@@ -8,6 +8,7 @@
     python -m nego --fetch-attachment-text --llm-similarity  # + 과거 실적과 LLM 유사도 판정
     python -m nego --categories 입찰 --complete-days 1   # 어제 게시된 입찰 공고만
     python -m nego --categories 협상,규격가격동시입찰 --complete-days 7  # 지난 7일
+    python -m nego --categories 입찰 --complete-days 1 --telegram   # + 결과를 텔레그램으로 발송
 """
 
 from __future__ import annotations
@@ -111,6 +112,25 @@ def _run_llm_similarity(candidates, config, now) -> dict[str, Path]:
     return llm_similarity.save_results(results, config.output_dir, now)
 
 
+def _send_telegram(candidates, stats, html_path) -> None:
+    """발송 실패는 종료코드에 반영하지 않는다 — 실패로 끝내면 워크플로 자동 재시도가
+    수집부터 다시 돌려 이미 받은 대화방에 같은 보고서가 또 간다. 대신 Actions 화면에
+    오류 표시(::error::)를 남긴다."""
+    from .telegram import TelegramConfig, send_report
+
+    tg_config = TelegramConfig.from_env()
+    if tg_config is None:
+        logging.warning("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 없음 → 텔레그램 발송 건너뜀")
+        return
+    errors = send_report(tg_config, candidates, stats, html_path)
+    sent = len(tg_config.chat_ids) - len(errors)
+    print(f"텔레그램 발송: 대화방 {sent}/{len(tg_config.chat_ids)}곳 성공")
+    for err in errors:
+        logging.error("텔레그램 발송 실패 %s", err)
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(f"::error::텔레그램 발송 실패 {err}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="nego", description="나라장터 「협상에 의한 계약」 공고 추출")
     parser.add_argument("--days", type=int, help="조회 기간(일). 기본값은 LOOKBACK_DAYS 환경변수")
@@ -149,6 +169,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="사전규격도 같은 기간으로 수집해 같은 필터·자격판정을 적용한다 "
         "(공공데이터포털에서 '사전규격정보서비스' 활용신청 필요, 실패해도 본공고는 계속)",
+    )
+    parser.add_argument(
+        "--telegram",
+        action="store_true",
+        help="결과를 텔레그램으로 발송한다 (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID 필요)",
     )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -249,6 +274,9 @@ def main(argv: list[str] | None = None) -> int:
     paths = save_reports(candidates, stats, config.output_dir, now)
     for kind, path in {**paths, **llm_paths}.items():
         print(f"{kind.upper()} 저장: {path}")
+
+    if args.telegram:
+        _send_telegram(candidates, stats, paths.get("html"))
 
     # 일부 조회가 실패했으면 종료코드 2로 구분한다 (CI에서 성공/부분성공 구분).
     return 2 if stats.failed_operations else 0

@@ -65,5 +65,5 @@ bash webapp/start.sh
 - 수집은 한 번에 하나만 돈다(누가 돌리는 중이면 버튼이 잠김). 진행 로그가 버튼 아래에 뜬다.
 - "첨부 자격판정"을 켜면 후보마다 첨부파일을 내려받아 시간이 걸린다(후보 수 × 첨부 수). 추출한 원문은
   `output/attachment_text/`에 남는다 — CLI와 같은 위치.
-- Supabase 저장·텔레그램 발송은 하지 않는다(9/28 결정: 수집 기능 완성 전까지 끔).
+- Supabase 저장·텔레그램 발송은 하지 않는다. 텔레그램은 GitHub Actions 스케줄이 보낸다(10/12 — 입찰 매일, 나머지 매주).
 - 테스트: `py -m unittest tests.test_webapp`

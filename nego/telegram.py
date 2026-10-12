@@ -21,8 +21,12 @@ GitHub Actions 스케줄(`daily.yml`)이 `python -m nego --telegram`으로 부�
   - 후보가 0건이어도 "새 공고 없음"을 보낸다 — 받는 사람이 "시스템이 돌았는지"를 알 수 있게.
 
 설정 (환경변수):
-  TELEGRAM_BOT_TOKEN  @BotFather가 발급한 봇 토큰
-  TELEGRAM_CHAT_ID    받을 대화방 ID. 여러 곳이면 쉼표로 구분 (개인 대화, 단체방 모두 가능)
+  TELEGRAM_BOT_TOKEN    @BotFather가 발급한 봇 토큰
+  TELEGRAM_CHAT_ID      받을 대화방 ID. 여러 곳이면 쉼표로 구분 (개인 대화, 단체방 모두 가능)
+  TELEGRAM_DEV_CHAT_ID  개발자 알림 방(선택) — 수집 실패(재시도 소진)·재시도 후 회복을 여기로만 보낸다.
+                        담당자 방에는 실패 알림을 보내지 않는다 (2026-10-12 사용자 결정)
+
+개발자 알림은 워크플로가 `python -m nego.telegram dev-alert "본문"`으로 보낸다.
 
 발송 실패는 수집 결과(리포트/Supabase 저장)에 영향을 주지 않는다. 호출 쪽에서 오류를
 로그로 남긴다 — 실패로 Run을 끝내면 워크플로의 자동 재시도가 수집부터 다시 돌려,
@@ -59,9 +63,9 @@ class TelegramConfig:
     chat_ids: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_env(cls) -> "TelegramConfig | None":
+    def from_env(cls, chat_env: str = "TELEGRAM_CHAT_ID") -> "TelegramConfig | None":
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-        chats = [c.strip() for c in os.environ.get("TELEGRAM_CHAT_ID", "").split(",") if c.strip()]
+        chats = [c.strip() for c in os.environ.get(chat_env, "").split(",") if c.strip()]
         if not token or not chats:
             return None
         return cls(token=token, chat_ids=chats)
@@ -252,3 +256,38 @@ def send_report(
     messages = build_messages(rows, title, stats_warnings(stats),
                               footer="지역·공동수급·확인 필요 요건 등 자세한 내용은 첨부 HTML 리포트" if has_open else None)
     return send_messages(config, messages, html_path if has_open else None, session)
+
+
+def send_dev_alert(text: str, session: requests.Session | None = None) -> list[str] | None:
+    """개발자 알림 방(TELEGRAM_DEV_CHAT_ID)에 글자 그대로 보낸다. 설정이 없으면 None(보내지 않음)."""
+    config = TelegramConfig.from_env("TELEGRAM_DEV_CHAT_ID")
+    if config is None:
+        return None
+    from .http_client import mask_service_key
+
+    body = html.escape(mask_service_key(text))[:MESSAGE_LIMIT]
+    return send_messages(config, [body], session=session)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`python -m nego.telegram dev-alert "본문"` — 워크플로의 실패·회복 알림용.
+    알림이 실패해도 0으로 끝낸다(알림 때문에 워크플로 결과가 바뀌지 않게)."""
+    import sys
+
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) != 2 or args[0] != "dev-alert":
+        print('사용법: python -m nego.telegram dev-alert "본문"', file=sys.stderr)
+        return 2
+    errors = send_dev_alert(args[1])
+    if errors is None:
+        print("TELEGRAM_DEV_CHAT_ID 없음 → 개발자 알림 건너뜀")
+    elif errors:
+        for err in errors:
+            print(f"::warning::개발자 알림 실패 {err}")
+    else:
+        print("개발자 알림 발송")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -60,6 +61,14 @@ RESULT_CODE_DESCRIPTIONS = {
     "32": "등록되지 않은 도메인",
     "99": "기타 에러",
 }
+
+
+_SERVICE_KEY_RE = re.compile(r"(serviceKey=)[^&\s'\")]+", re.IGNORECASE)
+
+
+def mask_service_key(text: str) -> str:
+    """URL 쿼리의 serviceKey 값을 ***로 바꾼다."""
+    return _SERVICE_KEY_RE.sub(r"\1***", text)
 
 
 class ApiError(Exception):
@@ -224,7 +233,8 @@ class DataGoKrClient:
         try:
             res = self.session.get(url, timeout=self.config.timeout_sec)
         except requests.RequestException as err:
-            raise ApiError(label, f"요청 실패: {err}") from err
+            # 연결 오류 문구에 요청 주소(서비스키 포함)가 그대로 들어간다 — 로그·개발자 알림에 키가 새지 않게 가린다
+            raise ApiError(label, f"요청 실패: {mask_service_key(str(err))}") from err
 
         if res.status_code >= 400:
             raise ApiError(label, f"HTTP {res.status_code} (응답 앞부분: {res.text[:200]})")

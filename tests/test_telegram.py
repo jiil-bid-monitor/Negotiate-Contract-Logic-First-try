@@ -155,5 +155,28 @@ class TestSendReport(unittest.TestCase):
             self.assertIsNone(T.TelegramConfig.from_env())
 
 
+class TestDevAlert(unittest.TestCase):
+    def test_skipped_without_dev_chat(self):
+        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_DEV_CHAT_ID": ""}):
+            self.assertIsNone(T.send_dev_alert("실패"))
+
+    def test_goes_only_to_dev_chat_with_key_masked(self):
+        session = FakeSession()
+        env = {"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_CHAT_ID": "111", "TELEGRAM_DEV_CHAT_ID": "999"}
+        with mock.patch.dict(os.environ, env):
+            errors = T.send_dev_alert("조회 실패 url: /a?serviceKey=SECRETKEY&type=json <b>", session=session)
+        self.assertEqual(errors, [])
+        self.assertEqual([c["data"]["chat_id"] for c in session.calls], ["999"], "담당자 방(111)엔 안 감")
+        text = session.calls[0]["data"]["text"]
+        self.assertNotIn("SECRETKEY", text)
+        self.assertIn("serviceKey=***", text)
+        self.assertIn("&lt;b&gt;", text)
+
+    def test_cli_entry_never_fails_workflow(self):
+        with mock.patch.dict(os.environ, {"TELEGRAM_DEV_CHAT_ID": ""}):
+            self.assertEqual(T.main(["dev-alert", "x"]), 0)
+        self.assertEqual(T.main(["oops"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

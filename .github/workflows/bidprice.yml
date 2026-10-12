@@ -1,0 +1,39 @@
+# 투찰가격 분석용 과거 개찰 결과 수집 (수동 실행만).
+# 입찰 유형 후보(평소 키워드·예산 필터 통과)의 개찰 결과를 모아 사정률·1순위 투찰률·자주 만난 업체를 집계한다.
+# 결과: 로그 끝 요약 + 아티팩트 bid_history_*.json. 텔레그램 발송·Supabase 저장 없음.
+name: 투찰가격 분석 - 과거 개찰 결과 수집
+
+on:
+  workflow_dispatch:
+    inputs:
+      months:
+        description: "최근 몇 개월 게시분 (예: 3)"
+        default: "3"
+
+env:
+  TZ: Asia/Seoul
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: 개찰 결과 수집·집계
+        env:
+          NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}
+          MONTHS: ${{ github.event.inputs.months }}
+        run: python -m nego.bidprice --months "${MONTHS:-3}"
+      - name: 결과 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bid-history-${{ github.run_id }}
+          path: output/bid_history_*.json
+          retention-days: 90
+          if-no-files-found: ignore

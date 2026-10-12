@@ -139,6 +139,7 @@ GitHub 서버(미국)에서 나라장터로 가는 접속이 잠깐 끊기는 �
 |---|---|
 | 메시지가 안 옴, 로그에 `TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 없음` | Secrets 이름 오타 — 대소문자·밑줄까지 정확히 |
 | 로그에 `chat not found` | 대화방 ID가 틀렸거나, 받을 사람이 봇에 `/start`를 안 보냄 |
+| 로그에 `group chat was upgraded to a supergroup chat` 또는 노란 경고 "대화방이 슈퍼그룹으로 바뀌어…" | 방 설정(관리자 지정·이전 대화 공개 등)을 바꾸면 텔레그램이 방 ID를 바꿉니다. 발송은 새 ID로 자동으로 다시 보내지만, 경고에 적힌 **새 ID(-100…)로 Secrets를 바꿔야** 다음부터 바로 갑니다 |
 | 로그에 `Unauthorized` | 토큰이 틀림, 또는 `/revoke`로 바꾼 뒤 옛 토큰이 남아 있음 |
 | 토큰이 남에게 노출됨 | `@BotFather` → `/revoke` → 봇 선택 → 새 토큰을 Secrets에 다시 저장 |
 | 아침에 안 옴 | 예약 실행 지연(최대 1시간 정도). Actions 탭에서 실행 여부 확인 |

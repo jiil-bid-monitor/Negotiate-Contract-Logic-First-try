@@ -116,7 +116,7 @@ def _send_telegram(candidates, stats, html_path) -> None:
     """발송 실패는 종료코드에 반영하지 않는다 — 실패로 끝내면 워크플로 자동 재시도가
     수집부터 다시 돌려 이미 받은 대화방에 같은 보고서가 또 간다. 대신 Actions 화면에
     오류 표시(::error::)를 남긴다."""
-    from .telegram import TelegramConfig, send_report
+    from .telegram import TelegramConfig, migration_notes, send_report
 
     tg_config = TelegramConfig.from_env()
     if tg_config is None:
@@ -129,6 +129,10 @@ def _send_telegram(candidates, stats, html_path) -> None:
         logging.error("텔레그램 발송 실패 %s", err)
         if os.environ.get("GITHUB_ACTIONS"):
             print(f"::error::텔레그램 발송 실패 {err}")
+    for note in migration_notes(tg_config, "TELEGRAM_CHAT_ID"):
+        logging.warning(note)
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(f"::warning::{note}")
 
 
 def main(argv: list[str] | None = None) -> int:

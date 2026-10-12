@@ -87,6 +87,9 @@
 - (10/12) **방 두 개로 운영**: 담당자 방 "지일 입찰 공고"(`TELEGRAM_CHAT_ID` = -5450822931), 개발자 방 "지일 입찰 개발"
   (`TELEGRAM_DEV_CHAT_ID` = -5536307994), 둘 다 일반 그룹 — 슈퍼그룹으로 바뀌면 ID가 -100…으로 바뀌니 다시 확인. 봇 `@jiil_bid_bot`.
   개발자 방 연결 시험용 수동 입력 `dev_test`(수집 안 하고 시험 알림만 — workflow_dispatch 입력 10개 꽉 참).
+  - **(10/12 실제로 겪음) 담당자 방이 슈퍼그룹으로 바뀜** — Run #92 구역 분리 시험 발송이 "400 group chat was upgraded to a supergroup chat"로
+    0/1 실패(예전 ID -5450822931). 오류 응답의 `parameters.migrate_to_chat_id`로 **새 ID로 자동 재발송**(`telegram.ChatMigrated`,
+    `TelegramConfig.migrated`) + Actions 노란 경고에 새 ID와 "Secrets 바꾸라" 안내(`migration_notes`, 예전 ID는 로그에서 ***로 가려져 새 ID만).
 - **실제 텔레그램 호출은 미검증**(이 환경에서 api.telegram.org 막힘 — 가짜 응답 테스트만).
 - Ruflo: 텔레그램 하나라 "독립 기능 여러 개" 시점 아님 — 한 줄 언급만 함.
 

@@ -182,6 +182,20 @@ class TestSendReport(unittest.TestCase):
         self.assertNotIn("SECRET", errors[0])
         self.assertEqual(len(session.calls), 1, "4xx는 다시 시도해도 같으니 재시도하지 않는다")
 
+    def test_group_upgraded_to_supergroup_resends_to_new_id(self):
+        """10/12 실제로 겪음: 일반 그룹이 슈퍼그룹으로 바뀌면 400 + migrate_to_chat_id — 새 ID로 다시 보내고 안내."""
+        moved = FakeResponse(400, {"ok": False, "description": "Bad Request: group chat was upgraded to a supergroup chat",
+                                   "parameters": {"migrate_to_chat_id": -1001234567890}})
+        session = FakeSession([moved])
+        config = T.TelegramConfig(token="1:x", chat_ids=["-5450822931"])
+        errors = T.send_messages(config, ["a", "b"], session=session)
+        self.assertEqual(errors, [])
+        self.assertEqual([c["data"]["chat_id"] for c in session.calls], ["-5450822931", "-1001234567890", "-1001234567890"])
+        self.assertEqual(config.migrated, {"-5450822931": "-1001234567890"})
+        note = T.migration_notes(config, "TELEGRAM_CHAT_ID")[0]
+        self.assertIn("-1001234567890", note)
+        self.assertIn("TELEGRAM_CHAT_ID", note)
+
     def test_config_from_env(self):
         with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "t", "TELEGRAM_CHAT_ID": "1, 2"}):
             self.assertEqual(T.TelegramConfig.from_env().chat_ids, ["1", "2"])

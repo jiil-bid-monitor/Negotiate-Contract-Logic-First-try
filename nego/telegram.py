@@ -70,6 +70,9 @@ _KIND_TAG = {"협상": "협상", "규격가격동시입찰": "규격가격", "�
 class TelegramConfig:
     token: str
     chat_ids: list[str] = field(default_factory=list)
+    # 보내는 도중 알게 된 대화방 ID 변경 {예전 ID: 새 ID} — 일반 그룹이 슈퍼그룹으로 바뀌면 텔레그램이 ID를 바꾼다.
+    # 새 ID로 다시 보내고, 호출 쪽에서 "Secrets를 새 ID로 바꾸라"는 안내를 남긴다(2026-10-12 실제로 겪음).
+    migrated: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_env(cls, chat_env: str = "TELEGRAM_CHAT_ID") -> "TelegramConfig | None":
@@ -217,6 +220,14 @@ class TelegramError(Exception):
     pass
 
 
+class ChatMigrated(TelegramError):
+    """일반 그룹이 슈퍼그룹으로 바뀌어 대화방 ID가 바뀜 — 오류 응답이 새 ID(migrate_to_chat_id)를 알려준다."""
+
+    def __init__(self, new_chat_id: str):
+        super().__init__(f"대화방이 슈퍼그룹으로 바뀜 → 새 ID {new_chat_id}")
+        self.new_chat_id = new_chat_id
+
+
 def _call(session: requests.Session, config: TelegramConfig, method: str, **kwargs: Any) -> None:
     """429(retry_after)·5xx·연결 오류는 몇 번 다시 시도한다. 오류 메시지에서 토큰은 가린다."""
     url = f"{API_BASE}/bot{config.token}/{method}"
@@ -234,6 +245,9 @@ def _call(session: requests.Session, config: TelegramConfig, method: str, **kwar
             except ValueError:
                 body = {}
             last_error = f"HTTP {res.status_code}: {body.get('description') or res.text[:200]}"
+            new_id = (body.get("parameters") or {}).get("migrate_to_chat_id")
+            if new_id:
+                raise ChatMigrated(str(new_id))
             if res.status_code == 429:
                 wait = (body.get("parameters") or {}).get("retry_after", 5)
                 time.sleep(min(float(wait), 60))
@@ -255,32 +269,47 @@ def send_messages(
     (빈 목록이면 전부 성공)."""
     session = session or requests.Session()
     errors: list[str] = []
-    for chat_id in config.chat_ids:
-        try:
-            for text in messages:
+
+    def send_to(chat_id: str) -> None:
+        for text in messages:
+            _call(
+                session,
+                config,
+                "sendMessage",
+                data={
+                    "chat_id": chat_id,
+                    "text": text,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": "true",
+                },
+            )
+        if document is not None and document.exists():
+            with document.open("rb") as handle:
                 _call(
                     session,
                     config,
-                    "sendMessage",
-                    data={
-                        "chat_id": chat_id,
-                        "text": text,
-                        "parse_mode": "HTML",
-                        "disable_web_page_preview": "true",
-                    },
+                    "sendDocument",
+                    data={"chat_id": chat_id},
+                    files={"document": (document.name, handle, "text/html")},
                 )
-            if document is not None and document.exists():
-                with document.open("rb") as handle:
-                    _call(
-                        session,
-                        config,
-                        "sendDocument",
-                        data={"chat_id": chat_id},
-                        files={"document": (document.name, handle, "text/html")},
-                    )
+
+    for chat_id in config.chat_ids:
+        try:
+            try:
+                send_to(chat_id)
+            except ChatMigrated as moved:
+                # 첫 메시지에서 바로 걸리므로 중복 발송 없이 새 ID로 처음부터 보낸다
+                config.migrated[chat_id] = moved.new_chat_id
+                send_to(moved.new_chat_id)
         except TelegramError as err:
             errors.append(f"[{chat_id}] {err}")
     return errors
+
+
+def migration_notes(config: TelegramConfig, secret_name: str) -> list[str]:
+    """대화방 ID가 바뀐 곳마다 "Secrets를 바꾸라"는 안내 문구. (예전 ID는 Actions 로그에서 ***로 가려지니 새 ID만 적는다)"""
+    return [f"대화방이 슈퍼그룹으로 바뀌어 ID가 바뀌었습니다 — 새 ID {new}로 보냈습니다. "
+            f"GitHub Secrets {secret_name}의 예전 ID를 {new}로 바꿔 주세요." for new in config.migrated.values()]
 
 
 def send_report(
@@ -308,7 +337,10 @@ def send_dev_alert(text: str, session: requests.Session | None = None) -> list[s
     from .http_client import mask_service_key
 
     body = html.escape(mask_service_key(text))[:MESSAGE_LIMIT]
-    return send_messages(config, [body], session=session)
+    errors = send_messages(config, [body], session=session)
+    for note in migration_notes(config, "TELEGRAM_DEV_CHAT_ID"):
+        print(f"::warning::{note}")
+    return errors
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -177,7 +177,21 @@ def collect_prespecs(client: DataGoKrClient, begin: str, end: str, stats: RunSta
         collected.extend(notices)
     stats.prespec_fetched = len(collected)
     stats.prespec_error = " / ".join(errors) or None
+    _log_attachmentless_prespecs(collected)
     return collected
+
+
+def _log_attachmentless_prespecs(notices: list[Notice]) -> None:
+    """첨부 없는 사전규격(국방전자조달 연계 등) 진단 로그 — 어느 응답 칸이 연계기관을 알려주는지 실응답으로
+    확인하려고 남긴다(2026-10-12). 앞 3건만, 값은 40자까지. 담당자 개인정보 칸은 이미 빠져 있다."""
+    empty = [n for n in notices if not n.attachments]
+    if not empty:
+        return
+    linked = sum(1 for n in empty if n.linked_system)
+    log.info("첨부 없는 사전규격 %d건 (국방전자조달 등 연계기관으로 판별 %d건)", len(empty), linked)
+    for n in empty[:3]:
+        fields = ", ".join(f"{k}={str(v)[:40]}" for k, v in n.raw.items() if v not in (None, ""))
+        log.info("  [진단] %s %s — %s", n.notice_no, n.title[:30], fields)
 
 
 def build_candidates(

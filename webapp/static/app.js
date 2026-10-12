@@ -4,7 +4,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // 이 화면이 기대하는 수집 결과 형식 — webapp/collect.py RESULT_FORMAT과 같이 올린다
-const APP_FORMAT = 26;
+const APP_FORMAT = 27;
 const store = {
   get(k, d = null) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장 불가여도 동작 */ } },
@@ -346,6 +346,16 @@ function badges(c) {
       out.push(chip("본공고 게시됨", "good", "본공고 게시됨", `이 사전규격으로 나온 본공고: ${esc(c.linked_bid_notices.join(", "))}`, "good"));
   } else if (c.category) out.push(chip(c.category, "info", `유형: ${c.category}`, c.award_method ? `낙찰 방법: ${esc(c.award_method)}` : ""));
   out.push(chip(c.work_type, "", `업무 구분: ${c.work_type}`, "나라장터가 분류한 업무 종류(용역·물품·공사)입니다."));
+  // 규격서가 다른 조달시스템에 있는 공고(2026-10-12 제보 — 국방부 국군재정관리단 사전규격은 나라장터 첨부 0건, 상세는 d2b 링크만)
+  if (c.linked_system) {
+    const ls = c.linked_system;
+    out.push(chip(`${ls.name}에서 확인`, "warn", `${ls.name} 공고`,
+      `나라장터엔 첨부가 없고 규격서·상세는 ${esc(ls.name)}에 있습니다 — 자격·과업은 거기서 확인하세요.<br>`
+      + `<a href="${esc(ls.url)}" target="_blank" rel="noopener">${esc(ls.url)}</a>`, "warn"));
+  } else if (c.attachment_count === 0) {
+    out.push(chip("첨부 없음", "muted", "나라장터 첨부 없음",
+      "나라장터에 올라온 첨부파일이 없어 자격·확인 필요 요건을 읽지 못했습니다. 공고 상세에서 직접 확인하세요."));
+  }
   if (c.is_re_notice) out.push(chip("재공고", "warn", "재공고", "유찰 등으로 다시 낸 공고입니다."));
   if (c.ai) {
     const cls = c.ai.label === "적합" ? "good" : c.ai.label === "부적합" ? "bad" : "warn";

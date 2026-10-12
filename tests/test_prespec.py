@@ -112,6 +112,45 @@ class TestLinkedPrespecRemoved(unittest.TestCase):
         self.assertEqual(stats.screened_out["본공고 게시됨"], 1)
 
 
+class TestLinkedSystem(unittest.TestCase):
+    """국방전자조달(d2b) 연계 사전규격 — 나라장터엔 첨부 0건, 규격서는 d2b에만 (2026-10-12 사용자 제보)."""
+
+    def test_d2b_url_anywhere_in_response(self):
+        n = prespec_from_raw(prespec_raw(specDocFileUrl1="", orderInsttNm="국방부 국군재정관리단",
+                                         bfSpecDtlUrl="http://www.d2b.go.kr/psb/plan/servicePreStdList.do"), "용역")
+        self.assertEqual(n.linked_system, {"name": "국방전자조달",
+                                           "url": "http://www.d2b.go.kr/psb/plan/servicePreStdList.do"})
+
+    def test_defense_institution_without_attachments(self):
+        n = prespec_from_raw(prespec_raw(specDocFileUrl1="", orderInsttNm="국방부 국군재정관리단",
+                                         rlDminsttNm="육군 제0000부대"), "용역")
+        self.assertEqual(n.linked_system["name"], "국방전자조달")
+        self.assertIn("d2b.go.kr", n.linked_system["url"])
+
+    def test_defense_institution_with_attachments_is_normal(self):
+        n = prespec_from_raw(prespec_raw(orderInsttNm="국방부 국군재정관리단"), "용역")
+        self.assertIsNone(n.linked_system, "나라장터에 첨부가 있으면 그대로 읽으면 된다")
+
+    def test_ordinary_notice_without_attachments_is_not_linked(self):
+        n = prespec_from_raw(prespec_raw(specDocFileUrl1=""), "용역")
+        self.assertIsNone(n.linked_system)
+
+    def test_shown_in_report_and_telegram(self):
+        from nego import report, telegram
+
+        config = load_config()
+        config.screen.keywords = ["박물관"]
+        n = prespec_from_raw(prespec_raw(specDocFileUrl1="", orderInsttNm="국방부 국군재정관리단",
+                                         prdctClsfcNoNm="육군박물관 전시물 제작 설치"), "용역")
+        stats = RunStats()
+        cands = build_candidates([n], config, {}, {}, datetime(2026, 9, 12, 9), stats)
+        self.assertEqual(len(cands), 1)
+        self.assertIn("국방전자조달 공고", report.render_console(cands, stats))
+        self.assertIn("국방전자조달에서 확인", report.render_html(cands, stats, datetime(2026, 9, 12, 9)))
+        row = telegram.Row.from_candidate(cands[0])
+        self.assertIn("· 국방전자조달에서 확인", telegram._line(1, row, False))
+
+
 class TestCollect(unittest.TestCase):
     def test_failure_does_not_raise(self):
         client = _Client(fail={"사전규격/용역"}, items={"사전규격/물품": [prespec_raw()]})

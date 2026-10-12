@@ -112,6 +112,17 @@ class TestLinkedPrespecRemoved(unittest.TestCase):
         self.assertEqual(stats.screened_out["본공고 게시됨"], 1)
 
 
+class TestPrespecDetailUrl(unittest.TestCase):
+    def test_built_from_registration_number(self):
+        """사전규격 응답엔 상세 주소 칸이 없다(10/12 실응답) — 등록번호로 만든 주소(사용자 확인: 업무구분 코드 없이 열림)."""
+        n = prespec_from_raw(prespec_raw(no="R26BD00281727"), "용역")
+        self.assertEqual(n.detail_url, "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00281727")
+
+    def test_api_url_wins_when_present(self):
+        n = prespec_from_raw(prespec_raw(bfSpecDtlUrl="https://example/x"), "용역")
+        self.assertEqual(n.detail_url, "https://example/x")
+
+
 class TestLinkedSystem(unittest.TestCase):
     """국방전자조달(d2b) 연계 사전규격 — 나라장터엔 첨부 0건, 규격서는 d2b에만 (2026-10-12 사용자 제보)."""
 
@@ -134,6 +145,12 @@ class TestLinkedSystem(unittest.TestCase):
     def test_ordinary_notice_without_attachments_is_not_linked(self):
         n = prespec_from_raw(prespec_raw(specDocFileUrl1=""), "용역")
         self.assertIsNone(n.linked_system)
+
+    def test_ps_reference_number_without_attachments(self):
+        """실응답(10/12): 국방 기관 사전규격은 refNo가 PS2026… — 기관명이 국방 표현이 아니어도 잡는다."""
+        n = prespec_from_raw(prespec_raw(specDocFileUrl1="", orderInsttNm="○○부대", refNo="PS2026UMM39791"), "용역")
+        self.assertEqual(n.linked_system["name"], "국방전자조달")
+        self.assertIsNone(prespec_from_raw(prespec_raw(specDocFileUrl1="", refNo="건설안전과-35965"), "용역").linked_system)
 
     def test_shown_in_report_and_telegram(self):
         from nego import report, telegram

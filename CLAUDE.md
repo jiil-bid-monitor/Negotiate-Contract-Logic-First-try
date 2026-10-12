@@ -93,6 +93,12 @@
   RESULT_FORMAT·APP_FORMAT 27(서버 재시작 + 다시 불러오기).
 - **실응답 미확인**: API가 연계기관을 어느 칸으로 알려주는지 몰라서 위 두 규칙으로 가림. 수집 로그에 "첨부 없는 사전규격 N건" +
   앞 3건 응답 칸 진단 줄(`[진단]`)을 남김 → 다음 실수집 로그로 칸 확인 후 규칙 다듬기.
+- **(10/12 실응답 진단, Run #90)** 첨부 없는 사전규격 281건 중 국방 판별 83건. 사전규격 응답엔 **상세 주소 칸이 아예 없음**
+  (칸: bsnsDivNm·refNo·prdctClsfcNoNm·orderInsttNm·rlDminsttNm·asignBdgtAmt·rcptDt·opninRgstClseDt·swBizObjYn·dlvrDaynum·bfSpecRgstNo·rgstDt·chgDt),
+  d2b 주소 칸도 없음, 국방 기관은 `refNo`가 "PS2026UMM39791" 꼴 → 판별에 refNo `^PS\d{4}[A-Z]` 규칙 추가.
+  텔레그램 사전규격 공고명에 링크가 안 붙던 것(사용자 제보) → 등록번호로 주소 생성
+  `https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=…`(사용자가 준 주소의 `prcmBsneSeCd=03` 없이도 열림 — 사용자 확인).
+  콘솔 로그 마감 지난 공고 "D--1" → "마감됨".
 - B안(방위사업청 국방전자조달 API로 규격서 직접 읽기)은 보류 — 활용신청·첨부 접근 가능 여부 확인 필요. 국방부 관련 공고 빈도 보고 결정.
 
 ## 2026-10-02 — 작업 정리 (main 병합: PR #72~#86) · **2주 뒤(10/16 무렵) 여기서 이어갈 것**

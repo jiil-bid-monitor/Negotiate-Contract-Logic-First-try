@@ -68,8 +68,8 @@ class Notice:
 
         2026-10-12 사용자 제보: 국방부(국군재정관리단)가 국방전자조달(d2b.go.kr)에 올린 사전규격은
         나라장터에 "연계기관 공개 규격"으로 첨부 0건, 상세는 d2b 링크만 있다 — 첨부를 못 읽어 자격 미확인.
-        API가 이걸 어느 칸으로 알려주는지 아직 실응답으로 못 봐서 두 가지로 가린다:
-        ① 응답 어느 칸에든 d2b.go.kr 주소가 있으면 그 주소 ② 첨부가 0건인 국방 기관 사전규격이면 d2b 사전규격 목록.
+        10/12 실응답 진단: 응답에 d2b 주소 칸은 없고, 국방 기관 사전규격은 참조번호(refNo)가 "PS2026…"로 왔다. 그래서
+        ① 응답 어느 칸에든 d2b.go.kr 주소가 있으면 그 주소 ② 첨부가 0건이고 참조번호가 PS…이거나 국방 기관이면 d2b 사전규격 목록.
         """
         for value in self.raw.values():
             if isinstance(value, str):
@@ -78,6 +78,8 @@ class Notice:
                     return {"name": D2B_NAME, "url": m.group(0)}
         if self.attachments or self.kind != PRESPEC_KIND:
             return None
+        if _D2B_REF_NO.match(str(self.raw.get("refNo") or "")):
+            return {"name": D2B_NAME, "url": D2B_PRESPEC_LIST}
         institutions = f"{self.notice_institution or ''} {self.demand_institution or ''}"
         if _DEFENSE_INSTITUTION.search(institutions):
             return {"name": D2B_NAME, "url": D2B_PRESPEC_LIST}
@@ -95,6 +97,9 @@ class Notice:
 PRESPEC_KIND = "사전규격"
 D2B_NAME = "국방전자조달"
 D2B_PRESPEC_LIST = "https://www.d2b.go.kr/psb/plan/servicePreStdList.do"
+G2B_PRESPEC_URL = "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo={no}"
+# 국방전자조달 공고의 참조번호 — 실응답(10/12)에서 국방부·해군 사전규격이 "PS2026UMM39791"처럼 왔다
+_D2B_REF_NO = re.compile(r"^PS\d{4}[A-Z]")
 _D2B_URL = re.compile(r"https?://(?:www\.)?d2b\.go\.kr[^\s\"'<>]*")
 _DEFENSE_INSTITUTION = re.compile(r"국방부|국군|방위사업청|육군|해군|공군|해병대")
 
@@ -155,7 +160,9 @@ def prespec_from_raw(raw: dict[str, Any], work_type: str) -> Notice:
         title=pick("title") or "(제목 없음)",
         notice_institution=pick("notice_institution"),
         demand_institution=pick("demand_institution"),
-        detail_url=pick("detail_url"),
+        # 사전규격 응답엔 상세 주소 칸이 없다(2026-10-12 실응답 진단) — 등록번호로 나라장터 상세 주소를 만든다.
+        # 사용자 확인: 업무구분 코드(prcmBsneSeCd) 없이 등록번호만으로 열림
+        detail_url=pick("detail_url") or (G2B_PRESPEC_URL.format(no=pick("notice_no")) if pick("notice_no") else None),
         assigned_budget=budget,
         posted_at=pick("posted_at"),
         product_class_no=pick("product_class_no"),

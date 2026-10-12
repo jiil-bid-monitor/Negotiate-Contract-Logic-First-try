@@ -174,7 +174,7 @@ jobs:
           TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          python -m nego.telegram dev-alert "$(printf '[개발자 알림] 시험 메시지 — 개발자 방 연결 확인\n수집 실패(재시도 %s회 소진)·재시도 후 회복 알림이 이 방으로 옵니다.\n\n로그: %s' "$MAX_ATTEMPTS" "$RUN_URL")"
+          python -m nego.telegram dev-alert "$(printf '[개발자 알림] 시험 메시지입니다 (실제 오류 아님).\n앞으로 수집이 %s번 모두 실패하거나, 재시도 끝에 성공하면 이 방으로 알림이 옵니다.\n\n로그: %s' "$MAX_ATTEMPTS" "$RUN_URL")"
 
       - name: 수집 실행
         id: collect

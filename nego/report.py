@@ -291,7 +291,7 @@ def render_console(candidates: list[Candidate], stats: RunStats) -> str:
             flags.append(f"{linked['name']} 공고 — 규격서·상세는 {linked['url']}")
 
         earliest = c.schedule.earliest
-        deadline = f"D-{c.days_left}" if c.days_left is not None else "일정 미상"
+        deadline = ("일정 미상" if c.days_left is None else "마감됨" if c.days_left < 0 else f"D-{c.days_left}")
         deadline_kind = f" ({earliest[0]})" if earliest else ""
 
         lines.append(f"[{i:2d}] [{c.category or '유형 미상'}] {c.notice.title}")

@@ -12,7 +12,12 @@ GitHub Actions 스케줄(`daily.yml`)이 `python -m nego --telegram`으로 부�
     후보 3건
 
     1. ○○체험관 전시물 제작설치          ← 누르면 나라장터 공고
-       3.2억 · D-5 · 자격 충족
+       3.2억 · 🔴 D-5 · 자격 충족
+    2. △△박물관 전시시설 공사
+       8.5억 · D-16 · 자격 미달(공동수급 가능)
+
+  - 마감 10일 이내(D-0~D-10)는 굵은 "🔴 D-N" — 텔레그램은 글자 색을 못 바꿔서 빨간 점으로(사용자 결정, 이모지는 이것만 예외).
+  - 자격 미달이면 바로 옆 괄호에 공동수급 가능/불허/정보 없음 — 미달이어도 공동수급으로 참가할 수 있는지 바로 보이게.
 
   - 지역·공동수급·확인 필요 요건 등 자세한 건 첨부 HTML 리포트(전체 표)에서 본다.
   - 유형이 섞이는 주간 보고는 공고명 앞에 [협상]·[규격가격]·[사전규격]을 붙인다.
@@ -53,6 +58,9 @@ API_BASE = "https://api.telegram.org"
 MESSAGE_LIMIT = 3800
 MAX_ATTEMPTS = 3
 
+# 이 날수 이하로 남은 공고는 "🔴 D-N"을 굵게 (2026-10-12 사용자 요청: "10일 이내 마감은 붉게")
+URGENT_DAYS = 10
+
 # 주간 보고에서 공고명 앞에 붙이는 유형 표시
 _KIND_TAG = {"협상": "협상", "규격가격동시입찰": "규격가격", "입찰": "입찰", "사전규격": "사전규격"}
 
@@ -80,13 +88,17 @@ class Row:
     kind: str | None  # 협상 / 규격가격동시입찰 / 입찰 / 사전규격
     budget: float | None
     days_left: int | None
-    qualification: str  # 자격 충족 / 자격 미달 / 자격 미확인
+    qualification: str  # 자격 충족 / 자격 미달(공동수급 가능|불허|정보 없음) / 자격 미확인
     linked: str | None = None  # 규격서가 다른 조달시스템에 있으면 그 이름 (국방전자조달)
 
     @classmethod
     def from_candidate(cls, c: Any) -> "Row":
         q = c.qualification
         qual = "자격 미확인" if not q.checked else ("자격 충족" if q.passes else "자격 미달")
+        if qual == "자격 미달":
+            j = c.joint
+            joint = "공동수급 정보 없음" if j.raw_value is None else ("공동수급 가능" if j.allowed else "공동수급 불허")
+            qual += f"({joint})"
         kind = "사전규격" if c.notice.kind == "사전규격" else c.category
         linked = c.notice.linked_system
         return cls(c.notice.title or "", c.notice.detail_url, kind, c.notice.budget, c.days_left, qual,
@@ -125,7 +137,12 @@ def _line(index: int, row: Row, tagged: bool) -> str:
         title = f'<a href="{esc(row.detail_url, quote=True)}">{title}</a>'
     if tagged and row.kind:
         title = f"[{esc(_KIND_TAG.get(row.kind, row.kind))}] {title}"
-    days = "마감 미상" if row.days_left is None else f"D-{row.days_left}"
+    if row.days_left is None:
+        days = "마감 미상"
+    elif row.days_left <= URGENT_DAYS:
+        days = f"<b>🔴 D-{row.days_left}</b>"
+    else:
+        days = f"D-{row.days_left}"
     line = f"{index}. {title}\n   {esc(_short_money(row.budget))} · {days} · {row.qualification}"
     if row.linked:
         line += f" · {esc(row.linked)}에서 확인"

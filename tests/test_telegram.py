@@ -80,9 +80,33 @@ class TestBuildMessages(unittest.TestCase):
         self.assertIn("후보 <b>3건</b> (마감 지난 1건 제외)", text)
         self.assertLess(text.index("먼저"), text.index("나중"))
         self.assertLess(text.index("나중"), text.index("마감남음"))
-        self.assertIn("3.2억 · D-2 · 자격 미달", text)
+        self.assertIn("3.2억 · <b>🔴 D-2</b> · 자격 미달", text)
         self.assertIn("마감 미상", text)
         self.assertNotIn("지남", text)
+
+    def test_urgent_within_ten_days_is_red_and_bold(self):
+        """10/12 사용자 요청: 마감 10일 이내는 붉게 — 텔레그램은 글자 색이 없어 굵은 🔴."""
+        text = T.build_messages([_row("a", 10), _row("b", 11), _row("c", 0)], "보고")[0]
+        self.assertIn("<b>🔴 D-10</b>", text)
+        self.assertIn("<b>🔴 D-0</b>", text)
+        self.assertIn(" · D-11 · ", text)
+        self.assertNotIn("🔴 D-11", text)
+
+    def test_unqualified_shows_joint_supply(self):
+        """10/12 사용자 요청: 자격 미달이면 바로 옆에 공동수급 여부."""
+        from types import SimpleNamespace as NS
+        from nego.qualify import parse_joint_supply
+
+        def cand(passes, joint_raw, kind="본공고"):
+            return NS(qualification=NS(checked=True, passes=passes), joint=parse_joint_supply(joint_raw),
+                      notice=NS(title="t", detail_url=None, kind=kind, budget=1e8, linked_system=None),
+                      category="입찰", days_left=20)
+
+        self.assertEqual(T.Row.from_candidate(cand(False, "(전자)공동이행 또는 분담이행")).qualification,
+                         "자격 미달(공동수급 가능)")
+        self.assertEqual(T.Row.from_candidate(cand(False, "(없음)공동수급불허")).qualification, "자격 미달(공동수급 불허)")
+        self.assertEqual(T.Row.from_candidate(cand(False, None, "사전규격")).qualification, "자격 미달(공동수급 정보 없음)")
+        self.assertEqual(T.Row.from_candidate(cand(True, "(없음)공동수급불허")).qualification, "자격 충족")
 
     def test_weekly_mixed_kinds_are_tagged(self):
         rows = [_row("가", 3, "협상"), _row("나", 4, "사전규격", budget=45_000_000)]

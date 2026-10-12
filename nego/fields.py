@@ -70,6 +70,8 @@ SCSBID_OPERATIONS = {
     "낙찰현황/용역": "getScsbidListSttusServc",
     "낙찰현황/공사": "getScsbidListSttusCnstwk",
 }
+# 공고 하나의 참가 업체 전체(순위·투찰금액·투찰률) — 공고번호로 조회
+OPENING_BIDDERS_OPERATION = "getOpengResultListInfoOpengCompt"
 
 FIELD_CANDIDATES: dict[str, list[str]] = {
     # ── 식별 ──────────────────────────────────────────────

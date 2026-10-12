@@ -56,6 +56,7 @@ def _verify_api(config) -> int:
     scsbid_url = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
     targets += [(f"낙찰정보/{w}", scsbid_url, op) for w, op in F.SCSBID_OPERATIONS.items()]
 
+    sample_no = None
     for label, base_url, operation in targets:
         print(f"\n── {label} ({operation}) " + "─" * 30)
         try:
@@ -73,7 +74,41 @@ def _verify_api(config) -> int:
         for key in sorted(first.keys()):
             value = str(first[key])[:40]
             print(f"    {key:32s} = {value}")
+        if label == "낙찰정보/개찰결과/공사":
+            opened = [i for i in items if i.get("rsrvtnPrceFileExistnceYn") == "Y"] or items
+            sample_no = opened[0].get("bidNtceNo")
+    _verify_one_notice(client, config, scsbid_url, sample_no)
     return 0
+
+
+def _verify_one_notice(client, config, scsbid_url: str, notice_no: str | None) -> None:
+    """공고번호로만 조회되는 낙찰정보(참가 업체 전체·예비가격)를 개찰결과 첫 공고로 확인한다."""
+    if not notice_no:
+        print("\n공고번호 단위 조회는 건너뜀 — 개찰결과 공사 응답이 없음")
+        return
+    client.config.num_of_rows = 100
+    checks = [
+        ("참가업체 전체", F.OPENING_BIDDERS_OPERATION, 3),
+        ("예비가격/공사(공고 지정)", F.SCSBID_OPERATIONS["예비가격/공사"], 20),
+    ]
+    for label, operation, show in checks:
+        print(f"\n── {label} ({operation}, 공고 {notice_no}) " + "─" * 20)
+        items = []
+        # 공고번호 조회의 inqryDiv 값은 활용가이드로 확정 못 해서 후보를 차례로 시도
+        for div in ("2", "4", "3", "1"):
+            try:
+                items = client.fetch_all_pages(
+                    scsbid_url, operation, {"inqryDiv": div, "bidNtceNo": notice_no}, label
+                )
+            except ApiError as err:
+                print(f"  inqryDiv={div} 실패: {redact(str(err), [config.api.service_key])[:160]}")
+                continue
+            print(f"  inqryDiv={div}: {len(items)}건 수신")
+            if items:
+                break
+        for item in items[:show]:
+            row = F.strip_personal_fields(item)
+            print("   ", {k: str(v)[:30] for k, v in sorted(row.items()) if v not in ("", None)})
 
 
 def _save_to_supabase(candidates, stats) -> None:

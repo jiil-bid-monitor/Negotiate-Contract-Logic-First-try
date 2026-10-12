@@ -353,6 +353,13 @@ class TestServer(unittest.TestCase):
         except urllib.error.HTTPError as err:
             return err.code, json.loads(err.read())
 
+    def test_static_version_sent_for_stale_page_check(self):
+        """열린 페이지가 예전 화면 코드인지 알 수 있게 meta·results에 같은 화면 지문을 보낸다."""
+        meta = self.call("/api/meta")[1]
+        res = self.call("/api/results")[1]
+        self.assertTrue(meta["static_version"])
+        self.assertEqual(meta["static_version"], res["static_version"])
+
     def test_token_required_for_api_not_for_page(self):
         self.assertEqual(self.call("/api/meta", token="wrong")[0], 401)
         with urllib.request.urlopen(self.base + "/") as res:

@@ -60,6 +60,11 @@ on:
         description: "true로 두면 후보 공고를 과거 실적과 Claude API로 유사도 판정한다 (secrets.ANTHROPIC_API_KEY 필요)"
         required: false
         default: "false"
+      # (workflow_dispatch 입력은 최대 10개 — 이게 10번째)
+      dev_test:
+        description: "true로 두면 수집 없이 개발자 방(TELEGRAM_DEV_CHAT_ID)에 시험 알림만 보내고 끝낸다"
+        required: false
+        default: "false"
 
 # 실패 시 같은 워크플로를 workflow_dispatch로 재호출해 새 Run을 큐에 올리려면
 # GITHUB_TOKEN에 actions:write 권한이 있어야 한다.
@@ -161,9 +166,19 @@ jobs:
           NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}
         run: python -m nego --verify
 
+      # 개발자 방은 실패가 나야 알림이 가서, 연결만 확인하는 시험 알림 (dev_test=true일 때만, 수집 안 함)
+      - name: 개발자 방 시험 알림 (dev_test=true일 때만)
+        if: github.event.inputs.dev_test == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python -m nego.telegram dev-alert "$(printf '[개발자 알림] 시험 메시지 — 개발자 방 연결 확인\n수집 실패(재시도 %s회 소진)·재시도 후 회복 알림이 이 방으로 옵니다.\n\n로그: %s' "$MAX_ATTEMPTS" "$RUN_URL")"
+
       - name: 수집 실행
         id: collect
-        if: github.event.inputs.verify != 'true'
+        if: github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
         continue-on-error: true
         env:
           NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}

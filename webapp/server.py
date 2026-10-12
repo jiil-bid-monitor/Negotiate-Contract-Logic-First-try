@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import hmac
 import json
 import logging
@@ -32,12 +33,24 @@ STATIC = Path(__file__).resolve().parent / "static"
 MAX_BODY = 200_000
 
 
+def static_version() -> str:
+    """화면 파일(app.js·css·html) 지문 — 서버를 새 코드로 다시 켜면 바뀐다. 열려 있던 페이지가 예전 화면 코드로
+    새 결과를 그리는 걸 알아채고 "새로고침" 안내를 띄우는 데 쓴다(10/1·10/12 두 번 헷갈림)."""
+    digest = hashlib.sha1()
+    for path in sorted(STATIC.rglob("*")):
+        if path.is_file():
+            digest.update(path.name.encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
+
+
 class App:
     def __init__(self, store: Store, past: PastIndex, collector: Collector, token: str | None):
         self.store = store
         self.past = past
         self.collector = collector
         self.token = token
+        self.static_version = static_version()
 
 
 def make_handler(app: App):
@@ -101,7 +114,7 @@ def make_handler(app: App):
                 return self._json({
                     "past_count": len(app.past.projects), "past_years": years,
                     "past_error": app.past.error, "periods": PERIODS, "max_custom_days": MAX_CUSTOM_DAYS, "statuses": STATUSES,
-                    "result_format": RESULT_FORMAT,
+                    "result_format": RESULT_FORMAT, "static_version": app.static_version,
                     "categories": scope.CATEGORIES, "sync_thresholds": {"high": HIGH, "border": BORDER},
                     "has_service_key": bool(os.environ.get("NARA_SERVICE_KEY", "").strip()),
                     "has_ai_key": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
@@ -117,11 +130,13 @@ def make_handler(app: App):
                     if current is not None and current == int(have) and (not wanted.isdigit() or int(wanted) == current):
                         return self._json({
                             "run": None, "same": True, "missing": False, "states": app.store.states(),
+                            "static_version": app.static_version,
                             "comment_counts": app.store.comment_counts(), "job": app.collector.job.snapshot(),
                         })
                 run = app.store.run(int(wanted)) if wanted.isdigit() else None
                 return self._json({
                     "run": run or app.store.latest_run(), "missing": bool(wanted) and run is None,
+                    "static_version": app.static_version,
                     "states": app.store.states(),
                     "comment_counts": app.store.comment_counts(), "job": app.collector.job.snapshot(),
                 })

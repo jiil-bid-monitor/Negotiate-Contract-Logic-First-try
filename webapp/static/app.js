@@ -653,8 +653,21 @@ async function loadResults(quiet = false) {
   if (!data.same) { RUN = data.run; rejLimit = REJ_PAGE; }
   STATES = data.states; COUNTS = data.comment_counts;
   if (RUN && !data.missing) SHOWN = String(RUN.id);
+  checkPageVersion(data.static_version);
   showJob(data.job);
   render();
+}
+// 서버가 새 화면 코드로 다시 켜졌는데 이 페이지는 예전 코드 그대로면(새로고침 안 함) 위쪽에 안내 띠 — 1분마다 결과 확인 때 비교
+// (10/12: 서버 재시작 후 F5 없이 불러오기 → 새 결과를 예전 화면이 그려 "국방전자조달" 칩이 안 보임. 10/1에도 같은 혼동)
+function checkPageVersion(serverVersion) {
+  if (!serverVersion || !META || !META.static_version || serverVersion === META.static_version) return;
+  if ($("#reloadBar")) return;
+  const bar = document.createElement("div");
+  bar.id = "reloadBar";
+  bar.className = "reload-bar";
+  bar.innerHTML = `화면이 업데이트됐습니다 — 새로고침해야 새 기능이 보입니다. <button type="button">새로고침</button>`;
+  bar.querySelector("button").addEventListener("click", () => location.reload());
+  document.body.prepend(bar);
 }
 async function setState(key, patch) {
   if (needName()) return;

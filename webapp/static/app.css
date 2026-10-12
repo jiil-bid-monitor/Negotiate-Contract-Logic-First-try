@@ -249,3 +249,8 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .dl-cell .tip { font-weight: 400; text-align: left; }
 .qual .tip.up { top: auto; bottom: calc(100% + 6px); }
 .qual .tip.right { left: auto; right: 0; }
+
+/* 서버가 새 화면 코드로 바뀌었는데 이 페이지는 예전 코드일 때 맨 위 안내 띠 (app.js checkPageVersion) */
+.reload-bar { position: sticky; top: 0; z-index: 50; display: flex; gap: 12px; align-items: center; justify-content: center;
+  padding: 10px 16px; background: #b45309; color: #fff; font-weight: 600; font-size: 14px; }
+.reload-bar button { background: #fff; color: #b45309; border: 0; border-radius: 6px; padding: 4px 12px; font-weight: 700; cursor: pointer; }

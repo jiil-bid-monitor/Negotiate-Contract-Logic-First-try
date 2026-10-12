@@ -108,7 +108,12 @@
   **참가업체 전체** `getOpengResultListInfoOpengCompt`(inqryDiv=2 + bidNtceNo): `opengRank`·`prcbdrNm`·`prcbdrBizno`·`bidprcAmt`·`bidprcrt`·`rmrk` /
   예비가격(inqryDiv=2 + bidNtceNo): `plnprc`(예정가격)·`bssamt`·`bsisPlnprc`·`drwtYn`·`drwtNum`·`compnoRsrvtnPrceSno` — 표본이 예가 1개 공고라 15개 행 모양은 미확인 /
   낙찰현황 `sucsfbidAmt`·`sucsfbidRate`·`bidwinnrBizno`.
-- 다음: 응답 칸 확인 → 관심 분야 개찰결과 매일 저장(저장소 결정 필요: Supabase 켜기 vs 웹앱 sqlite) → 웹앱 카드·리포트에 분석 표시.
+- **(10/12 사용자 결정 "1번")** 모을 범위 = **지금 필터를 통과한 입찰 유형 후보**의 과거 개찰 결과. 지일 사업자번호 **206-86-36338**
+  (`held_qualifications.json` `companyBizno`, 환경변수 `JIIL_BIZNO`로 덮어쓰기) — 지일 참가 공고·순위·투찰률도 뽑음.
+- 2단계(완료): `nego/bidprice.py` + 수동 워크플로 `.github/workflows/bidprice.yml`(입력 months, 기본 3) — `pipeline.run`(categories 입찰,
+  period)으로 후보를 고르고 개찰 지난 공고마다 예비가격 상세·참가업체 전체 조회 → 콘솔 요약(업무별 사정률 중앙·10~90% 구간,
+  1순위 투찰률−낙찰하한율, 참가업체 수, 자주 만난 업체 10곳, 지일 참가 목록) + 아티팩트 `bid_history_*.json`. 저장소는 아직 안 정함.
+- 다음: 백필 결과(건수·분포) 보고 → 저장 방식(Supabase/sqlite/저장소 파일) + 표시 방식(텔레그램 입찰 보고·웹앱 카드 한 줄 "참고 범위") 결정.
 
 ## 2026-10-12 — 국방전자조달(d2b) 연계 공고 표시 (A안)
 

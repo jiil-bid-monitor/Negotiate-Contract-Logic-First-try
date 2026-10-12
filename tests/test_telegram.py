@@ -108,14 +108,24 @@ class TestBuildMessages(unittest.TestCase):
         self.assertEqual(T.Row.from_candidate(cand(False, None, "사전규격")).qualification, "자격 미달(공동수급 정보 없음)")
         self.assertEqual(T.Row.from_candidate(cand(True, "(없음)공동수급불허")).qualification, "자격 충족")
 
-    def test_weekly_mixed_kinds_are_tagged(self):
-        rows = [_row("가", 3, "협상"), _row("나", 4, "사전규격", budget=45_000_000)]
+    def test_weekly_splits_main_and_prespec_sections(self):
+        """10/12 사용자 요청: 본공고·사전규격을 나눠서 — 번호는 이어서, 본공고 안에서 유형이 섞이면 [협상]·[규격가격]."""
+        rows = [_row("나", 4, "사전규격", budget=45_000_000), _row("가", 3, "협상"), _row("다", 9, "규격가격동시입찰")]
         text = T.build_messages(rows, T.report_title(["협상", "규격가격동시입찰"], True,
                                                      datetime(2026, 10, 5), datetime(2026, 10, 11, 23, 59)))[0]
         self.assertIn("협상·규격가격동시입찰·사전규격 공고 보고 (10/5~10/11 게시분)", text)
-        self.assertIn('[협상] <a href="https://g2b/가">가</a>', text)
-        self.assertIn("[사전규격]", text)
+        self.assertIn("후보 <b>3건</b> (본공고 2 · 사전규격 1)", text)
+        self.assertLess(text.index("── 본공고 2건 ──"), text.index("── 사전규격 1건 ──"))
+        self.assertIn('1. [협상] <a href="https://g2b/가">가</a>', text)
+        self.assertIn('2. [규격가격] <a href="https://g2b/다">다</a>', text)
+        self.assertIn('3. <a href="https://g2b/나">나</a>', text, "사전규격 구역은 [사전규격] 표시 없이, 번호는 이어서")
         self.assertIn("4,500만원", text)
+
+    def test_single_kind_has_no_sections(self):
+        text = T.build_messages([_row("가", 3, "입찰"), _row("나", 5, "입찰")], "입찰 공고 보고")[0]
+        self.assertNotIn("──", text)
+        self.assertIn("후보 <b>2건</b>", text)
+        self.assertNotIn("(본공고", text)
 
     def test_empty_run_still_reports(self):
         _, stats = _candidates(0)

@@ -20,7 +20,8 @@ GitHub Actions 스케줄(`daily.yml`)이 `python -m nego --telegram`으로 부�
   - 자격 미달이면 바로 옆 괄호에 공동수급 가능/불허/정보 없음 — 미달이어도 공동수급으로 참가할 수 있는지 바로 보이게.
 
   - 지역·공동수급·확인 필요 요건 등 자세한 건 첨부 HTML 리포트(전체 표)에서 본다.
-  - 유형이 섞이는 주간 보고는 공고명 앞에 [협상]·[규격가격]·[사전규격]을 붙인다.
+  - 본공고·사전규격이 함께 있으면 "── 본공고 N건 ──" / "── 사전규격 N건 ──" 구역으로 나눈다(번호는 이어서).
+    본공고 구역 안에서 유형이 섞이면 공고명 앞에 [협상]·[규격가격]·[입찰]을 붙인다.
   - 마감 지난 공고는 목록에서 빼고 건수만 적는다.
   - 메시지 한 건은 4096자까지라 넘치면 공고 단위로 나눠 보낸다.
   - 후보가 0건이어도 "새 공고 없음"을 보낸다 — 받는 사람이 "시스템이 돌았는지"를 알 수 있게.
@@ -163,10 +164,28 @@ def build_messages(rows: list[Row], title: str, warnings: list[str] | None = Non
     if not open_rows:
         header.append("조건에 맞는 새 공고가 없습니다." + skipped)
         return ["\n".join(header)]
-    header.append(f"후보 <b>{len(open_rows)}건</b>{skipped}")
+    # 본공고·사전규격을 나눠서 보여준다(2026-10-12 사용자 요청) — 둘 다 있을 때만 구역 제목을 단다.
+    # 번호는 구역을 넘어 이어서 매긴다(대화에서 "3번 공고"라고 부를 때 헷갈리지 않게).
+    main = [r for r in open_rows if r.kind != "사전규격"]
+    prespec = [r for r in open_rows if r.kind == "사전규격"]
+    both = bool(main and prespec)
+    summary = f"후보 <b>{len(open_rows)}건</b>"
+    if both:
+        summary += f" (본공고 {len(main)} · 사전규격 {len(prespec)})"
+    header.append(summary + skipped)
 
-    tagged = len({r.kind for r in open_rows}) > 1
-    blocks = [_line(i, r, tagged) for i, r in enumerate(open_rows, start=1)]
+    blocks: list[str] = []
+    index = 1
+    for section, rows_in in (("본공고", main), ("사전규격", prespec)):
+        if not rows_in:
+            continue
+        # 구역 안에서 유형이 섞일 때만 [협상]·[입찰] 표시 — 사전규격 구역은 제목이 이미 말해 줌
+        tagged = len({r.kind for r in rows_in}) > 1 or (not both and len({r.kind for r in open_rows}) > 1)
+        lines = [_line(index + i, r, tagged) for i, r in enumerate(rows_in)]
+        index += len(rows_in)
+        if both:  # 구역 제목이 첫 공고와 같은 메시지에 붙어 가게 한 블록으로
+            lines[0] = f"<b>── {section} {len(rows_in)}건 ──</b>\n\n{lines[0]}"
+        blocks += lines
     if footer:
         blocks.append(esc(footer))
 

@@ -24,6 +24,9 @@ if [ ! -f "$ENV_FILE" ]; then
     echo "PORT='8765'"
     echo "APP_TOKEN='jiil2026'"
     echo "# AI 판단을 쓸 때만: ANTHROPIC_API_KEY='...'"
+    echo "# 텔레그램 보내기를 쓸 때만 (SETUP.md '텔레그램 봇 만들기'):"
+    echo "# TELEGRAM_BOT_TOKEN='...'"
+    echo "# TELEGRAM_CHAT_ID='...'"
   } > "$ENV_FILE"
   echo "설정을 $ENV_FILE 에 저장했습니다 (서비스키를 바꾸려면 이 파일을 메모장으로 고치면 됨)."
 fi

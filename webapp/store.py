@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS comments (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS comments_key ON comments(key);
+CREATE TABLE IF NOT EXISTS telegram_sends (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    sent_by TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    result TEXT NOT NULL
+);
 """
 
 
@@ -137,3 +144,13 @@ class Store:
 
     def comment_counts(self) -> dict[str, int]:
         return {r["key"]: r["n"] for r in self._query("SELECT key, COUNT(*) AS n FROM comments GROUP BY key")}
+
+    # ── 텔레그램 발송 기록 ──────────────────────────────────────
+    # 같은 결과를 두 번 보내기 전에 "이미 보냄"을 알려 주려고 남긴다(실수로 단체방에 중복 발송 방지).
+    def add_telegram_send(self, run_id: int, by: str, result: str) -> None:
+        self._exec("INSERT INTO telegram_sends(run_id, sent_by, sent_at, result) VALUES (?,?,?,?)",
+                   (run_id, by, _now(), result))
+
+    def telegram_sends(self, run_id: int) -> list[dict[str, Any]]:
+        return [dict(r) for r in self._query(
+            "SELECT sent_by, sent_at, result FROM telegram_sends WHERE run_id=? ORDER BY id", (run_id,))]

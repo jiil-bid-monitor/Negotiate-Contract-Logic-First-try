@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 from nego import scope
 
+from . import notify
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .store import STATUSES, Store
 from .sync import BORDER, HIGH, PastIndex
@@ -105,6 +106,8 @@ def make_handler(app: App):
                     "categories": scope.CATEGORIES, "sync_thresholds": {"high": HIGH, "border": BORDER},
                     "has_service_key": bool(os.environ.get("NARA_SERVICE_KEY", "").strip()),
                     "has_ai_key": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
+                    "has_telegram": bool(os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+                                         and os.environ.get("TELEGRAM_CHAT_ID", "").strip()),
                 })
             if url.path == "/api/results":
                 # ?run=번호 — 그 브라우저가 보고 있는(직접 불러온) 결과. 없거나 지워진 번호면 최신 결과(missing=True)
@@ -184,6 +187,27 @@ def make_handler(app: App):
                         raise ValueError("key와 내용이 필요합니다")
                     app.store.add_comment(key, name, body)
                     return self._json({"comments": app.store.comments(key)})
+                if url.path == "/api/telegram":
+                    # 지금 보는 결과(run)를 보낸다. 이미 보낸 결과면 409로 알려 주고, 화면에서 확인받은 뒤 force로 다시 보냄
+                    name = self._name(data)
+                    wanted = data.get("run")
+                    run = app.store.run(int(wanted)) if str(wanted or "").isdigit() else app.store.latest_run()
+                    if run is None:
+                        raise ValueError("보낼 수집 결과가 없습니다 — 먼저 나라장터에서 불러오기")
+                    sent = app.store.telegram_sends(run["id"])
+                    ok_sent = [s for s in sent if s["result"] == "성공"]
+                    if ok_sent and not data.get("force"):
+                        last = ok_sent[-1]
+                        return self._json({"error": f"이 결과는 {last['sent_by']}님이 {last['sent_at'].replace('T', ' ')[:16]}에 "
+                                                    "이미 보냈습니다", "already": last}, HTTPStatus.CONFLICT)
+                    chats, errors = notify.send(run, name)
+                    result = "성공" if not errors else ("일부 실패" if len(errors) < chats else "실패")
+                    app.store.add_telegram_send(run["id"], name, result)
+                    if errors:
+                        logging.getLogger("webapp").error("텔레그램 발송 실패: %s", "; ".join(errors))
+                    return self._json({"chats": chats, "failed": len(errors), "errors": errors, "result": result,
+                                       "candidates": len(run.get("candidates") or [])},
+                                      HTTPStatus.OK if result != "실패" else HTTPStatus.BAD_GATEWAY)
                 if url.path == "/api/match":
                     title = str(data.get("title") or "").strip()
                     text = str(data.get("text") or "")

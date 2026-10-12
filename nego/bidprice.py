@@ -220,7 +220,9 @@ def summarize(results: list[BidResult], own_bizno: str | None = None) -> str:
         own = [(r, b) for r in usable for b in r.bidders if b.bizno == own_bizno]
         lines.append(f"\n지일 참가 {len(own)}건")
         for r, b in own[:20]:
-            lines.append(f"  {r.opened_at or ''} {r.title[:40]} — {b.rank}위 · 투찰률 {b.rate}%")
+            rank = f"{b.rank}위" if b.rank else f"순위 없음({b.remark or '사유 미표기'})"
+            limit = f" · 하한율 {r.lower_limit_rate}%" if r.lower_limit_rate else ""
+            lines.append(f"  {r.opened_at or ''} {r.title[:40]} — {rank} · 투찰률 {b.rate}%{limit} · 참가 {len(r.bidders)}곳")
     return "\n".join(lines)
 
 

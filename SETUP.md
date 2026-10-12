@@ -106,6 +106,7 @@ git push -u origin main
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase `service_role` 키 |
 | `TELEGRAM_BOT_TOKEN` | 텔레그램 봇 토큰 (아래 "텔레그램 봇 만들기") |
 | `TELEGRAM_CHAT_ID` | 보고서를 받을 대화방 ID. 여러 곳이면 쉼표로 구분 |
+| `TELEGRAM_DEV_CHAT_ID` | (선택) 개발자 알림 방 — 수집 실패(재시도 5회 소진)·회복 알림만. 자세한 건 `docs/telegram.md` |
 
 > 한 번 저장하면 **다시 볼 수 없습니다.** 값을 바꾸려면 새로 덮어써야 합니다. 정상입니다.
 

@@ -11,8 +11,13 @@ name: 나라장터 공고 수집
 #    켜려면 아래 "실행 모드 결정"의 스케줄 쪽 NO_SUPABASE를 "false"로).
 #    수동 실행은 telegram 입력이 true일 때만 보낸다.
 #
+# 수집이 실패하면(나라장터 접속 끊김 등) 60분 뒤 새 Run으로 다시 시도한다 — 최대 5회(약 4시간).
+#   담당자 방에는 실패 알림을 보내지 않는다. 개발자 방(TELEGRAM_DEV_CHAT_ID)에만
+#   ① 5회 모두 실패했을 때 ② 재시도 끝에 성공했을 때 알린다 (2026-10-12 사용자 결정).
+#
 # 필요한 저장소 secrets: NARA_SERVICE_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (텔레그램 두 개가 없으면 발송만 건너뜀)
+#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (텔레그램 두 개가 없으면 발송만 건너뜀),
+#   TELEGRAM_DEV_CHAT_ID (선택 — 개발자 알림 방. 없으면 개발자 알림만 건너뜀)
 on:
   schedule:
     - cron: "0 23 * * *"    # 23:00 UTC = 08:00 KST — 매일, 입찰
@@ -67,6 +72,10 @@ env:
   # 한국 시간대로 돌려야 한다 — 안 그러면 08:00 KST 실행 시점이 UTC로는 전날이라
   # "어제"가 한국 기준 이틀 전이 된다.
   TZ: Asia/Seoul
+  # 실패 후 다음 시도까지 기다리는 시간(분). 나라장터 접속 끊김은 몇 시간 이어질 수 있어서
+  # 바로 다시 하지 않고 간격을 둔다 (10/7 팀원 시스템 사례 — 몇 시간 뒤 정상화).
+  RETRY_DELAY_MINUTES: "60"
+  MAX_ATTEMPTS: "5"
 
 jobs:
   collect:
@@ -74,6 +83,17 @@ jobs:
     # days를 30일보다 길게 잡으면 API 조회가 여러 번(30일 단위)으로 나뉘어
     # 그만큼 오래 걸린다 — 실측 30일 기준 약 26분이라 여유 있게 잡는다.
     timeout-minutes: 90
+    # 아래 retry 잡이 같은 실행 모드로 새 Run을 띄울 때 쓴다
+    outputs:
+      failed: ${{ steps.fail.outputs.failed }}
+      categories: ${{ steps.mode.outputs.categories }}
+      complete_days: ${{ steps.mode.outputs.complete_days }}
+      days: ${{ steps.mode.outputs.days }}
+      telegram: ${{ steps.mode.outputs.telegram }}
+      prespec: ${{ steps.mode.outputs.prespec }}
+      no_supabase: ${{ steps.mode.outputs.no_supabase }}
+      llm: ${{ steps.mode.outputs.llm }}
+      attempt: ${{ steps.mode.outputs.attempt }}
 
     steps:
       - name: 저장소 체크아웃
@@ -172,7 +192,9 @@ jobs:
           [ "$PRESPEC" = "true" ] && ARGS+=(--pre-spec)
           [ "$NO_SUPABASE" = "true" ] && ARGS+=(--no-supabase)
           [ "$LLM" = "true" ] && ARGS+=(--llm-similarity)
-          python -m nego "${ARGS[@]}"
+          # 개발자 알림에 마지막 오류 줄을 붙이려고 로그를 파일로도 남긴다(output/ 밖 — 아티팩트에 안 올림)
+          set -o pipefail
+          python -m nego "${ARGS[@]}" 2>&1 | tee collect.log
 
       # 수집 원문(data/)은 올리지 않는다 — 담당자 연락처가 섞일 수 있다.
       # 리포트(output/)만 아티팩트로 남긴다.
@@ -185,45 +207,92 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
 
-      # 용역/물품/공사 중 하나라도 API 재시도(5회)를 다 소진하면 nego/pipeline.py가
-      # 전체 실행을 실패로 처리한다(부분 데이터로 리포트를 내지 않는다). 그럴 때
-      # 이 Run은 실패로 끝내고, 같은 실행 모드로 새 Run을 자동 큐잉해 재시도한다.
-      # 스케줄 실행이 실패해도 이 단계가 수동 실행 입력값으로 모드를 넘겨주므로
-      # 재시도 Run도 같은 유형·기간 설정으로 돈다.
-      # attempt를 5회로 제한해 API가 계속 죽어있을 때 무한 재시도하지 않는다.
-      - name: 실패 시 새 Run 재시도 예약
-        if: steps.collect.outcome == 'failure' && fromJSON(steps.mode.outputs.attempt) < 5
+      # 개발자 알림 — 담당자 방이 아니라 TELEGRAM_DEV_CHAT_ID로만. 알림이 실패해도 Run 결과는 그대로.
+      - name: 개발자 알림 (재시도 소진 · 회복)
+        if: >-
+          (steps.collect.outcome == 'failure' && fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.MAX_ATTEMPTS))
+          || (steps.collect.outcome == 'success' && fromJSON(steps.mode.outputs.attempt) > 1)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          REF: ${{ github.ref_name }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+          OUTCOME: ${{ steps.collect.outcome }}
+          EVENT: ${{ github.event_name }}
           CATEGORIES: ${{ steps.mode.outputs.categories }}
           COMPLETE_DAYS: ${{ steps.mode.outputs.complete_days }}
           DAYS: ${{ steps.mode.outputs.days }}
           TELEGRAM: ${{ steps.mode.outputs.telegram }}
-          PRESPEC: ${{ steps.mode.outputs.prespec }}
-          NO_SUPABASE: ${{ steps.mode.outputs.no_supabase }}
-          LLM: ${{ steps.mode.outputs.llm }}
           ATTEMPT: ${{ steps.mode.outputs.attempt }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -n "$COMPLETE_DAYS" ]; then PERIOD="오늘 뺀 직전 ${COMPLETE_DAYS}일"; else PERIOD="최근 ${DAYS}일"; fi
+          MODE="${CATEGORIES:-전체 유형} · ${PERIOD}"
+          if [ "$OUTCOME" = "failure" ]; then
+            ERRORS=$( (grep -E " ERROR |Error|조회 실패" collect.log 2>/dev/null || true) | tail -5 | cut -c1-300)
+            [ -z "$ERRORS" ] && ERRORS="(오류 줄 없음 — Actions 로그 확인)"
+            WAITED=$(( (ATTEMPT - 1) * RETRY_DELAY_MINUTES ))
+            REPORT="담당자 보고는 나가지 않았습니다."
+            [ "$TELEGRAM" != "true" ] && REPORT="(텔레그램 발송을 켜지 않은 실행)"
+            TEXT=$(printf '[개발자 알림] 나라장터 수집 실패 — %s회 모두 실패\n%s\n첫 시도 후 약 %s분 동안 재시도. %s\n\n마지막 오류:\n%s\n\n로그: %s' \
+              "$ATTEMPT" "$MODE" "$WAITED" "$REPORT" "$ERRORS" "$RUN_URL")
+          else
+            REPORT="담당자 보고 발송됨."
+            [ "$TELEGRAM" != "true" ] && REPORT="(텔레그램 발송을 켜지 않은 실행)"
+            TEXT=$(printf '[개발자 알림] 나라장터 수집 회복 — %s번째 시도에서 성공\n%s\n%s\n\n로그: %s' \
+              "$ATTEMPT" "$MODE" "$REPORT" "$RUN_URL")
+          fi
+          python -m nego.telegram dev-alert "$TEXT"
+
+      - name: 재시도 소진
+        if: steps.collect.outcome == 'failure' && fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.MAX_ATTEMPTS)
+        run: echo "::error::${{ steps.mode.outputs.attempt }}번째 시도에서도 실패 — 최대 재시도 소진, 자동 재시도를 중단합니다."
+
+      - name: 실패 처리
+        id: fail
+        if: steps.collect.outcome == 'failure'
+        run: |
+          echo "failed=true" >> "$GITHUB_OUTPUT"
+          exit 1
+
+  # 용역/물품/공사 중 하나라도 API 재시도를 다 소진하면 nego/pipeline.py가 전체 실행을 실패로
+  # 처리한다(부분 데이터로 리포트를 내지 않는다). 그럴 때 RETRY_DELAY_MINUTES만큼 기다렸다가 같은
+  # 실행 모드로 새 Run을 큐에 올린다 — 스케줄 실행이 실패해도 입력값으로 모드를 넘겨주므로 재시도
+  # Run도 같은 유형·기간으로 돈다(조회 기간은 날짜 단위라 몇 시간 뒤에 돌아도 같다).
+  # 기다리는 동안 러너 시간이 든다(실패한 날만, 회당 약 60분).
+  retry:
+    needs: collect
+    if: always() && needs.collect.outputs.failed == 'true' && fromJSON(needs.collect.outputs.attempt) < 5
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - name: 다음 시도까지 대기
+        run: |
+          echo "수집 실패 — ${RETRY_DELAY_MINUTES}분 뒤 $(( ${{ needs.collect.outputs.attempt }} + 1 ))번째 시도를 큐에 올립니다."
+          sleep $(( RETRY_DELAY_MINUTES * 60 ))
+
+      - name: 새 Run 재시도 예약
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
+          CATEGORIES: ${{ needs.collect.outputs.categories }}
+          COMPLETE_DAYS: ${{ needs.collect.outputs.complete_days }}
+          DAYS: ${{ needs.collect.outputs.days }}
+          TELEGRAM: ${{ needs.collect.outputs.telegram }}
+          PRESPEC: ${{ needs.collect.outputs.prespec }}
+          NO_SUPABASE: ${{ needs.collect.outputs.no_supabase }}
+          LLM: ${{ needs.collect.outputs.llm }}
+          ATTEMPT: ${{ needs.collect.outputs.attempt }}
         run: |
           NEXT_ATTEMPT=$(( ATTEMPT + 1 ))
-          echo "수집 실패 — ${NEXT_ATTEMPT}번째 시도로 새 Run을 큐에 올립니다."
           BODY=$(jq -n \
             --arg ref "$REF" --arg categories "$CATEGORIES" --arg complete_days "$COMPLETE_DAYS" \
             --arg days "$DAYS" --arg telegram "$TELEGRAM" --arg pre_spec "$PRESPEC" --arg no_supabase "$NO_SUPABASE" \
             --arg llm "$LLM" --arg attempt "$NEXT_ATTEMPT" \
             '{ref: $ref, inputs: {categories: $categories, complete_days: $complete_days, days: $days,
               telegram: $telegram, pre_spec: $pre_spec, no_supabase: $no_supabase, llm_similarity: $llm, attempt: $attempt}}')
-          curl -sS -X POST \
+          curl -sS --fail-with-body -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${REPO}/actions/workflows/daily.yml/dispatches" \
             -d "$BODY"
-
-      - name: 재시도 소진 알림
-        if: steps.collect.outcome == 'failure' && !(fromJSON(steps.mode.outputs.attempt) < 5)
-        run: echo "::error::${{ steps.mode.outputs.attempt }}번째 시도에서도 실패 — 최대 재시도(5회) 소진, 자동 재시도를 중단합니다."
-
-      - name: 실패 처리
-        if: steps.collect.outcome == 'failure'
-        run: exit 1
+          echo "${NEXT_ATTEMPT}번째 시도 Run을 큐에 올렸습니다."

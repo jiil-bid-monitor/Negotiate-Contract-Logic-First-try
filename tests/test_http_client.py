@@ -14,7 +14,25 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nego.http_client import ApiConfig, DataGoKrClient, chunk_date_range  # noqa: E402
+import requests  # noqa: E402
+
+from nego.http_client import ApiConfig, ApiError, DataGoKrClient, chunk_date_range  # noqa: E402
+
+
+class TestServiceKeyMasked(unittest.TestCase):
+    def test_connection_error_message_hides_service_key(self):
+        """연결 오류 문구엔 요청 주소가 통째로 들어간다 — 로그·개발자 알림에 키가 새면 안 된다."""
+
+        class Down:
+            def get(self, url, timeout=None):
+                raise requests.ConnectionError(f"Max retries exceeded with url: {url} (Caused by timeout)")
+
+        client = DataGoKrClient(ApiConfig(service_key="MY+SECRET/KEY=", max_retries=0, retry_delay_sec=0), Down())
+        with self.assertRaises(ApiError) as ctx:
+            client.fetch_all_pages("https://apis.data.go.kr/x", "op", {}, "본공고/용역")
+        msg = str(ctx.exception)
+        self.assertIn("serviceKey=***", msg)
+        self.assertNotIn("SECRET", msg)
 
 
 class TestChunkDateRange(unittest.TestCase):

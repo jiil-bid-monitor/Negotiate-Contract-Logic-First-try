@@ -101,6 +101,13 @@
   개찰결과에 참가업체 사업자번호가 나오므로 지일 번호로 거르면 **지일 투찰 이력·과거 실적**도 모을 수 있을 듯(9/18 "회사 필터 못 찾음" 우회 후보).
 - 1단계(완료): `--verify`에 기초금액 2종 + 낙찰정보 7종 추가(`fields.BASIS_AMOUNT_OPERATIONS`·`SCSBID_OPERATIONS`, 주소 `SCSBID_BASE_URL` 덮어쓰기 가능).
   주소(`/1230000/as/ScsbidInfoService`)·오퍼레이션 이름은 **활용가이드 기준 추정 — 실응답 미확인**. 활용신청 승인 후 Actions `verify=true`로 칸 확인.
+- **(10/12 실측 Run #94·#95) 전부 응답 옴 — 주소·오퍼레이션 이름 맞음, 사용자 기존 키로 이미 활용신청돼 있었음.** 확인한 칸:
+  본공고에 이미 `sucsfbidLwltRate`(낙찰하한율, 예 89.745)·`totPrdprcNum`(예비가격 수 15) /
+  기초금액 `bssamt`·`rsrvtnPrceRngBgnRate`·`EndRate`(±3), 공사는 A값 항목(`npnInsrprm`·`mrfnHealthInsrprm`·`odsnLngtrmrcprInsrprm`·`rtrfundNon`·`sftyMngcst` 등)·`bssAmtPurcnstcst`(순공사원가) /
+  개찰결과 목록 `opengCorpInfo`("업체^사업자번호^대표^금액^투찰률" — 1순위만)·`prtcptCnum` /
+  **참가업체 전체** `getOpengResultListInfoOpengCompt`(inqryDiv=2 + bidNtceNo): `opengRank`·`prcbdrNm`·`prcbdrBizno`·`bidprcAmt`·`bidprcrt`·`rmrk` /
+  예비가격(inqryDiv=2 + bidNtceNo): `plnprc`(예정가격)·`bssamt`·`bsisPlnprc`·`drwtYn`·`drwtNum`·`compnoRsrvtnPrceSno` — 표본이 예가 1개 공고라 15개 행 모양은 미확인 /
+  낙찰현황 `sucsfbidAmt`·`sucsfbidRate`·`bidwinnrBizno`.
 - 다음: 응답 칸 확인 → 관심 분야 개찰결과 매일 저장(저장소 결정 필요: Supabase 켜기 vs 웹앱 sqlite) → 웹앱 카드·리포트에 분석 표시.
 
 ## 2026-10-12 — 국방전자조달(d2b) 연계 공고 표시 (A안)

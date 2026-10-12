@@ -52,6 +52,9 @@ def _verify_api(config) -> int:
     targets.append(("참가가능지역", F.BID_NOTICE_BASE_URL, F.REGION_LIMIT_OPERATION))
     prespec_url = os.environ.get("PRESPEC_BASE_URL", "").strip() or F.PRESPEC_BASE_URL
     targets += [(f"사전규격/{w}", prespec_url, op) for w, op in F.PRESPEC_OPERATIONS.items()]
+    targets += [(f"기초금액/{w}", F.BID_NOTICE_BASE_URL, op) for w, op in F.BASIS_AMOUNT_OPERATIONS.items()]
+    scsbid_url = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
+    targets += [(f"낙찰정보/{w}", scsbid_url, op) for w, op in F.SCSBID_OPERATIONS.items()]
 
     for label, base_url, operation in targets:
         print(f"\n── {label} ({operation}) " + "─" * 30)

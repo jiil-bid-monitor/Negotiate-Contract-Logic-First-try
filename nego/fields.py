@@ -52,6 +52,25 @@ PRESPEC_ATTACHMENT_NAME_PREFIX = "specDocFileNm"
 PRESPEC_ATTACHMENT_MAX = 5
 REGION_LIMIT_OPERATION = "getBidPblancListInfoPrtcptPsblRgn"
 
+# ── 투찰가격 분석용 (아직 수집에는 안 씀 — `--verify`로 응답 칸 확인부터) ─────────
+# 기초금액은 입찰공고정보서비스 안의 별도 오퍼레이션, 개찰 결과·예비가격은
+# **별도 서비스(조달청_나라장터 낙찰정보서비스)** 라 공공데이터포털에서 따로 활용신청해야 한다.
+# 주소·오퍼레이션 이름은 활용가이드 기준 추정 — 주소가 다르면 환경변수 SCSBID_BASE_URL로 덮어쓴다.
+BASIS_AMOUNT_OPERATIONS = {
+    "용역": "getBidPblancListInfoServcBsisAmount",
+    "공사": "getBidPblancListInfoCnstwkBsisAmount",
+}
+SCSBID_BASE_URL = "https://apis.data.go.kr/1230000/as/ScsbidInfoService"
+SCSBID_OPERATIONS = {
+    "개찰결과/용역": "getOpengResultListInfoServc",
+    "개찰결과/공사": "getOpengResultListInfoCnstwk",
+    "개찰결과/물품": "getOpengResultListInfoThng",
+    "예비가격/용역": "getOpengResultListInfoServcPreparPcDetail",
+    "예비가격/공사": "getOpengResultListInfoCnstwkPreparPcDetail",
+    "낙찰현황/용역": "getScsbidListSttusServc",
+    "낙찰현황/공사": "getScsbidListSttusCnstwk",
+}
+
 FIELD_CANDIDATES: dict[str, list[str]] = {
     # ── 식별 ──────────────────────────────────────────────
     "notice_no": ["bidNtceNo"],

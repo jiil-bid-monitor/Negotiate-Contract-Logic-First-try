@@ -63,12 +63,40 @@ class Notice:
         return (self.work_type, self.notice_no, self.notice_ord)
 
     @property
+    def linked_system(self) -> dict[str, str] | None:
+        """나라장터엔 제목·일정만 있고 규격서·상세는 다른 조달시스템에 있는 공고 → {name, url}.
+
+        2026-10-12 사용자 제보: 국방부(국군재정관리단)가 국방전자조달(d2b.go.kr)에 올린 사전규격은
+        나라장터에 "연계기관 공개 규격"으로 첨부 0건, 상세는 d2b 링크만 있다 — 첨부를 못 읽어 자격 미확인.
+        API가 이걸 어느 칸으로 알려주는지 아직 실응답으로 못 봐서 두 가지로 가린다:
+        ① 응답 어느 칸에든 d2b.go.kr 주소가 있으면 그 주소 ② 첨부가 0건인 국방 기관 사전규격이면 d2b 사전규격 목록.
+        """
+        for value in self.raw.values():
+            if isinstance(value, str):
+                m = _D2B_URL.search(value)
+                if m:
+                    return {"name": D2B_NAME, "url": m.group(0)}
+        if self.attachments or self.kind != PRESPEC_KIND:
+            return None
+        institutions = f"{self.notice_institution or ''} {self.demand_institution or ''}"
+        if _DEFENSE_INSTITUTION.search(institutions):
+            return {"name": D2B_NAME, "url": D2B_PRESPEC_LIST}
+        return None
+
+    @property
     def budget(self) -> float | None:
         """금액 기준을 하나로 통일한다. 추정가격 우선, 없으면 배정예산."""
         return self.estimated_price if self.estimated_price else self.assigned_budget
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+PRESPEC_KIND = "사전규격"
+D2B_NAME = "국방전자조달"
+D2B_PRESPEC_LIST = "https://www.d2b.go.kr/psb/plan/servicePreStdList.do"
+_D2B_URL = re.compile(r"https?://(?:www\.)?d2b\.go\.kr[^\s\"'<>]*")
+_DEFENSE_INSTITUTION = re.compile(r"국방부|국군|방위사업청|육군|해군|공군|해병대")
 
 
 def notice_from_raw(raw: dict[str, Any], work_type: str) -> Notice:
@@ -105,9 +133,6 @@ def notice_from_raw(raw: dict[str, Any], work_type: str) -> Notice:
         attachments=F.extract_attachments(clean),
         raw=clean,
     )
-
-
-PRESPEC_KIND = "사전규격"
 
 
 def prespec_from_raw(raw: dict[str, Any], work_type: str) -> Notice:

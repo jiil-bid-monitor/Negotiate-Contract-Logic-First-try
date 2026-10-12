@@ -81,13 +81,16 @@ class Row:
     budget: float | None
     days_left: int | None
     qualification: str  # 자격 충족 / 자격 미달 / 자격 미확인
+    linked: str | None = None  # 규격서가 다른 조달시스템에 있으면 그 이름 (국방전자조달)
 
     @classmethod
     def from_candidate(cls, c: Any) -> "Row":
         q = c.qualification
         qual = "자격 미확인" if not q.checked else ("자격 충족" if q.passes else "자격 미달")
         kind = "사전규격" if c.notice.kind == "사전규격" else c.category
-        return cls(c.notice.title or "", c.notice.detail_url, kind, c.notice.budget, c.days_left, qual)
+        linked = c.notice.linked_system
+        return cls(c.notice.title or "", c.notice.detail_url, kind, c.notice.budget, c.days_left, qual,
+                   linked["name"] if linked else None)
 
 
 def _short_money(value: float | None) -> str:
@@ -123,7 +126,10 @@ def _line(index: int, row: Row, tagged: bool) -> str:
     if tagged and row.kind:
         title = f"[{esc(_KIND_TAG.get(row.kind, row.kind))}] {title}"
     days = "마감 미상" if row.days_left is None else f"D-{row.days_left}"
-    return f"{index}. {title}\n   {esc(_short_money(row.budget))} · {days} · {row.qualification}"
+    line = f"{index}. {title}\n   {esc(_short_money(row.budget))} · {days} · {row.qualification}"
+    if row.linked:
+        line += f" · {esc(row.linked)}에서 확인"
+    return line
 
 
 def build_messages(rows: list[Row], title: str, warnings: list[str] | None = None,

@@ -286,6 +286,9 @@ def render_console(candidates: list[Candidate], stats: RunStats) -> str:
             flags.append("직찰(비전자)")
         if c.screen_result.overseas_flag:
             flags.append(f"🌐 해외개최 의심(몽골) — 직접 확인 필요 ({c.screen_result.overseas_evidence})")
+        linked = c.notice.linked_system
+        if linked:
+            flags.append(f"{linked['name']} 공고 — 규격서·상세는 {linked['url']}")
 
         earliest = c.schedule.earliest
         deadline = f"D-{c.days_left}" if c.days_left is not None else "일정 미상"
@@ -502,6 +505,13 @@ def render_html(candidates: list[Candidate], stats: RunStats, generated_at: date
 
             confidence_cls = " confidence-strong" if c.screen_result.confidence == "강력추천" else ""
             re_badge = '<span class="rebadge">재공고</span>' if c.is_re_notice else ""
+            linked = c.notice.linked_system
+            if linked:
+                re_badge += (
+                    f'<a class="rebadge" href="{esc(linked["url"])}" target="_blank" rel="noopener" '
+                    f'title="나라장터엔 첨부가 없습니다 — 규격서·상세는 {esc(linked["name"])}에서 확인">'
+                    f'{esc(linked["name"])}에서 확인</a>'
+                )
 
             overseas_badge = ""
             if c.screen_result.overseas_flag:

@@ -1,15 +1,24 @@
 """수집 결과를 텔레그램 봇으로 발송한다.
 
-"수집 완료" 알림이 아니라 **보고서 형태**(후보 목록·발주기관·금액·마감·자격)로 보낸다
-(2026-09 결정 — 카카오 알림톡은 채널 등록·템플릿 심사·건당 비용이 들어 보류).
-
-  - 본문: 후보 공고 목록. 텔레그램 메시지 한 건은 4096자까지라 넘치면 공고 단위로 나눠 보낸다.
-  - 첨부(CLI만): 전체 HTML 리포트 파일 (PC·핸드폰에서 눌러 바로 열림).
-  - 후보가 0건이어도 "새 공고 없음"을 보낸다 — 받는 사람이 "시스템이 돌았는지"를 알 수 있게.
+"수집 완료" 알림이 아니라 **보고서 형태**로 보낸다 (2026-09 결정 — 카카오 알림톡은 채널 등록·
+템플릿 심사·건당 비용이 들어 보류).
 
 GitHub Actions 스케줄(`daily.yml`)이 `python -m nego --telegram`으로 부른다 (2026-10-12 사용자 결정):
 매일 08:00 입찰(어제 하루), 매주 월 08:10 협상·규격가격동시입찰·사전규격(지난 7일).
-`candidate_row`로 Candidate를 dict로 바꾼 뒤 메시지를 만든다 — 메시지 모양은 `_candidate_block` 한 곳.
+
+메시지 모양 (2026-10-12 사용자 결정 — 간결형·마감 임박순·HTML 첨부·0건도 발송):
+
+    📋 입찰 공고 보고 (10/11 게시분)
+    후보 3건
+
+    1. ○○체험관 전시물 제작설치          ← 누르면 나라장터 공고
+       3.2억 · D-5 · 자격 충족
+
+  - 지역·공동수급·확인 필요 요건 등 자세한 건 첨부 HTML 리포트(전체 표)에서 본다.
+  - 유형이 섞이는 주간 보고는 공고명 앞에 [협상]·[규격가격]·[사전규격]을 붙인다.
+  - 마감 지난 공고는 목록에서 빼고 건수만 적는다.
+  - 메시지 한 건은 4096자까지라 넘치면 공고 단위로 나눠 보낸다.
+  - 후보가 0건이어도 "새 공고 없음"을 보낸다 — 받는 사람이 "시스템이 돌았는지"를 알 수 있게.
 
 설정 (환경변수):
   TELEGRAM_BOT_TOKEN  @BotFather가 발급한 봇 토큰
@@ -39,8 +48,9 @@ API_BASE = "https://api.telegram.org"
 # 텔레그램 한도는 4096자. 태그·이모지 여유를 두고 자른다.
 MESSAGE_LIMIT = 3800
 MAX_ATTEMPTS = 3
-# 웹앱 "검토 필요"(관심·제외 키워드 공존)는 목록 끝에 짧게 — 길어지면 핵심 후보가 묻힌다
-MAX_REVIEW_LINES = 15
+
+# 주간 보고에서 공고명 앞에 붙이는 유형 표시
+_KIND_TAG = {"협상": "협상", "규격가격동시입찰": "규격가격", "입찰": "입찰", "사전규격": "사전규격"}
 
 
 @dataclass
@@ -57,35 +67,23 @@ class TelegramConfig:
         return cls(token=token, chat_ids=chats)
 
 
-def _iso(dt: datetime | None) -> str | None:
-    return dt.isoformat(timespec="minutes") if dt else None
+@dataclass
+class Row:
+    """메시지 한 줄에 쓰는 칸만 뽑은 공고."""
 
+    title: str
+    detail_url: str | None
+    kind: str | None  # 협상 / 규격가격동시입찰 / 입찰 / 사전규격
+    budget: float | None
+    days_left: int | None
+    qualification: str  # 자격 충족 / 자격 미달 / 자격 미확인
 
-def candidate_row(c: Any) -> dict[str, Any]:
-    """CLI의 `Candidate` → 웹앱 카드 JSON과 같은 키의 dict (메시지에 쓰는 칸만)."""
-    n = c.notice
-    q = c.qualification
-    earliest = c.schedule.earliest
-    return {
-        "title": n.title,
-        "detail_url": n.detail_url,
-        "kind": n.kind,
-        "category": c.category,
-        "work_type": n.work_type,
-        "confidence": c.screen_result.confidence,
-        "review_exclude": c.screen_result.review_exclude,
-        "matched_keywords": c.screen_result.matched_keywords,
-        "is_re_notice": c.is_re_notice,
-        "demand_institution": n.demand_institution or n.notice_institution,
-        "budget": n.budget,
-        "deadline_label": earliest[0] if earliest else None,
-        "deadline": _iso(earliest[1]) if earliest else None,
-        "days_left": c.days_left,
-        "region_check": c.region_check.to_dict(),
-        "text_flags": list(getattr(c, "text_flags", []) or []),
-        "joint": {"label": c.joint.label, "allowed": c.joint.allowed},
-        "qualification": {"checked": q.checked, "passes": q.passes, "summary": q.summary},
-    }
+    @classmethod
+    def from_candidate(cls, c: Any) -> "Row":
+        q = c.qualification
+        qual = "자격 미확인" if not q.checked else ("자격 충족" if q.passes else "자격 미달")
+        kind = "사전규격" if c.notice.kind == "사전규격" else c.category
+        return cls(c.notice.title or "", c.notice.detail_url, kind, c.notice.budget, c.days_left, qual)
 
 
 def _short_money(value: float | None) -> str:
@@ -97,166 +95,51 @@ def _short_money(value: float | None) -> str:
     return f"{value / 10_000:,.0f}만원"
 
 
-def _deadline_text(row: dict[str, Any]) -> str:
-    days = row.get("days_left")
-    if days is None:
-        return "마감 미상"
-    if days < 0:
-        return "마감됨"
-    text = f"D-{days}"
-    if row.get("deadline_label"):
-        text += f" {row['deadline_label']}"
-    deadline = row.get("deadline")
-    if deadline:
-        try:
-            dt = datetime.fromisoformat(deadline)
-            text += f"({dt.month}/{dt.day})"
-        except ValueError:
-            pass
-    return text
+def _md(dt: datetime) -> str:
+    return f"{dt.month}/{dt.day}"
 
 
-def _qual_text(row: dict[str, Any]) -> str:
-    q = row.get("qualification") or {}
-    if not q.get("checked"):
-        return "자격 미확인"
-    if q.get("passes"):
-        return "자격 충족"
-    summary = str(q.get("summary") or "자격 미달")
-    return summary if len(summary) <= 60 else summary[:58] + "…)"
+def report_title(categories: list[str] | None, prespec: bool, begin: datetime | None, end: datetime | None) -> str:
+    """"입찰 공고 보고 (10/11 게시분)" / "협상·규격가격동시입찰·사전규격 공고 보고 (10/5~10/11 게시분)"."""
+    kinds = list(categories or ["전체 유형"])
+    if prespec:
+        kinds.append("사전규격")
+    title = f"{'·'.join(kinds)} 공고 보고"
+    if begin and end:
+        span = _md(begin) if begin.date() == end.date() else f"{_md(begin)}~{_md(end)}"
+        title += f" ({span} 게시분)"
+    return title
 
 
-def _region_text(row: dict[str, Any]) -> str | None:
-    r = row.get("region_check") or {}
-    req = "·".join(r.get("required") or [])
-    if r.get("status") == "미달":
-        return f"지역 미달({req}만)"
-    if r.get("status") == "충족":
-        return "지역 충족"
-    return None
-
-
-def _flags_text(row: dict[str, Any]) -> str | None:
-    kinds = list(dict.fromkeys(f.get("kind") for f in row.get("text_flags") or [] if f.get("kind")))
-    names = {"실적": "실적", "현장설명회": "현장설명회", "인력": "기술인력", "건축사사무소": "건축사사무소"}
-    return " · ".join(names.get(k, k) for k in kinds) or None
-
-
-def _kind_tag(row: dict[str, Any]) -> str:
-    if row.get("kind") == "사전규격":
-        return "사전규격"
-    return "·".join(x for x in (row.get("category"), row.get("work_type")) if x) or "유형 미상"
-
-
-def _candidate_block(index: int, row: dict[str, Any]) -> str:
+def _line(index: int, row: Row, tagged: bool) -> str:
     esc = html.escape
-    title = esc(row.get("title") or "")
-    if row.get("detail_url"):
-        title = f'<a href="{esc(row["detail_url"], quote=True)}">{title}</a>'
-    tag = esc(_kind_tag(row)) + (" · 재공고" if row.get("is_re_notice") else "")
-    info = [
-        esc(row.get("demand_institution") or "기관 미상"),
-        esc(_short_money(row.get("budget"))),
-        esc(_deadline_text(row)),
-    ]
-    cond = [_qual_text(row)]
-    region = _region_text(row)
-    if region:
-        cond.append(region)
-    joint = (row.get("joint") or {}).get("label")
-    if joint and row.get("kind") != "사전규격":
-        cond.append(f"공동수급 {joint}")
-    lines = [
-        f"<b>{index}. [{tag}]</b> {title}",
-        "   " + " · ".join(info),
-        "   " + esc(" · ".join(cond)),
-    ]
-    flags = _flags_text(row)
-    if flags:
-        lines.append(f"   ⚠️ 확인 필요: {esc(flags)}")
-    sync = row.get("sync") or {}
-    if sync.get("score") is not None:
-        lines.append(f"   싱크로율 {round(sync['score'] * 100)}%")
-    return "\n".join(lines)
+    title = esc(row.title)
+    if row.detail_url:
+        title = f'<a href="{esc(row.detail_url, quote=True)}">{title}</a>'
+    if tagged and row.kind:
+        title = f"[{esc(_KIND_TAG.get(row.kind, row.kind))}] {title}"
+    days = "마감 미상" if row.days_left is None else f"D-{row.days_left}"
+    return f"{index}. {title}\n   {esc(_short_money(row.budget))} · {days} · {row.qualification}"
 
 
-def _review_line(row: dict[str, Any]) -> str:
+def build_messages(rows: list[Row], title: str, warnings: list[str] | None = None,
+                   footer: str | None = None) -> list[str]:
+    """마감 임박순으로 나열하고 메시지 한도에 맞춰 나눈다(공고 하나가 두 메시지로 갈라지지 않게)."""
     esc = html.escape
-    title = esc(row.get("title") or "")
-    if row.get("detail_url"):
-        title = f'<a href="{esc(row["detail_url"], quote=True)}">{title}</a>'
-    why = f' (제외어 "{esc(row.get("review_exclude") or "")}")' if row.get("review_exclude") else ""
-    return f"· {title} — {esc(_short_money(row.get('budget')))} · {esc(_deadline_text(row))}{why}"
-
-
-def _fmt_period(begin: str | datetime | None, end: str | datetime | None) -> str | None:
-    def day(v):
-        if isinstance(v, str):
-            try:
-                v = datetime.fromisoformat(v)
-            except ValueError:
-                return None
-        return f"{v.year}.{v.month}.{v.day}" if v else None
-
-    b, e = day(begin), day(end)
-    return f"{b} ~ {e}" if b and e else None
-
-
-def build_messages(
-    rows: list[dict[str, Any]],
-    title: str,
-    period_begin: str | datetime | None = None,
-    period_end: str | datetime | None = None,
-    warnings: list[str] | None = None,
-    footer: str | None = None,
-) -> list[str]:
-    """후보 목록을 메시지 한도에 맞춰 여러 개로 나눈다. 공고 하나가 두 메시지로 갈라지지 않게
-    공고 단위로 자른다.
-
-    - 마감 지난 공고는 목록에서 빼고 건수만 적는다.
-    - `confidence == "검토필요"`(웹앱의 관심·제외 키워드 공존)는 맨 뒤에 한 줄씩.
-    """
-    esc = html.escape
-    open_rows = [r for r in rows if r.get("days_left") is None or r["days_left"] >= 0]
+    open_rows = [r for r in rows if r.days_left is None or r.days_left >= 0]
     closed = len(rows) - len(open_rows)
-    main = [r for r in open_rows if r.get("confidence") != "검토필요"]
-    review = [r for r in open_rows if r.get("confidence") == "검토필요"]
+    open_rows.sort(key=lambda r: 9999 if r.days_left is None else r.days_left)  # 같은 날이면 들어온 순서 유지
 
     header = [f"📋 <b>{esc(title)}</b>"]
-    period = _fmt_period(period_begin, period_end)
-    if period:
-        header.append(f"조회 기간: {period}")
-    for w in warnings or []:
-        header.append(f"⚠️ {esc(w)}")
-
-    if not main and not review:
-        header.append("")
-        header.append("조건에 맞는 새 공고가 없습니다." + (f" (마감 지난 {closed}건 제외)" if closed else ""))
-        if footer:
-            header.append(esc(footer))
+    header += [f"⚠️ {esc(w)}" for w in warnings or []]
+    skipped = f" (마감 지난 {closed}건 제외)" if closed else ""
+    if not open_rows:
+        header.append("조건에 맞는 새 공고가 없습니다." + skipped)
         return ["\n".join(header)]
+    header.append(f"후보 <b>{len(open_rows)}건</b>{skipped}")
 
-    summary = f"후보 <b>{len(main)}건</b>"
-    if review:
-        summary += f" · 검토 필요 {len(review)}건"
-    if closed:
-        summary += f" (마감 지난 {closed}건 제외)"
-    header.append(summary)
-
-    blocks = [_candidate_block(i, r) for i, r in enumerate(main, start=1)]
-    if review:
-        lines = [f"<b>🔎 검토 필요 {len(review)}건</b> — 관심 키워드와 제외 키워드가 함께 있는 공고"]
-        lines += [_review_line(r) for r in review[:MAX_REVIEW_LINES]]
-        if len(review) > MAX_REVIEW_LINES:
-            lines.append(f"· 외 {len(review) - MAX_REVIEW_LINES}건은 웹앱에서 확인")
-        # 검토 필요 줄도 한도를 넘지 않게 줄 단위로 나눠 블록에 넣는다
-        chunk: list[str] = []
-        for line in lines:
-            if chunk and len("\n".join(chunk)) + 1 + len(line) > MESSAGE_LIMIT:
-                blocks.append("\n".join(chunk))
-                chunk = []
-            chunk.append(line)
-        blocks.append("\n".join(chunk))
+    tagged = len({r.kind for r in open_rows}) > 1
+    blocks = [_line(i, r, tagged) for i, r in enumerate(open_rows, start=1)]
     if footer:
         blocks.append(esc(footer))
 
@@ -273,12 +156,14 @@ def build_messages(
 
 
 def stats_warnings(stats: Any) -> list[str]:
-    """CLI `RunStats` → 메시지 머리에 붙일 경고."""
+    """`RunStats` → 메시지 머리에 붙일 경고."""
     out = []
     if getattr(stats, "failed_operations", None):
         out.append(f"조회 실패: {', '.join(stats.failed_operations)}")
     if getattr(stats, "license_error", None):
         out.append("면허제한정보 조회 실패 — 자격 판정 미적용")
+    if getattr(stats, "prespec_error", None):
+        out.append("사전규격 조회 실패 — 본공고만")
     return out
 
 
@@ -359,12 +244,11 @@ def send_report(
     html_path: Path | None = None,
     session: requests.Session | None = None,
 ) -> list[str]:
-    """CLI용 — 후보 목록 + (후보가 있으면) HTML 리포트 파일."""
-    from .report import report_title
-
-    rows = [candidate_row(c) for c in candidates]
-    messages = build_messages(
-        rows, report_title(stats), stats.period_begin, stats.period_end, stats_warnings(stats),
-        footer="전체 표는 첨부 HTML 리포트" if rows else None,
-    )
-    return send_messages(config, messages, html_path if rows else None, session)
+    """후보 목록 + (후보가 있으면) HTML 리포트 파일."""
+    rows = [Row.from_candidate(c) for c in candidates]
+    title = report_title(stats.categories, bool(getattr(stats, "prespec_requested", False)),
+                         stats.period_begin, stats.period_end)
+    has_open = any(r.days_left is None or r.days_left >= 0 for r in rows)
+    messages = build_messages(rows, title, stats_warnings(stats),
+                              footer="지역·공동수급·확인 필요 요건 등 자세한 내용은 첨부 HTML 리포트" if has_open else None)
+    return send_messages(config, messages, html_path if has_open else None, session)

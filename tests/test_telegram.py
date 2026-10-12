@@ -34,10 +34,12 @@ def _candidates(n: int, award: str = fixtures.QUALIFY):
 
 
 def _messages(candidates, stats):
-    from nego.report import report_title
+    title = T.report_title(stats.categories, False, stats.period_begin, stats.period_end)
+    return T.build_messages([T.Row.from_candidate(c) for c in candidates], title)
 
-    return T.build_messages([T.candidate_row(c) for c in candidates], report_title(stats),
-                            stats.period_begin, stats.period_end)
+
+def _row(title, days, kind="입찰", budget=320_000_000, qual="자격 충족"):
+    return T.Row(title, f"https://g2b/{title}", kind, budget, days, qual)
 
 
 class FakeResponse:
@@ -61,18 +63,34 @@ class FakeSession:
 
 
 class TestBuildMessages(unittest.TestCase):
-    def test_lists_candidates_with_category_and_short_money(self):
+    def test_compact_two_line_format(self):
+        """10/12 결정 모양: 공고명(링크) / 금액 · D-N · 자격."""
         candidates, stats = _candidates(2)
         self.assertEqual(len(candidates), 2)
-        messages = _messages(candidates, stats)
-        self.assertEqual(len(messages), 1)
-        text = messages[0]
-        self.assertIn("나라장터 입찰 모니터링 리포트 (입찰)", text)
-        self.assertIn("조회 기간: 2026.8.31 ~ 2026.8.31", text)
+        text = _messages(candidates, stats)[0]
+        self.assertIn("📋 <b>입찰 공고 보고 (8/31 게시분)</b>", text)
         self.assertIn("후보 <b>2건</b>", text)
-        self.assertIn("[입찰·용역]", text)
-        self.assertIn("억", text)
-        self.assertIn("href=", text)
+        self.assertRegex(text, r'1\. <a href="[^"]+">○○전시관 전시물 제작설치 0</a>\n   5\.0억 · D-\d+ · 자격 미확인')
+        self.assertNotIn("[입찰]", text, "한 유형만이면 유형 표시 없음")
+
+    def test_sorted_by_deadline_and_closed_counted(self):
+        rows = [_row("나중", 9), _row("마감남음", None), _row("지남", -1), _row("먼저", 2, qual="자격 미달")]
+        text = T.build_messages(rows, "보고")[0]
+        self.assertIn("후보 <b>3건</b> (마감 지난 1건 제외)", text)
+        self.assertLess(text.index("먼저"), text.index("나중"))
+        self.assertLess(text.index("나중"), text.index("마감남음"))
+        self.assertIn("3.2억 · D-2 · 자격 미달", text)
+        self.assertIn("마감 미상", text)
+        self.assertNotIn("지남", text)
+
+    def test_weekly_mixed_kinds_are_tagged(self):
+        rows = [_row("가", 3, "협상"), _row("나", 4, "사전규격", budget=45_000_000)]
+        text = T.build_messages(rows, T.report_title(["협상", "규격가격동시입찰"], True,
+                                                     datetime(2026, 10, 5), datetime(2026, 10, 11, 23, 59)))[0]
+        self.assertIn("협상·규격가격동시입찰·사전규격 공고 보고 (10/5~10/11 게시분)", text)
+        self.assertIn('[협상] <a href="https://g2b/가">가</a>', text)
+        self.assertIn("[사전규격]", text)
+        self.assertIn("4,500만원", text)
 
     def test_empty_run_still_reports(self):
         _, stats = _candidates(0)
@@ -81,42 +99,19 @@ class TestBuildMessages(unittest.TestCase):
         self.assertIn("새 공고가 없습니다", messages[0])
 
     def test_long_list_is_split_without_breaking_a_notice(self):
-        candidates, stats = _candidates(40)
+        candidates, stats = _candidates(80)
         messages = _messages(candidates, stats)
         self.assertGreater(len(messages), 1)
         for m in messages:
             self.assertLessEqual(len(m), T.MESSAGE_LIMIT)
         joined = "\n\n".join(messages)
-        for i in range(1, 41):
-            self.assertEqual(joined.count(f"<b>{i}. ["), 1)
+        for i in range(1, 81):
+            self.assertEqual(joined.count(f"\n{i}. <a"), 1)
 
     def test_title_is_html_escaped(self):
         candidates, stats = _candidates(1)
         candidates[0].notice.title = "A <B> & C"
         self.assertIn("A &lt;B&gt; &amp; C", _messages(candidates, stats)[0])
-
-    def test_card_rows_closed_review_flags_and_sync(self):
-        """웹앱 카드 JSON 그대로: 마감 지난 건 건수만, 검토 필요는 끝에, 확인 필요·싱크로율·지역 표시."""
-        base = {"title": "가 전시관", "category": "협상", "work_type": "용역", "kind": "본공고",
-                "demand_institution": "가군", "budget": 320_000_000, "days_left": 5,
-                "deadline_label": "자격등록 마감", "deadline": "2026-10-17T18:00",
-                "qualification": {"checked": True, "passes": True, "summary": "자격 충족"},
-                "joint": {"label": "공동이행"}, "region_check": {"status": "미달", "required": ["경기"]},
-                "text_flags": [{"kind": "실적"}, {"kind": "현장설명회"}, {"kind": "실적"}],
-                "sync": {"score": 0.723}}
-        rows = [base,
-                {**base, "title": "나 체험관", "days_left": -1},
-                {**base, "title": "다 체험관 연출", "confidence": "검토필요", "review_exclude": "연출"}]
-        text = "\n".join(T.build_messages(rows, "보고"))
-        self.assertIn("후보 <b>1건</b> · 검토 필요 1건 (마감 지난 1건 제외)", text)
-        self.assertIn("3.2억 · D-5 자격등록 마감(10/17)", text)
-        self.assertIn("자격 충족 · 지역 미달(경기만) · 공동수급 공동이행", text)
-        self.assertIn("확인 필요: 실적 · 현장설명회", text)
-        self.assertIn("싱크로율 72%", text)
-        self.assertNotIn("나 체험관", text)
-        self.assertIn("다 체험관 연출", text)
-        self.assertIn('(제외어 "연출")', text)
-        self.assertLess(text.index("가 전시관"), text.index("다 체험관 연출"))
 
 
 class TestSendReport(unittest.TestCase):

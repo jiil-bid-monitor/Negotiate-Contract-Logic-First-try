@@ -6,9 +6,9 @@
 GitHub Actions 스케줄(`daily.yml`)이 `python -m nego --telegram`으로 부른다 (2026-10-12 사용자 결정):
 매일 08:00 입찰(어제 하루), 매주 월 08:10 협상·규격가격동시입찰·사전규격(지난 7일).
 
-메시지 모양 (2026-10-12 사용자 결정 — 간결형·마감 임박순·HTML 첨부·0건도 발송):
+메시지 모양 (2026-10-12 사용자 결정 — 간결형·마감 임박순·HTML 첨부·0건도 발송·이모지 없음, 경고는 "※"):
 
-    📋 입찰 공고 보고 (10/11 게시분)
+    입찰 공고 보고 (10/11 게시분)
     후보 3건
 
     1. ○○체험관 전시물 제작설치          ← 누르면 나라장터 공고
@@ -130,8 +130,8 @@ def build_messages(rows: list[Row], title: str, warnings: list[str] | None = Non
     closed = len(rows) - len(open_rows)
     open_rows.sort(key=lambda r: 9999 if r.days_left is None else r.days_left)  # 같은 날이면 들어온 순서 유지
 
-    header = [f"📋 <b>{esc(title)}</b>"]
-    header += [f"⚠️ {esc(w)}" for w in warnings or []]
+    header = [f"<b>{esc(title)}</b>"]
+    header += [f"※ {esc(w)}" for w in warnings or []]
     skipped = f" (마감 지난 {closed}건 제외)" if closed else ""
     if not open_rows:
         header.append("조건에 맞는 새 공고가 없습니다." + skipped)

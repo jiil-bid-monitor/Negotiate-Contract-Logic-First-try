@@ -68,10 +68,11 @@ class TestBuildMessages(unittest.TestCase):
         candidates, stats = _candidates(2)
         self.assertEqual(len(candidates), 2)
         text = _messages(candidates, stats)[0]
-        self.assertIn("📋 <b>입찰 공고 보고 (8/31 게시분)</b>", text)
+        self.assertIn("<b>입찰 공고 보고 (8/31 게시분)</b>", text)
         self.assertIn("후보 <b>2건</b>", text)
         self.assertRegex(text, r'1\. <a href="[^"]+">○○전시관 전시물 제작설치 0</a>\n   5\.0억 · D-\d+ · 자격 미확인')
         self.assertNotIn("[입찰]", text, "한 유형만이면 유형 표시 없음")
+        self.assertFalse(any(ord(ch) >= 0x1F000 or 0x2600 <= ord(ch) < 0x2800 for ch in text), "이모지 없음")
 
     def test_sorted_by_deadline_and_closed_counted(self):
         rows = [_row("나중", 9), _row("마감남음", None), _row("지남", -1), _row("먼저", 2, qual="자격 미달")]

@@ -84,12 +84,13 @@
   ② 재시도 Run을 바로 띄우던 것을 **60분 뒤**로(`retry` 잡이 sleep 후 dispatch, `RETRY_DELAY_MINUTES`·`MAX_ATTEMPTS` env) — 08~12시, 약 4시간 버팀.
   ③ 연결 오류 문구에 요청 URL(서비스키 포함)이 그대로 들어가던 것 가림(`http_client.mask_service_key`) — 로그·알림 둘 다.
   실패 경로는 아직 실측 안 됨(실패가 나야 확인 가능).
-- (10/12) **방 두 개로 운영**: 담당자 방 "지일 입찰 공고"(`TELEGRAM_CHAT_ID` = -5450822931), 개발자 방 "지일 입찰 개발"
+- (10/12) **방 두 개로 운영**: 담당자 방 "지일 입찰 공고"(`TELEGRAM_CHAT_ID` = **-1004487982383**, 10/12 슈퍼그룹 전환 후 — 예전 -5450822931), 개발자 방 "지일 입찰 개발"
   (`TELEGRAM_DEV_CHAT_ID` = -5536307994), 둘 다 일반 그룹 — 슈퍼그룹으로 바뀌면 ID가 -100…으로 바뀌니 다시 확인. 봇 `@jiil_bid_bot`.
   개발자 방 연결 시험용 수동 입력 `dev_test`(수집 안 하고 시험 알림만 — workflow_dispatch 입력 10개 꽉 참).
   - **(10/12 실제로 겪음) 담당자 방이 슈퍼그룹으로 바뀜** — Run #92 구역 분리 시험 발송이 "400 group chat was upgraded to a supergroup chat"로
     0/1 실패(예전 ID -5450822931). 오류 응답의 `parameters.migrate_to_chat_id`로 **새 ID로 자동 재발송**(`telegram.ChatMigrated`,
     `TelegramConfig.migrated`) + Actions 노란 경고에 새 ID와 "Secrets 바꾸라" 안내(`migration_notes`, 예전 ID는 로그에서 ***로 가려져 새 ID만).
+    Run #93에서 자동 재발송 1/1 성공 확인, 새 ID **-1004487982383** → 사용자에게 Secrets `TELEGRAM_CHAT_ID` 교체 안내함.
 - **실제 텔레그램 호출은 미검증**(이 환경에서 api.telegram.org 막힘 — 가짜 응답 테스트만).
 - Ruflo: 텔레그램 하나라 "독립 기능 여러 개" 시점 아님 — 한 줄 언급만 함.
 

@@ -1,4 +1,4 @@
-"""텔레그램 발송(`nego/telegram.py`, 웹앱 `webapp/notify.py`) 테스트. 실제 텔레그램 API는 부르지 않는다.
+"""텔레그램 발송(`nego/telegram.py`) 테스트. 실제 텔레그램 API는 부르지 않는다.
 
     python -m unittest discover -s tests -v
 """
@@ -19,7 +19,6 @@ from nego.config import load_config  # noqa: E402
 from nego.models import notice_from_raw  # noqa: E402
 from nego.pipeline import RunStats, build_candidates  # noqa: E402
 from tests import fixtures  # noqa: E402
-from webapp import notify  # noqa: E402
 
 NOW = datetime(2026, 9, 1, 8, 5)
 
@@ -158,35 +157,6 @@ class TestSendReport(unittest.TestCase):
             self.assertEqual(T.TelegramConfig.from_env().chat_ids, ["1", "2"])
         with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": "1"}):
             self.assertIsNone(T.TelegramConfig.from_env())
-
-
-class TestWebappNotify(unittest.TestCase):
-    RUN = {"id": 3, "params": {"days": 7, "attachments": False},
-           "stats": {"period_begin": "2026-10-05T00:00", "period_end": "2026-10-12T09:00", "prespec_error": "403"},
-           "candidates": [{"title": "가 전시관", "days_left": 3, "budget": 50_000_000}]}
-
-    def test_build_uses_saved_run(self):
-        with mock.patch.dict(os.environ, {"WEBAPP_URL": "http://192.168.0.22:8765/"}):
-            text = notify.build(self.RUN, "김지일")[0]
-        self.assertIn("지일 입찰 공고 보고 (최근 7일)", text)
-        self.assertIn("조회 기간: 2026.10.5 ~ 2026.10.12", text)
-        self.assertIn("사전규격 조회 실패", text)
-        self.assertIn("첨부 자격판정 안 함", text)
-        self.assertIn("5,000만원", text)
-        self.assertIn("보낸 사람: 김지일", text)
-        self.assertIn("http://192.168.0.22:8765/", text)
-
-    def test_send_without_config_raises(self):
-        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": ""}):
-            with self.assertRaises(ValueError):
-                notify.send(self.RUN, "김지일")
-
-    def test_send_posts_to_every_chat(self):
-        session = FakeSession()
-        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_CHAT_ID": "1,2"}):
-            chats, errors = notify.send(self.RUN, "김지일", session=session)
-        self.assertEqual((chats, errors), (2, []))
-        self.assertEqual([c["data"]["chat_id"] for c in session.calls], ["1", "2"])
 
 
 if __name__ == "__main__":

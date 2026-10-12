@@ -6,7 +6,6 @@ jiil-past-contracts(비공개)가 옆에 없으면 싱크로율 실계산 테스
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
 import threading
@@ -382,39 +381,6 @@ class TestServer(unittest.TestCase):
         res = self.call("/api/results")[1]
         self.assertEqual(res["comment_counts"][keys[0]], 1)
         self.assertEqual(res["states"][keys[0]]["status"], "참가")
-
-    def test_telegram_send_and_resend_guard(self):
-        from unittest import mock
-
-        from tests.test_telegram import FakeSession
-
-        self.call("/api/collect", {"days": 7, "attachments": False, "categories": ["협상"]})
-        for _ in range(100):
-            if not self.call("/api/job")[1]["running"]:
-                break
-            time.sleep(0.05)
-        run = self.call("/api/results")[1]["run"]
-        run_id = run["id"]
-        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": ""}):
-            self.assertFalse(self.call("/api/meta")[1]["has_telegram"])
-            self.assertEqual(self.call("/api/telegram", {"run": run_id, "name": "김지일"})[0], 400, "설정 없음")
-        session = FakeSession()
-        with mock.patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_CHAT_ID": "7"}), \
-                mock.patch("nego.telegram.requests.Session", return_value=session):
-            self.assertTrue(self.call("/api/meta")[1]["has_telegram"])
-            self.assertEqual(self.call("/api/telegram", {"run": run_id})[0], 400, "이름 없이 거부")
-            status, body = self.call("/api/telegram", {"run": run_id, "name": "김지일"})
-            self.assertEqual((status, body["result"], body["chats"]), (200, "성공", 1))
-            sent_text = "".join(c["data"]["text"] for c in session.calls)
-            self.assertIn("보낸 사람: 김지일", sent_text)
-            self.assertIn(run["candidates"][0]["title"].replace("&", "&amp;"), sent_text)
-            status, body = self.call("/api/telegram", {"run": run_id, "name": "박지일"})
-            self.assertEqual(status, 409, "같은 결과 두 번째 발송은 먼저 확인")
-            self.assertEqual(body["already"]["sent_by"], "김지일")
-            n = len(session.calls)
-            status, _ = self.call("/api/telegram", {"run": run_id, "name": "박지일", "force": True})
-            self.assertEqual(status, 200)
-            self.assertGreater(len(session.calls), n)
 
     def test_custom_period(self):
         """직접 지정 구간: 시작일 00:00 ~ 종료일 23:59(오늘이면 지금까지). 잘못된 구간은 400."""

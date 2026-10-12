@@ -56,19 +56,17 @@
   "특별전"/"연출" 의도 확인), 키워드 누락("홍보관"), 첨부 자격판정 오탐 30일치 대조. 입찰 유형이 들어오면서
   키워드 매칭 건수가 크게 늘 수 있으니 첫 매일 보고의 후보 수를 보고 키워드 정리 필요 여부 판단.
 
-## 2026-10-12 — 텔레그램 발송 main에 넣음 (사용자 요청: "텔레그램 메신저 기능까지 추가하고 보고")
+## 2026-10-12 — 텔레그램 자동 발송 켬 (브랜치 `claude/zen-pascal-d4u89i`, main 병합 전)
 
 - 9/28 브랜치(`claude/gracious-pasteur-wcfrue`) 구현본을 지금 main에 맞춰 옮김: `nego/telegram.py`, CLI `--telegram`,
-  daily.yml `telegram` 입력(스케줄 실행은 TELEGRAM="true" — schedule 블록은 여전히 빠져 있어 자동 발송은 안 돎), SETUP.md 봇 만드는 법.
-- **웹앱 "텔레그램 보내기" 버튼 추가**(수집 줄 "판단 갱신" 옆) — 지금 화면의 결과(`RUN`)를 보냄(`webapp/notify.py`, `POST /api/telegram`).
-  서버 PC `.env`에 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_CHAT_ID`가 있어야 버튼이 켜짐(`/api/meta` `has_telegram`). 이름 필수(메시지 끝 "보낸 사람").
-  발송 기록은 sqlite `telegram_sends` — 같은 결과를 이미 보냈으면 409 → 화면에서 한 번 더 묻고 `force`로 다시 보냄. 선택 `WEBAPP_URL`(메시지 끝 주소).
-- 메시지 모양은 한 곳(`telegram._candidate_block`): 공고명(나라장터 링크) / 수요기관·금액(3.2억)·마감(D-N 기준이름(월/일)) /
-  자격·지역 미달·충족·공동수급 / "⚠️ 확인 필요: 실적 · 현장설명회" / 싱크로율(웹앱만). 마감 지난 공고는 건수만, 검토 필요는 끝에 한 줄씩(15건까지).
-  CLI는 `candidate_row`로 Candidate를 웹앱 카드 JSON과 같은 키로 바꿔 씀. CLI는 후보 있으면 HTML 리포트 파일도 첨부.
-- **실제 텔레그램 호출은 미검증**(이 환경에서 api.telegram.org 막힘 — 가짜 응답 테스트만). 사용자가 봇을 만들고 `.env`에 넣은 뒤 첫 발송 확인 필요.
-- 안내 자료(`docs/user_guide.md`·`.pptx` 6장·11장) 반영, 2026-10-12 기준.
-- Ruflo: "독립 기능 여러 개를 한꺼번에" 시점이 아니라(텔레그램 하나) 도입 제안 안 함 — 사용자에게 한 줄로 언급함.
+  daily.yml `telegram`·`pre_spec` 입력, SETUP.md 봇 만드는 법.
+- **사용자 결정: 입찰은 매일, 나머지는 매주** — daily.yml에 schedule 켬: 매일 08:00 KST 입찰(어제 하루),
+  매주 월 08:10 KST 협상·규격가격동시입찰 + **사전규격**(지난 7일, `--pre-spec`). **Supabase 저장은 스케줄도 끔**(9/28 결정 유지,
+  스케줄 쪽 NO_SUPABASE="true"). 스케줄은 main에 병합돼야 돎 + secrets `TELEGRAM_BOT_TOKEN`·`TELEGRAM_CHAT_ID` 필요.
+- 웹앱 "텔레그램 보내기" 버튼은 만들었다가 **사용자 결정으로 뺌**(필요 없음) — 커밋 5d0bd3c 참고.
+- **메시지 형태는 사용자와 정하는 중**(10/12).
+- **실제 텔레그램 호출은 미검증**(이 환경에서 api.telegram.org 막힘 — 가짜 응답 테스트만).
+- Ruflo: 텔레그램 하나라 "독립 기능 여러 개" 시점 아님 — 한 줄 언급만 함.
 
 ## 2026-10-02 — 작업 정리 (main 병합: PR #72~#86) · **2주 뒤(10/16 무렵) 여기서 이어갈 것**
 

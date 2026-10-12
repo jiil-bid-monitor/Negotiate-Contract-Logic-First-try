@@ -7,10 +7,9 @@
   - 첨부(CLI만): 전체 HTML 리포트 파일 (PC·핸드폰에서 눌러 바로 열림).
   - 후보가 0건이어도 "새 공고 없음"을 보낸다 — 받는 사람이 "시스템이 돌았는지"를 알 수 있게.
 
-두 곳에서 부른다(2026-10-12 — 9/28 브랜치 구현본을 main에 옮기면서 웹앱 버튼을 더함):
-  - CLI `python -m nego --telegram` — `Candidate` 객체를 `candidate_row`로 바꿔 보냄
-  - 웹앱 "텔레그램 보내기" — 저장된 수집 결과(카드 JSON, `webapp/collect.serialize`)를 그대로 보냄.
-    카드 JSON과 `candidate_row`는 같은 키를 쓴다 — 메시지 모양이 한 곳(`_candidate_block`)에서 정해진다.
+GitHub Actions 스케줄(`daily.yml`)이 `python -m nego --telegram`으로 부른다 (2026-10-12 사용자 결정):
+매일 08:00 입찰(어제 하루), 매주 월 08:10 협상·규격가격동시입찰·사전규격(지난 7일).
+`candidate_row`로 Candidate를 dict로 바꾼 뒤 메시지를 만든다 — 메시지 모양은 `_candidate_block` 한 곳.
 
 설정 (환경변수):
   TELEGRAM_BOT_TOKEN  @BotFather가 발급한 봇 토큰

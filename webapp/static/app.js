@@ -703,29 +703,6 @@ $("#btnCollect").addEventListener("click", async () => {
   } catch (e) { alert(e.message); }
 });
 $("#btnReload").addEventListener("click", () => loadResults().catch((e) => alert(e.message)));
-// 텔레그램 보내기(2026-10-12) — 지금 화면의 결과(RUN)를 보낸다. 서버가 이미 보낸 결과라고 하면(409) 한 번 더 묻고 다시 보냄
-$("#btnTelegram").addEventListener("click", async () => {
-  if (!RUN) return alert("보낼 수집 결과가 없습니다 — 먼저 나라장터에서 불러오기");
-  if (needName()) return;
-  const n = (RUN.candidates || []).length;
-  if (!confirm(`지금 보고 있는 결과(후보 ${n}건)를 텔레그램으로 보낼까요?`)) return;
-  const post = (force) => fetch("/api/telegram", {
-    method: "POST", headers: { "X-App-Token": token, "Content-Type": "application/json" },
-    body: JSON.stringify({ run: RUN.id, name: myName(), force }),
-  }).then(async (res) => ({ res, data: await res.json().catch(() => ({})) }));
-  const btn = $("#btnTelegram");
-  btn.disabled = true;
-  try {
-    let { res, data } = await post(false);
-    if (res.status === 409 && data.already) {
-      if (!confirm(`${data.error}. 그래도 한 번 더 보낼까요?`)) return;
-      ({ res, data } = await post(true));
-    }
-    if (!res.ok && !data.result) throw new Error(data.error || `HTTP ${res.status}`);
-    if (data.failed) alert(`텔레그램 발송 ${data.result}: 대화방 ${data.chats - data.failed}/${data.chats}곳 성공\n${(data.errors || []).join("\n")}`);
-    else alert(`텔레그램으로 보냈습니다 (대화방 ${data.chats}곳)`);
-  } catch (e) { alert(e.message); } finally { btn.disabled = !META.has_telegram; }
-});
 
 // ── 대화 ──
 let threadKey = null;
@@ -892,10 +869,6 @@ $("#pastYear").addEventListener("change", renderPast);
   syncRange();
   period.addEventListener("change", () => { store.set("period", period.value); syncRange(); });
   if (!META.has_ai_key) { $("#optAi").disabled = true; $("#optAiWrap").title = "서버에 ANTHROPIC_API_KEY가 없어 AI 판단을 쓸 수 없습니다"; }
-  if (!META.has_telegram) {
-    $("#btnTelegram").disabled = true;
-    $("#btnTelegram").title = "서버 .env에 TELEGRAM_BOT_TOKEN·TELEGRAM_CHAT_ID가 없어 보낼 수 없습니다 (SETUP.md 참고)";
-  }
   if (!META.has_service_key) $("#jobStatus").textContent = "서버에 NARA_SERVICE_KEY가 없어 불러오기가 실패합니다";
   showTab(store.get("tab", "live"));
   await loadResults();

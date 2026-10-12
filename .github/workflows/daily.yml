@@ -2,19 +2,21 @@ name: 나라장터 공고 수집
 
 # 실행 방법
 #  · 수동: GitHub 저장소 → Actions 탭 → 이 워크플로 선택 → "Run workflow"
-#  · 자동 스케줄은 **꺼둠** (2026-09-28 사용자 결정: 자동 저장은 수집 기능이 모두
-#    완성된 뒤에 켠다). 켤 때는 아래 on: 에 schedule 블록을 넣으면 된다 — 아래
-#    "실행 모드 결정" 단계가 이미 스케줄 문자열로 매일/주간 모드를 가르게 돼 있다:
-#      schedule:
-#        - cron: "0 23 * * *"    # 매일 08:00 KST — 어제 게시된 "입찰"
-#        - cron: "10 23 * * 0"   # 매주 월 08:10 KST — 지난 7일 "협상·규격가격동시입찰"
+#  · 자동 스케줄 (2026-10-12 사용자 결정: 입찰은 매일, 나머지는 매주 텔레그램으로):
+#      매일 08:00 KST — 어제 게시된 "입찰" → 텔레그램
+#      매주 월 08:10 KST — 지난 7일 "협상·규격가격동시입찰" + 사전규격 → 텔레그램
 #    조회 기간을 날짜 단위로 딱 잘라(--complete-days) 주기끼리 겹치지 않으므로
-#    같은 공고가 두 번 잡히지 않는다.
-#    스케줄 실행은 텔레그램 발송을 켠다(아래 TELEGRAM="true"). 수동 실행은 telegram 입력이 true일 때만.
+#    같은 공고가 두 번 잡히지 않는다. 스케줄은 **기본 브랜치(main)에 이 파일이 있어야** 돈다.
+#    스케줄 실행도 Supabase 저장은 하지 않는다(9/28 "저장은 수집 기능 완성 후" 결정 유지 —
+#    켜려면 아래 "실행 모드 결정"의 스케줄 쪽 NO_SUPABASE를 "false"로).
+#    수동 실행은 telegram 입력이 true일 때만 보낸다.
 #
 # 필요한 저장소 secrets: NARA_SERVICE_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
 #   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (텔레그램 두 개가 없으면 발송만 건너뜀)
 on:
+  schedule:
+    - cron: "0 23 * * *"    # 23:00 UTC = 08:00 KST — 매일, 입찰
+    - cron: "10 23 * * 0"   # 일 23:10 UTC = 월 08:10 KST — 주간, 협상·규격가격동시입찰·사전규격
   workflow_dispatch:
     inputs:
       categories:
@@ -31,6 +33,10 @@ on:
         default: "1"
       telegram:
         description: "true로 두면 결과를 텔레그램으로 발송"
+        required: false
+        default: "false"
+      pre_spec:
+        description: "true로 두면 사전규격도 같은 기간으로 수집 (주간 스케줄은 자동으로 켬)"
         required: false
         default: "false"
       no_supabase:
@@ -96,20 +102,21 @@ jobs:
           IN_COMPLETE_DAYS: ${{ github.event.inputs.complete_days }}
           IN_DAYS: ${{ github.event.inputs.days }}
           IN_TELEGRAM: ${{ github.event.inputs.telegram }}
+          IN_PRESPEC: ${{ github.event.inputs.pre_spec }}
           IN_NO_SUPABASE: ${{ github.event.inputs.no_supabase }}
           IN_LLM: ${{ github.event.inputs.llm_similarity }}
           IN_ATTEMPT: ${{ github.event.inputs.attempt }}
         run: |
           if [ "$EVENT" = "schedule" ]; then
             if [ "$SCHEDULE" = "10 23 * * 0" ]; then
-              CATEGORIES="협상,규격가격동시입찰"; COMPLETE_DAYS="7"
+              CATEGORIES="협상,규격가격동시입찰"; COMPLETE_DAYS="7"; PRESPEC="true"
             else
-              CATEGORIES="입찰"; COMPLETE_DAYS="1"
+              CATEGORIES="입찰"; COMPLETE_DAYS="1"; PRESPEC="false"
             fi
-            DAYS="1"; TELEGRAM="true"; NO_SUPABASE="false"; LLM="false"; ATTEMPT="1"
+            DAYS="1"; TELEGRAM="true"; NO_SUPABASE="true"; LLM="false"; ATTEMPT="1"
           else
             CATEGORIES="$IN_CATEGORIES"; COMPLETE_DAYS="$IN_COMPLETE_DAYS"
-            DAYS="${IN_DAYS:-1}"; TELEGRAM="${IN_TELEGRAM:-false}"
+            DAYS="${IN_DAYS:-1}"; TELEGRAM="${IN_TELEGRAM:-false}"; PRESPEC="${IN_PRESPEC:-false}"
             NO_SUPABASE="${IN_NO_SUPABASE:-true}"; LLM="${IN_LLM:-false}"; ATTEMPT="${IN_ATTEMPT:-1}"
           fi
           {
@@ -117,12 +124,13 @@ jobs:
             echo "complete_days=$COMPLETE_DAYS"
             echo "days=$DAYS"
             echo "telegram=$TELEGRAM"
+            echo "prespec=$PRESPEC"
             echo "no_supabase=$NO_SUPABASE"
             echo "llm=$LLM"
             echo "attempt=$ATTEMPT"
           } >> "$GITHUB_OUTPUT"
           if [ -n "$COMPLETE_DAYS" ]; then PERIOD="오늘 뺀 직전 ${COMPLETE_DAYS}일"; else PERIOD="최근 ${DAYS}일"; fi
-          echo "유형=${CATEGORIES:-전체} / 기간=${PERIOD} / 텔레그램=$TELEGRAM / 시도 ${ATTEMPT}회차"
+          echo "유형=${CATEGORIES:-전체} / 기간=${PERIOD} / 사전규격=$PRESPEC / 텔레그램=$TELEGRAM / 시도 ${ATTEMPT}회차"
 
       # 필드명이 비어 보이거나(예: 예가방법에 해당하는 실제 필드명을 모를 때)
       # 원본 응답을 직접 봐야 할 때 쓰는 1회성 진단. 이 스텝을 타면 아래
@@ -150,6 +158,7 @@ jobs:
           CATEGORIES: ${{ steps.mode.outputs.categories }}
           COMPLETE_DAYS: ${{ steps.mode.outputs.complete_days }}
           TELEGRAM: ${{ steps.mode.outputs.telegram }}
+          PRESPEC: ${{ steps.mode.outputs.prespec }}
           NO_SUPABASE: ${{ steps.mode.outputs.no_supabase }}
           LLM: ${{ steps.mode.outputs.llm }}
         run: |
@@ -160,6 +169,7 @@ jobs:
           [ -n "$CATEGORIES" ] && ARGS+=(--categories "$CATEGORIES")
           [ -n "$COMPLETE_DAYS" ] && ARGS+=(--complete-days "$COMPLETE_DAYS")
           [ "$TELEGRAM" = "true" ] && ARGS+=(--telegram)
+          [ "$PRESPEC" = "true" ] && ARGS+=(--pre-spec)
           [ "$NO_SUPABASE" = "true" ] && ARGS+=(--no-supabase)
           [ "$LLM" = "true" ] && ARGS+=(--llm-similarity)
           python -m nego "${ARGS[@]}"
@@ -191,6 +201,7 @@ jobs:
           COMPLETE_DAYS: ${{ steps.mode.outputs.complete_days }}
           DAYS: ${{ steps.mode.outputs.days }}
           TELEGRAM: ${{ steps.mode.outputs.telegram }}
+          PRESPEC: ${{ steps.mode.outputs.prespec }}
           NO_SUPABASE: ${{ steps.mode.outputs.no_supabase }}
           LLM: ${{ steps.mode.outputs.llm }}
           ATTEMPT: ${{ steps.mode.outputs.attempt }}
@@ -199,10 +210,10 @@ jobs:
           echo "수집 실패 — ${NEXT_ATTEMPT}번째 시도로 새 Run을 큐에 올립니다."
           BODY=$(jq -n \
             --arg ref "$REF" --arg categories "$CATEGORIES" --arg complete_days "$COMPLETE_DAYS" \
-            --arg days "$DAYS" --arg telegram "$TELEGRAM" --arg no_supabase "$NO_SUPABASE" \
+            --arg days "$DAYS" --arg telegram "$TELEGRAM" --arg pre_spec "$PRESPEC" --arg no_supabase "$NO_SUPABASE" \
             --arg llm "$LLM" --arg attempt "$NEXT_ATTEMPT" \
             '{ref: $ref, inputs: {categories: $categories, complete_days: $complete_days, days: $days,
-              telegram: $telegram, no_supabase: $no_supabase, llm_similarity: $llm, attempt: $attempt}}')
+              telegram: $telegram, pre_spec: $pre_spec, no_supabase: $no_supabase, llm_similarity: $llm, attempt: $attempt}}')
           curl -sS -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \

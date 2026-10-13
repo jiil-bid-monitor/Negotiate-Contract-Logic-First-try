@@ -201,6 +201,30 @@ def _is_group_satisfied(group: LicenseGroup, held_names: list[str], held_codes: 
     return False
 
 
+def no_held_license(
+    groups: list[LicenseGroup], held_names: list[str], held_codes: set[str] | frozenset[str] = frozenset()
+) -> list[str] | None:
+    """공고가 요구하는 면허를 지일이 **하나도** 갖고 있지 않으면 요구 면허 이름 목록, 아니면 None.
+
+    공동수급(분담이행)은 구성원이 맡는 부분의 면허를 갖고 있어야 해서, 요구 면허 중 지일 것이 하나도 없으면
+    공동수급으로도 들어갈 자리가 없다(2026-10-13 사용자 결정 — 조경·토목공사업만 요구하는 공고도 여기에 해당).
+    어느 그룹·어느 행이든 지일 보유 면허(대표 면허나 허용업종)가 하나라도 있으면 None(남겨서 자격 판정·공동수급 칸으로 판단).
+    면허제한 정보가 없으면 None.
+    """
+    if not groups:
+        return None
+    names: list[str] = []
+    for group in groups:
+        rows = [r for r in (group.rows or [group.allowed_names]) if r]
+        for row in rows:
+            if _is_group_satisfied(LicenseGroup("", row), held_names, held_codes):
+                return None
+            label = _row_label(row)
+            if label not in names:
+                names.append(label)
+    return names or None
+
+
 _LICENSE_CODE_RE = re.compile(r"(?:/\s*|\()(\d{4,10})\)?\s*$")
 
 
@@ -390,8 +414,17 @@ _CODE_HINT_RE = re.compile(r"업종\s*코드|세부\s*품명\s*번호|분류\s*�
 # "A, B 또는 C"처럼 쉼표 나열 끝에 "또는"이 오면 A·B·C 전체가 하나의 OR 묶음이다.
 # "또는"을 항목 어디서나 보면 "공동수급 또는 단독" 같은 무관한 문장에도 걸리므로
 # 코드 바로 뒤에 오는 경우로만 좁힌다.
-_OR_LINK_RE = re.compile(r"[ \t\u3000]*[)\]]?[ \t\u3000]*,?\s*(?:또는|혹은)")
-_COMMA_LINK_RE = re.compile(r"[ \t\u3000]*[)\]]?[ \t\u3000]*,")
+# 닫는 괄호는 여러 겹일 수 있다 — "[산림사업법인(…)(업종코드 1478)] 또는 [산림조합(…)(업종코드 4119)]"는 ")]" 두 겹이라
+# 예전엔 "또는"을 못 읽고 셋 다 필요(AND)로 판정했다(2026-10-13, R26BK01755562 재현 중 발견). 나라장터 화면 문구를 옮긴
+# "[…(1478)] 업종 또는 […]"처럼 닫는 괄호 뒤 "업종"도 허용한다.
+_LINK_HEAD = r"(?:[ \t\u3000]*[)\]])*[ \t\u3000]*(?:업종[ \t\u3000]*)?"
+# "비디오물제작업[업종코드 3244](허용업종코드 : 음반·음악영상물제작업[업종코드 3243] 또는 …)" — 괄호 속 허용업종은 대신 인정이라 OR
+# "비디오물제작업(업종코드: 3244) 신고필증을 교부받은 업체 또는 … 방송영상독립제작사(업종코드: 3230)" — 코드 뒤 짧은 서술(40자
+# 이내, 같은 줄)이 "업체/자"로 끝나고 바로 "또는"이면 두 요건을 "또는"으로 이은 것이다(2026-10-13 제보: 국립부산과학관 4D 체험관).
+# "업체로서 공동수급 또는 단독"처럼 "또는" 바로 앞이 업체/자가 아니면 잇지 않는다.
+_OR_AFTER_SUBJECT = r"[^\n。.]{0,40}?(?:업체|업자|자)\s*,?\s*(?:또는|혹은)(?=\s)"
+_OR_LINK_RE = re.compile(_LINK_HEAD + r"(?:,?\s*(?:또는|혹은)|\(\s*허용\s*업종|" + _OR_AFTER_SUBJECT + r")")
+_COMMA_LINK_RE = re.compile(_LINK_HEAD + r",")
 # 같은 줄에 요건이 둘 이상 나열되면(PDF 등) 뒷 요건의 이름표 앞에 앞 요건의
 # 괄호와 접속어가 딸려온다 — 닫는 괄호 이후만 남기고 앞머리 접속어를 뗀다.
 _LEADING_CONJUNCTION_RE = re.compile(r"^(?:또는|혹은|및|그리고)\s+")

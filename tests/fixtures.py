@@ -136,8 +136,8 @@ def license_rows() -> list[dict[str, Any]]:
             "bidNtceNo": "R26TEST00009",
             "lmtGrpNo": "1",
             "lmtSno": "1",
-            "lcnsLmtNm": "조경공사업/0005",
-            "permsnIndstrytyList": "[조경공사업/0005]",
+            "lcnsLmtNm": "건축공사업/0002",
+            "permsnIndstrytyList": "[건축공사업/0002]",
         },
         {
             "bidNtceNo": "R26TEST00009",
@@ -145,6 +145,15 @@ def license_rows() -> list[dict[str, Any]]:
             "lmtSno": "2",
             "lcnsLmtNm": "기계설비공사업/0009",
             "permsnIndstrytyList": "[기계설비공사업/0009][전기공사업/0007]",
+        },
+        # 세 번째 행은 지일 보유 면허 — 요구 면허 중 지일 것이 하나라도 있어야 공동수급 여지가 있어 후보에 남는다
+        # (2026-10-13: 지일 보유 면허가 하나도 없는 공고는 제외).
+        {
+            "bidNtceNo": "R26TEST00009",
+            "lmtGrpNo": "1",
+            "lmtSno": "3",
+            "lcnsLmtNm": "실내건축공사업/4990",
+            "permsnIndstrytyList": "[실내건축공사업/4990]",
         },
     ]
 

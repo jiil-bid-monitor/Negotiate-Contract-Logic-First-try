@@ -42,6 +42,9 @@ class ScreenConfig:
     exclude_keywords: list[str] = field(default_factory=list)
     # 무조건 제외 — 관심 키워드가 함께 있어도 "검토 필요"로 올리지 않고 바로 뺀다(2026-10-01 사용자 결정, 특별전·순회전)
     hard_exclude_keywords: list[str] = field(default_factory=list)
+    # 제외 키워드의 예외 — {"건축": ["실내건축"]}이면 공고명의 "실내건축"은 "건축"으로 안 본다(2026-10-13 대리님 답변:
+    # "건축"은 일반 건축공사를 거르려던 것이고 실내건축 공고까지 빼려던 건 아님). 다른 곳에 "건축"이 또 있으면 그대로 제외.
+    exclude_exceptions: dict[str, list[str]] = field(default_factory=dict)
     min_budget_amount: float | None = None
     product_codes: list[dict[str, str]] = field(default_factory=list)
     industry_codes: list[dict[str, str]] = field(default_factory=list)
@@ -70,9 +73,15 @@ class ScreenResult:
     review_exclude: str | None = None
 
 
-def _match_exclude(notice: Notice, exclude_keywords: list[str]) -> str | None:
-    haystack = _squash(notice.title)
+def _match_exclude(
+    notice: Notice, exclude_keywords: list[str], exceptions: dict[str, list[str]] | None = None
+) -> str | None:
+    title = _squash(notice.title)
     for word in exclude_keywords:
+        haystack = title
+        for allowed in (exceptions or {}).get(word, []):
+            if _squash(allowed):
+                haystack = haystack.replace(_squash(allowed), " ")
         if _squash(word) and _squash(word) in haystack:
             return word
     return None
@@ -155,10 +164,10 @@ def _explain_no_match(notice: Notice, config: ScreenConfig, industry_hits: list[
 
 
 def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
-    hard_word = _match_exclude(notice, config.hard_exclude_keywords)
+    hard_word = _match_exclude(notice, config.hard_exclude_keywords, config.exclude_exceptions)
     if hard_word:
         return ScreenResult(matched=False, confidence=None, excluded_by="제외키워드", excluded_reason=hard_word)
-    excluded_word = _match_exclude(notice, config.exclude_keywords)
+    excluded_word = _match_exclude(notice, config.exclude_keywords, config.exclude_exceptions)
     if excluded_word and config.review_conflicts and _match_keywords(notice, config.keywords):
         # 관심 키워드도 있다 — 제외하지 않고 아래 예산·해외 조건만 거친 뒤 "검토 필요"로 둔다.
         # (품명코드 일치만으로 올리는 건 2026-10-01 넣었다가 사용자 결정으로 뺌 — 관심 키워드가 있을 때만.)

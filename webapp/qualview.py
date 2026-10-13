@@ -169,6 +169,14 @@ def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, 
         for g in list(qualification.missing_groups) + list(qualification.satisfied_groups)
         if len(g.rows or []) == 1 and g.rows[0]
     } - {None}
+    # 면허제한 API 요건마다 대상 코드 묶음(대신 인정 업종 포함). 첨부 판정의 "A 또는 B 또는 C"가 이 안에 다 들어가면 같은
+    # 요건이다(2026-10-13 제보 R26BK01755562: API "1478·4119·4125·국유림영림단 중 하나" + 첨부 "1478·4119·4125 중 하나"가
+    # 따로 나와 "자격요건 2건"으로 보였음) — 더 온전한 API 쪽만 남긴다.
+    api_code_sets = [
+        {_code(_clean_label(_display_name(n))) for n in g.allowed_names} - {None}
+        for g in list(qualification.missing_groups) + list(qualification.satisfied_groups)
+        if g.rows or getattr(g, "combos", None) or str(g.group_no).startswith(("택1", "조합"))
+    ]
     for state, source in (("missing", qualification.missing_groups), ("satisfied", qualification.satisfied_groups)):
         for g in source:
             if getattr(g, "combos", None):
@@ -219,6 +227,10 @@ def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, 
             if not items:
                 continue
             if not g.rows and g.group_no != "held" and any(i["code"] in api_primary for i in items):
+                continue
+            att_codes = {i["code"] for i in items}
+            if (not g.rows and g.group_no != "held" and not str(g.group_no).startswith(("택1", "조합"))
+                    and None not in att_codes and any(att_codes <= api for api in api_code_sets)):
                 continue
             sig = tuple(sorted(i["code"] or i["label"] for i in items))
             if sig in by_sig:

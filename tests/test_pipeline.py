@@ -423,6 +423,32 @@ class TestQualification(unittest.TestCase):
         result = qualify.evaluate_attachment_text([self._MIXED_ITEM], held_codes={"7215409902", "3912110702"})
         self.assertEqual(result.summary, "자격 충족")
 
+    def test_or_after_double_closing_brackets(self):
+        """2026-10-13: "[이름(…)(업종코드 1478)] 또는 [이름(업종코드 4119)]"는 닫는 괄호가 ")]" 두 겹이라 "또는"을 못 읽고
+        셋 다 필요(AND)로 봤다. 하나만 보유해도 충족이어야 한다."""
+        item = ("가. 「산림자원의 조성 및 관리에 관한 법률」에 따른 [산림사업법인(자연휴양림등 조성)(업종코드 1478)] 또는 "
+                "[산림조합(지역조합)(업종코드 4119)] 또는 [산림조합중앙회(업종코드 4125)]를 등록한 업체")
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["1478", "4119", "4125"]])
+        self.assertEqual(qualify.evaluate_attachment_text([item], held_codes={"4119"}).summary, "자격 충족")
+        # 나라장터 화면 문구처럼 "] 업종 또는"
+        item = "가. [산림사업법인(업종코드 1478)] 업종 또는 [산림조합(업종코드 4119)] 업종을 등록한 업체"
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["1478", "4119"]])
+        # 괄호 속 허용업종은 대신 인정 — 과거 문서(2019 원주 거돈사지·2023 도담체험관 등) 표기
+        item = ("⑥ 비디오물제작업[업종코드 3244](허용업종코드 : 음반·음악영상물제작업[업종코드 3243] 또는 "
+                "문화산업전문회사[업종코드 3276]) 또는 소프트웨어사업자(디지털콘텐츠개발서비스사업)[업종코드 1469]로 등록한 자")
+        self.assertEqual([sorted(c for c, _ in g) for g in qualify._or_groups(item)], [["1469", "3243", "3244", "3276"]])
+        # 코드 뒤 서술이 "업체/자"로 끝나고 "또는" — 2026-10-13 제보 국립부산과학관 4D 체험관(3244 보유인데 미달로 나왔음)
+        item = ("라. ⌜영화 및 비디오물의 진흥에 관한 법률⌟ 제57조에 따른 비디오물제작업(업종코드: 3244) 신고필증을 교부받은 업체 또는 "
+                "⌜문화산업진흥 기본법 시행령｣ 제11조에 따른 방송영상독립제작사(업종코드: 3230) 신고를 필한 업체")
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["3244", "3230"]])
+        self.assertEqual(qualify.evaluate_attachment_text([item], held_codes={"3244"}).summary, "자격 충족")
+        # "업체로서 공동수급 또는 단독"처럼 "또는" 바로 앞이 업체/자가 아니면 잇지 않는다
+        item = "가. 실내건축공사업(업종코드 4990)을 등록한 업체로서 공동수급 또는 단독으로 참가하며 산림조합(업종코드 4119)을 등록한 자"
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["4990"], ["4119"]])
+        # "과/와"로 이으면 그대로 모두 필요
+        item = "가. [실내건축공사업(업종코드 4990)]과 [산림조합(업종코드 4119)]을 모두 등록한 자"
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["4990"], ["4119"]])
+
     def test_evaluate_attachment_text_comma_list_ending_in_or_is_one_or_group(self):
         item = "가. A(세부품명번호 1111111111), B(세부품명번호 2222222222) 또는 C(세부품명번호 7215409902)"
         result = qualify.evaluate_attachment_text([item], held_codes={"7215409902"})
@@ -923,6 +949,61 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(days, sorted(days), "마감 임박 순으로 정렬되어야 한다")
 
 
+class TestAnswers20261013(unittest.TestCase):
+    """2026-10-13: "건축" 제외가 "실내건축"을 안 빼고(대리님 답변), 요구 면허를 지일이 하나도 없는 공고는 뺀다(사용자 결정)."""
+
+    def _notice(self, title):
+        return notice_from_raw(fixtures.notice("R26TEST10013", title=title), "공사")
+
+    def test_interior_architecture_is_not_excluded_by_building(self):
+        config = load_config()
+        result = screen.screen(self._notice("○○박물관 실내건축공사"), config.screen)
+        self.assertTrue(result.matched, result.excluded_reason)
+        # 다른 곳에 "건축"이 또 있으면 그대로 제외
+        result = screen.screen(self._notice("○○박물관 건축 및 실내건축공사"), config.screen)
+        self.assertEqual((result.excluded_by, result.excluded_reason), ("제외키워드", "건축"))
+        result = screen.screen(self._notice("○○박물관 증축 건축공사"), config.screen)
+        self.assertEqual(result.excluded_by, "제외키워드")
+
+    def test_no_held_license(self):
+        held = ["실내건축공사업/4990"]
+
+        def f(groups):
+            return qualify.no_held_license(groups, held, {"4990"})
+
+        # 조경·토목만 요구 → 제외
+        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["조경공사업/0004"]])]), ["조경공사업(0004)"])
+        self.assertEqual(f([
+            qualify.LicenseGroup("1", rows=[["토목공사업/0001", "토목건축공사업"]]),
+            qualify.LicenseGroup("2", rows=[["조경공사업/0004"]]),
+        ]), ["토목공사업(0001)", "조경공사업(0004)"])
+        # 미보유 면허 둘을 함께 요구 → 제외
+        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["전기공사업/0007"], ["정보통신공사업"]])]),
+                         ["전기공사업(0007)", "정보통신공사업"])
+        # 지일 보유 면허를 함께 요구 → 공동수급(분담이행) 여지가 있어 남김
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["실내건축공사업/4990"], ["토목공사업/0001"]])]))
+        # 다른 그룹(또는)에 보유 면허 → 남김
+        self.assertIsNone(f([
+            qualify.LicenseGroup("1", rows=[["토목공사업/0001"]]),
+            qualify.LicenseGroup("2", rows=[["실내건축공사업/4990"]]),
+        ]))
+        # 허용업종으로 보유 면허 인정 → 남김
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["건축공사업/0002", "실내건축공사업"]])]))
+        # 면허정보 없음 → 남김
+        self.assertIsNone(f([]))
+
+    def test_pipeline_rejects_notice_without_held_license(self):
+        config = load_config()
+        notices = [notice_from_raw(fixtures.notice("R26TEST10013", title="○○체험관 조성공사"), "공사")]
+        groups = {"R26TEST10013": [qualify.LicenseGroup("1", rows=[["토목공사업/0001"]])]}
+        stats = RunStats()
+        self.assertEqual(build_candidates(notices, config, groups, {}, NOW, stats), [])
+        self.assertEqual(stats.screened_out.get("보유면허없음"), 1)
+        self.assertEqual(stats.rejected[0].excluded_reason, "보유면허없음 (요구 면허 토목공사업(0001) — 지일 보유 없음, 공동수급 불가)")
+        stats = RunStats()
+        self.assertEqual(len(build_candidates(notices, config, {}, {}, NOW, stats)), 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
@@ -1002,7 +1083,7 @@ class TestOverlappingLicenseGroups(unittest.TestCase):
 
     def test_rows_in_one_group_are_all_required(self):
         groups = qualify.group_license_rows(fixtures.license_rows())["R26TEST00009"]
-        self.assertEqual(qualify.evaluate(groups, []).missing_count, 2)
+        self.assertEqual(qualify.evaluate(groups, []).missing_count, 3)
 
     def test_separate_groups_are_alternatives(self):
         """나라장터 "[출판사(1517)] 업종 또는 [인쇄사(1518)] 업종" — API는 그룹 두 개로 준다

@@ -255,6 +255,19 @@ def build_candidates(
             stats.rejected.append(record)
             continue
 
+        # 요구 면허를 지일이 하나도 갖고 있지 않은 공고는 뺀다(2026-10-13 사용자 결정) — 지일이 맡을 부분이 없어
+        # 공동수급으로도 못 들어간다. 조경·토목공사업만 요구하는 공고(대리님 답변)도 여기서 빠진다. 하나라도 보유하면
+        # 남겨서 자격 미달·공동수급 칸으로 담당자가 판단. 면허제한 API 기준이라 사전규격·첨부에만 적힌 자격엔 해당 없음.
+        required = qualify.no_held_license(license_groups.get(notice.notice_no, []), config.held_names, held_codes)
+        if required:
+            reason = "보유면허없음"
+            shown = ", ".join(required[:4]) + (f" 외 {len(required) - 4}개" if len(required) > 4 else "")
+            stats.screened_out[reason] = stats.screened_out.get(reason, 0) + 1
+            record.is_candidate = False
+            record.excluded_reason = f"{reason} (요구 면허 {shown} — 지일 보유 없음, 공동수급 불가)"
+            stats.rejected.append(record)
+            continue
+
         stats.screened_in += 1
 
         # 자격 미달은 후보에서 빼지 않는다 (2026-09-28 사용자 결정: 미보유 자격 개수 무시).

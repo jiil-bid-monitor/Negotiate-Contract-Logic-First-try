@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, urlparse
 from nego import scope
 
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
-from .store import STATUSES, Store
+from .store import DECISION_REASONS, DECISION_SUMMARY_MIN, STATUSES, Store
 from .sync import BORDER, HIGH, PastIndex
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -114,6 +114,7 @@ def make_handler(app: App):
                 return self._json({
                     "past_count": len(app.past.projects), "past_years": years,
                     "past_error": app.past.error, "periods": PERIODS, "max_custom_days": MAX_CUSTOM_DAYS, "statuses": STATUSES,
+                    "decision_reasons": DECISION_REASONS, "decision_summary_min": DECISION_SUMMARY_MIN,
                     "result_format": RESULT_FORMAT, "static_version": app.static_version,
                     "categories": scope.CATEGORIES, "sync_thresholds": {"high": HIGH, "border": BORDER},
                     "has_service_key": bool(os.environ.get("NARA_SERVICE_KEY", "").strip()),
@@ -147,6 +148,12 @@ def make_handler(app: App):
                 return self._json({"comments": app.store.comments(key)})
             if url.path == "/api/past":
                 return self._json({"projects": app.past.public_list(), "error": app.past.error})
+            if url.path == "/api/decisions":
+                return self._json({"decisions": app.store.decisions()})
+            if url.path == "/api/decisions.csv":
+                # 판단 기록 내려받기(엑셀에서 바로 열리게 BOM 붙인 UTF-8) — 키워드 조정 검토 때 Claude에게 올려 주는 파일
+                return self._send(200, decisions_csv(app.store.decisions(latest_only=False)).encode("utf-8-sig"),
+                                  "text/csv; charset=utf-8")
             return self._error(HTTPStatus.NOT_FOUND, "없는 주소")
 
         def _static(self, path: str) -> None:
@@ -192,6 +199,18 @@ def make_handler(app: App):
                         promote=(bool(data["promote"]) if "promote" in data else None),
                     )
                     return self._json({"key": key, "state": state})
+                if url.path == "/api/decision":
+                    # 참가·보류·불참 + 사유(2026-10-13 요청) — 참가여부도 같이 바꾼다. status 없음 = 참가여부 해제
+                    name = self._name(data)
+                    key = str(data.get("key") or "")
+                    if not key:
+                        raise ValueError("key가 필요합니다")
+                    status = data.get("status") or None
+                    snapshot = data.get("snapshot") if isinstance(data.get("snapshot"), dict) else {}
+                    app.store.add_decision(key, name, status, [str(r) for r in (data.get("reasons") or [])][:12],
+                                           str(data.get("memo") or ""), snapshot)
+                    state = app.store.set_state(key, by=name, status=status, clear_status=status is None)
+                    return self._json({"key": key, "state": state, "decisions": app.store.decisions()})
                 if url.path == "/api/comments":
                     name = self._name(data)
                     key = str(data.get("key") or "")
@@ -213,6 +232,25 @@ def make_handler(app: App):
                 return self._error(HTTPStatus.BAD_REQUEST, str(err))
 
     return Handler
+
+
+def decisions_csv(rows: list[dict[str, Any]]) -> str:
+    """판단 기록 → CSV(한 판단 한 줄, 바꾼 이력 포함). 집계는 화면/Claude가 한다."""
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["판단일시", "판단자", "참가여부", "사유", "메모", "공고번호", "차수", "공고명", "공고종류", "낙찰방법", "업무",
+                "금액", "수요기관", "관심키워드", "검토필요_제외키워드", "원래_제외사유", "싱크로율", "자격"])
+    for d in rows:
+        sn = d.get("snapshot") or {}
+        w.writerow([d["decided_at"], d["decided_by"], d["status"] or "(해제)", " / ".join(d["reasons"]), d.get("memo") or "",
+                    sn.get("notice_no"), sn.get("notice_ord"), sn.get("title"), sn.get("kind"), sn.get("category"),
+                    sn.get("work_type"), sn.get("budget"), sn.get("demand_institution"),
+                    ", ".join(sn.get("matched_keywords") or []), sn.get("review_exclude") or "",
+                    sn.get("excluded_reason") or "", sn.get("sync_level") or "", sn.get("qual_summary") or ""])
+    return buf.getvalue()
 
 
 def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, collector: Collector | None = None) -> App:

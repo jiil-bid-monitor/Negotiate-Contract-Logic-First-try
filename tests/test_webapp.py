@@ -388,6 +388,28 @@ class TestStore(unittest.TestCase):
         self.assertIsNone(self.store.states()["R-000"]["promoted_by"])
         self.assertEqual(self.store.states()["R-000"]["status"], "참가")
 
+    def test_decisions_with_reasons(self):
+        """참가·보류·불참 판단은 사유와 공고 정보를 함께 쌓는다(2026-10-13) — 공고마다 마지막 판단, 해제하면 빠짐."""
+        snap = {"title": "○○체험관 운영 용역", "matched_keywords": ["체험관"], "budget": 3e8, "ignored": "x"}
+        with self.assertRaises(ValueError):
+            self.store.add_decision("A-000", "김", "불참", [], "", snap)  # 사유 없이 저장 안 됨
+        self.store.add_decision("A-000", "김", "불참", ["운영·유지보수 위주", "없는 사유"], "", snap)
+        self.store.add_decision("B-000", "이", "참가", [], "주력 분야라 참가", {"title": "△△과학관 전시물 제작"})
+        latest = {d["key"]: d for d in self.store.decisions()}
+        self.assertEqual(latest["A-000"]["reasons"], ["운영·유지보수 위주"], "정해진 칩만 남긴다")
+        self.assertEqual(latest["A-000"]["snapshot"]["matched_keywords"], ["체험관"])
+        self.assertNotIn("ignored", latest["A-000"]["snapshot"])
+        self.store.add_decision("A-000", "김", None, [], "", snap)  # 해제
+        self.assertEqual([d["key"] for d in self.store.decisions()], ["B-000"])
+        self.assertEqual(len(self.store.decisions(latest_only=False)), 3, "바꾼 이력은 다 남는다")
+
+    def test_decisions_csv(self):
+        from webapp.server import decisions_csv
+        self.store.add_decision("A-000", "김", "불참", ["금액 작음"], "메모, 쉼표", {"title": "공고 A", "matched_keywords": ["박물관"]})
+        text = decisions_csv(self.store.decisions(latest_only=False))
+        self.assertIn("판단일시,판단자,참가여부,사유,메모", text.splitlines()[0])
+        self.assertIn('김,불참,금액 작음,"메모, 쉼표"', text)
+
     def test_old_db_file_gets_promote_columns(self):
         """서버 PC의 예전 DB 파일(올림 칸 없음)도 그대로 열리고 칸이 더해진다."""
         import sqlite3

@@ -939,23 +939,33 @@ class TestAnswers20261013(unittest.TestCase):
         result = screen.screen(self._notice("○○박물관 증축 건축공사"), config.screen)
         self.assertEqual(result.excluded_by, "제외키워드")
 
-    def test_required_excluded_license(self):
+    def test_only_excluded_licenses(self):
         bad = ["조경공사업", "토목공사업"]
-        f = qualify.required_excluded_license
-        # 조경공사업 하나만 요구
-        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["조경공사업/0004"]])], bad), "조경공사업")
-        # 실내건축과 함께 모두 필요 → 토목은 그래도 필수
-        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["실내건축공사업/4990"], ["토목공사업/0001"]])], bad), "토목공사업")
-        # 허용업종으로 다른 면허 인정 → 빼지 않음
-        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["토목공사업/0001", "실내건축공사업"]])], bad))
-        # 다른 그룹(또는)으로 대신 가능 → 빼지 않음
+        held = ["실내건축공사업/4990"]
+
+        def f(groups):
+            return qualify.only_excluded_licenses(groups, bad, held, {"4990"})
+
+        # 조경공사업 하나만 요구 → 제외
+        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["조경공사업/0004"]])]), "조경공사업")
+        # 조경 또는 토목(그룹 둘) → 제외
+        self.assertEqual(f([
+            qualify.LicenseGroup("1", rows=[["토목공사업/0001", "토목건축공사업"]]),
+            qualify.LicenseGroup("2", rows=[["조경공사업/0004"]]),
+        ]), "조경공사업·토목공사업")
+        # 실내건축과 토목을 함께 요구 → 공동수급(분담이행) 여지가 있어 남김
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["실내건축공사업/4990"], ["토목공사업/0001"]])]))
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["전기공사업/0007"], ["토목공사업/0001"]])]))
+        # 다른 그룹(또는)으로 다른 면허 가능 → 남김
         self.assertIsNone(f([
             qualify.LicenseGroup("1", rows=[["토목공사업/0001"]]),
-            qualify.LicenseGroup("2", rows=[["실내건축공사업/4990"]]),
-        ], bad))
-        # 목록에 없는 면허(토목건축공사업), 면허정보 없음 → 빼지 않음
-        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["토목건축공사업/0003"]])], bad))
-        self.assertIsNone(f([], bad))
+            qualify.LicenseGroup("2", rows=[["건축공사업/0002"]]),
+        ]))
+        # 허용업종으로 지일 보유 면허 인정 → 단독 참가 가능, 남김
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["토목공사업/0001", "실내건축공사업/4990"]])]))
+        # 목록에 없는 면허, 면허정보 없음 → 남김
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["토목건축공사업/0003"]])]))
+        self.assertIsNone(f([]))
 
     def test_pipeline_rejects_required_civil_license(self):
         config = load_config()
@@ -964,7 +974,7 @@ class TestAnswers20261013(unittest.TestCase):
         stats = RunStats()
         self.assertEqual(build_candidates(notices, config, groups, {}, NOW, stats), [])
         self.assertEqual(stats.screened_out.get("필수면허"), 1)
-        self.assertTrue(stats.rejected[0].excluded_reason.startswith("필수면허 (토목공사업"))
+        self.assertEqual(stats.rejected[0].excluded_reason, "필수면허 (토목공사업만 요구 — 지일 분야 아님)")
         stats = RunStats()
         self.assertEqual(len(build_candidates(notices, config, {}, {}, NOW, stats)), 1)
 

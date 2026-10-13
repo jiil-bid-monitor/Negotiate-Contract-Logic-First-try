@@ -201,24 +201,31 @@ def _is_group_satisfied(group: LicenseGroup, held_names: list[str], held_codes: 
     return False
 
 
-def required_excluded_license(groups: list[LicenseGroup], excluded: list[str]) -> str | None:
-    """공고가 `excluded` 면허(예: 조경공사업·토목공사업)를 **반드시** 요구하면 그 면허 이름, 아니면 None.
+def only_excluded_licenses(
+    groups: list[LicenseGroup],
+    excluded: list[str],
+    held_names: list[str] = (),
+    held_codes: set[str] | frozenset[str] = frozenset(),
+) -> str | None:
+    """공고가 `excluded` 면허(조경공사업·토목공사업)**만** 요구하면 그 이름("토목공사업", "조경공사업·토목공사업"), 아니면 None.
 
-    면허제한 그룹끼리는 "또는", 그룹 안 행끼리는 "모두 필요", 행 안 이름(대표 + 허용업종)은 "또는"이다.
-    그래서 **모든 그룹**에 "이름이 전부 제외 면허인 행"이 있을 때만 필수로 본다 — 제외 면허가 아닌 다른 면허로
-    대신할 수 있으면(허용업종·다른 그룹) 빼지 않는다. 면허제한 정보가 없으면 None(빼지 않음).
+    모든 제한그룹의 모든 행에서 대표 면허(lcnsLmtNm, 행 맨 앞)가 제외 면허일 때만 해당한다 — 다른 면허가 하나라도
+    함께 요구되면("실내건축공사업과 토목공사업") 지일이 그 부분을 맡아 공동수급(분담이행)으로 들어갈 수 있으니 빼지 않는다
+    (2026-10-13 사용자 결정). 허용업종으로 지일이 그룹을 채우면(대신 인정) 단독 참가가 되니 역시 빼지 않는다.
+    면허제한 정보가 없으면 None.
     """
     bases = {_license_base(n) for n in excluded if _license_base(n)}
     if not groups or not bases:
         return None
-    found: str | None = None
+    found: list[str] = []
     for group in groups:
-        rows = group.rows or [group.allowed_names]
-        hit = next((row for row in rows if row and all(_license_base(n) in bases for n in row)), None)
-        if hit is None:
+        rows = [r for r in (group.rows or [group.allowed_names]) if r]
+        if not rows or any(_license_base(r[0]) not in bases for r in rows):
             return None
-        found = found or _license_base(hit[0])
-    return found
+        if all(_is_group_satisfied(LicenseGroup("", row), held_names, held_codes) for row in rows):
+            return None
+        found += [_license_base(r[0]) for r in rows if _license_base(r[0]) not in found]
+    return "·".join(sorted(found))
 
 
 _LICENSE_CODE_RE = re.compile(r"(?:/\s*|\()(\d{4,10})\)?\s*$")

@@ -72,8 +72,8 @@ input[type="date"] { color-scheme: light dark; }
 .fmenu.open .caret { transform: rotate(180deg); }
 .fpop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; min-width: 220px; max-width: min(420px, 90vw);
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px rgba(20,30,50,.16); padding: 10px; }
-.fopts { display: flex; flex-wrap: wrap; gap: 6px; }
-.fnote { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.fopts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.fnote { margin: 0 0 8px; font-size: 12px; color: var(--muted); text-align: center; }
 .foot.promote { justify-content: flex-end; gap: 10px; align-items: center; }
 mark.exw { background: var(--warn-bg); color: var(--warn); border-radius: 3px; padding: 0 2px; font-weight: 700; }
 .freset { border: 0; background: none; color: var(--accent); font-size: 13px; padding: 4px 6px; }
@@ -145,6 +145,7 @@ button.b.qual { cursor: help; position: relative; font: inherit; font-size: 12px
 .tip-title.good { color: var(--good); } .tip-title.bad { color: var(--bad); } .tip-title.warn { color: var(--warn); } .tip-title.info { color: var(--info); }
 .tip-item { font-size: 12.5px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .tip-sub { padding: 2px 0 0 10px; color: var(--bad); }
+.tip-h { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); font-weight: 600; }
 .tip-sub.held { color: var(--good); }
 .tip-sub .kind { font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: var(--chip); color: var(--muted); }
 .tip-item .why { display: block; font-size: 11px; }

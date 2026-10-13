@@ -38,6 +38,22 @@ def default_jiil_repo() -> Path:
 
 # 과업 설명이 아닌 줄 — 인력 학력·경력 기준표 등(실측: "고등학교 졸 : 15년이상"이 '교육청·학교' 근거로 잡힘)
 _NOT_TASK_LINE = re.compile(r"(?:고등학교|대학교?|학사|석사|박사)\s*졸|\d+\s*년\s*이상|경력\s*\d|학력|자격증")
+# "겹친 과업" 발췌는 **확실히 과업을 설명하는 줄만**(2026-10-13 요청 — 입찰참가자격 결격 조항 "…신용유의정보…체납기업으로
+# 규제되지 아니한 기관"이 '금융·경제' 과업으로 보였음). ① 과업 동사가 있어야 하고 ② 자격·조건·절차 표현이 있으면 뺀다.
+_TASK_VERB = re.compile(
+    r"제작|설치|설계|시공|구축|개발|조성|기획|연출|구성|촬영|편집|디자인|리모델링|개선|교체|철거|전시|체험|콘텐츠|납품|구현|적용|"
+    r"조형물|영상|미디어|인터[랙렉]티브|실감|그래픽|사인|조명|아트월|놀이|VR|AR"
+)
+_CONDITION_LINE = re.compile(
+    r"입찰|참가\s*자격|자격\s*요건|등록(?:한|된)?\s*(?:자|업체)|법률|법령|시행령|시행규칙|법\s*제\s*\d|조\s*제\s*\d|부정당|제재|"
+    r"체납|신용|확인서|증명서|소지|해당하지|중소기업|소상공인|보증|제출|서류|평가|배점|가점|감점|공동수급|하도급|지분|"
+    r"계약\s*(?:체결|기간|금액|조건)|지체상금|대가|지급|하자|보험|문의|연락처|담당자|일시|마감|기한|"
+    r"(?:위\s*치|장\s*소|대\s*상\s*지|소\s*재\s*지)\s*[:：]"
+)
+
+
+def _is_task_line(line: str) -> bool:
+    return bool(_TASK_VERB.search(line)) and not _CONDITION_LINE.search(line) and not _NOT_TASK_LINE.search(line)
 
 
 @dataclass
@@ -105,11 +121,11 @@ class PastIndex:
         if top_rows and text.strip():
             weight = getattr(tp, "FACET_WEIGHT", {})
             keys = sorted(mine & self._profiles[ranked[0][1]].tag_set(),
-                          key=lambda k: -weight.get(k.split("/", 1)[0], 0))
+                          key=lambda k: (-weight.get(k.split("/", 1)[0], 0), k))  # 같은 무게면 이름순 — 수집마다 순서가 바뀌지 않게
             excerpts, seen = [], set()
             for k in keys:
                 line = (getattr(profile, "evidence", {}).get(k) or "").strip()
-                if not line or line.startswith("(사업명)") or line in seen or _NOT_TASK_LINE.search(line):
+                if not line or line.startswith("(사업명)") or line in seen or not _is_task_line(line):
                     continue
                 seen.add(line)
                 excerpts.append({"tag": k.split("/", 1)[1], "text": line})

@@ -401,6 +401,15 @@ function fitChip(c) {
       : !(c.sync && c.sync.basis === "과업 원문") ? "첨부 과업 내용을 읽지 못했습니다."
       : "첨부 공고문에서 사업 범위 목록을 찾지 못했습니다.";
     body += `<div class="tip-note">${note}</div>`;
+    // 목록이 없어도 판정 근거는 있다(2026-10-13 요청: "미확인인데 일부 유사"로 보여 헷갈림) — 가장 비슷한 지일 실적과
+    // 공고 원문에서 그 실적과 겹친 과업 줄. 점수는 카드 오른쪽에 있어 다시 쓰지 않는다
+    const best = c.sync && c.sync.basis === "과업 원문" ? (c.sync.top || [])[0] : null;
+    if (best) {
+      body += `<div class="tip-h">판단 근거 — 가장 비슷한 지일 실적</div><div class="tip-item">(${esc(best.year)}) ${esc(best.title)}</div>`;
+      const ex = best.excerpts || [];
+      if (ex.length) body += `<div class="tip-h">공고 원문에서 겹친 과업</div>`
+        + ex.map((e) => `<div class="tip-item quote">· ${esc(e.text)} <span class="why">(${esc(e.tag)})</span></div>`).join("");
+    }
   }
   return qualButton(f.label, f.cls, f.label, body);
 }

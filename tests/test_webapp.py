@@ -125,6 +125,32 @@ class TestSerialize(unittest.TestCase):
 class TestQualificationView(unittest.TestCase):
     """2026-09-29 사용자 지적 3건을 그대로 재현한다."""
 
+    def test_attachment_or_inside_api_requirement_is_shown_once(self):
+        """2026-10-13 제보 R26BK01755562: API "1478 또는 4119 또는 4125"(1478은 4119·4125·국유림영림단도 대신 인정)와
+        첨부 "1478 또는 4119 또는 4125"가 따로 나와 "자격요건 2건"으로 보였다 — 같은 요건이라 한 번만."""
+        from nego import qualify
+        from webapp import qualview
+        rows = [
+            {"bidNtceNo": "F", "lmtGrpNo": "1", "lmtSno": "1", "lcnsLmtNm": "산림사업법인(자연휴양림등 조성)/1478",
+             "permsnIndstrytyList": "[산림조합(지역조합)/4119][산림조합중앙회/4125][국유림영림단]"},
+            {"bidNtceNo": "F", "lmtGrpNo": "2", "lmtSno": "1", "lcnsLmtNm": "산림조합(지역조합)/4119"},
+            {"bidNtceNo": "F", "lmtGrpNo": "3", "lmtSno": "1", "lcnsLmtNm": "산림조합중앙회/4125"},
+        ]
+        api = qualify.evaluate(qualify.group_license_rows(rows)["F"], [], {"4990"})
+        text = ("가. 산림사업법인(자연휴양림등 조성)[업종코드:1478] 또는 산림조합(지역조합)[업종코드:4119] "
+                "또는 산림조합중앙회[업종코드:4125]를 등록한 업체")
+        att = qualify.evaluate_attachment_text([text], held_codes={"4990"})
+        self.assertEqual(len(att.missing_groups), 1)
+        parts = qualview.build(qualify.merge_results(api, att), ({"4990"}, set()), {"industry": True}, text)
+        self.assertEqual(len(parts[0]["missing"]), 1, qualview.flat_missing(parts))
+        self.assertEqual(len(parts[0]["missing"][0]["items"]), 4, "API 쪽(국유림영림단 포함)을 남긴다")
+
+        # 첨부 요건에 API에 없는 코드가 있으면 다른 요건이라 그대로 둔다
+        other = qualify.evaluate_attachment_text(["가. 산림사업법인[업종코드:1478] 또는 실내건축공사업[업종코드:0006]"],
+                                                 held_codes=set())
+        parts = qualview.build(qualify.merge_results(api, other), (set(), set()), {"industry": True})
+        self.assertEqual(len(parts[0]["missing"]), 2)
+
     def test_need_counts_minimum_licenses_to_acquire(self):
         """'최소 N개 부족' — 반드시 1 + 택1 1 = 2, 조합 요건은 가장 덜 모자란 조합의 미보유 수."""
         from nego import qualify

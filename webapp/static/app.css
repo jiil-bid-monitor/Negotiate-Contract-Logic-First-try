@@ -165,6 +165,13 @@ button.b.qual { cursor: help; position: relative; font: inherit; font-size: 12px
 .title .ext { color: var(--accent); font-size: 14px; }
 .meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 24px; margin: 0; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .meta div { min-width: 0; }
+.nomatch { border-collapse: collapse; margin-top: 6px; font-size: 13px; font-weight: 400; }
+.nomatch th { text-align: left; color: var(--muted); font-weight: 400; padding: 3px 14px 3px 0; white-space: nowrap; vertical-align: top; }
+.nomatch td { padding: 3px 0; color: var(--ink); }
+.kwlist { display: inline; }
+.kwlist summary { display: inline; cursor: pointer; color: var(--accent); font-size: 12px; margin-left: 6px; }
+.kwlist[open] { display: block; margin-top: 4px; }
+.kwlist .kw { display: inline-block; font-size: 12px; padding: 0 6px; margin: 2px 4px 0 0; border-radius: 4px; background: var(--chip); color: var(--chip-ink); }
 .meta .explain { margin: 6px 0 0; padding-left: 18px; font-weight: 400; font-size: 13px; color: var(--muted); line-height: 1.6; }
 .meta .wide { grid-column: 1 / -1; }
 .meta dt { color: var(--muted); font-size: 12px; margin-bottom: 2px; }

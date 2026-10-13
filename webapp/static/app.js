@@ -4,7 +4,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // 이 화면이 기대하는 수집 결과 형식 — webapp/collect.py RESULT_FORMAT과 같이 올린다
-const APP_FORMAT = 28;
+const APP_FORMAT = 29;
 const store = {
   get(k, d = null) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장 불가여도 동작 */ } },
@@ -522,7 +522,30 @@ function titleHtml(c) {
 }
 function reasonHtml(c) {
   const word = /^제외키워드 \(/.test(c.excluded_reason || "") ? excludeWord(c) : null;
-  return word ? `제외 키워드 <mark class="exw">${esc(word)}</mark> — 공고명에 이 낱말이 있어 제외` : esc(c.excluded_reason);
+  if (word) return `제외 키워드 <mark class="exw">${esc(word)}</mark> — 공고명에 이 낱말이 있어 제외`;
+  const d = c.match_detail;
+  if (rejReason(c) === "미매칭" && d && d.keyword_count != null) return noMatchHtml(d);
+  // 예전 결과(match_detail 없음)는 서버가 만든 문장 그대로
+  return esc(c.excluded_reason) + ((c.match_explain || []).length
+    ? `<ul class="explain">${c.match_explain.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : "");
+}
+// 미매칭 설명(2026-10-13 요청: 문장이 길어 읽기 어려움) — 한 줄 결론 + "키워드 / 품명코드 / 업종" 짧은 표.
+// 관심 키워드 목록은 접어 두고(눌러서 펼침), 공고명은 카드 제목에 이미 있어 다시 쓰지 않는다
+function noMatchHtml(d) {
+  const kws = (RUN && RUN.keywords) || [];
+  const target = d.product_class_name ? `공고명·대표 세부품명 「${esc(d.product_class_name)}」` : "공고명";
+  const kwList = kws.length
+    ? ` <details class="kwlist"><summary>관심 키워드 ${kws.length}개 보기</summary>${kws.map((k) => `<span class="kw">${esc(k)}</span>`).join("")}</details>` : "";
+  const rows = [
+    ["키워드", `${target}에 관심 키워드가 하나도 없음${kwList}`],
+    ["품명코드", d.product_class_no
+      ? `세부품명번호 ${esc(d.product_class_no)}${d.product_class_name ? ` (${esc(d.product_class_name)})` : ""} — 관심 품명코드 ${d.product_code_count}개에 없음`
+      : `세부품명번호 없음 <span class="why">(용역·공사 공고는 대부분 없음)</span>`],
+  ];
+  if ((d.industry_hits || []).length) rows.push(["업종", `${esc(d.industry_hits.join(", "))} 일치 — 업종만 맞으면 후보로 안 봄`]);
+  else if (d.industry_text) rows.push(["업종", `「${esc(d.industry_text)}」 — 관심 업종과 겹치지 않음`]);
+  return `미매칭 <span class="why">— 관심 키워드·품명코드 어느 쪽에도 해당 없음</span>`
+    + `<table class="nomatch">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("")}</table>`;
 }
 
 function card(c, withActions = true) {
@@ -544,7 +567,7 @@ function card(c, withActions = true) {
           <div><dt>${c.kind === "사전규격" ? "의견등록 마감" : "마감"}</dt><dd>${deadlineCell(c, dd, note)}</dd></div>
           <div><dt>수요기관</dt><dd>${esc(c.demand_institution || "-")}</dd></div>
           <div><dt>사업금액</dt><dd>${esc(won(c.budget))}</dd></div>
-          ${c.excluded_reason ? `<div class="wide"><dt>제외 사유</dt><dd>${reasonHtml(c)}${(c.match_explain || []).length ? `<ul class="explain">${c.match_explain.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}</dd></div>` : ""}
+          ${c.excluded_reason ? `<div class="wide"><dt>제외 사유</dt><dd>${reasonHtml(c)}</dd></div>` : ""}
         </dl>
         ${conditions(c)}
         ${c.review_exclude ? `<div class="simline">${fitChip(c)}</div>` : ""}

@@ -189,6 +189,7 @@ def make_handler(app: App):
                         assignee=(name if data.get("take") else None),
                         clear_status=bool(data.get("clear_status")),
                         clear_assignee=bool(data.get("release")),
+                        promote=(bool(data["promote"]) if "promote" in data else None),
                     )
                     return self._json({"key": key, "state": state})
                 if url.path == "/api/comments":

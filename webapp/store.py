@@ -52,6 +52,11 @@ class Store:
         self._lock = threading.Lock()
         with self._lock:
             self._db.executescript(_SCHEMA)
+            # 제외된 공고를 담당자가 실제 공고로 올린 표시(2026-10-13 요청) — 예전 DB 파일엔 칸이 없어 여기서 더한다
+            cols = {r[1] for r in self._db.execute("PRAGMA table_info(notice_state)")}
+            for col in ("promoted_by", "promoted_at"):
+                if col not in cols:
+                    self._db.execute(f"ALTER TABLE notice_state ADD COLUMN {col} TEXT")
             self._db.commit()
 
     def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
@@ -104,24 +109,34 @@ class Store:
 
     # ── 참가여부·담당 ─────────────────────────────────────────
     def set_state(self, key: str, by: str, status: str | None = None, assignee: str | None = None,
-                  clear_status: bool = False, clear_assignee: bool = False) -> dict[str, Any]:
+                  clear_status: bool = False, clear_assignee: bool = False,
+                  promote: bool | None = None) -> dict[str, Any]:
+        """`promote`: True면 제외된 공고를 실제 공고로 올림(누가·언제 기록), False면 올림 취소, None이면 그대로."""
         if status is not None and status not in STATUSES:
             raise ValueError(f"참가여부는 {', '.join(STATUSES)} 중 하나: {status}")
         current = self.states().get(key, {})
         new_status = None if clear_status else (status if status is not None else current.get("status"))
         new_assignee = None if clear_assignee else (assignee if assignee is not None else current.get("assignee"))
+        now = _now()
+        if promote is None:
+            promoted_by, promoted_at = current.get("promoted_by"), current.get("promoted_at")
+        else:
+            promoted_by, promoted_at = (by, now) if promote else (None, None)
         self._exec(
-            "INSERT INTO notice_state(key, status, assignee, updated_by, updated_at) VALUES (?,?,?,?,?) "
+            "INSERT INTO notice_state(key, status, assignee, updated_by, updated_at, promoted_by, promoted_at) "
+            "VALUES (?,?,?,?,?,?,?) "
             "ON CONFLICT(key) DO UPDATE SET status=excluded.status, assignee=excluded.assignee, "
-            "updated_by=excluded.updated_by, updated_at=excluded.updated_at",
-            (key, new_status, new_assignee, by, _now()),
+            "updated_by=excluded.updated_by, updated_at=excluded.updated_at, "
+            "promoted_by=excluded.promoted_by, promoted_at=excluded.promoted_at",
+            (key, new_status, new_assignee, by, now, promoted_by, promoted_at),
         )
         return self.states()[key]
 
     def states(self) -> dict[str, dict[str, Any]]:
         return {
             r["key"]: {"status": r["status"], "assignee": r["assignee"],
-                       "updated_by": r["updated_by"], "updated_at": r["updated_at"]}
+                       "updated_by": r["updated_by"], "updated_at": r["updated_at"],
+                       "promoted_by": r["promoted_by"], "promoted_at": r["promoted_at"]}
             for r in self._query("SELECT * FROM notice_state")
         }
 

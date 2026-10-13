@@ -353,6 +353,32 @@ class TestStore(unittest.TestCase):
         self.store.add_comment("A-000", "김", "공동수급 가능?")
         self.assertEqual(self.store.comment_counts(), {"A-000": 1})
 
+    def test_promote_rejected_notice(self):
+        """제외된 공고를 실제 공고로 올림(2026-10-13) — 누가·언제 남고, 참가여부를 바꿔도 유지, 올림 취소 가능."""
+        self.store.set_state("R-000", by="김", promote=True)
+        st = self.store.states()["R-000"]
+        self.assertEqual(st["promoted_by"], "김")
+        self.assertTrue(st["promoted_at"])
+        self.store.set_state("R-000", by="이", status="참가")
+        self.assertEqual(self.store.states()["R-000"]["promoted_by"], "김", "참가여부를 바꿔도 올림은 그대로")
+        self.store.set_state("R-000", by="이", promote=False)
+        self.assertIsNone(self.store.states()["R-000"]["promoted_by"])
+        self.assertEqual(self.store.states()["R-000"]["status"], "참가")
+
+    def test_old_db_file_gets_promote_columns(self):
+        """서버 PC의 예전 DB 파일(올림 칸 없음)도 그대로 열리고 칸이 더해진다."""
+        import sqlite3
+        path = Path(tempfile.mkdtemp()) / "old.sqlite3"
+        db = sqlite3.connect(path)
+        db.execute("CREATE TABLE notice_state (key TEXT PRIMARY KEY, status TEXT, assignee TEXT, updated_by TEXT, updated_at TEXT)")
+        db.execute("INSERT INTO notice_state VALUES ('A-000', '참가', NULL, '김', '2026-10-01T09:00:00')")
+        db.commit()
+        db.close()
+        store = Store(path)
+        self.assertEqual(store.states()["A-000"]["status"], "참가")
+        store.set_state("A-000", by="김", promote=True)
+        self.assertEqual(store.states()["A-000"]["promoted_by"], "김")
+
 
 class TestServer(unittest.TestCase):
     def setUp(self):

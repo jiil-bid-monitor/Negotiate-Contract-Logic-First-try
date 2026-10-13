@@ -48,7 +48,7 @@ function needName() {
 }
 
 // ── 상태 ──
-let META = null, RUN = null, STATES = {}, COUNTS = {}, PAST = null;
+let META = null, RUN = null, STATES = {}, COUNTS = {}, PAST = null, DECISIONS = [];
 const F = {
   kind: "본공고+사전규격",
   cat: new Set(JSON.parse(store.get("f.cat", "[]"))),
@@ -72,6 +72,7 @@ function showTab(name) {
   // 제외·검색 탭은 보일 때만 그린다 — 안 보이는 탭까지 매번 다시 그리면 느려진다
   if (name === "rejected") renderRejected();
   if (name === "search") renderSearch();
+  if (name === "decisions") renderDecisions();
   updateSecNav();
 }
 const tabOn = (name) => !$(`#tab-${name}`).hidden;
@@ -561,6 +562,135 @@ function noMatchHtml(d) {
     + `<table class="nomatch">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("")}</table>`;
 }
 
+// ── 판단 사유(2026-10-13 요청) ──
+// 참가·보류·불참은 사유를 남긴다(검토중은 그대로). 판단할 때 공고 정보를 같이 남겨, 다음 수집의 비슷한 공고 카드에
+// "비슷한 과거 판단"으로 보여주고(A), 기록이 쌓이면 판단 기록 탭에서 키워드별 집계로 필터 조정에 쓴다(B).
+const REASON_STATUSES = ["참가", "보류", "불참"];
+const decisionOf = (c) => DECISIONS.find((d) => d.key === c.key) || null;
+function snapshotOf(c) {
+  return {
+    notice_no: c.notice_no, notice_ord: c.notice_ord, title: c.title, kind: c.kind, category: c.category, work_type: c.work_type,
+    budget: c.budget, demand_institution: c.demand_institution, notice_institution: c.notice_institution,
+    matched_keywords: c.matched_keywords || [], review_exclude: c.review_exclude || null, excluded_reason: c.excluded_reason || null,
+    is_candidate: c.is_candidate, posted_at: c.posted_at, sync_level: c.sync ? c.sync.level : null,
+    qual_summary: c.qualification ? c.qualification.summary : null,
+  };
+}
+async function chooseStatus(c, status) {
+  const st = stateOf(c);
+  if (!REASON_STATUSES.includes(status)) {  // 검토중 — 예전처럼 바로
+    return setState(c.key, st.status === status ? { clear_status: true } : { status });
+  }
+  if (st.status === status) {  // 같은 버튼 다시 = 해제(기록에도 "해제"로 남김)
+    if (needName()) return;
+    try {
+      const r = await api("/api/decision", { key: c.key, name: myName(), status: null, snapshot: snapshotOf(c) });
+      STATES[c.key] = r.state; DECISIONS = r.decisions; render();
+    } catch (e) { alert(e.message); }
+    return;
+  }
+  openReason(c, status);
+}
+let REASON_FOR = null;
+function openReason(c, status) {
+  if (needName()) return;
+  REASON_FOR = { c, status };
+  const prev = decisionOf(c);
+  const picked = new Set(prev && prev.status === status ? prev.reasons : []);
+  $("#reasonTitle").textContent = `${status} 사유`;
+  $("#reasonNotice").textContent = c.title;
+  $("#reasonChips").innerHTML = ((META && META.decision_reasons && META.decision_reasons[status]) || [])
+    .map((r) => `<button type="button" class="chip${picked.has(r) ? " on" : ""}" data-r="${esc(r)}">${esc(r)}</button>`).join("");
+  $("#reasonMemo").value = prev && prev.status === status ? (prev.memo || "") : "";
+  $("#reasonErr").textContent = "";
+  $("#reason").showModal();
+}
+$("#reasonChips").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-r]");
+  if (b) b.classList.toggle("on");
+});
+$("#reasonSave").addEventListener("click", async () => {
+  if (!REASON_FOR) return;
+  const { c, status } = REASON_FOR;
+  const reasons = [...document.querySelectorAll("#reasonChips .chip.on")].map((b) => b.dataset.r);
+  const memo = $("#reasonMemo").value.trim();
+  if (!reasons.length && !memo) { $("#reasonErr").textContent = "사유를 하나 이상 고르거나 메모를 적어 주세요"; return; }
+  try {
+    const r = await api("/api/decision", { key: c.key, name: myName(), status, reasons, memo, snapshot: snapshotOf(c) });
+    STATES[c.key] = r.state; DECISIONS = r.decisions;
+    $("#reason").close();
+    render();
+  } catch (e) { $("#reasonErr").textContent = e.message; }
+});
+
+// 비슷한 과거 판단(A) — 같은 공고의 예전 차수 > 같은 수요기관·같은 관심/제외 키워드·공고명 낱말 겹침 순으로 점수, 상위 2건
+const TITLE_STOP = new Set(["용역", "사업", "제작", "설치", "및", "구축", "조성", "공사", "구매", "개선", "위한", "관련", "추진", "기본", "실시"]);
+const titleWords = (t) => new Set(((t || "").replace(/\d{4}년?/g, " ").match(/[가-힣A-Za-z]{2,}/g) || []).filter((w) => !TITLE_STOP.has(w)));
+function similarDecisions(c) {
+  if (!DECISIONS.length) return [];
+  const myWords = titleWords(c.title), myKw = new Set(c.matched_keywords || []);
+  const scored = [];
+  for (const d of DECISIONS) {
+    const sn = d.snapshot || {};
+    if (d.key === c.key) continue;
+    let score = 0;
+    const why = [];
+    if (sn.notice_no && sn.notice_no === c.notice_no) { score += 10; why.push("같은 공고의 이전 차수"); }
+    if (sn.demand_institution && sn.demand_institution === c.demand_institution) { score += 3; why.push("같은 수요기관"); }
+    const kw = (sn.matched_keywords || []).filter((k) => myKw.has(k));
+    if (kw.length) { score += 2 * kw.length; why.push(`키워드 ${kw.join("·")}`); }
+    if (sn.review_exclude && sn.review_exclude === c.review_exclude) { score += 2; why.push(`제외 키워드 ${sn.review_exclude}`); }
+    const shared = [...titleWords(sn.title)].filter((w) => myWords.has(w));
+    if (shared.length) { score += Math.min(3, shared.length); why.push(`공고명 ${shared.slice(0, 3).join("·")}`); }
+    if (score >= 4) scored.push({ d, score, why });
+  }
+  return scored.sort((a, b) => b.score - a.score || (b.d.decided_at > a.d.decided_at ? 1 : -1)).slice(0, 2);
+}
+function similarHtml(c) {
+  const sims = similarDecisions(c);
+  if (!sims.length) return "";
+  return `<div class="pastdec"><span class="pastdec-h">비슷한 과거 판단</span>` + sims.map(({ d, why }) =>
+    `<div class="pastdec-row"><b class="st st-${esc(d.status)}">${esc(d.status)}</b> 「${esc((d.snapshot || {}).title || d.key)}」`
+    + ` — ${esc([...d.reasons, d.memo].filter(Boolean).join(" · ") || "사유 없음")}`
+    + ` <span class="why">(${esc(why.join(", "))} · ${esc(d.decided_by)} ${esc(fmtDt(d.decided_at).slice(0, 10))})</span></div>`).join("") + `</div>`;
+}
+
+// 판단 기록 탭(B) — 기록 목록·내려받기, DECISION_SUMMARY_MIN건이 쌓이면 키워드별 집계를 연다(사용자 결정: 쌓인 뒤에)
+function renderDecisions() {
+  const min = (META && META.decision_summary_min) || 30;
+  const ds = [...DECISIONS].sort((a, b) => (b.decided_at > a.decided_at ? 1 : -1));
+  const by = (s) => ds.filter((d) => d.status === s).length;
+  const csv = `/api/decisions.csv${token ? `?t=${encodeURIComponent(token)}` : ""}`;
+  $("#decSummary").innerHTML = `판단 기록 <b>${ds.length}</b>건 — 참가 ${by("참가")} · 보류 ${by("보류")} · 불참 ${by("불참")}`
+    + ` · <a href="${csv}" download="판단기록.csv">CSV 내려받기</a>`
+    + (ds.length < min ? `<br><span class="why">기록이 ${min}건 쌓이면 아래에 키워드 조정용 집계가 열립니다 (${ds.length}/${min}).</span>` : "");
+  $("#decAgg").innerHTML = ds.length >= min ? decisionAggHtml(ds) : "";
+  $("#decList").innerHTML = ds.length ? `<table class="dectable"><thead><tr><th>판단일</th><th>참가여부</th><th>공고명</th><th>사유</th><th>판단자</th></tr></thead><tbody>`
+    + ds.map((d) => `<tr><td>${esc(fmtDt(d.decided_at).slice(0, 10))}</td><td><b class="st st-${esc(d.status)}">${esc(d.status)}</b></td>`
+      + `<td>${esc((d.snapshot || {}).title || d.key)}</td><td>${esc([...d.reasons, d.memo].filter(Boolean).join(" · "))}</td><td>${esc(d.decided_by)}</td></tr>`).join("")
+    + `</tbody></table>` : emptyBox("아직 판단 기록이 없습니다. 실제 공고 카드에서 참가·보류·불참을 고르면 사유와 함께 쌓입니다.").outerHTML;
+}
+function decisionAggHtml(ds) {
+  // 무엇으로 걸렸는지(관심 키워드·검토 필요 제외 키워드·제외에서 올린 공고의 원래 사유)별 참가/보류/불참과 많이 나온 사유
+  const groups = {};
+  const add = (label, d) => { (groups[label] = groups[label] || []).push(d); };
+  for (const d of ds) {
+    const sn = d.snapshot || {};
+    (sn.matched_keywords || []).forEach((k) => add(`관심 "${k}"`, d));
+    if (sn.review_exclude) add(`검토 필요 · 제외 "${sn.review_exclude}"`, d);
+    if (sn.is_candidate === false && sn.excluded_reason) add(`제외에서 올림 · ${sn.excluded_reason.split(" (")[0]}`, d);
+  }
+  const rows = Object.entries(groups).filter(([, v]) => v.length >= 2).sort((a, b) => b[1].length - a[1].length).map(([label, v]) => {
+    const n = (s) => v.filter((d) => d.status === s).length;
+    const top = countBy(v.flatMap((d) => d.reasons.map((r) => ({ r }))), (x) => x.r);
+    return `<tr><td>${esc(label)}</td><td>${v.length}</td><td>${n("참가")}</td><td>${n("보류")}</td><td>${n("불참")}</td>`
+      + `<td>${esc(Object.entries(top).slice(0, 3).map(([r, k]) => `${r} ${k}`).join(" · "))}</td></tr>`;
+  }).join("");
+  return `<h2 class="section">키워드별 판단 집계 <small>2건 이상만 · 필터 조정 검토용</small></h2>`
+    + (rows ? `<table class="dectable"><thead><tr><th>걸린 키워드</th><th>건수</th><th>참가</th><th>보류</th><th>불참</th><th>많이 나온 사유</th></tr></thead><tbody>${rows}</tbody></table>`
+      : emptyBox("아직 같은 키워드로 2건 이상 판단된 공고가 없습니다.").outerHTML);
+}
+
 function card(c, withActions = true) {
   // 가로 전체를 쓰는 리스트 한 줄: [배지·공고명·정보 3칸 | 싱크로율] + 아래 참가여부·담당·대화
   const st = stateOf(c);
@@ -585,6 +715,7 @@ function card(c, withActions = true) {
         </dl>
         ${conditions(c)}
         ${c.review_exclude ? `<div class="simline">${fitChip(c)}</div>` : ""}
+        ${withActions ? similarHtml(c) : ""}
       </div>
       <button type="button" class="card-side lv-${esc(s.level)}" title="눌러서 비슷한 과거 실적 보기">
         <span class="pct">${pct(s.score)}</span>
@@ -604,8 +735,16 @@ function card(c, withActions = true) {
       b.dataset.s = status;
       b.textContent = status;
       b.classList.toggle("on", st.status === status);
-      b.addEventListener("click", () => setState(c.key, st.status === status ? { clear_status: true } : { status }));
+      b.addEventListener("click", () => chooseStatus(c, status));
       part.appendChild(b);
+    }
+    const dec = decisionOf(c);
+    if (dec && dec.status === st.status) {
+      const why = document.createElement("span");
+      why.className = "decwhy";
+      why.innerHTML = `사유: ${esc([...dec.reasons, dec.memo].filter(Boolean).join(" · "))} <button type="button" class="link">고치기</button>`;
+      $("button", why).addEventListener("click", () => openReason(c, dec.status));
+      part.appendChild(why);
     }
     const mine = st.assignee && st.assignee === myName();
     const right = document.createElement("div");
@@ -730,6 +869,7 @@ function render() {
     : "수집 결과가 없습니다.";
   if (tabOn("rejected")) renderRejected();
   if (tabOn("search")) renderSearch();
+  if (tabOn("decisions")) renderDecisions();
 }
 
 // ── 구역 이동 메뉴 ──
@@ -867,6 +1007,7 @@ async function loadResults(quiet = false) {
   if (data.missing) { store.set("myRun", ""); SHOWN = null; }  // 오래돼 지워진 결과(최근 30회만 보관)면 최신으로
   if (!data.same) { RUN = data.run; rejLimit = REJ_PAGE; }
   STATES = data.states; COUNTS = data.comment_counts;
+  try { DECISIONS = (await api("/api/decisions")).decisions || []; } catch { /* 예전 서버면 판단 기록 없음 */ }
   if (RUN && !data.missing) SHOWN = String(RUN.id);
   checkPageVersion(data.static_version);
   showJob(data.job);

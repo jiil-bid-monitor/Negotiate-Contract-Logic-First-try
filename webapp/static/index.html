@@ -30,6 +30,7 @@
   <button role="tab" data-tab="rejected">제외된 공고</button>
   <button role="tab" data-tab="search">직접 검색</button>
   <button role="tab" data-tab="past">과거사업 목록</button>
+  <button role="tab" data-tab="decisions">판단 기록</button>
   <!-- 탭 줄 오른쪽 빈 곳에 그 탭의 검색창(2026-10-01 요청) — 실제 공고·제외된 공고 탭에서만 보임 -->
   <span class="tabsearch">
     <input type="search" id="liveQ" data-tab="live" placeholder="공고명·수요기관·공고기관·공고번호 검색" autocomplete="off" aria-label="실제 공고에서 검색">
@@ -78,6 +79,13 @@
     </details>
   </section>
 
+  <!-- 참가·보류·불참 판단과 사유(2026-10-13) — 기록 목록·내려받기, 기록이 쌓이면 키워드 조정용 집계 -->
+  <section id="tab-decisions" class="tab" hidden>
+    <div id="decSummary" class="summary"></div>
+    <div id="decAgg"></div>
+    <div id="decList"></div>
+  </section>
+
   <section id="tab-past" class="tab" hidden>
     <div class="toolbar">
       <input id="pastQ" placeholder="사업명·과업·전시내용 검색" autocomplete="off">
@@ -101,6 +109,17 @@
   <div class="thread-new">
     <textarea id="threadInput" rows="2" placeholder="메시지 입력 (Ctrl+Enter 전송)"></textarea>
     <button class="primary" id="threadSend">보내기</button>
+  </div>
+</dialog>
+
+<dialog id="reason">
+  <form method="dialog" class="dlg-head"><strong id="reasonTitle"></strong><button aria-label="닫기">✕</button></form>
+  <div class="reason-body">
+    <p class="why" id="reasonNotice"></p>
+    <p class="reason-q">사유를 골라 주세요 <span class="why">(여러 개 가능 · 다음 수집 때 비슷한 공고에 이 판단이 함께 보입니다)</span></p>
+    <div id="reasonChips" class="reason-chips"></div>
+    <textarea id="reasonMemo" rows="2" maxlength="500" placeholder="메모 (선택) — 예: 공동수급 상대 ○○와 협의 중"></textarea>
+    <div class="reason-foot"><span class="job err" id="reasonErr"></span><button class="primary" id="reasonSave">저장</button></div>
   </div>
 </dialog>
 

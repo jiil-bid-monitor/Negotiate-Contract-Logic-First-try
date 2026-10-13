@@ -37,7 +37,33 @@ CREATE TABLE IF NOT EXISTS comments (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS comments_key ON comments(key);
+-- 참가·보류·불참 판단 기록(2026-10-13 요청) — 바꿀 때마다 한 줄씩 쌓는다. 수집 결과는 최근 30회만 남으므로
+-- 판단할 때의 공고 정보(snapshot: 공고명·기관·금액·유형·걸린 키워드 등)를 같이 남겨 나중에도 집계할 수 있게 한다
+CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL,
+    status TEXT,
+    reasons TEXT NOT NULL,
+    memo TEXT,
+    decided_by TEXT NOT NULL,
+    decided_at TEXT NOT NULL,
+    snapshot TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS decisions_key ON decisions(key);
 """
+
+# 판단 사유 칩(화면이 이 목록을 그대로 쓴다) — 집계가 되도록 정해진 칩 + 자유 메모
+DECISION_REASONS = {
+    "참가": ["주력 분야", "실적 쌓기", "후속 사업 연계", "금액 적정", "자격 충족", "공동수급 가능"],
+    "보류": ["공고문 확인 필요", "내부 협의 중", "공동수급 상대 찾는 중", "일정 확인 필요"],
+    "불참": ["과업 성격 다름", "운영·유지보수 위주", "자격·면허 부족", "실적 요건 미달", "지역 제한",
+             "금액 작음", "마감 촉박", "공동수급 상대 없음", "인력·일정 부족"],
+}
+# 판단 기록이 이만큼 쌓이면 "키워드 조정 집계"를 연다(사용자 결정 — 기록이 쌓인 뒤에 B 단계)
+DECISION_SUMMARY_MIN = 30
+_SNAPSHOT_KEYS = ("notice_no", "notice_ord", "title", "kind", "category", "work_type", "budget",
+                  "demand_institution", "notice_institution", "matched_keywords", "review_exclude",
+                  "excluded_reason", "is_candidate", "posted_at", "sync_level", "qual_summary")
 
 
 def _now() -> str:
@@ -139,6 +165,39 @@ class Store:
                        "promoted_by": r["promoted_by"], "promoted_at": r["promoted_at"]}
             for r in self._query("SELECT * FROM notice_state")
         }
+
+    # ── 판단 기록 ─────────────────────────────────────────────
+    def add_decision(self, key: str, by: str, status: str | None, reasons: list[str], memo: str,
+                     snapshot: dict[str, Any]) -> dict[str, Any]:
+        """참가여부를 정할 때 사유와 함께 한 줄 남긴다. status=None은 "판단 해제"(참가여부를 지움)."""
+        if status is not None:
+            if status not in DECISION_REASONS:
+                raise ValueError(f"사유를 남기는 참가여부는 {', '.join(DECISION_REASONS)} 중 하나: {status}")
+            reasons = [r for r in reasons if r in DECISION_REASONS[status]]
+            if not reasons and not memo.strip():
+                raise ValueError("사유를 하나 이상 고르거나 메모를 적어 주세요")
+        snap = {k: snapshot.get(k) for k in _SNAPSHOT_KEYS if k in snapshot}
+        cur = self._exec(
+            "INSERT INTO decisions(key, status, reasons, memo, decided_by, decided_at, snapshot) VALUES (?,?,?,?,?,?,?)",
+            (key, status, json.dumps(reasons, ensure_ascii=False), memo.strip()[:500] or None, by, _now(),
+             json.dumps(snap, ensure_ascii=False)),
+        )
+        return {"id": cur.lastrowid}
+
+    def decisions(self, latest_only: bool = True) -> list[dict[str, Any]]:
+        """공고마다 마지막 판단(해제된 공고는 뺌). latest_only=False면 바꾼 이력 전부(내려받기용)."""
+        rows = self._query("SELECT * FROM decisions ORDER BY id")
+        out = [{
+            "id": r["id"], "key": r["key"], "status": r["status"], "reasons": json.loads(r["reasons"] or "[]"),
+            "memo": r["memo"], "decided_by": r["decided_by"], "decided_at": r["decided_at"],
+            "snapshot": json.loads(r["snapshot"] or "{}"),
+        } for r in rows]
+        if not latest_only:
+            return out
+        last: dict[str, dict[str, Any]] = {}
+        for d in out:
+            last[d["key"]] = d
+        return [d for d in last.values() if d["status"]]
 
     # ── 대화 ─────────────────────────────────────────────────
     def add_comment(self, key: str, author: str, body: str) -> dict[str, Any]:

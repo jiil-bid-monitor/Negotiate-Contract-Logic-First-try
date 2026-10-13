@@ -924,7 +924,7 @@ class TestEndToEnd(unittest.TestCase):
 
 
 class TestAnswers20261013(unittest.TestCase):
-    """2026-10-13 대리님 답변 반영: "건축" 제외가 "실내건축"을 안 빼고, 조경·토목 면허 필수 공고는 뺀다."""
+    """2026-10-13: "건축" 제외가 "실내건축"을 안 빼고(대리님 답변), 요구 면허를 지일이 하나도 없는 공고는 뺀다(사용자 결정)."""
 
     def _notice(self, title):
         return notice_from_raw(fixtures.notice("R26TEST10013", title=title), "공사")
@@ -939,42 +939,41 @@ class TestAnswers20261013(unittest.TestCase):
         result = screen.screen(self._notice("○○박물관 증축 건축공사"), config.screen)
         self.assertEqual(result.excluded_by, "제외키워드")
 
-    def test_only_excluded_licenses(self):
-        bad = ["조경공사업", "토목공사업"]
+    def test_no_held_license(self):
         held = ["실내건축공사업/4990"]
 
         def f(groups):
-            return qualify.only_excluded_licenses(groups, bad, held, {"4990"})
+            return qualify.no_held_license(groups, held, {"4990"})
 
-        # 조경공사업 하나만 요구 → 제외
-        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["조경공사업/0004"]])]), "조경공사업")
-        # 조경 또는 토목(그룹 둘) → 제외
+        # 조경·토목만 요구 → 제외
+        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["조경공사업/0004"]])]), ["조경공사업(0004)"])
         self.assertEqual(f([
             qualify.LicenseGroup("1", rows=[["토목공사업/0001", "토목건축공사업"]]),
             qualify.LicenseGroup("2", rows=[["조경공사업/0004"]]),
-        ]), "조경공사업·토목공사업")
-        # 실내건축과 토목을 함께 요구 → 공동수급(분담이행) 여지가 있어 남김
+        ]), ["토목공사업(0001)", "조경공사업(0004)"])
+        # 미보유 면허 둘을 함께 요구 → 제외
+        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["전기공사업/0007"], ["정보통신공사업"]])]),
+                         ["전기공사업(0007)", "정보통신공사업"])
+        # 지일 보유 면허를 함께 요구 → 공동수급(분담이행) 여지가 있어 남김
         self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["실내건축공사업/4990"], ["토목공사업/0001"]])]))
-        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["전기공사업/0007"], ["토목공사업/0001"]])]))
-        # 다른 그룹(또는)으로 다른 면허 가능 → 남김
+        # 다른 그룹(또는)에 보유 면허 → 남김
         self.assertIsNone(f([
             qualify.LicenseGroup("1", rows=[["토목공사업/0001"]]),
-            qualify.LicenseGroup("2", rows=[["건축공사업/0002"]]),
+            qualify.LicenseGroup("2", rows=[["실내건축공사업/4990"]]),
         ]))
-        # 허용업종으로 지일 보유 면허 인정 → 단독 참가 가능, 남김
-        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["토목공사업/0001", "실내건축공사업/4990"]])]))
-        # 목록에 없는 면허, 면허정보 없음 → 남김
-        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["토목건축공사업/0003"]])]))
+        # 허용업종으로 보유 면허 인정 → 남김
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["건축공사업/0002", "실내건축공사업"]])]))
+        # 면허정보 없음 → 남김
         self.assertIsNone(f([]))
 
-    def test_pipeline_rejects_required_civil_license(self):
+    def test_pipeline_rejects_notice_without_held_license(self):
         config = load_config()
         notices = [notice_from_raw(fixtures.notice("R26TEST10013", title="○○체험관 조성공사"), "공사")]
         groups = {"R26TEST10013": [qualify.LicenseGroup("1", rows=[["토목공사업/0001"]])]}
         stats = RunStats()
         self.assertEqual(build_candidates(notices, config, groups, {}, NOW, stats), [])
-        self.assertEqual(stats.screened_out.get("필수면허"), 1)
-        self.assertEqual(stats.rejected[0].excluded_reason, "필수면허 (토목공사업만 요구 — 지일 분야 아님)")
+        self.assertEqual(stats.screened_out.get("보유면허없음"), 1)
+        self.assertEqual(stats.rejected[0].excluded_reason, "보유면허없음 (요구 면허 토목공사업(0001) — 지일 보유 없음, 공동수급 불가)")
         stats = RunStats()
         self.assertEqual(len(build_candidates(notices, config, {}, {}, NOW, stats)), 1)
 
@@ -1058,7 +1057,7 @@ class TestOverlappingLicenseGroups(unittest.TestCase):
 
     def test_rows_in_one_group_are_all_required(self):
         groups = qualify.group_license_rows(fixtures.license_rows())["R26TEST00009"]
-        self.assertEqual(qualify.evaluate(groups, []).missing_count, 2)
+        self.assertEqual(qualify.evaluate(groups, []).missing_count, 3)
 
     def test_separate_groups_are_alternatives(self):
         """나라장터 "[출판사(1517)] 업종 또는 [인쇄사(1518)] 업종" — API는 그룹 두 개로 준다

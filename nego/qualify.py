@@ -201,31 +201,28 @@ def _is_group_satisfied(group: LicenseGroup, held_names: list[str], held_codes: 
     return False
 
 
-def only_excluded_licenses(
-    groups: list[LicenseGroup],
-    excluded: list[str],
-    held_names: list[str] = (),
-    held_codes: set[str] | frozenset[str] = frozenset(),
-) -> str | None:
-    """공고가 `excluded` 면허(조경공사업·토목공사업)**만** 요구하면 그 이름("토목공사업", "조경공사업·토목공사업"), 아니면 None.
+def no_held_license(
+    groups: list[LicenseGroup], held_names: list[str], held_codes: set[str] | frozenset[str] = frozenset()
+) -> list[str] | None:
+    """공고가 요구하는 면허를 지일이 **하나도** 갖고 있지 않으면 요구 면허 이름 목록, 아니면 None.
 
-    모든 제한그룹의 모든 행에서 대표 면허(lcnsLmtNm, 행 맨 앞)가 제외 면허일 때만 해당한다 — 다른 면허가 하나라도
-    함께 요구되면("실내건축공사업과 토목공사업") 지일이 그 부분을 맡아 공동수급(분담이행)으로 들어갈 수 있으니 빼지 않는다
-    (2026-10-13 사용자 결정). 허용업종으로 지일이 그룹을 채우면(대신 인정) 단독 참가가 되니 역시 빼지 않는다.
+    공동수급(분담이행)은 구성원이 맡는 부분의 면허를 갖고 있어야 해서, 요구 면허 중 지일 것이 하나도 없으면
+    공동수급으로도 들어갈 자리가 없다(2026-10-13 사용자 결정 — 조경·토목공사업만 요구하는 공고도 여기에 해당).
+    어느 그룹·어느 행이든 지일 보유 면허(대표 면허나 허용업종)가 하나라도 있으면 None(남겨서 자격 판정·공동수급 칸으로 판단).
     면허제한 정보가 없으면 None.
     """
-    bases = {_license_base(n) for n in excluded if _license_base(n)}
-    if not groups or not bases:
+    if not groups:
         return None
-    found: list[str] = []
+    names: list[str] = []
     for group in groups:
         rows = [r for r in (group.rows or [group.allowed_names]) if r]
-        if not rows or any(_license_base(r[0]) not in bases for r in rows):
-            return None
-        if all(_is_group_satisfied(LicenseGroup("", row), held_names, held_codes) for row in rows):
-            return None
-        found += [_license_base(r[0]) for r in rows if _license_base(r[0]) not in found]
-    return "·".join(sorted(found))
+        for row in rows:
+            if _is_group_satisfied(LicenseGroup("", row), held_names, held_codes):
+                return None
+            label = _row_label(row)
+            if label not in names:
+                names.append(label)
+    return names or None
 
 
 _LICENSE_CODE_RE = re.compile(r"(?:/\s*|\()(\d{4,10})\)?\s*$")

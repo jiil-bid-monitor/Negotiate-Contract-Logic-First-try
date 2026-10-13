@@ -59,7 +59,6 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
         hard_exclude_keywords=list(keywords.get("hardExcludeKeywords", [])),
         exclude_exceptions=dict(keywords.get("excludeKeywordExceptions", {})),
         min_budget_amount=keywords.get("minBudgetAmount"),
-        exclude_required_licenses=list(keywords.get("excludeRequiredLicenses", [])),
         product_codes=list(codes.get("productCodes", [])),
         industry_codes=list(codes.get("industryCodes", [])),
     )

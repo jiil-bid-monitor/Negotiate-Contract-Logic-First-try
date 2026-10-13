@@ -46,9 +46,6 @@ class ScreenConfig:
     # "건축"은 일반 건축공사를 거르려던 것이고 실내건축 공고까지 빼려던 건 아님). 다른 곳에 "건축"이 또 있으면 그대로 제외.
     exclude_exceptions: dict[str, list[str]] = field(default_factory=dict)
     min_budget_amount: float | None = None
-    # 이 면허**만** 요구하는 공고는 제외(2026-10-13 대리님 답변 + 사용자 결정 — 다른 면허와 함께 요구하면 공동수급 여지가
-    # 있어 남김). 면허 이름 완전일치(코드·공백 무시). 판정은 pipeline에서 면허제한 API로 — `qualify.only_excluded_licenses`.
-    exclude_required_licenses: list[str] = field(default_factory=list)
     product_codes: list[dict[str, str]] = field(default_factory=list)
     industry_codes: list[dict[str, str]] = field(default_factory=list)
     # 제외 키워드와 관심 키워드가 공고명에 함께 있으면 빼지 않고 "검토 필요"로 남긴다(2026-09-30 사용자 결정 —

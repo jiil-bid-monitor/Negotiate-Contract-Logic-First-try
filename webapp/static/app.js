@@ -749,7 +749,7 @@ function card(c, withActions = true) {
     const mine = st.assignee && st.assignee === myName();
     const right = document.createElement("div");
     right.className = "who";
-    right.innerHTML = `<span>담당 <b>${esc(st.assignee || "없음")}</b>${st.updated_by ? ` <span class="why">· ${esc(st.updated_by)} ${esc(fmtDt(st.updated_at))}</span>` : ""}</span>`;
+    right.innerHTML = `<span>담당 <b>${esc(st.assignee || "없음")}</b>${st.updated_by && (st.status || st.assignee) ? ` <span class="why">· ${esc(st.updated_by)} ${esc(fmtDt(st.updated_at))}</span>` : ""}</span>`;
     const take = document.createElement("button");
     take.textContent = mine ? "담당 해제" : "내가 맡기";
     take.addEventListener("click", () => setState(c.key, mine ? { release: true } : { take: true }));

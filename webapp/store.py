@@ -144,6 +144,8 @@ class Store:
         new_status = None if clear_status else (status if status is not None else current.get("status"))
         new_assignee = None if clear_assignee else (assignee if assignee is not None else current.get("assignee"))
         now = _now()
+        # 참가여부·담당을 모두 비우면(재클릭 취소 등) 누가·언제 기록도 지움
+        upd_by, upd_at = (by, now) if (new_status or new_assignee) else (None, None)
         if promote is None:
             promoted_by, promoted_at = current.get("promoted_by"), current.get("promoted_at")
         else:
@@ -154,7 +156,7 @@ class Store:
             "ON CONFLICT(key) DO UPDATE SET status=excluded.status, assignee=excluded.assignee, "
             "updated_by=excluded.updated_by, updated_at=excluded.updated_at, "
             "promoted_by=excluded.promoted_by, promoted_at=excluded.promoted_at",
-            (key, new_status, new_assignee, by, now, promoted_by, promoted_at),
+            (key, new_status, new_assignee, upd_by, upd_at, promoted_by, promoted_at),
         )
         return self.states()[key]
 

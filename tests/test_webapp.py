@@ -371,6 +371,10 @@ class TestStore(unittest.TestCase):
         self.assertEqual((st["status"], st["assignee"], st["updated_by"]), ("검토중", "이", "이"))
         self.store.set_state("A-000", by="이", clear_assignee=True)
         self.assertIsNone(self.store.states()["A-000"]["assignee"])
+        self.assertEqual(self.store.states()["A-000"]["updated_by"], "이", "참가여부가 남아 있으면 기록 유지")
+        self.store.set_state("A-000", by="이", clear_status=True)
+        st = self.store.states()["A-000"]
+        self.assertEqual((st["updated_by"], st["updated_at"]), (None, None), "다 비우면 누가·언제도 지움")
         with self.assertRaises(ValueError):
             self.store.set_state("A-000", by="김", status="아무거나")
         self.store.add_comment("A-000", "김", "공동수급 가능?")

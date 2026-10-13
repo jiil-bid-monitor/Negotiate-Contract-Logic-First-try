@@ -506,6 +506,25 @@ function conditions(c) {
     .map(([label, html]) => `<div class="cg"><span class="cl">${label}</span><span class="cc">${html}</span></div>`).join("")}</div>`;
 }
 
+// 제외 키워드(2026-10-13 요청: 어떤 키워드 때문에 빠졌는지 바로 보이게) — 제외 사유 "제외키워드 (조사)"의 괄호 안,
+// 검토 필요 공고는 review_exclude. 공고명에서 그 낱말을 형광으로 표시한다 — 필터처럼 띄어쓰기는 무시하고 찾는다
+function excludeWord(c) {
+  const m = /^제외키워드 \((.+)\)$/.exec(c.excluded_reason || "");
+  return m ? m[1] : (c.review_exclude || null);
+}
+function titleHtml(c) {
+  const word = excludeWord(c);
+  if (!word) return esc(c.title);
+  const chars = [...word.replace(/\s+/g, "")].map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const m = chars.length ? new RegExp(chars.join("\\s*")).exec(c.title || "") : null;
+  if (!m) return esc(c.title);
+  return esc(c.title.slice(0, m.index)) + `<mark class="exw" title="제외 키워드">${esc(m[0])}</mark>` + esc(c.title.slice(m.index + m[0].length));
+}
+function reasonHtml(c) {
+  const word = /^제외키워드 \(/.test(c.excluded_reason || "") ? excludeWord(c) : null;
+  return word ? `제외 키워드 <mark class="exw">${esc(word)}</mark> — 공고명에 이 낱말이 있어 제외` : esc(c.excluded_reason);
+}
+
 function card(c, withActions = true) {
   // 가로 전체를 쓰는 리스트 한 줄: [배지·공고명·정보 3칸 | 싱크로율] + 아래 참가여부·담당·대화
   const st = stateOf(c);
@@ -520,12 +539,12 @@ function card(c, withActions = true) {
     <div class="card-body">
       <div class="card-main">
         <div class="badges">${badges(c)}</div>
-        <div class="title">${c.detail_url ? `<a href="${esc(c.detail_url)}" target="_blank" rel="noopener" title="나라장터에서 공고 열기">${esc(c.title)} <span class="ext" aria-hidden="true">↗</span></a>` : esc(c.title)}</div>
+        <div class="title">${c.detail_url ? `<a href="${esc(c.detail_url)}" target="_blank" rel="noopener" title="나라장터에서 공고 열기">${titleHtml(c)} <span class="ext" aria-hidden="true">↗</span></a>` : titleHtml(c)}</div>
         <dl class="meta">
           <div><dt>${c.kind === "사전규격" ? "의견등록 마감" : "마감"}</dt><dd>${deadlineCell(c, dd, note)}</dd></div>
           <div><dt>수요기관</dt><dd>${esc(c.demand_institution || "-")}</dd></div>
           <div><dt>사업금액</dt><dd>${esc(won(c.budget))}</dd></div>
-          ${c.excluded_reason ? `<div class="wide"><dt>제외 사유</dt><dd>${esc(c.excluded_reason)}${(c.match_explain || []).length ? `<ul class="explain">${c.match_explain.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}</dd></div>` : ""}
+          ${c.excluded_reason ? `<div class="wide"><dt>제외 사유</dt><dd>${reasonHtml(c)}${(c.match_explain || []).length ? `<ul class="explain">${c.match_explain.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}</dd></div>` : ""}
         </dl>
         ${conditions(c)}
         ${c.review_exclude ? `<div class="simline">${fitChip(c)}</div>` : ""}
@@ -691,11 +710,13 @@ $("#secNav").addEventListener("click", (e) => {
 // 공고(본공고/사전규격)·낙찰방법은 실제 공고 탭과 같은 구분(2026-10-01 요청). 사전규격엔 낙찰방법이 없어 그 줄에선 안 셈
 const REJ_KEYS = [
   { key: "reason", label: "제외 사유", get: (c) => rejReason(c) },
+  // 제외키워드로 빠진 공고만 — 어떤 키워드가 몇 건을 뺐는지(2026-10-13 요청)
+  { key: "word", label: "제외 키워드", get: (c) => rejReason(c) === "제외키워드" ? excludeWord(c) : null },
   { key: "kind", label: "공고", get: (c) => c.kind === "사전규격" ? "사전규격" : "본공고" },
   { key: "category", label: "낙찰방법", get: (c) => c.kind === "사전규격" ? null : c.category || "미상" },
   { key: "work", label: "업무", get: (c) => c.work_type || "미상" },
 ];
-const REJ_FILTER = { reason: "", kind: "", category: "", work: "" };
+const REJ_FILTER = { reason: "", word: "", kind: "", category: "", work: "" };
 function rejReason(c) { return (c.excluded_reason || "기타").split(" (")[0]; }
 function countBy(list, fn) {
   const out = {};
@@ -714,6 +735,7 @@ function renderRejected() {
   const any = REJ_KEYS.some((k) => REJ_FILTER[k.key]);
   $("#rejFilters").innerHTML = rej.length ? `<div class="fbar">` + REJ_KEYS.map((k) => {
     const counts = countBy(rej.filter((c) => matches(c, k.key)), k.get);
+    if (!Object.keys(counts).length && !REJ_FILTER[k.key]) return "";  // 제외키워드 공고가 없으면 "제외 키워드" 메뉴는 숨김
     const chip = (val, text, n) => `<button type="button" class="rej-chip chip${REJ_FILTER[k.key] === val ? " on" : ""}" data-k="${k.key}" data-v="${esc(val)}">${esc(text)} <b>${n}</b></button>`;
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
     const body = chip("", "전체", total) + Object.entries(counts).map(([v, n]) => chip(v, v, n)).join("");

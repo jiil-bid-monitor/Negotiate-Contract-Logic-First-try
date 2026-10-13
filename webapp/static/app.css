@@ -58,9 +58,45 @@ input[type="date"] { color-scheme: light dark; }
 .job { color: var(--muted); font-size: 13px; }
 .job.err { color: var(--bad); }
 .joblog { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 12px; max-height: 180px; overflow: auto; white-space: pre-wrap; color: var(--muted); }
-.filters { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.frow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.frow .lbl { color: var(--muted); font-size: 12px; min-width: 64px; }
+.filters { margin-bottom: 8px; }
+/* 필터 메뉴 — 버튼 한 줄, 누르면 아래로 선택지 */
+.fbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.fmenu { position: relative; }
+.fbtn { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; border-color: var(--chip-line); font-size: 13px; }
+.fbtn .fl { color: var(--muted); }
+.fbtn .fv { color: var(--ink); font-weight: 600; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fbtn .caret { color: var(--muted); font-size: 10px; transition: transform .15s; }
+.fbtn.on { border-color: var(--accent); background: var(--info-bg); }
+.fbtn.on .fv { color: var(--accent); }
+.fmenu.open .fbtn { border-color: var(--accent); }
+.fmenu.open .caret { transform: rotate(180deg); }
+.fpop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; min-width: 220px; max-width: min(420px, 90vw);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px rgba(20,30,50,.16); padding: 10px; }
+.fopts { display: flex; flex-wrap: wrap; gap: 6px; }
+.fnote { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.freset { border: 0; background: none; color: var(--accent); font-size: 13px; padding: 4px 6px; }
+.freset:hover { text-decoration: underline; }
+.fsort { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
+/* 구역 이동 메뉴 */
+.secnav { position: fixed; right: 20px; bottom: 20px; z-index: 40; }
+.secnav[hidden] { display: none; }
+.secnav-toggle { border-radius: 999px; padding: 8px 14px; background: var(--panel); box-shadow: 0 4px 14px rgba(20,30,50,.18); font-weight: 600; }
+.secnav-list { display: none; position: absolute; right: 0; bottom: calc(100% + 8px); min-width: 190px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px rgba(20,30,50,.16); padding: 6px 0; }
+.secnav.expanded .secnav-list { display: block; }
+.secnav-list button { display: flex; width: 100%; justify-content: space-between; gap: 12px; border: 0; border-left: 3px solid transparent;
+  border-radius: 0; background: none; padding: 7px 14px; text-align: left; color: var(--ink); }
+.secnav-list button b { color: var(--muted); font-weight: 400; }
+.secnav-list button:hover { background: var(--chip); }
+.secnav-list button.on { border-left-color: var(--accent); color: var(--accent); font-weight: 700; }
+.secnav-list .secnav-top { color: var(--muted); border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+h2.section { scroll-margin-top: 16px; }
+/* 넓은 화면(목록 오른쪽에 여백이 있을 때)은 오른쪽 위에 늘 펼쳐 둔다 */
+@media (min-width: 1840px) {
+  .secnav { top: 96px; bottom: auto; }
+  .secnav-toggle { display: none; }
+  .secnav-list { display: block; position: static; }
+}
 .chip { border-radius: 999px; padding: 3px 12px; background: var(--panel); border: 1px solid var(--chip-line); color: var(--chip-ink); font-size: 13px; }
 .chip:hover { border-color: var(--accent); }
 .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
@@ -220,9 +256,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 
 /* 제외 공고 분류키 */
 #rejList .more { display: block; margin: 14px auto 4px; padding: 8px 18px; }
-.rej-filters { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 12px; }
-.rej-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.rej-key { font-size: 12px; color: var(--muted); min-width: 56px; }
+.rej-filters { margin: 4px 0 12px; }
 .rej-chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--chip); color: var(--chip-ink); border-color: var(--chip-line); }
 .rej-chip b { font-weight: 600; margin-left: 2px; }
 .rej-chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }

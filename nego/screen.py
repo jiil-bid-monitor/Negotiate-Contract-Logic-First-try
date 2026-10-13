@@ -71,6 +71,9 @@ class ScreenResult:
     match_explain: list[str] = field(default_factory=list)
     # "검토 필요" — 관심 키워드가 있는데 제외 키워드(이 값)도 있어서 사람이 판단할 공고
     review_exclude: str | None = None
+    # 미매칭 근거를 문장 대신 항목으로(2026-10-13 요청: 문장이 길어 읽기 어려움) — 화면이 짧은 표로 그린다.
+    # 키워드 목록 자체는 공고마다 같아서 넣지 않는다(웹앱은 결과에 한 번만 담음)
+    match_detail: dict = field(default_factory=dict)
 
 
 def _match_exclude(
@@ -163,6 +166,18 @@ def _explain_no_match(notice: Notice, config: ScreenConfig, industry_hits: list[
     return lines
 
 
+def _no_match_detail(notice: Notice, config: ScreenConfig, industry_hits: list[str]) -> dict:
+    """`_explain_no_match`와 같은 내용을 항목으로 — 비교한 대표 세부품명, 세부품명번호, 업종."""
+    return {
+        "product_class_name": notice.product_class_name or None,
+        "product_class_no": notice.product_class_no or None,
+        "keyword_count": len(config.keywords),
+        "product_code_count": len(config.product_codes),
+        "industry_hits": list(industry_hits),
+        "industry_text": (notice.industry_text or "")[:80] or None,
+    }
+
+
 def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
     hard_word = _match_exclude(notice, config.hard_exclude_keywords, config.exclude_exceptions)
     if hard_word:
@@ -217,6 +232,7 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
             excluded_by="미매칭",
             excluded_reason="키워드·품명코드 모두 불일치",
             match_explain=_explain_no_match(notice, config, industry_hits),
+            match_detail=_no_match_detail(notice, config, industry_hits),
         )
 
     code_matched = bool(product_hits or industry_hits)

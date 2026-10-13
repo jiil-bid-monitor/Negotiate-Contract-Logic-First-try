@@ -643,7 +643,7 @@ class TestScreen(unittest.TestCase):
             self.assertEqual((res.matched, res.excluded_by), (False, "제외키워드"), title)
 
     def test_godohwa_is_conditional_exclude(self):
-        """'고도화' 단독은 조건부 제외(2026-10-01) — 관심 키워드가 있으면 웹앱 "검토 필요", IT 표현은 그대로 제외."""
+        """'고도화' 단독은 조건부 제외(2026-10-01) — 관심 키워드가 있으면 웹앱 "검토 필요", 없으면 제외(사유는 '고도화' — 10/13 IT 표현 8개 뺌)."""
         from dataclasses import replace
         from nego.config import load_config
 
@@ -652,7 +652,7 @@ class TestScreen(unittest.TestCase):
             "G", title="[경기북부어린이박물관 전시고도화사업] 상설전시 개편 설계 및 체험전시물 제작·설치"), "용역"), config)
         self.assertEqual((museum.confidence, museum.review_exclude), ("검토필요", "고도화"))
         homepage = screen.screen(notice_from_raw(fixtures.notice("H", title="○○군청 홈페이지 고도화 용역"), "용역"), config)
-        self.assertEqual((homepage.excluded_by, homepage.excluded_reason), ("제외키워드", "홈페이지 고도화"))
+        self.assertEqual((homepage.excluded_by, homepage.excluded_reason), ("제외키워드", "고도화"))
 
     def test_product_code_match_alone_is_not_review(self):
         """관심 품명코드만 맞고 관심 키워드가 없으면 제외 키워드대로 제외 — "검토 필요"는 관심 키워드가 있을 때만(2026-10-01)."""

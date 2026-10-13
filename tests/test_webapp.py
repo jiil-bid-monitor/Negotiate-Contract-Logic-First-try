@@ -337,6 +337,29 @@ class _Url(unittest.TestCase):
         self.assertIsNone(_g2b_url(prespec_from_raw({"bfSpecRgstNo": "R26BD1"}, "물품")))
 
 
+class TestTaskExcerptLine(unittest.TestCase):
+    """과업 유사 팝업 "겹친 과업" 발췌는 과업 설명 줄만(2026-10-13 요청 — 자격 결격 조항이 '금융·경제' 과업으로 보였음)."""
+
+    def test_condition_lines_are_not_tasks(self):
+        from webapp.sync import _is_task_line
+        for line in [
+            "· 입찰등록일 현재 재단 규정 및 국가를 당사자로 하는 계약에 관한 법률상 하자가 있거나 금융기관의 신용유의정보보유자"
+            "(연체거래자, 법정관리업체, 국세 및 지방세 체납기업)으로 규제되지 아니한 기관",
+            "가. 위치 : 울주군 상북면 명촌길천로 341, 꿈자람놀이터(구 길천초등학교)",
+            "▪ 표지 : 백색 아트지(200g/㎡) [서식 제4호]",
+            "① 제안서의 평가를 위하여 심사위원은 계약담당자, 해당분야 전문기관․단체 임직원 및 전문가․대학교수 등으로 한다.",
+            "도시교통과",
+        ]:
+            self.assertFalse(_is_task_line(line), line)
+        for line in [
+            "- 체험 전시물 설계 및 제작·설치 (모형, 소품, 교구 구매 포함)",
+            "① 상징조형물 각 1식",
+            "4) VR, AR 등 인터랙티브 미디어를 활용한 다양한 실감기술 적용",
+            "라. 경관조명",
+        ]:
+            self.assertTrue(_is_task_line(line), line)
+
+
 class TestStore(unittest.TestCase):
     def setUp(self):
         self.store = Store(Path(tempfile.mkdtemp()) / "t.sqlite3")

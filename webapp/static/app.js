@@ -4,7 +4,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // 이 화면이 기대하는 수집 결과 형식 — webapp/collect.py RESULT_FORMAT과 같이 올린다
-const APP_FORMAT = 29;
+const APP_FORMAT = 30;
 const store = {
   get(k, d = null) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장 불가여도 동작 */ } },
@@ -87,7 +87,8 @@ function debounce(fn, ms = 200) {
 // 펼친 메뉴는 다시 그려도 열린 채로 둔다(OPEN_MENU) — 여러 개를 연달아 고를 수 있게. 바깥을 누르거나 Esc면 닫힌다.
 let OPEN_MENU = null;
 const FILTER_DEFS = () => [
-  { key: "kind", label: "공고", options: ["본공고+사전규격", "본공고", "사전규격"], multi: false, all: "본공고+사전규격" },
+  // "검토필요"(2026-10-13 요청) — 관심·제외 키워드가 함께 있어 맨 아래 "검토 필요" 구역에 모인 공고만
+  { key: "kind", label: "공고", options: ["본공고+사전규격", "본공고", "사전규격", "검토필요"], multi: false, all: "본공고+사전규격" },
   { key: "cat", label: "낙찰방법", options: META ? META.categories : ["협상", "규격가격동시입찰", "입찰"], multi: true },
   { key: "part", label: "참가여부", options: ["미지정", ...(META ? META.statuses : [])], multi: true },
   { key: "ai", label: "AI 판단", options: ["적합", "검토필요", "부적합", "미판정"], multi: true },
@@ -203,7 +204,8 @@ function textHit(c, q) {
 }
 function passes(c) {
   if (!textHit(c, $("#liveQ").value)) return false;
-  if (F.kind !== "본공고+사전규격" && c.kind !== F.kind) return false;
+  if (F.kind === "검토필요") { if (!c.review_exclude) return false; }
+  else if (F.kind !== "본공고+사전규격" && c.kind !== F.kind) return false;
   if (F.cat.size && !F.cat.has(c.category)) return false;
   if (F.part.size && !F.part.has(stateOf(c).status || "미지정")) return false;
   if (F.ai.size && !F.ai.has(c.ai ? c.ai.label : "미판정")) return false;

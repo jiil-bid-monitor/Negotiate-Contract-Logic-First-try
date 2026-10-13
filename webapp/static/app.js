@@ -192,6 +192,8 @@ document.addEventListener("keydown", (e) => {
 });
 
 function stateOf(c) { return STATES[c.key] || {}; }
+// 제외된 공고를 담당자가 실제 공고로 올렸는지(2026-10-13 요청) — 팀 전체에 공유되고, 다음 수집에도 같은 공고번호-차수면 그대로 올라온다
+const promoted = (c) => !c.is_candidate && !!stateOf(c).promoted_by;
 // 탭 안 검색(2026-10-01 요청) — 공고명·수요기관·공고기관·공고번호에 검색어가 들어 있으면 통과. 띄어쓰기로 나누면 모두 들어 있어야 함
 function textHit(c, q) {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -561,13 +563,14 @@ function card(c, withActions = true) {
   el.innerHTML = `
     <div class="card-body">
       <div class="card-main">
-        <div class="badges">${badges(c)}</div>
+        <div class="badges">${badges(c)}${promoted(c) ? chip("제외에서 올림", "b star", `${stateOf(c).promoted_by} 님이 올림 · ${fmtDt(stateOf(c).promoted_at)}`,
+          "필터에서 제외됐던 공고를 담당자가 실제 공고로 올렸습니다. 첨부 자격판정은 수집 때 하지 않아 자격은 나라장터 면허제한 기준입니다.") : ""}</div>
         <div class="title">${c.detail_url ? `<a href="${esc(c.detail_url)}" target="_blank" rel="noopener" title="나라장터에서 공고 열기">${titleHtml(c)} <span class="ext" aria-hidden="true">↗</span></a>` : titleHtml(c)}</div>
         <dl class="meta">
           <div><dt>${c.kind === "사전규격" ? "의견등록 마감" : "마감"}</dt><dd>${deadlineCell(c, dd, note)}</dd></div>
           <div><dt>수요기관</dt><dd>${esc(c.demand_institution || "-")}</dd></div>
           <div><dt>사업금액</dt><dd>${esc(won(c.budget))}</dd></div>
-          ${c.excluded_reason ? `<div class="wide"><dt>제외 사유</dt><dd>${reasonHtml(c)}</dd></div>` : ""}
+          ${c.excluded_reason ? `<div class="wide"><dt>${promoted(c) ? "원래 제외 사유" : "제외 사유"}</dt><dd>${reasonHtml(c)}</dd></div>` : ""}
         </dl>
         ${conditions(c)}
         ${c.review_exclude ? `<div class="simline">${fitChip(c)}</div>` : ""}
@@ -604,7 +607,34 @@ function card(c, withActions = true) {
     talk.textContent = `대화 ${COUNTS[c.key] || 0}건`;
     talk.addEventListener("click", () => openThread(c));
     right.append(take, talk);
+    if (promoted(c)) {
+      const back = document.createElement("button");
+      back.textContent = "제외로 되돌리기";
+      back.title = "실제 공고 목록에서 빼고 제외된 공고로 되돌립니다";
+      back.addEventListener("click", () => setState(c.key, { promote: false }));
+      right.append(back);
+    }
     foot.append(part, right);
+    el.append(foot);
+  } else if (!c.is_candidate && c.excluded_reason) {
+    // 제외된 공고 — 담당자가 보기에 참가할 만하면 실제 공고로 올린다(2026-10-13 요청)
+    const st2 = stateOf(c);
+    const foot = document.createElement("div");
+    foot.className = "foot promote";
+    if (st2.promoted_by) {
+      foot.innerHTML = `<span class="why">실제 공고로 올림 — ${esc(st2.promoted_by)} ${esc(fmtDt(st2.promoted_at))}</span>`;
+      const back = document.createElement("button");
+      back.textContent = "올림 취소";
+      back.addEventListener("click", () => setState(c.key, { promote: false }));
+      foot.append(back);
+    } else {
+      foot.innerHTML = `<span class="why">참가할 만한 공고라면</span>`;
+      const up = document.createElement("button");
+      up.className = "primary";
+      up.textContent = "실제 공고로 올리기";
+      up.addEventListener("click", () => setState(c.key, { promote: true }));
+      foot.append(up);
+    }
     el.append(foot);
   }
   return el;
@@ -631,7 +661,8 @@ const openFirst = (list) => [...list.filter((c) => !isClosed(c)), ...list.filter
 function render() {
   if (!META) return;
   renderFilters();
-  const all = RUN ? RUN.candidates : [];
+  const lifted = RUN ? RUN.rejected.filter(promoted) : [];
+  const all = RUN ? [...RUN.candidates, ...lifted] : [];
   const shown = all.filter(passes);
   const lv = (l) => shown.filter((c) => c.sync.level === l).length;
   // 예전 버전 코드로 수집한 결과면 판정·팝업이 최신 규칙과 다를 수 있다 — 다시 불러오라고 알린다
@@ -641,7 +672,7 @@ function render() {
   $("#summary").innerHTML = RUN
     ? (oldServer ? `<span class="job err">⚠ 서버가 예전 코드로 실행 중입니다 — Git Bash에서 Ctrl+C 후 'bash webapp/start.sh'로 다시 켜고 '나라장터에서 불러오기'를 다시 눌러 주세요.</span><br>`
       : stale ? `<span class="job err">⚠ 이 결과는 이전 버전으로 수집됐습니다 — 자격 판정·표시가 최신 규칙과 다를 수 있으니 '나라장터에서 불러오기'를 다시 눌러 주세요.</span><br>` : "")
-      + `후보 <b>${all.length}</b>건${closed(all) ? ` <span class="why">(마감 ${closed(all)}건)</span>` : ""} 중 <b>${shown.length}</b>건 표시 · 싱크로율 높음 <b>${lv("높음")}</b> / 경계선 ${lv("경계선")} / 낮음 ${lv("낮음")}`
+      + `후보 <b>${all.length}</b>건${lifted.length ? ` <span class="why">(제외에서 올림 ${lifted.length}건 포함)</span>` : ""}${closed(all) ? ` <span class="why">(마감 ${closed(all)}건)</span>` : ""} 중 <b>${shown.length}</b>건 표시 · 싱크로율 높음 <b>${lv("높음")}</b> / 경계선 ${lv("경계선")} / 낮음 ${lv("낮음")}`
       + ` · 조회 ${esc(fmtDt(RUN.stats.period_begin))} ~ ${esc(fmtDt(RUN.stats.period_end))} · 수집 ${esc(fmtDt(RUN.finished_at))}`
       + (RUN.params.attachments ? "" : " · <span title='첨부 참가자격 미반영'>첨부 자격판정 안 함</span>")
       + (RUN.stats.license_error ? ` · <span class="job err">면허제한정보 조회 실패</span>` : "")

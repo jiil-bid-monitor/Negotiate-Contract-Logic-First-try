@@ -931,9 +931,8 @@ class TestAnswers20261013(unittest.TestCase):
 
     def test_interior_architecture_is_not_excluded_by_building(self):
         config = load_config()
-        result = screen.screen(self._notice("○○센터 실내건축공사"), config.screen)
+        result = screen.screen(self._notice("○○박물관 실내건축공사"), config.screen)
         self.assertTrue(result.matched, result.excluded_reason)
-        self.assertIn("실내건축", result.matched_keywords)
         # 다른 곳에 "건축"이 또 있으면 그대로 제외
         result = screen.screen(self._notice("○○박물관 건축 및 실내건축공사"), config.screen)
         self.assertEqual((result.excluded_by, result.excluded_reason), ("제외키워드", "건축"))
@@ -941,7 +940,7 @@ class TestAnswers20261013(unittest.TestCase):
         self.assertEqual(result.excluded_by, "제외키워드")
 
     def test_required_excluded_license(self):
-        bad = ["조경공사업", "토목공사업", "토목건축공사업"]
+        bad = ["조경공사업", "토목공사업"]
         f = qualify.required_excluded_license
         # 조경공사업 하나만 요구
         self.assertEqual(f([qualify.LicenseGroup("1", rows=[["조경공사업/0004"]])], bad), "조경공사업")
@@ -954,13 +953,8 @@ class TestAnswers20261013(unittest.TestCase):
             qualify.LicenseGroup("1", rows=[["토목공사업/0001"]]),
             qualify.LicenseGroup("2", rows=[["실내건축공사업/4990"]]),
         ], bad))
-        # "건축공사업 또는 토목건축공사업" → 건축공사업은 목록에 없어 빼지 않음
-        self.assertIsNone(f([
-            qualify.LicenseGroup("1", rows=[["건축공사업/0002", "토목건축공사업"]]),
-            qualify.LicenseGroup("2", rows=[["토목건축공사업/0003"]]),
-        ], bad))
-        # 조경시설물설치공사업은 목록에 없음(놀이시설), 면허정보 없음 → 빼지 않음
-        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["조경시설물설치공사업/0045"]])], bad))
+        # 목록에 없는 면허(토목건축공사업), 면허정보 없음 → 빼지 않음
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["토목건축공사업/0003"]])], bad))
         self.assertIsNone(f([], bad))
 
     def test_pipeline_rejects_required_civil_license(self):

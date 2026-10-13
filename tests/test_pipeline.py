@@ -423,6 +423,24 @@ class TestQualification(unittest.TestCase):
         result = qualify.evaluate_attachment_text([self._MIXED_ITEM], held_codes={"7215409902", "3912110702"})
         self.assertEqual(result.summary, "자격 충족")
 
+    def test_or_after_double_closing_brackets(self):
+        """2026-10-13: "[이름(…)(업종코드 1478)] 또는 [이름(업종코드 4119)]"는 닫는 괄호가 ")]" 두 겹이라 "또는"을 못 읽고
+        셋 다 필요(AND)로 봤다. 하나만 보유해도 충족이어야 한다."""
+        item = ("가. 「산림자원의 조성 및 관리에 관한 법률」에 따른 [산림사업법인(자연휴양림등 조성)(업종코드 1478)] 또는 "
+                "[산림조합(지역조합)(업종코드 4119)] 또는 [산림조합중앙회(업종코드 4125)]를 등록한 업체")
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["1478", "4119", "4125"]])
+        self.assertEqual(qualify.evaluate_attachment_text([item], held_codes={"4119"}).summary, "자격 충족")
+        # 나라장터 화면 문구처럼 "] 업종 또는"
+        item = "가. [산림사업법인(업종코드 1478)] 업종 또는 [산림조합(업종코드 4119)] 업종을 등록한 업체"
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["1478", "4119"]])
+        # 괄호 속 허용업종은 대신 인정 — 과거 문서(2019 원주 거돈사지·2023 도담체험관 등) 표기
+        item = ("⑥ 비디오물제작업[업종코드 3244](허용업종코드 : 음반·음악영상물제작업[업종코드 3243] 또는 "
+                "문화산업전문회사[업종코드 3276]) 또는 소프트웨어사업자(디지털콘텐츠개발서비스사업)[업종코드 1469]로 등록한 자")
+        self.assertEqual([sorted(c for c, _ in g) for g in qualify._or_groups(item)], [["1469", "3243", "3244", "3276"]])
+        # "과/와"로 이으면 그대로 모두 필요
+        item = "가. [실내건축공사업(업종코드 4990)]과 [산림조합(업종코드 4119)]을 모두 등록한 자"
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["4990"], ["4119"]])
+
     def test_evaluate_attachment_text_comma_list_ending_in_or_is_one_or_group(self):
         item = "가. A(세부품명번호 1111111111), B(세부품명번호 2222222222) 또는 C(세부품명번호 7215409902)"
         result = qualify.evaluate_attachment_text([item], held_codes={"7215409902"})

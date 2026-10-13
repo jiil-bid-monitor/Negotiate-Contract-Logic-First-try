@@ -437,6 +437,14 @@ class TestQualification(unittest.TestCase):
         item = ("⑥ 비디오물제작업[업종코드 3244](허용업종코드 : 음반·음악영상물제작업[업종코드 3243] 또는 "
                 "문화산업전문회사[업종코드 3276]) 또는 소프트웨어사업자(디지털콘텐츠개발서비스사업)[업종코드 1469]로 등록한 자")
         self.assertEqual([sorted(c for c, _ in g) for g in qualify._or_groups(item)], [["1469", "3243", "3244", "3276"]])
+        # 코드 뒤 서술이 "업체/자"로 끝나고 "또는" — 2026-10-13 제보 국립부산과학관 4D 체험관(3244 보유인데 미달로 나왔음)
+        item = ("라. ⌜영화 및 비디오물의 진흥에 관한 법률⌟ 제57조에 따른 비디오물제작업(업종코드: 3244) 신고필증을 교부받은 업체 또는 "
+                "⌜문화산업진흥 기본법 시행령｣ 제11조에 따른 방송영상독립제작사(업종코드: 3230) 신고를 필한 업체")
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["3244", "3230"]])
+        self.assertEqual(qualify.evaluate_attachment_text([item], held_codes={"3244"}).summary, "자격 충족")
+        # "업체로서 공동수급 또는 단독"처럼 "또는" 바로 앞이 업체/자가 아니면 잇지 않는다
+        item = "가. 실내건축공사업(업종코드 4990)을 등록한 업체로서 공동수급 또는 단독으로 참가하며 산림조합(업종코드 4119)을 등록한 자"
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["4990"], ["4119"]])
         # "과/와"로 이으면 그대로 모두 필요
         item = "가. [실내건축공사업(업종코드 4990)]과 [산림조합(업종코드 4119)]을 모두 등록한 자"
         self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["4990"], ["4119"]])

@@ -89,6 +89,12 @@
   </section>
 </main>
 
+<!-- 스크롤을 내리면 나타나는 구역 이동 메뉴(2026-10-13 요청) — 넓은 화면은 오른쪽 여백에 펼쳐 두고, 좁으면 오른쪽 아래 버튼을 눌러 연다 -->
+<nav id="secNav" class="secnav" aria-label="구역 이동" hidden>
+  <button type="button" class="secnav-toggle" aria-expanded="false">구역 이동 <span aria-hidden="true">▴</span></button>
+  <div class="secnav-list"></div>
+</nav>
+
 <dialog id="thread">
   <form method="dialog" class="dlg-head"><strong id="threadTitle"></strong><button aria-label="닫기">✕</button></form>
   <div id="threadBody" class="thread-body"></div>

@@ -72,6 +72,7 @@ function showTab(name) {
   // 제외·검색 탭은 보일 때만 그린다 — 안 보이는 탭까지 매번 다시 그리면 느려진다
   if (name === "rejected") renderRejected();
   if (name === "search") renderSearch();
+  updateSecNav();
 }
 const tabOn = (name) => !$(`#tab-${name}`).hidden;
 // 글자를 칠 때마다 다시 그리지 않고 입력이 멈추면 한 번만(0.2초)
@@ -80,44 +81,115 @@ function debounce(fn, ms = 200) {
   return () => { clearTimeout(t); t = setTimeout(fn, ms); };
 }
 
-// ── 필터 칩 ──
-function chipRow(label, key, options, multi, disabled = {}) {
-  const row = document.createElement("div");
-  row.className = "frow";
-  row.innerHTML = `<span class="lbl">${esc(label)}</span>`;
-  for (const opt of options) {
-    const b = document.createElement("button");
-    b.className = "chip";
-    b.textContent = opt;
-    const on = multi ? F[key].has(opt) : F[key] === opt;
-    b.classList.toggle("on", on);
-    if (disabled[opt]) { b.disabled = true; b.title = disabled[opt]; }
-    b.addEventListener("click", () => {
-      if (multi) { F[key].has(opt) ? F[key].delete(opt) : F[key].add(opt); }
-      else F[key] = opt;
-      // "확인 필요"의 "없음"은 다른 버튼과 함께 고를 수 없다(요건이 있는 공고 + 없는 공고는 0건)
-      if (key === "flag" && F.flag.has(opt)) {
-        if (opt === "없음") F.flag = new Set(["없음"]);
-        else F.flag.delete("없음");
-      }
-      if (key === "cat") store.set("f.cat", JSON.stringify([...F.cat]));
-      render();
-    });
-    row.appendChild(b);
-  }
-  return row;
+// ── 필터 메뉴 ──
+// 필터 줄이 6줄이나 돼서 화면이 복잡했다(2026-10-13 요청) — 한 줄에 "공고 ▾ · 낙찰방법 ▾ …" 버튼만 두고, 누르면 그 아래로
+// 세부 선택지가 펼쳐진다. 고른 값은 버튼에 바로 보이고(선택한 버튼은 파란 테두리), "필터 초기화"로 한 번에 풀 수 있다.
+// 펼친 메뉴는 다시 그려도 열린 채로 둔다(OPEN_MENU) — 여러 개를 연달아 고를 수 있게. 바깥을 누르거나 Esc면 닫힌다.
+let OPEN_MENU = null;
+const FILTER_DEFS = () => [
+  { key: "kind", label: "공고", options: ["본공고+사전규격", "본공고", "사전규격"], multi: false, all: "본공고+사전규격" },
+  { key: "cat", label: "낙찰방법", options: META ? META.categories : ["협상", "규격가격동시입찰", "입찰"], multi: true },
+  { key: "part", label: "참가여부", options: ["미지정", ...(META ? META.statuses : [])], multi: true },
+  { key: "ai", label: "AI 판단", options: ["적합", "검토필요", "부적합", "미판정"], multi: true },
+  { key: "sync", label: "싱크로율", options: ["높음", "경계선", "낮음", "판정 불가"], multi: true },
+  { key: "flag", label: "확인 필요", options: [...Object.keys(FLAG_FILTER), "없음"], multi: true,
+    note: "여러 개 고르면 모두 있는 공고만" },
+];
+// 버튼에 보일 고른 값 — 안 골랐으면 "전체", 하나면 그 이름, 여럿이면 "A 외 N"
+function pickedText(values) {
+  if (!values.length) return "전체";
+  return values.length === 1 ? values[0] : `${values[0]} 외 ${values.length - 1}`;
 }
+function menuHtml(id, label, valueText, active, body, note = "") {
+  const open = OPEN_MENU === id;
+  return `<div class="fmenu${open ? " open" : ""}" data-menu="${esc(id)}">`
+    + `<button type="button" class="fbtn${active ? " on" : ""}" aria-expanded="${open}"><span class="fl">${esc(label)}</span>`
+    + `<span class="fv">${esc(valueText)}</span><span class="caret" aria-hidden="true">▾</span></button>`
+    + (open ? `<div class="fpop" role="menu">${note ? `<p class="fnote">${esc(note)}</p>` : ""}<div class="fopts">${body}</div></div>` : "")
+    + `</div>`;
+}
+// 정렬(2026-10-13 요청) — 각 구역(본공고·사전규격·검토 필요) 안에서 적용, 마감된 공고는 어느 정렬이든 맨 뒤
+const SORTS = { deadline: "마감 임박 순", sync: "싱크로율 높은 순", budget: "금액 큰 순", posted: "최근 게시 순" };
+let SORT = SORTS[store.get("sort", "deadline")] ? store.get("sort", "deadline") : "deadline";
+function sortList(list, fallback = (l) => l) {
+  const desc = (get) => [...list].sort((a, b) => {
+    const x = get(a), y = get(b);
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return x < y ? 1 : x > y ? -1 : 0;
+  });
+  if (SORT === "sync") return desc((c) => c.sync ? c.sync.score : null);
+  if (SORT === "budget") return desc((c) => c.budget);
+  if (SORT === "posted") return desc((c) => c.posted_at || null);
+  return fallback(list);  // 마감 임박 순 = 서버가 준 순서(마감 빠른 순)
+}
+function filterActive(d) { return d.multi ? F[d.key].size > 0 : F[d.key] !== d.all; }
 function renderFilters() {
-  const box = $("#filters");
-  box.replaceChildren(
-    chipRow("공고", "kind", ["본공고+사전규격", "본공고", "사전규격"], false),
-    chipRow("낙찰방법", "cat", META ? META.categories : ["협상", "규격가격동시입찰", "입찰"], true),
-    chipRow("참가여부", "part", ["미지정", ...(META ? META.statuses : [])], true),
-    chipRow("AI 판단", "ai", ["적합", "검토필요", "부적합", "미판정"], true),
-    chipRow("싱크로율", "sync", ["높음", "경계선", "낮음", "판정 불가"], true),
-    chipRow("확인 필요", "flag", [...Object.keys(FLAG_FILTER), "없음"], true),
-  );
+  const defs = FILTER_DEFS();
+  const menus = defs.map((d) => {
+    const picked = d.multi ? [...F[d.key]] : (F[d.key] === d.all ? [] : [F[d.key]]);
+    const body = d.options.map((opt) => {
+      const on = d.multi ? F[d.key].has(opt) : F[d.key] === opt;
+      return `<button type="button" class="chip${on ? " on" : ""}" data-f="${d.key}" data-v="${esc(opt)}" role="menuitemcheckbox" aria-checked="${on}">${esc(opt)}</button>`;
+    }).join("");
+    return menuHtml(`live:${d.key}`, d.label, pickedText(picked), filterActive(d), body, d.note);
+  }).join("");
+  const any = defs.some(filterActive);
+  const sort = `<label class="fsort">정렬 <select id="sortSel" aria-label="공고 정렬">`
+    + Object.entries(SORTS).map(([k, v]) => `<option value="${k}"${k === SORT ? " selected" : ""}>${v}</option>`).join("")
+    + `</select></label>`;
+  $("#filters").innerHTML = `<div class="fbar">${menus}${any ? `<button type="button" class="freset" id="fReset">필터 초기화</button>` : ""}${sort}</div>`;
 }
+$("#filters").addEventListener("click", (e) => {
+  const opt = e.target.closest("[data-f]");
+  if (opt) {
+    const key = opt.dataset.f, val = opt.dataset.v, d = FILTER_DEFS().find((x) => x.key === key);
+    if (d.multi) { F[key].has(val) ? F[key].delete(val) : F[key].add(val); }
+    else F[key] = val;
+    // "확인 필요"의 "없음"은 다른 버튼과 함께 고를 수 없다(요건이 있는 공고 + 없는 공고는 0건)
+    if (key === "flag" && F.flag.has(val)) {
+      if (val === "없음") F.flag = new Set(["없음"]);
+      else F.flag.delete("없음");
+    }
+    if (key === "cat") store.set("f.cat", JSON.stringify([...F.cat]));
+    if (!d.multi) OPEN_MENU = null;  // 하나만 고르는 메뉴는 고르면 닫는다
+    render();
+    return;
+  }
+  if (e.target.closest("#fReset")) {
+    FILTER_DEFS().forEach((d) => { F[d.key] = d.multi ? new Set() : d.all; });
+    store.set("f.cat", "[]");
+    OPEN_MENU = null;
+    render();
+    return;
+  }
+  const btn = e.target.closest(".fbtn");
+  if (btn) {
+    const id = btn.closest(".fmenu").dataset.menu;
+    OPEN_MENU = OPEN_MENU === id ? null : id;
+    renderFilters();
+  }
+});
+$("#filters").addEventListener("change", (e) => {
+  if (e.target.id !== "sortSel") return;
+  SORT = e.target.value;
+  store.set("sort", SORT);
+  render();
+});
+// 메뉴 바깥을 누르거나 Esc면 닫는다
+document.addEventListener("click", (e) => {
+  if (!OPEN_MENU || e.target.closest(".fmenu")) return;
+  const wasRej = OPEN_MENU.startsWith("rej:");
+  OPEN_MENU = null;
+  wasRej ? renderRejected() : renderFilters();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || !OPEN_MENU) return;
+  const wasRej = OPEN_MENU.startsWith("rej:");
+  OPEN_MENU = null;
+  wasRej ? renderRejected() : renderFilters();
+});
 
 function stateOf(c) { return STATES[c.key] || {}; }
 // 탭 안 검색(2026-10-01 요청) — 공고명·수요기관·공고기관·공고번호에 검색어가 들어 있으면 통과. 띄어쓰기로 나누면 모두 들어 있어야 함
@@ -541,10 +613,10 @@ function render() {
     const parts = [];
     // "검토 필요"(관심·제외 키워드 공존)는 본공고·사전규격과 섞지 않고 맨 아래 따로 모은다
     const sections = [
-      ["본공고", openFirst(shown.filter((c) => c.kind === "본공고" && !c.review_exclude)), ""],
-      ["사전규격", openFirst(shown.filter((c) => c.kind === "사전규격" && !c.review_exclude)), ""],
-      ["검토 필요", openFirst(byTaskFit(shown.filter((c) => c.review_exclude))),
-       "관심 키워드와 제외 키워드가 공고명에 함께 있는 공고 — 첨부 과업 내용이 지일 실적과 비슷한 순서. 참가여부를 남겨 주시면 판단 기준을 고치는 데 씁니다"],
+      ["본공고", openFirst(sortList(shown.filter((c) => c.kind === "본공고" && !c.review_exclude))), ""],
+      ["사전규격", openFirst(sortList(shown.filter((c) => c.kind === "사전규격" && !c.review_exclude))), ""],
+      ["검토 필요", openFirst(sortList(shown.filter((c) => c.review_exclude), byTaskFit)),
+       `관심 키워드와 제외 키워드가 공고명에 함께 있는 공고 — ${SORT === "deadline" ? "첨부 과업 내용이 지일 실적과 비슷한 순서" : SORTS[SORT]}. 참가여부를 남겨 주시면 판단 기준을 고치는 데 씁니다`],
     ];
     for (const [kind, list, note] of sections) {
       if (!list.length) continue;
@@ -555,6 +627,9 @@ function render() {
       }
       const h = document.createElement("h2");
       h.className = "section" + (note ? " review" : "");
+      h.id = `sec-${kind.replace(/\s+/g, "")}`;
+      h.dataset.nav = kind;
+      h.dataset.count = list.length;
       h.innerHTML = note
         ? `${kind} ${list.length}건<small>${esc(note)}</small>`
         : `${kind} ${list.length}건`;
@@ -562,6 +637,7 @@ function render() {
     }
     live.replaceChildren(...parts);
   }
+  renderSecNav();
 
   const rej = RUN ? RUN.rejected : [];
   const reasons = countBy(rej, rejReason);
@@ -571,6 +647,45 @@ function render() {
   if (tabOn("rejected")) renderRejected();
   if (tabOn("search")) renderSearch();
 }
+
+// ── 구역 이동 메뉴 ──
+// 실제 공고 목록을 어느 정도 내리면 나타난다: "↑ 맨 위로" + 구역(본공고·사전규격·검토 필요)과 건수, 지금 보는 구역은 강조
+function renderSecNav() {
+  const heads = [...document.querySelectorAll("#liveList h2.section")];
+  $("#secNav .secnav-list").innerHTML = `<button type="button" class="secnav-top" data-go="top">↑ 맨 위로</button>`
+    + heads.map((h) => `<button type="button" data-go="${h.id}"><span>${esc(h.dataset.nav)}</span><b>${h.dataset.count}건</b></button>`).join("");
+  updateSecNav();
+}
+function updateSecNav() {
+  const nav = $("#secNav"), list = $("#liveList");
+  const heads = [...document.querySelectorAll("#liveList h2.section")];
+  const listTop = list.getBoundingClientRect().top + window.scrollY;
+  const show = tabOn("live") && heads.length > 0 && window.scrollY > listTop - 80;
+  nav.hidden = !show;
+  if (!show) { nav.classList.remove("expanded"); return; }
+  let cur = heads[0];
+  for (const h of heads) if (h.getBoundingClientRect().top <= 160) cur = h;
+  nav.querySelectorAll("[data-go]").forEach((b) => b.classList.toggle("on", b.dataset.go === cur.id));
+}
+let navTick = false;
+window.addEventListener("scroll", () => {
+  if (navTick) return;
+  navTick = true;
+  requestAnimationFrame(() => { navTick = false; updateSecNav(); });
+}, { passive: true });
+$("#secNav").addEventListener("click", (e) => {
+  const nav = $("#secNav");
+  if (e.target.closest(".secnav-toggle")) {
+    const on = nav.classList.toggle("expanded");
+    nav.querySelector(".secnav-toggle").setAttribute("aria-expanded", on);
+    return;
+  }
+  const go = e.target.closest("[data-go]");
+  if (!go) return;
+  nav.classList.remove("expanded");
+  if (go.dataset.go === "top") window.scrollTo({ top: 0, behavior: "smooth" });
+  else document.getElementById(go.dataset.go).scrollIntoView({ behavior: "smooth", block: "start" });
+});
 
 // ── 제외 공고 분류 (제외 사유 · 공고 · 낙찰방법 · 업무구분) ──
 // 공고(본공고/사전규격)·낙찰방법은 실제 공고 탭과 같은 구분(2026-10-01 요청). 사전규격엔 낙찰방법이 없어 그 줄에선 안 셈
@@ -594,13 +709,16 @@ function renderRejected() {
   const q = $("#rejQ").value;
   const rej = (RUN ? RUN.rejected : []).filter((c) => textHit(c, q));
   const matches = (c, skip) => REJ_KEYS.every((k) => k.key === skip || !REJ_FILTER[k.key] || k.get(c) === REJ_FILTER[k.key]);
-  // 각 줄의 건수는 "다른 줄에서 고른 조건" 안에서 센다 — 고르면 몇 건이 남는지 바로 보이게
-  $("#rejFilters").innerHTML = rej.length ? REJ_KEYS.map((k) => {
+  // 각 메뉴의 건수는 "다른 메뉴에서 고른 조건" 안에서 센다 — 고르면 몇 건이 남는지 바로 보이게.
+  // 실제 공고 탭처럼 메뉴 버튼 → 누르면 선택지(2026-10-13 요청)
+  const any = REJ_KEYS.some((k) => REJ_FILTER[k.key]);
+  $("#rejFilters").innerHTML = rej.length ? `<div class="fbar">` + REJ_KEYS.map((k) => {
     const counts = countBy(rej.filter((c) => matches(c, k.key)), k.get);
-    const chip = (val, text, n) => `<button type="button" class="rej-chip${REJ_FILTER[k.key] === val ? " on" : ""}" data-k="${k.key}" data-v="${esc(val)}">${esc(text)} <b>${n}</b></button>`;
+    const chip = (val, text, n) => `<button type="button" class="rej-chip chip${REJ_FILTER[k.key] === val ? " on" : ""}" data-k="${k.key}" data-v="${esc(val)}">${esc(text)} <b>${n}</b></button>`;
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    return `<div class="rej-row"><span class="rej-key">${k.label}</span>${chip("", "전체", total)}${Object.entries(counts).map(([v, n]) => chip(v, v, n)).join("")}</div>`;
-  }).join("") : "";
+    const body = chip("", "전체", total) + Object.entries(counts).map(([v, n]) => chip(v, v, n)).join("");
+    return menuHtml(`rej:${k.key}`, k.label, REJ_FILTER[k.key] || "전체", !!REJ_FILTER[k.key], body);
+  }).join("") + (any ? `<button type="button" class="freset" id="rejReset">필터 초기화</button>` : "") + `</div>` : "";
   const shown = rej.filter((c) => matches(c));
   if (!shown.length) {
     $("#rejList").replaceChildren(emptyBox(rej.length ? "고른 분류에 해당하는 공고가 없습니다." : q.trim() ? "검색어와 일치하는 제외 공고가 없습니다." : "제외된 공고가 없습니다."));
@@ -618,8 +736,18 @@ function renderRejected() {
 }
 $("#rejFilters").addEventListener("click", (e) => {
   const b = e.target.closest(".rej-chip");
-  if (!b) return;
-  REJ_FILTER[b.dataset.k] = REJ_FILTER[b.dataset.k] === b.dataset.v ? "" : b.dataset.v;
+  if (b) {
+    REJ_FILTER[b.dataset.k] = REJ_FILTER[b.dataset.k] === b.dataset.v ? "" : b.dataset.v;
+    OPEN_MENU = null;  // 하나만 고르는 메뉴라 고르면 닫는다
+  } else if (e.target.closest("#rejReset")) {
+    REJ_KEYS.forEach((k) => { REJ_FILTER[k.key] = ""; });
+    OPEN_MENU = null;
+  } else {
+    const btn = e.target.closest(".fbtn");
+    if (!btn) return;
+    const id = btn.closest(".fmenu").dataset.menu;
+    OPEN_MENU = OPEN_MENU === id ? null : id;
+  }
   rejLimit = REJ_PAGE;
   renderRejected();
 });

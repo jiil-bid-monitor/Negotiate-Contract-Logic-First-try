@@ -923,6 +923,58 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(days, sorted(days), "마감 임박 순으로 정렬되어야 한다")
 
 
+class TestAnswers20261013(unittest.TestCase):
+    """2026-10-13 대리님 답변 반영: "건축" 제외가 "실내건축"을 안 빼고, 조경·토목 면허 필수 공고는 뺀다."""
+
+    def _notice(self, title):
+        return notice_from_raw(fixtures.notice("R26TEST10013", title=title), "공사")
+
+    def test_interior_architecture_is_not_excluded_by_building(self):
+        config = load_config()
+        result = screen.screen(self._notice("○○센터 실내건축공사"), config.screen)
+        self.assertTrue(result.matched, result.excluded_reason)
+        self.assertIn("실내건축", result.matched_keywords)
+        # 다른 곳에 "건축"이 또 있으면 그대로 제외
+        result = screen.screen(self._notice("○○박물관 건축 및 실내건축공사"), config.screen)
+        self.assertEqual((result.excluded_by, result.excluded_reason), ("제외키워드", "건축"))
+        result = screen.screen(self._notice("○○박물관 증축 건축공사"), config.screen)
+        self.assertEqual(result.excluded_by, "제외키워드")
+
+    def test_required_excluded_license(self):
+        bad = ["조경공사업", "토목공사업", "토목건축공사업"]
+        f = qualify.required_excluded_license
+        # 조경공사업 하나만 요구
+        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["조경공사업/0004"]])], bad), "조경공사업")
+        # 실내건축과 함께 모두 필요 → 토목은 그래도 필수
+        self.assertEqual(f([qualify.LicenseGroup("1", rows=[["실내건축공사업/4990"], ["토목공사업/0001"]])], bad), "토목공사업")
+        # 허용업종으로 다른 면허 인정 → 빼지 않음
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["토목공사업/0001", "실내건축공사업"]])], bad))
+        # 다른 그룹(또는)으로 대신 가능 → 빼지 않음
+        self.assertIsNone(f([
+            qualify.LicenseGroup("1", rows=[["토목공사업/0001"]]),
+            qualify.LicenseGroup("2", rows=[["실내건축공사업/4990"]]),
+        ], bad))
+        # "건축공사업 또는 토목건축공사업" → 건축공사업은 목록에 없어 빼지 않음
+        self.assertIsNone(f([
+            qualify.LicenseGroup("1", rows=[["건축공사업/0002", "토목건축공사업"]]),
+            qualify.LicenseGroup("2", rows=[["토목건축공사업/0003"]]),
+        ], bad))
+        # 조경시설물설치공사업은 목록에 없음(놀이시설), 면허정보 없음 → 빼지 않음
+        self.assertIsNone(f([qualify.LicenseGroup("1", rows=[["조경시설물설치공사업/0045"]])], bad))
+        self.assertIsNone(f([], bad))
+
+    def test_pipeline_rejects_required_civil_license(self):
+        config = load_config()
+        notices = [notice_from_raw(fixtures.notice("R26TEST10013", title="○○체험관 조성공사"), "공사")]
+        groups = {"R26TEST10013": [qualify.LicenseGroup("1", rows=[["토목공사업/0001"]])]}
+        stats = RunStats()
+        self.assertEqual(build_candidates(notices, config, groups, {}, NOW, stats), [])
+        self.assertEqual(stats.screened_out.get("필수면허"), 1)
+        self.assertTrue(stats.rejected[0].excluded_reason.startswith("필수면허 (토목공사업"))
+        stats = RunStats()
+        self.assertEqual(len(build_candidates(notices, config, {}, {}, NOW, stats)), 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

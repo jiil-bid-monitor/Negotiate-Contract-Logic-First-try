@@ -255,6 +255,19 @@ def build_candidates(
             stats.rejected.append(record)
             continue
 
+        # 조경·토목공사업처럼 지일 분야가 아닌 면허를 반드시 요구하는 공고는 뺀다(2026-10-13 대리님 답변).
+        # 공고명 제외 키워드("토목")는 공고명만 봐서 이런 공고를 못 거른다. 면허제한 API 기준이라 사전규격엔 해당 없음.
+        required = qualify.required_excluded_license(
+            license_groups.get(notice.notice_no, []), config.screen.exclude_required_licenses
+        )
+        if required:
+            reason = "필수면허"
+            stats.screened_out[reason] = stats.screened_out.get(reason, 0) + 1
+            record.is_candidate = False
+            record.excluded_reason = f"{reason} ({required} 필수 — 지일 분야 아님)"
+            stats.rejected.append(record)
+            continue
+
         stats.screened_in += 1
 
         # 자격 미달은 후보에서 빼지 않는다 (2026-09-28 사용자 결정: 미보유 자격 개수 무시).

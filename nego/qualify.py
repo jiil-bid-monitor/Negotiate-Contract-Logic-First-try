@@ -201,6 +201,26 @@ def _is_group_satisfied(group: LicenseGroup, held_names: list[str], held_codes: 
     return False
 
 
+def required_excluded_license(groups: list[LicenseGroup], excluded: list[str]) -> str | None:
+    """공고가 `excluded` 면허(예: 조경공사업·토목공사업)를 **반드시** 요구하면 그 면허 이름, 아니면 None.
+
+    면허제한 그룹끼리는 "또는", 그룹 안 행끼리는 "모두 필요", 행 안 이름(대표 + 허용업종)은 "또는"이다.
+    그래서 **모든 그룹**에 "이름이 전부 제외 면허인 행"이 있을 때만 필수로 본다 — 제외 면허가 아닌 다른 면허로
+    대신할 수 있으면(허용업종·다른 그룹) 빼지 않는다. 면허제한 정보가 없으면 None(빼지 않음).
+    """
+    bases = {_license_base(n) for n in excluded if _license_base(n)}
+    if not groups or not bases:
+        return None
+    found: str | None = None
+    for group in groups:
+        rows = group.rows or [group.allowed_names]
+        hit = next((row for row in rows if row and all(_license_base(n) in bases for n in row)), None)
+        if hit is None:
+            return None
+        found = found or _license_base(hit[0])
+    return found
+
+
 _LICENSE_CODE_RE = re.compile(r"(?:/\s*|\()(\d{4,10})\)?\s*$")
 
 

@@ -136,8 +136,8 @@ def license_rows() -> list[dict[str, Any]]:
             "bidNtceNo": "R26TEST00009",
             "lmtGrpNo": "1",
             "lmtSno": "1",
-            "lcnsLmtNm": "조경공사업/0005",
-            "permsnIndstrytyList": "[조경공사업/0005]",
+            "lcnsLmtNm": "건축공사업/0002",
+            "permsnIndstrytyList": "[건축공사업/0002]",
         },
         {
             "bidNtceNo": "R26TEST00009",

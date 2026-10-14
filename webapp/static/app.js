@@ -4,7 +4,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // 이 화면이 기대하는 수집 결과 형식 — webapp/collect.py RESULT_FORMAT과 같이 올린다
-const APP_FORMAT = 31;
+const APP_FORMAT = 32;
 const store = {
   get(k, d = null) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장 불가여도 동작 */ } },
@@ -59,7 +59,8 @@ const F = {
 };
 // "확인 필요" 칩 분류(2026-10-01 요청) — 버튼 이름 → text_flags의 kind. 여러 개 고르면 **모두 있는** 공고(좁혀 가며 보기,
 // 2026-10-01 제보: 실적+현장설명회를 눌렀는데 실적만 있는 공고가 남아 오류로 보임)
-const FLAG_FILTER = { "실적 요건": "실적", "현장설명회": "현장설명회", "기술인력": "인력", "건축사사무소": "건축사사무소" };
+// 현장설명회는 2026-10-14 사용자 결정으로 안 찾음 — 메뉴에서도 뺌(예전 결과의 칩 이름표는 아래 FLAG_LABEL에 남김)
+const FLAG_FILTER = { "실적 요건": "실적", "기술인력": "인력", "건축사사무소": "건축사사무소" };
 
 // ── 탭 ──
 document.querySelectorAll(".tabs button[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));

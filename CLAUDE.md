@@ -31,6 +31,10 @@
    칩에서 빼는 쪽(`_NOT_TRACK_REQUIREMENT`·`_NOT_STAFF_REQUIREMENT`)으로만 다루고, 평가 점수 예측·정량평가 계산·`suitability.py` 1.5배 보정에
    서식 제17호 쓰기(9/18 메모) 같은 건 제안하지 말 것.
 
+6. **(10/14 사용자 결정) 현장설명회 참석 요건은 안 찾음** — "굳이 파싱하지 않아도 됨". `text_requirements._FLAGS`에서 현장설명회 항목과
+   원문 전체 검색·일시/장소 추출(`_NOT_MANDATORY`·`_DATE_RE`·`_site_summary`) 삭제, `flag_requirements(items)`(full_text 인자 없앰).
+   웹앱 "확인 필요" 필터 메뉴에서도 뺌. 남은 칩: 실적·기술인력·건축사사무소. RESULT_FORMAT·APP_FORMAT 32(서버 재시작 + 다시 불러오기).
+
 ## 2026-09-16 수정분 실측 검증 — 부분 확인됨 (2026-09-18, 5일치 수집으로)
 
 30일치 정식 검증은 아직 안 했고, 9/18에 5일치(9/13~9/18) 수집으로 일부만 확인됨.

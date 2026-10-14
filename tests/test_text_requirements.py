@@ -1,4 +1,4 @@
-"""코드 없이 글로 적힌 참가자격 — 이름 판정(업종·직접생산)과 "확인 필요" 칩(실적·현장설명회·인력).
+"""코드 없이 글로 적힌 참가자격 — 이름 판정(업종·직접생산)과 "확인 필요" 칩(실적·인력·건축사사무소).
 
 예문은 과거 제안요청서·공고문 원문 그대로다(jiil-past-contracts, 2026-09-30 조사).
 """
@@ -124,17 +124,10 @@ class TestFlags(unittest.TestCase):
         for keep in ["최근 5년간 유사 전시 제작·설치 실적이 단일 5억 이상인 업체", "최근 3년간 유사용역 수행실적 3건 이상 보유 업체"]:
             self.assertEqual([f["kind"] for f in flag_requirements([keep])], ["실적"], keep)
 
-    def test_site_briefing_mandatory_with_date(self):
-        items = ["5) 사업 현장 설명회에 참가한 업체(불참자는 입찰에 참여 할 수 없음)"]
-        full = "나. 현장설명회 : 2026. 10. 7.(수) 14:00, 완도군청 소회의실"
-        flags = flag_requirements(items, full)
-        self.assertEqual(flags[0]["kind"], "현장설명회")
-        self.assertEqual(flags[0]["date"], "2026-10-07 14:00")
-
-    def test_site_briefing_not_mandatory_is_ignored(self):
-        for s in ["현장설명회에 참석하지 않은 업체의 질의는 응답하지 않는다.", "별도 현장설명회 없으나 개별 현장실사 필수",
-                  "가. 현장설명회 : 별도의 현장설명회는 없습니다."]:
-            self.assertEqual(flag_requirements([s], s), [], s)
+    def test_site_briefing_is_not_flagged(self):
+        """현장설명회 참석 요건은 찾지 않는다(2026-10-14 사용자 결정)."""
+        for s in ["5) 사업 현장 설명회에 참가한 업체(불참자는 입찰에 참여 할 수 없음)", "※ 현장설명회 미참석시 응모신청 불가"]:
+            self.assertEqual(flag_requirements([s]), [], s)
 
     def test_architect_office_and_staff(self):
         self.assertEqual([f["kind"] for f in flag_requirements(
@@ -152,7 +145,7 @@ def test_attach_sources_names_file_and_zip_member():
     flags = [
         {"kind": "인력", "text": "건축사 자격을 보유한 기술자 1인 이상 재직"},
         {"kind": "실적", "text": "최근 3년 이내 단일 실적 5억원 이상"},
-        {"kind": "현장설명회", "text": "어디에도 없는 문장"},
+        {"kind": "건축사사무소", "text": "어디에도 없는 문장"},
     ]
     files = [
         ("제안요청서.hwp", "가. 건축사 자격을\n보유한 기술자 1인 이상\n재직 업체"),
@@ -209,22 +202,8 @@ def test_flag_summaries_have_same_shape():
                                                   "50백만원 이상) 실적(용역‧물품)이 있는 업체"})[1] == ["금액", "단일 5천만원 이상"]
     assert summarize_flag({"kind": "인력", "text": "6) 기본 및 실시설계를 담당하는 자는 건축사 자격증을 보유한 자"}) == [
         ["역할", "기본 및 실시설계"], ["자격", "건축사 자격증"]]
-    assert summarize_flag({"kind": "현장설명회", "text": "8) 현장설명회에 참석한 업체(미 참석 업체는 응모 불가)", "date": "2026-10-07 14:00"}) == [
-        ["참가", "필수 (불참 시 입찰·응모 불가)"], ["일시", "2026-10-07 14:00"]]
     assert summarize_flag({"kind": "건축사사무소", "text": "5) 「건축사법」 제7조의 규정에 의한 건축사 면허를 소지하고 건축사사무소를 개설"}) == [
         ["요건", "건축사사무소 개설 신고(등록)"], ["근거", "건축사법 제7조"]]
-
-
-def test_site_briefing_mi_chamseok_is_mandatory():
-    """거제 지심도 산마루문화놀이터 제안공모 — "현장설명회 미참석시 응모신청 불가"가 칩으로 안 잡혔음(2026-10-02)."""
-    from nego.text_requirements import flag_requirements
-
-    full = ("현장설명회\n ◦ 현장설명회 일시 : 2026. 10. 13.(화) 14:00 ~\n ◦ 현장설명회 장소 : 거제시 일운면 옥림리 산1 지심도 휴게소\n"
-            " ※ 현장설명회 미참석시 응모신청 불가\n")
-    flags = flag_requirements([], full)
-    assert [f["kind"] for f in flags] == ["현장설명회"]
-    assert flags[0]["summary"] == [["참가", "필수 (불참 시 입찰·응모 불가)"], ["일시", "2026-10-13 14:00"],
-                                   ["장소", "거제시 일운면 옥림리 산1 지심도 휴게소"]]
 
 
 def test_large_company_restriction_is_not_a_requirement():

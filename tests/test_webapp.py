@@ -111,7 +111,7 @@ class TestSerialize(unittest.TestCase):
         self.assertEqual(q["parts"][0]["status"], "미달")
         self.assertEqual(len(q["parts"][0]["missing"]), 2)
         # 기계설비공사업 행은 전기공사업을 대신 인정 — 허용업종도 함께 보여준다(2026-10-14)
-        self.assertIn("기계설비공사업(0009) 또는 전기공사업", q["missing"])
+        self.assertIn("기계설비공사업(0009) 또는 전기공사업(0007)", q["missing"])
         self.assertIn("g2b.go.kr", flagged["detail_url"])
         self.assertEqual(flagged["category"], "협상")
         self.assertEqual(flagged["key"], "R26TEST00009-000")
@@ -150,6 +150,53 @@ class TestQualificationView(unittest.TestCase):
         parts = qualview.build(qualify.merge_results(api, other), (set(), set()), {"industry": True})
         self.assertEqual(len(parts[0]["missing"]), 2)
 
+    def test_api_combos_with_attachment_products(self):
+        """2026-10-14 제보: 같은 요건이 나라장터 조합과 첨부 "또는"·"보유 확인"으로 여러 번 나왔고 첨부 세부품명이 묻혔다."""
+        from nego import qualify
+        from webapp import qualview
+        def row(g, s, n, a=""):
+            return {"bidNtceNo": "L", "lmtGrpNo": g, "lmtSno": s, "lcnsLmtNm": n, "permsnIndstrytyList": a}
+        rows = [row("1", "1", "산업디자인전문회사(멀티미디어디자인분야)/4443"),
+                row("1", "2", "비디오물제작업/3244", "[음반·음악영상물제작업/3243]"),
+                row("1", "3", "소프트웨어사업자(디지털콘텐츠개발서비스사업)/1469"), row("1", "4", "정보통신공사업/0036"),
+                row("2", "1", "산업디자인전문회사(종합디자인분야)/4444"), row("2", "2", "음반·음악영상물제작업/3243"),
+                row("2", "3", "소프트웨어사업자(디지털콘텐츠개발서비스사업)/1469"), row("2", "4", "정보통신공사업/0036")]
+        held = {"4443", "4444", "3243", "3244", "1469", "0036", "3911160501", "4511161601"}
+        api = qualify.evaluate(qualify.group_license_rows(rows)["L"], [], held)
+        items = ["1) 나라장터에 세부품명번호 10자리(4511161601 비디오프로젝터, 3911160501 LED경관조명기구, 3912110702 조명용제어장치) "
+                 "제조 또는 공급으로 입찰참가 등록한 업체",
+                 "2) 직접생산확인증명서[3911160501, LED경관조명기구], [3912110702, 조명용제어장치]를 소지한 업체",
+                 "3) 산업디자인전문회사[(멀티미디어디자인 분야(업종코드 4443)]] 또는 산업디자인전문회사[(종합디자인분야(업종코드 4444)]]로 신고를 필한 업체",
+                 "4) 소프트웨어사업자(디지털콘텐츠개발서비스사업)[업종코드 1469] 등록업체",
+                 "5) 비디오물 제작업(업종코드 3244) 또는 음반·음악영상물 제작업(업종코드 3243) 등록업체",
+                 "6) 정보통신공사업(업종코드 0036)으로 입찰 참가 자격을 등록한 자"]
+        att = qualify.evaluate_attachment_text(items, held)
+        industry, product = qualview.build(qualify.merge_results(api, att), (held, set()), {"industry": True, "product": True})
+        # 나라장터 조합(4443+3244/3243 · 4444+3243)과 필수 1469·0036 — 첨부의 같은 요건("4443 또는 4444" 등)은 중복이라 안 보임
+        combos = [r for r in industry["satisfied"] if r.get("combos")]
+        self.assertEqual(len(combos), 1)
+        self.assertEqual([[row["label"] for row in c["rows"]] for c in combos[0]["combos"]],
+                         [["산업디자인전문회사(멀티미디어디자인분야)(4443)", "비디오물제작업(3244) 또는 음반·음악영상물제작업(3243)"],
+                          ["산업디자인전문회사(종합디자인분야)(4444)", "음반·음악영상물제작업(3243)"]])
+        self.assertEqual(sorted(r["items"][0]["code"] for r in industry["satisfied"] if not r.get("combos")), ["0036", "1469"])
+        # 첨부에만 있는 세부품명(직접생산·등록 품목)은 세부품명번호 부문에
+        self.assertEqual(product["status"], "미달")
+        self.assertEqual([[i["code"] for i in r["items"]] for r in product["missing"]], [["3912110702"]])
+
+    def test_group_absorbed_by_common_license_still_shows_both_combos(self):
+        """2026-10-14 제보: "[1253과 6728] 업종 또는 [1253] 업종" — 팝업엔 1253만 나왔다(제외 사유엔 둘 다). 원문 조합 그대로."""
+        from nego import qualify
+        from webapp import qualview
+        rows = [{"bidNtceNo": "W", "lmtGrpNo": "1", "lmtSno": "1", "lcnsLmtNm": "건설폐기물중간처리업/1253"},
+                {"bidNtceNo": "W", "lmtGrpNo": "1", "lmtSno": "2", "lcnsLmtNm": "건설폐기물수집·운반업/6728"},
+                {"bidNtceNo": "W", "lmtGrpNo": "2", "lmtSno": "1", "lcnsLmtNm": "건설폐기물중간처리업/1253"}]
+        groups = qualify.group_license_rows(rows)["W"]
+        part = qualview.build(qualify.evaluate(groups, [], set()), (set(), set()), {"industry": True})[0]
+        combos = part["missing"][0]["combos"]
+        self.assertEqual([[r["label"] for r in c["rows"]] for c in combos],
+                         [["건설폐기물중간처리업(1253)", "건설폐기물수집·운반업(6728)"], ["건설폐기물중간처리업(1253)"]])
+        self.assertTrue(qualify.evaluate(groups, [], {"1253"}).passes and not qualify.evaluate(groups, [], {"1253"}).missing_groups)
+
     def test_need_counts_minimum_licenses_to_acquire(self):
         """'최소 N개 부족' — 반드시 1 + 택1 1 = 2, 조합 요건은 가장 덜 모자란 조합의 미보유 수."""
         from nego import qualify
@@ -175,7 +222,7 @@ class TestQualificationView(unittest.TestCase):
         ]
         q = qualify.evaluate(qualify.group_license_rows(rows)["N"], [])
         combo = qualview.build(q, (set(), set()), {"industry": True})[0]["missing"][0]["combos"]
-        self.assertEqual(combo[0]["rows"][0]["label"], "토목공사업(0001) 또는 토목건축공사업")
+        self.assertEqual(combo[0]["rows"][0]["label"], "토목공사업(0001) 또는 토목건축공사업(0003)")
         waste = [{"bidNtceNo": "W", "lmtGrpNo": "1", "lmtSno": "1", "lcnsLmtNm": "폐기물수집·운반업/1227",
                   "permsnIndstrytyList": "[폐기물수집·운반업/1227][폐기물종합처분업]"}]
         q = qualify.evaluate(qualify.group_license_rows(waste)["W"], [])
@@ -250,7 +297,7 @@ class TestQualificationView(unittest.TestCase):
         merged = qualify.merge_results(api, att)
         part = qualview.build(merged, (set(), set()), {"industry": True})[0]
         self.assertEqual([[i["label"] for i in r["items"]] for r in part["missing"]],
-                         [["건축공사업(0002)", "토목건축공사업"]])
+                         [["건축공사업(0002)", "토목건축공사업(0003)"]])
         # API가 허용업종을 안 줘도 건축공사업은 한 번만
         rows[0]["permsnIndstrytyList"] = ""
         api = qualify.evaluate(qualify.group_license_rows(rows)["B"], [])
@@ -455,7 +502,7 @@ class TestServer(unittest.TestCase):
     def test_token_required_for_api_not_for_page(self):
         self.assertEqual(self.call("/api/meta", token="wrong")[0], 401)
         with urllib.request.urlopen(self.base + "/") as res:
-            self.assertIn("싱크로율 탐색기", res.read().decode())
+            self.assertIn("나라장터 공고 수집", res.read().decode())
         self.assertEqual(self.call("/../server.py")[0], 404)
 
     def test_collect_then_state_and_comments(self):

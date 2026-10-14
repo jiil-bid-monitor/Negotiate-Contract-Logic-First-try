@@ -99,7 +99,8 @@ def _combo_req(group, held: tuple[set[str], set[str]]) -> dict[str, Any]:
                 continue  # 같은 면허가 한 조합에 두 번 — 한 번만
             # 허용업종(나라장터 "투찰가능한업종 / 허용업종" 표)도 늘 함께 보여준다(2026-10-14 사용자 요청)
             out.append({"label": " 또는 ".join(i["label"] for i in row_items),
-                        "held": any(i["held"] for i in row_items)})
+                        "held": any(i["held"] for i in row_items),
+                        "codes": [i["code"] for i in row_items if i["code"]]})
         if out and not any([r["label"] for r in c["rows"]] == [r["label"] for r in out] for c in combos):
             combos.append({"rows": out, "held": all(r["held"] for r in out)})
     # 더 따야 할 면허 수 = 가장 덜 모자란 조합의 미보유 면허 수
@@ -110,6 +111,13 @@ def _combo_req(group, held: tuple[set[str], set[str]]) -> dict[str, Any]:
 def _section_of(items: list[dict[str, Any]]) -> str:
     coded = [i for i in items if i["code"]]
     return "product" if coded and len(coded) == len(items) and all(i["kind"] == "product" for i in items) else "industry"
+
+
+def _group_codes(g) -> set[str]:
+    """요건의 모든 코드 — 대표 이름·허용업종(행)·조합 안 면허까지."""
+    names = list(g.allowed_names) + [n for row in (g.rows or []) for n in row]
+    names += [n for rows in (getattr(g, "combos", None) or []) for row in rows for n in row]
+    return {_code(_clean_label(_display_name(n))) for n in names} - {None}
 
 
 def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, bool]) -> list[dict[str, Any]]:
@@ -140,7 +148,7 @@ def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, 
     # 요건이다(2026-10-13 제보 R26BK01755562: API "1478·4119·4125·국유림영림단 중 하나" + 첨부 "1478·4119·4125 중 하나"가
     # 따로 나와 "자격요건 2건"으로 보였음) — 더 온전한 API 쪽만 남긴다.
     api_code_sets = [
-        {_code(_clean_label(_display_name(n))) for n in g.allowed_names} - {None}
+        _group_codes(g)
         for g in list(qualification.missing_groups) + list(qualification.satisfied_groups)
         if g.rows or getattr(g, "combos", None) or str(g.group_no).startswith(("택1", "조합"))
     ]
@@ -230,9 +238,11 @@ def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, 
         # 충족 요건 중복 제거 — 같은 코드가 API 요건과 첨부 "보유 확인"에 두 번 잡히면 요건 쪽만 남긴다
         ok_reqs, seen = [], set()
         for r in sorted(satisfied[key], key=lambda r: r.get("why") == "보유 확인"):
-            labels = ([row["label"] for c in r["combos"] for row in c["rows"]] if r.get("combos")
-                      else [i["label"] for i in r["items"]])
-            sig = tuple(sorted(_code(l) or l for l in labels))
+            # 조합 요건은 행마다 "A 또는 B" 이름이라 코드를 행에 따로 둔 것으로 센다 — 이름 끝 코드만 보면 "3244 또는 3243"의
+            # 3243이 빠져 첨부 "보유 확인 3243"이 따로 또 나왔다(2026-10-14 제보)
+            sig = tuple(sorted(
+                {c for co in r["combos"] for row in co["rows"] for c in (row.get("codes") or [_code(row["label"]) or row["label"]])}
+                if r.get("combos") else {_code(i["label"]) or i["label"] for i in r["items"]}))
             if r.get("why") == "보유 확인" and (sig[0] in seen):
                 continue
             if sig in seen:

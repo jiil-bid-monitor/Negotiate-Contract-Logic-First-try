@@ -4,7 +4,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // 이 화면이 기대하는 수집 결과 형식 — webapp/collect.py RESULT_FORMAT과 같이 올린다
-const APP_FORMAT = 32;
+const APP_FORMAT = 35;
 const store = {
   get(k, d = null) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장 불가여도 동작 */ } },
@@ -53,8 +53,6 @@ const F = {
   kind: "본공고+사전규격",
   cat: new Set(JSON.parse(store.get("f.cat", "[]"))),
   part: new Set(),
-  ai: new Set(),
-  sync: new Set(),
   flag: new Set(),
 };
 // "확인 필요" 칩 분류(2026-10-01 요청) — 버튼 이름 → text_flags의 kind. 여러 개 고르면 **모두 있는** 공고(좁혀 가며 보기,
@@ -94,11 +92,10 @@ function debounce(fn, ms = 200) {
 let OPEN_MENU = null;
 const FILTER_DEFS = () => [
   // "검토필요"(2026-10-13 요청) — 관심·제외 키워드가 함께 있어 맨 아래 "검토 필요" 구역에 모인 공고만
-  { key: "kind", label: "공고", options: ["본공고+사전규격", "본공고", "사전규격", "검토필요"], multi: false, all: "본공고+사전규격" },
+  // "마감 공고"(2026-10-14 요청) — 마감 지난 공고만. 마감 공고는 "본공고+사전규격"에서만 구역 맨 아래에 함께 보이고, 다른 선택에선 뺀다
+  { key: "kind", label: "공고", options: ["본공고+사전규격", "본공고", "사전규격", "검토필요", "마감 공고"], multi: false, all: "본공고+사전규격" },
   { key: "cat", label: "낙찰방법", options: META ? META.categories : ["협상", "규격가격동시입찰", "입찰"], multi: true },
   { key: "part", label: "참가여부", options: ["미지정", ...(META ? META.statuses : [])], multi: true },
-  { key: "ai", label: "AI 판단", options: ["적합", "검토필요", "부적합", "미판정"], multi: true },
-  { key: "sync", label: "싱크로율", options: ["높음", "경계선", "낮음", "판정 불가"], multi: true },
   { key: "flag", label: "확인 필요", options: Object.keys(FLAG_FILTER), multi: true,
     note: "여러 개 고르면 모두 있는 공고만" },
 ];
@@ -205,12 +202,12 @@ function textHit(c, q) {
 }
 function passes(c) {
   if (!textHit(c, $("#liveQ").value)) return false;
+  if (F.kind === "마감 공고") { if (!isClosed(c)) return false; }
+  else if (F.kind !== "본공고+사전규격" && isClosed(c)) return false;
   if (F.kind === "검토필요") { if (!c.review_exclude) return false; }
-  else if (F.kind !== "본공고+사전규격" && c.kind !== F.kind) return false;
+  else if (!["본공고+사전규격", "마감 공고"].includes(F.kind) && c.kind !== F.kind) return false;
   if (F.cat.size && !F.cat.has(c.category)) return false;
   if (F.part.size && !F.part.has(stateOf(c).status || "미지정")) return false;
-  if (F.ai.size && !F.ai.has(c.ai ? c.ai.label : "미판정")) return false;
-  if (F.sync.size && !F.sync.has(c.sync.level)) return false;
   if (F.flag.size) {
     const kinds = (c.text_flags || []).map((f) => f.kind);
     // 예전에 저장된 선택("현장설명회"·"없음" 등 지금 메뉴에 없는 값)은 무시
@@ -317,14 +314,13 @@ function reqHtml(req, mixed) {
   const cls = (held) => held ? "held" : done ? "moot" : "";
   const item = (i) => `<div class="tip-sub ${cls(i.held)}">${mark(i.held)} ${mixed ? `<span class="kind">${KIND_TAG[i.kind]}</span> ` : ""}${labelHtml(i.label)}${i.via ? ` <small>← ${esc(i.via)}</small>` : ""}</div>`;
   if (req.combos) {
-    // 나라장터 원문 "[A]과 [B] 업종 또는 [C]과 [D] 업종"처럼 조합(세트)으로 — 조합 하나를 다 갖추면 충족
-    // 면허 사이는 "+" 대신 앞 줄 끝에 조사 "과/와"를 조금 띄어서(2026-10-01 요청)
-    const row = (r, j, rows) => `<div class="combo-row ${cls(r.held)}">`
-      + `${mark(r.held)} ${labelHtml(r.label)}${r.via ? ` <small>← ${esc(r.via)}</small>` : ""}`
-      + `${j < rows.length - 1 ? `<span class="or-word join">${joinParticle(r.label)}</span>` : ""}</div>`;
-    const circled = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮";
-    return `<div class="tip-item"><span class="why">아래 ${req.combos.length}개 조합 중 하나를 모두 갖추면 충족${done ? " — 보유로 충족" : ""}</span>`
-      + req.combos.map((c, i) => `<div class="tip-sub combo"><span class="no">${circled[i] || `${i + 1}.`}</span><div>${c.rows.map(row).join("")}</div></div>`).join("") + `</div>`;
+    // 나라장터 "[A]과 [B] 업종 또는 [C]과 [D] 업종" — 방법(조합) 하나를 다 갖추면 충족. 방법마다 한 줄 "A + B 또는 C",
+    // 방법 사이는 "또는"(2026-10-14 요청 — 예전 ①② 번호·줄마다 조사 "과/와" 모양 대체). 조합 안 미보유 면허는 붉게.
+    const part = (r, held) => `<span class="${r.held ? "" : held ? "" : "combo-miss"}">${labelHtml(r.label)}</span>`
+      + (r.via ? ` <small>← ${esc(r.via)}</small>` : "");
+    const line = (c) => `<div class="tip-sub combo ${cls(c.held)}">${mark(c.held)} <span>${c.rows.map((r) => part(r, c.held)).join(" + ")}</span></div>`;
+    const why = `아래 방법 중 하나를 갖추면 충족${done ? " — 보유로 충족" : ""}`;
+    return `<div class="tip-item"><span class="why">${why}</span>${req.combos.map(line).join(`<div class="or-sep">또는</div>`)}</div>`;
   }
   // 미보유는 전부 붉은 ✗로 — 흰 글씨면 보유한 자격으로 착각한다(2026-09-30 제보)
   if (!req.any_of) return `<div class="tip-item"><span class="why">${esc(req.why || "필수 보유")}</span>${item(req.items[0])}</div>`;
@@ -369,7 +365,9 @@ function qualBadge(q) {
     else cls = "muted";  // 제한 없음·미확인은 흐리게 — 눈에 띄어야 할 칩은 문제·확인 필요 칩(2026-10-01 배치 정리)
     // 요건 전체를 한 목록으로 — 미달 요건 먼저, 충족 요건 뒤. 보유 ✓ 초록, 미보유 ✗ 붉은색
     const ok = p.satisfied || [];
-    const all = [...p.missing, ...ok];
+    // 미달·충족 안에서는 필수 보유를 맨 앞에 — 공고문처럼 "필수 → 택1·조합" 순(2026-10-14 요청)
+    const mustFirst = (rs) => [...rs].sort((a, b) => Number(!(!a.any_of && !a.combos && !a.why)) - Number(!(!b.any_of && !b.combos && !b.why)));
+    const all = [...mustFirst(p.missing), ...mustFirst(ok)];
     if (all.length) {
       const mixed = all.some((r) => new Set((r.items || []).map((i) => i.kind)).size > 1);
       body += `<div class="tip-title">${esc(p.name)} ${all.length}건 — <span class="good">충족 ${ok.length}</span> · <span class="${p.missing.length ? "bad" : ""}">미달 ${p.missing.length}</span></div>`
@@ -444,10 +442,6 @@ function badges(c) {
       "나라장터에 올라온 첨부파일이 없어 자격·확인 필요 요건을 읽지 못했습니다. 공고 상세에서 직접 확인하세요."));
   }
   if (c.is_re_notice) out.push(chip("재공고", "warn", "재공고", "유찰 등으로 다시 낸 공고입니다."));
-  if (c.ai) {
-    const cls = c.ai.label === "적합" ? "good" : c.ai.label === "부적합" ? "bad" : "warn";
-    out.push(chip(`AI ${c.ai.label}`, cls, `AI 판단: ${c.ai.label}`, esc(c.ai.reason || ""), cls));
-  }
   return out.join("");
 }
 const SIDO_FULL = { 서울: "서울특별시", 부산: "부산광역시", 대구: "대구광역시", 인천: "인천광역시", 광주: "광주광역시",
@@ -488,10 +482,21 @@ function regionBadge(c) {
 // 한 공고에 둘이 같이 붙진 않는다(건축사사무소 문장이 있으면 인력 칩은 안 만듦 — text_requirements.flag_requirements)
 const FLAG_LABEL = { "실적": "실적 요건", "현장설명회": "현장설명회 참가 필수", "인력": "기술인력 요건", "건축사사무소": "기술인력 요건" };
 const FLAG_CHIP = { "현장설명회": "현장설명회" };
+// 칩 글자에 요건 핵심을 바로 적는다(2026-10-14 요청: "⚠ 실적제한 최근 3년 · 단일 7,000만원 이상") — 원문은 팝업 그대로.
+// 요약 표의 값에서 "원문에서 못 찾음"은 빼고, 값이 없으면 예전 이름("실적 요건")
+const FLAG_HEAD = { "실적": "실적제한", "인력": "기술인력", "건축사사무소": "기술인력" };
+function flagChipText(f) {
+  const vals = (f.summary || []).map(([, v]) => String(v || "").trim()).filter((v) => v && !v.includes("못 찾음"))
+    .map((v) => v.replace(/(\d+)억\s*(\d+)천만원/g, (_, a, b) => `${(Number(a) * 10000 + Number(b) * 1000).toLocaleString()}만원`)
+      .replace(/(\d+)천만원/g, (_, a) => `${(Number(a) * 1000).toLocaleString()}만원`));
+  const head = FLAG_HEAD[f.kind];
+  if (!head || !vals.length) return FLAG_CHIP[f.kind] || FLAG_LABEL[f.kind] || f.kind;
+  return `⚠ ${head} ${vals.join(" · ")}`;
+}
 function flagBadges(c) {
   return (c.text_flags || []).map((f) => {
     // 칩은 이름만("현장설명회" — 10/2 요청, 날짜는 팝업 일시 칸에). 팝업 제목은 FLAG_LABEL 그대로
-    const label = FLAG_CHIP[f.kind] || FLAG_LABEL[f.kind] || f.kind;
+    const label = flagChipText(f);
     // 요약(f.summary: [[항목, 값]…])이 있으면 표를 먼저, 원문은 아래 작게. 예전 결과(요약 없음)는 일시 + 원문만
     const rows = f.summary && f.summary.length ? f.summary : (f.date ? [["일시", f.date]] : []);
     const body = `<div class="tip-title warn">${esc(FLAG_LABEL[f.kind] || f.kind)} — 확인 필요</div>`
@@ -723,7 +728,7 @@ function card(c, withActions = true) {
       <button type="button" class="card-side lv-${esc(s.level)}" title="눌러서 비슷한 과거 실적 보기">
         <span class="pct">${pct(s.score)}</span>
         <span class="bar"><i class="lv-${esc(s.level)}" style="width:${Math.round((s.score || 0) * 100)}%"></i></span>
-        <span class="why">싱크로율 · ${esc(s.level)}</span>
+        <span class="why">싱크로율</span>
       </button>
     </div>`;
   $(".card-side", el).addEventListener("click", () => openDetail(c));
@@ -817,7 +822,6 @@ function render() {
   const lifted = RUN ? RUN.rejected.filter(promoted) : [];
   const all = RUN ? [...RUN.candidates, ...lifted] : [];
   const shown = all.filter(passes);
-  const lv = (l) => shown.filter((c) => c.sync.level === l).length;
   // 예전 버전 코드로 수집한 결과면 판정·팝업이 최신 규칙과 다를 수 있다 — 다시 불러오라고 알린다
   const stale = RUN && META && META.result_format && (RUN.format || 0) < Math.max(META.result_format, APP_FORMAT);
   // 화면 파일은 git pull만으로 바로 새 버전이 되지만 서버(수집·판정 코드)는 다시 켜야 바뀐다 — 서버가 예전 코드면 알린다
@@ -825,7 +829,7 @@ function render() {
   $("#summary").innerHTML = RUN
     ? (oldServer ? `<span class="job err">⚠ 서버가 예전 코드로 실행 중입니다 — Git Bash에서 Ctrl+C 후 'bash webapp/start.sh'로 다시 켜고 '나라장터에서 불러오기'를 다시 눌러 주세요.</span><br>`
       : stale ? `<span class="job err">⚠ 이 결과는 이전 버전으로 수집됐습니다 — 자격 판정·표시가 최신 규칙과 다를 수 있으니 '나라장터에서 불러오기'를 다시 눌러 주세요.</span><br>` : "")
-      + `후보 <b>${all.length}</b>건${lifted.length ? ` <span class="why">(제외에서 올림 ${lifted.length}건 포함)</span>` : ""}${closed(all) ? ` <span class="why">(마감 ${closed(all)}건)</span>` : ""} 중 <b>${shown.length}</b>건 표시 · 싱크로율 높음 <b>${lv("높음")}</b> / 경계선 ${lv("경계선")} / 낮음 ${lv("낮음")}`
+      + `후보 <b>${all.length}</b>건${lifted.length ? ` <span class="why">(제외에서 올림 ${lifted.length}건 포함)</span>` : ""}${closed(all) ? ` <span class="why">(마감 ${closed(all)}건)</span>` : ""} 중 <b>${shown.length}</b>건 표시`
       + ` · 조회 ${esc(fmtDt(RUN.stats.period_begin))} ~ ${esc(fmtDt(RUN.stats.period_end))} · 수집 ${esc(fmtDt(RUN.finished_at))}`
       + (RUN.params.attachments ? "" : " · <span title='첨부 참가자격 미반영'>첨부 자격판정 안 함</span>")
       + (RUN.stats.license_error ? ` · <span class="job err">면허제한정보 조회 실패</span>` : "")
@@ -856,9 +860,10 @@ function render() {
       h.id = `sec-${kind.replace(/\s+/g, "")}`;
       h.dataset.nav = kind;
       h.dataset.count = list.length;
-      h.innerHTML = note
-        ? `${kind} ${list.length}건<small>${esc(note)}</small>`
-        : `${kind} ${list.length}건`;
+      // 마감 전 / 마감 공고를 나눠 센다(2026-10-14 요청) — "본공고 20건 · 마감 6건"
+      const shut = closed(list), open_ = list.length - shut;
+      const count = !shut ? `${list.length}건` : open_ ? `${open_}건 · 마감 ${shut}건` : `마감 ${shut}건`;
+      h.innerHTML = note ? `${kind} ${count}<small>${esc(note)}</small>` : `${kind} ${count}`;
       parts.push(h, grid(list, true));
     }
     live.replaceChildren(...parts);
@@ -1077,7 +1082,7 @@ $("#btnCollect").addEventListener("click", async () => {
     const range = custom ? { begin: $("#rangeBegin").value, end: $("#rangeEnd").value } : { days: Number($("#period").value) };
     if (custom && (!range.begin || !range.end)) return alert("시작일과 종료일을 모두 고르세요");
     const job = await api("/api/collect", {
-      ...range, attachments: $("#optAttach").checked, ai: $("#optAi").checked,
+      ...range, attachments: $("#optAttach").checked, ai: false,
       prespec: $("#optPrespec").checked,
     });
     store.set("myJob", job.started_at);
@@ -1123,17 +1128,16 @@ $("#thread").addEventListener("close", render);
 function syncDetailHtml(s) {
   const tags = Object.entries(s.tags || {}).map(([f, ts]) => `<div><span class="why">${esc(f)}</span><div class="tags">${ts.map((t) => `<span>${esc(t)}</span>`).join("")}</div></div>`).join("");
   const top = (s.top || []).map((r) => `<li><span class="sc">${pct(r.score)}</span>(${esc(r.year)}) ${esc(r.title)}<div class="tags">${r.shared.map((t) => `<span>${esc(t)}</span>`).join("")}</div></li>`).join("");
-  return `<p>싱크로율 <b class="lv-${esc(s.level)}">${pct(s.score)} (${esc(s.level)})</b> — 근거: ${esc(s.basis)}`
+  return `<p>싱크로율 <b class="lv-${esc(s.level)}">${pct(s.score)}</b> — 근거: ${esc(s.basis)}`
     + `${s.basis === "공고명만" ? " <span class='why'>(첨부 원문 없이 공고명만으로 계산해 정확도가 낮습니다)</span>" : ""}</p>`
     + `<h3>비슷한 과거 실적</h3><ul class="toplist">${top || "<li>없음</li>"}</ul>`
     + `<h3>이 공고의 과업 프로필</h3>${tags || "<p class='why'>추출된 항목 없음</p>"}`;
 }
 function openDetail(c) {
   $("#detailTitle").textContent = c.title;
-  const ai = c.ai ? `<p><b>AI 판단: ${esc(c.ai.label)}</b> (${esc(c.ai.overall)})${c.ai.best ? ` · 가장 비슷: ${esc(c.ai.best)}` : ""}<br><span class="why">${esc(c.ai.reason)}</span></p>` : "";
   const q = c.qualification;
   const qual = `<p><b>자격</b>: ${esc(q.summary)}${(q.held || []).length ? `<br><span class="why">보유로 충족: ${esc(q.held.join(", "))}</span>` : ""}</p>`;
-  $("#detailBody").innerHTML = qual + ai + syncDetailHtml(c.sync);
+  $("#detailBody").innerHTML = qual + syncDetailHtml(c.sync);
   $("#detail").showModal();
 }
 
@@ -1250,7 +1254,6 @@ $("#pastYear").addEventListener("change", renderPast);
   const syncRange = () => { $("#rangeWrap").hidden = period.value !== "custom"; };
   syncRange();
   period.addEventListener("change", () => { store.set("period", period.value); syncRange(); });
-  if (!META.has_ai_key) { $("#optAi").disabled = true; $("#optAiWrap").title = "서버에 ANTHROPIC_API_KEY가 없어 AI 판단을 쓸 수 없습니다"; }
   if (!META.has_service_key) $("#jobStatus").textContent = "서버에 NARA_SERVICE_KEY가 없어 불러오기가 실패합니다";
   showTab(store.get("tab", "live"));
   await loadResults();

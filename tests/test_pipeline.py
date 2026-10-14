@@ -159,9 +159,9 @@ class TestQualification(unittest.TestCase):
 
     held = ["실내건축공사업", "산업디자인전문회사(환경디자인분야)", "전시사업자(전시장치사업자)"]
 
-    def test_bracketed_industry_list_is_split_and_code_removed(self):
-        names = qualify.split_industry_list("[건축공사업/0002][토목건축공사업/0001]")
-        self.assertEqual(names, ["건축공사업", "토목건축공사업"])
+    def test_bracketed_industry_list_is_split_and_code_kept(self):
+        names = qualify.split_industry_list("[건축공사업/0002][토목건축공사업/0001][국유림영림단]")
+        self.assertEqual(names, ["건축공사업/0002", "토목건축공사업/0001", "국유림영림단"])
 
     def test_no_groups_is_fail_open(self):
         result = qualify.evaluate([], self.held)
@@ -448,6 +448,22 @@ class TestQualification(unittest.TestCase):
         # "과/와"로 이으면 그대로 모두 필요
         item = "가. [실내건축공사업(업종코드 4990)]과 [산림조합(업종코드 4119)]을 모두 등록한 자"
         self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["4990"], ["4119"]])
+        # "…로 신고 또는 …", "…로 신고하거나 …"도 "또는" — 2026-10-14 제보(도시계획 엔지니어링 3583 / 기술사사무소 1351)
+        item = "2) 건설부문(도시계획)의 엔지니어링사업자(업종코드 3583)로 신고 또는 기술사사무소(업종코드 1351)로 등록한 업체"
+        self.assertEqual(qualify._or_groups(item), [[("3583", "엔지니어링사업자(3583)"), ("1351", "기술사사무소(1351)")]])
+        item = "2) 엔지니어링사업자(업종코드 3583)로 신고하거나 「기술사법」에 따른 기술사사무소(업종코드 1351)를 등록한 자"
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["3583", "1351"]])
+
+    def test_label_survives_line_break_inside_word(self):
+        # PDF가 낱말 중간에서 줄을 바꿔 "니어링사업자", "따른 기술사사무소"로 잘리던 것(2026-10-14 제보)
+        item = ("2) 「엔지니어링산업 진흥법」 제21조에 따른 건설부문(도시계획) 엔지\n"
+                "니어링사업자(업종코드:3583)로 신고한 업체 또는 「기술사법」제6조에\n"
+                "따른 기술사사무소(도시계획)(업종코드:1351)를 등록한 업체")
+        self.assertEqual(qualify._or_groups(item),
+                         [[("3583", "엔지니어링사업자(3583)"), ("1351", "기술사사무소(도시계획)(1351)")]])
+        # 앞 줄이 "…해당하는 자"로 끝난 새 항목은 이어 붙이지 않는다
+        item = "다음 중 어느 하나에 해당하는 자\n종합디자인 전문분야(업종코드 4444)"
+        self.assertEqual(qualify._or_groups(item), [[("4444", "종합디자인 전문분야(4444)")]])
 
     def test_evaluate_attachment_text_comma_list_ending_in_or_is_one_or_group(self):
         item = "가. A(세부품명번호 1111111111), B(세부품명번호 2222222222) 또는 C(세부품명번호 7215409902)"
@@ -662,6 +678,22 @@ class TestScreen(unittest.TestCase):
                          product_codes=[{"code": "6010989901", "name": "실물모형및전시물"}])
         raw = fixtures.notice("P", title="○○군 홍보시설 구매 설치 정비", prdctClsfcNo="6010989901")
         self.assertEqual(screen.screen(notice_from_raw(raw, "물품"), config).excluded_by, "제외키워드")
+
+    def test_goods_notice_product_code_from_real_field(self):
+        """물품 본공고의 세부품명번호는 dtilPrdctClsfcNo(+ 구매대상물품 목록)로 온다 — prdctClsfcNo만 봐서 늘 "세부품명번호 없음"이었다
+        (2026-10-14 제보: 서당골천 경관개선을 위한 조형물 제작·설치가 조형물(6012100201)인데 미매칭)."""
+        from dataclasses import replace
+
+        config = replace(self.config, product_codes=[{"code": "6012100201", "name": "조형물"}])
+        raw = fixtures.notice("G", title="서당골천 경관개선을 위한 조형물 제작.설치", presmptPrce="126000000",
+                              dtilPrdctClsfcNo="6012100201", dtilPrdctClsfcNoNm="조형물")
+        result = screen.screen(notice_from_raw(raw, "물품"), config)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.matched_product_codes, ["조형물"])
+        # 대표 품목이 아니라 구매대상물품 목록의 두 번째 품목이 관심 품명코드여도 일치
+        raw = fixtures.notice("H", title="○○센터 물품 구매", presmptPrce="126000000", dtilPrdctClsfcNo="5310270502",
+                              purchsObjPrdctList="[1^5310270502^여자학생복(하)],[2^6012100201^조형물]")
+        self.assertEqual(screen.screen(notice_from_raw(raw, "물품"), config).matched_product_codes, ["조형물"])
 
     def test_budget_below_minimum_blocks(self):
         result = self._screen(fixtures.notice("X", title="○○과학관 전시", presmptPrce="50000000"))
@@ -1190,7 +1222,7 @@ class TestOverlappingLicenseGroups(unittest.TestCase):
             name = "상·하수도설비공사업/4996" if i % 2 == 0 else "지반조성·포장공사업/4989"
             rows.append({"bidNtceNo": "R", "bidNtceOrd": "000", "lmtGrpNo": "2", "lmtSno": str(i + 1), "lcnsLmtNm": name})
         groups = qualify.group_license_rows(rows)["R"]
-        self.assertEqual(groups[0].rows, [["토목공사업/0001", "토목건축공사업"]])  # 허용업종 목록은 코드를 떼어 둔다
+        self.assertEqual(groups[0].rows, [["토목공사업/0001", "토목건축공사업/0003"]])  # 허용업종도 코드를 남긴다(표시용)
         self.assertEqual(groups[1].rows, [["상·하수도설비공사업/4996"], ["지반조성·포장공사업/4989"]])
         from webapp import qualview
         q = qualify.evaluate(groups, [])

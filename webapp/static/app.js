@@ -59,8 +59,14 @@ const F = {
 };
 // "확인 필요" 칩 분류(2026-10-01 요청) — 버튼 이름 → text_flags의 kind. 여러 개 고르면 **모두 있는** 공고(좁혀 가며 보기,
 // 2026-10-01 제보: 실적+현장설명회를 눌렀는데 실적만 있는 공고가 남아 오류로 보임)
-// 현장설명회는 2026-10-14 사용자 결정으로 안 찾음 — 메뉴에서도 뺌(예전 결과의 칩 이름표는 아래 FLAG_LABEL에 남김)
-const FLAG_FILTER = { "실적 요건": "실적", "기술인력": "인력", "건축사사무소": "건축사사무소" };
+// 2026-10-14 사용자 요청: 공고마다 어떤 요건이 나올지 모르니 자주 나오는 둘 + 나머지 묶음 3개로(현장설명회는 안 찾고, "없음"은 뺌).
+// 버튼 이름 → 그 버튼이 고르는 칩 kind 판정
+const FLAG_MAIN = ["실적", "인력"];
+const FLAG_FILTER = {
+  "실적 요건": (k) => k === "실적",
+  "기술인력": (k) => k === "인력",
+  "이외 자격": (k) => !FLAG_MAIN.includes(k),  // 건축사사무소 등 — 앞으로 칩 종류가 늘어도 여기로
+};
 
 // ── 탭 ──
 document.querySelectorAll(".tabs button[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -95,7 +101,7 @@ const FILTER_DEFS = () => [
   { key: "part", label: "참가여부", options: ["미지정", ...(META ? META.statuses : [])], multi: true },
   { key: "ai", label: "AI 판단", options: ["적합", "검토필요", "부적합", "미판정"], multi: true },
   { key: "sync", label: "싱크로율", options: ["높음", "경계선", "낮음", "판정 불가"], multi: true },
-  { key: "flag", label: "확인 필요", options: [...Object.keys(FLAG_FILTER), "없음"], multi: true,
+  { key: "flag", label: "확인 필요", options: Object.keys(FLAG_FILTER), multi: true,
     note: "여러 개 고르면 모두 있는 공고만" },
 ];
 // 버튼에 보일 고른 값 — 안 골랐으면 "전체", 하나면 그 이름, 여럿이면 "A 외 N"
@@ -150,11 +156,6 @@ $("#filters").addEventListener("click", (e) => {
     const key = opt.dataset.f, val = opt.dataset.v, d = FILTER_DEFS().find((x) => x.key === key);
     if (d.multi) { F[key].has(val) ? F[key].delete(val) : F[key].add(val); }
     else F[key] = val;
-    // "확인 필요"의 "없음"은 다른 버튼과 함께 고를 수 없다(요건이 있는 공고 + 없는 공고는 0건)
-    if (key === "flag" && F.flag.has(val)) {
-      if (val === "없음") F.flag = new Set(["없음"]);
-      else F.flag.delete("없음");
-    }
     if (key === "cat") store.set("f.cat", JSON.stringify([...F.cat]));
     if (!d.multi) OPEN_MENU = null;  // 하나만 고르는 메뉴는 고르면 닫는다
     render();
@@ -213,8 +214,9 @@ function passes(c) {
   if (F.ai.size && !F.ai.has(c.ai ? c.ai.label : "미판정")) return false;
   if (F.sync.size && !F.sync.has(c.sync.level)) return false;
   if (F.flag.size) {
-    const kinds = new Set((c.text_flags || []).map((f) => f.kind));
-    const hit = F.flag.has("없음") ? !kinds.size : [...F.flag].every((opt) => kinds.has(FLAG_FILTER[opt]));
+    const kinds = (c.text_flags || []).map((f) => f.kind);
+    // 예전에 저장된 선택("현장설명회"·"없음" 등 지금 메뉴에 없는 값)은 무시
+    const hit = [...F.flag].filter((opt) => FLAG_FILTER[opt]).every((opt) => kinds.some(FLAG_FILTER[opt]));
     if (!hit) return false;
   }
   return true;

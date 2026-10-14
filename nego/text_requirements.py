@@ -210,6 +210,7 @@ _NOT_TRACK_REQUIREMENT = re.compile(
 # 인력을 갖춰야 참가할 수 있다는 요건이 아니다
 _NOT_STAFF_REQUIREMENT = re.compile(r"배\s*점|평\s*가\s*항\s*목|평\s*점|가\s*점|\(\s*\d+(?:\.\d+)?\s*점\s*\)")
 
+_LAW_TITLE_RE = re.compile(r"「[^」]{0,80}」")
 _SUB_LINE = re.compile(r"^\s*[-·•]")  # "◦""▪"는 항목 머리표로도 써서(아리랑보부상로드 "◦ 공고일로부터 …") 하위 줄로 안 봄
 _MAX_FLAG_TEXT = 220
 _MAX_CONTEXT_TEXT = 500
@@ -259,7 +260,9 @@ def flag_requirements(items: list[str]) -> list[dict]:
                 continue  # 실적으로 참가를 "제한하지 않는다"·적격심사 평가(배점) 설명은 참가 요건이 아니다
             if kind == "인력" and _NOT_STAFF_REQUIREMENT.search(s):
                 continue  # 평가 배점표의 "전문인력 보유현황 (6점)" 같은 칸은 참가 요건이 아니다
-            if subject.search(s) and detail.search(s):
+            # 「…」 안 법령·지침 이름은 요건 낱말로 안 본다 — 「소프트웨어기술자 경력 및 소프트웨어사업자 실적 관리 지침」의 "기술자"가
+            # 기술인력 칩으로 잡혔음(2026-10-14 제보: 컴퓨터관련서비스사업 신고 + 직접생산확인 8115169901 요건 — 자격 판정이 보는 내용)
+            if subject.search(_LAW_TITLE_RE.sub(" ", s)) and detail.search(s):
                 entry = {"kind": kind, "text": _with_context(s, owner)}
                 out.setdefault(kind, entry)
                 break

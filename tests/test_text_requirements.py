@@ -129,6 +129,14 @@ class TestFlags(unittest.TestCase):
         for s in ["5) 사업 현장 설명회에 참가한 업체(불참자는 입찰에 참여 할 수 없음)", "※ 현장설명회 미참석시 응모신청 불가"]:
             self.assertEqual(flag_requirements([s]), [], s)
 
+    def test_law_title_is_not_a_staff_requirement(self):
+        """2026-10-14 제보: 「소프트웨어기술자 경력 및 … 지침」의 "기술자" + 뒤쪽 "직접생산확인증명서를 소지한 자"가 기술인력 칩이 됐음."""
+        sw = ("「소프트웨어 진흥법」에 의한 소프트웨어사업자 중 「소프트웨어기술자 경력 및 소프트웨어사업자 실적 관리 지침"
+              "(과학기술정보통신부고시 제2020-91호)」제15조에 따른 “컴퓨터관련 서비스사업” 분야의 신고를 필하였으며, "
+              "「중소기업제품 구매촉진 및 판로지원에 관한 법률」제9조에 따라 직접생산확인증명서(세부품명: 공간정보DB구축서비스, "
+              "세부품명번호 : 8115169901)를소지한 자이어야 합니다.")
+        self.assertEqual(flag_requirements([sw]), [])
+
     def test_architect_office_and_staff(self):
         self.assertEqual([f["kind"] for f in flag_requirements(
             ["5) 「건축사법」 제7조의 규정에 의한 건축사 면허를 소지하고 건축사사무소를 개설하여 업무신고를 필한 자"])], ["건축사사무소"])

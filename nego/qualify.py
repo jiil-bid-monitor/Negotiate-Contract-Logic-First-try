@@ -422,12 +422,17 @@ _LINK_HEAD = r"(?:[ \t\u3000]*[)\]])*[ \t\u3000]*(?:업종[ \t\u3000]*)?"
 # "비디오물제작업(업종코드: 3244) 신고필증을 교부받은 업체 또는 … 방송영상독립제작사(업종코드: 3230)" — 코드 뒤 짧은 서술(40자
 # 이내, 같은 줄)이 "업체/자"로 끝나고 바로 "또는"이면 두 요건을 "또는"으로 이은 것이다(2026-10-13 제보: 국립부산과학관 4D 체험관).
 # "업체로서 공동수급 또는 단독"처럼 "또는" 바로 앞이 업체/자가 아니면 잇지 않는다.
-_OR_AFTER_SUBJECT = r"[^\n。.]{0,40}?(?:업체|업자|자)\s*,?\s*(?:또는|혹은)(?=\s)"
+# "엔지니어링사업자(업종코드 3583)로 신고 또는 기술사사무소(업종코드 1351)로 등록한 자"처럼 "신고/등록 또는"·"신고하거나"도
+# 두 요건을 잇는 말이다(2026-10-14 제보: 도시계획 엔지니어링 3583 / 기술사사무소 1351이 "모두 필요"로 나옴).
+_OR_AFTER_SUBJECT = (
+    r"[^\n。.]{0,40}?(?:(?:업체|업자|자|(?:신고|등록)(?:한|된)?)\s*,?\s*(?:또는|혹은)|(?:신고|등록)하거나)(?=\s)"
+)
 _OR_LINK_RE = re.compile(_LINK_HEAD + r"(?:,?\s*(?:또는|혹은)|\(\s*허용\s*업종|" + _OR_AFTER_SUBJECT + r")")
 _COMMA_LINK_RE = re.compile(_LINK_HEAD + r",")
 # 같은 줄에 요건이 둘 이상 나열되면(PDF 등) 뒷 요건의 이름표 앞에 앞 요건의
 # 괄호와 접속어가 딸려온다 — 닫는 괄호 이후만 남기고 앞머리 접속어를 뗀다.
-_LEADING_CONJUNCTION_RE = re.compile(r"^(?:또는|혹은|및|그리고)\s+")
+# 줄바꿈으로 "…에\n따른 기술사사무소"처럼 연결어 뒷부분·조사만 줄머리에 남은 경우도 뗀다(2026-10-14 제보).
+_LEADING_CONJUNCTION_RE = re.compile(r"^(?:또는|혹은|및|그리고|따른|따라|의한|의하여|의거|의|로|으로)\s+")
 _CONJUNCTION_ONLY_RE = re.compile(r"\s*(?:또는|혹은|및|그리고|등|/)?\s*")
 # 이름표에서 떼어낼 절차성 어구. 법령 인용("~에 따른/따라/의하여")과, 실측으로
 # 확인된 마감 안내 어구("~까지")를 둘 다 다룬다 — 실측(사용자 제보,
@@ -439,6 +444,11 @@ _LABEL_CONNECTOR_RE = re.compile(
     r"(?:에\s*따른|에\s*따라|에\s*의하여|에\s*의한|의한|에\s*의거|에\s*해당하는|까지|포함한|등록한\s*자\s*또는)\s*"
 )
 _MAX_LABEL_LEN = 20
+# 낱말 끝이 조사·어미면 온전한 어절로 본다 — 줄바꿈이 낱말 중간에 걸린 게 아니다
+# 줄머리 항목 표시 — 이런 줄은 새 항목이라 앞 줄과 이어진 낱말이 아니다
+_LINE_HEAD_MARK_RE = re.compile(r"\s*(?:[①-⑳※\-·•○◦▪□■ㅇ]|[가-하0-9]+\s*[.)]|\()")
+_WHOLE_WORD_ENDS = {"자", "함", "것", "곳", "업체", "업자"}
+_PARTICLE_END_RE = re.compile(r"(?:에|의|를|을|로|는|은|가|이|와|과|고|서|및|한|된|른|며|여|등|도|만|라|면|해|게)$")
 # "충족된 자격" 팝업에 보여줄 목록을 만들 때 쓴다 — 실측: "[업종코드 4440, 4442,
 # 4444]로 등록되어 있는 업체"처럼 키워드가 괄호 **안쪽 맨 앞**에 오고 코드 여러
 # 개가 나열되는 표기는 위 단계별 추출(_extract_code_requirements)이 첫 코드만
@@ -579,7 +589,8 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
     merged = _merge_wrapped_parens(item)
     results: list[tuple[int, int, str, str]] = []
     offset = 0
-    for line in merged.split("\n"):
+    lines = merged.split("\n")
+    for line_no, line in enumerate(lines):
         consumed: list[tuple[int, int]] = []
         base = offset
         offset += len(line) + 1
@@ -643,6 +654,14 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
                 before_paren = _LEADING_CONJUNCTION_RE.sub("", before_paren)
                 segments = [s for s in _LABEL_CONNECTOR_RE.split(before_paren) if s.strip()]
                 name = (segments[-1] if segments else before_paren).strip()
+                # "…로 신고 또는 기술사사무소" — 앞 요건과 "또는"으로 이어진 이름은 "또는" 뒤만
+                name = re.split(r"\s(?:또는|혹은)\s", name)[-1]
+                # PDF 줄바꿈이 낱말 중간에 걸리면("…엔지\n니어링사업자(3583)") 이름이 줄머리부터라 앞 조각이 잘린다 —
+                # 앞 줄 끝 낱말이 조사·어미로 끝나지 않는 짧은 조각이면 이어 붙인다.
+                if name and line_no > 0 and line.lstrip().startswith(name) and not _LINE_HEAD_MARK_RE.match(line):
+                    tail = re.search(r"(?<![가-힣])([가-힣]{1,4})$", lines[line_no - 1])
+                    if tail and not _PARTICLE_END_RE.search(tail.group(1)) and tail.group(1) not in _WHOLE_WORD_ENDS:
+                        name = tail.group(1) + name
                 name = re.sub(r"^[\s,;，:：]+", "", name)  # "직접생산확인증명서 : 영상…"의 콜론
                 name = name.strip("\"'“‘”’").strip()
                 name = _truncate_label(name)

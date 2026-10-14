@@ -448,6 +448,22 @@ class TestQualification(unittest.TestCase):
         # "과/와"로 이으면 그대로 모두 필요
         item = "가. [실내건축공사업(업종코드 4990)]과 [산림조합(업종코드 4119)]을 모두 등록한 자"
         self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["4990"], ["4119"]])
+        # "…로 신고 또는 …", "…로 신고하거나 …"도 "또는" — 2026-10-14 제보(도시계획 엔지니어링 3583 / 기술사사무소 1351)
+        item = "2) 건설부문(도시계획)의 엔지니어링사업자(업종코드 3583)로 신고 또는 기술사사무소(업종코드 1351)로 등록한 업체"
+        self.assertEqual(qualify._or_groups(item), [[("3583", "엔지니어링사업자(3583)"), ("1351", "기술사사무소(1351)")]])
+        item = "2) 엔지니어링사업자(업종코드 3583)로 신고하거나 「기술사법」에 따른 기술사사무소(업종코드 1351)를 등록한 자"
+        self.assertEqual([[c for c, _ in g] for g in qualify._or_groups(item)], [["3583", "1351"]])
+
+    def test_label_survives_line_break_inside_word(self):
+        # PDF가 낱말 중간에서 줄을 바꿔 "니어링사업자", "따른 기술사사무소"로 잘리던 것(2026-10-14 제보)
+        item = ("2) 「엔지니어링산업 진흥법」 제21조에 따른 건설부문(도시계획) 엔지\n"
+                "니어링사업자(업종코드:3583)로 신고한 업체 또는 「기술사법」제6조에\n"
+                "따른 기술사사무소(도시계획)(업종코드:1351)를 등록한 업체")
+        self.assertEqual(qualify._or_groups(item),
+                         [[("3583", "엔지니어링사업자(3583)"), ("1351", "기술사사무소(도시계획)(1351)")]])
+        # 앞 줄이 "…해당하는 자"로 끝난 새 항목은 이어 붙이지 않는다
+        item = "다음 중 어느 하나에 해당하는 자\n종합디자인 전문분야(업종코드 4444)"
+        self.assertEqual(qualify._or_groups(item), [[("4444", "종합디자인 전문분야(4444)")]])
 
     def test_evaluate_attachment_text_comma_list_ending_in_or_is_one_or_group(self):
         item = "가. A(세부품명번호 1111111111), B(세부품명번호 2222222222) 또는 C(세부품명번호 7215409902)"

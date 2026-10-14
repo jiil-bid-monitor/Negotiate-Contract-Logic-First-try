@@ -291,8 +291,12 @@ def license_requirements(
     common_keys = set.intersection(*({key(r) for r in rows} for rows in grouped))
     out = [must(f"필수{i + 1}", r) for i, r in enumerate(r for r in grouped[0] if key(r) in common_keys)]
     residuals = [[r for r in rows if key(r) not in common_keys] for rows in grouped]
-    if any(not res for res in residuals):  # 공통 면허만으로 채워지는 그룹이 있으면 나머지는 선택 사항
-        return out
+    if any(not res for res in residuals):
+        # 공통 면허만으로 채워지는 그룹이 있으면 나머지는 사실상 선택 사항이지만, "공통 면허 필수"로 줄이면 원문
+        # "[1253과 6728] 업종 또는 [1253] 업종"의 6728이 화면에서 사라진다(2026-10-14 제보: 제외 사유엔 둘 다 나오는데
+        # 팝업엔 1253만) — 원문처럼 조합 그대로 보여준다. 판정은 같다(1253만 있으면 두 번째 조합으로 충족).
+        labels = [" + ".join(_row_label(r) for r in rows) for rows in grouped]
+        return [LicenseGroup(group_no="조합", allowed_names=list(dict.fromkeys(labels)), combos=grouped)]
     if all(len(res) == 1 for res in residuals):
         out.append(LicenseGroup(group_no="택1", allowed_names=_dedupe_names([n for res in residuals for n in res[0]])))
         return out

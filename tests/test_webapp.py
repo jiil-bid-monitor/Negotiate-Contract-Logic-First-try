@@ -183,6 +183,20 @@ class TestQualificationView(unittest.TestCase):
         self.assertEqual(product["status"], "미달")
         self.assertEqual([[i["code"] for i in r["items"]] for r in product["missing"]], [["3912110702"]])
 
+    def test_group_absorbed_by_common_license_still_shows_both_combos(self):
+        """2026-10-14 제보: "[1253과 6728] 업종 또는 [1253] 업종" — 팝업엔 1253만 나왔다(제외 사유엔 둘 다). 원문 조합 그대로."""
+        from nego import qualify
+        from webapp import qualview
+        rows = [{"bidNtceNo": "W", "lmtGrpNo": "1", "lmtSno": "1", "lcnsLmtNm": "건설폐기물중간처리업/1253"},
+                {"bidNtceNo": "W", "lmtGrpNo": "1", "lmtSno": "2", "lcnsLmtNm": "건설폐기물수집·운반업/6728"},
+                {"bidNtceNo": "W", "lmtGrpNo": "2", "lmtSno": "1", "lcnsLmtNm": "건설폐기물중간처리업/1253"}]
+        groups = qualify.group_license_rows(rows)["W"]
+        part = qualview.build(qualify.evaluate(groups, [], set()), (set(), set()), {"industry": True})[0]
+        combos = part["missing"][0]["combos"]
+        self.assertEqual([[r["label"] for r in c["rows"]] for c in combos],
+                         [["건설폐기물중간처리업(1253)", "건설폐기물수집·운반업(6728)"], ["건설폐기물중간처리업(1253)"]])
+        self.assertTrue(qualify.evaluate(groups, [], {"1253"}).passes and not qualify.evaluate(groups, [], {"1253"}).missing_groups)
+
     def test_need_counts_minimum_licenses_to_acquire(self):
         """'최소 N개 부족' — 반드시 1 + 택1 1 = 2, 조합 요건은 가장 덜 모자란 조합의 미보유 수."""
         from nego import qualify

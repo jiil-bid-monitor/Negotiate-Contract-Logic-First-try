@@ -99,7 +99,8 @@ def _combo_req(group, held: tuple[set[str], set[str]]) -> dict[str, Any]:
                 continue  # 같은 면허가 한 조합에 두 번 — 한 번만
             # 허용업종(나라장터 "투찰가능한업종 / 허용업종" 표)도 늘 함께 보여준다(2026-10-14 사용자 요청)
             out.append({"label": " 또는 ".join(i["label"] for i in row_items),
-                        "held": any(i["held"] for i in row_items)})
+                        "held": any(i["held"] for i in row_items),
+                        "codes": [i["code"] for i in row_items if i["code"]]})
         if out and not any([r["label"] for r in c["rows"]] == [r["label"] for r in out] for c in combos):
             combos.append({"rows": out, "held": all(r["held"] for r in out)})
     # 더 따야 할 면허 수 = 가장 덜 모자란 조합의 미보유 면허 수
@@ -112,44 +113,11 @@ def _section_of(items: list[dict[str, Any]]) -> str:
     return "product" if coded and len(coded) == len(items) and all(i["kind"] == "product" for i in items) else "industry"
 
 
-def _is_api_group(g) -> bool:
-    """면허제한 API에서 온 요건인지 — 첨부 판정 묶음은 rows·combos가 없고 group_no가 항목 번호·"이름…"·"또는"·"held"다."""
-    return bool(g.rows) or bool(getattr(g, "combos", None)) or str(g.group_no).startswith(("택1", "조합"))
-
-
 def _group_codes(g) -> set[str]:
+    """요건의 모든 코드 — 대표 이름·허용업종(행)·조합 안 면허까지."""
     names = list(g.allowed_names) + [n for row in (g.rows or []) for n in row]
     names += [n for rows in (getattr(g, "combos", None) or []) for row in rows for n in row]
     return {_code(_clean_label(_display_name(n))) for n in names} - {None}
-
-
-def _attachment_first(qualification):
-    """첨부 공고문 참가자격을 판정했으면 팝업은 **첨부 요건을 기준으로** 그린다(2026-10-14 사용자 요청).
-
-    나라장터 면허제한은 "투찰가능한업종" 조합(①4443+3244 ②4444+3243 …)으로 와서, 공고문의 "필수 1469·0036 +
-    4443/4444 중 하나 + 3244/3243 중 하나 + 직접생산 품목"과 모양이 달라 헷갈렸다. 첨부에 같은 코드가 한 번이라도
-    나오는 API 요건은 빼고, 첨부가 전혀 다루지 않은 API 요건만 남긴다(첨부 파싱이 놓친 요건 대비). 판정·텔레그램은 그대로.
-    """
-    groups = list(qualification.missing_groups) + list(qualification.satisfied_groups)
-    att_sets = [c for c in (_group_codes(g) for g in groups if not _is_api_group(g)) if c]
-    att_codes = set().union(*att_sets) if att_sets else set()
-    if not att_codes:
-        return qualification
-
-    def keep(g) -> bool:
-        if not _is_api_group(g):
-            return True
-        codes = _group_codes(g)
-        if not codes & att_codes:
-            return True
-        # 첨부 요건과 같은 요건인데 나라장터 쪽이 허용업종까지 더 온전한 경우("1478 또는 4119·4125·국유림영림단",
-        # "건축공사업 또는 토목건축공사업")는 남긴다 — 아래에서 첨부 쪽 중복이 빠진다. 조합 요건은 공고문과 모양이 달라 뺀다.
-        return not getattr(g, "combos", None) and any(a <= codes for a in att_sets)
-
-    return SimpleNamespace(
-        missing_groups=[g for g in qualification.missing_groups if keep(g)],
-        satisfied_groups=[g for g in qualification.satisfied_groups if keep(g)],
-    )
 
 
 def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, bool]) -> list[dict[str, Any]]:
@@ -160,7 +128,6 @@ def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, 
     세부품명번호 부문에, 4자리 업종은 자격요건 부문에 나온다.
     미보유 쪽은 요건 단위라 나눌 수 없어, 전부 10자리일 때만 세부품명번호 부문에 둔다.
     """
-    qualification = _attachment_first(qualification)
     missing: dict[str, list] = {k: [] for k, _ in SECTIONS}
     # 충족한 요건도 미보유와 같은 모양으로 — 팝업에서 요건 전체를 초록 ✓ / 붉은 ✗로 한 번에 보여준다(2026-09-30 요청)
     satisfied: dict[str, list] = {k: [] for k, _ in SECTIONS}
@@ -181,7 +148,7 @@ def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, 
     # 요건이다(2026-10-13 제보 R26BK01755562: API "1478·4119·4125·국유림영림단 중 하나" + 첨부 "1478·4119·4125 중 하나"가
     # 따로 나와 "자격요건 2건"으로 보였음) — 더 온전한 API 쪽만 남긴다.
     api_code_sets = [
-        {_code(_clean_label(_display_name(n))) for n in g.allowed_names} - {None}
+        _group_codes(g)
         for g in list(qualification.missing_groups) + list(qualification.satisfied_groups)
         if g.rows or getattr(g, "combos", None) or str(g.group_no).startswith(("택1", "조합"))
     ]
@@ -271,9 +238,11 @@ def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, 
         # 충족 요건 중복 제거 — 같은 코드가 API 요건과 첨부 "보유 확인"에 두 번 잡히면 요건 쪽만 남긴다
         ok_reqs, seen = [], set()
         for r in sorted(satisfied[key], key=lambda r: r.get("why") == "보유 확인"):
-            labels = ([row["label"] for c in r["combos"] for row in c["rows"]] if r.get("combos")
-                      else [i["label"] for i in r["items"]])
-            sig = tuple(sorted(_code(l) or l for l in labels))
+            # 조합 요건은 행마다 "A 또는 B" 이름이라 코드를 행에 따로 둔 것으로 센다 — 이름 끝 코드만 보면 "3244 또는 3243"의
+            # 3243이 빠져 첨부 "보유 확인 3243"이 따로 또 나왔다(2026-10-14 제보)
+            sig = tuple(sorted(
+                {c for co in r["combos"] for row in co["rows"] for c in (row.get("codes") or [_code(row["label"]) or row["label"]])}
+                if r.get("combos") else {_code(i["label"]) or i["label"] for i in r["items"]}))
             if r.get("why") == "보유 확인" and (sig[0] in seen):
                 continue
             if sig in seen:

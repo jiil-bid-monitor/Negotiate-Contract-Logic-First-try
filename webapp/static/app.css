@@ -289,6 +289,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 
 /* "아래 조합 중 하나" — 조합마다 번호 + 면허 한 줄씩, 보유 면허는 초록 */
 .tip-sub.combo { display: flex; gap: 6px; padding-top: 4px; }
+.tip-sub.combo .combo-miss { color: var(--bad); }
 .tip-sub.combo .no { flex: none; }
 .or-word { color: var(--muted); font-weight: 400; }
 .or-word.join { margin-left: 8px; }

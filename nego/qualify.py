@@ -100,21 +100,23 @@ def split_industry_list(text: str) -> list[str]:
     """허용업종목록 텍스트를 개별 업종명으로 나눈다.
 
     실측 형태는 "[업종명/업종코드][업종명/업종코드]…" 이다 (예: "[실내건축공사업/4990]").
-    대괄호 단위로 나눈 뒤 마지막 '/' 뒤의 코드를 떼어 업종명만 남긴다.
+    대괄호 단위로 나눈다.
     대괄호가 없으면 콤마·슬래시로 나눈다.
 
-    허용업종 목록의 코드는 여기서 버린다(이름 완전일치용). 코드 비교는 같은 그룹의
-    lcnsLmtNm("건축공사업/0002")에 남은 코드로 한다. 표시용 "이름(코드)" 변환은
-    `report.py`에서 별도로 한다.
+    코드가 있으면 "업종명/코드"로 남긴다(대표 면허 lcnsLmtNm과 같은 모양 — 판정은 코드·이름 둘 다로).
+    표시용 "이름(코드)" 변환은 `report.py`에서 별도로 한다.
     """
     bracketed = re.findall(r"\[([^\]]+)\]", text)
     if bracketed:
         out = []
         for entry in bracketed:
-            name = entry.rsplit("/", 1)[0] if "/" in entry else entry
-            name = name.strip()
-            if name:
-                out.append(name)
+            entry = entry.strip()
+            # 코드가 있으면 "이름/코드" 그대로 둔다 — 대표 면허(lcnsLmtNm)와 같은 모양이라 판정은 코드로도 하고, 팝업에
+            # "음반·음악영상물제작업(3243) 또는 문화산업전문회사(3276)"처럼 코드까지 보인다(2026-10-14 요청)
+            if not re.search(r"/\s*\d{4,10}$", entry):
+                entry = entry.rsplit("/", 1)[0].strip() if "/" in entry else entry
+            if entry:
+                out.append(entry)
         return out
 
     return [s.strip() for s in re.split(r"[,/·、]", text) if s.strip()]

@@ -317,14 +317,13 @@ function reqHtml(req, mixed) {
   const cls = (held) => held ? "held" : done ? "moot" : "";
   const item = (i) => `<div class="tip-sub ${cls(i.held)}">${mark(i.held)} ${mixed ? `<span class="kind">${KIND_TAG[i.kind]}</span> ` : ""}${labelHtml(i.label)}${i.via ? ` <small>← ${esc(i.via)}</small>` : ""}</div>`;
   if (req.combos) {
-    // 나라장터 원문 "[A]과 [B] 업종 또는 [C]과 [D] 업종"처럼 조합(세트)으로 — 조합 하나를 다 갖추면 충족
-    // 면허 사이는 "+" 대신 앞 줄 끝에 조사 "과/와"를 조금 띄어서(2026-10-01 요청)
-    const row = (r, j, rows) => `<div class="combo-row ${cls(r.held)}">`
-      + `${mark(r.held)} ${labelHtml(r.label)}${r.via ? ` <small>← ${esc(r.via)}</small>` : ""}`
-      + `${j < rows.length - 1 ? `<span class="or-word join">${joinParticle(r.label)}</span>` : ""}</div>`;
-    const circled = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮";
-    return `<div class="tip-item"><span class="why">아래 ${req.combos.length}개 조합 중 하나를 모두 갖추면 충족${done ? " — 보유로 충족" : ""}</span>`
-      + req.combos.map((c, i) => `<div class="tip-sub combo"><span class="no">${circled[i] || `${i + 1}.`}</span><div>${c.rows.map(row).join("")}</div></div>`).join("") + `</div>`;
+    // 나라장터 "[A]과 [B] 업종 또는 [C]과 [D] 업종" — 방법(조합) 하나를 다 갖추면 충족. 방법마다 한 줄 "A + B 또는 C",
+    // 방법 사이는 "또는"(2026-10-14 요청 — 예전 ①② 번호·줄마다 조사 "과/와" 모양 대체). 조합 안 미보유 면허는 붉게.
+    const part = (r, held) => `<span class="${r.held ? "" : held ? "" : "combo-miss"}">${labelHtml(r.label)}</span>`
+      + (r.via ? ` <small>← ${esc(r.via)}</small>` : "");
+    const line = (c) => `<div class="tip-sub combo ${cls(c.held)}">${mark(c.held)} <span>${c.rows.map((r) => part(r, c.held)).join(" + ")}</span></div>`;
+    const why = `아래 방법 중 하나를 갖추면 충족${done ? " — 보유로 충족" : ""}`;
+    return `<div class="tip-item"><span class="why">${why}</span>${req.combos.map(line).join(`<div class="or-sep">또는</div>`)}</div>`;
   }
   // 미보유는 전부 붉은 ✗로 — 흰 글씨면 보유한 자격으로 착각한다(2026-09-30 제보)
   if (!req.any_of) return `<div class="tip-item"><span class="why">${esc(req.why || "필수 보유")}</span>${item(req.items[0])}</div>`;
@@ -369,7 +368,9 @@ function qualBadge(q) {
     else cls = "muted";  // 제한 없음·미확인은 흐리게 — 눈에 띄어야 할 칩은 문제·확인 필요 칩(2026-10-01 배치 정리)
     // 요건 전체를 한 목록으로 — 미달 요건 먼저, 충족 요건 뒤. 보유 ✓ 초록, 미보유 ✗ 붉은색
     const ok = p.satisfied || [];
-    const all = [...p.missing, ...ok];
+    // 미달·충족 안에서는 필수 보유를 맨 앞에 — 공고문처럼 "필수 → 택1·조합" 순(2026-10-14 요청)
+    const mustFirst = (rs) => [...rs].sort((a, b) => Number(!(!a.any_of && !a.combos && !a.why)) - Number(!(!b.any_of && !b.combos && !b.why)));
+    const all = [...mustFirst(p.missing), ...mustFirst(ok)];
     if (all.length) {
       const mixed = all.some((r) => new Set((r.items || []).map((i) => i.kind)).size > 1);
       body += `<div class="tip-title">${esc(p.name)} ${all.length}건 — <span class="good">충족 ${ok.length}</span> · <span class="${p.missing.length ? "bad" : ""}">미달 ${p.missing.length}</span></div>`

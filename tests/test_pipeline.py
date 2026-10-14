@@ -159,9 +159,9 @@ class TestQualification(unittest.TestCase):
 
     held = ["실내건축공사업", "산업디자인전문회사(환경디자인분야)", "전시사업자(전시장치사업자)"]
 
-    def test_bracketed_industry_list_is_split_and_code_removed(self):
-        names = qualify.split_industry_list("[건축공사업/0002][토목건축공사업/0001]")
-        self.assertEqual(names, ["건축공사업", "토목건축공사업"])
+    def test_bracketed_industry_list_is_split_and_code_kept(self):
+        names = qualify.split_industry_list("[건축공사업/0002][토목건축공사업/0001][국유림영림단]")
+        self.assertEqual(names, ["건축공사업/0002", "토목건축공사업/0001", "국유림영림단"])
 
     def test_no_groups_is_fail_open(self):
         result = qualify.evaluate([], self.held)
@@ -1206,7 +1206,7 @@ class TestOverlappingLicenseGroups(unittest.TestCase):
             name = "상·하수도설비공사업/4996" if i % 2 == 0 else "지반조성·포장공사업/4989"
             rows.append({"bidNtceNo": "R", "bidNtceOrd": "000", "lmtGrpNo": "2", "lmtSno": str(i + 1), "lcnsLmtNm": name})
         groups = qualify.group_license_rows(rows)["R"]
-        self.assertEqual(groups[0].rows, [["토목공사업/0001", "토목건축공사업"]])  # 허용업종 목록은 코드를 떼어 둔다
+        self.assertEqual(groups[0].rows, [["토목공사업/0001", "토목건축공사업/0003"]])  # 허용업종도 코드를 남긴다(표시용)
         self.assertEqual(groups[1].rows, [["상·하수도설비공사업/4996"], ["지반조성·포장공사업/4989"]])
         from webapp import qualview
         q = qualify.evaluate(groups, [])

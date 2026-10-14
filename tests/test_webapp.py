@@ -111,7 +111,7 @@ class TestSerialize(unittest.TestCase):
         self.assertEqual(q["parts"][0]["status"], "미달")
         self.assertEqual(len(q["parts"][0]["missing"]), 2)
         # 기계설비공사업 행은 전기공사업을 대신 인정 — 허용업종도 함께 보여준다(2026-10-14)
-        self.assertIn("기계설비공사업(0009) 또는 전기공사업", q["missing"])
+        self.assertIn("기계설비공사업(0009) 또는 전기공사업(0007)", q["missing"])
         self.assertIn("g2b.go.kr", flagged["detail_url"])
         self.assertEqual(flagged["category"], "협상")
         self.assertEqual(flagged["key"], "R26TEST00009-000")
@@ -144,15 +144,14 @@ class TestQualificationView(unittest.TestCase):
         self.assertEqual(len(parts[0]["missing"]), 1, qualview.flat_missing(parts))
         self.assertEqual(len(parts[0]["missing"][0]["items"]), 4, "API 쪽(국유림영림단 포함)을 남긴다")
 
-        # 첨부 요건이 API와 다르게 적혀 있으면(API에 없는 코드) 공고문 쪽만 보여준다(2026-10-14 첨부 우선)
+        # 첨부 요건에 API에 없는 코드가 있으면 다른 요건이라 그대로 둔다
         other = qualify.evaluate_attachment_text(["가. 산림사업법인[업종코드:1478] 또는 실내건축공사업[업종코드:0006]"],
                                                  held_codes=set())
         parts = qualview.build(qualify.merge_results(api, other), (set(), set()), {"industry": True})
-        self.assertEqual([sorted(i["code"] for i in r["items"]) for r in parts[0]["missing"]], [["0006", "1478"]])
+        self.assertEqual(len(parts[0]["missing"]), 2)
 
-    def test_attachment_requirements_drive_popup(self):
-        """2026-10-14 제보: 나라장터 조합(①4443+3244 ②4444+3243)만 보고 팝업을 그려 공고문의 "필수 1469·0036 + 4443/4444 중 하나 +
-        3244/3243 중 하나 + 직접생산 품목"과 달랐다 — 첨부를 판정했으면 첨부 요건으로 그린다."""
+    def test_api_combos_with_attachment_products(self):
+        """2026-10-14 제보: 같은 요건이 나라장터 조합과 첨부 "또는"·"보유 확인"으로 여러 번 나왔고 첨부 세부품명이 묻혔다."""
         from nego import qualify
         from webapp import qualview
         def row(g, s, n, a=""):
@@ -173,9 +172,14 @@ class TestQualificationView(unittest.TestCase):
                  "6) 정보통신공사업(업종코드 0036)으로 입찰 참가 자격을 등록한 자"]
         att = qualify.evaluate_attachment_text(items, held)
         industry, product = qualview.build(qualify.merge_results(api, att), (held, set()), {"industry": True, "product": True})
-        self.assertFalse(any(r.get("combos") for r in industry["satisfied"]), "나라장터 조합은 안 보임")
-        self.assertEqual(sorted(tuple(sorted(i["code"] for i in r["items"])) for r in industry["satisfied"]),
-                         [("0036",), ("1469",), ("3243", "3244"), ("4443", "4444")])
+        # 나라장터 조합(4443+3244/3243 · 4444+3243)과 필수 1469·0036 — 첨부의 같은 요건("4443 또는 4444" 등)은 중복이라 안 보임
+        combos = [r for r in industry["satisfied"] if r.get("combos")]
+        self.assertEqual(len(combos), 1)
+        self.assertEqual([[row["label"] for row in c["rows"]] for c in combos[0]["combos"]],
+                         [["산업디자인전문회사(멀티미디어디자인분야)(4443)", "비디오물제작업(3244) 또는 음반·음악영상물제작업(3243)"],
+                          ["산업디자인전문회사(종합디자인분야)(4444)", "음반·음악영상물제작업(3243)"]])
+        self.assertEqual(sorted(r["items"][0]["code"] for r in industry["satisfied"] if not r.get("combos")), ["0036", "1469"])
+        # 첨부에만 있는 세부품명(직접생산·등록 품목)은 세부품명번호 부문에
         self.assertEqual(product["status"], "미달")
         self.assertEqual([[i["code"] for i in r["items"]] for r in product["missing"]], [["3912110702"]])
 
@@ -204,7 +208,7 @@ class TestQualificationView(unittest.TestCase):
         ]
         q = qualify.evaluate(qualify.group_license_rows(rows)["N"], [])
         combo = qualview.build(q, (set(), set()), {"industry": True})[0]["missing"][0]["combos"]
-        self.assertEqual(combo[0]["rows"][0]["label"], "토목공사업(0001) 또는 토목건축공사업")
+        self.assertEqual(combo[0]["rows"][0]["label"], "토목공사업(0001) 또는 토목건축공사업(0003)")
         waste = [{"bidNtceNo": "W", "lmtGrpNo": "1", "lmtSno": "1", "lcnsLmtNm": "폐기물수집·운반업/1227",
                   "permsnIndstrytyList": "[폐기물수집·운반업/1227][폐기물종합처분업]"}]
         q = qualify.evaluate(qualify.group_license_rows(waste)["W"], [])
@@ -278,15 +282,13 @@ class TestQualificationView(unittest.TestCase):
         self.assertTrue(att.checked)
         merged = qualify.merge_results(api, att)
         part = qualview.build(merged, (set(), set()), {"industry": True})[0]
-        # 첨부 공고문 요건 우선(2026-10-14) — 공고문의 "건축공사업 또는 토목건축공사업" 한 건
-        self.assertEqual([sorted(i["label"] for i in r["items"]) for r in part["missing"]],
+        self.assertEqual([[i["label"] for i in r["items"]] for r in part["missing"]],
                          [["건축공사업(0002)", "토목건축공사업(0003)"]])
         # API가 허용업종을 안 줘도 건축공사업은 한 번만
         rows[0]["permsnIndstrytyList"] = ""
         api = qualify.evaluate(qualify.group_license_rows(rows)["B"], [])
         part = qualview.build(qualify.merge_results(api, att), (set(), set()), {"industry": True})[0]
-        self.assertEqual([sorted(i["label"] for i in r["items"]) for r in part["missing"]],
-                         [["건축공사업(0002)", "토목건축공사업(0003)"]])
+        self.assertEqual([[i["label"] for i in r["items"]] for r in part["missing"]], [["건축공사업(0002)"]])
 
     HELD = ({"1469", "4440", "4442", "4444", "4990", "6010989901"}, set())
 

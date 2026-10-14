@@ -668,6 +668,31 @@ class TestScreen(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertEqual(result.excluded_by, "최소예산")
 
+    def test_budget_exempt_keyword(self):
+        """공고명에 "공사 설계 용역"(띄어쓰기 무시)이 있으면 1억 미만이어도 수집, 나머지는 그대로 1억 기준(2026-10-14 사용자 요청)."""
+        from dataclasses import replace
+
+        config = replace(self.config, keywords=self.config.keywords + ["공사 설계 용역"],
+                         budget_exempt_keywords=["공사 설계 용역"])
+        small = fixtures.notice("X", title="○○체험관 리모델링 공사설계용역", presmptPrce="30000000")
+        self.assertTrue(screen.screen(notice_from_raw(small, "용역"), config).matched)
+        other = fixtures.notice("Y", title="○○과학관 전시", presmptPrce="50000000")
+        self.assertEqual(screen.screen(notice_from_raw(other, "용역"), config).excluded_by, "최소예산")
+
+    def test_design_service_only_for_new_builds(self):
+        """"공사 설계 용역"은 새로 짓는 신설만 — 수리·증축 같은 부수적 설계 용역은 관심 키워드·예산 예외 둘 다 안 됨(2026-10-14)."""
+        from dataclasses import replace
+
+        config = replace(self.config, keywords=["공사 설계 용역"], budget_exempt_keywords=["공사 설계 용역"],
+                         keyword_skip_when={"공사 설계 용역": ["수리", "증축"]})
+        new = fixtures.notice("N", title="○○문화센터 신축 공사 설계용역", presmptPrce="30000000")
+        self.assertTrue(screen.screen(notice_from_raw(new, "용역"), config).matched)
+        for title in ["○○문화센터 증축공사 설계용역", "○○회관 수리공사 설계 용역"]:
+            small = fixtures.notice("R", title=title, presmptPrce="30000000")
+            self.assertEqual(screen.screen(notice_from_raw(small, "용역"), config).excluded_by, "최소예산", title)
+            big = fixtures.notice("B", title=title, presmptPrce="300000000")
+            self.assertEqual(screen.screen(notice_from_raw(big, "용역"), config).excluded_by, "미매칭", title)
+
     def test_unknown_budget_passes(self):
         result = self._screen(
             fixtures.notice("X", title="○○과학관 전시물 제작", presmptPrce="", asignBdgtAmt="")

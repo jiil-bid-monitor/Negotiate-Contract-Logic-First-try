@@ -46,6 +46,11 @@ class ScreenConfig:
     # "건축"은 일반 건축공사를 거르려던 것이고 실내건축 공고까지 빼려던 건 아님). 다른 곳에 "건축"이 또 있으면 그대로 제외.
     exclude_exceptions: dict[str, list[str]] = field(default_factory=dict)
     min_budget_amount: float | None = None
+    # 공고명에 이 낱말이 있으면 최소예산을 안 따진다(2026-10-14 사용자 요청: "공사 설계 용역"은 금액이 작아도 수집). 띄어쓰기 무시.
+    budget_exempt_keywords: list[str] = field(default_factory=list)
+    # 관심 키워드를 무시할 조건 — {"공사 설계 용역": ["수리", "증축", …]}이면 공고명에 그 낱말이 있을 때 그 관심 키워드는 안 맞은 것으로 본다
+    # (2026-10-14 사용자 요청: 공사 설계 용역은 새로 짓는 "신설"만 — 수리·증축 같은 부수적 설계 용역은 뺌). 최소예산 예외에도 같이 적용.
+    keyword_skip_when: dict[str, list[str]] = field(default_factory=dict)
     product_codes: list[dict[str, str]] = field(default_factory=list)
     industry_codes: list[dict[str, str]] = field(default_factory=list)
     # 제외 키워드와 관심 키워드가 공고명에 함께 있으면 빼지 않고 "검토 필요"로 남긴다(2026-09-30 사용자 결정 —
@@ -90,9 +95,14 @@ def _match_exclude(
     return None
 
 
-def _match_keywords(notice: Notice, keywords: list[str]) -> list[str]:
+def _skipped(word: str, notice: Notice, skip_when: dict[str, list[str]] | None) -> bool:
+    title = _squash(notice.title)
+    return any(_squash(x) and _squash(x) in title for x in (skip_when or {}).get(word, []))
+
+
+def _match_keywords(notice: Notice, keywords: list[str], skip_when: dict[str, list[str]] | None = None) -> list[str]:
     haystack = _squash(notice.title) + _squash(notice.product_class_name)
-    return [w for w in keywords if _squash(w) and _squash(w) in haystack]
+    return [w for w in keywords if _squash(w) and _squash(w) in haystack and not _skipped(w, notice, skip_when)]
 
 
 _OVERSEAS_EVENT_RE = re.compile(r"전시회|박람회|엑스포")
@@ -183,7 +193,7 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
     if hard_word:
         return ScreenResult(matched=False, confidence=None, excluded_by="제외키워드", excluded_reason=hard_word)
     excluded_word = _match_exclude(notice, config.exclude_keywords, config.exclude_exceptions)
-    if excluded_word and config.review_conflicts and _match_keywords(notice, config.keywords):
+    if excluded_word and config.review_conflicts and _match_keywords(notice, config.keywords, config.keyword_skip_when):
         # 관심 키워드도 있다 — 제외하지 않고 아래 예산·해외 조건만 거친 뒤 "검토 필요"로 둔다.
         # (품명코드 일치만으로 올리는 건 2026-10-01 넣었다가 사용자 결정으로 뺌 — 관심 키워드가 있을 때만.)
         result = screen(notice, replace(config, exclude_keywords=[], review_conflicts=False))
@@ -211,7 +221,11 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
         )
 
     budget = notice.budget
-    if config.min_budget_amount is not None and budget is not None and budget < config.min_budget_amount:
+    title = _squash(notice.title)
+    budget_exempt = any(_squash(w) and _squash(w) in title and not _skipped(w, notice, config.keyword_skip_when)
+                        for w in config.budget_exempt_keywords)
+    if (config.min_budget_amount is not None and budget is not None and budget < config.min_budget_amount
+            and not budget_exempt):
         return ScreenResult(
             matched=False,
             confidence=None,
@@ -220,7 +234,7 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
         )
 
     product_hits, industry_hits = _match_codes(notice, config)
-    keyword_hits = _match_keywords(notice, config.keywords)
+    keyword_hits = _match_keywords(notice, config.keywords, config.keyword_skip_when)
 
     # 업종코드 단독 매칭은 결과에 포함하지 않는다 (기존 정책). 단, 몽골 해외관은
     # 키워드·코드가 하나도 안 맞아도 조용히 빼지 않는다 — 플래그를 달아 사람이

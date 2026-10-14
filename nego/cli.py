@@ -304,6 +304,11 @@ def main(argv: list[str] | None = None) -> int:
                 + ", ".join(att_stats["unnamed_codes"])
             )
 
+    # 지역 제한 미달은 제외(2026-10-14) — 첨부 공고문 판정이 API보다 우선이라 첨부를 읽은 뒤에
+    from .pipeline import drop_region_unmet
+
+    candidates = drop_region_unmet(candidates, stats)
+
     llm_paths: dict[str, Path] = {}
     if args.llm_similarity:
         llm_paths = _run_llm_similarity(candidates, config, now)

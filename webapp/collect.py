@@ -225,7 +225,7 @@ class Collector:
 
     def _run_nego(self, config: AppConfig, days: int | None, attachments: bool, cats, prespec: bool = True,
                   period: tuple[datetime, datetime] | None = None):
-        from nego.pipeline import run
+        from nego.pipeline import drop_region_unmet, run
 
         if days:
             config.lookback_days = days
@@ -246,6 +246,8 @@ class Collector:
                      att["attempted"], att["ok"], att["failed"], att["qualification_determined"])
             if att["unnamed_codes"]:
                 log.info("이름 미확인 코드 (config/code_names.json에 추가): %s", ", ".join(att["unnamed_codes"]))
+        # 지역 제한 미달은 제외(2026-10-14) — 첨부 공고문 판정이 API보다 우선이라 첨부를 읽은 뒤에
+        candidates = drop_region_unmet(candidates, stats)
         return candidates, stats
 
     def _work(self, job: Job, days: int | None, attachments: bool, ai: bool, cats, prespec: bool = True,

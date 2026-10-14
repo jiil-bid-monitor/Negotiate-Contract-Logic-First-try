@@ -48,7 +48,7 @@ class Candidate:
     attachment_text: str = ""
     # `--llm-similarity`를 줬을 때만 채워진다 (`llm_similarity.LlmJudgement`).
     llm_similarity: object | None = None
-    # 지역 제한(업체 소재지) 판정 — 표시용, 후보 여부에는 쓰지 않는다 (`region.py`)
+    # 지역 제한(업체 소재지) 판정 — "미달"이면 `drop_region_unmet`이 제외로 옮긴다(2026-10-14)
     region_check: region.RegionCheck = field(default_factory=region.RegionCheck)
     # 첨부 공고문에서 찾은, 판정하지 않고 "확인 필요"로만 보여줄 요건 — 실적·현장설명회·기술인력
     # (`text_requirements.flag_requirements`, [{kind, text, date?}])
@@ -281,6 +281,30 @@ def build_candidates(
     candidates.sort(key=lambda c: c.sort_key)
     stats.candidates = len(candidates)
     return candidates
+
+
+def drop_region_unmet(candidates: list[Candidate], stats: RunStats) -> list[Candidate]:
+    """지역 제한을 못 채운 후보를 제외 목록으로 옮긴다(2026-10-14 사용자 결정 — 9/28 "지역제한은 표시만"을 바꿈).
+
+    지역제한 입찰은 공동수급을 허용해도 구성원 모두가 소재지 요건을 채워야 해서 지일은 들어갈 수 없다.
+    (지역의무공동도급 — "지역업체와 공동으로" — 은 `region.from_text`가 제한으로 보지 않아 여기 안 걸린다.)
+    첨부 공고문 판정이 API보다 우선이라(`region.combine`) 첨부를 읽은 **뒤에** 부른다. "미확인"은 남긴다.
+    """
+    kept = []
+    for c in candidates:
+        check = c.region_check
+        if check.status != "미달":
+            kept.append(c)
+            continue
+        reason = "지역제한"
+        required = "·".join(check.required) or "다른 지역"
+        stats.screened_out[reason] = stats.screened_out.get(reason, 0) + 1
+        stats.screened_in -= 1
+        c.is_candidate = False
+        c.excluded_reason = f"{reason} ({required}만 참가 — 지일 {check.company}, 근거: {check.source})"
+        stats.rejected.append(c)
+    stats.candidates = len(kept)
+    return kept
 
 
 def run(

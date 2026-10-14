@@ -93,3 +93,24 @@ def test_summary_uses_same_shape_for_different_wordings():
     assert b == {"basis": "주된 영업소 소재지", "period": "입찰공고일 전일 ~ 입찰일 (낙찰자: 계약체결일)", "individual": False}
     c = summarize("주된 영업소의 소재지가 경기도에 있는 업체")
     assert c == {"basis": "주된 영업소 소재지", "period": None, "individual": False}
+
+
+class TestDropRegionUnmet(unittest.TestCase):
+    """2026-10-14 사용자 결정: 지역 미달은 공동수급 허용이어도 제외(구성원 모두 소재지 요건), 미확인은 남김."""
+
+    def test_unmet_moved_to_rejected(self):
+        from types import SimpleNamespace
+
+        from nego.pipeline import RunStats, drop_region_unmet
+
+        unmet = SimpleNamespace(region_check=region.from_text([GYEONGGI_ITEM], "강원"),
+                                is_candidate=True, excluded_reason=None)
+        ok = SimpleNamespace(region_check=region.from_api(["강원특별자치도"], "강원"))
+        unknown = SimpleNamespace(region_check=region.from_api([], "강원"))
+        stats = RunStats(screened_in=3, candidates=3)
+        kept = drop_region_unmet([unmet, ok, unknown], stats)
+        self.assertEqual(kept, [ok, unknown])
+        self.assertEqual(stats.rejected, [unmet])
+        self.assertFalse(unmet.is_candidate)
+        self.assertEqual(unmet.excluded_reason, "지역제한 (경기만 참가 — 지일 강원, 근거: 첨부 공고문)")
+        self.assertEqual((stats.screened_out, stats.candidates, stats.screened_in), ({"지역제한": 1}, 2, 2))

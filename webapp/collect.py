@@ -46,7 +46,7 @@ def custom_period(begin: str, end: str, now: datetime) -> tuple[datetime, dateti
 # 저장되는 수집 결과의 판정·표시 형식 버전. 자격 판정·팝업 자료가 바뀔 때 올린다 — 화면이 예전 버전으로
 # 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다. webapp/static/app.js APP_FORMAT도 같이 올릴 것(2026-09-30: 코드를 받고도 옛 결과를 보고
 # 중복·개수 오류가 그대로라고 여긴 일이 두 번 있었음).
-RESULT_FORMAT = 30
+RESULT_FORMAT = 31
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -78,8 +78,7 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         }
     has_text = bool(candidate.attachment_text.strip())
     # 자격요건은 본공고면 면허제한정보 API를 봤고, 세부품명번호는 첨부 원문을 읽었을 때만 볼 수 있다
-    parts = qualview.build(q, held, {"industry": n.kind == "본공고" or has_text, "product": has_text},
-                           doc_text=candidate.attachment_text)
+    parts = qualview.build(q, held, {"industry": n.kind == "본공고" or has_text, "product": has_text})
     missing = qualview.flat_missing(parts)
     return {
         "key": f"{n.notice_no}-{n.notice_ord}",
@@ -226,7 +225,7 @@ class Collector:
 
     def _run_nego(self, config: AppConfig, days: int | None, attachments: bool, cats, prespec: bool = True,
                   period: tuple[datetime, datetime] | None = None):
-        from nego.pipeline import run
+        from nego.pipeline import drop_region_unmet, run
 
         if days:
             config.lookback_days = days
@@ -247,6 +246,8 @@ class Collector:
                      att["attempted"], att["ok"], att["failed"], att["qualification_determined"])
             if att["unnamed_codes"]:
                 log.info("이름 미확인 코드 (config/code_names.json에 추가): %s", ", ".join(att["unnamed_codes"]))
+        # 지역 제한 미달은 제외(2026-10-14) — 첨부 공고문 판정이 API보다 우선이라 첨부를 읽은 뒤에
+        candidates = drop_region_unmet(candidates, stats)
         return candidates, stats
 
     def _work(self, job: Job, days: int | None, attachments: bool, ai: bool, cats, prespec: bool = True,

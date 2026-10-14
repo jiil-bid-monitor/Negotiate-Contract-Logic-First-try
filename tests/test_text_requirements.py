@@ -114,6 +114,16 @@ class TestFlags(unittest.TestCase):
         keep = "1) 최근 5년 이내에 '조달청 일반용역 적격심사 세부기준'에 따라 단일실적 334백만원 이상 실물모형을 제작·설치한 실적을 보유한 업체"
         self.assertEqual([f["kind"] for f in flag_requirements([keep])], ["실적"])
 
+    def test_track_record_needs_amount_or_count_over(self):
+        """"최근 N년간 … X원 이상"처럼 금액·건수 + 이상이 있어야 실적 요건(2026-10-14 제보: 부산광역시 공고 제2026-2813호 —
+        기간만 있는 평가 방법 설명이 칩으로 잡혔음)."""
+        busan = ("※ 해당공사 시공실적은 관련법령에 따라 매년 정기적으로 관련협회에서 신고한 실적 중 관련협회에서 연도말 단위로 "
+                 "최종확정한 최근 3년간 업종별 실적에 그 최종연도의 다음연도 1월 1일부터 입찰공고일까지 준공이 완료된 공사실적을 "
+                 "합한 실적금액으로 평가합니다.")
+        self.assertEqual(flag_requirements([busan]), [])
+        for keep in ["최근 5년간 유사 전시 제작·설치 실적이 단일 5억 이상인 업체", "최근 3년간 유사용역 수행실적 3건 이상 보유 업체"]:
+            self.assertEqual([f["kind"] for f in flag_requirements([keep])], ["실적"], keep)
+
     def test_site_briefing_mandatory_with_date(self):
         items = ["5) 사업 현장 설명회에 참가한 업체(불참자는 입찰에 참여 할 수 없음)"]
         full = "나. 현장설명회 : 2026. 10. 7.(수) 14:00, 완도군청 소회의실"

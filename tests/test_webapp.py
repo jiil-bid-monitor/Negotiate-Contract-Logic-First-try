@@ -400,10 +400,10 @@ class TestStore(unittest.TestCase):
 
     def test_decisions_csv(self):
         from webapp.server import decisions_csv
-        self.store.add_decision("A-000", "김", "불참", ["금액 작음"], "메모, 쉼표", {"title": "공고 A", "matched_keywords": ["박물관"]})
+        self.store.add_decision("A-000", "김", "불참", ["금액 적음"], "메모, 쉼표", {"title": "공고 A", "matched_keywords": ["박물관"]})
         text = decisions_csv(self.store.decisions(latest_only=False))
         self.assertIn("판단일시,판단자,참가여부,사유,메모", text.splitlines()[0])
-        self.assertIn('김,불참,금액 작음,"메모, 쉼표"', text)
+        self.assertIn('김,불참,금액 적음,"메모, 쉼표"', text)
 
     def test_old_db_file_gets_promote_columns(self):
         """서버 PC의 예전 DB 파일(올림 칸 없음)도 그대로 열리고 칸이 더해진다."""

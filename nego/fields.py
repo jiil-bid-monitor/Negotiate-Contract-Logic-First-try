@@ -7,6 +7,7 @@ data.go.kr은 서비스 개정 시 필드명이 바뀌는 일이 있어, 기존 
 
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
 
 RawItem = dict[str, Any]
@@ -44,6 +45,8 @@ PRESPEC_FIELDS: dict[str, list[str]] = {
     "opinion_deadline": ["opinionRgstClseDt", "opninRgstClseDt"],
     "detail_url": ["bfSpecDtlUrl", "dtlUrl"],
     "product_class_no": ["dtilPrdctClsfcNo", "prdctClsfcNo"],
+    # 사전규격 물품은 "[1^5310270503^남자학생복(동)]" 목록으로 세부품명번호를 준다(Run #94 진단 로그)
+    "product_list": ["prdctDtlList"],
     "linked_bid_notices": ["bidNtceNoList"],
     "sw_business_yn": ["swBizObjYn"],
 }
@@ -124,8 +127,12 @@ FIELD_CANDIDATES: dict[str, list[str]] = {
     "performance_competition_yn": ["arsltCmptYn"],
     # ── 분류 ────────────────────────────────────────────
     "industry_text": ["bidprcPsblIndstrytyNm"],
-    "product_class_no": ["prdctClsfcNo"],
-    "product_class_name": ["prdctClsfcNoNm", "pubPrcrmntClsfcNm"],
+    # 물품 본공고의 세부품명번호는 dtilPrdctClsfcNo(10자리)로 온다 — prdctClsfcNo만 봐서 물품 공고가 늘 "세부품명번호 없음"이었다
+    # (2026-10-14 제보: 서당골천 조형물 제작·설치가 품명코드 조형물(6012100201)인데 미매칭. Run #94 진단 로그로 칸 이름 확인)
+    "product_class_no": ["dtilPrdctClsfcNo", "prdctClsfcNo"],
+    "product_class_name": ["dtilPrdctClsfcNoNm", "prdctClsfcNoNm", "pubPrcrmntClsfcNm"],
+    # 구매대상물품이 여럿이면 "[1^5310270502^여자학생복(하)],[2^…]" 목록 — 대표 하나만 보면 나머지 품목을 놓친다
+    "product_list": ["purchsObjPrdctList"],
     "service_division": ["srvceDivNm"],
 }
 
@@ -160,6 +167,14 @@ def pick(raw: RawItem, candidates: Iterable[str]) -> str | None:
         if text and text.lower() not in {"null", "none"}:
             return text
     return None
+
+
+_PRODUCT_ENTRY_RE = re.compile(r"\[\s*[^\]^]*\^\s*(\d{10})\s*\^\s*([^\]]*)\]")
+
+
+def parse_product_list(text: str | None) -> list[tuple[str, str]]:
+    """"[1^5310270502^여자학생복(하)],[2^…^…]" → [(세부품명번호, 이름), …]."""
+    return [(m.group(1), m.group(2).strip()) for m in _PRODUCT_ENTRY_RE.finditer(text or "")]
 
 
 def pick_field(raw: RawItem, key: str) -> str | None:

@@ -138,11 +138,9 @@ def _is_mongolia(notice: Notice) -> bool:
 
 
 def _match_codes(notice: Notice, config: ScreenConfig) -> tuple[list[str], list[str]]:
-    product_hits = [
-        entry["name"]
-        for entry in config.product_codes
-        if notice.product_class_no and entry.get("code") == notice.product_class_no
-    ]
+    # 대표 세부품명번호 + 구매대상물품 목록의 번호 전부 — 하나만 맞아도 품명코드 일치
+    codes = set(notice.product_codes or []) | ({notice.product_class_no} if notice.product_class_no else set())
+    product_hits = [entry["name"] for entry in config.product_codes if entry.get("code") in codes]
     industry_text = _squash(notice.industry_text)
     industry_hits = [
         entry["name"]

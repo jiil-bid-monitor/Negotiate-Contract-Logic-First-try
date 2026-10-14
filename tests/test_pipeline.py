@@ -679,6 +679,22 @@ class TestScreen(unittest.TestCase):
         raw = fixtures.notice("P", title="○○군 홍보시설 구매 설치 정비", prdctClsfcNo="6010989901")
         self.assertEqual(screen.screen(notice_from_raw(raw, "물품"), config).excluded_by, "제외키워드")
 
+    def test_goods_notice_product_code_from_real_field(self):
+        """물품 본공고의 세부품명번호는 dtilPrdctClsfcNo(+ 구매대상물품 목록)로 온다 — prdctClsfcNo만 봐서 늘 "세부품명번호 없음"이었다
+        (2026-10-14 제보: 서당골천 경관개선을 위한 조형물 제작·설치가 조형물(6012100201)인데 미매칭)."""
+        from dataclasses import replace
+
+        config = replace(self.config, product_codes=[{"code": "6012100201", "name": "조형물"}])
+        raw = fixtures.notice("G", title="서당골천 경관개선을 위한 조형물 제작.설치", presmptPrce="126000000",
+                              dtilPrdctClsfcNo="6012100201", dtilPrdctClsfcNoNm="조형물")
+        result = screen.screen(notice_from_raw(raw, "물품"), config)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.matched_product_codes, ["조형물"])
+        # 대표 품목이 아니라 구매대상물품 목록의 두 번째 품목이 관심 품명코드여도 일치
+        raw = fixtures.notice("H", title="○○센터 물품 구매", presmptPrce="126000000", dtilPrdctClsfcNo="5310270502",
+                              purchsObjPrdctList="[1^5310270502^여자학생복(하)],[2^6012100201^조형물]")
+        self.assertEqual(screen.screen(notice_from_raw(raw, "물품"), config).matched_product_codes, ["조형물"])
+
     def test_budget_below_minimum_blocks(self):
         result = self._screen(fixtures.notice("X", title="○○과학관 전시", presmptPrce="50000000"))
         self.assertFalse(result.matched)

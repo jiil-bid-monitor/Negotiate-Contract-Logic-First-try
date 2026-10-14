@@ -47,6 +47,8 @@ class Notice:
     industry_text: str | None = None
     product_class_no: str | None = None
     product_class_name: str | None = None
+    # 구매대상물품 목록의 세부품명번호 전부(대표 세부품명 포함) — 품명코드 매칭은 이 중 하나만 맞아도 된다
+    product_codes: list[str] = field(default_factory=list)
 
     attachments: list[dict[str, str]] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
@@ -104,6 +106,12 @@ _D2B_URL = re.compile(r"https?://(?:www\.)?d2b\.go\.kr[^\s\"'<>]*")
 _DEFENSE_INSTITUTION = re.compile(r"국방부|국군|방위사업청|육군|해군|공군|해병대")
 
 
+def _product_codes(main: str | None, listed: str | None) -> list[str]:
+    codes = [main.strip()] if main and main.strip() else []
+    codes += [code for code, _ in F.parse_product_list(listed)]
+    return list(dict.fromkeys(codes))
+
+
 def notice_from_raw(raw: dict[str, Any], work_type: str) -> Notice:
     clean = F.strip_personal_fields(raw)
     return Notice(
@@ -135,6 +143,7 @@ def notice_from_raw(raw: dict[str, Any], work_type: str) -> Notice:
         industry_text=F.pick_field(clean, "industry_text"),
         product_class_no=F.pick_field(clean, "product_class_no"),
         product_class_name=F.pick_field(clean, "product_class_name"),
+        product_codes=_product_codes(F.pick_field(clean, "product_class_no"), F.pick_field(clean, "product_list")),
         attachments=F.extract_attachments(clean),
         raw=clean,
     )
@@ -165,7 +174,8 @@ def prespec_from_raw(raw: dict[str, Any], work_type: str) -> Notice:
         detail_url=pick("detail_url") or (G2B_PRESPEC_URL.format(no=pick("notice_no")) if pick("notice_no") else None),
         assigned_budget=budget,
         posted_at=pick("posted_at"),
-        product_class_no=pick("product_class_no"),
+        product_class_no=pick("product_class_no") or next(iter(_product_codes(None, pick("product_list"))), None),
+        product_codes=_product_codes(pick("product_class_no"), pick("product_list")),
         attachments=F.extract_attachments(
             clean, F.PRESPEC_ATTACHMENT_NAME_PREFIX, F.PRESPEC_ATTACHMENT_URL_PREFIX, F.PRESPEC_ATTACHMENT_MAX
         ),

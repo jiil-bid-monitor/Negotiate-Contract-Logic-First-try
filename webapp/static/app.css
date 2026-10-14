@@ -76,8 +76,15 @@ input[type="date"] { color-scheme: light dark; }
 .fmenu.open .caret { transform: rotate(180deg); }
 .fpop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; min-width: 220px; max-width: min(420px, 90vw);
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px rgba(20,30,50,.16); padding: 10px; }
-.fopts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-.fnote { margin: 0 0 8px; font-size: 12px; color: var(--muted); text-align: center; }
+/* 선택지는 한 줄에 하나씩 세로 목록으로(2026-10-14 요청) — 건수는 오른쪽 끝에 맞춤 */
+.fopts { display: flex; flex-direction: column; gap: 2px; }
+.fopts .chip { display: flex; justify-content: space-between; align-items: center; gap: 16px; width: 100%; text-align: left;
+  border: 0; border-radius: 6px; background: transparent; padding: 7px 10px; }
+.fopts .chip:hover { background: var(--chip); }
+.fopts .chip.on { background: var(--accent); color: var(--accent-ink); }
+.fopts .chip b { font-weight: 600; color: var(--muted); }
+.fopts .chip.on b { color: var(--accent-ink); }
+.fnote { margin: 0 0 6px; padding: 0 10px; font-size: 12px; color: var(--muted); }
 .foot.promote { justify-content: flex-end; gap: 10px; align-items: center; }
 /* 판단 사유 */
 .reason-body { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; }

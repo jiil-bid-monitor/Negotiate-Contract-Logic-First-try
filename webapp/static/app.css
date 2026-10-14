@@ -29,7 +29,7 @@ input, select, textarea { background: var(--panel); border: 1px solid var(--line
 /* 상단 바 — 짙은 초록 띠에 JIIL 로고 · 제목 · 이름 · 테마(2026-10-14 요청) */
 .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 24px; background: #17291f; color: #f2f5f3; }
 .brand { display: flex; gap: 14px; align-items: center; }
-.logo { font-family: "Arial Black", "Pretendard", system-ui, sans-serif; font-weight: 900; font-size: 30px; letter-spacing: -1.5px; line-height: 1; color: #fff; }
+.logo { display: block; height: 30px; width: auto; color: #fff; }  /* JIIL 로고(2026-10-14 사용자 제공 이미지를 SVG로 옮김) */
 .brand-sep { width: 1px; height: 20px; background: rgba(255,255,255,.35); }
 h1 { font-size: 17px; margin: 0; font-weight: 700; }
 .top .sub { margin: 0; color: rgba(242,245,243,.65); font-size: 12px; }

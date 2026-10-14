@@ -46,6 +46,8 @@ class ScreenConfig:
     # "건축"은 일반 건축공사를 거르려던 것이고 실내건축 공고까지 빼려던 건 아님). 다른 곳에 "건축"이 또 있으면 그대로 제외.
     exclude_exceptions: dict[str, list[str]] = field(default_factory=dict)
     min_budget_amount: float | None = None
+    # 공고명에 이 낱말이 있으면 최소예산을 안 따진다(2026-10-14 사용자 요청: "공사 설계 용역"은 금액이 작아도 수집). 띄어쓰기 무시.
+    budget_exempt_keywords: list[str] = field(default_factory=list)
     product_codes: list[dict[str, str]] = field(default_factory=list)
     industry_codes: list[dict[str, str]] = field(default_factory=list)
     # 제외 키워드와 관심 키워드가 공고명에 함께 있으면 빼지 않고 "검토 필요"로 남긴다(2026-09-30 사용자 결정 —
@@ -211,7 +213,10 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
         )
 
     budget = notice.budget
-    if config.min_budget_amount is not None and budget is not None and budget < config.min_budget_amount:
+    title = _squash(notice.title)
+    budget_exempt = any(_squash(w) and _squash(w) in title for w in config.budget_exempt_keywords)
+    if (config.min_budget_amount is not None and budget is not None and budget < config.min_budget_amount
+            and not budget_exempt):
         return ScreenResult(
             matched=False,
             confidence=None,

@@ -668,6 +668,17 @@ class TestScreen(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertEqual(result.excluded_by, "최소예산")
 
+    def test_budget_exempt_keyword(self):
+        """공고명에 "공사 설계 용역"(띄어쓰기 무시)이 있으면 1억 미만이어도 수집, 나머지는 그대로 1억 기준(2026-10-14 사용자 요청)."""
+        from dataclasses import replace
+
+        config = replace(self.config, keywords=self.config.keywords + ["공사 설계 용역"],
+                         budget_exempt_keywords=["공사 설계 용역"])
+        small = fixtures.notice("X", title="○○체험관 리모델링 공사설계용역", presmptPrce="30000000")
+        self.assertTrue(screen.screen(notice_from_raw(small, "용역"), config).matched)
+        other = fixtures.notice("Y", title="○○과학관 전시", presmptPrce="50000000")
+        self.assertEqual(screen.screen(notice_from_raw(other, "용역"), config).excluded_by, "최소예산")
+
     def test_unknown_budget_passes(self):
         result = self._screen(
             fixtures.notice("X", title="○○과학관 전시물 제작", presmptPrce="", asignBdgtAmt="")

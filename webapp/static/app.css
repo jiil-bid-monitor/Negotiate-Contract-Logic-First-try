@@ -1,22 +1,22 @@
 :root {
   --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #6b7384; --line: #e2e5eb;
-  --accent: #2f6fed; --accent-ink: #fff; --chip: #f1f3f7; --chip-ink: #4a5263; --chip-line: #c9ced8; --card-line: #b9c0cc; --card-shadow: 0 1px 3px rgba(20,30,50,.08);
+  --accent: #1b6e43; --accent-ink: #fff; --chip: #f1f3f7; --chip-ink: #4a5263; --chip-line: #c9ced8; --card-line: #b9c0cc; --card-shadow: 0 1px 3px rgba(20,30,50,.08);
   --good: #17803f; --good-bg: #e6f5eb; --warn: #a86506; --warn-bg: #fdf1dc;
-  --bad: #c53030; --bad-bg: #fdeaea; --info: #2d5fc8; --info-bg: #e8effd; --star: #7a3fc7; --star-bg: #f2eafc;
+  --bad: #c53030; --bad-bg: #fdeaea; --info: #2a6b63; --info-bg: #e2efed; --star: #7a3fc7; --star-bg: #f2eafc;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #12151b; --panel: #1b2029; --ink: #e6e9ef; --muted: #98a0b0; --line: #2c3340;
-    --accent: #5b8cff; --chip: #252c38; --chip-ink: #b4bccb; --chip-line: #3a4353; --card-line: #465063; --card-shadow: 0 1px 3px rgba(0,0,0,.4);
+    --accent: #4fae7c; --chip: #252c38; --chip-ink: #b4bccb; --chip-line: #3a4353; --card-line: #465063; --card-shadow: 0 1px 3px rgba(0,0,0,.4);
     --good: #4cc987; --good-bg: #173726; --warn: #e3a64a; --warn-bg: #3a2d14;
-    --bad: #f07575; --bad-bg: #3d1d1f; --info: #7ea2ff; --info-bg: #1d2a47; --star: #b88cf2; --star-bg: #2f2244;
+    --bad: #f07575; --bad-bg: #3d1d1f; --info: #74c2b3; --info-bg: #17302c; --star: #b88cf2; --star-bg: #2f2244;
   }
 }
 :root[data-theme="dark"] {
   --bg: #12151b; --panel: #1b2029; --ink: #e6e9ef; --muted: #98a0b0; --line: #2c3340;
-  --accent: #5b8cff; --chip: #252c38; --chip-ink: #b4bccb; --chip-line: #3a4353; --card-line: #465063; --card-shadow: 0 1px 3px rgba(0,0,0,.4);
+  --accent: #4fae7c; --chip: #252c38; --chip-ink: #b4bccb; --chip-line: #3a4353; --card-line: #465063; --card-shadow: 0 1px 3px rgba(0,0,0,.4);
   --good: #4cc987; --good-bg: #173726; --warn: #e3a64a; --warn-bg: #3a2d14;
-  --bad: #f07575; --bad-bg: #3d1d1f; --info: #7ea2ff; --info-bg: #1d2a47; --star: #b88cf2; --star-bg: #2f2244;
+  --bad: #f07575; --bad-bg: #3d1d1f; --info: #74c2b3; --info-bg: #17302c; --star: #b88cf2; --star-bg: #2f2244;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 "Pretendard", "Malgun Gothic", system-ui, sans-serif; }
@@ -26,17 +26,21 @@ button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
 button:disabled { opacity: .5; cursor: default; }
 input, select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
-.top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 24px 4px; }
-.brand { display: flex; gap: 12px; align-items: center; }
-.logo { width: 40px; height: 40px; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 15px; letter-spacing: -0.5px; }
-h1 { font-size: 20px; margin: 0; }
+/* 상단 바 — 짙은 초록 띠에 JIIL 로고 · 제목 · 이름 · 테마(2026-10-14 요청) */
+.top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 24px; background: #17291f; color: #f2f5f3; }
+.brand { display: flex; gap: 14px; align-items: center; }
+.logo { font-family: "Arial Black", "Pretendard", system-ui, sans-serif; font-weight: 900; font-size: 30px; letter-spacing: -1.5px; line-height: 1; color: #fff; }
+.brand-sep { width: 1px; height: 20px; background: rgba(255,255,255,.35); }
+h1 { font-size: 17px; margin: 0; font-weight: 700; }
+.top .sub { margin: 0; color: rgba(242,245,243,.65); font-size: 12px; }
 .sub { margin: 0; color: var(--muted); font-size: 12px; }
 .top-right { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.me { display: flex; gap: 6px; align-items: center; color: var(--muted); }
-.theme { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.theme button { border: 0; border-radius: 0; padding: 5px 10px; }
-.theme button.on { background: var(--chip); font-weight: 600; }
-.hint { margin: 0 24px 8px; color: var(--muted); font-size: 12px; }
+.me { display: flex; gap: 6px; align-items: center; color: rgba(242,245,243,.75); }
+.top .me input { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.25); color: #fff; }
+.theme { display: inline-flex; border: 1px solid rgba(255,255,255,.3); border-radius: 0; overflow: hidden; }
+.theme button { border: 0; border-radius: 0; padding: 5px 12px; background: transparent; color: #dfe6e1; }
+.theme button.on { background: #f2f5f3; color: #17291f; font-weight: 700; }
+.hint { margin: 8px 24px 8px; color: var(--muted); font-size: 12px; }
 .tabs { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .tabs button { border: 0; background: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 14px; color: var(--muted); white-space: nowrap; }
 .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 700; }
@@ -126,7 +130,7 @@ h2.section { font-size: 16px; margin: 16px 0 8px; }
 h2.section small { color: var(--star); font-weight: 600; margin-left: 6px; }
 h2.section.review small { color: var(--muted); font-weight: 400; }
 .grid { display: flex; flex-direction: column; gap: 12px; }
-.card { background: var(--panel); border: 1px solid var(--card-line); border-left: 4px solid var(--card-line); box-shadow: var(--card-shadow); border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--card-line); border-left: 4px solid var(--card-line); box-shadow: var(--card-shadow); border-radius: 0; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
 .card.urgent { border-left-color: var(--bad); }
 .card.mine { border-color: var(--accent); border-left-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--card-shadow); }
 .card-body { display: flex; gap: 20px; align-items: stretch; }

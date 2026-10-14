@@ -502,7 +502,7 @@ class TestServer(unittest.TestCase):
     def test_token_required_for_api_not_for_page(self):
         self.assertEqual(self.call("/api/meta", token="wrong")[0], 401)
         with urllib.request.urlopen(self.base + "/") as res:
-            self.assertIn("싱크로율 탐색기", res.read().decode())
+            self.assertIn("나라장터 공고 수집", res.read().decode())
         self.assertEqual(self.call("/../server.py")[0], 404)
 
     def test_collect_then_state_and_comments(self):

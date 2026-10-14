@@ -140,12 +140,25 @@ def _sniff_ext(data: bytes) -> str | None:
     return None
 
 
+# 문서 보안(DRM)으로 잠긴 파일 — 맨 앞이 PDF·HWP 표시가 아니라 보안 프로그램 표시로 시작한다(2026-10-14 실측: R26BK01757744
+# "7. 설계도서.zip" 안 도면 PDF 2개가 b"\x9b DRM…"). 보안 프로그램 없이는 못 읽어서 실패가 아니라 건너뜀으로 센다.
+_DRM_HEAD_RE = re.compile(rb"DRM|SCDSA|<## FSD|DOCUMENT SAFER", re.I)
+
+
+def _is_drm(data: bytes) -> bool:
+    head = data[:64]
+    return not head.startswith((_PDF_MAGIC, _OLE_MAGIC) + tuple(_ZIP_MAGIC_PREFIXES)) and bool(_DRM_HEAD_RE.search(head))
+
+
 def extract_text(data: bytes, ext: str) -> str:
     return redact_personal_contacts(_extract_raw(data, ext, depth=0))
 
 
 def _extract_raw(data: bytes, ext: str, depth: int) -> str:
     ext = ext.lower().lstrip(".")
+    if _is_drm(data):
+        log.info("문서 보안(DRM)으로 잠긴 파일이라 건너뜁니다")
+        raise AttachmentUnsupported("문서 보안(DRM)으로 잠긴 파일")
     sniffed = _sniff_ext(data)
     if sniffed and sniffed != ext and sniffed in SUPPORTED_EXTENSIONS:
         if ext:
@@ -240,7 +253,7 @@ def _extract_zip_text(data: bytes, depth: int = 0) -> str:
     if unsupported:
         log.debug("압축 파일 안의 읽을 대상이 아닌 파일: %s", ", ".join(unsupported[:10]))
     if not parts and not skipped:
-        raise AttachmentUnsupported("압축 파일 안에 HWP/HWPX/PDF 문서가 없습니다")
+        raise AttachmentUnsupported("압축 파일 안에 읽을 대상 문서가 없습니다(내역서·도면·DRM 보안 문서 등)")
     if not parts:
         raise AttachmentError("압축 파일 안에 읽을 수 있는 문서(HWP/HWPX/PDF)가 없습니다"
                               + (f" — {', '.join(skipped[:5])}" if skipped else ""))

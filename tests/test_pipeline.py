@@ -688,10 +688,13 @@ class TestScreen(unittest.TestCase):
         new = fixtures.notice("N", title="○○문화센터 신축 공사 설계용역", presmptPrce="30000000")
         self.assertTrue(screen.screen(notice_from_raw(new, "용역"), config).matched)
         for title in ["○○문화센터 증축공사 설계용역", "○○회관 수리공사 설계 용역"]:
+            # 관심 키워드로는 안 잡힘(신설만) — 예산은 상관없이 통과(무조건 예산 예외, 2026-10-14)
             small = fixtures.notice("R", title=title, presmptPrce="30000000")
-            self.assertEqual(screen.screen(notice_from_raw(small, "용역"), config).excluded_by, "최소예산", title)
-            big = fixtures.notice("B", title=title, presmptPrce="300000000")
-            self.assertEqual(screen.screen(notice_from_raw(big, "용역"), config).excluded_by, "미매칭", title)
+            self.assertEqual(screen.screen(notice_from_raw(small, "용역"), config).excluded_by, "미매칭", title)
+        # 다른 관심 키워드("공간")로 잡히는 리모델링 설계용역은 예산이 작아도 수집
+        cfg2 = replace(config, keywords=["공간", "공사 설계 용역"])
+        gumi = fixtures.notice("G", title="구미시 스타트업 필드 공용공간 리모델링 공사 설계용역", presmptPrce="30000000")
+        self.assertTrue(screen.screen(notice_from_raw(gumi, "용역"), cfg2).matched)
 
     def test_unknown_budget_passes(self):
         result = self._screen(

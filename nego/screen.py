@@ -49,7 +49,7 @@ class ScreenConfig:
     # 공고명에 이 낱말이 있으면 최소예산을 안 따진다(2026-10-14 사용자 요청: "공사 설계 용역"은 금액이 작아도 수집). 띄어쓰기 무시.
     budget_exempt_keywords: list[str] = field(default_factory=list)
     # 관심 키워드를 무시할 조건 — {"공사 설계 용역": ["수리", "증축", …]}이면 공고명에 그 낱말이 있을 때 그 관심 키워드는 안 맞은 것으로 본다
-    # (2026-10-14 사용자 요청: 공사 설계 용역은 새로 짓는 "신설"만 — 수리·증축 같은 부수적 설계 용역은 뺌). 최소예산 예외에도 같이 적용.
+    # (2026-10-14 사용자 요청: 공사 설계 용역은 새로 짓는 "신설"만 — 수리·증축 같은 부수적 설계 용역은 뺌). 최소예산 예외엔 적용 안 함.
     keyword_skip_when: dict[str, list[str]] = field(default_factory=dict)
     product_codes: list[dict[str, str]] = field(default_factory=list)
     industry_codes: list[dict[str, str]] = field(default_factory=list)
@@ -222,8 +222,8 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
 
     budget = notice.budget
     title = _squash(notice.title)
-    budget_exempt = any(_squash(w) and _squash(w) in title and not _skipped(w, notice, config.keyword_skip_when)
-                        for w in config.budget_exempt_keywords)
+    # 예산 예외는 수리·리모델링 등이 있어도 그대로 — "공사 설계 용역"이 들어가면 무조건 예산 상관없이(2026-10-14 사용자 요청)
+    budget_exempt = any(_squash(w) and _squash(w) in title for w in config.budget_exempt_keywords)
     if (config.min_budget_amount is not None and budget is not None and budget < config.min_budget_amount
             and not budget_exempt):
         return ScreenResult(

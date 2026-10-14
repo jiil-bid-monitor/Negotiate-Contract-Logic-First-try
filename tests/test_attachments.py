@@ -994,6 +994,19 @@ class TestZipAttachment(unittest.TestCase):
         with self.assertRaises(AttachmentUnsupported):
             extract_text(_zip_bytes({"내역서.xlsx": b"x", "도면.dwg": b"y"}), "zip")
 
+    def test_drm_locked_files_are_skipped_not_failed(self):
+        """2026-10-14 R26BK01757744 "7. 설계도서.zip": 도면 PDF 2개가 문서 보안(DRM)으로 잠겨(b"\\x9b DRM…") 실패 1건으로 셌다."""
+        from nego.attachments import AttachmentUnsupported, extract_text
+
+        drm = b"\x9b DRM\x00\x01 locked body"
+        with self.assertRaises(AttachmentUnsupported):
+            extract_text(drm, "pdf")
+        with self.assertRaises(AttachmentUnsupported):
+            extract_text(_zip_bytes({"인테리어 도면.pdf": drm, "디자인제안 투시도.pdf": drm}), "zip")
+        # 잠긴 도면과 읽히는 공고문이 같이 있으면 공고문만 읽는다
+        text = extract_text(_zip_bytes({"도면.pdf": drm, "공고문.pdf": _build_pdf("Notice body")}), "zip")
+        self.assertIn("Notice body", text)
+
     def test_zip_with_broken_document_is_a_failure(self):
         from nego.attachments import AttachmentUnsupported, extract_text
 

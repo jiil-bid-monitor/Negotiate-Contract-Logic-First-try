@@ -241,7 +241,7 @@ class TestQualification(unittest.TestCase):
             [item], held_codes={"4442"}, held_code_names={"4442": "산업디자인전문회사(환경디자인분야)"}
         )
         self.assertEqual(
-            [g.allowed_names for g in result.satisfied_groups],
+            [g.allowed_names for g in result.satisfied_groups if g.group_no == "held"],
             [["산업디자인전문회사(환경디자인분야)(4442)"]],
         )
 
@@ -256,7 +256,7 @@ class TestQualification(unittest.TestCase):
             [item], held_codes={"4990"}, held_code_names={"4990": "실내건축공사업"}
         )
         self.assertEqual(
-            [g.allowed_names for g in result.satisfied_groups],
+            [g.allowed_names for g in result.satisfied_groups if g.group_no == "held"],
             [["실내건축공사업(4990)"]],
         )
 
@@ -265,7 +265,7 @@ class TestQualification(unittest.TestCase):
         그대로 쓴다 — 동작이 바뀌지 않아야 한다."""
         item = "마.「건설산업기본법」 제9조에 따른 실내건축공사업(업종코드 4990)으로 입찰참가 등록한 자"
         result = qualify.evaluate_attachment_text([item], held_codes={"4990"})
-        self.assertEqual([g.allowed_names for g in result.satisfied_groups], [["실내건축공사업(4990)"]])
+        self.assertEqual([g.allowed_names for g in result.satisfied_groups if g.group_no == "held"], [["실내건축공사업(4990)"]])
 
     def test_load_held_code_names_maps_products_and_industries(self):
         held_config = {
@@ -338,7 +338,7 @@ class TestQualification(unittest.TestCase):
         )
         self.assertEqual(result.summary, "자격 충족")
         self.assertEqual(
-            [g.allowed_names for g in result.satisfied_groups], [["영상정보디스플레이장치(4511189301)"]]
+            [g.allowed_names for g in result.satisfied_groups if g.group_no == "held"], [["영상정보디스플레이장치(4511189301)"]]
         )
 
     def test_extract_code_requirements_preserves_multi_word_item_name(self):

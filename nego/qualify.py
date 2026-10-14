@@ -845,6 +845,9 @@ def evaluate_attachment_text(
                 missing.append(LicenseGroup(group_no=group_no, allowed_names=[label for _, label in bundle]))
             elif len(bundle) > 1:
                 or_ok.append(LicenseGroup(group_no="또는", allowed_names=[label for _, label in bundle]))
+            else:
+                # 보유로 채운 단독 요건도 요건으로 남긴다 — 팝업이 "보유 확인" 대신 공고문처럼 "필수 보유"로 보이게(2026-10-14 요청)
+                or_ok.append(LicenseGroup(group_no="필수", allowed_names=[bundle[0][1]]))
 
     if not groups:
         return QualificationResult(total_groups=0, missing_groups=[], passes=True, checked=False)

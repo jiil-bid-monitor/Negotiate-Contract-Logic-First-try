@@ -144,11 +144,40 @@ class TestQualificationView(unittest.TestCase):
         self.assertEqual(len(parts[0]["missing"]), 1, qualview.flat_missing(parts))
         self.assertEqual(len(parts[0]["missing"][0]["items"]), 4, "API 쪽(국유림영림단 포함)을 남긴다")
 
-        # 첨부 요건에 API에 없는 코드가 있으면 다른 요건이라 그대로 둔다
+        # 첨부 요건이 API와 다르게 적혀 있으면(API에 없는 코드) 공고문 쪽만 보여준다(2026-10-14 첨부 우선)
         other = qualify.evaluate_attachment_text(["가. 산림사업법인[업종코드:1478] 또는 실내건축공사업[업종코드:0006]"],
                                                  held_codes=set())
         parts = qualview.build(qualify.merge_results(api, other), (set(), set()), {"industry": True})
-        self.assertEqual(len(parts[0]["missing"]), 2)
+        self.assertEqual([sorted(i["code"] for i in r["items"]) for r in parts[0]["missing"]], [["0006", "1478"]])
+
+    def test_attachment_requirements_drive_popup(self):
+        """2026-10-14 제보: 나라장터 조합(①4443+3244 ②4444+3243)만 보고 팝업을 그려 공고문의 "필수 1469·0036 + 4443/4444 중 하나 +
+        3244/3243 중 하나 + 직접생산 품목"과 달랐다 — 첨부를 판정했으면 첨부 요건으로 그린다."""
+        from nego import qualify
+        from webapp import qualview
+        def row(g, s, n, a=""):
+            return {"bidNtceNo": "L", "lmtGrpNo": g, "lmtSno": s, "lcnsLmtNm": n, "permsnIndstrytyList": a}
+        rows = [row("1", "1", "산업디자인전문회사(멀티미디어디자인분야)/4443"),
+                row("1", "2", "비디오물제작업/3244", "[음반·음악영상물제작업/3243]"),
+                row("1", "3", "소프트웨어사업자(디지털콘텐츠개발서비스사업)/1469"), row("1", "4", "정보통신공사업/0036"),
+                row("2", "1", "산업디자인전문회사(종합디자인분야)/4444"), row("2", "2", "음반·음악영상물제작업/3243"),
+                row("2", "3", "소프트웨어사업자(디지털콘텐츠개발서비스사업)/1469"), row("2", "4", "정보통신공사업/0036")]
+        held = {"4443", "4444", "3243", "3244", "1469", "0036", "3911160501", "4511161601"}
+        api = qualify.evaluate(qualify.group_license_rows(rows)["L"], [], held)
+        items = ["1) 나라장터에 세부품명번호 10자리(4511161601 비디오프로젝터, 3911160501 LED경관조명기구, 3912110702 조명용제어장치) "
+                 "제조 또는 공급으로 입찰참가 등록한 업체",
+                 "2) 직접생산확인증명서[3911160501, LED경관조명기구], [3912110702, 조명용제어장치]를 소지한 업체",
+                 "3) 산업디자인전문회사[(멀티미디어디자인 분야(업종코드 4443)]] 또는 산업디자인전문회사[(종합디자인분야(업종코드 4444)]]로 신고를 필한 업체",
+                 "4) 소프트웨어사업자(디지털콘텐츠개발서비스사업)[업종코드 1469] 등록업체",
+                 "5) 비디오물 제작업(업종코드 3244) 또는 음반·음악영상물 제작업(업종코드 3243) 등록업체",
+                 "6) 정보통신공사업(업종코드 0036)으로 입찰 참가 자격을 등록한 자"]
+        att = qualify.evaluate_attachment_text(items, held)
+        industry, product = qualview.build(qualify.merge_results(api, att), (held, set()), {"industry": True, "product": True})
+        self.assertFalse(any(r.get("combos") for r in industry["satisfied"]), "나라장터 조합은 안 보임")
+        self.assertEqual(sorted(tuple(sorted(i["code"] for i in r["items"])) for r in industry["satisfied"]),
+                         [("0036",), ("1469",), ("3243", "3244"), ("4443", "4444")])
+        self.assertEqual(product["status"], "미달")
+        self.assertEqual([[i["code"] for i in r["items"]] for r in product["missing"]], [["3912110702"]])
 
     def test_need_counts_minimum_licenses_to_acquire(self):
         """'최소 N개 부족' — 반드시 1 + 택1 1 = 2, 조합 요건은 가장 덜 모자란 조합의 미보유 수."""
@@ -249,13 +278,15 @@ class TestQualificationView(unittest.TestCase):
         self.assertTrue(att.checked)
         merged = qualify.merge_results(api, att)
         part = qualview.build(merged, (set(), set()), {"industry": True})[0]
-        self.assertEqual([[i["label"] for i in r["items"]] for r in part["missing"]],
-                         [["건축공사업(0002)", "토목건축공사업"]])
+        # 첨부 공고문 요건 우선(2026-10-14) — 공고문의 "건축공사업 또는 토목건축공사업" 한 건
+        self.assertEqual([sorted(i["label"] for i in r["items"]) for r in part["missing"]],
+                         [["건축공사업(0002)", "토목건축공사업(0003)"]])
         # API가 허용업종을 안 줘도 건축공사업은 한 번만
         rows[0]["permsnIndstrytyList"] = ""
         api = qualify.evaluate(qualify.group_license_rows(rows)["B"], [])
         part = qualview.build(qualify.merge_results(api, att), (set(), set()), {"industry": True})[0]
-        self.assertEqual([[i["label"] for i in r["items"]] for r in part["missing"]], [["건축공사업(0002)"]])
+        self.assertEqual([sorted(i["label"] for i in r["items"]) for r in part["missing"]],
+                         [["건축공사업(0002)", "토목건축공사업(0003)"]])
 
     HELD = ({"1469", "4440", "4442", "4444", "4990", "6010989901"}, set())
 

@@ -50,7 +50,7 @@ class Candidate:
     llm_similarity: object | None = None
     # 지역 제한(업체 소재지) 판정 — "미달"이면 `drop_region_unmet`이 제외로 옮긴다(2026-10-14)
     region_check: region.RegionCheck = field(default_factory=region.RegionCheck)
-    # 첨부 공고문에서 찾은, 판정하지 않고 "확인 필요"로만 보여줄 요건 — 실적·현장설명회·기술인력
+    # 첨부 공고문에서 찾은, 판정하지 않고 "확인 필요"로만 보여줄 요건 — 실적·기술인력·건축사사무소
     # (`text_requirements.flag_requirements`, [{kind, text, date?}])
     text_flags: list = field(default_factory=list)
 

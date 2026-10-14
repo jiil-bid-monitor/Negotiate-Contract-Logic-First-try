@@ -4,7 +4,7 @@
 
 - 분야 이름만 적은 업종 32건 — "산업디자인 전문회사(시각디자인, 제품디자인, 종합디자인 분야 중 하나 이상)"
 - 품명만 적은 직접생산증명 29건 — "직접생산증명서(실물모형)", "〈물품분류번호 : 60121002〉"(8자리)
-- 실적 요건 22건, 현장설명회 참가 필수 6건, 기술인력 보유 1건
+- 실적 요건 22건, 현장설명회 참가 필수 6건(2026-10-14부터 안 찾음 — 사용자 결정), 기술인력 보유 1건
 
 앞의 둘은 지일 보유 목록과 **이름으로 대조해 판정**하고(`name_bundles`), 뒤의 셋은 판정하지 않고
 **"확인 필요" 칩**으로만 보여준다(`flag_requirements`). 중소기업·소상공인 확인서는 지일이 보유해
@@ -174,17 +174,9 @@ _FLAGS = (
     # ("최근 3년간 업종별 실적에 … 합한 실적금액으로 평가합니다")은 요건이 아니다(2026-10-14 제보: 부산광역시 공고 제2026-2813호).
     ("실적", re.compile(r"실적|준공한|수행한\s*경험"),
      re.compile(r"\d[\d,.]*\s*(?:(?:억|천만|백만|만)\s*원?|원|건)[^.\n]{0,15}?이\s*상")),
-    # 참가 안 하면 입찰·평가에서 빠지는 경우만 — "참석하지 않은 업체의 질의는 받지 않음"은 필수가 아니다
-    ("현장설명회", re.compile(r"현장\s*설명회"),
-     re.compile(r"불참자|참가하지\s*않은\s*(?:업체|자)는|참석하지\s*않은\s*(?:업체|자)는|참가한\s*(?:업체|자)|참석한\s*(?:업체|자)|참석\s*필수|참가\s*필수|의무"
-                # "현장설명회 미참석시 응모신청 불가"(2026-10-02 실측: 거제 지심도 산마루문화놀이터 제안공모), "불참 시 … 불가"
-                r"|(?:미\s*참(?:석|가)|불참)\s*(?:시|할\s*경우|업체는?)?[^.\n]{0,20}(?:불가|제외|무효|할\s*수\s*없)")),
     ("건축사사무소", re.compile(r"건축사\s*사무소"), re.compile(r"개설|등록|신고")),
     ("인력", re.compile(r"기술자|기술사|학예사|건축사|전문\s*인력|기사\s*자격"), re.compile(r"보유|소지|소속|재직|자격증")),
 )
-# "현장설명회 없음/생략"(설명회 자체가 없음), "참석 안 하면 질의 응답 안 함"(필수 아님) — "불참자는 참여할 수 없음"은 필수
-_NOT_MANDATORY = re.compile(r"설명회[^.]{0,15}(?:없|미실시|생략|갈음|개최하지)|질의|응답")
-_DATE_RE = re.compile(r"(20\d{2})\s*[.년-]\s*(\d{1,2})\s*[.월-]\s*(\d{1,2})\s*일?\.?\s*(?:\([월화수목금토일]\))?\s*(\d{1,2}\s*:\s*\d{2})?")
 
 
 # 줄머리 표시(나./1)/①/-/※/❍ …)로 시작하는 줄은 새 문장이다
@@ -245,8 +237,9 @@ def _with_context(sent: str, owner: dict) -> str:
     return "\n".join(flat(x) for x in lines)[:_MAX_CONTEXT_TEXT]
 
 
-def flag_requirements(items: list[str], full_text: str = "") -> list[dict]:
-    """실적·현장설명회 참가·기술인력 요건을 찾아 [{kind, text, date?}]로. 판정은 하지 않는다."""
+def flag_requirements(items: list[str]) -> list[dict]:
+    """실적·기술인력·건축사사무소 요건을 찾아 [{kind, text}]로. 판정은 하지 않는다.
+    현장설명회 참석 요건은 찾지 않는다(2026-10-14 사용자 결정 — 굳이 파싱할 필요 없음)."""
     out: dict[str, dict] = {}
     per_item = [_sentences(item) for item in items]
     sentences = [s for sents in per_item for s in sents]
@@ -254,11 +247,8 @@ def flag_requirements(items: list[str], full_text: str = "") -> list[dict]:
     for sents in per_item:
         for i, sent in enumerate(sents):
             owner.setdefault(sent, (sents, i))
-    # 현장설명회는 참가자격 절 밖("입찰 일정")에 "참석 필수"로만 적히기도 해서 원문 전체도 본다
-    extra = [m.group(0) for m in re.finditer(r"[^\n]{0,60}현장\s*설명회[^\n]{0,100}", full_text or "")]
     for kind, subject, detail in _FLAGS:
-        pool = sentences + (extra if kind == "현장설명회" else [])
-        for s in pool:
+        for s in sentences:
             if _FORM_RE.search(s):
                 continue  # 제출 서식(참여인력 경력사항 표 등)의 칸 이름은 요건이 아니다
             if kind == "인력" and "건축사사무소" in out:
@@ -269,18 +259,8 @@ def flag_requirements(items: list[str], full_text: str = "") -> list[dict]:
                 continue  # 실적으로 참가를 "제한하지 않는다"·적격심사 평가(배점) 설명은 참가 요건이 아니다
             if kind == "인력" and _NOT_STAFF_REQUIREMENT.search(s):
                 continue  # 평가 배점표의 "전문인력 보유현황 (6점)" 같은 칸은 참가 요건이 아니다
-            if subject.search(s) and detail.search(s) and not (kind == "현장설명회" and _NOT_MANDATORY.search(s)):
+            if subject.search(s) and detail.search(s):
                 entry = {"kind": kind, "text": _with_context(s, owner)}
-                if kind == "현장설명회":
-                    near = [m.group(0) for m in re.finditer(r"[^\n]{0,20}현장\s*설명회[^\n]{0,120}", full_text or "")]
-                    d = next((_DATE_RE.search(n) for n in near if _DATE_RE.search(n)), None)
-                    if d:
-                        entry["date"] = f"{d.group(1)}-{int(d.group(2)):02d}-{int(d.group(3)):02d}" + (
-                            f" {d.group(4).replace(' ', '')}" if d.group(4) else "")
-                    # 장소도 같은 표의 다른 줄("◦ 현장설명회 장소 : 거제시 …")에 적는 경우가 많다
-                    place = re.search(r"현장\s*설명회\s*장소\s*[:：]\s*([^\n]{2,60})", full_text or "")
-                    if place:
-                        entry["place"] = re.sub(r"\s+", " ", place.group(1)).strip()
                 out.setdefault(kind, entry)
                 break
     for entry in out.values():
@@ -423,17 +403,6 @@ def _staff_summary(text: str) -> list[list[str]]:
     return rows
 
 
-def _site_summary(text: str, date: str | None, place: str | None = None) -> list[list[str]]:
-    rows = [["참가", "필수 (불참 시 입찰·응모 불가)"]]
-    if date:
-        rows.append(["일시", date])
-    m = re.search(r"장소\s*[:：]\s*([^\n,·]{2,40})", text)
-    place = place or (_sq(m.group(1)) if m else None)
-    if place:
-        rows.append(["장소", place])
-    return rows
-
-
 def _office_summary(text: str) -> list[list[str]]:
     rows = [["요건", "건축사사무소 개설 신고(등록)"]]
     law = re.search(r"건축사법[」\"']?\s*(제\s*\d+\s*조)?", text)
@@ -449,8 +418,6 @@ def summarize_flag(flag: dict) -> list[list[str]]:
         return _track_summary(text)
     if kind == "인력":
         return _staff_summary(text)
-    if kind == "현장설명회":
-        return _site_summary(text, flag.get("date"), flag.get("place"))
     if kind == "건축사사무소":
         return _office_summary(text)
     return []

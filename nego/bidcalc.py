@@ -145,8 +145,24 @@ def _from_attachments(notice: dict, out: dict, fetch: Callable) -> None:
 _FIELD_NAMES = {"basis": "기초금액", "lower_rate": "낙찰하한율", "range_lo": "변동폭"}
 
 
-def _licenses(client: DataGoKrClient, params: dict, notice_no: str, notice_ord: str) -> list[str]:
-    """면허제한 업종 이름(21라인 '업종제한' 칸) — 실패하면 빈 목록."""
+def _notice_day(notice: dict) -> str | None:
+    """공고 등록일(YYYYMMDD) — 면허제한 API는 공고번호로 못 찾고 등록일 범위로만 조회된다."""
+    for key in ("rgstDt", "bidNtceDt"):
+        digits = re.sub(r"\D", "", str(notice.get(key) or ""))
+        if len(digits) >= 8:
+            return digits[:8]
+    return None
+
+
+def _licenses(client: DataGoKrClient, notice: dict, notice_no: str, notice_ord: str) -> list[str]:
+    """면허제한 업종 이름(21라인 '업종제한' 칸) — 실패하면 빈 목록.
+
+    이 오퍼레이션은 공고번호 조회(inqryDiv=2)를 받지 않는다(2026-10-15 실측: resultCode=08 필수값 입력 에러).
+    수집과 같이 inqryDiv=1 + 등록일 하루치로 받고 공고번호로 거른다."""
+    day = _notice_day(notice)
+    if not day:
+        return []
+    params = {"inqryDiv": "1", "inqryBgnDt": f"{day}0000", "inqryEndDt": f"{day}2359"}
     try:
         rows = client.fetch_all_pages(F.BID_NOTICE_BASE_URL, F.LICENSE_LIMIT_OPERATION, params, "계산기 면허제한")
     except ApiError as err:
@@ -199,7 +215,7 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
         out["notes"].append("공고를 찾지 못함 — 공고번호를 확인하거나 값을 직접 입력하세요")
 
     if notice:
-        out["licenses"] = _licenses(client, params, notice_no, out.get("notice_ord", ""))
+        out["licenses"] = _licenses(client, notice, notice_no, out.get("notice_ord", ""))
 
     basis_row = None
     for wt in ([work_type] if work_type else []) + [w for w in WORK_TYPES if w != work_type]:
@@ -230,4 +246,4 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
 
 def make_client(api_config) -> DataGoKrClient:
     """화면에서 기다리는 조회라 재시도를 줄인 클라이언트."""
-    return DataGoKrClient(dataclasses.replace(api_config, max_retries=1, max_pages=2))
+    return DataGoKrClient(dataclasses.replace(api_config, max_retries=1, max_pages=5))

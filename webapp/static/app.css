@@ -326,3 +326,43 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .reload-bar { position: sticky; top: 0; z-index: 50; display: flex; gap: 12px; align-items: center; justify-content: center;
   padding: 10px 16px; background: #b45309; color: #fff; font-weight: 600; font-size: 14px; }
 .reload-bar button { background: #fff; color: #b45309; border: 0; border-radius: 6px; padding: 4px 12px; font-weight: 700; cursor: pointer; }
+
+/* ── 투찰 계산기 탭 (2026-10-15) ── */
+.calc-warn { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+.calc-box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px; }
+.calc-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.calc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 16px; }
+.calc-grid label, .calc-row label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; }
+.calc-row label { flex-direction: row; align-items: center; gap: 8px; }
+.calc-grid label.off { opacity: .45; }
+.calc-grid input, .calc-grid select { color: var(--ink); font-size: 14px; min-width: 0; }
+.calc-pair { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+.calc-pair input { width: 100%; min-width: 0; }
+.calc-pair .chk { white-space: nowrap; }
+.calc-lookup label { white-space: nowrap; }
+.calc-lookup input { width: 200px; }
+.calc-notice p { margin: 0; }
+.calc-notice ul { margin: 4px 0 0; padding-left: 18px; }
+.calc-more summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.calc-prices { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(var(--rows, 5), auto); grid-auto-flow: column; gap: 6px 12px; margin-bottom: 12px; }
+.calc-prices:empty { display: none; }
+.calc-price { display: grid; grid-template-columns: 28px 1.4fr 1fr 1fr auto; gap: 8px; align-items: center; text-align: right; font-variant-numeric: tabular-nums; padding: 8px 10px; border-radius: 8px; color: var(--ink); }
+.calc-price .no { text-align: left; font-size: 16px; color: var(--muted); }
+.calc-price .amt { font-weight: 600; }
+.calc-price .cnt { color: var(--muted); font-size: 12px; min-width: 36px; }
+.calc-price.below .amt { color: var(--info); }
+.calc-price.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.calc-price.on .no, .calc-price.on .cnt, .calc-price.on.below .amt { color: var(--accent-ink); }
+.calc-picked { margin: 0 0 6px; font-weight: 600; }
+.calc-kv { display: grid; gap: 4px; }
+.calc-kv > div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.calc-kv span { color: var(--muted); }
+.calc-kv b { font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; }
+.calc-kv strong { color: var(--accent); font-size: 16px; }
+.calc-assume strong { color: var(--accent); }
+.calc-h { margin: 8px 0 6px; font-size: 14px; }
+@media (max-width: 760px) {
+  .calc-prices { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-flow: row; }
+  .calc-price { grid-template-columns: 24px 1.4fr 1fr 1fr auto; font-size: 13px; padding: 6px 8px; }
+  .calc-lookup input { width: 100%; }
+}

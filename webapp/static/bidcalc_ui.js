@@ -100,10 +100,16 @@
 
   function renderGrid() {
     const box = $("#cPrices");
-    if (!SLOTS.length) { box.innerHTML = ""; return; }
+    // 예비가격을 만들기 전에도 빈 표(번호만)를 보여 준다 — 21라인처럼
+    const empty = !SLOTS.length;
+    const slots = empty ? new Array(radio("cN")).fill(null) : SLOTS;
     const basis = numIn("#cBasis");
-    const rows = Math.ceil(SLOTS.length / 3);
+    const rows = Math.ceil(slots.length / 3);
     const cell = (price, no) => {
+      if (price == null) {
+        return `<div class="calc-price blank"><span class="no">${circled(no)}</span><span></span><span></span><span></span>
+          <input type="checkbox" disabled aria-label="${no}번 (예비가격 없음)"></div>`;
+      }
       const pct = basis ? (price / basis) * 100 : null;
       const on = no != null && SELECTED.has(no);
       return `<div class="calc-price${on ? " on" : ""}">
@@ -117,11 +123,11 @@
       html += `<div class="calc-pcol">${head}`;
       for (let r = 0; r < rows; r++) {
         const i = c * rows + r;
-        if (i < SLOTS.length) html += cell(SLOTS[i], i + 1);
+        if (i < slots.length) html += cell(slots[i], i + 1);
       }
       html += "</div>";
     }
-    if (SHOW_SORTED) {
+    if (SHOW_SORTED && !empty) {
       const sorted = SLOTS.map((p, i) => ({ p, no: i + 1 })).sort((a, b) => a.p - b.p);
       html += `<div class="calc-sorted"><h4 class="calc-h">전체 예가 (금액순)</h4><ol>${sorted.map((s) =>
         `<li><span>${circled(s.no)}</span><span>${won(s.p)}</span><span>${basis ? p4((s.p / basis) * 100) : "-"}</span></li>`).join("")}</ol></div>`;

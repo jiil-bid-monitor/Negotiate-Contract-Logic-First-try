@@ -329,7 +329,8 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 
 /* ── 투찰 계산기 탭 (2026-10-15, 21라인 복수예가산출프로그램 모양) ── */
 .calc-lookup { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.calc-lookup label { display: flex; gap: 8px; align-items: center; color: var(--muted); white-space: nowrap; }
+.calc-lookup label { display: flex; gap: 8px; align-items: center; color: var(--ink); font-weight: 600; white-space: nowrap; }
+.calc-lookup input { color: var(--ink); }
 .calc-lookup input { width: 200px; }
 .calc-form { width: 100%; border-collapse: collapse; background: var(--panel); border-top: 2px solid var(--accent); margin-bottom: 10px; font-size: 13px; }
 .calc-form th, .calc-form td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: middle; }

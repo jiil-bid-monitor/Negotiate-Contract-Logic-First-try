@@ -87,62 +87,80 @@
     <div id="decList"></div>
   </section>
 
-  <!-- 투찰 계산기(2026-10-15 요청) — 복수예비가격 모의 추첨 + 예정가격·투찰금액 계산. 계산은 bidcalc.js, 화면은 bidcalc_ui.js -->
+  <!-- 투찰 계산기(2026-10-15 요청) — 21라인 "복수예가산출프로그램 v0.1" 화면을 따름. 계산은 bidcalc.js, 화면은 bidcalc_ui.js -->
   <section id="tab-calc" class="tab" hidden>
-    <p class="calc-warn">모의 계산입니다 — 예비가격은 실제 나라장터가 무작위로 만들고 4개는 입찰자 선택으로 정해지므로, 이 화면의 추첨 결과는 실제 예정가격 예측이 아닙니다.</p>
-
-    <div class="calc-box">
-      <div class="calc-row calc-lookup">
-        <label>공고번호 <input id="cNo" placeholder="R26BK01744201" autocomplete="off"></label>
-        <button id="cLookup" type="button">나라장터에서 불러오기</button>
-        <span id="cLookupMsg" class="job"></span>
-      </div>
-      <div id="cNotice" class="calc-notice" hidden></div>
-      <div class="calc-grid">
-        <label>기초금액 <input id="cBasis" inputmode="numeric" placeholder="원"></label>
-        <label>변동폭(%) <span class="calc-pair"><input id="cLo" value="-3" inputmode="decimal"> ~ <input id="cHi" value="3" inputmode="decimal"></span></label>
-        <label>낙찰하한율(%) <input id="cRate" inputmode="decimal" placeholder="예: 87.745"></label>
-        <label>A값 <span class="calc-pair"><input id="cA" inputmode="numeric" placeholder="원"> <span class="chk"><input type="checkbox" id="cAOn"> 적용</span></span></label>
-        <label>순공사원가 <input id="cNet" inputmode="numeric" placeholder="공사만 (원)"></label>
-      </div>
-      <p id="cAItems" class="why"></p>
+    <div class="calc-lookup">
+      <label>공고번호 <input id="cNo" placeholder="R26BK01744201" autocomplete="off"></label>
+      <button id="cLookup" type="button" class="primary">나라장터에서 불러오기</button>
+      <span id="cLookupMsg" class="job"></span>
     </div>
 
-    <div class="calc-box">
-      <div class="calc-grid">
-        <label>예비가격 방식 <select id="cMethod"></select></label>
-        <label>예가 개수 <select id="cN"><option>15</option><option>10</option></select></label>
-        <label>기초금액 위 개수 <input id="cUp" value="7" inputmode="numeric"></label>
-        <label>추첨 개수 <select id="cTake"><option>4</option><option>3</option></select></label>
-        <label>번호 배치 <select id="cOrder"><option value="random">무작위 (나라장터처럼)</option><option value="asc">금액 낮은 순</option></select></label>
-        <label>모의 입찰자 수 <input id="cBidders" value="100" inputmode="numeric"></label>
-      </div>
-      <details class="calc-more"><summary>끝자리 처리</summary>
-        <div class="calc-grid">
-          <label>예정가격 <select id="cRoundPlanned"></select></label>
-          <label>투찰금액 <select id="cRoundBid"></select></label>
-          <label>순공사원가 기준 <span class="calc-pair"><input id="cNetRate" value="98" inputmode="decimal"> %</span></label>
-        </div>
-      </details>
-      <div class="calc-row">
-        <button id="cMake" type="button" class="primary">예비가격 만들기</button>
-        <button id="cDraw" type="button">모의 추첨 (입찰자 선택)</button>
-        <button id="cClear" type="button">선택 지우기</button>
-        <button id="cMonte" type="button">1만 번 모의 → 사정률 분포</button>
-        <span id="cMsg" class="job err"></span>
-      </div>
+    <table class="calc-form">
+      <tr><th>공고명</th><td colspan="3" id="cTitle">-</td><th>발주처명</th><td colspan="3" id="cInst">-</td></tr>
+      <tr><th>공고번호</th><td colspan="3" id="cNoShow">-</td><th>업종제한</th><td colspan="3" id="cLicense">-</td></tr>
+      <tr><th>추정가격</th><td id="cEst">-</td><th>적격심사기준</th><td colspan="3" id="cStd">-</td><th>계약방법</th><td id="cContract">-</td></tr>
+      <tr>
+        <th>기초금액</th><td><input id="cBasis" inputmode="numeric"></td>
+        <th>변동폭(%)</th><td><span class="calc-pair"><input id="cLo" value="-3" inputmode="decimal"> ~ <input id="cHi" value="3" inputmode="decimal"></span></td>
+        <th>하한율</th><td><span class="calc-pair"><input id="cRate" inputmode="decimal"> %</span></td>
+        <th>예가개수</th>
+        <td><label class="chk"><input type="radio" name="cN" value="15" checked> 15개</label> <label class="chk"><input type="radio" name="cN" value="10"> 10개</label></td>
+      </tr>
+      <tr>
+        <th>A 값</th>
+        <td colspan="3"><span class="calc-pair"><input id="cA" inputmode="numeric" placeholder="-"> <label class="chk"><input type="checkbox" id="cAOn"> 적용</label></span><div id="cAItems" class="why"></div></td>
+        <th>선택개수</th>
+        <td><label class="chk"><input type="radio" name="cTake" value="3"> 3개</label> <label class="chk"><input type="radio" name="cTake" value="4" checked> 4개</label></td>
+        <th>추출범위</th>
+        <td><span class="calc-pair"><select id="cDown" aria-label="기초금액 아래 개수"></select> <select id="cUp" aria-label="기초금액 위 개수"></select></span></td>
+      </tr>
+      <tr>
+        <th>순공사원가</th>
+        <td colspan="7"><span class="calc-pair"><input id="cNet" inputmode="numeric" class="calc-net"> 원</span>
+          <span class="why">투찰금액 산정 시 투찰금액과 순공사원가 투찰금액을 검토 후 높은 금액으로 투찰해 주셔야 합니다.</span></td>
+      </tr>
+    </table>
+    <div id="cNotes" class="why calc-notes"></div>
+
+    <div class="calc-btns">
+      <button type="button" data-method="uniform">난수추출적용</button>
+      <button type="button" data-method="geometric">등비추출적용</button>
+      <button type="button" data-method="pps">조달청난수추출</button>
+      <button type="button" data-method="mois">행자부난수추출</button>
+      <button type="button" id="cShowAll">전체예가보기</button>
+      <button type="button" id="cRandom">랜덤배치</button>
+      <button type="button" id="cPrint">인쇄하기</button>
+      <span id="cMsg" class="job err"></span>
     </div>
 
     <div id="cPrices" class="calc-prices"></div>
 
-    <div class="calc-box">
-      <div id="cResult" class="calc-result"></div>
-      <div class="calc-row">
-        <label>가정 사정률로 계산 <span class="calc-pair"><input id="cAssume" inputmode="decimal" placeholder="예: 100.05"> %</span></label>
-        <span id="cAssumeOut" class="calc-assume"></span>
-      </div>
-      <div id="cMonteOut"></div>
-    </div>
+    <table class="calc-form calc-bottom">
+      <tr>
+        <th>선택번호</th><td id="cPicked">-</td>
+        <th>분석번호</th>
+        <td><span class="calc-pair calc-nos"><input id="cA1" inputmode="numeric" maxlength="2"><input id="cA2" inputmode="numeric" maxlength="2"><input id="cA3" inputmode="numeric" maxlength="2"><input id="cA4" inputmode="numeric" maxlength="2"> <button type="button" id="cAnalyze">적용</button></span></td>
+      </tr>
+      <tr>
+        <th>예정가격</th><td id="cPlanned">-</td>
+        <th>투찰금액</th><td id="cBid">-</td>
+        <th>순공사원가<br>투찰가격</th><td id="cNetBid">-</td>
+      </tr>
+      <tr>
+        <th>자동선택</th><td><span id="cAuto">-</span> <button type="button" id="cAutoStart">시작</button> <button type="button" id="cAutoApply">적용</button></td>
+        <th>기타설정</th>
+        <td colspan="3"><span class="calc-pair">
+          <select id="cRoundTarget"><option value="planned">예정가격절상</option><option value="bid">투찰금액절상</option></select>
+          <select id="cRoundUnit"><option value="1">원미만</option><option value="10">십원미만</option><option value="100">백원미만</option><option value="1000">천원미만</option></select>
+        </span></td>
+      </tr>
+    </table>
+
+    <table class="calc-form calc-summary">
+      <tr><th>구 분</th><th>금 액</th><th>사정률 = (예정가격 / 기초금액) × 100</th></tr>
+      <tbody id="cSummary"><tr><td colspan="3" class="why">예비가격을 만들고 번호를 고르면 나옵니다.</td></tr></tbody>
+    </table>
+    <p class="why">예비가격은 모의로 만든 값입니다 — 실제 예비가격은 나라장터가 무작위로 만들고 4개는 입찰자 선택으로 정해집니다.</p>
   </section>
 
   <section id="tab-past" class="tab" hidden>

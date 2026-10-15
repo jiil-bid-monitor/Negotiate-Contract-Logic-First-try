@@ -11,7 +11,12 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
+from typing import Callable
 
+import requests
+
+from . import attachments
 from . import fields as F
 from .http_client import ApiError, DataGoKrClient
 
@@ -87,7 +92,60 @@ def guess_method(standard: str, range_lo: float | None, range_hi: float | None) 
     return "pps"
 
 
-def lookup(client: DataGoKrClient, notice_no: str) -> dict:
+# 첨부 공고문에서 읽는 값 — 기초금액 API가 비거나(물품 등) 하한율이 없을 때만 쓴다.
+# "※ 기초금액 : 금 | 139,000,000원"(hwpx 표 칸 구분 |), "기초금액(부가세 포함): 139,000,000원" 등
+_BASIS_TEXT_RE = re.compile(r"기초\s*금액\s*(?:\([^)]{0,20}\))?[\s|:：]*(?:금\s*)?[\s|]*([\d,]{7,})\s*원")
+_RATE_TEXT_RE = re.compile(r"낙찰\s*하한율[^\d\n]{0,15}(\d{2}(?:\.\d+)?)\s*%")
+_RANGE_TEXT_RE = re.compile(r"기초\s*금액의?\s*[±+\-]\s*(\d(?:\.\d+)?)\s*%")
+# 먼저 읽을 첨부 — 공고문이 기초금액·하한율을 적는 곳
+_NOTICE_FILE_RE = re.compile(r"공고")
+MAX_TEXT_FILES = 3
+
+
+def parse_notice_text(text: str) -> dict:
+    """공고문 원문 → {basis, lower_rate, range_lo, range_hi} 중 찾은 것만."""
+    out: dict = {}
+    for m in _BASIS_TEXT_RE.finditer(text):
+        amount = _num(m.group(1))
+        if amount and amount >= 1_000_000:
+            out["basis"] = amount
+            break
+    if m := _RATE_TEXT_RE.search(text):
+        rate = _num(m.group(1))
+        if rate and 50 <= rate < 100:
+            out["lower_rate"] = rate
+    if m := _RANGE_TEXT_RE.search(text):
+        width = _num(m.group(1))
+        if width and width <= 5:
+            out["range_lo"], out["range_hi"] = -width, width
+    return out
+
+
+def _from_attachments(notice: dict, out: dict, fetch: Callable) -> None:
+    """기초금액·하한율·범위 중 빈 칸을 첨부 공고문에서 채운다(파일명에 '공고'가 든 것부터, 최대 3개)."""
+    files = F.extract_attachments(notice)
+    files.sort(key=lambda a: not _NOTICE_FILE_RE.search(a.get("file_name", "")))
+    session = requests.Session()
+    for att in files[:MAX_TEXT_FILES]:
+        result = fetch(session, att, timeout=30.0)
+        if not result.ok or not result.text:
+            continue
+        found = parse_notice_text(result.text)
+        filled = [k for k in ("basis", "lower_rate", "range_lo", "range_hi") if out.get(k) is None and k in found]
+        for k in filled:
+            out[k] = found[k]
+        if "basis" in filled:
+            out["basis_source"] = f"첨부 {att.get('file_name') or '공고문'}"
+        if filled:
+            out["notes"].append(f"{', '.join(_FIELD_NAMES[k] for k in filled if k in _FIELD_NAMES)}: 첨부 '{att.get('file_name')}'에서 읽음 — 원문과 확인하세요")
+        if all(out.get(k) is not None for k in ("basis", "lower_rate", "range_lo")):
+            break
+
+
+_FIELD_NAMES = {"basis": "기초금액", "lower_rate": "낙찰하한율", "range_lo": "변동폭"}
+
+
+def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments.fetch_attachment_text) -> dict:
     """공고번호 → 계산기 입력값. 못 찾은 칸은 None, 이유는 notes에."""
     notice_no = notice_no.strip().upper()
     if "-" in notice_no:  # "R26BK01744201-001"처럼 차수까지 붙여 넣은 경우
@@ -117,8 +175,6 @@ def lookup(client: DataGoKrClient, notice_no: str) -> dict:
             "award_method": str(notice.get("sucsfbidMthdNm") or ""),
             "price_count": _num(notice.get("totPrdprcNum")),
         })
-        if out["lower_rate"] is None:
-            out["notes"].append("낙찰하한율이 없는 공고 — 협상·최저가 등 하한율 방식이 아닐 수 있음")
     else:
         out["notes"].append("공고를 찾지 못함 — 공고번호를 확인하거나 값을 직접 입력하세요")
 
@@ -137,9 +193,14 @@ def lookup(client: DataGoKrClient, notice_no: str) -> dict:
             break
     if basis_row:
         out.update(parse_basis(basis_row))
-    else:
-        out["notes"].append("기초금액이 아직 공개되지 않았거나 찾지 못함 — 직접 입력하세요")
+        out["basis_source"] = "나라장터 기초금액"
+    if notice and (out.get("basis") is None or out.get("lower_rate") is None):
+        _from_attachments(notice, out, fetch)
+    if out.get("basis") is None:
+        out["notes"].append("기초금액을 나라장터·첨부 공고문에서 찾지 못함 (아직 비공개일 수 있음) — 직접 입력하세요")
 
+    if notice and out.get("lower_rate") is None:
+        out["notes"].append("낙찰하한율이 없는 공고 — 협상·최저가 등 하한율 방식이 아닐 수 있음")
     out["method"] = guess_method(out.get("standard", ""), out.get("range_lo"), out.get("range_hi"))
     return out
 

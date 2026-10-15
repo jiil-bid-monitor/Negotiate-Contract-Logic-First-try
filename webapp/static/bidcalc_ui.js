@@ -58,7 +58,7 @@
     box.innerHTML = PRICES.map((p) => {
         const on = SELECTED.has(p.no);
         const pct = basis ? (p.price / basis) * 100 : p.pct;
-        return `<button type="button" class="calc-price${on ? " on" : ""}${p.price < basis ? " below" : ""}" data-no="${p.no}" aria-pressed="${on}">
+        return `<button type="button" class="calc-price${on ? " on" : ""}" data-no="${p.no}" aria-pressed="${on}">
           <span class="no">${circled(p.no)}</span><span class="amt">${won(p.price)}</span>
           <span title="기초금액 대비">${p4(pct)}</span><span title="변동률">${(pct - 100 >= 0 ? "+" : "") + p4(pct - 100)}</span>${COUNTS ? `<span class="cnt" title="모의 입찰자가 고른 횟수">${COUNTS[p.no]}회</span>` : ""}</button>`;
       }).join("");
@@ -189,7 +189,7 @@
         : "";
       const info = [d.title, d.institution, d.work_type, d.award_method, d.standard].filter(Boolean).map(esc).join(" · ");
       const notes = (d.notes || []).map((n) => `<li>${esc(n)}</li>`).join("");
-      $("#cNotice").innerHTML = (info ? `<p>${info}</p>` : "") + (d.basis_open_at ? `<p class="why">기초금액 공개 ${esc(d.basis_open_at)}</p>` : "") + (notes ? `<ul class="why">${notes}</ul>` : "");
+      $("#cNotice").innerHTML = (info ? `<p>${info}</p>` : "") + (d.basis != null ? `<p class="why">기초금액 출처: ${esc(d.basis_source || "나라장터")}${d.basis_open_at ? ` (공개 ${esc(d.basis_open_at)})` : ""}</p>` : "") + (notes ? `<ul class="why">${notes}</ul>` : "");
       $("#cNotice").hidden = !info && !notes;
       $("#cLookupMsg").textContent = d.basis != null ? "불러옴 — 값을 확인하세요" : "일부만 불러옴";
       PRICES = []; COUNTS = null; SELECTED.clear(); renderPrices(); renderResult(); renderAssume();

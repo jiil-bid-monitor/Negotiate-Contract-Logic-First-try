@@ -80,6 +80,36 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(len(out["notes"]), 2)
         self.assertEqual(out["method"], "pps")
 
+    def test_attachment_fallback_for_goods(self):
+        """물품 공고: 기초금액 API가 비면 첨부 공고문에서 기초금액·범위를 읽음(2026-10-15 서당골천 R26BK01764801)."""
+        notice = {"bidNtceNo": "R26BK01764801", "bidNtceOrd": "000", "bidNtceNm": "서당골천 경관개선을 위한 조형물 제작·설치",
+                  "sucsfbidLwltRate": "84.245", "sucsfbidMthdAppStd": "지방자치단체 입찰시 낙찰자 결정기준",
+                  "ntceSpecFileNm1": "규격서.hwp", "ntceSpecDocUrl1": "https://x/1",
+                  "ntceSpecFileNm2": "입찰공고문(아주동).hwpx", "ntceSpecDocUrl2": "https://x/2"}
+        text = (" | 마. 예 산 액: | 금139,000,000원 | 추정가격: | 금126,363,637원\n |   ※ 기초금액 : 금 | 139,000,000원 |\n"
+                "가. 예정가격은 「지방자치단체 입찰 및 계약 집행기준」제2장에 의거 기초금액의 ±3%의 범위 내에서 정한 15개\n"
+                "예정가격 이하 낙찰하한율(84.245%) 이상 최저가 입찰자 순으로 심사")
+        read = []
+
+        def fetch(session, att, timeout=30.0):
+            read.append(att["file_name"])
+            return bidcalc.attachments.AttachmentText(seq=att["seq"], file_name=att["file_name"], url=att["url"], ext=att["ext"],
+                                                      text=text if "공고" in att["file_name"] else "규격")
+        client = FakeClient({F.BID_NOTICE_OPERATIONS["물품"]: [notice]})
+        out = bidcalc.lookup(client, "R26BK01764801", fetch=fetch)
+        self.assertEqual(read, ["입찰공고문(아주동).hwpx"])  # 공고문부터, 다 찾으면 멈춤
+        self.assertEqual(out["basis"], 139000000)
+        self.assertEqual(out["lower_rate"], 84.245)  # API 값 그대로
+        self.assertEqual((out["range_lo"], out["range_hi"]), (-3, 3))
+        self.assertEqual(out["basis_source"], "첨부 입찰공고문(아주동).hwpx")
+        self.assertEqual(out["method"], "mois")
+        self.assertTrue(any("첨부" in n for n in out["notes"]))
+
+    def test_parse_notice_text(self):
+        self.assertEqual(bidcalc.parse_notice_text("기초금액(부가세 포함): 85,300,000원 / 기초금액의 ±2% / 낙찰하한율 : 87.745%"),
+                         {"basis": 85300000, "lower_rate": 87.745, "range_lo": -2, "range_hi": 2})
+        self.assertEqual(bidcalc.parse_notice_text("기초금액은 개찰 전 나라장터에 공개합니다."), {})
+
     def test_guess_method(self):
         self.assertEqual(bidcalc.guess_method("", -2, 2), "pps")
         self.assertEqual(bidcalc.guess_method("", -3, 3), "mois")

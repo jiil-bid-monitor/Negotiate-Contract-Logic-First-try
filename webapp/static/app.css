@@ -350,9 +350,8 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .calc-price .no { text-align: left; font-size: 16px; color: var(--muted); }
 .calc-price .amt { font-weight: 600; }
 .calc-price .cnt { color: var(--muted); font-size: 12px; min-width: 36px; }
-.calc-price.below .amt { color: var(--info); }
 .calc-price.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.calc-price.on .no, .calc-price.on .cnt, .calc-price.on.below .amt { color: var(--accent-ink); }
+.calc-price.on .no, .calc-price.on .cnt { color: var(--accent-ink); }
 .calc-picked { margin: 0 0 6px; font-weight: 600; }
 .calc-kv { display: grid; gap: 4px; }
 .calc-kv > div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px dashed var(--line); }

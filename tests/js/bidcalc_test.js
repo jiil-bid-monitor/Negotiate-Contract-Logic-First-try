@@ -40,13 +40,52 @@ for (let seed = 1; seed <= 50; seed++) {
   assert.strictEqual(p.filter((x) => x >= 1e9).length, 10);
 }
 
-// 조달청: 범위를 15칸으로 나눠 칸마다 1개 → 금액순 i번째가 i번째 칸 안
-{
-  const p = C.makePrices({ basis: 1e9, lo: -2, hi: 2, method: "pps", rng: C.seeded(7) });
-  p.forEach((x, i) => {
-    const a = 1e9 * (1 + (-2 + (4 / 15) * i) / 100), b = 1e9 * (1 + (-2 + (4 / 15) * (i + 1)) / 100);
-    assert.ok(x >= Math.floor(a) && x <= b, `${i}: ${x}`);
+// 조달청(기본서 표, ±2%): 구간 i의 예비가격이 그 구간 안 — 1원 미만 올림이라 하한 이상·상한 + 1원 이내
+for (let seed = 1; seed <= 30; seed++) {
+  const r = C.rates("pps", 15, -2, 2, C.seeded(seed));
+  r.forEach((x, i) => {
+    const [a, b] = C.PPS_TABLE.slots[i];
+    assert.ok(x >= a - 100 - 1e-9 && x <= b - 100 + 1e-9, `${i}: ${x}`);
+    assert.ok(Math.abs(x * 1000 - Math.round(x * 1000)) < 1e-6, "0.001% 단위");
   });
+  const p = C.makePrices({ basis: 1e9, lo: -2, hi: 2, method: "pps", rng: C.seeded(seed) });
+  assert.strictEqual(new Set(p).size, 15);
+  p.forEach((x) => assert.ok(x >= 0.98e9 && x <= 1.02e9));
+}
+// 조달청 표인데 공고 범위가 ±3%면 같은 비율로 늘림: 1번 구간(101.735~102.000) → 102.6025~103
+{
+  const r = C.rates("pps", 15, -3, 3, C.seeded(4));
+  assert.ok(r[0] >= 2.6025 - 1e-9 && r[0] <= 3 + 1e-9, String(r[0]));
+  assert.ok(r[14] >= -3 - 1e-9 && r[14] <= -2.6025 + 1e-9, String(r[14]));
+}
+// 행자부(기본서 표, ±3%): 1~8 아래 · 9~15 위, 구간 안
+for (let seed = 1; seed <= 30; seed++) {
+  const r = C.rates("mois", 15, -3, 3, C.seeded(seed), 8, 7);
+  r.forEach((x, i) => {
+    const [a, b] = C.MOIS_TABLE.slots[i];
+    assert.ok(x >= a - 100 - 1e-9 && x <= b - 100 + 1e-9, `${i}: ${x}`);
+  });
+}
+// 표 끝값이 기본서 그대로
+assert.deepStrictEqual(C.PPS_TABLE.slots[7], [99.867, 100.133]);
+assert.deepStrictEqual(C.MOIS_TABLE.slots[13], [102.14285715, 102.57142857]);
+// 10개 공고는 표가 없어 예전 칸 나누기
+{
+  const p = C.makePrices({ basis: 1e9, lo: -2, hi: 2, n: 10, method: "pps", rng: C.seeded(5) });
+  assert.strictEqual(p.length, 10);
+}
+
+// 예비가격 소수점 처리(기본서): 총액 1원 미만 올림 · 단가 소수점 셋째 자리에서 올림 · 시설공사/감리·설계 100원 미만 올림
+{
+  const fixed = () => 0;  // 각 구간 하한
+  const total = C.makePrices({ basis: 123456789, lo: -3, hi: 3, method: "mois", rng: fixed });
+  // 1번 구간 하한 97% → 119,753,085.33 → 119,753,086
+  assert.strictEqual(total[0], 119753086);
+  const cnst = C.makePrices({ basis: 123456789, lo: -3, hi: 3, method: "mois", decimal: "cnst", rng: fixed });
+  assert.strictEqual(cnst[0], 119753100);
+  cnst.forEach((x) => assert.strictEqual(x % 100, 0));
+  const unit = C.makePrices({ basis: 1234.5678, lo: -3, hi: 3, method: "mois", decimal: "unit", rng: fixed });
+  assert.strictEqual(unit[0], 1197.54);  // 1197.530766 → 셋째 자리 이하가 남아 둘째 자리로 올림
 }
 
 // 등비: 양 끝이 범위 끝, 이웃 비율이 같음

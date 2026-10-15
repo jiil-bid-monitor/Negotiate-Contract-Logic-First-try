@@ -23,7 +23,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from nego import scope
+from nego import bidcalc, scope
+from nego.config import ConfigError, load_config, redact
+from nego.http_client import ApiError
 
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .store import DECISION_REASONS, DECISION_SUMMARY_MIN, STATUSES, Store
@@ -120,6 +122,19 @@ def make_handler(app: App):
                     "has_service_key": bool(os.environ.get("NARA_SERVICE_KEY", "").strip()),
                     "has_ai_key": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
                 })
+            if url.path == "/api/bidcalc":
+                # 투찰 계산기 — 공고번호로 기초금액·하한율·A값 불러오기 (서비스키는 서버에만)
+                no = q.get("no", [""])[0].strip()
+                if not no:
+                    return self._error(HTTPStatus.BAD_REQUEST, "공고번호를 입력하세요")
+                try:
+                    config = load_config()
+                    if not config.api.service_key:
+                        return self._error(HTTPStatus.CONFLICT, "서버에 나라장터 인증키(NARA_SERVICE_KEY)가 없습니다")
+                    return self._json(bidcalc.lookup(bidcalc.make_client(config.api), no))
+                except (ConfigError, ApiError) as err:
+                    key = os.environ.get("NARA_SERVICE_KEY", "")
+                    return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
             if url.path == "/api/results":
                 # ?run=번호 — 그 브라우저가 보고 있는(직접 불러온) 결과. 없거나 지워진 번호면 최신 결과(missing=True)
                 wanted = q.get("run", [""])[0]

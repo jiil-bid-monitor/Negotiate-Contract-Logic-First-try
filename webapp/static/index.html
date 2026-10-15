@@ -10,7 +10,7 @@
 <body>
 <header class="top">
   <div class="brand">
-    <div class="logo" aria-label="JIIL">JIIL</div>
+    <svg class="logo" viewBox="14 13 78 35" role="img" aria-label="JIIL" fill="currentColor"><path d="M35 14 L35 31 L34.4 33.5 L33.5 35.5 L32.3 37.5 L30.8 39.3 L29 41 L27 42.6 L25 44 L23.5 45.3 L22.4 46.8 L21.4 46.8 L20.6 45 L20 43 L19.4 41 L18.8 39 L18.3 37 L17.9 35 L17.7 33.5 L17.8 32.3 L18.5 31 L19.3 30 L20.1 29 L20.9 28 L21.5 26.6 L21.9 25 L22 24 L22 14Z"/><rect x="40" y="14" width="12.5" height="33"/><rect x="57" y="14" width="13" height="33"/><path d="M74 14H86V33C88 33.5 90.5 34.5 91.5 36.5V47H74Z"/></svg>
     <span class="brand-sep" aria-hidden="true"></span>
     <div>
       <h1>나라장터 공고 수집</h1>
@@ -32,6 +32,7 @@
   <button role="tab" data-tab="search">직접 검색</button>
   <button role="tab" data-tab="past">과거사업 목록</button>
   <button role="tab" data-tab="decisions">판단 기록</button>
+  <button role="tab" data-tab="calc">투찰 계산기</button>
   <!-- 탭 줄 오른쪽 빈 곳에 그 탭의 검색창(2026-10-01 요청) — 실제 공고·제외된 공고 탭에서만 보임 -->
   <span class="tabsearch">
     <input type="search" id="liveQ" data-tab="live" placeholder="공고명·수요기관·공고기관·공고번호 검색" autocomplete="off" aria-label="실제 공고에서 검색">
@@ -86,6 +87,64 @@
     <div id="decList"></div>
   </section>
 
+  <!-- 투찰 계산기(2026-10-15 요청) — 복수예비가격 모의 추첨 + 예정가격·투찰금액 계산. 계산은 bidcalc.js, 화면은 bidcalc_ui.js -->
+  <section id="tab-calc" class="tab" hidden>
+    <p class="calc-warn">모의 계산입니다 — 예비가격은 실제 나라장터가 무작위로 만들고 4개는 입찰자 선택으로 정해지므로, 이 화면의 추첨 결과는 실제 예정가격 예측이 아닙니다.</p>
+
+    <div class="calc-box">
+      <div class="calc-row calc-lookup">
+        <label>공고번호 <input id="cNo" placeholder="R26BK01744201" autocomplete="off"></label>
+        <button id="cLookup" type="button">나라장터에서 불러오기</button>
+        <span id="cLookupMsg" class="job"></span>
+      </div>
+      <div id="cNotice" class="calc-notice" hidden></div>
+      <div class="calc-grid">
+        <label>기초금액 <input id="cBasis" inputmode="numeric" placeholder="원"></label>
+        <label>변동폭(%) <span class="calc-pair"><input id="cLo" value="-3" inputmode="decimal"> ~ <input id="cHi" value="3" inputmode="decimal"></span></label>
+        <label>낙찰하한율(%) <input id="cRate" inputmode="decimal" placeholder="예: 87.745"></label>
+        <label>A값 <span class="calc-pair"><input id="cA" inputmode="numeric" placeholder="원"> <span class="chk"><input type="checkbox" id="cAOn"> 적용</span></span></label>
+        <label>순공사원가 <input id="cNet" inputmode="numeric" placeholder="공사만 (원)"></label>
+      </div>
+      <p id="cAItems" class="why"></p>
+    </div>
+
+    <div class="calc-box">
+      <div class="calc-grid">
+        <label>예비가격 방식 <select id="cMethod"></select></label>
+        <label>예가 개수 <select id="cN"><option>15</option><option>10</option></select></label>
+        <label>기초금액 위 개수 <input id="cUp" value="7" inputmode="numeric"></label>
+        <label>추첨 개수 <select id="cTake"><option>4</option><option>3</option></select></label>
+        <label>번호 배치 <select id="cOrder"><option value="random">무작위 (나라장터처럼)</option><option value="asc">금액 낮은 순</option></select></label>
+        <label>모의 입찰자 수 <input id="cBidders" value="100" inputmode="numeric"></label>
+      </div>
+      <details class="calc-more"><summary>끝자리 처리</summary>
+        <div class="calc-grid">
+          <label>예정가격 <select id="cRoundPlanned"></select></label>
+          <label>투찰금액 <select id="cRoundBid"></select></label>
+          <label>순공사원가 기준 <span class="calc-pair"><input id="cNetRate" value="98" inputmode="decimal"> %</span></label>
+        </div>
+      </details>
+      <div class="calc-row">
+        <button id="cMake" type="button" class="primary">예비가격 만들기</button>
+        <button id="cDraw" type="button">모의 추첨 (입찰자 선택)</button>
+        <button id="cClear" type="button">선택 지우기</button>
+        <button id="cMonte" type="button">1만 번 모의 → 사정률 분포</button>
+        <span id="cMsg" class="job err"></span>
+      </div>
+    </div>
+
+    <div id="cPrices" class="calc-prices"></div>
+
+    <div class="calc-box">
+      <div id="cResult" class="calc-result"></div>
+      <div class="calc-row">
+        <label>가정 사정률로 계산 <span class="calc-pair"><input id="cAssume" inputmode="decimal" placeholder="예: 100.05"> %</span></label>
+        <span id="cAssumeOut" class="calc-assume"></span>
+      </div>
+      <div id="cMonteOut"></div>
+    </div>
+  </section>
+
   <section id="tab-past" class="tab" hidden>
     <div class="toolbar">
       <input id="pastQ" placeholder="사업명·과업·전시내용 검색" autocomplete="off">
@@ -129,5 +188,7 @@
 </dialog>
 
 <script src="app.js"></script>
+<script src="bidcalc.js"></script>
+<script src="bidcalc_ui.js"></script>
 </body>
 </html>

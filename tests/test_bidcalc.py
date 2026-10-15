@@ -53,7 +53,8 @@ class LookupTest(unittest.TestCase):
     def test_lookup_fills_from_notice_and_basis(self):
         notice = {"bidNtceNo": "R26BK01752065", "bidNtceOrd": "001", "bidNtceNm": "마곡나루역 펀스테이션 전기공사",
                   "dminsttNm": "서울교통공사", "sucsfbidLwltRate": "89.745", "sucsfbidMthdAppStd": "지방자치단체 입찰시 낙찰자 결정기준",
-                  "totPrdprcNum": "15", "presmptPrce": "167746809", "cntrctCnclsMthdNm": "제한경쟁"}
+                  "totPrdprcNum": "15", "presmptPrce": "167746809", "cntrctCnclsMthdNm": "제한경쟁",
+                  "rgstDt": "2026-10-01 07:33:09"}
         older = {**notice, "bidNtceOrd": "000", "sucsfbidLwltRate": "87.745"}
         other = {**notice, "bidNtceNo": "R26BK09999999"}  # 공고번호가 다른 행은 안 씀
         client = FakeClient({
@@ -77,6 +78,9 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(out["licenses"], ["전기공사업"])
         self.assertEqual(out["notes"], [])
         self.assertEqual(client.calls[0][1], {"inqryDiv": "2", "bidNtceNo": "R26BK01752065"})
+        # 면허제한은 공고번호 조회가 안 돼 등록일 하루치로 받음(실측 resultCode=08)
+        lic = [c for c in client.calls if c[0] == F.LICENSE_LIMIT_OPERATION]
+        self.assertEqual(lic[0][1], {"inqryDiv": "1", "inqryBgnDt": "202610010000", "inqryEndDt": "202610012359"})
 
     def test_lookup_not_found_keeps_going(self):
         client = FakeClient({}, fail={F.BID_NOTICE_OPERATIONS["물품"]})

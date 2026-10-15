@@ -53,12 +53,14 @@ class LookupTest(unittest.TestCase):
     def test_lookup_fills_from_notice_and_basis(self):
         notice = {"bidNtceNo": "R26BK01752065", "bidNtceOrd": "001", "bidNtceNm": "마곡나루역 펀스테이션 전기공사",
                   "dminsttNm": "서울교통공사", "sucsfbidLwltRate": "89.745", "sucsfbidMthdAppStd": "지방자치단체 입찰시 낙찰자 결정기준",
-                  "totPrdprcNum": "15"}
+                  "totPrdprcNum": "15", "presmptPrce": "167746809", "cntrctCnclsMthdNm": "제한경쟁"}
         older = {**notice, "bidNtceOrd": "000", "sucsfbidLwltRate": "87.745"}
         other = {**notice, "bidNtceNo": "R26BK09999999"}  # 공고번호가 다른 행은 안 씀
         client = FakeClient({
             F.BID_NOTICE_OPERATIONS["공사"]: [older, other, notice],
             F.BASIS_AMOUNT_OPERATIONS["공사"]: [BASIS_ROW],
+            F.LICENSE_LIMIT_OPERATION: [{"bidNtceNo": "R26BK01752065", "bidNtceOrd": "001", "lcnsLmtNm": "전기공사업/0040"},
+                                        {"bidNtceNo": "R26BK01752065", "bidNtceOrd": "000", "lcnsLmtNm": "옛차수업/9999"}],
         })
         out = bidcalc.lookup(client, " r26bk01752065-001 ")
         self.assertEqual(out["notice_no"], "R26BK01752065")
@@ -70,6 +72,9 @@ class LookupTest(unittest.TestCase):
         self.assertTrue(out["a_applies"])
         self.assertEqual(out["net_cost"], 145398641)
         self.assertEqual(out["method"], "mois")
+        self.assertEqual(out["est_price"], 167746809)
+        self.assertEqual(out["contract_method"], "제한경쟁")
+        self.assertEqual(out["licenses"], ["전기공사업"])
         self.assertEqual(out["notes"], [])
         self.assertEqual(client.calls[0][1], {"inqryDiv": "2", "bidNtceNo": "R26BK01752065"})
 

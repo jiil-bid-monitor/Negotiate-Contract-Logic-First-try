@@ -145,6 +145,24 @@ def _from_attachments(notice: dict, out: dict, fetch: Callable) -> None:
 _FIELD_NAMES = {"basis": "기초금액", "lower_rate": "낙찰하한율", "range_lo": "변동폭"}
 
 
+def _licenses(client: DataGoKrClient, params: dict, notice_no: str, notice_ord: str) -> list[str]:
+    """면허제한 업종 이름(21라인 '업종제한' 칸) — 실패하면 빈 목록."""
+    try:
+        rows = client.fetch_all_pages(F.BID_NOTICE_BASE_URL, F.LICENSE_LIMIT_OPERATION, params, "계산기 면허제한")
+    except ApiError as err:
+        log.info("계산기 면허제한 조회 실패 %s: %s", notice_no, err)
+        return []
+    rows = [r for r in rows if str(r.get("bidNtceNo") or "").strip() == notice_no]
+    if notice_ord:
+        rows = [r for r in rows if str(r.get("bidNtceOrd") or "") in ("", notice_ord)] or rows
+    names: list[str] = []
+    for r in rows:
+        name = str(r.get("lcnsLmtNm") or "").split("/")[0].strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
 def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments.fetch_attachment_text) -> dict:
     """공고번호 → 계산기 입력값. 못 찾은 칸은 None, 이유는 notes에."""
     notice_no = notice_no.strip().upper()
@@ -173,10 +191,15 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
             "lower_rate": _num(notice.get("sucsfbidLwltRate")),
             "standard": str(notice.get("sucsfbidMthdAppStd") or ""),
             "award_method": str(notice.get("sucsfbidMthdNm") or ""),
+            "contract_method": str(notice.get("cntrctCnclsMthdNm") or ""),
+            "est_price": _num(notice.get("presmptPrce")),
             "price_count": _num(notice.get("totPrdprcNum")),
         })
     else:
         out["notes"].append("공고를 찾지 못함 — 공고번호를 확인하거나 값을 직접 입력하세요")
+
+    if notice:
+        out["licenses"] = _licenses(client, params, notice_no, out.get("notice_ord", ""))
 
     basis_row = None
     for wt in ([work_type] if work_type else []) + [w for w in WORK_TYPES if w != work_type]:

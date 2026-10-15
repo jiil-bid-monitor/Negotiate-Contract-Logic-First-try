@@ -6,7 +6,8 @@
   const C = window.BidCalc;
   const won = (v) => (v == null || Number.isNaN(v) ? "-" : Math.round(v).toLocaleString("ko-KR"));
   const p4 = (v) => (v == null || Number.isNaN(v) ? "-" : v.toFixed(4));
-  const circled = (n) => (n >= 1 && n <= 20 ? String.fromCharCode(0x2460 + n - 1) : String(n));
+  // 번호 동그라미 — ①② 같은 글자는 글꼴에 따라 너무 작게 나와(10/15 제보) 숫자에 원 테두리를 그린다
+  const circled = (n) => `<span class="calc-num">${n}</span>`;
   const numIn = (id) => {
     const v = parseFloat(String($(id).value).replace(/[,\s원%+]/g, ""));
     return Number.isFinite(v) ? v : null;
@@ -80,7 +81,7 @@
   $("#cAutoStart").addEventListener("click", () => {
     if (!SLOTS.length) { $("#cMsg").textContent = "예비가격을 먼저 만드세요"; return; }
     AUTO = C.pickRandom(SLOTS.length, radio("cTake"));
-    $("#cAuto").textContent = AUTO.map(circled).join(" ");
+    $("#cAuto").innerHTML = AUTO.map(circled).join("");
   });
   $("#cAutoApply").addEventListener("click", () => { if (AUTO.length) select(AUTO); });
 
@@ -139,7 +140,8 @@
     const take = radio("cTake");
     const basis = numIn("#cBasis");
     const nos = [...SELECTED].sort((a, b) => a - b);
-    $("#cPicked").textContent = nos.length ? nos.map(circled).join(" ") : "-";
+    $("#cPicked").innerHTML = nos.length ? nos.map(circled).join("") : "-";
+    $("#cAuto").innerHTML = AUTO.length ? AUTO.map(circled).join("") : "-";
     const done = SLOTS.length && nos.length === take;
     const r = rounding();
     const planned = done ? C.plannedPrice(nos.map((no) => SLOTS[no - 1]), "ceil", r.planned) : null;

@@ -17,11 +17,13 @@
     mois: "행자부난수추출",
   };
 
-  // how: "ceil"(절상) | "floor"(절사), unit: 1·10·100·1000 (원 미만·십원 미만·백원 미만·천원 미만)
+  // how: "ceil"(절상) | "floor"(절사) | "round"(사사오입), unit: 끝자리 단위
+  //   0.01(단가 — 소수점 둘째 자리까지) · 1(원미만) · 10(원단위) · 1,000(백원단위) · 10,000(천원단위) · 100,000(만원단위)
   function roundAmount(value, how = "ceil", unit = 1) {
     // 부동소수 오차(1000000.0000001 같은)로 1원이 올라가지 않게 아주 작은 차이는 먼저 정리
-    const v = Math.round(value * 1e6) / 1e6 / unit;
-    return (how === "floor" ? Math.floor(v) : Math.ceil(v)) * unit;
+    const v = Math.round((value / unit) * 1e6) / 1e6;
+    const r = how === "floor" ? Math.floor(v) : how === "round" ? Math.round(v) : Math.ceil(v);
+    return unit < 1 ? Math.round(r * unit * 100) / 100 : r * unit;
   }
 
   const inSlot = (a, b, rng) => a + (b - a) * rng();

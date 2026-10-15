@@ -4,7 +4,8 @@
 
 (function () {
   const C = window.BidCalc;
-  const won = (v) => (v == null || Number.isNaN(v) ? "-" : Math.round(v).toLocaleString("ko-KR"));
+  // 금액 — 단가(소수점) 계산이면 소수점 둘째 자리까지 보임
+  const won = (v) => (v == null || Number.isNaN(v) ? "-" : Number(v).toLocaleString("ko-KR", { maximumFractionDigits: 2 }));
   const p4 = (v) => (v == null || Number.isNaN(v) ? "-" : v.toFixed(4));
   // 번호 동그라미 — ①② 같은 글자는 글꼴에 따라 너무 작게 나와(10/15 제보) 숫자에 원 테두리를 그린다
   const circled = (n) => `<span class="calc-num">${n}</span>`;
@@ -37,10 +38,13 @@
   document.querySelectorAll('input[name="cTake"]').forEach((r) => r.addEventListener("change", () => { SELECTED.clear(); AUTO = []; render(); }));
 
   const aValue = () => ($("#cAOn").checked ? numIn("#cA") || 0 : 0);
+  // 기타설정(21라인과 같은 세 상자): 소수점 종류 · 예정가격/투찰금액 절상·절사·사사오입 · 끝자리 단위
+  // 단위는 예정가격·투찰금액 둘 다에 적용. 단가 계약이면 "원미만"을 소수점 둘째 자리로 본다(추정 — 21라인 동작 미확인)
   function rounding() {
-    const unit = parseInt($("#cRoundUnit").value, 10);
-    const target = $("#cRoundTarget").value;
-    return { planned: target === "planned" ? unit : 1, bid: target === "bid" ? unit : 1 };
+    const [planned, bid] = $("#cRoundMode").value.split("/");
+    let unit = parseInt($("#cRoundUnit").value, 10);
+    if ($("#cDecimal").value === "unit" && unit === 1) unit = 0.01;
+    return { planned, bid, unit };
   }
 
   function generate(method) {
@@ -144,9 +148,9 @@
     $("#cAuto").innerHTML = AUTO.length ? AUTO.map(circled).join("") : "-";
     const done = SLOTS.length && nos.length === take;
     const r = rounding();
-    const planned = done ? C.plannedPrice(nos.map((no) => SLOTS[no - 1]), "ceil", r.planned) : null;
-    const bid = planned ? C.bidAmount({ planned, lowerRate: numIn("#cRate"), a: aValue(), unit: r.bid }) : null;
-    const netBid = planned ? C.netCostBid({ planned, basis, netCost: numIn("#cNet"), unit: r.bid }) : null;
+    const planned = done ? C.plannedPrice(nos.map((no) => SLOTS[no - 1]), r.planned, r.unit) : null;
+    const bid = planned ? C.bidAmount({ planned, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
+    const netBid = planned ? C.netCostBid({ planned, basis, netCost: numIn("#cNet"), how: r.bid, unit: r.unit }) : null;
     const higher = bid != null && netBid != null && netBid > bid;
     $("#cPlanned").textContent = planned ? won(planned) : "-";
     $("#cBid").innerHTML = bid != null ? `<span${higher ? "" : ' class="calc-final"'}>${won(bid)}</span>` : (planned ? "하한율 필요" : "-");
@@ -167,7 +171,7 @@
   function render() { renderGrid(); renderResult(); }
 
   ["#cRate", "#cA", "#cNet"].forEach((id) => $(id).addEventListener("input", renderResult));
-  ["#cAOn", "#cRoundTarget", "#cRoundUnit"].forEach((id) => $(id).addEventListener("change", renderResult));
+  ["#cAOn", "#cDecimal", "#cRoundMode", "#cRoundUnit"].forEach((id) => $(id).addEventListener("change", renderResult));
   $("#cBasis").addEventListener("input", render);
 
   // 공고번호로 불러오기

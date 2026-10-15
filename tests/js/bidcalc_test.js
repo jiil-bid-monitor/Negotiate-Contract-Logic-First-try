@@ -11,6 +11,19 @@ assert.strictEqual(C.roundAmount(1000.9, "floor"), 1000);
 assert.strictEqual(C.roundAmount(1234561, "ceil", 10), 1234570);
 assert.strictEqual(C.roundAmount(1234567, "ceil", 1000), 1235000);
 assert.strictEqual(C.roundAmount(1234567, "floor", 1000), 1234000);
+// 사사오입
+assert.strictEqual(C.roundAmount(1000.5, "round"), 1001);
+assert.strictEqual(C.roundAmount(1000.49, "round"), 1000);
+assert.strictEqual(C.roundAmount(1234567, "round", 10000), 1230000);
+// 만원단위 절상
+assert.strictEqual(C.roundAmount(1234567, "ceil", 100000), 1300000);
+// 단가: 소수점 둘째 자리
+assert.strictEqual(C.roundAmount(1234.5671, "ceil", 0.01), 1234.57);
+assert.strictEqual(C.roundAmount(1234.5679, "floor", 0.01), 1234.56);
+assert.strictEqual(C.roundAmount(1234.5, "ceil", 0.01), 1234.5);
+// 예정가격 사사오입 / 투찰금액 절사
+assert.strictEqual(C.plannedPrice([1000, 1001], "round"), 1001);
+assert.strictEqual(C.bidAmount({ planned: 1000000, lowerRate: 87.7457, how: "floor" }), 877457);
 
 // 행자부: 기초금액 아래 8개·위 7개, 범위 ±3% 안, 서로 다름, 금액순
 for (let seed = 1; seed <= 50; seed++) {

@@ -52,7 +52,7 @@
     try {
       const prices = C.makePrices({
         basis: numIn("#cBasis"), lo: numIn("#cLo"), hi: numIn("#cHi"), n: radio("cN"), method,
-        down: parseInt($("#cDown").value, 10), up: parseInt($("#cUp").value, 10),
+        down: parseInt($("#cDown").value, 10), up: parseInt($("#cUp").value, 10), decimal: $("#cDecimal").value,
       });
       SLOTS = C.shuffle(prices);  // 나라장터처럼 번호와 금액은 무관하게
       SELECTED.clear(); AUTO = []; SHOW_SORTED = false;
@@ -194,6 +194,8 @@
       if (d.range_lo != null) $("#cLo").value = d.range_lo;
       if (d.range_hi != null) $("#cHi").value = d.range_hi;
       if (d.lower_rate != null) $("#cRate").value = d.lower_rate;
+      // 예비가격 소수점 처리기준(기본서): 시설공사·감리/설계 용역은 100원 미만 올림, 그 밖은 총액(1원 미만 올림)
+      $("#cDecimal").value = d.work_type === "공사" || /감리|설계\s*용역/.test(d.title || "") ? "cnst" : "total";
       setNum("#cA", d.a_value || null);
       $("#cAOn").checked = !!d.a_applies && (d.a_value || 0) > 0;
       setNum("#cNet", d.net_cost || null);

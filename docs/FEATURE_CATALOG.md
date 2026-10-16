@@ -1,5 +1,7 @@
 # 기능 목록 — 다른 수집기와 비교·이식용 (2026-10-16 기준)
 
+세부 판정 규칙(정규식·기준값·처리 순서, 싱크로율 계산식 포함)은 짝 문서 `docs/LOGIC_DETAILS.md`에 있다.
+
 이 문서는 **팀원 수집기(다른 저장소)와 기능을 비교하고, 이 저장소에만 있는 기능을 옮겨 심을 때** 쓰는 자료다.
 각 기능에 ID(F-01…)를 붙였다. 기능마다 "무엇을 하나 / 규칙 / 겪은 함정 / 코드·설정·테스트 위치"를 적었다.
 코드 원본: `kdh-007/Negotiate-Contract-Logic-First-try` main 브랜치. 결정 배경은 루트 `CLAUDE.md`(날짜별 메모).
@@ -9,6 +11,7 @@
 ## 0. 팀원 저장소 쪽 Claude에게 줄 지시문 (그대로 붙여 넣기)
 
 > 이 저장소(팀원 수집기)와 `kdh-007/Negotiate-Contract-Logic-First-try`의 `docs/FEATURE_CATALOG.md`를 비교해 줘.
+> (세부 규칙은 같은 폴더 `docs/LOGIC_DETAILS.md` — 규칙 차이를 볼 땐 그 문서 기준으로)
 > 1) 카탈로그의 기능 ID마다 우리 저장소에 **있음 / 일부 있음 / 없음**을 표로 정리하고, 있으면 우리 쪽 파일 위치와 규칙 차이를 적어 줘.
 > 2) 같은 기능인데 규칙이 다른 곳(예: "또는" 판정, 마감 우선순위)은 어느 쪽이 맞는지 판단하지 말고 차이만 나열해 줘.
 > 3) "없음" 기능은 아래 의존 관계와 이식 순서를 보고 옮길 순서를 제안해 줘. 코드는 내가 승인하기 전엔 고치지 마.
@@ -28,6 +31,7 @@
 | F-04 | 수집 | 사전규격 수집 + 본공고 게시된 사전규격 제외 | `nego/pipeline.py` `collect_prespecs` |
 | F-05 | 수집 | 날짜 단위 조회(`--complete-days`)로 중복 발송 없이 매일/매주 보고 | `nego/pipeline.py` `complete_days_window` |
 | F-06 | 필터 | 관심·제외 키워드(띄어쓰기 무시), 조건부/무조건 제외, 제외 예외, 예산 하한·예외 | `nego/screen.py`, `config/keywords.json` |
+| F-06b | 필터 | 해외 전시회 한국관/단체관 공고 제외(몽골은 제외하지 않고 표시) | `nego/screen.py` |
 | F-07 | 필터 | 품명코드 매칭(물품 세부품명번호 칸 버그 수정 포함) | `nego/screen.py` `_match_codes`, `config/codes.json` |
 | F-08 | 필터 | "검토 필요" — 관심·제외 키워드가 같이 있는 공고를 버리지 않고 따로 | `nego/screen.py` (`review_conflicts`) |
 | F-09 | 필터 | 보유 면허 0개인 공고 제외 | `nego/qualify.py` `no_held_license` |

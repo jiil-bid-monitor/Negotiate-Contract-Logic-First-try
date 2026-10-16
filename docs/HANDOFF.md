@@ -1,7 +1,7 @@
 # 작업 인수인계 (2026-10-16 기준)
 
 다른 Claude 계정(또는 새 세션)에서 이 프로젝트를 이어받을 때 **이 파일을 먼저 읽고**, 그다음 루트 `CLAUDE.md`(자세한 결정·이력 메모)를 읽는다.
-팀원 수집기와 비교·이식할 땐 `docs/FEATURE_CATALOG.md`(기능 목록·이식 순서)를 본다.
+팀원 수집기와 비교·통합할 땐 `docs/FEATURE_CATALOG.md`(기능 목록·이식 순서)와 `docs/LOGIC_DETAILS.md`(세부 판정 규칙)를 본다.
 새 세션에 이렇게 말하면 된다:
 
 > `docs/HANDOFF.md`와 `CLAUDE.md`를 읽고 이어서 작업해 줘.

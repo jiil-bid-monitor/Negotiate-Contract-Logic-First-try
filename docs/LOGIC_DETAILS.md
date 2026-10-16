@@ -241,6 +241,8 @@ ZIP: 안의 HWP/HWPX/PDF/ZIP만 대상(공고·제안요청·과업지시·규�
   자격·조건 표현(입찰·참가자격·법령·체납·신용·확인서·제출·평가·배점·보증·공동수급·하도급·대가·하자·연락처·일시·마감·"위치/장소 :")과 학력·경력 표현이 없는 줄만.
 - 쓰임: 웹앱 카드 오른쪽 % · 검토 필요 카드 "과업 유사" 칩(높음 → 과업 유사 / 경계선 → 일부 유사 / 낮음 → 무관 가능성). **선정·제외에는 쓰지 않음**(표시·정렬만).
 
+**계산 코드**: 이 저장소엔 없고(비공개 레포 코드라 공개 저장소에 복사하지 않음) 전달 묶음 `jiil_handoff.zip`의 `sync_code/`에 들어 있다 — `evaluation/task_profile.py`·`section_text.py`, `scripts/build_task_profiles.py`, `sync.py`, 배치·실행법 `sync_code/README.md`.
+
 **통합 시**: `evaluation/task_profile.py` + `evaluation/section_text.py`와 `past_task_profiles.json`이 필요. 과거 실적은 사내 자료라 공개 저장소에 복사하지 말고 지금처럼 옆 레포에서 읽을 것.
 
 ---

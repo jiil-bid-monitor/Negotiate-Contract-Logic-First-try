@@ -150,7 +150,7 @@ def _run_llm_similarity(candidates, config, now) -> dict[str, Path]:
     return llm_similarity.save_results(results, config.output_dir, now)
 
 
-def _send_telegram(candidates, stats, html_path) -> None:
+def _send_telegram(candidates, stats, html_path) -> bool:
     """발송 실패는 종료코드에 반영하지 않는다 — 실패로 끝내면 워크플로 자동 재시도가
     수집부터 다시 돌려 이미 받은 대화방에 같은 보고서가 또 간다. 대신 Actions 화면에
     오류 표시(::error::)를 남긴다."""
@@ -159,7 +159,7 @@ def _send_telegram(candidates, stats, html_path) -> None:
     tg_config = TelegramConfig.from_env()
     if tg_config is None:
         logging.warning("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 없음 → 텔레그램 발송 건너뜀")
-        return
+        return False
     errors = send_report(tg_config, candidates, stats, html_path)
     sent = len(tg_config.chat_ids) - len(errors)
     print(f"텔레그램 발송: 대화방 {sent}/{len(tg_config.chat_ids)}곳 성공")
@@ -171,6 +171,24 @@ def _send_telegram(candidates, stats, html_path) -> None:
         logging.warning(note)
         if os.environ.get("GITHUB_ACTIONS"):
             print(f"::warning::{note}")
+    return sent > 0
+
+
+def _send_email(candidates, stats, html_path, now) -> None:
+    """주간 리포트 메일(2026-10-19 통합 결정 15번). 실패해도 종료코드는 그대로 — 텔레그램과 같은 이유."""
+    from .email_report import send, subject_for
+
+    if html_path is None or not Path(html_path).exists():
+        logging.warning("HTML 리포트가 없어 메일을 보내지 않습니다")
+        return
+    subject = subject_for(now.strftime("%Y-%m-%d"), len(candidates), bool(stats.failed_operations))
+    error = send(subject, Path(html_path).read_text(encoding="utf-8"), Path(html_path))
+    if error:
+        logging.error(error)
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(f"::error::{error}")
+    else:
+        print("주간 리포트 메일 발송")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -216,6 +234,16 @@ def main(argv: list[str] | None = None) -> int:
         "--telegram",
         action="store_true",
         help="결과를 텔레그램으로 발송한다 (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID 필요)",
+    )
+    parser.add_argument(
+        "--sent-state",
+        help="보낸 공고 기록 파일(JSON). 주면 처음 보는 공고와 정정공고([정정])만 보고하고, 텔레그램 발송 뒤 기록한다 "
+        "(매일 '입찰' 보고용 — 2026-10-19 통합 결정 14번)",
+    )
+    parser.add_argument(
+        "--email",
+        action="store_true",
+        help="HTML 리포트를 메일로 보낸다(주간 보고용, SMTP_* 환경변수·config/recipients.json — 통합 결정 15번)",
     )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -318,6 +346,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.llm_similarity:
         llm_paths = _run_llm_similarity(candidates, config, now)
 
+    sent_state = None
+    if args.sent_state:
+        from . import sent_state as _sent
+
+        sent_state = _sent.load(Path(args.sent_state))
+        before = len(candidates)
+        candidates = _sent.select_new(candidates, sent_state)
+        corrected = sum(1 for c in candidates if getattr(c, "corrected", False))
+        print(f"보낸 공고 기록 적용: {before}건 중 새 공고 {len(candidates) - corrected}건 · 정정공고 {corrected}건 보고")
+        stats.candidates = len(candidates)
+
     print(render_console(candidates, stats))
 
     if not args.no_supabase:
@@ -328,7 +367,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{kind.upper()} 저장: {path}")
 
     if args.telegram:
-        _send_telegram(candidates, stats, paths.get("html"))
+        delivered = _send_telegram(candidates, stats, paths.get("html"))
+        if sent_state is not None and delivered:
+            from . import sent_state as _sent
+
+            _sent.save(Path(args.sent_state), _sent.mark(sent_state, candidates, now))
+            print(f"보낸 공고 기록 저장: {args.sent_state}")
+
+    if args.email:
+        _send_email(candidates, stats, paths.get("html"), now)
 
     # 일부 조회가 실패했으면 종료코드 2로 구분한다 (CI에서 성공/부분성공 구분).
     return 2 if stats.failed_operations else 0

@@ -69,7 +69,7 @@ class TestRenderHtml(unittest.TestCase):
     def test_section_header_shows_candidate_count(self):
         candidates, stats = self._candidates()
         out = render_html(candidates, stats, NOW)
-        self.assertIn(f"본공고 ({len(candidates)}건)", out)
+        self.assertIn(f"관심 공고 ({len(candidates)}건)", out)  # 2026-10-19 통합 결정 12번: 관심 / 세부품명 구역
 
     def test_row_shows_confidence_and_worktype_badges(self):
         candidates, stats = self._candidates()

@@ -50,6 +50,8 @@ class Candidate:
     task_text: str = ""
     # 첨부 공고문의 개최·사업 장소가 해외일 때 그 장소("독일 뒤셀도르프") — 표시만(2026-10-16 통합 결정 8번)
     overseas_attachment: str | None = None
+    # 매일 입찰 보고에서 이미 보낸 공고의 정정공고(차수가 오름) — 보고에 [정정] (`sent_state.select_new`)
+    corrected: bool = False
     # `--llm-similarity`를 줬을 때만 채워진다 (`llm_similarity.LlmJudgement`).
     llm_similarity: object | None = None
     # 지역 제한(업체 소재지) 판정 — 나라장터 참가가능지역 API 기준. "미달"이면 `drop_region_unmet`이 제외로 옮긴다(2026-10-14)

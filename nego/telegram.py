@@ -22,7 +22,9 @@ GitHub Actions 스케줄(`daily.yml`)이 `python -m nego --telegram`으로 부�
   - 지역·공동수급·확인 필요 요건 등 자세한 건 첨부 HTML 리포트(전체 표)에서 본다.
   - 본공고·사전규격이 함께 있으면 "── 본공고 N건 ──" / "── 사전규격 N건 ──" 구역으로 나눈다(번호는 이어서).
     본공고 구역 안에서 유형이 섞이면 공고명 앞에 [협상]·[규격가격]·[입찰]을 붙인다.
-  - 마감 지난 공고는 목록에서 빼고 건수만 적는다.
+  - 관심 공고 / 세부품명 공고(키워드 없이 보유 품목으로 수집) 두 구역으로 나눈다(2026-10-19 통합 결정 12번).
+    세부품명 공고 줄 끝엔 걸린 품목을 적는다. 정정공고(이미 보낸 공고의 차수가 오름)는 [정정]을 붙인다(결정 14번).
+  - 마감 지난 공고는 수집 단계에서 이미 빠진다(결정 4번) — "마감 지난 N건 제외" 문구는 없앴다.
   - 메시지 한 건은 4096자까지라 넘치면 공고 단위로 나눠 보낸다.
   - 후보가 0건이어도 "새 공고 없음"을 보낸다 — 받는 사람이 "시스템이 돌았는지"를 알 수 있게.
 
@@ -94,28 +96,45 @@ class Row:
     days_left: int | None
     qualification: str  # 자격 충족 / 자격 미달(공동수급 가능|불허|정보 없음) / 자격 미확인
     linked: str | None = None  # 규격서가 다른 조달시스템에 있으면 그 이름 (국방전자조달)
+    section: str = "관심"  # 관심 / 세부품명
+    products: list[str] = field(default_factory=list)  # 세부품명 공고에서 걸린 보유 품목
+    budget_kind: str | None = None  # 추정가격 / 배정예산 / None
+    corrected: bool = False  # 이미 보낸 공고의 정정공고(차수 오름)
+    notes: list[str] = field(default_factory=list)  # "해외 의심", "지역 제한 의심"
 
     @classmethod
     def from_candidate(cls, c: Any) -> "Row":
         q = c.qualification
-        qual = "자격 미확인" if not q.checked else ("자격 충족" if q.passes else "자격 미달")
+        # 요건이 하나라도 빠지면 미달 — 예전엔 `passes`(빠진 요건 1개까지 허용)라 1개가 빠져도 "자격 충족"이었다(2026-10-19 수정)
+        qual = "자격 미확인" if not q.checked else ("자격 충족" if not getattr(q, "missing_count", 0) and q.passes else "자격 미달")
         if qual == "자격 미달":
             j = c.joint
             joint = "공동수급 정보 없음" if j.raw_value is None else ("공동수급 가능" if j.allowed else "공동수급 불허")
             qual += f"({joint})"
         kind = "사전규격" if c.notice.kind == "사전규격" else c.category
         linked = c.notice.linked_system
+        sr = getattr(c, "screen_result", None)
+        notes = []
+        if getattr(sr, "overseas_flag", False) or getattr(sr, "overseas_suspect", None) or getattr(c, "overseas_attachment", None):
+            notes.append("해외 의심")
+        if getattr(c, "region_suspect", None):
+            notes.append("지역 제한 의심")
         return cls(c.notice.title or "", c.notice.detail_url, kind, c.notice.budget, c.days_left, qual,
-                   linked["name"] if linked else None)
+                   linked["name"] if linked else None,
+                   section=getattr(sr, "section", None) or "관심",
+                   products=list(getattr(sr, "matched_product_codes", []) or []),
+                   budget_kind=getattr(c.notice, "budget_kind", None),
+                   corrected=bool(getattr(c, "corrected", False)),
+                   notes=notes)
 
 
-def _short_money(value: float | None) -> str:
-    """핸드폰 한 줄에 들어가게 줄인다: 320,000,000 → 3.2억, 45,000,000 → 4,500만원."""
+def _short_money(value: float | None, kind: str | None = None) -> str:
+    """핸드폰 한 줄에 들어가게 줄인다: 320,000,000 → 3.2억, 45,000,000 → 4,500만원.
+    배정예산(부가세 포함)이면 "(배정)"을 붙인다 — 추정가격이 기본(2026-10-19 통합 결정 2번)."""
     if not value:
-        return "금액 미상"
-    if value >= 100_000_000:
-        return f"{value / 100_000_000:.1f}억"
-    return f"{value / 10_000:,.0f}만원"
+        return "금액 모름"
+    text = f"{value / 100_000_000:.1f}억" if value >= 100_000_000 else f"{value / 10_000:,.0f}만원"
+    return f"{text}(배정)" if kind == "배정예산" else text
 
 
 def _md(dt: datetime) -> str:
@@ -139,6 +158,8 @@ def _line(index: int, row: Row, tagged: bool) -> str:
     title = esc(row.title)
     if row.detail_url:
         title = f'<a href="{esc(row.detail_url, quote=True)}">{title}</a>'
+    if row.corrected:
+        title = f"[정정] {title}"
     if tagged and row.kind:
         title = f"[{esc(_KIND_TAG.get(row.kind, row.kind))}] {title}"
     if row.days_left is None:
@@ -147,9 +168,13 @@ def _line(index: int, row: Row, tagged: bool) -> str:
         days = f"<b>🔴 D-{row.days_left}</b>"
     else:
         days = f"D-{row.days_left}"
-    line = f"{index}. {title}\n   {esc(_short_money(row.budget))} · {days} · {row.qualification}"
+    line = f"{index}. {title}\n   {esc(_short_money(row.budget, row.budget_kind))} · {days} · {row.qualification}"
     if row.linked:
         line += f" · {esc(row.linked)}에서 확인"
+    for note in row.notes:
+        line += f" · {esc(note)}"
+    if row.section == "세부품명" and row.products:
+        line += f" — 품목: {esc(', '.join(row.products))}"
     return line
 
 
@@ -157,38 +182,50 @@ def build_messages(rows: list[Row], title: str, warnings: list[str] | None = Non
                    footer: str | None = None) -> list[str]:
     """마감 임박순으로 나열하고 메시지 한도에 맞춰 나눈다(공고 하나가 두 메시지로 갈라지지 않게)."""
     esc = html.escape
+    # 마감 지난 공고는 수집에서 이미 빠지지만(drop_expired) 혹시 남아 있으면 조용히 뺀다
     open_rows = [r for r in rows if r.days_left is None or r.days_left >= 0]
-    closed = len(rows) - len(open_rows)
     open_rows.sort(key=lambda r: 9999 if r.days_left is None else r.days_left)  # 같은 날이면 들어온 순서 유지
 
     header = [f"<b>{esc(title)}</b>"]
     header += [f"※ {esc(w)}" for w in warnings or []]
-    skipped = f" (마감 지난 {closed}건 제외)" if closed else ""
     if not open_rows:
-        header.append("조건에 맞는 새 공고가 없습니다." + skipped)
+        header.append("조건에 맞는 새 공고가 없습니다.")
         return ["\n".join(header)]
-    # 본공고·사전규격을 나눠서 보여준다(2026-10-12 사용자 요청) — 둘 다 있을 때만 구역 제목을 단다.
-    # 번호는 구역을 넘어 이어서 매긴다(대화에서 "3번 공고"라고 부를 때 헷갈리지 않게).
+    interest = [r for r in open_rows if r.section != "세부품명"]
+    product_only = [r for r in open_rows if r.section == "세부품명"]
     main = [r for r in open_rows if r.kind != "사전규격"]
     prespec = [r for r in open_rows if r.kind == "사전규격"]
-    both = bool(main and prespec)
     summary = f"후보 <b>{len(open_rows)}건</b>"
-    if both:
+    if product_only:
+        summary += f" (관심 공고 {len(interest)} · 세부품명 공고 {len(product_only)})"
+    elif main and prespec:
         summary += f" (본공고 {len(main)} · 사전규격 {len(prespec)})"
-    header.append(summary + skipped)
+    header.append(summary)
 
     blocks: list[str] = []
     index = 1
-    for section, rows_in in (("본공고", main), ("사전규격", prespec)):
-        if not rows_in:
+    # 관심 공고 / 세부품명 공고 구역 — 세부품명 공고가 있을 때만 구역 제목을 단다(관심 공고뿐이면 예전 모양 그대로)
+    for section_title, section_rows in (("■ 관심 공고", interest), ("■ 세부품명 공고 (키워드 없이 보유 품목으로 수집)", product_only)):
+        if not section_rows:
             continue
-        # 구역 안에서 유형이 섞일 때만 [협상]·[입찰] 표시 — 사전규격 구역은 제목이 이미 말해 줌
-        tagged = len({r.kind for r in rows_in}) > 1 or (not both and len({r.kind for r in open_rows}) > 1)
-        lines = [_line(index + i, r, tagged) for i, r in enumerate(rows_in)]
-        index += len(rows_in)
-        if both:  # 구역 제목이 첫 공고와 같은 메시지에 붙어 가게 한 블록으로
-            lines[0] = f"<b>── {section} {len(rows_in)}건 ──</b>\n\n{lines[0]}"
-        blocks += lines
+        sec_main = [r for r in section_rows if r.kind != "사전규격"]
+        sec_prespec = [r for r in section_rows if r.kind == "사전규격"]
+        both = bool(sec_main and sec_prespec)
+        first_block = len(blocks)
+        # 본공고·사전규격을 나눠서 보여준다(2026-10-12 사용자 요청) — 둘 다 있을 때만 구역 제목을 단다.
+        # 번호는 구역을 넘어 이어서 매긴다(대화에서 "3번 공고"라고 부를 때 헷갈리지 않게).
+        for sub, rows_in in (("본공고", sec_main), ("사전규격", sec_prespec)):
+            if not rows_in:
+                continue
+            # 구역 안에서 유형이 섞일 때만 [협상]·[입찰] 표시 — 사전규격 구역은 제목이 이미 말해 줌
+            tagged = len({r.kind for r in rows_in}) > 1 or (not both and len({r.kind for r in section_rows}) > 1)
+            lines = [_line(index + i, r, tagged) for i, r in enumerate(rows_in)]
+            index += len(rows_in)
+            if both:  # 구역 제목이 첫 공고와 같은 메시지에 붙어 가게 한 블록으로
+                lines[0] = f"<b>── {sub} {len(rows_in)}건 ──</b>\n\n{lines[0]}"
+            blocks += lines
+        if product_only:
+            blocks[first_block] = f"<b>{esc(section_title)} {len(section_rows)}건</b>\n\n{blocks[first_block]}"
     if footer:
         blocks.append(esc(footer))
 

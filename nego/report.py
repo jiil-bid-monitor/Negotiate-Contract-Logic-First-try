@@ -185,10 +185,17 @@ def _deadline_cell_html(c: Candidate, esc) -> str:
         dday_html = '<div class="dday-closed">공고 마감</div>'
     else:
         dday_html = f'<div class="dday">{esc(f"D-{days}")}</div>'
+    # 커서를 올리면 공고의 마감 일시 전부(2026-10-19 통합 결정 4번 — 기준 마감은 가장 이른 것, 공동수급협정 마감은 여기에만)
+    all_lines = "\n".join(
+        f"{name} {_fmt_kr_deadline(dt)}" + (" (기준)" if (name, dt) == earliest else "")
+        for name, dt in c.schedule.all_deadlines
+    )
     return (
+        f'<div title="{esc(all_lines)}">'
         f"{dday_html}"
         f'<div class="dl-date">{esc(_fmt_kr_deadline(when))}</div>'
         f'<div class="dl-label dim">{esc(label)}</div>'
+        "</div>"
     )
 
 
@@ -461,24 +468,8 @@ _TOOLTIP_FLIP_SCRIPT = """<script>
 </script>"""
 
 
-def render_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime) -> str:
-    def esc(text: str | None) -> str:
-        return html.escape(str(text or ""))
-
-    parts = [_HTML_HEAD, '<div class="wrap">']
-    parts.append(f"<h1>{esc(report_title(stats))}</h1>")
-
-    period = ""
-    if stats.period_begin and stats.period_end:
-        period = f"조회 기간: {_fmt_kr_date(stats.period_begin)} ~ {_fmt_kr_date(stats.period_end)} · "
-    parts.append(f'<div class="sub">{period}생성 시각: {_fmt_kr_datetime(generated_at)}</div>')
-
-    if stats.failed_operations:
-        parts.append(f'<span class="warn">⚠ 조회 실패: {esc(", ".join(stats.failed_operations))}</span>')
-    if stats.license_error:
-        parts.append('<span class="warn">⚠ 면허제한정보 조회 실패 → 자격 게이트 미적용(fail-open)</span>')
-
-    parts.append(f'<div class="section">본공고 ({len(candidates)}건)</div>')
+def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[str]:
+    parts = [f'<div class="section">{esc(section_title)} ({len(candidates)}건)</div>']
 
     if not candidates:
         parts.append('<div class="empty">조건에 맞는 공고가 없습니다.</div>')
@@ -524,7 +515,19 @@ def render_html(candidates: list[Candidate], stats: RunStats, generated_at: date
                     "</span>"
                 )
 
+            for note in (
+                getattr(c.screen_result, "overseas_suspect", None) and f"🌐 해외 개최 의심 — {c.screen_result.overseas_suspect}",
+                getattr(c, "overseas_attachment", None) and f"🌐 해외 개최 (첨부: {c.overseas_attachment})",
+                getattr(c, "region_suspect", None),
+            ):
+                if note:
+                    overseas_badge += f'<span class="rebadge" title="{esc(note)}">{esc(note.split(" — ")[0])}</span>'
+
             kwtags = ""
+            if getattr(c.screen_result, "section", None) == "세부품명" and c.screen_result.matched_product_codes:
+                kwtags = '<div class="kwtags">' + "".join(
+                    f'<span class="kwtag">품목:{esc(k)}</span>' for k in c.screen_result.matched_product_codes
+                ) + "</div>"
             if c.screen_result.matched_keywords:
                 tags = "".join(f'<span class="kwtag">키워드:{esc(k)}</span>' for k in c.screen_result.matched_keywords)
                 kwtags = f'<div class="kwtags">{tags}</div>'
@@ -533,13 +536,15 @@ def render_html(candidates: list[Candidate], stats: RunStats, generated_at: date
             # "추정"/"배정" 두 글자로 줄인다 — 값 하나만 있을 때도 어느 쪽인지는
             # 알 수 있게 유지하되 폭은 아낀다.
             money_parts = []
-            if c.notice.estimated_price:
+            if c.notice.estimated_price and c.notice.estimated_price > 0:
                 money_parts.append(f'<div class="nowrap">추정 {esc(_fmt_money(c.notice.estimated_price))}</div>')
-            if c.notice.assigned_budget and c.notice.assigned_budget != c.notice.estimated_price:
+            if (c.notice.assigned_budget and c.notice.assigned_budget > 0
+                    and c.notice.assigned_budget != c.notice.estimated_price):
                 money_parts.append(
-                    f'<div class="dim nowrap">배정 {esc(_fmt_money(c.notice.assigned_budget))}</div>'
+                    f'<div class="{"nowrap" if not money_parts else "dim nowrap"}">배정 '
+                    f'{esc(_fmt_money(c.notice.assigned_budget))} (부가세 포함)</div>'
                 )
-            money_html = "".join(money_parts) or '<span class="dim">미상</span>'
+            money_html = "".join(money_parts) or '<span class="dim">금액 모름</span>'
 
             parts.append(
                 "<tr>"
@@ -561,6 +566,34 @@ def render_html(candidates: list[Candidate], stats: RunStats, generated_at: date
                 "</tr>"
             )
         parts.append("</tbody></table></div>")
+
+    return parts
+
+
+def render_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime) -> str:
+    def esc(text: str | None) -> str:
+        return html.escape(str(text or ""))
+
+    parts = [_HTML_HEAD, '<div class="wrap">']
+    parts.append(f"<h1>{esc(report_title(stats))}</h1>")
+
+    period = ""
+    if stats.period_begin and stats.period_end:
+        period = f"조회 기간: {_fmt_kr_date(stats.period_begin)} ~ {_fmt_kr_date(stats.period_end)} · "
+    parts.append(f'<div class="sub">{period}생성 시각: {_fmt_kr_datetime(generated_at)}</div>')
+
+    if stats.failed_operations:
+        parts.append(f'<span class="warn">⚠ 조회 실패: {esc(", ".join(stats.failed_operations))}</span>')
+    if stats.license_error:
+        parts.append('<span class="warn">⚠ 면허제한정보 조회 실패 → 자격 게이트 미적용(fail-open)</span>')
+
+    # 관심 공고 / 세부품명 공고 두 구역(2026-10-19 통합 결정 12번) — 세부품명 공고 = 키워드 없이 등록 품목만 맞은 공고
+    interest = [c for c in candidates if getattr(c.screen_result, "section", "관심") != "세부품명"]
+    product_only = [c for c in candidates if getattr(c.screen_result, "section", "관심") == "세부품명"]
+    for section_title, rows in (("관심 공고", interest), ("세부품명 공고 (키워드 없이 보유 품목으로 수집)", product_only)):
+        if section_title.startswith("세부품명") and not rows:
+            continue
+        parts.extend(_table_html(section_title, rows, esc))
 
     parts.append("</div>")
     parts.append(_TOOLTIP_FLIP_SCRIPT)

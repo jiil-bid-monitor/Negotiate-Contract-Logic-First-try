@@ -77,7 +77,8 @@ class TestBuildMessages(unittest.TestCase):
     def test_sorted_by_deadline_and_closed_counted(self):
         rows = [_row("나중", 9), _row("마감남음", None), _row("지남", -1), _row("먼저", 2, qual="자격 미달")]
         text = T.build_messages(rows, "보고")[0]
-        self.assertIn("후보 <b>3건</b> (마감 지난 1건 제외)", text)
+        self.assertIn("후보 <b>3건</b>", text)
+        self.assertNotIn("마감 지난", text, "마감 지난 공고는 수집에서 빠지므로 문구 없음(2026-10-19 통합 결정 4번)")
         self.assertLess(text.index("먼저"), text.index("나중"))
         self.assertLess(text.index("나중"), text.index("마감남음"))
         self.assertIn("3.2억 · <b>🔴 D-2</b> · 자격 미달", text)
@@ -107,6 +108,29 @@ class TestBuildMessages(unittest.TestCase):
         self.assertEqual(T.Row.from_candidate(cand(False, "(없음)공동수급불허")).qualification, "자격 미달(공동수급 불허)")
         self.assertEqual(T.Row.from_candidate(cand(False, None, "사전규격")).qualification, "자격 미달(공동수급 정보 없음)")
         self.assertEqual(T.Row.from_candidate(cand(True, "(없음)공동수급불허")).qualification, "자격 충족")
+
+    def test_interest_and_product_sections(self):
+        """2026-10-19 통합 결정 12·14번 — 관심 / 세부품명 구역, 품목 표시, [정정], 배정예산 표시."""
+        rows = [
+            T.Row("관심 공고", "https://g2b/1", "입찰", 150_000_000, 5, "자격 충족"),
+            T.Row("안내판 설치", "https://g2b/2", "입찰", 120_000_000, 8, "자격 충족", section="세부품명",
+                  products=["안내판"], budget_kind="배정예산"),
+            T.Row("정정된 공고", "https://g2b/3", "입찰", None, 12, "자격 미확인", corrected=True, notes=["해외 의심"]),
+        ]
+        text = "\n".join(T.build_messages(rows, "보고"))
+        self.assertIn("후보 <b>3건</b> (관심 공고 2 · 세부품명 공고 1)", text)
+        self.assertLess(text.index("■ 관심 공고 2건"), text.index("■ 세부품명 공고 (키워드 없이 보유 품목으로 수집) 1건"))
+        self.assertIn("1.2억(배정) · <b>🔴 D-8</b> · 자격 충족 — 품목: 안내판", text)
+        self.assertIn("[정정] <a", text)
+        self.assertIn("금액 모름 · D-12 · 자격 미확인 · 해외 의심", text)
+
+    def test_one_missing_requirement_is_not_qualified(self):
+        """예전엔 passes(빠진 요건 1개까지 허용)로 '자격 충족'이 나왔다."""
+        from types import SimpleNamespace as NS
+
+        c = NS(qualification=NS(checked=True, passes=True, missing_count=1), joint=NS(raw_value=None, allowed=False),
+               notice=NS(kind="본공고", title="t", detail_url=None, budget=None, linked_system=None), category="입찰", days_left=3)
+        self.assertTrue(T.Row.from_candidate(c).qualification.startswith("자격 미달"))
 
     def test_weekly_splits_main_and_prespec_sections(self):
         """10/12 사용자 요청: 본공고·사전규격을 나눠서 — 번호는 이어서, 본공고 안에서 유형이 섞이면 [협상]·[규격가격]."""

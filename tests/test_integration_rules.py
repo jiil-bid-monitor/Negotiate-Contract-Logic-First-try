@@ -188,9 +188,12 @@ class TestSection(unittest.TestCase):
         self.assertEqual({e["code"] for e in config.screen.product_codes}, held)
         self.assertIn("7215409902", held)
 
-    def test_bosu_construction_collected(self):
-        r = screen.screen(_notice(title="OO과학관 보수공사"), _screen_config())
-        self.assertTrue(r.matched)
+    def test_bosu_construction_excluded(self):
+        """결정 11번으로 뺐다가 10/19 점검 중 사용자 결정으로 무조건 제외로 — 띄어 써도, 관심 키워드가 있어도 뺀다."""
+        for title in ("OO과학관 보수공사", "OO과학관 보수 공사"):
+            r = screen.screen(_notice(title=title), _screen_config())
+            self.assertFalse(r.matched, title)
+            self.assertEqual(r.excluded_reason, "보수공사")
 
 
 class TestRegion(unittest.TestCase):

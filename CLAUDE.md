@@ -25,7 +25,7 @@ N(이 레포)·M(팀원 `iamhiki/narajangter-bid-monitor`, TS) 비교 → 16개 
   `Candidate.mongolia`). "무릉"은 "몽골"과 함께일 때만, `config/overseas.json`에 다른 표기 "울란바타르" 추가(원래 목록의 "울란바토르"가 실제 표기 — 사용자 확인). 수집·제외 규칙은 안 바꿈. RESULT_FORMAT 50.
 - **9·10 세부품명**: 물품 수집 세부품명 = `held_qualifications.json` heldProducts(26개, 10/16 등록증 대조). `codes.json` productCodes 삭제.
   키워드 없이 품목만 맞으면 `ScreenResult.section == "세부품명"`.
-- **11 키워드**: 제외 키워드에서 '보수공사' 삭제(71개).
+- **11 키워드**: 제외 키워드에서 '보수공사' 삭제(71개). → **(10/19 점검 중 사용자 결정) '보수공사'를 무조건 제외(`hardExcludeKeywords`)로 다시 넣음** — '보수 공사'도(공백 무시), 관심 키워드가 있어도 뺌.
 - **12·14·15 보고**: 텔레그램·HTML 관심/세부품명 구역, 품목 표시. 매일 입찰은 `--sent-state`(bot-state 브랜치 `sent_bids.json`)로 새 공고·[정정]만,
   3일치 조회. 주간은 `--email`(SMTP_*, `config/recipients.json`).
 - **1 첨부**: `nego/attachment_sources.py`(과업 문서 순서·연결 사전규격·d2b), docx·공내역서 xlsx 추출, `Candidate.task_text`(싱크로율 근거).

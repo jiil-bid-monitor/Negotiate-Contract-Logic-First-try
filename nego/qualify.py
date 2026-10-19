@@ -453,14 +453,15 @@ def _or_scope(item: str) -> tuple[bool, list[tuple[str, bool]]]:
     """OR 표시가 걸리는 범위. (항목 전체가 OR인지, [(조각, 그 조각이 OR인지)]).
 
     - 하위 항목이 없으면 예전처럼 "어느 하나"가 있을 때만 항목 전체 OR("중 1개 이상"은 안 봄).
-    - 머리말에 표시가 있으면("다음 중 어느 하나에 해당하는 자 1) … 2) …") 항목 전체 OR.
+    - 머리말에 "어느 하나"가 있으면("다음 중 어느 하나에 해당하는 자 1) … 2) …") 항목 전체 OR("중 1개 이상"은 머리말에선 안 봄).
     - 그 밖엔 표시가 든 하위 항목만 OR(양남 물빛사랑교 "(3) … 어느 하나 ① 4444 ② 4442 (4) … 6012100201 (5) … 중 1개 이상 ① 4991 ② 4998").
     """
     parts = _numbered_parts(item)
     if len(parts) == 1:
         return bool(_OR_MARKER_RE.search(item)), [(item, False)]
     marked = lambda t: bool(_OR_MARKER_RE.search(t) or _SCOPED_OR_MARKER_RE.search(t))
-    if marked(parts[0]):
+    # 머리말은 "어느 하나"만 본다 — "산업디자인(… 중 1개 이상)로 등록하고 다음을 모두 갖춘 자 1) … 2) …"가 통째로 OR이 되지 않게
+    if _OR_MARKER_RE.search(parts[0]):
         return True, [(item, False)]
     return False, [(parts[0], False)] + [(p, marked(p)) for p in parts[1:]]
 

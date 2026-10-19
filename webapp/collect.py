@@ -93,6 +93,9 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "confidence": candidate.screen_result.confidence,
         "matched_keywords": candidate.screen_result.matched_keywords,
         "matched_product_codes": candidate.screen_result.matched_product_codes,
+        # 관심 / 세부품명 (키워드 없이 등록 품목만 맞은 공고) — 2026-10-19 통합 결정 10·12번
+        "section": candidate.screen_result.section,
+        "overseas_suspect": candidate.screen_result.overseas_suspect,
         "review_exclude": candidate.screen_result.review_exclude,
         "is_candidate": candidate.is_candidate,
         "excluded_reason": candidate.excluded_reason,
@@ -102,6 +105,8 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "demand_institution": n.demand_institution or n.notice_institution,
         "notice_institution": n.notice_institution,
         "budget": n.budget,
+        # 추정가격 / 배정예산 / None(금액 모름) — 2026-10-19 통합 결정 2번
+        "budget_kind": n.budget_kind,
         "posted_at": n.posted_at,
         "deadline_label": earliest[0] if earliest else None,
         "deadline": _iso(earliest[1]) if earliest else None,
@@ -110,6 +115,9 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "detail_url": n.detail_url or _g2b_url(n),
         "regions": candidate.regions,
         "region_check": candidate.region_check.to_dict(),
+        # 첨부 공고문의 소재지 요건 — 제외 안 하고 표시만(2026-10-19 통합 결정 7번)
+        "region_text": candidate.region_text.to_dict() if getattr(candidate, "region_text", None) else None,
+        "region_suspect": getattr(candidate, "region_suspect", None),
         "text_flags": getattr(candidate, "text_flags", []),
         "joint": {"label": candidate.joint.label, "allowed": candidate.joint.allowed},
         "qualification": {
@@ -225,7 +233,7 @@ class Collector:
 
     def _run_nego(self, config: AppConfig, days: int | None, attachments: bool, cats, prespec: bool = True,
                   period: tuple[datetime, datetime] | None = None):
-        from nego.pipeline import drop_region_unmet, run
+        from nego.pipeline import drop_expired, drop_region_unmet, run
 
         if days:
             config.lookback_days = days
@@ -247,6 +255,7 @@ class Collector:
             if att["unnamed_codes"]:
                 log.info("이름 미확인 코드 (config/code_names.json에 추가): %s", ", ".join(att["unnamed_codes"]))
         # 지역 제한 미달은 제외(2026-10-14) — 첨부 공고문 판정이 API보다 우선이라 첨부를 읽은 뒤에
+        candidates = drop_expired(candidates, datetime.now(), stats)
         candidates = drop_region_unmet(candidates, stats)
         return candidates, stats
 

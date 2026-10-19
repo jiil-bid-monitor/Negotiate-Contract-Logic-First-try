@@ -48,8 +48,18 @@ class Candidate:
     attachment_text: str = ""
     # `--llm-similarity`를 줬을 때만 채워진다 (`llm_similarity.LlmJudgement`).
     llm_similarity: object | None = None
-    # 지역 제한(업체 소재지) 판정 — "미달"이면 `drop_region_unmet`이 제외로 옮긴다(2026-10-14)
+    # 지역 제한(업체 소재지) 판정 — 나라장터 참가가능지역 API 기준. "미달"이면 `drop_region_unmet`이 제외로 옮긴다(2026-10-14)
     region_check: region.RegionCheck = field(default_factory=region.RegionCheck)
+    # 첨부 공고문에서 찾은 소재지 요건 — 제외에 쓰지 않고 "지역 제한 의심"으로 표시만(2026-10-19 통합 결정 7번)
+    region_text: region.RegionCheck | None = None
+
+    @property
+    def region_suspect(self) -> str | None:
+        """첨부 공고문 판정이 미달인데 API로는 미달이 아닐 때 — "지역 제한 의심: 경기 (첨부)"."""
+        text = self.region_text
+        if text is None or text.status != "미달" or self.region_check.status == "미달":
+            return None
+        return f"지역 제한 의심: {'·'.join(text.required)} (첨부)"
     # 첨부 공고문에서 찾은, 판정하지 않고 "확인 필요"로만 보여줄 요건 — 실적·기술인력·건축사사무소
     # (`text_requirements.flag_requirements`, [{kind, text, date?}])
     text_flags: list = field(default_factory=list)
@@ -72,6 +82,7 @@ class RunStats:
     failed_operations: list[str] = field(default_factory=list)
     cancelled: int = 0
     private_contract: int = 0  # 수의계약이라 뺀 공고
+    design_contest: int = 0  # 설계공모라 뺀 공고 (2026-10-16 통합 결정 5번)
     other_category: int = 0  # 이번 실행 유형(--categories) 밖이라 뺀 공고
     old_ordinal: int = 0
     in_scope: int = 0  # 수집 범위(+유형)에 든 공고
@@ -206,13 +217,14 @@ def build_candidates(
     scope_result = scope.apply_scope(notices, categories)
     stats.cancelled = scope_result.dropped_cancelled
     stats.private_contract = scope_result.dropped_private
+    stats.design_contest = scope_result.dropped_design_contest
     stats.other_category = scope_result.dropped_other_category
     stats.old_ordinal = scope_result.dropped_old_ordinal
     stats.in_scope = len(scope_result.kept)
     stats.categories = sorted(categories, key=scope.CATEGORIES.index) if categories else None
 
     candidates: list[Candidate] = []
-    company_sido = region.company_sido(config.held_raw)
+    company_location = region.company_location(config.held_raw)
     held_codes = qualify.load_held_codes(config.held_raw)
 
     for notice in scope_result.kept:
@@ -233,7 +245,7 @@ def build_candidates(
             is_re_notice=scope.is_re_notice(notice),
             variant=scope.negotiation_variant(notice),
             category=scope.bid_category(notice),
-            region_check=region.from_api(regions.get(notice.notice_no, []), company_sido),
+            region_check=region.from_api(regions.get(notice.notice_no, []), company_location),
         )
 
         # 이미 본공고로 나간 사전규격은 후보에서 뺀다 (사용자 요청 2026-09-30) — 같은 사업이
@@ -283,12 +295,32 @@ def build_candidates(
     return candidates
 
 
+def drop_expired(candidates: list[Candidate], now: datetime, stats: RunStats) -> list[Candidate]:
+    """기준 마감(자격등록·입찰·의견등록 중 가장 이른 것, `Schedule.earliest`)이 지난 후보를 제외 목록으로 옮긴다
+    (2026-10-19 통합 결정 4번 — 마감 지난 공고는 화면·보고 어디에도 안 보임). 첨부 공고문의 제출기한으로 마감을
+    채우는 공고가 있어 첨부를 읽은 **뒤에** 부른다. 마감 정보가 없으면 남긴다."""
+    kept = []
+    for c in candidates:
+        if not c.schedule.is_expired(now):
+            kept.append(c)
+            continue
+        label, dt = c.schedule.earliest
+        reason = "마감 지남"
+        stats.screened_out[reason] = stats.screened_out.get(reason, 0) + 1
+        stats.screened_in -= 1
+        c.is_candidate = False
+        c.excluded_reason = f"{reason} ({label} {dt:%m/%d %H:%M})"
+        stats.rejected.append(c)
+    stats.candidates = len(kept)
+    return kept
+
+
 def drop_region_unmet(candidates: list[Candidate], stats: RunStats) -> list[Candidate]:
     """지역 제한을 못 채운 후보를 제외 목록으로 옮긴다(2026-10-14 사용자 결정 — 9/28 "지역제한은 표시만"을 바꿈).
 
     지역제한 입찰은 공동수급을 허용해도 구성원 모두가 소재지 요건을 채워야 해서 지일은 들어갈 수 없다.
-    (지역의무공동도급 — "지역업체와 공동으로" — 은 `region.from_text`가 제한으로 보지 않아 여기 안 걸린다.)
-    첨부 공고문 판정이 API보다 우선이라(`region.combine`) 첨부를 읽은 **뒤에** 부른다. "미확인"은 남긴다.
+    **나라장터 참가가능지역 API 판정만** 본다(2026-10-19 통합 결정 7번) — 첨부 공고문 판정은 `region_suspect` 표시만.
+    시·군 단위까지 본다(강원 춘천시만 → 정선군 지일은 미달). "미확인"은 남긴다.
     """
     kept = []
     for c in candidates:

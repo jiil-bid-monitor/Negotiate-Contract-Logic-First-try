@@ -11,29 +11,38 @@
   - 코드+키워드 둘 다 → '강력추천', 하나만 → '참고용'
   - 키워드 비교 시 공백은 무시 ("운영 용역" == "운영용역")
 
-**해외 전시회 한국관/단체관 판별** — 기존 시스템에는 없던 신규 규칙(2026-09
-결정). "한국관"이라는 단어만 보고 국내 공고로 오인하기 쉽다(실측:
-R26BK01717819 UAE 두바이 의료기기전시회, R26BK01714892 두바이 — 둘 다
-해외 개최인데 "한국관" 제목 때문에 국내로 오인됨). "한국관"은 그 자체로
-해외 국가관 부스를 뜻하므로 제목에 있으면 단독으로도 자동 제외한다.
-"단체관"은 국내 행사에도 쓰이는 말이라 "전시회/박람회/엑스포"가 같이
-있을 때만 신호로 인정한다. 단, 회사가 실제로 확장 중인 몽골만 예외 —
-자동 제외 대신 플래그(🌐)만 남겨 담당자가 직접 확인하게 한다(이땐
-통상적인 키워드/코드 불일치 제외도 건너뛴다 — 플래그가 붙는데 조용히
-빠지면 안 되므로).
+**해외 개최 판별** (2026-10-19 통합 결정 8번 — 팀원 수집기 규칙을 그대로 옮김, 목록은 `config/overseas.json`).
+공고명에 아래 중 하나가 있으면 국내 공고가 아니라 해외 전시회 국가관·부스 공고로 보고 뺀다.
+  ① '한국관'(통합한국관 포함 — 한국관광·한국관리 등 다른 낱말 제외). 팀원 60일치 실측: 해외 한국관 18건 모두 이것으로
+     빠지고 같이 빠진 국내 공고는 '옥동 한국관~송현동' 교통 개선공사뿐. 국내 '한국관' 전시실 공고는 화면에서 되살린다.
+  ② 전시회·박람회·엑스포 + 단체관  ③ 해외 지명 + 단체관  ④ 영문 국가 약자(USA·UAE 등, 대문자 단어)
+단체관람·단체관광은 단체관이 아니다. 몽골(도시명 포함)이면 빼지 않고 플래그(🌐)만 남긴다(키워드 불일치 제외도 건너뜀).
+위에 안 걸려도 공고명에 해외 지명이 있으면 "해외 개최 의심" 표시만 붙인다(`overseas_suspect`).
 """
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
 
 from .models import Notice
 
 
 def _squash(text: str | None) -> str:
     return re.sub(r"\s+", "", text or "")
+
+
+# "공사 설계 용역"의 변형 — 공사 기본설계 용역, 공사 실시설계 용역, 공사 기본 및 실시설계 용역(기본·실시설계)
+# (2026-10-16 통합 결정 3번). 띄어쓰기를 지운 공고명에서 "공사설계용역"으로 바꿔 놓으면 관심 키워드·예산 예외가 같이 맞는다.
+_DESIGN_SERVICE_VARIANT_RE = re.compile(r"공사(?:기본및실시|기본[·ㆍ.,]?실시|기본|실시)설계용역")
+
+
+def _canonical_title(text: str | None) -> str:
+    return _DESIGN_SERVICE_VARIANT_RE.sub("공사설계용역", _squash(text))
 
 
 @dataclass
@@ -67,8 +76,10 @@ class ScreenResult:
     matched_industry_codes: list[str] = field(default_factory=list)
     excluded_by: str | None = None
     excluded_reason: str | None = None
-    # 해외 전시회 한국관/단체관인데 개최지가 몽골이라 자동 제외 대신 통과시킨 경우.
+    # 해외 개최인데 개최지가 몽골이라 자동 제외 대신 통과시킨 경우.
     overseas_flag: bool = False
+    # 제외 규칙엔 안 걸렸지만 공고명에 해외 지명이 있다 — "🌐 해외 개최 의심" 표시만(2026-10-16 통합 결정 8번)
+    overseas_suspect: str | None = None
     # 위 플래그를 왜 붙였는지 — 리포트에서 배지에 마우스를 올리면 보여줄 근거.
     overseas_evidence: str | None = None
     # "미매칭"으로 빠졌을 때 무엇을 무엇과 비교해서 안 맞았는지 (사람이 읽는 줄 목록).
@@ -79,6 +90,14 @@ class ScreenResult:
     # 미매칭 근거를 문장 대신 항목으로(2026-10-13 요청: 문장이 길어 읽기 어려움) — 화면이 짧은 표로 그린다.
     # 키워드 목록 자체는 공고마다 같아서 넣지 않는다(웹앱은 결과에 한 번만 담음)
     match_detail: dict = field(default_factory=dict)
+
+    @property
+    def section(self) -> str | None:
+        """보고·화면 구역 — 관심 키워드가 맞으면 "관심", 키워드 없이 보유 세부품명만 맞으면 "세부품명"
+        (2026-10-16 통합 결정 10·12번). 매칭 안 된 공고는 None."""
+        if not self.matched:
+            return None
+        return "관심" if self.matched_keywords or not self.matched_product_codes else "세부품명"
 
 
 def _match_exclude(
@@ -96,45 +115,95 @@ def _match_exclude(
 
 
 def _skipped(word: str, notice: Notice, skip_when: dict[str, list[str]] | None) -> bool:
-    title = _squash(notice.title)
+    title = _canonical_title(notice.title)
     return any(_squash(x) and _squash(x) in title for x in (skip_when or {}).get(word, []))
 
 
 def _match_keywords(notice: Notice, keywords: list[str], skip_when: dict[str, list[str]] | None = None) -> list[str]:
-    haystack = _squash(notice.title) + _squash(notice.product_class_name)
+    haystack = _canonical_title(notice.title) + _squash(notice.product_class_name)
     return [w for w in keywords if _squash(w) and _squash(w) in haystack and not _skipped(w, notice, skip_when)]
 
 
-_OVERSEAS_EVENT_RE = re.compile(r"전시회|박람회|엑스포")
-# "한국관"은 그 단어만으로도 해외 국가관 부스라는 뜻이라 단독으로도 신호로 본다.
-# "단체관"은 국내 행사에도 쓰이는 좀 더 일반적인 말이라, 오탐을 줄이기 위해
-# 전시회/박람회/엑스포 키워드가 같이 있을 때만 신호로 인정한다.
-_KOREA_PAVILION_STRONG_RE = re.compile(r"한국관")
-_GROUP_PAVILION_RE = re.compile(r"단체관")
-_MONGOLIA_RE = re.compile(r"몽골")
+OVERSEAS_CONFIG = Path(__file__).resolve().parent.parent / "config" / "overseas.json"
+
+# 한국관 뒤에 이 글자가 붙으면 다른 낱말이다 (한국관광·한국관리·한국관세·한국관계·한국관련 …)
+_KOREA_PAVILION_RE = re.compile(r"한국관(?!광|리|세|계|련|측|심|람|찰|절|악|제|통|행|개|저)")
+# 단체관람·단체관광·단체관리는 단체관이 아니다 — "박람회 단체관람 버스 임차"가 빠지지 않게
+_GROUP = r"단체관(?!람|광|리|계|련|심)"
+_EXPO_GROUP_RE = re.compile(rf"(전시회|박람회|엑스포).*{_GROUP}|{_GROUP}.*(전시회|박람회|엑스포)")
+_GROUP_RE = re.compile(_GROUP)
 
 
-def _overseas_exhibition_evidence(notice: Notice) -> str | None:
-    """해외 전시회·박람회·엑스포에 한국 기업이 참가할 때 짓는 한국관/단체관
-    부스 설치 공고인지 제목으로 판별하고, 맞으면 사람이 알아볼 근거 문구를
-    돌려준다(리포트 배지의 마우스오버 툴팁용). 아니면 None."""
-    haystack = _squash(notice.title) + _squash(notice.product_class_name)
+@dataclass(frozen=True)
+class OverseasRules:
+    mongolia: tuple[str, ...] = ()
+    places: tuple[str, ...] = ()
+    flag_skip_places: tuple[str, ...] = ()
+    abbreviations: tuple[str, ...] = ()
 
-    pavilion = _KOREA_PAVILION_STRONG_RE.search(haystack)
-    if pavilion:
-        return f"제목에 '{pavilion.group(0)}' 포함"
 
-    event = _OVERSEAS_EVENT_RE.search(haystack)
-    group_pavilion = _GROUP_PAVILION_RE.search(haystack)
-    if event and group_pavilion:
-        return f"제목에 '{event.group(0)}'와 '{group_pavilion.group(0)}' 포함"
+@lru_cache(maxsize=4)
+def load_overseas_rules(path: Path = OVERSEAS_CONFIG) -> OverseasRules:
+    if not path.exists():
+        return OverseasRules(mongolia=("몽골",))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return OverseasRules(
+        mongolia=tuple(data.get("mongoliaKeywords", [])),
+        places=tuple(data.get("overseasPlaces", [])),
+        flag_skip_places=tuple(data.get("flagSkipPlaces", [])),
+        abbreviations=tuple(data.get("countryAbbreviations", [])),
+    )
 
+
+def _word_re(word: str, ignore_case: bool) -> re.Pattern:
+    """영문은 앞뒤에 영문자가 붙지 않은 단어로만 — 'ASIA'가 'ASIAN'에, 'US'가 'BUSAN'에 걸리지 않게."""
+    return re.compile(rf"(?<![A-Za-z]){re.escape(word)}(?![A-Za-z])", re.IGNORECASE if ignore_case else 0)
+
+
+def _find_place(title: str, places: tuple[str, ...]) -> str | None:
+    for place in places:
+        if re.search(r"[A-Za-z]", place):
+            if _word_re(place, True).search(title):
+                return place
+        elif place in title:
+            return place
     return None
 
 
-def _is_mongolia(notice: Notice) -> bool:
-    haystack = _squash(notice.title) + _squash(notice.product_class_name)
-    return bool(_MONGOLIA_RE.search(haystack))
+def _find_abbreviation(title: str, abbreviations: tuple[str, ...]) -> str | None:
+    return next((a for a in abbreviations if _word_re(a, False).search(title)), None)
+
+
+def _overseas_exhibition_evidence(notice: Notice, rules: OverseasRules | None = None) -> str | None:
+    """공고명으로 해외 개최(국가관·부스) 공고인지 판별하고, 맞으면 근거 문구를 돌려준다. 아니면 None."""
+    rules = rules or load_overseas_rules()
+    title = notice.title or ""
+    if _KOREA_PAVILION_RE.search(title):
+        return "제목에 '한국관'"
+    if _EXPO_GROUP_RE.search(title):
+        return "전시회·박람회 단체관"
+    if _GROUP_RE.search(title):
+        place = _find_place(title, rules.places)
+        if place:
+            return f"해외 지명 '{place}' + 단체관"
+    abbreviation = _find_abbreviation(title, rules.abbreviations)
+    if abbreviation:
+        return f"영문 국가 약자 '{abbreviation}'"
+    return None
+
+
+def _overseas_suspect(notice: Notice, rules: OverseasRules | None = None) -> str | None:
+    """제외 규칙엔 안 걸린 공고명의 해외 지명 — 표시만 한다."""
+    rules = rules or load_overseas_rules()
+    skip = set(rules.flag_skip_places)
+    place = _find_place(notice.title or "", tuple(p for p in rules.places if p not in skip))
+    return f"제목에 해외 지명 '{place}'" if place else None
+
+
+def _is_mongolia(notice: Notice, rules: OverseasRules | None = None) -> bool:
+    rules = rules or load_overseas_rules()
+    title = notice.title or ""
+    return any(word in title for word in rules.mongolia)
 
 
 def _match_codes(notice: Notice, config: ScreenConfig) -> tuple[list[str], list[str]]:
@@ -161,7 +230,7 @@ def _explain_no_match(notice: Notice, config: ScreenConfig, industry_hits: list[
     if notice.product_class_no:
         name = f" {notice.product_class_name}" if notice.product_class_name else ""
         lines.append(
-            f"품명코드: 공고 세부품명번호 {notice.product_class_no}{name} — 관심 품명코드 {len(config.product_codes)}개 목록에 없음"
+            f"품명코드: 공고 세부품명번호 {notice.product_class_no}{name} — 보유 세부품명 {len(config.product_codes)}개 목록에 없음"
         )
     else:
         lines.append("품명코드: 공고에 세부품명번호가 없음 (용역·공사 공고는 대부분 없음) — 품명코드로는 비교 불가")
@@ -215,11 +284,11 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
             matched=False,
             confidence=None,
             excluded_by="해외개최",
-            excluded_reason=f"해외 전시회·박람회·엑스포 한국관/단체관 — 국내 공고 아님 ({overseas_evidence})",
+            excluded_reason=f"해외 개최 — 국내 공고 아님 ({overseas_evidence})",
         )
 
     budget = notice.budget
-    title = _squash(notice.title)
+    title = _canonical_title(notice.title)
     # 예산 예외는 수리·리모델링 등이 있어도 그대로 — "공사 설계 용역"이 들어가면 무조건 예산 상관없이(2026-10-14 사용자 요청)
     budget_exempt = any(_squash(w) and _squash(w) in title for w in config.budget_exempt_keywords)
     if (config.min_budget_amount is not None and budget is not None and budget < config.min_budget_amount
@@ -256,8 +325,9 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
         matched_industry_codes=industry_hits,
         overseas_flag=mongolia,
         overseas_evidence=(
-            f"{overseas_evidence} · '몽골' 감지 — 확장 중인 시장이라 자동 배제 대신 표시" if mongolia else None
+            f"{overseas_evidence} · 몽골 감지 — 확장 중인 시장이라 자동 배제 대신 표시" if mongolia else None
         ),
+        overseas_suspect=None if overseas_booth else _overseas_suspect(notice),
     )
 
 
@@ -300,18 +370,23 @@ class Schedule:
 
     @property
     def earliest(self) -> tuple[str, datetime] | None:
-        """카드 마감(D-N 기준). 이름은 예전 그대로지만 "가장 이른 것"이 아니라 **우선순위**로 고른다(2026-10-02 사용자 결정):
-        ① 입찰참가자격등록 마감 ② 입찰 마감 ③ 사전규격 의견등록 마감 ④ 첨부 공고문의 참가등록·제출 마감
-        ⑤ 공동수급협정 마감(공동수급으로 참가할 때만 해당해서 맨 뒤). 나머지 마감은 팝업(`all_deadlines`)에 날짜순으로 보인다."""
-        for label, dt in (
-            ("자격등록 마감", self.qualification_deadline),
-            ("입찰 마감", self.bid_deadline),
-            ("의견등록 마감", self.opinion_deadline),
-            (self.attachment_deadline_kind, self.attachment_deadline),
-            ("공동수급협정 마감", self.joint_agreement_deadline),
-        ):
-            if dt is not None:
-                return (label, dt)
+        """카드 마감(D-N 기준) = 자격등록·입찰·의견등록(사전규격) 마감 중 **가장 이른 것**(2026-10-19 통합 결정 4번 —
+        10/02의 우선순위 방식을 바꿈). 셋 다 비었을 때만 첨부 공고문의 참가등록·제출 마감을 쓴다.
+        공동수급협정 마감은 공동수급으로 참가할 때만 의미가 있어 계산에서 뺀다(지나도 단독 참가는 가능) — 팝업(`all_deadlines`)에만 보인다.
+        이 날짜가 지나면 수집 단계에서 뺀다(`pipeline.drop_expired`)."""
+        api = [
+            (label, dt)
+            for label, dt in (
+                ("자격등록 마감", self.qualification_deadline),
+                ("입찰 마감", self.bid_deadline),
+                ("의견등록 마감", self.opinion_deadline),
+            )
+            if dt is not None
+        ]
+        if api:
+            return min(api, key=lambda pair: pair[1])
+        if self.attachment_deadline is not None:
+            return (self.attachment_deadline_kind, self.attachment_deadline)
         return None
 
     @property
@@ -351,6 +426,11 @@ class Schedule:
         if earliest is None:
             return None
         return (earliest[1] - now).days
+
+    def is_expired(self, now: datetime) -> bool:
+        """기준 마감(`earliest`)이 지났는가. 마감 정보가 없으면 False(남김)."""
+        earliest = self.earliest
+        return earliest is not None and earliest[1] < now
 
 
 def build_schedule(notice: Notice) -> Schedule:

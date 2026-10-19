@@ -28,6 +28,9 @@ from .models import Notice
 NEGOTIATED_PREFIX = "협상에의한계약"
 SPEC_PRICE_PREFIX = "규격가격동시입찰"
 PRIVATE_CONTRACT_MARK = "수의"
+# 설계공모(일반·제안·간이) — 작품 공모로 설계자만 뽑는 발주라 수집하지 않는다(2026-10-16 통합 결정 5번, 팀원 수집기 방식).
+# 공고명에 '설계공모'가 없고 낙찰방법에만 적힌 공고가 있다(신안갯벌박물관 리모델링 기본 및 실시설계 용역).
+DESIGN_CONTEST_MARK = "설계공모"
 
 CATEGORY_NEGOTIATED = "협상"
 CATEGORY_SPEC_PRICE = "규격가격동시입찰"
@@ -65,11 +68,17 @@ def is_private_contract(notice: Notice) -> bool:
     ).startswith(PRIVATE_CONTRACT_MARK)
 
 
+def is_design_contest(notice: Notice) -> bool:
+    """낙찰방법·계약방법·입찰방식 칸 어디든 '설계공모'가 있으면 설계공모 발주다(가운뎃점·공백 무시)."""
+    texts = (notice.award_method, notice.contract_method, notice.bid_method)
+    return any(DESIGN_CONTEST_MARK in re.sub(r"[\s·ㆍ.,]", "", t or "") for t in texts)
+
+
 def bid_category(notice: Notice) -> str | None:
-    """공고 유형. 수의계약이면 None(수집 범위 밖)."""
+    """공고 유형. 수의계약·설계공모면 None(수집 범위 밖). 순서: 수의 → 설계공모 → 협상 → 규격가격동시 → 입찰."""
     if notice.kind == CATEGORY_PRESPEC:
         return CATEGORY_PRESPEC
-    if is_private_contract(notice):
+    if is_private_contract(notice) or is_design_contest(notice):
         return None
     award = _normalize(notice.award_method)
     if award.startswith(NEGOTIATED_PREFIX):
@@ -138,6 +147,8 @@ class ScopeResult:
     dropped_old_ordinal: int
     # 이번 실행에서 고른 유형(`categories`) 밖이라 뺀 공고 수 (예: 매일 실행에서 협상 공고)
     dropped_other_category: int = 0
+    # 설계공모라 뺀 공고 수 (dropped_private와 따로 센다)
+    dropped_design_contest: int = 0
 
 
 def apply_scope(notices: list[Notice], categories: set[str] | None = None) -> ScopeResult:
@@ -158,7 +169,10 @@ def apply_scope(notices: list[Notice], categories: set[str] | None = None) -> Sc
     dropped_cancelled = len(latest) - len(alive)
 
     competitive = [n for n in alive if bid_category(n) is not None]
-    dropped_private = len(alive) - len(competitive)
+    dropped_design_contest = sum(
+        1 for n in alive if n.kind != CATEGORY_PRESPEC and not is_private_contract(n) and is_design_contest(n)
+    )
+    dropped_private = len(alive) - len(competitive) - dropped_design_contest
 
     kept = competitive
     if categories is not None:
@@ -172,6 +186,7 @@ def apply_scope(notices: list[Notice], categories: set[str] | None = None) -> Sc
         dropped_private=dropped_private,
         dropped_old_ordinal=dropped_old_ordinal,
         dropped_other_category=len(competitive) - len(kept),
+        dropped_design_contest=dropped_design_contest,
     )
 
 

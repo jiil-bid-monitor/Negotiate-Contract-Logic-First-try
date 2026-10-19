@@ -424,14 +424,12 @@ def save_attachment_texts(
             if hasattr(candidate, "days_left"):
                 candidate.days_left = schedule.days_left(now)
 
-        # 첨부 참가자격에 "주된 영업소 소재지가 ○○도" 같은 지역 요건이 있으면 API보다 우선한다
-        if all_items and held_codes is not None and hasattr(candidate, "region_check"):
+        # 첨부 참가자격의 "주된 영업소 소재지가 ○○도" 같은 지역 요건 — 제외에 쓰지 않고 "지역 제한 의심" 표시만
+        # (2026-10-19 통합 결정 7번). 제외는 나라장터 참가가능지역 API 판정(`region_check`)으로만.
+        if all_items and held_codes is not None and hasattr(candidate, "region_text"):
             from . import region as _region
 
-            company = _region.company_sido(held_raw or {})
-            candidate.region_check = _region.combine(
-                candidate.region_check, _region.from_text(all_items, company)
-            )
+            candidate.region_text = _region.from_text(all_items, _region.company_location(held_raw or {}))
 
         # 실적·기술인력·건축사사무소 요건 — 판정 없이 "확인 필요" 칩으로 (2026-09-30 사용자 요청)
         if hasattr(candidate, "text_flags"):

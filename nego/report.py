@@ -255,7 +255,7 @@ def render_console(candidates: list[Candidate], stats: RunStats) -> str:
     )
     other = f" / 다른 유형 {stats.other_category}" if stats.other_category else ""
     lines.append(
-        f"  (취소공고 제외 {stats.cancelled} / 수의계약 {stats.private_contract}{other} / "
+        f"  (취소공고 제외 {stats.cancelled} / 수의계약 {stats.private_contract} / 설계공모 {stats.design_contest}{other} / "
         f"이전 차수 {stats.old_ordinal})"
     )
     if stats.qualification_flagged:

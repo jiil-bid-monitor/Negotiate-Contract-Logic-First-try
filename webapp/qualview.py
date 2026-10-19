@@ -83,7 +83,9 @@ def _items(group, held: tuple[set[str], set[str]]) -> list[dict[str, Any]]:
         # 코드가 달라도 이름이 보유 면허 정식 이름과 똑같으면 보유("실내건축공사업(452106)" — 지일 0006·4990, 2026-10-19 제보,
         # `qualify.evaluate_attachment_text`와 같은 기준). 나라장터 번호가 아닌 숫자 괄호는 떼고 비교
         plain = _NORM.sub("", re.sub(r"\(\d+\)\s*$", "", label))
-        is_held = (code in codes or plain in exact) if code else (plain in names or _base(label) in names)
+        other = re.search(r"\((\d+)\)\s*$", label)  # 나라장터 번호가 아닌 숫자(세무 업종코드 452106 등)도 보유 목록에 있으면 보유
+        is_held = (code in codes or plain in exact) if code else (plain in names or _base(label) in names
+                                                                   or bool(other and other.group(1) in codes))
         out.append({"label": label, "code": code, "kind": "product" if code and len(code) == 10 else "industry",
                     "held": is_held})
     return out

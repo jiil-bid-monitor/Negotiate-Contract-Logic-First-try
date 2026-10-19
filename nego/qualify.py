@@ -1001,7 +1001,8 @@ def evaluate_attachment_text(
                 or_ok.append(LicenseGroup(group_no="또는", allowed_names=[label for _, label in bundle]))
             else:
                 code, label = bundle[0]
-                if code not in held_codes:  # 이름으로만 보유가 확인된 요건 — 충족 목록에 보이게
+                # 이름으로만 보유가 확인된 요건, 원문 훑기(4·10자리)에 안 잡히는 번호(세무 업종코드 등) — 충족 목록에 보이게
+                if code not in held_codes or len(code) not in (4, 10):
                     name_held.append(label)
 
     if not groups:

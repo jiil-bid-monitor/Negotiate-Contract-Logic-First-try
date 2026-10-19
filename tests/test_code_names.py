@@ -113,6 +113,14 @@ class TestUnheldCodeNames(unittest.TestCase):
             held_code_names={"0006": "실내건축공사업", "4990": "실내건축공사업"})
         self.assertEqual(result.summary, "자격 미달(실내건축공사업[사업자등록 업종](452106))")
 
+    def test_tax_code_in_held_list(self):
+        """사용자 결정(2026-10-19): 실내건축공사업 면허 보유라 세무 업종코드 452106도 보유 목록에 넣음 — 사업자등록 문맥이어도 보유."""
+        cfg = load_config()
+        held, names = qualify.load_held_codes(cfg.held_raw), qualify.load_held_code_names(cfg.held_raw)
+        self.assertIn("452106", held)
+        result = qualify.evaluate_attachment_text(["다. 사업자등록증상 업태·종목이 실내건축공사업(업종코드: 452106)인 업체"], held, names)
+        self.assertEqual(result.summary, "자격 충족")
+
     def test_unclosed_bracket_name_keeps_company_and_field(self):
         """"산업디자인전문회사[환경디자인분야(업종코드 4442)"처럼 대괄호를 안 닫은 표기 — 예전엔 "[" 가 이름표에 그대로 남았다."""
         self.assertEqual(

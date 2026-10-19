@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -232,6 +233,13 @@ def build_candidates(
     stats.categories = sorted(categories, key=scope.CATEGORIES.index) if categories else None
     # 웹앱 수집 로그에도 보이게 — 설계공모는 제외된 공고 탭에 안 실려 여기서만 건수를 볼 수 있다(통합 결정 5번)
     log.info("수집 범위 밖: 수의계약 %d건 · 설계공모 %d건 · 취소공고 %d건", stats.private_contract, stats.design_contest, stats.cancelled)
+    # [진단] 공고명에 '설계공모'가 든 공고의 낙찰방법·계약방법 — 설계공모 판별 칸이 맞는지 실응답으로 보려고(10/19)
+    named = [n for n in notices if "설계공모" in re.sub(r"\s", "", n.title or "")]
+    if named:
+        log.info("[진단] 공고명에 '설계공모'가 든 공고 %d건 (설계공모로 판별 %d건)", len(named), sum(scope.is_design_contest(n) for n in named))
+        for n in named[:3]:
+            log.info("  [진단] %s %s — 낙찰방법 %r · 계약방법 %r · 입찰방식 %r", n.notice_no, (n.title or "")[:30],
+                     n.award_method, n.contract_method, n.bid_method)
 
     candidates: list[Candidate] = []
     company_location = region.company_location(config.held_raw)

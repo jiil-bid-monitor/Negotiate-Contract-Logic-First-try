@@ -93,6 +93,13 @@ class TestDesignContest(unittest.TestCase):
         self.assertEqual(result.dropped_design_contest, 1)
         self.assertEqual(result.dropped_private, 0)
 
+    def test_design_contest_with_private_contract_counted_as_design_contest(self):
+        """설계공모는 당선자와 수의계약이라 계약방법이 '수의계약'이어도 설계공모로 센다(10/19 실수집 로그 "설계공모 0건")."""
+        n = _notice(title="OO도서관 건립 설계공모", award="설계공모-일반설계공모")
+        n.contract_method = "수의계약"
+        result = scope.apply_scope([n])
+        self.assertEqual((result.dropped_design_contest, result.dropped_private), (1, 0))
+
     def test_proposal_contest_by_negotiation_kept(self):
         n = _notice(title="거제 지심도 산마루문화놀이터 명소화 사업 제안공모")
         self.assertEqual(scope.bid_category(n), "협상")

@@ -169,9 +169,9 @@ def apply_scope(notices: list[Notice], categories: set[str] | None = None) -> Sc
     dropped_cancelled = len(latest) - len(alive)
 
     competitive = [n for n in alive if bid_category(n) is not None]
-    dropped_design_contest = sum(
-        1 for n in alive if n.kind != CATEGORY_PRESPEC and not is_private_contract(n) and is_design_contest(n)
-    )
+    # 설계공모는 당선자와 수의계약을 맺어 계약방법 칸이 "수의계약"인 경우가 많다 — 수의계약보다 먼저 센다
+    # (10/19 실수집 로그 "설계공모 0건"). 빠지는 공고는 같고 건수 나누기만 바뀐다.
+    dropped_design_contest = sum(1 for n in alive if n.kind != CATEGORY_PRESPEC and is_design_contest(n))
     dropped_private = len(alive) - len(competitive) - dropped_design_contest
 
     kept = competitive

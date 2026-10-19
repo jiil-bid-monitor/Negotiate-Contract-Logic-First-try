@@ -352,7 +352,8 @@ class TestUnknownIndustryFlag(unittest.TestCase):
         item = ("나.「엔지니어링산업진흥법」제21조의 규정에 따라 건설부문 (도로‧공항, 토목구조)에 신고를 필한 업체 또는「기술사법」 "
                 "제6조의 규정에 의거 동일분야 기술사사무소 등록을 필한 업체로 「건설기술진흥법」제 26조에 따른 "
                 "건설기술용역업〔종합 또는 설계·사업관리(일반) 또는 설계·사업관리(설계 등 용역)〕을 등록한 업체이어야 합니다.")
-        self.assertEqual(self.industry([item])[0]["names"], ["기술사사무소", "건설기술용역업"])
+        # 첫 조건은 업종 이름 없이 법 이름으로만 적혀 있다 — 엔지니어링사업자(건설부문)
+        self.assertEqual(self.industry([item])[0]["names"], ["엔지니어링사업자(건설부문)", "기술사사무소", "건설기술용역업"])
 
     def test_known_or_held_alternative_not_flagged(self):
         """사전에 있는 업종은 이름 판정이 보고, 지일 보유 업종과 "중 하나"로 나열되면 이미 채워진다."""

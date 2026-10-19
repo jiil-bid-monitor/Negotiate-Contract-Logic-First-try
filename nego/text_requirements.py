@@ -330,6 +330,15 @@ def _unknown_industry_flag(per_item: list[list[str]], owner: dict, held_code_nam
                     continue
                 if name not in names and name not in found:
                     found.append(name)
+            # "「엔지니어링산업진흥법」에 따라 건설부문(…)에 신고를 필한 업체"는 업종 이름 없이 법 이름으로만 말한다(제천 공고문)
+            squeezed = _norm(s)
+            eng = re.search(r"엔지니어링산업진흥법(.{0,80}?)신고", squeezed)
+            if eng and "엔지니어링사업자" not in squeezed and not any(k.startswith("엔지니어링사업자") for k in known):
+                part = re.search(r"([가-힣]{2,12}부문)", eng.group(1))
+                field_name = _INDUSTRY_LEAD_RE.sub("", part.group(1)) if part else ""  # "조에따른건설부문" → "건설부문"
+                name = f"엔지니어링사업자({field_name})" if len(field_name) > 2 else "엔지니어링사업자"
+                if name not in names:
+                    found.insert(0, name)
             if found:
                 names.extend(found)
                 text = _with_context(s, owner)

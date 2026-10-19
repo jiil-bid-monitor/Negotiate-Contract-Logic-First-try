@@ -2118,8 +2118,16 @@ function scoreWhyHtml(n) {
       : s.basis === "공고명만"
         ? "공고 제목만 (첨부 과업 내용을 읽지 못했거나, 제외된 공고라 첨부를 읽지 않음)"
         : s.basis || "—";
+  // 근거 문서 — 연결 사전규격 첨부까지 과업 문서로 읽어서, 공고 첨부에 없는 글로 점수가 나올 수 있다(2026-10-19 사용자 요청)
+  const docNames = (s.docs || []).map(esc).join(", ");
+  const docs =
+    s.docs_from === "과업 문서"
+      ? `근거 문서: ${docNames || "과업 문서"}${(s.docs || []).some((d) => d.startsWith("연결 사전규격")) ? " <small>(연결 사전규격 첨부 = 본공고 전에 올린 사전규격의 규격서·제안요청서)</small>" : ""}<br>`
+      : s.docs_from === "첨부 전체"
+        ? `근거 문서: 공고문만 — 과업 문서(과업지시서·제안요청서) 없음${docNames ? ` <small>(${docNames})</small>` : ""}<br>`
+        : "";
   const head = `<h4>싱크로율 근거</h4>
-    <p class="meta">비교한 것: ${esc(basis)}<br>${s.score == null ? "판정 불가 — 비교할 과업 항목이 없습니다" : `가장 비슷한 과거 실적과의 유사도 ${Math.round(s.score * 100)}% · ${esc(s.level || "")}`}</p>`;
+    <p class="meta">비교한 것: ${esc(s.docs_from === "첨부 전체" ? "공고 제목 + 첨부 공고문" : basis)}<br>${docs}${s.score == null ? "판정 불가 — 비교할 과업 항목이 없습니다" : `가장 비슷한 과거 실적과의 유사도 ${Math.round(s.score * 100)}% · ${esc(s.level || "")}`}</p>`;
   const facets = Object.entries(s.tags || {}).filter(([, t]) => (t || []).length);
   const profileHtml =
     `<h5>이 공고의 과업 프로필</h5>` +

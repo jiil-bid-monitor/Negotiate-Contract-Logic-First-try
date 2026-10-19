@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -46,7 +47,7 @@ def custom_period(begin: str, end: str, now: datetime) -> tuple[datetime, dateti
 # 저장되는 수집 결과의 판정·표시 형식 버전. 자격 판정·팝업 자료가 바뀔 때 올린다 — 화면이 예전 버전으로
 # 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다(화면은 서버가 알려 주는 이 값과 결과의 format을 비교 — 2026-09-30: 코드를 받고도 옛 결과를 보고
 # 중복·개수 오류가 그대로라고 여긴 일이 두 번 있었음).
-RESULT_FORMAT = 53
+RESULT_FORMAT = 54
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -60,6 +61,19 @@ def _g2b_url(n) -> str | None:
     return f"https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo={n.notice_no}&bidPbancOrd={n.notice_ord}"
 
 
+_DOC_HEADER_RE = re.compile(r"^=== (.+?) ===$", re.M)
+
+
+def sync_docs(task_text: str, attachment_text: str) -> dict[str, Any]:
+    """싱크로율을 계산한 문서 — 파일명 목록과 출처(과업 문서 / 과업 문서 없이 첨부 전체). 팝업 "근거 문서" 줄에 쓴다
+    (2026-10-19 사용자 요청: 본공고 첨부는 공고서 한 장인데 75%가 나와 어디서 왔는지 헷갈림 — 연결 사전규격 제안요청서였음)."""
+    if task_text.strip():
+        return {"docs_from": "과업 문서", "docs": _DOC_HEADER_RE.findall(task_text)}
+    if attachment_text.strip():
+        return {"docs_from": "첨부 전체", "docs": _DOC_HEADER_RE.findall(attachment_text)}
+    return {"docs_from": None, "docs": []}
+
+
 def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set(), set()),
               interest: Callable[[Any], list[str]] | None = None) -> dict[str, Any]:
     """Candidate 1건 → 카드 1장. 후보/제외 공고 모두 같은 모양.
@@ -70,7 +84,9 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
     q = candidate.qualification
     earliest = candidate.schedule.earliest
     # 싱크로율 근거는 과업 문서 글 우선(과업지시서·제안요청서·공내역서 — 2026-10-19 통합), 없으면 첨부 전체
-    sync = past.score(n.title, getattr(candidate, "task_text", "") or candidate.attachment_text)
+    task_text = getattr(candidate, "task_text", "")
+    sync = past.score(n.title, task_text or candidate.attachment_text)
+    sync.update(sync_docs(task_text, candidate.attachment_text))
     ai = candidate.llm_similarity
     ai_row = None
     if ai is not None:

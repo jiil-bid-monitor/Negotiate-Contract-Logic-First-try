@@ -114,9 +114,23 @@ class TestSerialize(unittest.TestCase):
         self.assertEqual(flagged["category"], "협상")
         self.assertEqual(flagged["key"], "R26TEST00009-000")
         self.assertEqual(flagged["sync"]["basis"], "공고명만")
+        self.assertEqual((flagged["sync"]["docs_from"], flagged["sync"]["docs"]), (None, []))
         json.dumps(flagged, ensure_ascii=False)  # 화면으로 보낼 수 있어야 한다
         rejected = [serialize(x, FakePast()) for x in stats.rejected]
         self.assertTrue(all(r["excluded_reason"] for r in rejected))
+
+
+class TestSyncDocs(unittest.TestCase):
+    """2026-10-19 — 싱크로율 팝업 "근거 문서": 과업 문서면 그 파일명(연결 사전규격 첨부 포함), 없으면 공고문만."""
+
+    def test_task_docs_and_fallback(self):
+        from webapp.collect import sync_docs
+
+        task = "\n\n=== 연결 사전규격(R26BD00000001) 첨부 1 ===\n제안요청서 본문"
+        att = "\n\n=== 입찰공고서.pdf ===\n공고 본문" + task
+        self.assertEqual(sync_docs(task, att), {"docs_from": "과업 문서", "docs": ["연결 사전규격(R26BD00000001) 첨부 1"]})
+        self.assertEqual(sync_docs("", "\n\n=== 입찰공고서.pdf ===\n공고 본문"),
+                         {"docs_from": "첨부 전체", "docs": ["입찰공고서.pdf"]})
 
 
 class TestQualificationView(unittest.TestCase):

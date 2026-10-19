@@ -64,10 +64,15 @@ class TestDesignServiceVariants(unittest.TestCase):
                 self.assertTrue(result.matched, result.excluded_reason)
                 self.assertIn("공사 설계 용역", result.matched_keywords)
 
-    def test_design_service_without_construction_is_not_exempt(self):
+    def test_any_design_service_is_budget_exempt(self):
+        """10/19 결정 — '공사'가 없는 설계 용역도 예산 상관없이(관심 키워드는 맞아야 함)."""
         n = _notice(title="OO전시관 실시설계 용역", presmptPrce="30000000", asignBdgtAmt="33000000")
         result = screen.screen(n, _screen_config())
-        self.assertEqual(result.excluded_by, "최소예산")
+        self.assertTrue(result.matched, result.excluded_reason)
+        n = _notice(title="OO본부 청사 실시설계 용역", presmptPrce="30000000", asignBdgtAmt="33000000")
+        self.assertEqual(screen.screen(n, _screen_config()).excluded_by, "미매칭")
+        n = _notice(title="OO전시관 전시물 제작", presmptPrce="30000000", asignBdgtAmt="33000000")
+        self.assertEqual(screen.screen(n, _screen_config()).excluded_by, "최소예산")
 
     def test_design_service_with_interest_keyword_is_collected(self):
         """10/19 결정 — 관심 키워드가 있으면 제작·설치 없는 설계 용역도 수집(울란바타르 공간기획·인테리어 설계 용역)."""

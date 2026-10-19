@@ -45,6 +45,13 @@ def _canonical_title(text: str | None) -> str:
     return _DESIGN_SERVICE_VARIANT_RE.sub("공사설계용역", _squash(text))
 
 
+def is_design_service(title: str | None) -> bool:
+    """공고명에 "설계"와 "용역"이 다 있으면 설계 용역 — 최소예산을 안 따진다(2026-10-19 사용자 결정: 설계 용역은 예산 상관없이,
+    관심 키워드는 그대로 맞아야 함). 설계공모는 scope에서 이미 수집 범위 밖."""
+    plain = _squash(title)
+    return "설계" in plain and "용역" in plain
+
+
 @dataclass
 class ScreenConfig:
     keywords: list[str] = field(default_factory=list)
@@ -289,8 +296,10 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
 
     budget = notice.budget
     title = _canonical_title(notice.title)
-    # 예산 예외는 수리·리모델링 등이 있어도 그대로 — "공사 설계 용역"이 들어가면 무조건 예산 상관없이(2026-10-14 사용자 요청)
-    budget_exempt = any(_squash(w) and _squash(w) in title for w in config.budget_exempt_keywords)
+    # 예산 예외는 수리·리모델링 등이 있어도 그대로 — "공사 설계 용역"이 들어가면 무조건 예산 상관없이(2026-10-14 사용자 요청),
+    # 10/19부터는 설계 용역 전부(관심 키워드는 맞아야 함)
+    budget_exempt = (any(_squash(w) and _squash(w) in title for w in config.budget_exempt_keywords)
+                     or is_design_service(notice.title))
     if (config.min_budget_amount is not None and budget is not None and budget < config.min_budget_amount
             and not budget_exempt):
         return ScreenResult(

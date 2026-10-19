@@ -2350,7 +2350,6 @@ function regionBadge(n) {
   return tipBadge("faint", "지역제한 정보 없음", "지역제한", `<p>나라장터 참가가능지역 정보에 지역제한이 없습니다.<br>원문에서 한 번 더 확인하세요.</p>`);
 }
 
-/** 첨부 공고문의 소재지 요건 — 나라장터엔 지역제한이 없는데 공고문엔 있을 때. 빼지 않고 표시만 (통합 결정 7번) */
 /** ["강원 속초시", "강원 고성군", "경기"] → "강원 속초시·고성군 / 경기" — 같은 시·도는 한 번만 쓴다 */
 function regionList(list) {
   const groups = new Map();
@@ -2361,6 +2360,7 @@ function regionList(list) {
   }
   return [...groups].map(([sido, sub]) => (sub.length ? `${sido} ${sub.join("·")}` : sido)).join(" / ");
 }
+/** 첨부 공고문의 소재지 요건 — 나라장터엔 지역제한이 없는데 공고문엔 있을 때. 빼지 않고 표시만 (통합 결정 7번) */
 function regionSuspectBadge(n) {
   const t = n.regionText || {};
   const req = regionList(t.required);

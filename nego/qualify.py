@@ -482,7 +482,7 @@ _STANDALONE_CODE_RE = re.compile(r"(?<!\d)(?:\d{10}|\d{4})(?!\d)")
 # 이름표 맨 앞의 항목 번호 — "가.", "1)", "(가)", "①" 등. 참가자격 항목은 대개
 # 번호로 시작해서, 괄호 앞 구절을 이름표로 쓰면 "나. 직접생산확인증명서"처럼 번호가
 # 같이 붙어 나왔다.
-_ITEM_MARKER_RE = re.compile(r"^\s*(?:[가-하]\s*[.)]|[0-9]+\s*[.)]|\([가-하0-9]+\)|[①-⑳])\s*")
+_ITEM_MARKER_RE = re.compile(r"^\s*(?:[가-하]\s*[.)]|[0-9]+\s*[.)]|\([가-하0-9]+\)|[①-⑳Ⓐ-Ⓩⓐ-ⓩ])\s*")
 
 
 def _last_name_chunk(text: str) -> str:
@@ -662,37 +662,74 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
             elif inside_paren and len(inside_paren) <= _MAX_LABEL_LEN:
                 name = inside_paren
             else:
-                before_paren = prefix[:last_open] if is_inside else prefix
-                before_paren = _last_name_chunk(before_paren)
-                # 실측: 인용부호로 감싼 품목명("조합놀이대")도 있어 대괄호/낫표류
-                # 인용 문장부호와 함께 일반 인용부호("'')도 선행 문자로 떼어낸다.
-                # 앞 항목과 이어 쓴 쉼표·세미콜론("…(코드1), 이름2(코드2)")도 뗀다.
-                before_paren = re.sub(r"^[\s\-·,;，:：「『\"'“‘]+", "", before_paren)
-                before_paren = _LEADING_CONJUNCTION_RE.sub("", before_paren)
-                segments = [s for s in _LABEL_CONNECTOR_RE.split(before_paren) if s.strip()]
-                name = (segments[-1] if segments else before_paren).strip()
-                # "…로 신고 또는 기술사사무소" — 앞 요건과 "또는"으로 이어진 이름은 "또는" 뒤만
-                name = re.split(r"\s(?:또는|혹은)\s", name)[-1]
-                # PDF 줄바꿈이 낱말 중간에 걸리면("…엔지\n니어링사업자(3583)") 이름이 줄머리부터라 앞 조각이 잘린다 —
-                # 앞 줄 끝 낱말이 조사·어미로 끝나지 않는 짧은 조각이면 이어 붙인다.
-                if name and line_no > 0 and line.lstrip().startswith(name) and not _LINE_HEAD_MARK_RE.match(line):
-                    tail = re.search(r"(?<![가-힣])([가-힣]{1,4})$", lines[line_no - 1])
-                    if tail and not _PARTICLE_END_RE.search(tail.group(1)) and tail.group(1) not in _WHOLE_WORD_ENDS:
-                        name = tail.group(1) + name
-                name = re.sub(r"^[\s,;，:：]+", "", name)  # "직접생산확인증명서 : 영상…"의 콜론
-                name = name.strip("\"'“‘”’").strip()
-                name = _truncate_label(name)
+                name = _name_before_bracket(prefix[:last_open] if is_inside else prefix, line, lines, line_no)
             start = base + match.start(code_group)
             results.append((start, start + len(code), code, f"{name}({code})" if name else code))
 
         for bare_match in _BARE_GROUP_RE.finditer(line):
             if any(_spans_overlap(bare_match.span(), span) for span in consumed):
                 continue
-            for pos, code, name in _split_group_entries(bare_match.group(1), _BARE_GROUP_ENTRY_CODE_RE):
+            entries = _split_group_entries(bare_match.group(1), _BARE_GROUP_ENTRY_CODE_RE)
+            for pos, code, name in entries:
+                # "측량용역(분류번호:8115160401)"처럼 괄호 안이 "…번호:" + 코드뿐이면 괄호 앞 낱말이 이름
+                # ("(6010989901)"처럼 코드만이면 이름 사전·등록증이 더 깔끔한 이름을 준다)
+                if not name and len(entries) == 1 and _LABEL_BEFORE_CODE_RE.search(bare_match.group(1)[:pos]):
+                    name = _name_before_bracket(line[: bare_match.start()], line, lines, line_no)
                 name = _truncate_label(name)
                 start = base + bare_match.start(1) + pos
                 results.append((start, start + len(code), code, f"{name}({code})" if name else code))
     return merged, results
+
+
+# 괄호 안 코드 앞 설명 — "(분류번호:8115160401)", "(물품분류번호 …)"
+_LABEL_BEFORE_CODE_RE = re.compile(r"번호\s*[:：]?\s*$")
+# 이름 앞 "허용업종(코드) :" 머리말 — "(허용업종코드: 음반·음악영상물제작업(3243)"
+_ALLOWED_PREFIX_RE = re.compile(r"^허용\s*업종\s*(?:코드)?\s*[:：]\s*")
+
+
+def _name_before_bracket(before_paren: str, line: str, lines: list[str], line_no: int) -> str:
+    """코드 괄호 바로 앞 글에서 이름표를 뽑는다. 아직 안 닫힌 괄호·대괄호가 앞에 있으면 그 안쪽부터만 본다
+    ("직접생산확인증명서[측량용역(분류번호:8115160401)" → "측량용역", 2026-10-19 제보)."""
+    outer = ""
+    depth = 0
+    for i in range(len(before_paren) - 1, -1, -1):
+        ch = before_paren[i]
+        if ch in ")]":
+            depth += 1
+        elif ch in "([":
+            if depth == 0:
+                # 괄호 앞이 업종·회사 이름이면 "산업디자인전문회사(환경디자인분야)"로, 서류 이름이면 안쪽만
+                if before_paren[i + 1 :].strip():
+                    outer = (_name_before_bracket(before_paren[:i], line, lines, line_no) if i else "").strip()
+                    # 안쪽이 이미 "이름(분야)"이면("[산업디자인전문회사(환경디자인분야)(업종코드 4442)]") 겉 이름을 안 붙인다
+                    if outer and (_GENERIC_LABEL_RE.search(outer) or outer.endswith(")") or before_paren.rstrip().endswith(")")):
+                        outer = ""
+                before_paren = before_paren[i + 1 :]
+                break
+            depth -= 1
+    before_paren = _ALLOWED_PREFIX_RE.sub("", before_paren.lstrip())
+    before_paren = _last_name_chunk(before_paren)
+    # 실측: 인용부호로 감싼 품목명("조합놀이대")도 있어 대괄호/낫표류
+    # 인용 문장부호와 함께 일반 인용부호("'')도 선행 문자로 떼어낸다.
+    # 앞 항목과 이어 쓴 쉼표·세미콜론("…(코드1), 이름2(코드2)")도 뗀다.
+    before_paren = re.sub(r"^[\s\-·,;，:：「『\"'“‘]+", "", before_paren)
+    before_paren = _LEADING_CONJUNCTION_RE.sub("", before_paren)
+    segments = [s for s in _LABEL_CONNECTOR_RE.split(before_paren) if s.strip()]
+    name = (segments[-1] if segments else before_paren).strip()
+    # "…로 신고 또는 기술사사무소" — 앞 요건과 "또는"으로 이어진 이름은 "또는" 뒤만
+    name = re.split(r"\s(?:또는|혹은)\s", name)[-1]
+    # PDF 줄바꿈이 낱말 중간에 걸리면("…엔지\n니어링사업자(3583)") 이름이 줄머리부터라 앞 조각이 잘린다 —
+    # 앞 줄 끝 낱말이 조사·어미로 끝나지 않는 짧은 조각이면 이어 붙인다.
+    if name and line_no > 0 and line.lstrip().startswith(name) and not _LINE_HEAD_MARK_RE.match(line):
+        tail = re.search(r"(?<![가-힣])([가-힣]{1,4})$", lines[line_no - 1])
+        if tail and not _PARTICLE_END_RE.search(tail.group(1)) and tail.group(1) not in _WHOLE_WORD_ENDS:
+            name = tail.group(1) + name
+    name = re.sub(r"^[\s,;，:：]+", "", name)  # "직접생산확인증명서 : 영상…"의 콜론
+    name = name.strip("\"'“‘”’").strip()
+    if outer and name:
+        name = f"{outer}({name})"
+    name = _truncate_label(name)
+    return name
 
 
 def _or_groups(item: str) -> list[list[tuple[str, str]]]:

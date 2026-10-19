@@ -73,6 +73,26 @@ class TestUnheldCodeNames(unittest.TestCase):
         )
         self.assertEqual(result.summary, "자격 미달(조형물(6012100201))")
 
+    def test_name_before_bracket_when_inner_is_label_and_code(self):
+        """2026-10-19 제보(제천시 신월~모산 도로개설공사 실시설계용역 R26BK01775782): "직접생산확인증명서[측량용역
+        (분류번호:8115160401)-…]"가 "이름 미확인(8115160401)"로 보였다 — 괄호 안이 "…번호:" + 코드뿐이면 괄호 앞 이름."""
+        item = ("다. … 직접생산확인증명서[측량용역(분류번호:8115160401)-필수특이사항에 공공측량업 또는 "
+                "측지측량업에 한함]를 소지한 업체이어야 합니다.")
+        self.assertEqual(qualify._extract_code_requirements(item), [("8115160401", "측량용역(8115160401)")])
+        result = qualify.evaluate_attachment_text([item], held_codes=set())
+        self.assertEqual(result.unnamed_codes, [])
+
+    def test_unclosed_bracket_name_keeps_company_and_field(self):
+        """"산업디자인전문회사[환경디자인분야(업종코드 4442)"처럼 대괄호를 안 닫은 표기 — 예전엔 "[" 가 이름표에 그대로 남았다."""
+        self.assertEqual(
+            qualify._extract_code_requirements("산업디자인전문회사[환경디자인분야(업종코드 4442)"),
+            [("4442", "산업디자인전문회사(환경디자인분야)(4442)")],
+        )
+        self.assertEqual(
+            qualify._extract_code_requirements("따른 [산업디자인전문회사(환경디자인분야)(업종코드 4442)]"),
+            [("4442", "산업디자인전문회사(환경디자인분야)(4442)")],
+        )
+
     def test_held_code_is_not_reported_as_unnamed(self):
         result = qualify.evaluate_attachment_text([BARE_ITEM], held_codes={"4440", "4444"})
         self.assertEqual(result.missing_count, 0)

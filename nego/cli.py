@@ -276,6 +276,7 @@ def main(argv: list[str] | None = None) -> int:
         # candidate.schedule.attachment_deadline(일정 미상 공고를 첨부파일로 보충한
         # 결과)이 리포트와 Supabase 저장 내용에 반영되어야 하기 때문이다.
         from .attachments import save_attachment_texts
+        from .http_client import DataGoKrClient
 
         held_codes = qualify.load_held_codes(config.held_raw)
         held_code_names = qualify.load_held_code_names(config.held_raw)
@@ -287,6 +288,8 @@ def main(argv: list[str] | None = None) -> int:
             now=now,
             code_names=config.code_names,
             held_raw=config.held_raw,
+            # 연결된 사전규격 첨부 조회용(본공고 bfSpecRgstNo) — 2026-10-19 통합 결정 1번
+            client=DataGoKrClient(config.api) if config.api.service_key else None,
         )
         print(
             f"첨부파일 텍스트 추출: 시도 {att_stats['attempted']}건 "

@@ -65,7 +65,8 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
     n = candidate.notice
     q = candidate.qualification
     earliest = candidate.schedule.earliest
-    sync = past.score(n.title, candidate.attachment_text)
+    # 싱크로율 근거는 과업 문서 글 우선(과업지시서·제안요청서·공내역서 — 2026-10-19 통합), 없으면 첨부 전체
+    sync = past.score(n.title, getattr(candidate, "task_text", "") or candidate.attachment_text)
     ai = candidate.llm_similarity
     ai_row = None
     if ai is not None:
@@ -96,6 +97,7 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         # 관심 / 세부품명 (키워드 없이 등록 품목만 맞은 공고) — 2026-10-19 통합 결정 10·12번
         "section": candidate.screen_result.section,
         "overseas_suspect": candidate.screen_result.overseas_suspect,
+        "overseas_attachment": getattr(candidate, "overseas_attachment", None),
         "review_exclude": candidate.screen_result.review_exclude,
         "is_candidate": candidate.is_candidate,
         "excluded_reason": candidate.excluded_reason,
@@ -243,12 +245,14 @@ class Collector:
         candidates, stats, _ = run(config, now, cats, include_prespec=prespec, period=period)
         if attachments:
             from nego.attachments import save_attachment_texts
+            from nego.http_client import DataGoKrClient
 
             att = save_attachment_texts(
                 candidates, config.output_dir,
                 held_codes=qualify.load_held_codes(config.held_raw),
                 held_code_names=qualify.load_held_code_names(config.held_raw),
                 now=now, code_names=config.code_names, held_raw=config.held_raw,
+                client=DataGoKrClient(config.api) if config.api.service_key else None,
             )
             log.info("첨부파일: 시도 %d → 성공 %d / 실패 %d · 자격판정 반영 %d건",
                      att["attempted"], att["ok"], att["failed"], att["qualification_determined"])

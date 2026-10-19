@@ -46,7 +46,7 @@ def custom_period(begin: str, end: str, now: datetime) -> tuple[datetime, dateti
 # 저장되는 수집 결과의 판정·표시 형식 버전. 자격 판정·팝업 자료가 바뀔 때 올린다 — 화면이 예전 버전으로
 # 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다(화면은 서버가 알려 주는 이 값과 결과의 format을 비교 — 2026-09-30: 코드를 받고도 옛 결과를 보고
 # 중복·개수 오류가 그대로라고 여긴 일이 두 번 있었음).
-RESULT_FORMAT = 41
+RESULT_FORMAT = 42
 
 
 def _iso(dt: datetime | None) -> str | None:

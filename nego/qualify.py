@@ -385,6 +385,9 @@ _CODE_REQUIREMENT_RE = re.compile(
     # 실측 표기 중 "세부품명번호: 7215409901"처럼 콜론이 끼는 경우도 받는다.
     r"(?:업종코드|세부품명번호)\s*[:：]?\s*(?:[0-9]+\s*자리\s*,?\s*)?(?P<code>[0-9]{4,10})"
     r"|\((?P<bare_code>[0-9]{10})\)"
+    # "공공측량업(5023)"처럼 업·사업자·회사·사무소로 끝나는 이름 바로 뒤 (4자리) — 업종코드(2026-10-19 사용자 결정,
+    # 제천시 신월~모산 도로개설공사 실시설계용역). 이름 끝 글자를 보는 건 "(2024)" 같은 연도·조항 번호를 코드로 안 읽으려고
+    r"|(?<=[업자사소])\((?P<short_code>[0-9]{4})\)(?!\s*년)"
 )
 # 문서마다 괄호를 쓰는지 대괄호를 쓰는지, 코드 여러 개를 콤마로 나열하는지
 # 세미콜론이나 공백으로 나열하는지가 제각각이다 — 문서마다 정규식을 하나씩
@@ -645,7 +648,7 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
             if any(_spans_overlap(match.span(), span) for span in consumed):
                 continue
             consumed.append(match.span())
-            code_group = "code" if match.group("code") else "bare_code"
+            code_group = next(g for g in ("code", "bare_code", "short_code") if match.group(g))
             code = match.group(code_group)
             prefix = line[: match.start()]
             # 코드가 **아직 닫히지 않은** 괄호 안에 있을 때만 괄호 안쪽을 이름으로 본다.
@@ -663,6 +666,11 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
                 name = inside_paren
             else:
                 name = _name_before_bracket(prefix[:last_open] if is_inside else prefix, line, lines, line_no)
+            if code_group == "short_code" and name:
+                # "…별표7에서 정하고 있는 공공측량업(5023)" — 꾸미는 말(…는/한/된/에서)까지는 떼고 업종명만
+                words = name.split()
+                cut = max((i + 1 for i, w in enumerate(words[:-1]) if re.search(r"[는은한된른서고여며를을에의]$", w)), default=0)
+                name = _ITEM_MARKER_RE.sub("", " ".join(words[cut:]))
             start = base + match.start(code_group)
             results.append((start, start + len(code), code, f"{name}({code})" if name else code))
 

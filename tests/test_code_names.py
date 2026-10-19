@@ -82,6 +82,13 @@ class TestUnheldCodeNames(unittest.TestCase):
         result = qualify.evaluate_attachment_text([item], held_codes=set())
         self.assertEqual(result.unnamed_codes, [])
 
+    def test_four_digit_code_after_industry_name(self):
+        """2026-10-19 사용자 결정: "공공측량업(5023) 또는 측지측량업(5021)"처럼 업·사업자·회사·사무소로 끝나는 이름 바로 뒤
+        (4자리)는 업종코드. 연도·조항 번호는 그대로 안 읽는다."""
+        item = "별표7에서 정하고 있는 공공측량업(5023) 또는 측지측량업(5021)에 등록된 업체"
+        self.assertEqual(qualify._or_groups(item), [[("5023", "공공측량업(5023)"), ("5021", "측지측량업(5021)")]])
+        self.assertEqual(qualify._extract_code_requirements("2024년(2024) 기준, 제44조(1234)에 따라"), [])
+
     def test_unclosed_bracket_name_keeps_company_and_field(self):
         """"산업디자인전문회사[환경디자인분야(업종코드 4442)"처럼 대괄호를 안 닫은 표기 — 예전엔 "[" 가 이름표에 그대로 남았다."""
         self.assertEqual(

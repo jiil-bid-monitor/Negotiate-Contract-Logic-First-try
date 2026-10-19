@@ -43,7 +43,7 @@ def card(no, **kw):
 
 RUN = {
     "id": 1, "started_at": "2026-10-19T09:00:00", "finished_at": "2026-10-19T09:05:00", "params": {"days": 7},
-    "format": 37, "keywords": ["과학관"],
+    "format": 38, "keywords": ["과학관"],
     "candidates": [
         card("R26BK00000001"),
         card("R26BK00000002", confidence="검토필요", review_exclude="운영 용역", product_codes=["6010989901"]),

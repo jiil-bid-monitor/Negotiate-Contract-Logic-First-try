@@ -140,6 +140,7 @@ def item(c: dict[str, Any], held_names: dict[str, str], promoted: dict[str, Any]
         "attachmentCount": c.get("attachment_count"),
         "hasAttachmentText": bool(c.get("has_attachment_text")),
         "scopeItems": c.get("scope_items") or [],
+        "designScope": c.get("design_scope"),
         "sync": sync,
         "maxScore": sync.get("score") or 0,
         "basis": "제목+과업내용" if sync.get("basis") == "과업 원문" else "제목",

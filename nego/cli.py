@@ -342,6 +342,16 @@ def main(argv: list[str] | None = None) -> int:
     candidates = drop_expired(candidates, now, stats)
     candidates = drop_region_unmet(candidates, stats)
 
+    # 싱크로율 — 과거 실적 자료(JIIL_REPO, Actions에선 암호화 묶음을 푼 data/jiil)가 있을 때만. 메일·HTML 리포트에 표시
+    from .sync import PastIndex
+
+    past = PastIndex.load()
+    if past.available:
+        for c in candidates:
+            c.sync = past.score(c.notice.title, c.task_text or c.attachment_text)
+    else:
+        logging.info("싱크로율 건너뜀: %s", past.error)
+
     llm_paths: dict[str, Path] = {}
     if args.llm_similarity:
         llm_paths = _run_llm_similarity(candidates, config, now)

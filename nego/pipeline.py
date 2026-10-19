@@ -50,6 +50,8 @@ class Candidate:
     task_text: str = ""
     # 첨부 공고문의 개최·사업 장소가 해외일 때 그 장소("독일 뒤셀도르프") — 표시만(2026-10-16 통합 결정 8번)
     overseas_attachment: str | None = None
+    # 싱크로율(`sync.PastIndex.score` 결과) — 화면·메일에만 표시, 판정엔 안 씀(2026-10-19 통합 결정 16번)
+    sync: dict | None = None
     # 매일 입찰 보고에서 이미 보낸 공고의 정정공고(차수가 오름) — 보고에 [정정] (`sent_state.select_new`)
     corrected: bool = False
     # `--llm-similarity`를 줬을 때만 채워진다 (`llm_similarity.LlmJudgement`).

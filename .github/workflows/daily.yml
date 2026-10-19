@@ -199,6 +199,13 @@ jobs:
           fi
           echo "보낸 공고 기록 $(python -c "import json;print(len(json.load(open('state/sent_bids.json'))))")건"
 
+      # 싱크로율 자료(비공개 과거 실적)는 암호화 묶음 corpus/sync_bundle.enc로 커밋돼 있다 — Secret이 없으면 싱크로율만 빠진다
+      - name: 싱크로율 자료 풀기
+        if: github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
+        env:
+          CORPUS_PASSPHRASE: ${{ secrets.CORPUS_PASSPHRASE }}
+        run: python -m nego.corpus open
+
       - name: 수집 실행
         id: collect
         if: github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
@@ -219,6 +226,7 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          JIIL_REPO: data/jiil
           SENT_STATE: ${{ steps.mode.outputs.sent_state }}
           EMAIL: ${{ steps.mode.outputs.email }}
           CATEGORIES: ${{ steps.mode.outputs.categories }}

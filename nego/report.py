@@ -528,9 +528,15 @@ def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[st
                 kwtags = '<div class="kwtags">' + "".join(
                     f'<span class="kwtag">품목:{esc(k)}</span>' for k in c.screen_result.matched_product_codes
                 ) + "</div>"
+            sync = getattr(c, "sync", None) or {}
+            if sync.get("score") is not None:
+                best = (sync.get("top") or [{}])[0]
+                similar = f' · 유사: {esc(best.get("year") or "")} {esc(best.get("title") or "")}' if best.get("title") else ""
+                kwtags += (f'<div class="dim" style="font-size:0.68rem;margin-top:4px;">'
+                           f'싱크로율 {round(sync["score"] * 100)}% ({esc(sync.get("level"))}){similar}</div>')
             if c.screen_result.matched_keywords:
                 tags = "".join(f'<span class="kwtag">키워드:{esc(k)}</span>' for k in c.screen_result.matched_keywords)
-                kwtags = f'<div class="kwtags">{tags}</div>'
+                kwtags += f'<div class="kwtags">{tags}</div>'
 
             # 헤더가 "추정가격(원) / 배정예산(원)" 순서를 알려주므로 칸 안 라벨은
             # "추정"/"배정" 두 글자로 줄인다 — 값 하나만 있을 때도 어느 쪽인지는

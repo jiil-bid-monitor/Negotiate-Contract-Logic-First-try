@@ -29,7 +29,7 @@ N(이 레포)·M(팀원 `iamhiki/narajangter-bid-monitor`, TS) 비교 → 16개 
 - **12·14·15 보고**: 텔레그램·HTML 관심/세부품명 구역, 품목 표시. 매일 입찰은 `--sent-state`(bot-state 브랜치 `sent_bids.json`)로 새 공고·[정정]만,
   3일치 조회. 주간은 `--email`(SMTP_*, `config/recipients.json`).
 - **1 첨부**: `nego/attachment_sources.py`(과업 문서 순서·연결 사전규격·d2b), docx·공내역서 xlsx 추출, `Candidate.task_text`(싱크로율 근거).
-- **16 싱크로율**: `webapp/sync.py` → `nego/sync.py`. Actions는 `python -m nego.corpus open`(CORPUS_PASSPHRASE)으로 `data/jiil` 풀어 계산, 메일·HTML만 표시.
+- **16 싱크로율**: (10/19 점검 결정) 사용자는 표시 동작만 확인, 타당성은 담당자 참가·불참 기록(싱크로율 함께 저장)이 30건쯤 쌓이면 비교 검증. `webapp/sync.py` → `nego/sync.py`. Actions는 `python -m nego.corpus open`(CORPUS_PASSPHRASE)으로 `data/jiil` 풀어 계산, 메일·HTML만 표시.
 - **5 화면(B안, 10/19 완료)**: 팀원 `ui.html` → `webapp/static/index.html`. 서버는 그대로 `webapp/server.py`가 팀원 화면 API 모양을 내줌
   (`webapp/mview.py` — 저장된 결과를 옮겨 담기만, 판정 안 바꿈). 참가여부·올리기 = `data/participation.json`·`promoted.json`(`webapp/mstore.py`,
   공고번호 키, 예전 sqlite 기록은 처음 한 번 옮김). 자격·지역·확인 칩·싱크로율 팝업은 이 레포 자료(qualview·region_check·text_flags·sync)로

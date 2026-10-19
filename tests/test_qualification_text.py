@@ -18,6 +18,23 @@ class TestFindQualificationSection(unittest.TestCase):
     def test_returns_none_when_no_heading(self):
         self.assertIsNone(find_qualification_section("아무 관련 없는 문서 내용입니다."))
 
+    def test_pdf_spaced_numbering(self):
+        """2026-10-19 제보(구미시 스타트업 필드 공용공간 리모델링 공사 설계용역 공고문 PDF): 번호가 "3 . 1 . 1 ."처럼
+        띄어져 뽑혀 절을 못 찾았다."""
+        text = (
+            "증서를 제출하여야 합니다 . \n\n"
+            "3 .  입찰참가자격 \n"
+            " 3 . 1 .  아래의 자격을 모두 갖춘 자 이어야 합니다 . \n"
+            "  3 . 1 . 1 .  ｢ 건축사법 ｣ 에 의한 건축사사무소 를 개설하고 국토교통부장관에게 신고를 필한 자 \n"
+            "  3 . 1 . 2 .  ｢ 엔지니어링산업진흥법령 ｣ 에 의한 정보통신부문 에 엔지니어링사업자 로 신고를 필한 자 \n"
+            "  3 . 1 . 3 .  ｢ 소방시설공사업법령 ｣ 에 의한 전문소방시설설계업 으로 등록한 자 \n"
+            "4 .  입찰참가 등록 관련 \n"
+        )
+        section = find_qualification_section(text)
+        self.assertIsNotNone(section)
+        self.assertEqual(len(section.items), 4)
+        self.assertIn("소방시설설계업", section.items[-1])
+
     def test_skips_table_of_contents_style_run_on_line(self):
         """목차처럼 줄바꿈 없이 나열된 항목은 줄 시작이 아니라 매칭되면 안 된다."""
         text = (

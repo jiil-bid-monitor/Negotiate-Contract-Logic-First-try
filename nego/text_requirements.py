@@ -284,7 +284,7 @@ _INDUSTRY_NAME_RE = re.compile(
     r"([가-힣A-Za-z·‧ㆍ]{2,20}?(?:\([^()]{1,30}\))?"
     r"(?:공사업|설계업|용역업|측량업|제작업|대행업|감리업|진단업|조사업|관리업|사업자|사무소|전문회사))"
     # 이름 뒤 분야 괄호는 길 수 있다 — "건설기술용역업〔종합 또는 설계·사업관리(일반) 또는 …〕을 등록"(제천)
-    r"(?:[(\[〔][^()\[\]〔〕]{0,80}(?:\([^()]*\)[^()\[\]〔〕]{0,40})*[)\]〕])?(?=[^.。]{0,25}?(?:등록|신고|개설|면허))"
+    r"([(\[〔][^()\[\]〔〕]{0,80}(?:\([^()]*\)[^()\[\]〔〕]{0,40})*[)\]〕])?(?=[^.。]{0,25}?(?:등록|신고|개설|면허))"
 )
 _INDUSTRY_SKIP_SENTENCE = re.compile(
     r"업종\s*코드|[\[(]\s*\d{4}\s*[\])]|\d{10}|입찰\s*참가\s*자격\s*등록|사업자\s*등록|제출|확인서|등록증|증명서"
@@ -313,14 +313,15 @@ def _unknown_industry_flag(per_item: list[list[str]], owner: dict, held_code_nam
                 continue
             if _PROHIBITION.search(s) or _RESTRICTION_SENTENCE.search(s):
                 continue
-            flat = _ARTICLE_RE.sub(" ", _norm(_LAW_TITLE_RE.sub(" ", s)))
+            # 공백만 지운다(가운뎃점은 남겨 "설계·사업관리"로 보이게) — 사전과 비교할 땐 `_norm`
+            flat = _ARTICLE_RE.sub(" ", re.sub(r"\s+", "", _LAW_TITLE_RE.sub(" ", s)))
             # 지일이 가진 업종과 "또는/중 하나"로 나열된 문장 — 보유 쪽으로 이미 채워진다("실내건축공사업, 도장공사업 중 하나 이상")
-            if _OR_HINT.search(s) and any(len(h) >= 4 and h in flat for h in held):
+            if _OR_HINT.search(s) and any(len(h) >= 4 and h in _norm(flat) for h in held):
                 continue
             found = []
             for m in _INDUSTRY_NAME_RE.finditer(flat):
                 name = _industry_name(m.group(1))
-                base = re.sub(r"\([^()]*\)", "", name)
+                base = _norm(re.sub(r"\([^()]*\)", "", name))
                 if _INDUSTRY_SKIP_NAME.search(name) or _norm(name) in known or base in known:
                     continue
                 if any(k.startswith(base) or base.endswith(k) for k in known if len(k) >= 4):
@@ -328,8 +329,18 @@ def _unknown_industry_flag(per_item: list[list[str]], owner: dict, held_code_nam
                 # 보유 이름의 괄호 분야로 적은 경우 — "디지털콘텐츠개발서비스사업자" = 보유 "소프트웨어사업자(디지털콘텐츠개발서비스사업)"
                 if any(base.rstrip("자") in k for k in held_full if len(base) >= 4):
                     continue
-                if name not in names and name not in found:
-                    found.append(name)
+                # 이름 뒤 괄호에 분야를 "또는"으로 나열하면 분야마다 따로 — "건설기술용역업〔종합 또는 설계·사업관리(일반) 또는
+                # 설계·사업관리(설계 등 용역)〕" → 건설기술용역업(종합) / 건설기술용역업(설계·사업관리) (2026-10-19 사용자 요청)
+                fields = m.group(2) or ""
+                subs = []
+                if "또는" in fields:
+                    for part in re.split(r"또는", fields[1:-1]):
+                        part = re.sub(r"\([^()]*\)", "", part).strip(" ,·")
+                        if part and part not in subs:
+                            subs.append(part)
+                for full in [f"{name}({sub})" for sub in subs] or [name]:
+                    if all(_norm(full) != _norm(x) for x in names + found):
+                        found.append(full)
             # "「엔지니어링산업진흥법」에 따라 건설부문(…)에 신고를 필한 업체"는 업종 이름 없이 법 이름으로만 말한다(제천 공고문)
             squeezed = _norm(s)
             eng = re.search(r"엔지니어링산업진흥법(.{0,80}?)신고", squeezed)

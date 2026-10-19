@@ -230,6 +230,8 @@ def build_candidates(
     stats.old_ordinal = scope_result.dropped_old_ordinal
     stats.in_scope = len(scope_result.kept)
     stats.categories = sorted(categories, key=scope.CATEGORIES.index) if categories else None
+    # 웹앱 수집 로그에도 보이게 — 설계공모는 제외된 공고 탭에 안 실려 여기서만 건수를 볼 수 있다(통합 결정 5번)
+    log.info("수집 범위 밖: 수의계약 %d건 · 설계공모 %d건 · 취소공고 %d건", stats.private_contract, stats.design_contest, stats.cancelled)
 
     candidates: list[Candidate] = []
     company_location = region.company_location(config.held_raw)

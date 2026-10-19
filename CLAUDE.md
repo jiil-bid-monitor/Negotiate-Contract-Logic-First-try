@@ -4,6 +4,29 @@
 
 **새 계정·새 세션에서 이어받을 때는 `docs/HANDOFF.md`부터 읽을 것** (2026-10-16 계정 이전용 인수인계 — 현재 상태·준비할 것·다음 할 일 요약).
 
+## 2026-10-19 — 팀원 수집기와 통합 (브랜치 `claude/collector-integration`, 사용자 요청)
+
+N(이 레포)·M(팀원 `iamhiki/narajangter-bid-monitor`, TS) 비교 → 16개 항목 결정(10/16, 10/19 8·10번 변경). **팀원 레포는 수정 금지**
+(사용자 지시 — 읽기만). 결정 전문은 팀원 레포 `claude/collector-integration-plan` 브랜치 `INTEGRATION_HANDOFF.md`(10/16 작성, 이후 그 레포엔 손대지 않음)와
+공유 문서 https://claude.ai/code/artifact/c641cab6-44be-460c-934a-b079939c80af. 여기엔 바뀐 규칙만:
+- **2 예산**: 추정가격 → 배정예산 그대로(÷1.1 없음). 0원·빈 값 = 금액 모름(최소예산 통과). `Notice.budget_kind`, 표기 "(배정)"/"금액 모름".
+- **3 면제**: "공사 설계 용역" + 공사 기본·실시·기본 및 실시설계 용역 변형(`screen._canonical_title`) — 관심 키워드·예산 예외 둘 다.
+- **4 마감**: 기준 마감 = 자격등록·입찰·의견등록 중 **가장 이른 것**(셋 다 없으면 첨부 마감), 공동수급협정 마감은 기준에서 뺌(팝업·툴팁만).
+  지나면 `pipeline.drop_expired`(첨부 읽은 뒤). "마감 지난 N건 제외" 문구 삭제. HTML 마감 칸 title 툴팁 = 전체 마감.
+- **5 설계공모**: 낙찰방법·계약방법에 '설계공모' → 수집 범위 밖(`scope.is_design_contest`, `stats.design_contest`).
+- **6 보유 면허**: 그대로(API만 제외). 텔레그램 "자격 충족"은 이제 빠진 요건 0개일 때만(예전 1개 허용 버그).
+- **7 지역**: 제외는 **API만**(`region_check`), 시·군 단위(정선군 기준, `region.split_location`). 첨부 판정은 `region_text` → "지역 제한 의심" 표시.
+- **8 해외**: 팀원 규칙(한국관 단독·전시회류/해외지명+단체관·국가 약자 115개, `config/overseas.json`), 공고명만. 그 밖의 해외 지명은
+  `overseas_suspect` 표시, 첨부 개최·사업 장소가 해외면 `overseas_attachment` 표시(`nego/venue_text.py`).
+- **9·10 세부품명**: 물품 수집 세부품명 = `held_qualifications.json` heldProducts(26개, 10/16 등록증 대조). `codes.json` productCodes 삭제.
+  키워드 없이 품목만 맞으면 `ScreenResult.section == "세부품명"`.
+- **11 키워드**: 제외 키워드에서 '보수공사' 삭제(71개).
+- **12·14·15 보고**: 텔레그램·HTML 관심/세부품명 구역, 품목 표시. 매일 입찰은 `--sent-state`(bot-state 브랜치 `sent_bids.json`)로 새 공고·[정정]만,
+  3일치 조회. 주간은 `--email`(SMTP_*, `config/recipients.json`).
+- **1 첨부**: `nego/attachment_sources.py`(과업 문서 순서·연결 사전규격·d2b), docx·공내역서 xlsx 추출, `Candidate.task_text`(싱크로율 근거).
+- **16 싱크로율**: `webapp/sync.py` → `nego/sync.py`. Actions는 `python -m nego.corpus open`(CORPUS_PASSPHRASE)으로 `data/jiil` 풀어 계산, 메일·HTML만 표시.
+- **남은 것**: 5단계 화면(팀원 TS 화면 이식), 싱크로율 묶음 파일 만들기, 실측 확인(연결 사전규격·d2b·bot-state·메일).
+
 ## 2026-10-14 오전에 할 것 (10/13 퇴근 전 사용자 요청 — 세션 시작하면 먼저 말해줄 것)
 
 1. **(10/14 완료) 지역 미달 공고 제외** — 9/28 "지역제한은 표시만" 결정을 바꿈. 사용자 확인: 지역제한 입찰은 공동수급을 허용해도 구성원

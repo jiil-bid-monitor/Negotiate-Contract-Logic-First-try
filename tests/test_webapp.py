@@ -65,13 +65,11 @@ def config_with_key():
 
 
 class TestFormatInSync(unittest.TestCase):
-    def test_app_js_expects_current_result_format(self):
-        """화면(app.js APP_FORMAT)과 서버(RESULT_FORMAT)가 같은 형식 번호여야 "서버 재시작 필요" 경고가 맞게 뜬다."""
-        import re
-        from webapp.collect import RESULT_FORMAT
-
-        js = (Path(__file__).resolve().parent.parent / "webapp" / "static" / "app.js").read_text(encoding="utf-8")
-        self.assertEqual(int(re.search(r"const APP_FORMAT = (\d+);", js).group(1)), RESULT_FORMAT)
+    def test_page_warns_on_old_result_format(self):
+        """화면(팀원 화면 이식본)이 서버가 알려 주는 RESULT_FORMAT과 결과의 format을 비교해 "다시 불러오기"를 띄운다."""
+        html = (Path(__file__).resolve().parent.parent / "webapp" / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("data.format !== data.resultFormat", html)
+        self.assertIn("checkPageVersion(data.static_version)", html)
 
 
 class TestSyncLevel(unittest.TestCase):

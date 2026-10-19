@@ -25,7 +25,14 @@ N(이 레포)·M(팀원 `iamhiki/narajangter-bid-monitor`, TS) 비교 → 16개 
   3일치 조회. 주간은 `--email`(SMTP_*, `config/recipients.json`).
 - **1 첨부**: `nego/attachment_sources.py`(과업 문서 순서·연결 사전규격·d2b), docx·공내역서 xlsx 추출, `Candidate.task_text`(싱크로율 근거).
 - **16 싱크로율**: `webapp/sync.py` → `nego/sync.py`. Actions는 `python -m nego.corpus open`(CORPUS_PASSPHRASE)으로 `data/jiil` 풀어 계산, 메일·HTML만 표시.
-- **남은 것**: 5단계 화면(팀원 TS 화면 이식), 싱크로율 묶음 파일 만들기, 실측 확인(연결 사전규격·d2b·bot-state·메일).
+- **5 화면(B안, 10/19 완료)**: 팀원 `ui.html` → `webapp/static/index.html`. 서버는 그대로 `webapp/server.py`가 팀원 화면 API 모양을 내줌
+  (`webapp/mview.py` — 저장된 결과를 옮겨 담기만, 판정 안 바꿈). 참가여부·올리기 = `data/participation.json`·`promoted.json`(`webapp/mstore.py`,
+  공고번호 키, 예전 sqlite 기록은 처음 한 번 옮김). 자격·지역·확인 칩·싱크로율 팝업은 이 레포 자료(qualview·region_check·text_flags·sync)로
+  다시 씀, 마감은 기준 마감 + 툴팁, 투찰 계산기 탭(`bidcalc_ui.js`는 자체 `$`·`api`). "나라장터에서 불러오기" = 수집 작업 시작 → `/api/job` 진행.
+  토큰은 `?t=` 첫 접속 때 쿠키(app_token). 뺀 것: "첨부로 다시 볼 공고" 칸·"첨부 자격판정" 끄기(제외 공고 첨부를 안 읽고 첨부로 안 빼서).
+  예전 화면(app.js·app.css) 삭제. 강력추천 배지·필터는 팀원 화면대로 남김(10/1에 N 화면에서 뺐던 것 — 사용자가 원하면 다시 뺄 것).
+  팀원 화면 버그 하나 고침: 이름을 적고 바로 카드 버튼을 누르면 클릭이 사라지던 것. 픽스처 + playwright로 탭 전부 확인, 실수집 실측은 아직.
+- **남은 것**: 싱크로율 묶음 파일 만들기, 실측 확인(연결 사전규격·d2b·bot-state·메일·새 화면 실수집), `docs/user_guide.*` 새 화면으로 고치기.
 
 ## 2026-10-14 오전에 할 것 (10/13 퇴근 전 사용자 요청 — 세션 시작하면 먼저 말해줄 것)
 

@@ -15,7 +15,7 @@
 
 - **main = 최신**(마지막 병합 PR #134, 커밋 `525e1b5`). 열린 작업 브랜치·미병합 코드 없음.
 - 테스트: `python -m pytest -q` → **400 통과, 1 건너뜀**(10/16 확인). JS: `node tests/js/bidcalc_test.js` → `bidcalc ok`.
-- 결과 형식 번호: `webapp/collect.py` `RESULT_FORMAT = 35` = `webapp/static/app.js` `APP_FORMAT = 35`
+- 결과 형식 번호: `webapp/collect.py` `RESULT_FORMAT = 36` (10/19부터 화면은 서버가 알려 주는 값과 비교 — 화면 쪽 숫자 없음)
   (자격 판정·팝업 자료 형식을 바꾸면 **둘 다** 올릴 것 — 테스트가 일치 검사).
 - 사용자 PC(서버)에 반영하는 법: `Ctrl+C` → `git pull` → `bash webapp/start.sh` → 브라우저 **F5**
   (판정 로직이 바뀐 경우에만 "나라장터에서 불러오기" 다시).
@@ -85,7 +85,7 @@
 ## 7. 수집기 통합 (2026-10-19, 브랜치 `claude/collector-integration`)
 
 팀원 수집기와 하나로 합치기로 함(10/16 비교·결정, 10/19 8·10번은 팀원 방식으로 변경). 역할: **수집·판정·첨부·보고·싱크로율 = Python(이 레포),
-담당자 화면 = TypeScript(팀원 화면을 옮겨 올 예정)**. 팀원 레포는 수정하지 않음(사용자 지시).
+담당자 화면 = 팀원 화면(ui.html)을 이 레포 웹앱에 옮김(B안 — 서버는 그대로 Python `webapp/server.py`)**. 팀원 레포는 수정하지 않음(사용자 지시).
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
@@ -93,7 +93,7 @@
 | 2 첨부 | 과업 문서 순서, 연결 사전규격 첨부, 국방전자조달 첨부, docx·공내역서 xlsx, 첨부 개최지 | 완료 |
 | 3 보고 | 텔레그램·HTML 관심/세부품명 구역, [정정]·보낸 공고 기록(bot-state 브랜치), 주간 메일, 자격 충족 표시 수정 | 완료 |
 | 4 싱크로율 | 암호화 묶음(corpus/sync_bundle.enc, 아직 안 만듦 — 담당자 PC에서 `python -m nego.corpus seal`) → 메일·HTML 표시 | 완료(묶음 파일 대기) |
-| 5 화면 | 팀원 화면(scripts/ui.ts·ui.html)을 옮겨 Python 결과를 읽게, 투찰 계산기 이식 | 진행 전 — 방식 확인 중 |
+| 5 화면 | 팀원 화면(ui.html)을 `webapp/static/index.html`로 옮김. 서버가 팀원 화면 API 모양(`/api/notices`·`/api/excluded`·`/api/participation`·`/api/promote`·`/api/search`·`/api/corpus`)을 내줌(`webapp/mview.py`), 참가여부·올리기는 `data/participation.json`·`data/promoted.json`(`webapp/mstore.py`, 예전 sqlite 기록은 처음 한 번 옮김). 자격·지역·확인 필요·싱크로율 표시는 이 레포 판정 자료로, 투찰 계산기 탭 추가 | 완료(픽스처·브라우저 확인, 실제 수집 실측 대기) |
 
 실측 확인 필요(이 클라우드 환경은 나라장터·텔레그램이 막혀 있음): 연결 사전규격·국방전자조달 첨부 조회, bot-state 브랜치 기록, 메일 발송.
 

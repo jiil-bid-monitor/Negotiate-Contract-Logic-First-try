@@ -44,9 +44,9 @@ def custom_period(begin: str, end: str, now: datetime) -> tuple[datetime, dateti
     e_end = e.replace(hour=23, minute=59)
     return b, min(e_end, now)
 # 저장되는 수집 결과의 판정·표시 형식 버전. 자격 판정·팝업 자료가 바뀔 때 올린다 — 화면이 예전 버전으로
-# 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다. webapp/static/app.js APP_FORMAT도 같이 올릴 것(2026-09-30: 코드를 받고도 옛 결과를 보고
+# 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다(화면은 서버가 알려 주는 이 값과 결과의 format을 비교 — 2026-09-30: 코드를 받고도 옛 결과를 보고
 # 중복·개수 오류가 그대로라고 여긴 일이 두 번 있었음).
-RESULT_FORMAT = 35
+RESULT_FORMAT = 36
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -60,8 +60,12 @@ def _g2b_url(n) -> str | None:
     return f"https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo={n.notice_no}&bidPbancOrd={n.notice_ord}"
 
 
-def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set(), set())) -> dict[str, Any]:
-    """Candidate 1건 → 카드 1장. 후보/제외 공고 모두 같은 모양."""
+def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set(), set()),
+              interest: Callable[[Any], list[str]] | None = None) -> dict[str, Any]:
+    """Candidate 1건 → 카드 1장. 후보/제외 공고 모두 같은 모양.
+
+    `interest`: 공고명에 든 관심 키워드를 찾는 함수 — 제외된 공고는 선별에서 키워드를 안 세서(제외 키워드에서 멈춤)
+    화면 "제외 사유" 칸의 "공고명에 관심 키워드 …" 줄을 따로 채운다(2026-10-19 팀원 화면 이식)."""
     n = candidate.notice
     q = candidate.qualification
     earliest = candidate.schedule.earliest
@@ -94,10 +98,16 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "confidence": candidate.screen_result.confidence,
         "matched_keywords": candidate.screen_result.matched_keywords,
         "matched_product_codes": candidate.screen_result.matched_product_codes,
+        # 공고에 분류된 세부품명 전부 — 화면 "세부품명" 필터·"세부품명 공고" 탭(제외된 공고 중 보유 품목)에 쓴다
+        "product_codes": list(getattr(n, "product_codes", None) or ([n.product_class_no] if n.product_class_no else [])),
+        "product_name": n.product_class_name or None,
+        "interest_keywords": (candidate.screen_result.matched_keywords or (interest(n) if interest else [])),
         # 관심 / 세부품명 (키워드 없이 등록 품목만 맞은 공고) — 2026-10-19 통합 결정 10·12번
         "section": candidate.screen_result.section,
         "overseas_suspect": candidate.screen_result.overseas_suspect,
         "overseas_attachment": getattr(candidate, "overseas_attachment", None),
+        # 몽골 해외관(제외하지 않고 표시) 근거
+        "overseas_mongolia": candidate.screen_result.overseas_evidence if candidate.screen_result.overseas_flag else None,
         "review_exclude": candidate.screen_result.review_exclude,
         "is_candidate": candidate.is_candidate,
         "excluded_reason": candidate.excluded_reason,
@@ -284,12 +294,16 @@ class Collector:
                 import os
                 _judge_ai(candidates, self.past, int(os.environ.get("LLM_MAX_CANDIDATES", "30")))
             held = qualview.held_lookup(config.held_raw)
+            from nego.screen import _match_keywords
+
+            def interest(n, sc=config.screen):
+                return _match_keywords(n, list(sc.keywords), sc.keyword_skip_when)
             payload = {
                 "format": RESULT_FORMAT,
                 # 미매칭 설명에 쓰는 관심 키워드 목록 — 공고마다 같아서 결과에 한 번만
                 "keywords": list(config.screen.keywords),
-                "candidates": [serialize(c, self.past, held) for c in candidates],
-                "rejected": [serialize(c, self.past, held) for c in stats.rejected],
+                "candidates": [serialize(c, self.past, held, interest) for c in candidates],
+                "rejected": [serialize(c, self.past, held, interest) for c in stats.rejected],
                 "stats": {
                     "fetched": stats.fetched, "in_scope": stats.in_scope,
                     "private_contract": stats.private_contract, "cancelled": stats.cancelled,

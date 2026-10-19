@@ -89,6 +89,12 @@ class TestUnheldCodeNames(unittest.TestCase):
         self.assertEqual(qualify._or_groups(item), [[("5023", "공공측량업(5023)"), ("5021", "측지측량업(5021)")]])
         self.assertEqual(qualify._extract_code_requirements("2024년(2024) 기준, 제44조(1234)에 따라"), [])
 
+    def test_four_digit_code_after_line_break(self):
+        """제천 공고문 PDF: "측지측량업\n(5021)" — 5021을 못 읽어 5023의 "또는"이 측량용역(8115160401)에 이어졌다."""
+        item = ("다. 측량분야는 … 공공측량업(5023) 또는 측지측량업\n(5021)에 등록된 업체로서, 분담이행방식(단독분담 또는 "
+                "공동이행분담)으로 참여해야하며, … 직접생산확인증명서[측량용역(분류번호:8115160401)-필수특이사항]를 소지한 업체")
+        self.assertEqual([[c for c, _ in b] for b in qualify._or_groups(item)], [["5023", "5021"], ["8115160401"]])
+
     def test_unclosed_bracket_name_keeps_company_and_field(self):
         """"산업디자인전문회사[환경디자인분야(업종코드 4442)"처럼 대괄호를 안 닫은 표기 — 예전엔 "[" 가 이름표에 그대로 남았다."""
         self.assertEqual(

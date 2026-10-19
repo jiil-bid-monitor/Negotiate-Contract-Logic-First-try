@@ -34,19 +34,20 @@ def _base(label: str) -> str:
     return _NORM.sub("", _TRAILING_CODE.sub("", label))
 
 
-def held_lookup(held_raw: dict) -> tuple[set[str], set[str]]:
-    """보유 자격 → (코드 집합, 정규화한 이름 집합)."""
-    codes, names = set(), set()
+def held_lookup(held_raw: dict) -> tuple[set[str], set[str], set[str]]:
+    """보유 자격 → (코드 집합, 정규화한 이름 집합(통칭 포함), 정규화한 정식 이름 집합)."""
+    codes, names, exact = set(), set(), set()
     for key in ("heldProducts", "heldIndustries"):
         for entry in held_raw.get(key, []) or []:
             if entry.get("code"):
                 codes.add(str(entry["code"]).strip())
             if entry.get("name"):
                 names.add(_NORM.sub("", str(entry["name"])))
+                exact.add(_NORM.sub("", str(entry["name"])))
                 # 분야 없이 적은 통칭("소프트웨어사업자")도 보유로 — 보유 이름이 "소프트웨어사업자(컴퓨터관련서비스사업)"
                 if "(" in str(entry["name"]):
                     names.add(_NORM.sub("", str(entry["name"]).split("(")[0]))
-    return codes, names
+    return codes, names, exact
 
 
 # 이름 앞에 붙어 나오는 분류 머리말 — "G2B분류번호 교육훈련장비(6010999901)"
@@ -74,11 +75,15 @@ def _items(group, held: tuple[set[str], set[str]]) -> list[dict[str, Any]]:
     for label in labels:
         by_code.setdefault(_code(label) or label, []).append(label)
     labels = [_best_label(v) for v in by_code.values()]
-    codes, names = held
+    codes, names, *rest = held
+    exact = rest[0] if rest else set()
     out = []
     for label in labels:
         code = _code(label)
-        is_held = (code in codes) if code else (_base(label) in names)
+        # 코드가 달라도 이름이 보유 면허 정식 이름과 똑같으면 보유("실내건축공사업(452106)" — 지일 0006·4990, 2026-10-19 제보,
+        # `qualify.evaluate_attachment_text`와 같은 기준). 나라장터 번호가 아닌 숫자 괄호는 떼고 비교
+        plain = _NORM.sub("", re.sub(r"\(\d+\)\s*$", "", label))
+        is_held = (code in codes or plain in exact) if code else (plain in names or _base(label) in names)
         out.append({"label": label, "code": code, "kind": "product" if code and len(code) == 10 else "industry",
                     "held": is_held})
     return out

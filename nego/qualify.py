@@ -772,8 +772,10 @@ def _name_before_bracket(before_paren: str, line: str, lines: list[str], line_no
     # PDF 줄바꿈이 낱말 중간에 걸리면("…엔지\n니어링사업자(3583)") 이름이 줄머리부터라 앞 조각이 잘린다 —
     # 앞 줄 끝 낱말이 조사·어미로 끝나지 않는 짧은 조각이면 이어 붙인다.
     if name and line_no > 0 and line.lstrip().startswith(name) and not _LINE_HEAD_MARK_RE.match(line):
-        tail = re.search(r"(?<![가-힣])([가-힣]{1,4})$", lines[line_no - 1])
-        if tail and not _PARTICLE_END_RE.search(tail.group(1)) and tail.group(1) not in _WHOLE_WORD_ENDS:
+        # 앞 조각은 보통 4자 이내, 남은 이름이 "사업"처럼 아주 짧으면 8자까지("실내건축공\n사업(업종코드: 452106)", 2026-10-19 제보)
+        tail = re.search(r"(?<![가-힣])([가-힣]{1,8})$", lines[line_no - 1])
+        if (tail and (len(tail.group(1)) <= 4 or len(name) <= 3)
+                and not _PARTICLE_END_RE.search(tail.group(1)) and tail.group(1) not in _WHOLE_WORD_ENDS):
             name = tail.group(1) + name
     name = re.sub(r"^[\s,;，:：]+", "", name)  # "직접생산확인증명서 : 영상…"의 콜론
     name = name.strip("\"'“‘”’").strip()
@@ -903,6 +905,14 @@ def evaluate_attachment_text(
             return seen_in_notice[code]
         return f"{UNNAMED_LABEL}({code})"
 
+    # 코드가 달라도 이름이 보유 면허와 똑같으면 보유 — 공고문이 나라장터 업종코드가 아닌 번호를 적는 경우
+    # ("실내건축공사업(업종코드: 452106)" — 지일은 0006·4990으로 보유, 2026-10-19 제보). API 판정의 "코드 또는 이름 완전일치"와 같은 기준.
+    held_name_keys = {re.sub(r"[\s·ㆍ]", "", n) for n in held_code_names.values() if n}
+
+    def _held(code: str, label: str) -> bool:
+        name = _TRAILING_CODE_RE.sub("", label)
+        return code in held_codes or re.sub(r"[\s·ㆍ]", "", name) in held_name_keys
+
     groups: list[LicenseGroup] = []
     missing: list[LicenseGroup] = []
     parsed_labels: dict[str, str] = {}
@@ -974,10 +984,14 @@ def evaluate_attachment_text(
         # "[업종코드 4440, 4442, 4444]"처럼 "또는" 없이 나열한 코드는 모두 필요(2026-10-01 사용자 확정) — 빠진 묶음마다
         # 요건 1건으로 둔다. 한 덩어리로 합치면 화면에 "아래 2개 중 1개 이상"(또는)으로 잘못 보였다.
         for bundle in or_groups:
-            if not any(code in held_codes for code, _ in bundle):
+            if not any(_held(code, label) for code, label in bundle):
                 missing.append(LicenseGroup(group_no=group_no, allowed_names=[label for _, label in bundle]))
             elif len(bundle) > 1:
                 or_ok.append(LicenseGroup(group_no="또는", allowed_names=[label for _, label in bundle]))
+            else:
+                code, label = bundle[0]
+                if code not in held_codes:  # 이름으로만 보유가 확인된 요건 — 충족 목록에 보이게
+                    name_held.append(label)
 
     if not groups:
         return QualificationResult(total_groups=0, missing_groups=[], passes=True, checked=False)

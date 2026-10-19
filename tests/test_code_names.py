@@ -95,6 +95,16 @@ class TestUnheldCodeNames(unittest.TestCase):
                 "공동이행분담)으로 참여해야하며, … 직접생산확인증명서[측량용역(분류번호:8115160401)-필수특이사항]를 소지한 업체")
         self.assertEqual([[c for c, _ in b] for b in qualify._or_groups(item)], [["5023", "5021"], ["8115160401"]])
 
+    def test_nonstandard_code_with_held_name(self):
+        """2026-10-19 제보: 공고문이 나라장터 업종코드가 아닌 "실내건축공사업(업종코드: 452106)"을 적었고, PDF 줄바꿈에 이름이
+        "사업"으로 잘려 미보유로 나왔다. 이름이 보유 면허와 같으면 코드가 달라도 보유."""
+        item = ("다. 「건설산업기본법」 제9조 제1항에 따른 실내건축공\n사업(업종코드: 452106) 면허를 단독으로 보유하지 않은 "
+                "경우에는, 반드시 해당 면허를 보유한 업체와 공동수급체를 구성하여 참여하여야 합니다.")
+        self.assertEqual(qualify._extract_code_requirements(item), [("452106", "실내건축공사업(452106)")])
+        result = qualify.evaluate_attachment_text([item], held_codes={"0006", "4990"},
+                                                  held_code_names={"0006": "실내건축공사업", "4990": "실내건축공사업"})
+        self.assertEqual(result.summary, "자격 충족")
+
     def test_unclosed_bracket_name_keeps_company_and_field(self):
         """"산업디자인전문회사[환경디자인분야(업종코드 4442)"처럼 대괄호를 안 닫은 표기 — 예전엔 "[" 가 이름표에 그대로 남았다."""
         self.assertEqual(

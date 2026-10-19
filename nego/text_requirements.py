@@ -238,8 +238,10 @@ def _with_context(sent: str, owner: dict) -> str:
     return "\n".join(flat(x) for x in lines)[:_MAX_CONTEXT_TEXT]
 
 
-def flag_requirements(items: list[str]) -> list[dict]:
-    """실적·기술인력·건축사사무소 요건을 찾아 [{kind, text}]로. 판정은 하지 않는다.
+def flag_requirements(
+    items: list[str], held_code_names: dict[str, str] | None = None, lookup: dict[str, str] | None = None
+) -> list[dict]:
+    """실적·기술인력·건축사사무소 요건, 이름만 적힌 모르는 업종 요건을 찾아 [{kind, text}]로. 판정은 하지 않는다.
     현장설명회 참석 요건은 찾지 않는다(2026-10-14 사용자 결정 — 굳이 파싱할 필요 없음)."""
     out: dict[str, dict] = {}
     per_item = [_sentences(item) for item in items]
@@ -266,9 +268,76 @@ def flag_requirements(items: list[str]) -> list[dict]:
                 entry = {"kind": kind, "text": _with_context(s, owner)}
                 out.setdefault(kind, entry)
                 break
+    industry = _unknown_industry_flag(per_item, owner, held_code_names or {}, lookup or {})
+    if industry:
+        out["업종"] = industry
     for entry in out.values():
         entry["summary"] = summarize_flag(entry)
     return list(out.values())
+
+
+# 코드 없이 이름만 적은 업종 요건 중 이름 사전에 없는 것 — "확인 필요" 칩으로만(2026-10-19 사용자 결정).
+# 이름 사전(보유 목록·codes·code_names)에 있는 업종은 `name_bundles`가 이미 판정하므로 뺀다.
+# 실측: 구미시 스타트업 필드 공용공간 리모델링 공사 설계용역 "정보통신부문 엔지니어링사업자 / 기술사사무소 / 일반·전문소방시설설계업",
+# 제천 신월~모산 도로개설공사 실시설계용역 "기술사사무소 / 건설기술용역업" — 어디에도 안 보였음.
+_INDUSTRY_NAME_RE = re.compile(
+    r"([가-힣A-Za-z·‧ㆍ]{2,20}?(?:\([^()]{1,30}\))?"
+    r"(?:공사업|설계업|용역업|측량업|제작업|대행업|감리업|진단업|조사업|관리업|사업자|사무소|전문회사))"
+    # 이름 뒤 분야 괄호는 길 수 있다 — "건설기술용역업〔종합 또는 설계·사업관리(일반) 또는 …〕을 등록"(제천)
+    r"(?:[(\[〔][^()\[\]〔〕]{0,80}(?:\([^()]*\)[^()\[\]〔〕]{0,40})*[)\]〕])?(?=[^.。]{0,25}?(?:등록|신고|개설|면허))"
+)
+_INDUSTRY_SKIP_SENTENCE = re.compile(
+    r"업종\s*코드|[\[(]\s*\d{4}\s*[\])]|\d{10}|입찰\s*참가\s*자격\s*등록|사업자\s*등록|제출|확인서|등록증|증명서"
+)
+# 산업디자인전문회사는 분야 이름으로 따로 판정(`_design_names`), 건축사사무소는 기술인력 칩
+_INDUSTRY_SKIP_NAME = re.compile(r"산업디자인전문회사|건축사사무소|중소기업|소상공인|^사업자$|^사무소$|^업무")
+# 이름 앞에 붙어 잡힌 꾸밈말을 떼는 경계 — "…제14조에 의한 설계업" → "설계업", "동일분야 기술사사무소" → "기술사사무소"
+_INDUSTRY_LEAD_RE = re.compile(r".*(?:의한|따른|따라|의거|의하여|에서|으로|에|로|의|및|또는|중|필한|하는|있는|된|분야)")
+_ARTICLE_RE = re.compile(r"제?\d+조(?:의\d+)?(?:제?\d+항)?")
+
+
+def _industry_name(raw: str) -> str:
+    name = _INDUSTRY_LEAD_RE.sub("", raw)
+    return name if len(re.sub(r"\([^()]*\)", "", name)) >= 3 else raw
+
+
+def _unknown_industry_flag(per_item: list[list[str]], owner: dict, held_code_names: dict[str, str], lookup: dict[str, str]) -> dict | None:
+    held_full = {_norm(n) for n in held_code_names.values()}
+    held = {re.sub(r"\([^()]*\)", "", n) for n in held_full}
+    known = set(_industry_dictionary(held_code_names, lookup)) | {_norm(n) for n in held_code_names.values()} | held
+    names: list[str] = []
+    texts: list[str] = []
+    for sents in per_item:
+        for s in sents:
+            if _FORM_RE.search(s) or _INDUSTRY_SKIP_SENTENCE.search(s) or _NOT_REQUIREMENT.search(s):
+                continue
+            if _PROHIBITION.search(s) or _RESTRICTION_SENTENCE.search(s):
+                continue
+            flat = _ARTICLE_RE.sub(" ", _norm(_LAW_TITLE_RE.sub(" ", s)))
+            # 지일이 가진 업종과 "또는/중 하나"로 나열된 문장 — 보유 쪽으로 이미 채워진다("실내건축공사업, 도장공사업 중 하나 이상")
+            if _OR_HINT.search(s) and any(len(h) >= 4 and h in flat for h in held):
+                continue
+            found = []
+            for m in _INDUSTRY_NAME_RE.finditer(flat):
+                name = _industry_name(m.group(1))
+                base = re.sub(r"\([^()]*\)", "", name)
+                if _INDUSTRY_SKIP_NAME.search(name) or _norm(name) in known or base in known:
+                    continue
+                if any(k.startswith(base) or base.endswith(k) for k in known if len(k) >= 4):
+                    continue
+                # 보유 이름의 괄호 분야로 적은 경우 — "디지털콘텐츠개발서비스사업자" = 보유 "소프트웨어사업자(디지털콘텐츠개발서비스사업)"
+                if any(base.rstrip("자") in k for k in held_full if len(base) >= 4):
+                    continue
+                if name not in names and name not in found:
+                    found.append(name)
+            if found:
+                names.extend(found)
+                text = _with_context(s, owner)
+                if text not in texts:
+                    texts.append(text)
+    if not names:
+        return None
+    return {"kind": "업종", "text": "\n".join(texts)[:_MAX_CONTEXT_TEXT], "names": names}
 
 
 _ZIP_PART_RE = re.compile(r"^=== \[압축 안\] (.+?) ===$", re.M)
@@ -423,4 +492,6 @@ def summarize_flag(flag: dict) -> list[list[str]]:
         return _staff_summary(text)
     if kind == "건축사사무소":
         return _office_summary(text)
+    if kind == "업종":
+        return [["업종", " / ".join(flag.get("names") or [])]]
     return []

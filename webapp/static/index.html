@@ -1628,13 +1628,15 @@ const includePre = () => $("incPre").checked;
 function checkKinds(n) {
   const out = new Set();
   if ((n.qual?.parts || []).some((p) => p.status === "미달")) out.add("qual");
-  if ((n.textFlags || []).length) out.add("perf");
+  // 업종 요건 칩은 자격 쪽, 나머지(실적·기술인력)는 실적·기술인력 쪽
+  if ((n.textFlags || []).some((f) => f.kind === "업종")) out.add("qual");
+  if ((n.textFlags || []).some((f) => f.kind !== "업종")) out.add("perf");
   if (consortiumCase(n)) out.add("consortium");
   if (n.overseas || n.overseasSuspect || n.overseasAttachment || n.regionSuspect || n.linkedSystem || n.attachmentCount === 0) out.add("scope");
   return out;
 }
 const CHECK_OPTS = [
-  ["qual", "자격·품명", "자격요건·세부품명번호 미보유"],
+  ["qual", "자격·품명", "자격요건·세부품명번호 미보유, 이름만 적힌 업종 요건(확인 필요)"],
   ["perf", "실적·기술인력", "첨부 공고문의 실적제한·기술인력 요건"],
   ["scope", "확인할 것", "해외 개최 의심, 지역 제한 의심(첨부), 첨부 없음·국방전자조달"],
   ["consortium", "컨소시엄 검토", "자격 미보유 — 보유 자격이 학술연구용역뿐"],
@@ -2375,8 +2377,10 @@ function attachBadge(n) {
 
 // 판정하지 않는 글로 된 요건 — 실적·기술인력(건축사사무소 포함). 칩 글자에 요건 핵심을 바로 적는다
 // ("⚠ 실적제한 최근 3년 · 단일 7,000만원 이상", 2026-10-14 요청). 원문·출처는 팝업에.
-const FLAG_LABEL = { 실적: "실적 요건", 현장설명회: "현장설명회 참가 필수", 인력: "기술인력 요건", 건축사사무소: "기술인력 요건" };
-const FLAG_HEAD = { 실적: "실적제한", 인력: "기술인력", 건축사사무소: "기술인력" };
+const FLAG_LABEL = { 실적: "실적 요건", 현장설명회: "현장설명회 참가 필수", 인력: "기술인력 요건", 건축사사무소: "기술인력 요건", 업종: "업종 요건" };
+const FLAG_HEAD = { 실적: "실적제한", 인력: "기술인력", 건축사사무소: "기술인력", 업종: "업종" };
+// 이름 사전에 없는 업종(코드 없이 이름만 적힘) — 지일 보유 여부를 판정하지 못한다 (2026-10-19 요청)
+const FLAG_NOTE = { 업종: "지일 보유 업종 목록·코드 사전에 없는 이름이라 자동 판정하지 않았습니다 — 보유 여부를 공고문과 등록 현황에서 확인하세요." };
 function flagChipText(f) {
   const vals = (f.summary || []).map(([, v]) => String(v || "").trim()).filter((v) => v && !v.includes("못 찾음"))
     .map((v) => v.replace(/(\d+)억\s*(\d+)천만원/g, (_, a, b) => `${(Number(a) * 10000 + Number(b) * 1000).toLocaleString()}만원`)
@@ -2391,7 +2395,7 @@ function flagBadges(n) {
     const body =
       (rows.length ? `<ul class="due-list">${rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join("")}</ul>` : "") +
       `<p class="q-label">공고문 원문</p><blockquote class="quote">${esc(f.text)}</blockquote>` +
-      `<p>자동 판정하지 않습니다 — 지일 실적·인력이 조건에 맞는지 공고문에서 확인하세요.</p>` +
+      `<p>${esc(FLAG_NOTE[f.kind] || "자동 판정하지 않습니다 — 지일 실적·인력이 조건에 맞는지 공고문에서 확인하세요.")}</p>` +
       (f.source ? `<p class="src">출처: ${esc(f.source)}</p>` : "");
     return tipBadge("warn", `⚠ ${esc(flagChipText(f))}`, `${esc(FLAG_LABEL[f.kind] || f.kind)} — 확인 필요`, body);
   });

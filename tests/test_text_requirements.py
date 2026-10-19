@@ -328,3 +328,38 @@ def test_or_marker_in_head_still_covers_whole_item():
     # 하위 항목이 없으면 "중 1개 이상"은 항목 전체를 OR로 만들지 않는다
     flat = "실내건축공사업(업종코드 4990) 및 산업디자인전문회사(시각, 환경 중 1개 이상)[업종코드 4442] 모두 등록한 자"
     assert _codes(flat) == [["4990"], ["4442"]]
+
+
+class TestUnknownIndustryFlag(unittest.TestCase):
+    """2026-10-19 사용자 결정: 코드 없이 이름만 적은 업종 요건 중 이름 사전에 없는 것은 "업종 요건" 확인 필요 칩으로."""
+
+    def industry(self, items):
+        return [f for f in flag_requirements(items, HELD, LOOKUP) if f["kind"] == "업종"]
+
+    def test_gumi_engineering_and_fire_design(self):
+        """구미시 스타트업 필드 공용공간 리모델링 공사 설계용역 공고문(PDF라 글자 사이가 띄어짐)."""
+        items = [
+            "3.1.2. ｢ 엔지니어링산업진흥법령 ｣ 에 의한 정보통신부문 ( 정보통신분야 ) 에 엔지니 어링사업자 로 신고를 필한 자 "
+            "또는 ｢ 기술사법령 ｣ 에 의한 정보통신부문 ( 정보통신분야 ) 에 기술사사무소 를 등록한 자",
+            "3.1.3. ｢ 소방시설공사업법령 ｣ 에 의한 일반소방시설설계업 ( 기계 및 전기 ) 또는 전문소방시설설계업 으로 등록한 자",
+        ]
+        flags = self.industry(items)
+        self.assertEqual(len(flags), 1)
+        self.assertEqual(flags[0]["names"], ["엔지니어링사업자", "기술사사무소", "일반소방시설설계업", "전문소방시설설계업"])
+        self.assertEqual(flags[0]["summary"], [["업종", "엔지니어링사업자 / 기술사사무소 / 일반소방시설설계업 / 전문소방시설설계업"]])
+
+    def test_jecheon_long_field_bracket(self):
+        item = ("나.「엔지니어링산업진흥법」제21조의 규정에 따라 건설부문 (도로‧공항, 토목구조)에 신고를 필한 업체 또는「기술사법」 "
+                "제6조의 규정에 의거 동일분야 기술사사무소 등록을 필한 업체로 「건설기술진흥법」제 26조에 따른 "
+                "건설기술용역업〔종합 또는 설계·사업관리(일반) 또는 설계·사업관리(설계 등 용역)〕을 등록한 업체이어야 합니다.")
+        self.assertEqual(self.industry([item])[0]["names"], ["기술사사무소", "건설기술용역업"])
+
+    def test_known_or_held_alternative_not_flagged(self):
+        """사전에 있는 업종은 이름 판정이 보고, 지일 보유 업종과 "중 하나"로 나열되면 이미 채워진다."""
+        self.assertEqual(self.industry(["1) 「건설산업기본법」에 의한 실내건축공사업을 등록한 업체"]), [])
+        self.assertEqual(self.industry(["② 전문건설업(실내건축공사업, 도장공사업 중 하나 이상)으로 등록된 업체"]), [])
+        self.assertEqual(self.industry(["2) 「산업디자인진흥법」에 의한 산업디자인 전문회사(환경디자인 분야) 신고를 필한 업체"]), [])
+
+    def test_code_or_document_sentences_not_flagged(self):
+        self.assertEqual(self.industry(["다. 공공측량업(5023) 또는 측지측량업(5021)에 등록된 업체"]), [])
+        self.assertEqual(self.industry(["※ 최근 연도 결산 신고된 SW사업자 신고확인서, 정보통신공사업등록증 제출"]), [])

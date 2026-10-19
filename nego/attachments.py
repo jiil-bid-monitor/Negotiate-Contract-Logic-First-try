@@ -510,12 +510,12 @@ def save_attachment_texts(
 
             candidate.region_text = _region.from_text(all_items, _region.company_location(held_raw or {}))
 
-        # 실적·기술인력·건축사사무소 요건 — 판정 없이 "확인 필요" 칩으로 (2026-09-30 사용자 요청)
+        # 실적·기술인력·건축사사무소 요건, 이름 사전에 없는 업종 요건 — 판정 없이 "확인 필요" 칩으로 (2026-09-30·10-19 사용자 요청)
         if hasattr(candidate, "text_flags"):
             from .text_requirements import attach_sources, flag_requirements
 
             candidate.text_flags = attach_sources(
-                flag_requirements(all_items), read_files
+                flag_requirements(all_items, held_code_names or {}, code_names or {}), read_files
             )
 
         if not needs_check or not all_items:

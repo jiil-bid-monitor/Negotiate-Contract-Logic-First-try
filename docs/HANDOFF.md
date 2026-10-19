@@ -15,7 +15,7 @@
 
 - **main = 최신**(마지막 병합 PR #134, 커밋 `525e1b5`). 열린 작업 브랜치·미병합 코드 없음.
 - 테스트: `python -m pytest -q` → **400 통과, 1 건너뜀**(10/16 확인). JS: `node tests/js/bidcalc_test.js` → `bidcalc ok`.
-- 결과 형식 번호: `webapp/collect.py` `RESULT_FORMAT = 36` (10/19부터 화면은 서버가 알려 주는 값과 비교 — 화면 쪽 숫자 없음)
+- 결과 형식 번호: `webapp/collect.py` `RESULT_FORMAT = 37` (10/19부터 화면은 서버가 알려 주는 값과 비교 — 화면 쪽 숫자 없음)
   (자격 판정·팝업 자료 형식을 바꾸면 **둘 다** 올릴 것 — 테스트가 일치 검사).
 - 사용자 PC(서버)에 반영하는 법: `Ctrl+C` → `git pull` → `bash webapp/start.sh` → 브라우저 **F5**
   (판정 로직이 바뀐 경우에만 "나라장터에서 불러오기" 다시).

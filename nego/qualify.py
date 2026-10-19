@@ -406,7 +406,18 @@ _INNER_PREFIXED_GROUP_RE = re.compile(
     r"[(\[]\s*(?:업종코드|세부품명번호)\s*(?:[0-9]+\s*자리\s*,?\s*)?([^()\[\]]*)[)\]]"
 )
 _GROUP_ENTRY_CODE_RE = re.compile(r"[0-9]{4,10}")
-_INNER_ITEM_NAME_RE = re.compile(r"(?:세부)?품명\s*[:：]\s*([^,，;()\[\]]+?)\s*(?:[,，;]|$)")
+_INNER_ITEM_NAME_RE = re.compile(r"(?<!제)(세부)?품명\s*[:：]\s*([^,，;()\[\]]+?)\s*(?:[,，;]|$)")
+
+
+def _inner_item_name(text: str) -> str | None:
+    """괄호 안 "세부품명 : X" / "품명 : X"의 X. 코드(10자리)는 세부품명번호라 "세부품명"을 먼저 쓰고,
+    "제품명 : 지도작성법"(직접생산 제품명)은 이름으로 안 쓴다(2026-10-19 제보: "[제품명 : 지도작성법, 세부품명 :
+    공간정보DB구축서비스(8115169901)]"가 "지도작성법(8115169901)"이 됨)."""
+    found = list(_INNER_ITEM_NAME_RE.finditer(text))
+    if not found:
+        return None
+    best = next((m for m in reversed(found) if m.group(1)), found[-1])
+    return best.group(2).strip()
 _BARE_GROUP_ENTRY_CODE_RE = re.compile(r"[0-9]{10}")
 _GROUP_ENTRY_STRIP_CHARS = " ,·/;、"
 # "다음 중 어느 하나"는 항목 전체를 OR로 만든다.
@@ -622,10 +633,10 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
             entries = _split_group_entries(group_match.group(1), _GROUP_ENTRY_CODE_RE)
             # "[세부품명: 실물모형및전시물, 세부품명번호 10자리(6010989901)" — 코드 하나에 이름이 없으면
             # 바로 앞에 따로 적힌 "품명: …"을 이름으로 쓴다(실측: 울산박물관 R26BK01748232).
-            lead = _INNER_ITEM_NAME_RE.search(line[max(0, group_match.start() - 60) : group_match.start()])
+            lead = _inner_item_name(line[max(0, group_match.start() - 60) : group_match.start()])
             for pos, code, name in entries:
                 if not name and lead and len(entries) == 1:
-                    name = lead.group(1).strip()
+                    name = lead
                 name = _truncate_label(name)
                 start = base + group_match.start(1) + pos
                 results.append((start, start + len(code), code, f"{name}({code})" if name else code))
@@ -645,9 +656,9 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
             is_inside = last_open > last_close
             inside_paren = prefix[last_open + 1 :].strip(" ,") if is_inside else ""
             # "[세부품명: 실물모형및전시물, 세부품명번호 10자리(6010989901)" — 괄호 안에 품명을 따로 적은 표기
-            named = _INNER_ITEM_NAME_RE.search(inside_paren) if inside_paren else None
+            named = _inner_item_name(inside_paren) if inside_paren else None
             if named:
-                name = _truncate_label(named.group(1).strip())
+                name = _truncate_label(named)
             elif inside_paren and len(inside_paren) <= _MAX_LABEL_LEN:
                 name = inside_paren
             else:

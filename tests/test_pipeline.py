@@ -1133,6 +1133,12 @@ class TestCodeLabelsNotBleeding(unittest.TestCase):
         self.assertEqual(self.labels("직접생산확인증명서 [세부품명: 실물모형및전시물, 세부품명번호 10자리(6010989901)"),
                          ["실물모형및전시물(6010989901)"])
 
+    def test_detail_item_name_not_product_name(self):
+        """2026-10-19 제보: "[제품명 : 지도작성법, 세부품명 : 공간정보DB구축서비스(코드)]" — 코드 앞이 세부품명, 제품명은 이름 아님."""
+        text = ("다. 중소기업제품구매촉진 및 판로지원에 관한 법률 제9조 및 동법 시행규칙\n제5조 규정에 의한 직접생산확인증명서"
+                "[제품명 : 지도작성법, 세부품명 :\n공간정보DB구축서비스(8115169901)]를 소지한 업체")
+        self.assertEqual(self.labels(text), ["공간정보DB구축서비스(8115169901)"])
+
 
 class TestOverlappingLicenseGroups(unittest.TestCase):
     """2026-09-30 실측: 공고문 '건축(또는 토목건축)공사업'인데 면허제한 API는 두 그룹으로 나눠 줌."""

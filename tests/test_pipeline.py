@@ -919,6 +919,19 @@ class TestScheduleTextExtraction(unittest.TestCase):
         )
         self.assertEqual(schedule_text.extract_deadline(text), datetime(2026, 11, 3, 17, 0))
 
+    def test_multi_day_range_uses_end(self):
+        """2026-10-19 실측: 구미시 스타트업 필드 공용공간 리모델링 공사 설계용역 — 입찰서제출 10/16 00:00 ~ 10/20 10:00인데
+        시작 일시를 마감으로 잡아 "첨부파일 제출기한 10/16 00:00 · 지남"으로 보였다."""
+        cases = {
+            "입찰서 제출일시 : 2026. 10. 16.(금) 00:00 ~ 2026. 10. 20.(화) 10:00": datetime(2026, 10, 20, 10, 0),
+            "제출기간: 2026.10.16 ~ 2026.10.20 10:00": datetime(2026, 10, 20, 10, 0),
+            "제출기간: 2026.10.16.(금) 09:00 ~ 10. 20.(화) 18:00": datetime(2026, 10, 20, 18, 0),
+            "제출기한: 2026.12.30 ~ 1. 5. 17:00": datetime(2027, 1, 5, 17, 0),
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(schedule_text.extract_deadline(text), expected)
+
     def test_returns_none_when_no_deadline_text_present(self):
         self.assertIsNone(schedule_text.extract_deadline("과업 내용은 별첨 과업지시서를 참조합니다."))
 

@@ -37,6 +37,10 @@ _LABEL_TO_DATE_WINDOW = 20
 # 표에서는 머리글 줄("제 출 일 시 제출장소 제출방법 제 출 자 제출서류") 다음 줄에 값이 온다 — 그만큼 더 본다
 _TABLE_WINDOW = 60
 _DATE_TO_TIME_WINDOW = 25
+# 기간 표시 "~" 뒤에 바로 끝 날짜가 오는지 — 요일 괄호("(금)")는 건너뜀
+_RANGE_TO_DATE_RE = re.compile(r"\s*(?:\([^)\n]{1,3}\))?\s*[~∼～]\s*")
+# 끝 날짜는 연도를 빼고 쓰기도 한다("~ 10. 20.(화) 10:00")
+_MONTH_DAY_RE = re.compile(r"(?P<month>1[0-2]|0?[1-9])\s*[.\-월]\s*(?P<day>3[01]|[12]\d|0?[1-9])\s*일?\.?")
 
 
 # 응모·참가 신청 등록 마감 — 제안서 제출보다 먼저 끝나는 경우가 있다(2026-10-02 실측: 거제 지심도 산마루문화놀이터
@@ -73,23 +77,48 @@ def _first_deadline(text: str, label_re: re.Pattern) -> datetime | None:
         if not date_match or date_match.start() - label_match.end() > window:
             continue
 
-        try:
-            year = int(date_match.group("year"))
-            month = int(date_match.group("month"))
-            day = int(date_match.group("day"))
-        except (TypeError, ValueError):
+        parsed = _date_time_at(text, date_match)
+        if parsed is None:
             continue
-
-        hour, minute = 23, 59
-        time_match = _TIME_RE.search(text, date_match.end())
-        if time_match and time_match.start() - date_match.end() <= _DATE_TO_TIME_WINDOW:
-            if time_match.group("h2") is not None:
-                hour, minute = int(time_match.group("h2")), int(time_match.group("m2"))
-            else:
-                hour, minute = int(time_match.group("h1")), int(time_match.group("m1"))
-
-        try:
-            return datetime(year, month, day, hour, minute)
-        except ValueError:
-            continue
+        found, end = parsed
+        # 날짜가 바뀌는 기간("2026.10.16.(금) 00:00 ~ 2026.10.20.(화) 10:00")이면 끝 일시가 마감 —
+        # 시작 일시를 마감으로 잡던 것(2026-10-19 실측: 구미시 스타트업 필드 공용공간 리모델링 공사 설계용역,
+        # 나라장터 입찰서제출 10/16 00:00 ~ 10/20 10:00인데 "첨부파일 제출기한 10/16 00:00 · 지남"으로 보였음)
+        range_match = _RANGE_TO_DATE_RE.match(text, end)
+        if range_match:
+            end_date = _DATE_RE.match(text, range_match.end()) or _MONTH_DAY_RE.match(text, range_match.end())
+            if end_date:
+                later = _date_time_at(text, end_date, default_year=found.year)
+                if later is not None and later[0] < found and "year" not in end_date.groupdict():  # 해 넘김 "12.30 ~ 1.5"
+                    later = _date_time_at(text, end_date, default_year=found.year + 1)
+                if later is not None and later[0] >= found:
+                    found = later[0]
+        return found
     return None
+
+
+def _date_time_at(text: str, date_match: re.Match, default_year: int | None = None) -> tuple[datetime, int] | None:
+    """날짜 매치 + 뒤 가까운 시각(범위면 종료 시각) → (일시, 읽은 끝 위치). 시각이 없으면 그날 23:59."""
+    try:
+        year = int(date_match.groupdict().get("year") or default_year or 0)
+        month = int(date_match.group("month"))
+        day = int(date_match.group("day"))
+    except (TypeError, ValueError):
+        return None
+
+    hour, minute = 23, 59
+    end = date_match.end()
+    time_match = _TIME_RE.search(text, date_match.end())
+    # "2026.10.16 ~ 2026.10.20 10:00"처럼 시작 날짜에 시각이 없으면 "~" 너머 끝 날짜의 시각을 가져오지 않는다
+    if (time_match and time_match.start() - date_match.end() <= _DATE_TO_TIME_WINDOW
+            and not re.search(r"[~∼～]", text[date_match.end():time_match.start()])):
+        end = time_match.end()
+        if time_match.group("h2") is not None:
+            hour, minute = int(time_match.group("h2")), int(time_match.group("m2"))
+        else:
+            hour, minute = int(time_match.group("h1")), int(time_match.group("m1"))
+
+    try:
+        return datetime(year, month, day, hour, minute), end
+    except ValueError:
+        return None

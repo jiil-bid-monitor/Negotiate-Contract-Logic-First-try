@@ -26,6 +26,7 @@ STAGE_OF = {
     "보유면허없음": "참가자격",
     "마감 지남": "마감",
     "지역제한": "참가지역",
+    "설계용역": "설계용역",
 }
 # 제외된 공고 탭에 안 싣는 단계 — 미매칭은 수천~수만 건이라 목록으로는 쓸모없고(공고번호 검색으로 본다), 마감은 볼 일이 없다
 HIDDEN_STAGES = {"키워드·품목", "마감"}
@@ -140,7 +141,6 @@ def item(c: dict[str, Any], held_names: dict[str, str], promoted: dict[str, Any]
         "attachmentCount": c.get("attachment_count"),
         "hasAttachmentText": bool(c.get("has_attachment_text")),
         "scopeItems": c.get("scope_items") or [],
-        "designScope": c.get("design_scope"),
         "sync": sync,
         "maxScore": sync.get("score") or 0,
         "basis": "제목+과업내용" if sync.get("basis") == "과업 원문" else "제목",

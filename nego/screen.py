@@ -45,6 +45,19 @@ def _canonical_title(text: str | None) -> str:
     return _DESIGN_SERVICE_VARIANT_RE.sub("공사설계용역", _squash(text))
 
 
+# 설계 용역은 제작·설치까지 하는 사업만(2026-10-19 사용자 결정) — 공고명에 이런 말이 없으면 설계만 하는 일로 보고 뺀다.
+# 단 "공사 설계 용역"(변형 포함)은 예외로 수집(10/14 결정 그대로).
+_MAKE_WORD_RE = re.compile(r"제작|설치|시공|조성|구축|납품")
+
+
+def design_only(title: str | None) -> bool:
+    """공고명이 제작·설치 없는 설계 용역인지 — "○○박물관 리모델링 기본 및 실시설계 용역"."""
+    canonical = _canonical_title(title)
+    plain = re.sub(r"[·ㆍ.,()\[\]]", "", canonical)
+    return ("설계" in plain and "용역" in plain and "설계공모" not in plain
+            and "공사설계용역" not in plain and not _MAKE_WORD_RE.search(plain))
+
+
 @dataclass
 class ScreenConfig:
     keywords: list[str] = field(default_factory=list)
@@ -314,6 +327,14 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
             excluded_reason="키워드·품명코드 모두 불일치",
             match_explain=_explain_no_match(notice, config, industry_hits),
             match_detail=_no_match_detail(notice, config, industry_hits),
+        )
+
+    if design_only(notice.title):
+        return ScreenResult(
+            matched=False,
+            confidence=None,
+            excluded_by="설계용역",
+            excluded_reason="공고명에 제작·설치가 없는 설계 용역 — '공사 설계 용역'만 수집",
         )
 
     code_matched = bool(product_hits or industry_hits)

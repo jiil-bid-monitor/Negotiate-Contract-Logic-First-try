@@ -1630,14 +1630,13 @@ function checkKinds(n) {
   if ((n.qual?.parts || []).some((p) => p.status === "미달")) out.add("qual");
   if ((n.textFlags || []).length) out.add("perf");
   if (consortiumCase(n)) out.add("consortium");
-  if (n.overseas || n.overseasSuspect || n.overseasAttachment || n.regionSuspect || n.linkedSystem || n.attachmentCount === 0
-      || (n.designScope && n.designScope.kind !== "설계+제작설치")) out.add("scope");
+  if (n.overseas || n.overseasSuspect || n.overseasAttachment || n.regionSuspect || n.linkedSystem || n.attachmentCount === 0) out.add("scope");
   return out;
 }
 const CHECK_OPTS = [
   ["qual", "자격·품명", "자격요건·세부품명번호 미보유"],
   ["perf", "실적·기술인력", "첨부 공고문의 실적제한·기술인력 요건"],
-  ["scope", "확인할 것", "설계만 하는 용역, 해외 개최 의심, 지역 제한 의심(첨부), 첨부 없음·국방전자조달"],
+  ["scope", "확인할 것", "해외 개최 의심, 지역 제한 의심(첨부), 첨부 없음·국방전자조달"],
   ["consortium", "컨소시엄 검토", "자격 미보유 — 보유 자격이 학술연구용역뿐"],
 ];
 const checkPass = (n, v) => v === "all" || checkKinds(n).has(v);
@@ -2319,7 +2318,7 @@ function enrichBadges(n) {
   if (cons) qual.push(consortiumBadge(n, cons));
   const area = [regionBadge(n), jointBadge(n)];
   if (n.regionSuspect) area.push(regionSuspectBadge(n));
-  const check = [designBadge(n), ...flagBadges(n), attachBadge(n)];
+  const check = [...flagBadges(n), attachBadge(n)];
   const group = (label, list) => {
     const html = list.filter(Boolean).join("");
     return html ? `<div class="tag-group">${label ? `<span class="tg-label">${label}</span>` : ""}${html}</div>` : "";
@@ -2361,28 +2360,6 @@ function regionSuspectBadge(n) {
       (rows.length ? `<ul class="due-list">${rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join("")}</ul>` : "") +
       (t.evidence ? `<p class="q-label">공고문 원문</p><blockquote class="quote">${esc(t.evidence)}</blockquote>` : "") +
       `<p>원문에서 참가할 수 있는지 확인하세요.</p>`);
-}
-
-/**
- * 설계 용역이 제작·설치까지 하는지 (2026-10-19 요청 — 표시만). 관심 키워드로 걸린 "○○ 설계 용역" 중 설계만 하는 일을 가려 보게 한다.
- * 공고명에 제작·설치·시공·조성이 있으면 그것으로, 없으면 첨부 과업 문서에서 제작·설치 문장을 찾는다(서버 nego/design_scope.py).
- */
-function designBadge(n) {
-  const d = n.designScope;
-  if (!d) return "";
-  const quotes = (d.lines || []).map((l) => `<blockquote class="quote">${esc(l)}</blockquote>`).join("");
-  if (d.kind === "설계+제작설치")
-    return tipBadge("okb", "설계 + 제작·설치", "설계 용역 — 제작·설치 포함",
-      d.source === "공고명"
-        ? `<p>공고명에 제작·설치(시공·조성)가 함께 있습니다.</p>`
-        : `<p class="lead">첨부 과업 문서에 제작·설치 내용이 있습니다.</p><p class="q-label">과업 문서 원문</p>${quotes}<p>범위는 원문에서 확인하세요.</p>`);
-  if (d.kind === "설계만")
-    return tipBadge("warn", "⚠ 설계만 (제작·설치 없음)", "설계 용역 — 제작·설치 없음",
-      `<p class="lead">공고명에도 첨부 과업 문서에도 제작·설치가 이번 과업으로 나오지 않습니다.<br>설계만 하는 용역일 수 있습니다.</p>` +
-        (quotes ? `<p class="q-label">제작·설치가 나온 문장 (별도 발주·향후 등)</p>${quotes}` : "") +
-        `<p>과업 범위는 원문에서 확인하세요.</p>`);
-  return tipBadge("faint", "설계 용역 · 제작·설치 확인 안 됨", "설계 용역",
-    `<p>공고명에 제작·설치가 없고 첨부 과업 문서를 읽지 못했습니다.<br>설계만 하는 용역인지 공고 원문에서 확인하세요.</p>`);
 }
 
 /** 첨부를 못 읽은 까닭 — 다른 조달시스템(국방전자조달)에 규격서가 있거나, 나라장터 첨부가 없음 */
@@ -2960,6 +2937,7 @@ const STAGE_LABEL = {
   최소예산: "금액 미달",
   낙찰방법: "수의계약·설계공모",
   검토필요: "관심·제외 키워드 함께 있음",
+  설계용역: "설계만 하는 용역",
   해외개최: "해외 개최",
   "키워드·품목": "키워드 없음",
   // 참가자격 단계에서 빠지는 경우: 조경·토목·건축사 면허 필수, 또는 (용역·공사) 요구 업종을 하나도 보유하지 않음.
@@ -2974,6 +2952,7 @@ const STAGE_NOTE = {
   마감: "입찰 마감(사전규격은 의견 마감)이 지난 공고입니다.<br>사전규격은 본공고가 올라오면 본공고 목록에 나옵니다.",
   "본공고 게시": "사전규격 공고인데 본공고가 이미 나왔습니다.<br>본공고에서 확인하세요.",
   검토필요: "제목에 관심 키워드와 제외 키워드가 함께 있어 '검토필요' 칸에 둔 공고입니다.",
+  설계용역: "공고명에 제작·설치(시공·조성 등)가 없는 설계 용역입니다.<br>설계 용역은 '공사 설계 용역'만 수집합니다.",
   제외키워드: "제목에 지일 업무와 무관한 공고를 거르는 단어가 들어 있습니다.",
   최소예산: "사업금액이 설정한 최소 금액보다 작습니다.",
   낙찰방법: "수집하지 않는 낙찰방법입니다(수의계약, 설계공모).",
@@ -3009,6 +2988,7 @@ const STEP_NAME = {
   참가자격: "참가 자격",
   참가지역: "참가 가능 지역",
   "과업 내용": "과업 내용",
+  설계용역: "설계만 하는 용역",
 };
 async function loadExcluded() {
   $("exMeta").textContent = "불러오는 중…";
@@ -3043,6 +3023,7 @@ const STAGE_RULE = {
   "키워드·품목": "등록 키워드·품목이 없음",
   참가자격: "요구 면허를 지일이 하나도 보유하지 않음",
   참가지역: "본점(정선군) 지역 밖 업체만 참가 가능 (나라장터 기준)",
+  설계용역: "공고명에 제작·설치 없는 설계 용역 ('공사 설계 용역'은 수집)",
   "과업 내용": "과업지시서에 전시·제작 내용 없음, 휴게·독서 공간 조성",
 };
 const num = (v) => v.toLocaleString("ko-KR");
@@ -3233,6 +3214,7 @@ function promoteAsk(n, kw) {
     참가지역: "다른 지역 업체만 참가할 수 있는 공고입니다.",
     해외개최: "해외에서 열리는 전시회 공고입니다.",
     "본공고 게시": "본공고가 이미 따로 올라온 사전규격입니다.",
+    설계용역: "제작·설치 없이 설계만 하는 용역으로 보이는 공고입니다.",
     "과업 내용": "과업에 전시·제작 내용이 없는 공고입니다.",
   };
   const reason = n.excludedAt === "제외키워드"

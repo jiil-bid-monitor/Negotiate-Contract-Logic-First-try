@@ -69,6 +69,18 @@ class TestDesignServiceVariants(unittest.TestCase):
         result = screen.screen(n, _screen_config())
         self.assertEqual(result.excluded_by, "최소예산")
 
+    def test_design_only_service_is_excluded(self):
+        """10/19 결정 — 공고명에 제작·설치 류가 없는 설계 용역은 '공사 설계 용역'일 때만 수집."""
+        for title in ("OO박물관 리모델링 기본 및 실시설계 용역", "OO체험관 전시 설계 용역"):
+            with self.subTest(title=title):
+                n = _notice(title=title, presmptPrce="300000000", asignBdgtAmt="330000000")
+                self.assertEqual(screen.screen(n, _screen_config()).excluded_by, "설계용역")
+        for title in ("OO체험관 전시 설계 및 제작·설치 용역", "OO도서관 리모델링 공사 설계 용역"):
+            with self.subTest(title=title):
+                n = _notice(title=title, presmptPrce="300000000", asignBdgtAmt="330000000")
+                result = screen.screen(n, _screen_config())
+                self.assertTrue(result.matched, result.excluded_reason)
+
 
 class TestDesignContest(unittest.TestCase):
     """결정 5번 — 낙찰방법에만 '설계공모'가 있어도 수집 범위 밖."""

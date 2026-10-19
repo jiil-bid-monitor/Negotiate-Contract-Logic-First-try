@@ -105,6 +105,28 @@ class TestDesignContest(unittest.TestCase):
         self.assertEqual(scope.bid_category(n), "협상")
 
 
+class TestMongoliaLikely(unittest.TestCase):
+    """2026-10-19 사용자 요청: 공고명·첨부 장소에 몽골·몽골 지명이 있으면 "해외의심 몽골" 대신 "몽골 공고 유력"."""
+
+    def _screen(self, title):
+        return screen.screen(_notice(title=title), _screen_config())
+
+    def test_title_mention(self):
+        r = self._screen("몽골 울란바타르 스타트업 타운 조성을 위한 공간기획 및 인테리어 설계 용역")
+        self.assertTrue(r.matched)
+        self.assertEqual(r.mongolia, "공고명에 '몽골'")
+        self.assertIsNone(r.overseas_suspect)
+        self.assertEqual(self._screen("울란바타르 한국문화원 전시관 리모델링").mongolia, "공고명에 '울란바타르'")
+
+    def test_mureung_needs_mongolia(self):
+        self.assertIsNone(self._screen("동해 무릉계곡 체험관 전시물 제작 설치").mongolia)
+
+    def test_attachment_venue(self):
+        c = SimpleNamespace(screen_result=self._screen("OO 전시관 전시물 제작 설치"), overseas_attachment="몽골 울란바토르 시내")
+        from nego.pipeline import Candidate
+        self.assertEqual(Candidate.mongolia.fget(c), "첨부 장소: 몽골 울란바토르 시내")
+
+
 class TestOverseas(unittest.TestCase):
     """결정 8번 — 팀원 수집기 규칙: 한국관 단독, 전시회류·해외 지명 + 단체관, 영문 국가 약자."""
 

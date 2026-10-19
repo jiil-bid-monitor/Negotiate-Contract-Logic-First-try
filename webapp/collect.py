@@ -46,7 +46,7 @@ def custom_period(begin: str, end: str, now: datetime) -> tuple[datetime, dateti
 # 저장되는 수집 결과의 판정·표시 형식 버전. 자격 판정·팝업 자료가 바뀔 때 올린다 — 화면이 예전 버전으로
 # 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다(화면은 서버가 알려 주는 이 값과 결과의 format을 비교 — 2026-09-30: 코드를 받고도 옛 결과를 보고
 # 중복·개수 오류가 그대로라고 여긴 일이 두 번 있었음).
-RESULT_FORMAT = 49
+RESULT_FORMAT = 50
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -105,9 +105,10 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         # 관심 / 세부품명 (키워드 없이 등록 품목만 맞은 공고) — 2026-10-19 통합 결정 10·12번
         "section": candidate.screen_result.section,
         "overseas_suspect": candidate.screen_result.overseas_suspect,
-        "overseas_attachment": getattr(candidate, "overseas_attachment", None),
-        # 몽골 해외관(제외하지 않고 표시) 근거
-        "overseas_mongolia": candidate.screen_result.overseas_evidence if candidate.screen_result.overseas_flag else None,
+        # 첨부 장소가 몽골이면 "해외 개최 (첨부)" 대신 "몽골 공고 유력"으로만
+        "overseas_attachment": None if getattr(candidate, "mongolia", None) else getattr(candidate, "overseas_attachment", None),
+        # "몽골 공고 유력" 근거 — 공고명·첨부 장소의 몽골·몽골 지명(2026-10-19 사용자 요청, 예전 "해외의심 몽골")
+        "overseas_mongolia": getattr(candidate, "mongolia", None),
         "review_exclude": candidate.screen_result.review_exclude,
         "is_candidate": candidate.is_candidate,
         "excluded_reason": candidate.excluded_reason,

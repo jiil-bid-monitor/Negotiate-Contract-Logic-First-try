@@ -63,6 +63,16 @@ class Candidate:
     region_text: region.RegionCheck | None = None
 
     @property
+    def mongolia(self) -> str | None:
+        """"몽골 공고 유력" 근거 — 공고명의 몽골·몽골 지명, 없으면 첨부 개최·사업 장소의 몽골(2026-10-19 사용자 요청)."""
+        sr = getattr(self, "screen_result", None)
+        if sr is not None and sr.mongolia:
+            return sr.mongolia
+        if self.overseas_attachment and screen.mongolia_word(self.overseas_attachment):
+            return f"첨부 장소: {self.overseas_attachment}"
+        return None
+
+    @property
     def region_suspect(self) -> str | None:
         """첨부 공고문 판정이 미달인데 API로는 미달이 아닐 때 — "지역 제한 의심: 경기 (첨부)"."""
         text = self.region_text

@@ -89,6 +89,8 @@ class ScreenResult:
     overseas_suspect: str | None = None
     # 위 플래그를 왜 붙였는지 — 리포트에서 배지에 마우스를 올리면 보여줄 근거.
     overseas_evidence: str | None = None
+    # 공고명에 몽골·몽골 지명이 있다 — "몽골 공고 유력" 표시 근거(2026-10-19 사용자 요청, 해외 의심 대신)
+    mongolia: str | None = None
     # "미매칭"으로 빠졌을 때 무엇을 무엇과 비교해서 안 맞았는지 (사람이 읽는 줄 목록).
     # 판정에는 쓰지 않는다 — 제외된 공고 화면에서 "왜 빠졌지?"를 바로 보려고 남긴다.
     match_explain: list[str] = field(default_factory=list)
@@ -207,10 +209,18 @@ def _overseas_suspect(notice: Notice, rules: OverseasRules | None = None) -> str
     return f"제목에 해외 지명 '{place}'" if place else None
 
 
-def _is_mongolia(notice: Notice, rules: OverseasRules | None = None) -> bool:
+def mongolia_word(text: str | None, rules: OverseasRules | None = None) -> str | None:
+    """글에 든 몽골·몽골 지명. "무릉"은 국내 무릉계곡·무릉도원과 겹쳐 "몽골"이 함께 있을 때만."""
     rules = rules or load_overseas_rules()
-    title = notice.title or ""
-    return any(word in title for word in rules.mongolia)
+    text = text or ""
+    for word in rules.mongolia:
+        if word in text and (word != "무릉" or "몽골" in text):
+            return word
+    return None
+
+
+def _is_mongolia(notice: Notice, rules: OverseasRules | None = None) -> bool:
+    return mongolia_word(notice.title, rules) is not None
 
 
 def _match_codes(notice: Notice, config: ScreenConfig) -> tuple[list[str], list[str]]:
@@ -336,7 +346,10 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
         overseas_evidence=(
             f"{overseas_evidence} · 몽골 감지 — 확장 중인 시장이라 자동 배제 대신 표시" if mongolia else None
         ),
-        overseas_suspect=None if overseas_booth else _overseas_suspect(notice),
+        # 몽골이면 "해외 개최 의심" 대신 "몽골 공고 유력"(2026-10-19 사용자 요청)
+        overseas_suspect=None if overseas_booth or mongolia_word(notice.title) else _overseas_suspect(notice),
+        mongolia=(f"{overseas_evidence} · 몽골" if mongolia else
+                  (f"공고명에 '{mongolia_word(notice.title)}'" if mongolia_word(notice.title) else None)),
     )
 
 

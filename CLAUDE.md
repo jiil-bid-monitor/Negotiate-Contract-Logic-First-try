@@ -21,6 +21,8 @@ N(이 레포)·M(팀원 `iamhiki/narajangter-bid-monitor`, TS) 비교 → 16개 
 - **7 지역**: 제외는 **API만**(`region_check`), 시·군 단위(정선군 기준, `region.split_location`). 첨부 판정은 `region_text` → "지역 제한 의심" 표시.
 - **8 해외**: 팀원 규칙(한국관 단독·전시회류/해외지명+단체관·국가 약자 115개, `config/overseas.json`), 공고명만. 그 밖의 해외 지명은
   `overseas_suspect` 표시, 첨부 개최·사업 장소가 해외면 `overseas_attachment` 표시(`nego/venue_text.py`).
+  (10/19 사용자 요청) 공고명·첨부 장소에 몽골·몽골 지명이 있으면 **"몽골 공고 유력"** 칩(예전 "해외의심 몽골", 해외 개최 의심 대신 — `screen.mongolia_word`,
+  `Candidate.mongolia`). "무릉"은 "몽골"과 함께일 때만, `config/overseas.json`에 "울란바타르" 표기 추가. 수집·제외 규칙은 안 바꿈. RESULT_FORMAT 50.
 - **9·10 세부품명**: 물품 수집 세부품명 = `held_qualifications.json` heldProducts(26개, 10/16 등록증 대조). `codes.json` productCodes 삭제.
   키워드 없이 품목만 맞으면 `ScreenResult.section == "세부품명"`.
 - **11 키워드**: 제외 키워드에서 '보수공사' 삭제(71개).

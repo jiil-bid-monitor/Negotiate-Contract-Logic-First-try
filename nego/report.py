@@ -225,7 +225,7 @@ def _row(index: int, c: Candidate) -> dict[str, str]:
         "공고유형": c.category or "",
         "협상유형": c.variant or "",
         "재공고": "Y" if c.is_re_notice else "",
-        "해외의심": "🌐 몽골" if c.screen_result.overseas_flag else "",
+        "해외의심": "몽골 공고 유력" if getattr(c, "mongolia", None) else "",
         "공동수급": c.joint.label,
         "자격판정": c.qualification.summary,
         "참가가능지역": ", ".join(c.regions),
@@ -291,8 +291,8 @@ def render_console(candidates: list[Candidate], stats: RunStats) -> str:
             flags.append("재공고")
         if c.notice.bid_method and "직찰" in c.notice.bid_method:
             flags.append("직찰(비전자)")
-        if c.screen_result.overseas_flag:
-            flags.append(f"🌐 해외개최 의심(몽골) — 직접 확인 필요 ({c.screen_result.overseas_evidence})")
+        if getattr(c, "mongolia", None):
+            flags.append(f"몽골 공고 유력 — {c.mongolia}")
         linked = c.notice.linked_system
         if linked:
             flags.append(f"{linked['name']} 공고 — 규격서·상세는 {linked['url']}")

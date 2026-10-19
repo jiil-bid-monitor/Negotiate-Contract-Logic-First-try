@@ -115,7 +115,9 @@ class Row:
         linked = c.notice.linked_system
         sr = getattr(c, "screen_result", None)
         notes = []
-        if getattr(sr, "overseas_flag", False) or getattr(sr, "overseas_suspect", None) or getattr(c, "overseas_attachment", None):
+        if getattr(c, "mongolia", None):
+            notes.append("몽골 공고 유력")
+        elif getattr(sr, "overseas_suspect", None) or getattr(c, "overseas_attachment", None):
             notes.append("해외 의심")
         if getattr(c, "region_suspect", None):
             notes.append("지역 제한 의심")

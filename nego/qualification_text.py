@@ -134,6 +134,15 @@ def _hangul_count(text: str) -> int:
     return sum(1 for ch in text if "가" <= ch <= "힣")
 
 
+# PDF에서 글자마다 띄워 뽑힌 번호("3 .  입찰참가자격", "3 . 1 . 1 .") — 붙여야 제목·항목으로 알아본다
+# (2026-10-19 제보: 구미시 스타트업 필드 공용공간 리모델링 공사 설계용역 공고문 PDF — 절을 못 찾아 3.1.2·3.1.3 요건이 빠짐)
+_SPACED_NUMBER_RE = re.compile(r"(?m)^([ \t]*)(\d{1,2}(?: \. \d{1,2})*) \.(?=\s)")
+
+
+def _join_spaced_numbering(text: str) -> str:
+    return _SPACED_NUMBER_RE.sub(lambda m: m.group(1) + m.group(2).replace(" . ", ".") + ".", text)
+
+
 def find_qualification_section(text: str) -> QualificationSection | None:
     """원문에서 입찰참가자격 절을 찾아 같은 급의 다음 제목 직전까지 잘라낸다.
 
@@ -146,6 +155,7 @@ def find_qualification_section(text: str) -> QualificationSection | None:
     # 우선순위: ① 번호 붙은 "입찰참가자격" ② 번호 붙은 "참가자격" ③ 번호 없는 제목.
     # 한 문서에 둘 다 있으면(실측: 노원수학문화관 — 앞쪽 요약의 "5. 참가자격"과 본문의
     # "2. 입찰참가자격") 입찰참가자격 절이 더 온전하다.
+    text = _join_spaced_numbering(text)
     tiers: list[list[tuple[re.Match, str]]] = [[], [], []]
     best: tuple[int, re.Match, str] | None = None
     for match in _HEADING_RE.finditer(text):

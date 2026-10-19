@@ -73,6 +73,65 @@ class TestUnheldCodeNames(unittest.TestCase):
         )
         self.assertEqual(result.summary, "자격 미달(조형물(6012100201))")
 
+    def test_name_before_bracket_when_inner_is_label_and_code(self):
+        """2026-10-19 제보(제천시 신월~모산 도로개설공사 실시설계용역 R26BK01775782): "직접생산확인증명서[측량용역
+        (분류번호:8115160401)-…]"가 "이름 미확인(8115160401)"로 보였다 — 괄호 안이 "…번호:" + 코드뿐이면 괄호 앞 이름."""
+        item = ("다. … 직접생산확인증명서[측량용역(분류번호:8115160401)-필수특이사항에 공공측량업 또는 "
+                "측지측량업에 한함]를 소지한 업체이어야 합니다.")
+        self.assertEqual(qualify._extract_code_requirements(item), [("8115160401", "측량용역(8115160401)")])
+        result = qualify.evaluate_attachment_text([item], held_codes=set())
+        self.assertEqual(result.unnamed_codes, [])
+
+    def test_four_digit_code_after_industry_name(self):
+        """2026-10-19 사용자 결정: "공공측량업(5023) 또는 측지측량업(5021)"처럼 업·사업자·회사·사무소로 끝나는 이름 바로 뒤
+        (4자리)는 업종코드. 연도·조항 번호는 그대로 안 읽는다."""
+        item = "별표7에서 정하고 있는 공공측량업(5023) 또는 측지측량업(5021)에 등록된 업체"
+        self.assertEqual(qualify._or_groups(item), [[("5023", "공공측량업(5023)"), ("5021", "측지측량업(5021)")]])
+        self.assertEqual(qualify._extract_code_requirements("2024년(2024) 기준, 제44조(1234)에 따라"), [])
+
+    def test_four_digit_code_after_line_break(self):
+        """제천 공고문 PDF: "측지측량업\n(5021)" — 5021을 못 읽어 5023의 "또는"이 측량용역(8115160401)에 이어졌다."""
+        item = ("다. 측량분야는 … 공공측량업(5023) 또는 측지측량업\n(5021)에 등록된 업체로서, 분담이행방식(단독분담 또는 "
+                "공동이행분담)으로 참여해야하며, … 직접생산확인증명서[측량용역(분류번호:8115160401)-필수특이사항]를 소지한 업체")
+        self.assertEqual([[c for c, _ in b] for b in qualify._or_groups(item)], [["5023", "5021"], ["8115160401"]])
+
+    def test_nonstandard_code_with_held_name(self):
+        """2026-10-19 제보: 공고문이 나라장터 업종코드가 아닌 "실내건축공사업(업종코드: 452106)"을 적었고, PDF 줄바꿈에 이름이
+        "사업"으로 잘려 미보유로 나왔다. 이름이 보유 면허와 같으면 코드가 달라도 보유."""
+        item = ("다. 「건설산업기본법」 제9조 제1항에 따른 실내건축공\n사업(업종코드: 452106) 면허를 단독으로 보유하지 않은 "
+                "경우에는, 반드시 해당 면허를 보유한 업체와 공동수급체를 구성하여 참여하여야 합니다.")
+        self.assertEqual(qualify._extract_code_requirements(item), [("452106", "실내건축공사업(452106)")])
+        result = qualify.evaluate_attachment_text([item], held_codes={"0006", "4990"},
+                                                  held_code_names={"0006": "실내건축공사업", "4990": "실내건축공사업"})
+        self.assertEqual(result.summary, "자격 충족")
+
+    def test_tax_registration_code_not_held_by_name(self):
+        """재검토(2026-10-19): 452106은 국세청 사업자등록 업종코드 — "업태·종목"처럼 사업자등록을 말하면 면허 보유와 별개라
+        이름이 같아도 보유로 치지 않고 이름표에 밝힌다."""
+        result = qualify.evaluate_attachment_text(
+            ["다. 사업자등록증상 업태·종목이 실내건축공사업(업종코드: 452106)인 업체"], held_codes={"0006", "4990"},
+            held_code_names={"0006": "실내건축공사업", "4990": "실내건축공사업"})
+        self.assertEqual(result.summary, "자격 미달(실내건축공사업[사업자등록 업종](452106))")
+
+    def test_tax_code_in_held_list(self):
+        """사용자 결정(2026-10-19): 실내건축공사업 면허 보유라 세무 업종코드 452106도 보유 목록에 넣음 — 사업자등록 문맥이어도 보유."""
+        cfg = load_config()
+        held, names = qualify.load_held_codes(cfg.held_raw), qualify.load_held_code_names(cfg.held_raw)
+        self.assertIn("452106", held)
+        result = qualify.evaluate_attachment_text(["다. 사업자등록증상 업태·종목이 실내건축공사업(업종코드: 452106)인 업체"], held, names)
+        self.assertEqual(result.summary, "자격 충족")
+
+    def test_unclosed_bracket_name_keeps_company_and_field(self):
+        """"산업디자인전문회사[환경디자인분야(업종코드 4442)"처럼 대괄호를 안 닫은 표기 — 예전엔 "[" 가 이름표에 그대로 남았다."""
+        self.assertEqual(
+            qualify._extract_code_requirements("산업디자인전문회사[환경디자인분야(업종코드 4442)"),
+            [("4442", "산업디자인전문회사(환경디자인분야)(4442)")],
+        )
+        self.assertEqual(
+            qualify._extract_code_requirements("따른 [산업디자인전문회사(환경디자인분야)(업종코드 4442)]"),
+            [("4442", "산업디자인전문회사(환경디자인분야)(4442)")],
+        )
+
     def test_held_code_is_not_reported_as_unnamed(self):
         result = qualify.evaluate_attachment_text([BARE_ITEM], held_codes={"4440", "4444"})
         self.assertEqual(result.missing_count, 0)

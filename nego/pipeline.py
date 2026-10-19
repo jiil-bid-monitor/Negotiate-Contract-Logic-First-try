@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -46,10 +47,38 @@ class Candidate:
     # `--fetch-attachment-text`로 뽑은 첨부파일 원문(파일별로 이어붙임). LLM 유사도
     # 판정(`llm_similarity.py`)에 과업내용 근거로 넘긴다. 첨부를 안 뽑았으면 빈 문자열.
     attachment_text: str = ""
+    # 그중 과업 문서(과업지시서·제안요청서·시방서·공내역서·연결 사전규격 첨부)의 글만 — 싱크로율·과업 근거
+    task_text: str = ""
+    # 첨부 공고문의 개최·사업 장소가 해외일 때 그 장소("독일 뒤셀도르프") — 표시만(2026-10-16 통합 결정 8번)
+    overseas_attachment: str | None = None
+    # 싱크로율(`sync.PastIndex.score` 결과) — 화면·메일에만 표시, 판정엔 안 씀(2026-10-19 통합 결정 16번)
+    sync: dict | None = None
+    # 매일 입찰 보고에서 이미 보낸 공고의 정정공고(차수가 오름) — 보고에 [정정] (`sent_state.select_new`)
+    corrected: bool = False
     # `--llm-similarity`를 줬을 때만 채워진다 (`llm_similarity.LlmJudgement`).
     llm_similarity: object | None = None
-    # 지역 제한(업체 소재지) 판정 — "미달"이면 `drop_region_unmet`이 제외로 옮긴다(2026-10-14)
+    # 지역 제한(업체 소재지) 판정 — 나라장터 참가가능지역 API 기준. "미달"이면 `drop_region_unmet`이 제외로 옮긴다(2026-10-14)
     region_check: region.RegionCheck = field(default_factory=region.RegionCheck)
+    # 첨부 공고문에서 찾은 소재지 요건 — 제외에 쓰지 않고 "지역 제한 의심"으로 표시만(2026-10-19 통합 결정 7번)
+    region_text: region.RegionCheck | None = None
+
+    @property
+    def mongolia(self) -> str | None:
+        """"몽골 공고 유력" 근거 — 공고명의 몽골·몽골 지명, 없으면 첨부 개최·사업 장소의 몽골(2026-10-19 사용자 요청)."""
+        sr = getattr(self, "screen_result", None)
+        if sr is not None and sr.mongolia:
+            return sr.mongolia
+        if self.overseas_attachment and screen.mongolia_word(self.overseas_attachment):
+            return f"첨부 장소: {self.overseas_attachment}"
+        return None
+
+    @property
+    def region_suspect(self) -> str | None:
+        """첨부 공고문 판정이 미달인데 API로는 미달이 아닐 때 — "지역 제한 의심: 경기 (첨부)"."""
+        text = self.region_text
+        if text is None or text.status != "미달" or self.region_check.status == "미달":
+            return None
+        return f"지역 제한 의심: {'·'.join(text.required)} (첨부)"
     # 첨부 공고문에서 찾은, 판정하지 않고 "확인 필요"로만 보여줄 요건 — 실적·기술인력·건축사사무소
     # (`text_requirements.flag_requirements`, [{kind, text, date?}])
     text_flags: list = field(default_factory=list)
@@ -72,6 +101,7 @@ class RunStats:
     failed_operations: list[str] = field(default_factory=list)
     cancelled: int = 0
     private_contract: int = 0  # 수의계약이라 뺀 공고
+    design_contest: int = 0  # 설계공모라 뺀 공고 (2026-10-16 통합 결정 5번)
     other_category: int = 0  # 이번 실행 유형(--categories) 밖이라 뺀 공고
     old_ordinal: int = 0
     in_scope: int = 0  # 수집 범위(+유형)에 든 공고
@@ -206,13 +236,23 @@ def build_candidates(
     scope_result = scope.apply_scope(notices, categories)
     stats.cancelled = scope_result.dropped_cancelled
     stats.private_contract = scope_result.dropped_private
+    stats.design_contest = scope_result.dropped_design_contest
     stats.other_category = scope_result.dropped_other_category
     stats.old_ordinal = scope_result.dropped_old_ordinal
     stats.in_scope = len(scope_result.kept)
     stats.categories = sorted(categories, key=scope.CATEGORIES.index) if categories else None
+    # 웹앱 수집 로그에도 보이게 — 설계공모는 제외된 공고 탭에 안 실려 여기서만 건수를 볼 수 있다(통합 결정 5번)
+    log.info("수집 범위 밖: 수의계약 %d건 · 설계공모 %d건 · 취소공고 %d건", stats.private_contract, stats.design_contest, stats.cancelled)
+    # [진단] 공고명에 '설계공모'가 든 공고의 낙찰방법·계약방법 — 설계공모 판별 칸이 맞는지 실응답으로 보려고(10/19)
+    named = [n for n in notices if "설계공모" in re.sub(r"\s", "", n.title or "")]
+    if named:
+        log.info("[진단] 공고명에 '설계공모'가 든 공고 %d건 (설계공모로 판별 %d건)", len(named), sum(scope.is_design_contest(n) for n in named))
+        for n in named[:3]:
+            log.info("  [진단] %s %s — 낙찰방법 %r · 계약방법 %r · 입찰방식 %r", n.notice_no, (n.title or "")[:30],
+                     n.award_method, n.contract_method, n.bid_method)
 
     candidates: list[Candidate] = []
-    company_sido = region.company_sido(config.held_raw)
+    company_location = region.company_location(config.held_raw)
     held_codes = qualify.load_held_codes(config.held_raw)
 
     for notice in scope_result.kept:
@@ -233,7 +273,7 @@ def build_candidates(
             is_re_notice=scope.is_re_notice(notice),
             variant=scope.negotiation_variant(notice),
             category=scope.bid_category(notice),
-            region_check=region.from_api(regions.get(notice.notice_no, []), company_sido),
+            region_check=region.from_api(regions.get(notice.notice_no, []), company_location),
         )
 
         # 이미 본공고로 나간 사전규격은 후보에서 뺀다 (사용자 요청 2026-09-30) — 같은 사업이
@@ -283,12 +323,32 @@ def build_candidates(
     return candidates
 
 
+def drop_expired(candidates: list[Candidate], now: datetime, stats: RunStats) -> list[Candidate]:
+    """기준 마감(자격등록·입찰·의견등록 중 가장 이른 것, `Schedule.earliest`)이 지난 후보를 제외 목록으로 옮긴다
+    (2026-10-19 통합 결정 4번 — 마감 지난 공고는 화면·보고 어디에도 안 보임). 첨부 공고문의 제출기한으로 마감을
+    채우는 공고가 있어 첨부를 읽은 **뒤에** 부른다. 마감 정보가 없으면 남긴다."""
+    kept = []
+    for c in candidates:
+        if not c.schedule.is_expired(now):
+            kept.append(c)
+            continue
+        label, dt = c.schedule.earliest
+        reason = "마감 지남"
+        stats.screened_out[reason] = stats.screened_out.get(reason, 0) + 1
+        stats.screened_in -= 1
+        c.is_candidate = False
+        c.excluded_reason = f"{reason} ({label} {dt:%m/%d %H:%M})"
+        stats.rejected.append(c)
+    stats.candidates = len(kept)
+    return kept
+
+
 def drop_region_unmet(candidates: list[Candidate], stats: RunStats) -> list[Candidate]:
     """지역 제한을 못 채운 후보를 제외 목록으로 옮긴다(2026-10-14 사용자 결정 — 9/28 "지역제한은 표시만"을 바꿈).
 
     지역제한 입찰은 공동수급을 허용해도 구성원 모두가 소재지 요건을 채워야 해서 지일은 들어갈 수 없다.
-    (지역의무공동도급 — "지역업체와 공동으로" — 은 `region.from_text`가 제한으로 보지 않아 여기 안 걸린다.)
-    첨부 공고문 판정이 API보다 우선이라(`region.combine`) 첨부를 읽은 **뒤에** 부른다. "미확인"은 남긴다.
+    **나라장터 참가가능지역 API 판정만** 본다(2026-10-19 통합 결정 7번) — 첨부 공고문 판정은 `region_suspect` 표시만.
+    시·군 단위까지 본다(강원 춘천시만 → 정선군 지일은 미달). "미확인"은 남긴다.
     """
     kept = []
     for c in candidates:

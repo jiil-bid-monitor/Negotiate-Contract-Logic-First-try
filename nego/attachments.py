@@ -25,13 +25,16 @@ from xml.etree import ElementTree as ET
 
 import requests
 
+from .attachment_sources import attachments_for, is_quantity_sheet, is_spec_name
+
 if TYPE_CHECKING:
+    from .http_client import DataGoKrClient
     from .models import Notice
     from .pipeline import Candidate
 
 log = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = {"hwp", "hwpx", "pdf", "zip"}
+SUPPORTED_EXTENSIONS = {"hwp", "hwpx", "pdf", "zip", "docx", "xlsx"}
 
 # ZIP 안전장치 — 발주기관이 올린 압축 파일이라도 압축 폭탄·거대 파일로 수집이 멈추면 안 된다.
 ZIP_MAX_MEMBERS = 60  # 압축 안에서 읽을 최대 문서 수 (HWP/HWPX/PDF/zip — 도면·사진 등은 세지 않는다)
@@ -72,9 +75,11 @@ class AttachmentText:
         return len(self.text)
 
 
-def download_bytes(session: requests.Session, url: str, timeout: float = 30.0) -> bytes:
+def download_bytes(
+    session: requests.Session, url: str, timeout: float = 30.0, headers: dict[str, str] | None = None
+) -> bytes:
     try:
-        res = session.get(url, timeout=timeout)
+        res = session.get(url, timeout=timeout, **({"headers": headers} if headers else {}))
     except requests.RequestException as err:
         raise AttachmentError(f"다운로드 실패: {err}") from err
     if res.status_code >= 400:
@@ -130,11 +135,25 @@ def _is_hwpx_zip(data: bytes) -> bool:
     return False
 
 
+def _office_kind(data: bytes) -> str | None:
+    """zip 안 항목으로 워드·엑셀을 가린다 — hwpx·docx·xlsx·그냥 압축이 모두 zip이라 확장자만으로는 구분이 안 된다."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            names = zf.namelist()
+    except (zipfile.BadZipFile, OSError):
+        return None
+    if "word/document.xml" in names:
+        return "docx"
+    if any(n.startswith("xl/") for n in names):
+        return "xlsx"
+    return None
+
+
 def _sniff_ext(data: bytes) -> str | None:
     if data.startswith(_PDF_MAGIC):
         return "pdf"
     if data.startswith(_ZIP_MAGIC_PREFIXES):
-        return "hwpx" if _is_hwpx_zip(data) else "zip"
+        return "hwpx" if _is_hwpx_zip(data) else (_office_kind(data) or "zip")
     if data.startswith(_OLE_MAGIC):
         return "hwp"
     return None
@@ -173,11 +192,53 @@ def _extract_raw(data: bytes, ext: str, depth: int) -> str:
         return _extract_hwpx_text(data)
     if ext == "hwp":
         return _extract_hwp_text(data)
+    if ext == "docx":
+        return _extract_docx_text(data)
+    if ext == "xlsx":
+        return _extract_xlsx_text(data)
     if ext == "zip":
         if depth >= ZIP_MAX_DEPTH + 1:
             raise AttachmentError("압축 파일 안의 압축 파일이 너무 깊습니다")
         return _extract_zip_text(data, depth)
     raise AttachmentUnsupported(f"지원하지 않는 형식입니다: .{ext or '(확장자 없음)'}")
+
+
+def _decode_entities(text: str) -> str:
+    import html
+
+    return html.unescape(text)
+
+
+def _extract_docx_text(data: bytes) -> str:
+    """워드(.docx) 본문 — 시방서 등. 문단 끝은 줄바꿈, 탭·표 칸은 공백 (팀원 수집기 `corpus/officeText.ts`)."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            xml = zf.read("word/document.xml").decode("utf-8", errors="replace")
+    except (zipfile.BadZipFile, KeyError, OSError) as err:
+        raise AttachmentError(f"docx 열기 실패: {err}") from err
+    xml = re.sub(r"</w:p>", "\n", xml)
+    xml = re.sub(r"<w:(?:tab|br)\b[^>]*/>|</w:tc>", " ", xml)
+    return _decode_entities(re.sub(r"<[^>]+>", "", xml))
+
+
+def _extract_xlsx_text(data: bytes) -> str:
+    """엑셀은 글자 칸만 — 공내역서의 공종·품명·규격 목록. 숫자만 있는 칸·"식"·"EA" 같은 단위는 뺀다."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            xml = zf.read("xl/sharedStrings.xml").decode("utf-8", errors="replace")
+    except KeyError as err:
+        raise AttachmentUnsupported("엑셀에 글자 칸이 없음") from err
+    except (zipfile.BadZipFile, OSError) as err:
+        # 내역서 엑셀은 과업 근거를 보태는 부가 자료라 못 읽어도 실패로 세지 않는다(2026-09-30 사용자 요청과 같은 원칙)
+        raise AttachmentUnsupported(f"xlsx 열기 실패: {err}") from err
+    cells = [
+        _decode_entities("".join(re.findall(r"<t\b[^>]*>([\s\S]*?)</t>", si))).strip()
+        for si in re.findall(r"<si>([\s\S]*?)</si>", xml)
+    ]
+    kept = [c for c in cells if re.search(r"[가-힣]{2,}|[A-Za-z]{3,}", c)]
+    if not kept:
+        raise AttachmentUnsupported("엑셀 글자 칸에 내용이 없음")
+    return "\n".join(kept)
 
 
 def _zip_member_name(info: zipfile.ZipInfo) -> str:
@@ -223,6 +284,9 @@ def _extract_zip_text(data: bytes, depth: int = 0) -> str:
             ext = base.rsplit(".", 1)[-1].lower() if "." in base else ""
             if ext and ext not in SUPPORTED_EXTENSIONS:
                 unsupported.append(f"{base}(.{ext})")
+                continue
+            if ext == "xlsx" and not is_quantity_sheet(base):  # 엑셀은 공내역서만 읽는다
+                unsupported.append(base)
                 continue
             docs.append((info, name, base, ext))
         docs.sort(key=lambda d: not _ZIP_PRIORITY_RE.search(d[2]))  # 안정 정렬 — 같은 순위끼리는 압축 안 순서 그대로
@@ -276,13 +340,15 @@ def fetch_attachment_text(
         return result
     # 확장자가 아예 없으면(사전규격 문서 URL은 파일명 필드가 없다) 받아서 내용으로 판별한다
     # (`extract_text`의 `_sniff_ext`). 확장자가 있는데 지원 형식이 아니면 받지 않는다.
-    if ext and ext not in SUPPORTED_EXTENSIONS:
+    if (ext and ext not in SUPPORTED_EXTENSIONS) or (ext == "xlsx" and not is_quantity_sheet(file_name)):
+        # 엑셀은 공내역서만 읽는다(공종·품명 목록 = 과업 내용) — 나머지 엑셀은 예전처럼 건너뜀
         result.error = f"지원하지 않는 형식입니다: .{ext or '(확장자 없음)'}"
         result.skipped = True
         return result
 
+    headers = {"Referer": attachment["referer"]} if attachment.get("referer") else None
     try:
-        data = download_bytes(session, url, timeout=timeout)
+        data = download_bytes(session, url, timeout=timeout, headers=headers)
         result.text = extract_text(data, ext)
     except AttachmentUnsupported as err:
         result.error = str(err)
@@ -297,9 +363,11 @@ def fetch_attachment_text(
 
 
 def collect_notice_attachment_texts(
-    session: requests.Session, notice: "Notice", timeout: float = 30.0
+    session: requests.Session, notice: "Notice", timeout: float = 30.0, client: "DataGoKrClient | None" = None
 ) -> list[AttachmentText]:
-    return [fetch_attachment_text(session, att, timeout=timeout) for att in notice.attachments]
+    """공고 첨부 + 연결된 사전규격 첨부 + 군 기관 사전규격의 국방전자조달 첨부를 과업 문서 순서로 읽는다
+    (`attachment_sources.attachments_for`, 2026-10-19 통합 결정 1번)."""
+    return [fetch_attachment_text(session, att, timeout=timeout) for att in attachments_for(notice, session, client)]
 
 
 _UNSAFE_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|]')
@@ -320,6 +388,7 @@ def save_attachment_texts(
     now: datetime | None = None,
     code_names: dict[str, str] | None = None,
     held_raw: dict | None = None,
+    client: "DataGoKrClient | None" = None,
 ) -> dict[str, Any]:
     """후보 공고의 첨부파일을 내려받아 텍스트를 `output_dir/attachment_text/`에 저장한다.
 
@@ -384,7 +453,7 @@ def save_attachment_texts(
         read_files: list[tuple[str, str]] = []  # (파일명, 원문) — 칩 원문의 출처 파일을 찾을 때 쓴다
         deadline = None
 
-        for result in collect_notice_attachment_texts(session, notice, timeout=timeout):
+        for result in collect_notice_attachment_texts(session, notice, timeout=timeout, client=client):
             if result.skipped:  # xlsx 내역서 등 — 읽을 대상이 아니라 시도·실패로 세지 않는다
                 log.debug("첨부파일 건너뜀 [%s] %s: %s", notice.notice_no, result.file_name, result.error)
                 continue
@@ -399,6 +468,16 @@ def save_attachment_texts(
             read_files.append((result.file_name, result.text))
             if hasattr(candidate, "attachment_text"):
                 candidate.attachment_text += f"\n\n=== {result.file_name} ===\n{result.text}"
+            # 과업 문서(과업지시서·제안요청서·시방서·규격서·공내역서·연결 사전규격 첨부)의 글 — 싱크로율·과업 근거용
+            if hasattr(candidate, "task_text") and (
+                is_spec_name(result.file_name) or is_quantity_sheet(result.file_name) or result.seq.startswith(("사전규격", "d2b"))
+            ):
+                candidate.task_text += f"\n\n=== {result.file_name} ===\n{result.text}"
+            # 첨부 공고문의 개최·사업 장소가 해외면 "🌐 해외 개최 (첨부: …)" 표시만(2026-10-16 통합 결정 8번)
+            if hasattr(candidate, "overseas_attachment") and not candidate.overseas_attachment:
+                from .venue_text import overseas_venue
+
+                candidate.overseas_attachment = overseas_venue(result.text)
 
             section = find_qualification_section(result.text)
             if section is not None:
@@ -424,21 +503,19 @@ def save_attachment_texts(
             if hasattr(candidate, "days_left"):
                 candidate.days_left = schedule.days_left(now)
 
-        # 첨부 참가자격에 "주된 영업소 소재지가 ○○도" 같은 지역 요건이 있으면 API보다 우선한다
-        if all_items and held_codes is not None and hasattr(candidate, "region_check"):
+        # 첨부 참가자격의 "주된 영업소 소재지가 ○○도" 같은 지역 요건 — 제외에 쓰지 않고 "지역 제한 의심" 표시만
+        # (2026-10-19 통합 결정 7번). 제외는 나라장터 참가가능지역 API 판정(`region_check`)으로만.
+        if all_items and held_codes is not None and hasattr(candidate, "region_text"):
             from . import region as _region
 
-            company = _region.company_sido(held_raw or {})
-            candidate.region_check = _region.combine(
-                candidate.region_check, _region.from_text(all_items, company)
-            )
+            candidate.region_text = _region.from_text(all_items, _region.company_location(held_raw or {}))
 
-        # 실적·기술인력·건축사사무소 요건 — 판정 없이 "확인 필요" 칩으로 (2026-09-30 사용자 요청)
+        # 실적·기술인력·건축사사무소 요건, 이름 사전에 없는 업종 요건 — 판정 없이 "확인 필요" 칩으로 (2026-09-30·10-19 사용자 요청)
         if hasattr(candidate, "text_flags"):
             from .text_requirements import attach_sources, flag_requirements
 
             candidate.text_flags = attach_sources(
-                flag_requirements(all_items), read_files
+                flag_requirements(all_items, held_code_names or {}, code_names or {}), read_files
             )
 
         if not needs_check or not all_items:

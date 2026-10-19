@@ -86,7 +86,7 @@ class TestScope(unittest.TestCase):
             (fixtures.NEGO_SW, "일반경쟁", "협상"),
             ("규격가격동시입찰-규격가격동시입찰", "제한경쟁", "규격가격동시입찰"),
             (fixtures.QUALIFY, "제한경쟁", "입찰"),
-            (fixtures.DESIGN_CONTEST, "일반경쟁", "입찰"),
+            (fixtures.DESIGN_CONTEST, "일반경쟁", None),  # 설계공모는 수집 안 함(2026-10-16 통합 결정 5번)
             (fixtures.QUALIFY, "수의계약", None),
             (fixtures.QUALIFY, "수의(소액)", None),
         ]
@@ -820,14 +820,24 @@ class TestSchedule(unittest.TestCase):
         self.assertEqual([l for l, _ in sched.all_deadlines], ["공고 게시", "공동수급협정 마감", "자격등록 마감", "입찰 마감"])
 
     def test_card_deadline_fallback_order(self):
-        """자격등록 없으면 입찰 마감, 둘 다 없으면 첨부 마감, 그것도 없으면 공동수급협정 마감."""
+        """기준 마감은 자격등록·입찰·의견등록 중 가장 이른 것, 셋 다 없으면 첨부 마감. 공동수급협정 마감은 기준에서 뺀다
+        (2026-10-19 통합 결정 4번)."""
         s = screen.Schedule(qualification_deadline=None, joint_agreement_deadline=datetime(2026, 9, 18, 18),
                             bid_deadline=datetime(2026, 9, 25, 10))
         self.assertEqual(s.earliest[0], "입찰 마감")
         s = screen.Schedule(qualification_deadline=None, joint_agreement_deadline=datetime(2026, 9, 18, 18), bid_deadline=None)
-        self.assertEqual(s.earliest[0], "공동수급협정 마감")
+        self.assertIsNone(s.earliest, "공동수급협정 마감만 있으면 기준 마감 없음")
         s.attachment_deadline_kind, s.attachment_deadline = "첨부파일 제출기한", datetime(2026, 9, 20, 17)
         self.assertEqual(s.earliest, ("첨부파일 제출기한", datetime(2026, 9, 20, 17)))
+
+    def test_card_deadline_is_earliest_of_api_deadlines(self):
+        """입찰 마감이 자격등록 마감보다 이르면 입찰 마감이 기준(예전엔 자격등록이 늘 먼저)."""
+        s = screen.Schedule(qualification_deadline=datetime(2026, 9, 26, 18), joint_agreement_deadline=None,
+                            bid_deadline=datetime(2026, 9, 25, 10), opinion_deadline=None)
+        self.assertEqual(s.earliest, ("입찰 마감", datetime(2026, 9, 25, 10)))
+        self.assertTrue(s.is_expired(datetime(2026, 9, 25, 11)))
+        self.assertFalse(s.is_expired(datetime(2026, 9, 25, 9)))
+        self.assertFalse(screen.Schedule(None, None, None).is_expired(NOW), "마감 정보 없으면 남김")
 
     def test_missing_schedule_returns_none(self):
         n = notice_from_raw(
@@ -909,6 +919,19 @@ class TestScheduleTextExtraction(unittest.TestCase):
         )
         self.assertEqual(schedule_text.extract_deadline(text), datetime(2026, 11, 3, 17, 0))
 
+    def test_multi_day_range_uses_end(self):
+        """2026-10-19 실측: 구미시 스타트업 필드 공용공간 리모델링 공사 설계용역 — 입찰서제출 10/16 00:00 ~ 10/20 10:00인데
+        시작 일시를 마감으로 잡아 "첨부파일 제출기한 10/16 00:00 · 지남"으로 보였다."""
+        cases = {
+            "입찰서 제출일시 : 2026. 10. 16.(금) 00:00 ~ 2026. 10. 20.(화) 10:00": datetime(2026, 10, 20, 10, 0),
+            "제출기간: 2026.10.16 ~ 2026.10.20 10:00": datetime(2026, 10, 20, 10, 0),
+            "제출기간: 2026.10.16.(금) 09:00 ~ 10. 20.(화) 18:00": datetime(2026, 10, 20, 18, 0),
+            "제출기한: 2026.12.30 ~ 1. 5. 17:00": datetime(2027, 1, 5, 17, 0),
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(schedule_text.extract_deadline(text), expected)
+
     def test_returns_none_when_no_deadline_text_present(self):
         self.assertIsNone(schedule_text.extract_deadline("과업 내용은 별첨 과업지시서를 참조합니다."))
 
@@ -986,18 +1009,19 @@ class TestEndToEnd(unittest.TestCase):
         self.assertIn("자격 미달", flagged.qualification.summary)
         self.assertEqual(stats.cancelled, 1)
         self.assertEqual(stats.qualification_flagged, 1)
-        self.assertEqual(stats.other_category, 2, "적격심사·설계공모는 '입찰' 유형이라 협상 실행에서 빠진다")
+        self.assertEqual(stats.other_category, 1, "적격심사는 '입찰' 유형이라 협상 실행에서 빠진다")
+        self.assertEqual(stats.design_contest, 1, "설계공모는 수집 범위 밖(2026-10-16 통합 결정 5번)")
         self.assertTrue(all(c.category == "협상" for c in candidates))
 
     def test_all_categories_include_competitive_bids(self):
-        """유형을 고르지 않으면 적격심사(입찰)·설계공모(입찰)도 후보가 될 수 있다."""
+        """유형을 고르지 않으면 적격심사(입찰)도 후보가 될 수 있다. 설계공모는 수집 범위 밖."""
         config = load_config()
         config.screen.keywords = ["전시관", "박물관"]
         stats = RunStats()
         candidates = build_candidates(_notices(), config, {}, {}, NOW, stats)
         by_no = {c.notice.notice_no: c.category for c in candidates}
         self.assertEqual(by_no.get("R26TEST00004"), "입찰")
-        self.assertEqual(by_no.get("R26TEST00005"), "입찰")
+        self.assertNotIn("R26TEST00005", by_no)
         self.assertEqual(by_no.get("R26TEST00002"), "협상")
 
     def test_sorted_by_deadline_first(self):
@@ -1121,6 +1145,12 @@ class TestCodeLabelsNotBleeding(unittest.TestCase):
     def test_item_name_written_before_code(self):
         self.assertEqual(self.labels("직접생산확인증명서 [세부품명: 실물모형및전시물, 세부품명번호 10자리(6010989901)"),
                          ["실물모형및전시물(6010989901)"])
+
+    def test_detail_item_name_not_product_name(self):
+        """2026-10-19 제보: "[제품명 : 지도작성법, 세부품명 : 공간정보DB구축서비스(코드)]" — 코드 앞이 세부품명, 제품명은 이름 아님."""
+        text = ("다. 중소기업제품구매촉진 및 판로지원에 관한 법률 제9조 및 동법 시행규칙\n제5조 규정에 의한 직접생산확인증명서"
+                "[제품명 : 지도작성법, 세부품명 :\n공간정보DB구축서비스(8115169901)]를 소지한 업체")
+        self.assertEqual(self.labels(text), ["공간정보DB구축서비스(8115169901)"])
 
 
 class TestOverlappingLicenseGroups(unittest.TestCase):

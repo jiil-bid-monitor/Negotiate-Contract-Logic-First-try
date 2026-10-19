@@ -1,0 +1,7 @@
+{
+  "_comment": "주간 리포트 이메일을 받을 사람 목록입니다(2026-10-19 통합 결정 15번 — 팀원 수집기 config/recipients.json의 두 주소를 그대로 옮김). 나중에 이 파일만 고치면 됩니다.",
+  "recipients": [
+    "dl4360@hanyang.ac.kr",
+    "hjmun4178@gmail.com"
+  ]
+}

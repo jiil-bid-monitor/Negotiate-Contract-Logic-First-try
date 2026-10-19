@@ -69,8 +69,9 @@ on:
 
 # 실패 시 같은 워크플로를 workflow_dispatch로 재호출해 새 Run을 큐에 올리려면
 # GITHUB_TOKEN에 actions:write 권한이 있어야 한다.
+# contents: write — 보낸 공고 기록을 상태 전용 브랜치(bot-state)에 커밋한다(2026-10-19 통합 결정 14번)
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 env:
@@ -137,7 +138,9 @@ jobs:
             if [ "$SCHEDULE" = "10 0 * * 1" ]; then
               CATEGORIES="협상,규격가격동시입찰"; COMPLETE_DAYS="7"; PRESPEC="true"
             else
-              CATEGORIES="입찰"; COMPLETE_DAYS="1"; PRESPEC="false"
+              # 3일치를 보되 보낸 공고 기록으로 새 공고만 보낸다(2026-10-19 통합 결정 14번) — 예약 실행이 밀리거나
+              # 늦게 등록된 공고도 빠지지 않게
+              CATEGORIES="입찰"; COMPLETE_DAYS="3"; PRESPEC="false"
             fi
             DAYS="1"; TELEGRAM="true"; NO_SUPABASE="true"; LLM="false"; ATTEMPT="1"
           else
@@ -145,7 +148,14 @@ jobs:
             DAYS="${IN_DAYS:-1}"; TELEGRAM="${IN_TELEGRAM:-false}"; PRESPEC="${IN_PRESPEC:-false}"
             NO_SUPABASE="${IN_NO_SUPABASE:-true}"; LLM="${IN_LLM:-false}"; ATTEMPT="${IN_ATTEMPT:-1}"
           fi
+          # 텔레그램으로 실제 보내는 실행에서만: '입찰'만 보면 보낸 공고 기록(중복 방지), 사전규격까지 보는 주간이면 메일도
+          # (workflow_dispatch 입력이 10개 한도라 입력을 늘리지 않고 실행 모드로 정한다)
+          SENT_STATE="false"; EMAIL="false"
+          if [ "$TELEGRAM" = "true" ] && [ "$CATEGORIES" = "입찰" ]; then SENT_STATE="true"; fi
+          if [ "$TELEGRAM" = "true" ] && [ "$PRESPEC" = "true" ]; then EMAIL="true"; fi
           {
+            echo "sent_state=$SENT_STATE"
+            echo "email=$EMAIL"
             echo "categories=$CATEGORIES"
             echo "complete_days=$COMPLETE_DAYS"
             echo "days=$DAYS"
@@ -156,7 +166,7 @@ jobs:
             echo "attempt=$ATTEMPT"
           } >> "$GITHUB_OUTPUT"
           if [ -n "$COMPLETE_DAYS" ]; then PERIOD="오늘 뺀 직전 ${COMPLETE_DAYS}일"; else PERIOD="최근 ${DAYS}일"; fi
-          echo "유형=${CATEGORIES:-전체} / 기간=${PERIOD} / 사전규격=$PRESPEC / 텔레그램=$TELEGRAM / 시도 ${ATTEMPT}회차"
+          echo "유형=${CATEGORIES:-전체} / 기간=${PERIOD} / 사전규격=$PRESPEC / 텔레그램=$TELEGRAM / 보낸공고기록=$SENT_STATE / 메일=$EMAIL / 시도 ${ATTEMPT}회차"
 
       # 필드명이 비어 보이거나(예: 예가방법에 해당하는 실제 필드명을 모를 때)
       # 원본 응답을 직접 봐야 할 때 쓰는 1회성 진단. 이 스텝을 타면 아래
@@ -177,6 +187,25 @@ jobs:
         run: |
           python -m nego.telegram dev-alert "$(printf '[개발자 알림] 시험 메시지입니다 (실제 오류 아님).\n앞으로 수집이 %s번 모두 실패하거나, 재시도 끝에 성공하면 이 방으로 알림이 옵니다.\n\n로그: %s' "$MAX_ATTEMPTS" "$RUN_URL")"
 
+      # 보낸 공고 기록은 상태 전용 브랜치 bot-state의 sent_bids.json — 없으면 빈 기록으로 시작
+      - name: 보낸 공고 기록 불러오기
+        if: steps.mode.outputs.sent_state == 'true' && github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
+        run: |
+          mkdir -p state
+          if git fetch --depth 1 origin bot-state 2>/dev/null; then
+            git show FETCH_HEAD:sent_bids.json > state/sent_bids.json 2>/dev/null || echo '{}' > state/sent_bids.json
+          else
+            echo '{}' > state/sent_bids.json
+          fi
+          echo "보낸 공고 기록 $(python -c "import json;print(len(json.load(open('state/sent_bids.json'))))")건"
+
+      # 싱크로율 자료(비공개 과거 실적)는 암호화 묶음 corpus/sync_bundle.enc로 커밋돼 있다 — Secret이 없으면 싱크로율만 빠진다
+      - name: 싱크로율 자료 풀기
+        if: github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
+        env:
+          CORPUS_PASSPHRASE: ${{ secrets.CORPUS_PASSPHRASE }}
+        run: python -m nego.corpus open
+
       - name: 수집 실행
         id: collect
         if: github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
@@ -191,6 +220,15 @@ jobs:
           LLM_MODEL: ${{ vars.LLM_MODEL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          JIIL_REPO: data/jiil
+          SENT_STATE: ${{ steps.mode.outputs.sent_state }}
+          EMAIL: ${{ steps.mode.outputs.email }}
           CATEGORIES: ${{ steps.mode.outputs.categories }}
           COMPLETE_DAYS: ${{ steps.mode.outputs.complete_days }}
           TELEGRAM: ${{ steps.mode.outputs.telegram }}
@@ -208,9 +246,25 @@ jobs:
           [ "$PRESPEC" = "true" ] && ARGS+=(--pre-spec)
           [ "$NO_SUPABASE" = "true" ] && ARGS+=(--no-supabase)
           [ "$LLM" = "true" ] && ARGS+=(--llm-similarity)
+          [ "$SENT_STATE" = "true" ] && ARGS+=(--sent-state state/sent_bids.json)
+          [ "$EMAIL" = "true" ] && ARGS+=(--email)
           # 개발자 알림에 마지막 오류 줄을 붙이려고 로그를 파일로도 남긴다(output/ 밖 — 아티팩트에 안 올림)
           set -o pipefail
           python -m nego "${ARGS[@]}" 2>&1 | tee collect.log
+
+      # 텔레그램 발송 뒤 기록이 바뀌었으면 bot-state 브랜치에 커밋(코드 브랜치와 섞이지 않게 기록 파일 하나만 둔 브랜치)
+      - name: 보낸 공고 기록 저장
+        if: steps.mode.outputs.sent_state == 'true' && steps.collect.outcome == 'success'
+        run: |
+          [ -f state/sent_bids.json ] || exit 0
+          TMP=$(mktemp -d)
+          cp state/sent_bids.json "$TMP/sent_bids.json"
+          cd "$TMP"
+          git init -q && git checkout -q -b bot-state
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sent_bids.json && git commit -q -m "보낸 공고 기록 갱신 (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" bot-state
 
       # 수집 원문(data/)은 올리지 않는다 — 담당자 연락처가 섞일 수 있다.
       # 리포트(output/)만 아티팩트로 남긴다.

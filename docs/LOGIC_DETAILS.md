@@ -104,7 +104,7 @@ region_check, attachment_text(첨부 원문 이어 붙임 "=== 파일명 ===" �
    - 웹앱(`review_conflicts=True`)이고 관심 키워드도 있으면 → 제외 키워드 없이 3~5를 다시 돌려 통과하면 `confidence="검토필요"`, `review_exclude=제외어`
    - 아니면 `제외키워드`
 3. **해외 전시회 한국관/단체관** → `해외개최` 제외. "한국관" 단독, 또는 (전시회|박람회|엑스포) + "단체관". **단 "몽골"이 있으면 제외하지 않고 `overseas_flag`**(확장 중인 시장).
-4. **최소예산**: budget이 있고 1억 미만이면 `최소예산` 제외. 예산 정보 없으면 통과. 공고명에 `minBudgetExemptKeywords`("공사 설계 용역")가 있으면 면제.
+4. **최소예산**: budget이 있고 1억 미만이면 `최소예산` 제외. 예산 정보 없으면 통과. 공고명에 `minBudgetExemptKeywords`("공사 설계 용역")가 있거나 "설계"와 "용역"이 다 있으면(`screen.is_design_service`, 10/19) 면제.
 5. **매칭**: 품명코드(`product_codes` ∪ 대표번호 중 하나가 codes.json productCodes에 있음) 또는 관심 키워드. 업종(industryCodes 이름이 industry_text에 포함)은 **단독으론 후보 아님**. 셋 다 없으면 `미매칭`(몽골 예외).
 6. 통과: `confidence` = (코드 일치 그리고 키워드 일치) → 강력추천, 아니면 참고용(화면에선 더 안 씀, 정렬에만).
 - `keywordSkipWhen`(특정 낱말이 공고명에 있으면 그 관심 키워드 무시) 기능은 있으나 설정 비어 있음.
@@ -247,7 +247,7 @@ ZIP: 안의 HWP/HWPX/PDF/ZIP만 대상(공고·제안요청·과업지시·규�
 
 ---
 
-## 13. 자격 팝업 표시 규칙 — `webapp/qualview.py`, `webapp/static/app.js`
+## 13. 자격 팝업 표시 규칙 — `webapp/qualview.py`, `webapp/static/index.html`(10/19부터 팀원 화면 — `nQualBadges`)
 - 부분(part) 두 개: 업종(API 면허 + 첨부 업종) / 세부품명(첨부를 읽은 공고만).
 - 요건 블록: **필수 보유**(2건 이상이면 한 칸 "N개 모두 필요") / **아래 N개 중 1개 이상**(택1, 허용업종도 늘 같이) / **아래 방법 중 하나**(조합 — 방법마다 한 줄 "A + B 또는 C", 방법 사이 "또는").
 - 표시: ✓ 초록 = 보유 · ✗ 붉은 = 미보유(채워야 함) · – 회색 = 이미 충족한 요건의 나머지. 미달 블록 먼저, 그 안에서 필수 먼저.

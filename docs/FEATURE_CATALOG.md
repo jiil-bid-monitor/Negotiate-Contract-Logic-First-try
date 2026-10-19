@@ -49,10 +49,10 @@
 | F-21 | 보고 | 실패 처리: 개발자 방 알림·60분 뒤 재시도·슈퍼그룹 ID 자동 전환 | `.github/workflows/daily.yml`, `nego/telegram.py` |
 | F-22 | 보고 | HTML/CSV/콘솔 리포트 | `nego/report.py` |
 | F-23 | 웹앱 | 사내 웹앱(수집 버튼·카드·필터 메뉴·정렬·구역 이동·검색) | `webapp/` |
-| F-24 | 웹앱 | 자격 팝업(필수 보유 / N개 중 1개 / 조합) | `webapp/qualview.py`, `static/app.js` |
+| F-24 | 웹앱 | 자격 팝업(필수 보유 / N개 중 1개 / 조합) | `webapp/qualview.py`, `static/index.html` |
 | F-25 | 웹앱 | 싱크로율(과거 실적 유사도) | `webapp/sync.py` (+ 비공개 `jiil-past-contracts`) |
 | F-26 | 웹앱 | 참가여부·담당·대화·사유 기록, 판단 기록 집계·CSV | `webapp/store.py`, `server.py` |
-| F-27 | 웹앱 | 제외 공고 → "실제 공고로 올리기" | `webapp/store.py`, `app.js` |
+| F-27 | 웹앱 | 제외 공고 → "실제 공고로 올리기" | `webapp/mstore.py`·`mview.py`, `static/index.html` |
 | F-28 | 웹앱 | 옛 화면·옛 결과 경고(RESULT_FORMAT·static 지문) | `collect.RESULT_FORMAT`, `server.static_version` |
 | F-29 | 투찰 | 투찰 계산기(공고번호로 기초금액·하한율·A값 불러오기, 예비가격 15개 생성) | `nego/bidcalc.py`, `static/bidcalc*.js` |
 | F-30 | 투찰 | 투찰가격 분석 수집기(과거 개찰결과·예비가격·참가업체) | `nego/bidprice.py`, `.github/workflows/bidprice.yml` |
@@ -101,7 +101,7 @@
 - 비교 대상 = 공고명 + 대표 품목명, **띄어쓰기 무시**.
 - `keywords`(관심 18개), `excludeKeywords`(조건부 72개), `hardExcludeKeywords`(무조건: 특별전·순회전),
   `excludeKeywordExceptions`({"건축": ["실내건축"]} — "실내건축"은 "건축"으로 안 침),
-  `minBudgetAmount` 1억(예산 정보 없으면 통과), `minBudgetExemptKeywords`(["공사 설계 용역"] — 예산 하한 면제).
+  `minBudgetAmount` 1억(예산 정보 없으면 통과), `minBudgetExemptKeywords`(["공사 설계 용역"] — 예산 하한 면제, 10/19부터 공고명에 "설계"+"용역"이 있는 설계 용역 전부 면제).
 - `keywordSkipWhen`(특정 낱말이 있으면 그 관심 키워드를 무시) 기능은 남아 있으나 설정은 비어 있음.
 - keywords.json 안 `_…comment` 칸에 키워드마다 넣고 뺀 이유가 적혀 있음 — 이식할 때 같이 옮기면 판단 근거가 보존됨.
 

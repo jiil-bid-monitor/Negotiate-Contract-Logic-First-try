@@ -46,6 +46,22 @@ class TestFromText(unittest.TestCase):
         self.assertEqual(region.from_text([GYEONGGI_ITEM], None).status, "미확인")
 
 
+class TestSigunguList(unittest.TestCase):
+    def test_listed_sigungu_all_read(self):
+        """2026-10-19 제보: "본점이 강원특별자치도 속초시·고성군·양양군·강릉시에 있는 업체" — 칩에 속초시만 보였다."""
+        r = region.from_text(["본점이 강원특별자치도 속초시·고성군·양양군·강릉시에 있는 업체."], "강원특별자치도 정선군")
+        self.assertEqual((r.status, r.required), ("미달", ["강원 강릉시", "강원 고성군", "강원 속초시", "강원 양양군"]))
+
+    def test_listed_sigungu_with_company(self):
+        r = region.from_text(["주된 영업소 소재지가 강원특별자치도 평창군, 정선군 또는 영월군에 있는 업체"], "강원특별자치도 정선군")
+        self.assertEqual(r.status, "충족")
+
+    def test_particle_after_sigungu(self):
+        """"춘천시에 있는"처럼 조사가 붙어도 시·군까지 본다(예전엔 강원 전체로 읽어 충족)."""
+        r = region.from_text(["본점 소재지가 강원특별자치도 춘천시에 있는 업체"], "강원특별자치도 정선군")
+        self.assertEqual((r.status, r.required), ("미달", ["강원 춘천시"]))
+
+
 class TestFromApiAndCombine(unittest.TestCase):
     def test_api_regions(self):
         self.assertEqual(region.from_api(["경기도"], "강원").status, "미달")

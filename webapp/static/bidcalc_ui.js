@@ -1,9 +1,19 @@
 "use strict";
 // 투찰 계산기 탭 화면 — 21라인 "복수예가산출프로그램 v0.1" 모양. 계산은 bidcalc.js(BidCalc),
-// 공고 값 불러오기는 서버 /api/bidcalc. app.js 다음에 읽힌다($·esc·api 사용).
+// 공고 값 불러오기는 서버 /api/bidcalc. 화면(index.html) 본 스크립트와 이름이 겹치지 않게 쓰는 도구를 여기 안에 둔다
+// (2026-10-19 화면 이식 — 본 스크립트의 $는 getElementById라 모양이 다르다).
 
 (function () {
   const C = window.BidCalc;
+  const $ = (sel) => document.querySelector(sel);
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // 접속 토큰은 쿠키로 간다(처음 ?t= 주소로 들어올 때 서버가 심음)
+  const api = async (path) => {
+    const res = await fetch(path, { credentials: "same-origin" });
+    const data = await res.json().catch(() => ({ error: `서버 응답을 읽지 못했습니다 (HTTP ${res.status})` }));
+    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  };
   // 금액 — 단가(소수점) 계산이면 소수점 둘째 자리까지 보임
   const won = (v) => (v == null || Number.isNaN(v) ? "-" : Number(v).toLocaleString("ko-KR", { maximumFractionDigits: 2 }));
   const p4 = (v) => (v == null || Number.isNaN(v) ? "-" : v.toFixed(4));

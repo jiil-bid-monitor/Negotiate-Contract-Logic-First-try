@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -44,9 +45,9 @@ def custom_period(begin: str, end: str, now: datetime) -> tuple[datetime, dateti
     e_end = e.replace(hour=23, minute=59)
     return b, min(e_end, now)
 # 저장되는 수집 결과의 판정·표시 형식 버전. 자격 판정·팝업 자료가 바뀔 때 올린다 — 화면이 예전 버전으로
-# 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다. webapp/static/app.js APP_FORMAT도 같이 올릴 것(2026-09-30: 코드를 받고도 옛 결과를 보고
+# 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다(화면은 서버가 알려 주는 이 값과 결과의 format을 비교 — 2026-09-30: 코드를 받고도 옛 결과를 보고
 # 중복·개수 오류가 그대로라고 여긴 일이 두 번 있었음).
-RESULT_FORMAT = 35
+RESULT_FORMAT = 54
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -60,12 +61,32 @@ def _g2b_url(n) -> str | None:
     return f"https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo={n.notice_no}&bidPbancOrd={n.notice_ord}"
 
 
-def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set(), set())) -> dict[str, Any]:
-    """Candidate 1건 → 카드 1장. 후보/제외 공고 모두 같은 모양."""
+_DOC_HEADER_RE = re.compile(r"^=== (.+?) ===$", re.M)
+
+
+def sync_docs(task_text: str, attachment_text: str) -> dict[str, Any]:
+    """싱크로율을 계산한 문서 — 파일명 목록과 출처(과업 문서 / 과업 문서 없이 첨부 전체). 팝업 "근거 문서" 줄에 쓴다
+    (2026-10-19 사용자 요청: 본공고 첨부는 공고서 한 장인데 75%가 나와 어디서 왔는지 헷갈림 — 연결 사전규격 제안요청서였음)."""
+    if task_text.strip():
+        return {"docs_from": "과업 문서", "docs": _DOC_HEADER_RE.findall(task_text)}
+    if attachment_text.strip():
+        return {"docs_from": "첨부 전체", "docs": _DOC_HEADER_RE.findall(attachment_text)}
+    return {"docs_from": None, "docs": []}
+
+
+def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set(), set()),
+              interest: Callable[[Any], list[str]] | None = None) -> dict[str, Any]:
+    """Candidate 1건 → 카드 1장. 후보/제외 공고 모두 같은 모양.
+
+    `interest`: 공고명에 든 관심 키워드를 찾는 함수 — 제외된 공고는 선별에서 키워드를 안 세서(제외 키워드에서 멈춤)
+    화면 "제외 사유" 칸의 "공고명에 관심 키워드 …" 줄을 따로 채운다(2026-10-19 팀원 화면 이식)."""
     n = candidate.notice
     q = candidate.qualification
     earliest = candidate.schedule.earliest
-    sync = past.score(n.title, candidate.attachment_text)
+    # 싱크로율 근거는 과업 문서 글 우선(과업지시서·제안요청서·공내역서 — 2026-10-19 통합), 없으면 첨부 전체
+    task_text = getattr(candidate, "task_text", "")
+    sync = past.score(n.title, task_text or candidate.attachment_text)
+    sync.update(sync_docs(task_text, candidate.attachment_text))
     ai = candidate.llm_similarity
     ai_row = None
     if ai is not None:
@@ -93,6 +114,17 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "confidence": candidate.screen_result.confidence,
         "matched_keywords": candidate.screen_result.matched_keywords,
         "matched_product_codes": candidate.screen_result.matched_product_codes,
+        # 공고에 분류된 세부품명 전부 — 화면 "세부품명" 필터·"세부품명 공고" 탭(제외된 공고 중 보유 품목)에 쓴다
+        "product_codes": list(getattr(n, "product_codes", None) or ([n.product_class_no] if n.product_class_no else [])),
+        "product_name": n.product_class_name or None,
+        "interest_keywords": (candidate.screen_result.matched_keywords or (interest(n) if interest else [])),
+        # 관심 / 세부품명 (키워드 없이 등록 품목만 맞은 공고) — 2026-10-19 통합 결정 10·12번
+        "section": candidate.screen_result.section,
+        "overseas_suspect": candidate.screen_result.overseas_suspect,
+        # 첨부 장소가 몽골이면 "해외 개최 (첨부)" 대신 "몽골 공고 유력"으로만
+        "overseas_attachment": None if getattr(candidate, "mongolia", None) else getattr(candidate, "overseas_attachment", None),
+        # "몽골 공고 유력" 근거 — 공고명·첨부 장소의 몽골·몽골 지명(2026-10-19 사용자 요청, 예전 "해외의심 몽골")
+        "overseas_mongolia": getattr(candidate, "mongolia", None),
         "review_exclude": candidate.screen_result.review_exclude,
         "is_candidate": candidate.is_candidate,
         "excluded_reason": candidate.excluded_reason,
@@ -102,6 +134,8 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "demand_institution": n.demand_institution or n.notice_institution,
         "notice_institution": n.notice_institution,
         "budget": n.budget,
+        # 추정가격 / 배정예산 / None(금액 모름) — 2026-10-19 통합 결정 2번
+        "budget_kind": n.budget_kind,
         "posted_at": n.posted_at,
         "deadline_label": earliest[0] if earliest else None,
         "deadline": _iso(earliest[1]) if earliest else None,
@@ -110,6 +144,9 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "detail_url": n.detail_url or _g2b_url(n),
         "regions": candidate.regions,
         "region_check": candidate.region_check.to_dict(),
+        # 첨부 공고문의 소재지 요건 — 제외 안 하고 표시만(2026-10-19 통합 결정 7번)
+        "region_text": candidate.region_text.to_dict() if getattr(candidate, "region_text", None) else None,
+        "region_suspect": getattr(candidate, "region_suspect", None),
         "text_flags": getattr(candidate, "text_flags", []),
         "joint": {"label": candidate.joint.label, "allowed": candidate.joint.allowed},
         "qualification": {
@@ -225,7 +262,7 @@ class Collector:
 
     def _run_nego(self, config: AppConfig, days: int | None, attachments: bool, cats, prespec: bool = True,
                   period: tuple[datetime, datetime] | None = None):
-        from nego.pipeline import drop_region_unmet, run
+        from nego.pipeline import drop_expired, drop_region_unmet, run
 
         if days:
             config.lookback_days = days
@@ -235,18 +272,21 @@ class Collector:
         candidates, stats, _ = run(config, now, cats, include_prespec=prespec, period=period)
         if attachments:
             from nego.attachments import save_attachment_texts
+            from nego.http_client import DataGoKrClient
 
             att = save_attachment_texts(
                 candidates, config.output_dir,
                 held_codes=qualify.load_held_codes(config.held_raw),
                 held_code_names=qualify.load_held_code_names(config.held_raw),
                 now=now, code_names=config.code_names, held_raw=config.held_raw,
+                client=DataGoKrClient(config.api) if config.api.service_key else None,
             )
             log.info("첨부파일: 시도 %d → 성공 %d / 실패 %d · 자격판정 반영 %d건",
                      att["attempted"], att["ok"], att["failed"], att["qualification_determined"])
             if att["unnamed_codes"]:
                 log.info("이름 미확인 코드 (config/code_names.json에 추가): %s", ", ".join(att["unnamed_codes"]))
         # 지역 제한 미달은 제외(2026-10-14) — 첨부 공고문 판정이 API보다 우선이라 첨부를 읽은 뒤에
+        candidates = drop_expired(candidates, datetime.now(), stats)
         candidates = drop_region_unmet(candidates, stats)
         return candidates, stats
 
@@ -271,12 +311,16 @@ class Collector:
                 import os
                 _judge_ai(candidates, self.past, int(os.environ.get("LLM_MAX_CANDIDATES", "30")))
             held = qualview.held_lookup(config.held_raw)
+            from nego.screen import _match_keywords
+
+            def interest(n, sc=config.screen):
+                return _match_keywords(n, list(sc.keywords), sc.keyword_skip_when)
             payload = {
                 "format": RESULT_FORMAT,
                 # 미매칭 설명에 쓰는 관심 키워드 목록 — 공고마다 같아서 결과에 한 번만
                 "keywords": list(config.screen.keywords),
-                "candidates": [serialize(c, self.past, held) for c in candidates],
-                "rejected": [serialize(c, self.past, held) for c in stats.rejected],
+                "candidates": [serialize(c, self.past, held, interest) for c in candidates],
+                "rejected": [serialize(c, self.past, held, interest) for c in stats.rejected],
                 "stats": {
                     "fetched": stats.fetched, "in_scope": stats.in_scope,
                     "private_contract": stats.private_contract, "cancelled": stats.cancelled,

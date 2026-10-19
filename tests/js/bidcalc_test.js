@@ -69,6 +69,8 @@ for (let seed = 1; seed <= 30; seed++) {
 // 표 끝값이 기본서 그대로
 assert.deepStrictEqual(C.PPS_TABLE.slots[7], [99.867, 100.133]);
 assert.deepStrictEqual(C.MOIS_TABLE.slots[13], [102.14285715, 102.57142857]);
+// 9번 하한은 100.00000001(기본서 표 — 8번 상한 100.00000000과 겹치지 않음, 10/19 원본 캡처로 확인)
+assert.deepStrictEqual(C.MOIS_TABLE.slots[8], [100.00000001, 100.42857142]);
 // 10개 공고는 표가 없어 예전 칸 나누기
 {
   const p = C.makePrices({ basis: 1e9, lo: -2, hi: 2, n: 10, method: "pps", rng: C.seeded(5) });

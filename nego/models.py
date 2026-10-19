@@ -89,11 +89,27 @@ class Notice:
 
     @property
     def budget(self) -> float | None:
-        """금액 기준을 하나로 통일한다. 추정가격 우선, 없으면 배정예산."""
-        return self.estimated_price if self.estimated_price else self.assigned_budget
+        """금액 기준을 하나로 통일한다. 추정가격 우선, 없으면 배정예산(부가세 포함 금액 그대로 — 1.1로 나누지 않음).
+
+        0이나 음수는 금액이 아니라 "미입력"이라 None(금액 모름)으로 본다 — 0원으로 두면 최소예산에서 조용히 빠진다
+        (2026-10-16 통합 결정 2번, 팀원 수집기 실측 7일치 75건)."""
+        return _positive(self.estimated_price) or _positive(self.assigned_budget)
+
+    @property
+    def budget_kind(self) -> str | None:
+        """`budget`이 어느 금액인지 — "추정가격" / "배정예산" / None(금액 모름). 화면·보고에 금액 종류로 표시한다."""
+        if _positive(self.estimated_price):
+            return "추정가격"
+        if _positive(self.assigned_budget):
+            return "배정예산"
+        return None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def _positive(value: float | None) -> float | None:
+    return value if value is not None and value > 0 else None
 
 
 PRESPEC_KIND = "사전규격"

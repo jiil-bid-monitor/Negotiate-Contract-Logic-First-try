@@ -4,9 +4,12 @@
 받는데(공동수급 불허) 자격판정은 "자격 충족"으로 나왔다. 면허·품목만 보고 소재지는 안 봤기 때문.
 
 - 근거는 두 가지: 나라장터 참가가능지역 API(`candidate.regions`)와 첨부 공고문의 참가자격 문장.
-- 결과는 충족 / 미달 / 미확인 3상태. **"미달"이면 후보에서 뺀다**(2026-10-14 사용자 결정, `pipeline.drop_region_unmet`) —
+- 결과는 충족 / 미달 / 미확인 3상태. **API 판정이 "미달"이면 후보에서 뺀다**(2026-10-14 사용자 결정, `pipeline.drop_region_unmet`) —
   지역제한 입찰은 공동수급을 허용해도 구성원 모두가 소재지 요건을 채워야 해서 지일은 못 들어간다. "미확인"은 표시만.
-- 시·도 단위로만 판정한다. "동두천시 관내"처럼 시·군만 적힌 경우는 어느 도인지 표가 없어 미확인.
+- **첨부 공고문 판정은 제외에 쓰지 않고 "지역 제한 의심" 표시만 한다**(2026-10-19 통합 결정 7번 — 첨부 파싱 정확도가
+  아직 완전하지 않아 공고가 조용히 사라지는 걸 막으려고). 예전엔 첨부가 API보다 우선했다(`combine`, 지금은 안 씀).
+- **시·군 단위까지 본다**(통합 결정 7번): 지일 본사 '강원특별자치도 정선군' 기준으로 "강원 춘천시"만 받는 공고는 미달.
+  "동두천시 관내"처럼 시·도 없이 시·군만 적힌 경우는 어느 도인지 몰라 미확인(지일 시·군과 같으면 충족).
 """
 
 from __future__ import annotations
@@ -53,6 +56,31 @@ _LOCATION_HINT_RE = re.compile(r"소재지|소재한|소재하는|주된\s*영�
 _NOT_LIMIT_RE = re.compile(r"공동수급|공동으로|분담|지역의무|구성원|하도급|납품\s*장소|설치\s*장소|현장|권장|권고|우대|가점|가산")
 
 
+_SIGUNGU_RE = re.compile(r"([가-힣]{1,6}?(?:시|군|구))(?:(?![가-힣])|(?=에|의|내|소재))")  # "정선군에 있는", "정선군 내"
+# 시·군 나열의 다음 항목 — "속초시·고성군", "속초시, 고성군", "속초시 및 고성군"
+_SIGUNGU_LIST_RE = re.compile(r"\s*(?:[·ㆍ‧,、/]|및|또는)\s*([가-힣]{1,6}?(?:시|군|구))(?:(?![가-힣])|(?=에|의|내|소재))")
+
+
+def split_location(name: str | None) -> tuple[str | None, str | None]:
+    """'강원특별자치도 정선군' → ('강원', '정선군'), '경기도' → ('경기', None), '강원' → ('강원', None)."""
+    if not name:
+        return None, None
+    sido = sido_of(name)
+    if sido is None:
+        return None, None
+    rest = re.sub(r"\s+", " ", name).strip()
+    for alias in sorted(SIDO_ALIASES[sido], key=len, reverse=True):
+        if rest.replace(" ", "").startswith(alias):
+            rest = rest.replace(" ", "")[len(alias):]
+            break
+    m = _SIGUNGU_RE.match(rest)
+    return sido, (m.group(1) if m else None)
+
+
+def _label(sido: str, sigungu: str | None) -> str:
+    return f"{sido} {sigungu}" if sigungu else sido
+
+
 def sido_of(name: str | None) -> str | None:
     """'경기도', '강원특별자치도 정선군', '서울특별시 강남구' → 표준 시·도명."""
     if not name:
@@ -82,19 +110,29 @@ def company_sido(held_raw: dict) -> str | None:
     return sido_of((held_raw or {}).get("companyRegion"))
 
 
-def _judge(required: set[str], company: str | None, source: str, evidence: str) -> RegionCheck:
-    ordered = sorted(required, key=list(SIDO_ALIASES).index)
-    if company is None:
+def company_location(held_raw: dict) -> str | None:
+    """지일 본사 소재지 원문('강원특별자치도 정선군') — 시·군 단위 판정에 쓴다."""
+    return (held_raw or {}).get("companyRegion") or None
+
+
+def _judge(required: set[tuple[str, str | None]], company: str | None, source: str, evidence: str) -> RegionCheck:
+    """required = {(시·도, 시·군 또는 None)}. 하나라도 지일 소재지를 포함하면 충족."""
+    order = list(SIDO_ALIASES)
+    ordered = [_label(*r) for r in sorted(required, key=lambda r: (order.index(r[0]), r[1] or ""))]
+    company_sido_, company_sigungu = split_location(company)
+    if company_sido_ is None:
         return RegionCheck("미확인", ordered, None, source, evidence)
-    status = "충족" if company in required else "미달"
-    return RegionCheck(status, ordered, company, source, evidence)
+    ok = any(sido == company_sido_ and (sigungu is None or sigungu == company_sigungu) for sido, sigungu in required)
+    return RegionCheck("충족" if ok else "미달", ordered, _label(company_sido_, company_sigungu), source, evidence)
 
 
 def from_api(regions: list[str], company: str | None) -> RegionCheck:
-    """나라장터 참가가능지역 목록. 비어 있으면 '제한 없음'이 아니라 '정보 없음'이다."""
-    required = {s for s in (sido_of(r) for r in regions) if s}
+    """나라장터 참가가능지역 목록. 비어 있으면 '제한 없음'이 아니라 '정보 없음'이다.
+    '강원특별자치도 춘천시'처럼 시·군까지 적힌 항목은 시·군까지 맞아야 한다."""
+    required = {loc for loc in (split_location(r) for r in regions) if loc[0]}
     if not required:
-        return RegionCheck(company=company)
+        sido, sigungu = split_location(company)
+        return RegionCheck(company=_label(sido, sigungu) if sido else None)
     return _judge(required, company, "나라장터 참가가능지역", ", ".join(dict.fromkeys(regions)))
 
 
@@ -104,8 +142,23 @@ def from_text(items: list[str], company: str | None) -> RegionCheck | None:
         for sentence in re.split(r"(?<=[.。])\s+|\n", item):
             if not _LOCATION_HINT_RE.search(sentence) or _NOT_LIMIT_RE.search(sentence):
                 continue
-            # 정규식이 긴 표기부터 맞춰서 "경기도"를 "경기"로 두 번 세지 않는다
-            required = {sido_of(m.group(0)) for m in _SIDO_RE.finditer(sentence)} - {None}
+            # 정규식이 긴 표기부터 맞춰서 "경기도"를 "경기"로 두 번 세지 않는다. 바로 뒤에 시·군이 붙으면 시·군까지
+            required = set()
+            for m in _SIDO_RE.finditer(sentence):
+                sido = sido_of(m.group(0))
+                if sido is None:
+                    continue
+                rest = re.sub(r"^\s+", "", sentence[m.end():])
+                after = _SIGUNGU_RE.match(rest)
+                if not after or after.group(1).endswith("구"):
+                    required.add((sido, None))
+                    continue
+                required.add((sido, after.group(1)))
+                # "강원특별자치도 속초시·고성군·양양군·강릉시"처럼 이어 적은 시·군도 전부(2026-10-19 제보 — 속초시만 보였음)
+                rest = rest[after.end():]
+                while (more := _SIGUNGU_LIST_RE.match(rest)) and not more.group(1).endswith("구"):
+                    required.add((sido, more.group(1)))
+                    rest = rest[more.end():]
             if not required:
                 continue
             evidence = re.sub(r"\s+", " ", sentence).strip()[:300]

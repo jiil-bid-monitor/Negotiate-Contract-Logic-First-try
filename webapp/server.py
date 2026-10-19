@@ -27,7 +27,9 @@ from nego import bidcalc, scope
 from nego.config import ConfigError, load_config, redact
 from nego.http_client import ApiError
 
+from . import mview
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
+from .mstore import TeamStore
 from .store import DECISION_REASONS, DECISION_SUMMARY_MIN, STATUSES, Store
 from .sync import BORDER, HIGH, PastIndex
 
@@ -36,7 +38,7 @@ MAX_BODY = 200_000
 
 
 def static_version() -> str:
-    """화면 파일(app.js·css·html) 지문 — 서버를 새 코드로 다시 켜면 바뀐다. 열려 있던 페이지가 예전 화면 코드로
+    """화면 파일(index.html·js) 지문 — 서버를 새 코드로 다시 켜면 바뀐다. 열려 있던 페이지가 예전 화면 코드로
     새 결과를 그리는 걸 알아채고 "새로고침" 안내를 띄우는 데 쓴다(10/1·10/12 두 번 헷갈림)."""
     digest = hashlib.sha1()
     for path in sorted(STATIC.rglob("*")):
@@ -47,12 +49,38 @@ def static_version() -> str:
 
 
 class App:
-    def __init__(self, store: Store, past: PastIndex, collector: Collector, token: str | None):
+    def __init__(self, store: Store, past: PastIndex, collector: Collector, token: str | None,
+                 team: TeamStore | None = None):
         self.store = store
         self.past = past
         self.collector = collector
         self.token = token
         self.static_version = static_version()
+        # 참가여부·올리기 — 팀원 화면 모양(2026-10-19 화면 이식). 예전 sqlite 기록은 처음 한 번 옮겨 온다
+        self.team = team or TeamStore(store.path.parent, legacy_db=store.path, titles=self._titles)
+        self._run_cache: tuple[int | None, dict[str, Any] | None] = (None, None)
+        self._held_raw: dict[str, Any] | None = None
+
+    def _titles(self) -> dict[str, str]:
+        run = self.store.latest_run() or {}
+        return {c.get("notice_no"): c.get("title") or "" for c in (run.get("candidates") or []) + (run.get("rejected") or [])}
+
+    def latest_run(self) -> dict[str, Any] | None:
+        """최신 결과(수 MB JSON)를 요청마다 다시 읽지 않게 결과 번호가 같으면 들고 있는 것을 쓴다."""
+        run_id = self.store.run_id_if_exists()
+        if run_id is None:
+            return None
+        if self._run_cache[0] != run_id:
+            self._run_cache = (run_id, self.store.run(run_id))
+        return self._run_cache[1]
+
+    def held_raw(self) -> dict[str, Any]:
+        if self._held_raw is None:
+            try:
+                self._held_raw = load_config().held_raw
+            except ConfigError:
+                self._held_raw = {}
+        return self._held_raw
 
 
 def make_handler(app: App):
@@ -66,12 +94,22 @@ def make_handler(app: App):
         def _authorized(self) -> bool:
             if not app.token:
                 return True
-            given = self.headers.get("X-App-Token") or parse_qs(urlparse(self.path).query).get("t", [""])[0]
+            given = self.headers.get("X-App-Token") or parse_qs(urlparse(self.path).query).get("t", [""])[0] or self._cookie()
             return hmac.compare_digest(given.encode(), app.token.encode())
 
-        def _send(self, status: int, body: bytes, content_type: str) -> None:
+        def _cookie(self) -> str:
+            # 팀원 화면은 요청마다 토큰을 붙이지 않는다 — 처음 ?t=로 들어올 때 심은 쿠키로 확인한다(ui.ts와 같은 방식)
+            for part in (self.headers.get("Cookie") or "").split(";"):
+                name, _, value = part.strip().partition("=")
+                if name == "app_token":
+                    return value
+            return ""
+
+        def _send(self, status: int, body: bytes, content_type: str, cookie: str | None = None) -> None:
             self.send_response(status)
             self.send_header("Content-Type", content_type)
+            if cookie:
+                self.send_header("Set-Cookie", cookie)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
@@ -107,7 +145,8 @@ def make_handler(app: App):
             if not url.path.startswith("/api/"):
                 return self._static(url.path)
             if not self._authorized():
-                return self._error(HTTPStatus.UNAUTHORIZED, "접속 토큰이 필요합니다 (서버 창에 출력된 주소로 접속)")
+                return self._json({"error": "접속 토큰이 필요합니다 — 담당자에게 받은 주소(?t=… 포함)로 다시 여세요.",
+                                   "unauthorized": True}, HTTPStatus.UNAUTHORIZED)
             q = parse_qs(url.query)
             if url.path == "/api/meta":
                 years: dict[str, int] = {}
@@ -158,6 +197,36 @@ def make_handler(app: App):
                 })
             if url.path == "/api/job":
                 return self._json(app.collector.job.snapshot())
+            # ── 팀원 화면(ui.html)이 부르는 주소 — 2026-10-19 화면 이식 ──
+            if url.path == "/api/notices":
+                job = app.collector.job.snapshot()
+                if q.get("refresh", [""])[0] == "1":
+                    # 나라장터 조회 + 첨부 읽기는 몇 분 걸려서 응답을 붙잡지 않는다 — 수집을 시작하고 화면이 /api/job을 본다
+                    days = int(q.get("days", ["7"])[0]) if q.get("days", ["7"])[0].isdigit() else 7
+                    try:
+                        app.collector.start(days=days if days in PERIODS else 7, attachments=True, ai=False,
+                                            categories=None, prespec=True)
+                    except RuntimeError:
+                        pass  # 이미 누가 수집 중 — 그 진행을 같이 본다
+                    return self._json({"running": True, "job": app.collector.job.snapshot()})
+                data = mview.notices(app.latest_run(), app.team.promoted, app.held_raw())
+                return self._json({**data, "job": job, "static_version": app.static_version, "resultFormat": RESULT_FORMAT})
+            if url.path == "/api/excluded":
+                return self._json(mview.excluded(app.latest_run(), app.team.promoted, app.held_raw()))
+            if url.path == "/api/enrich":
+                # 첨부 읽기는 수집할 때 끝나 있다 — 화면이 기다릴 것이 없다
+                return self._json({"running": False, "done": 0, "total": 0, "byNo": {}, "keepQualifications": [],
+                                   "headquartersRegion": app.held_raw().get("companyRegion")})
+            if url.path == "/api/participation":
+                return self._json({"participation": app.team.participation, "statuses": STATUSES})
+            if url.path == "/api/search":
+                return self._json(mview.search(q.get("q", [""])[0], app.latest_run(), app.past, app.held_raw()))
+            if url.path == "/api/corpus":
+                return self._json(mview.corpus(app.past))
+            if url.path == "/api/project":
+                pid = q.get("id", [""])[0]
+                p = app.past.projects[int(pid)] if pid.isdigit() and int(pid) < len(app.past.projects) else {}
+                return self._json({"excerpt": mview.project_excerpt(p) if p else None})
             if url.path == "/api/comments":
                 key = q.get("key", [""])[0]
                 return self._json({"comments": app.store.comments(key)})
@@ -179,7 +248,13 @@ def make_handler(app: App):
             ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
             if ctype.startswith("text/") or ctype.endswith("javascript"):
                 ctype += "; charset=utf-8"
-            self._send(200, target.read_bytes(), ctype)
+            cookie = None
+            if name == "index.html" and app.token:
+                given = parse_qs(urlparse(self.path).query).get("t", [""])[0]
+                if given and hmac.compare_digest(given.encode(), app.token.encode()):
+                    # HttpOnly·SameSite=Lax, 1년 — 한 번 토큰 주소로 들어오면 그 뒤로는 주소에 토큰이 없어도 된다
+                    cookie = f"app_token={app.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000"
+            self._send(200, target.read_bytes(), ctype, cookie)
 
         # ── POST ──────────────────────────────────────────
         def do_POST(self) -> None:
@@ -234,6 +309,10 @@ def make_handler(app: App):
                         raise ValueError("key와 내용이 필요합니다")
                     app.store.add_comment(key, name, body)
                     return self._json({"comments": app.store.comments(key)})
+                if url.path == "/api/participation":
+                    return self._json({"ok": True, "participation": app.team.update(data)})
+                if url.path == "/api/promote":
+                    return self._json({"ok": True, "promoted": app.team.promote(data)})
                 if url.path == "/api/match":
                     title = str(data.get("title") or "").strip()
                     text = str(data.get("text") or "")

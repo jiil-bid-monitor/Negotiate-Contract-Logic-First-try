@@ -107,6 +107,8 @@ git push -u origin main
 | `TELEGRAM_BOT_TOKEN` | 텔레그램 봇 토큰 (아래 "텔레그램 봇 만들기") |
 | `TELEGRAM_CHAT_ID` | 보고서를 받을 대화방 ID. 여러 곳이면 쉼표로 구분 |
 | `TELEGRAM_DEV_CHAT_ID` | (선택) 개발자 알림 방 — 수집 실패(재시도 5회 소진)·회복 알림만. 자세한 건 `docs/telegram.md` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | (선택) 주간 리포트 메일 — 매주 월요일 보고를 `config/recipients.json`의 주소로 보냅니다. `SMTP_SECURE`는 SSL(보통 465)이면 `true`, STARTTLS(587)이면 비워 둡니다. 없으면 메일만 건너뜁니다 |
+| `CORPUS_PASSPHRASE` | (선택) 싱크로율 자료 묶음(`corpus/sync_bundle.enc`) 비밀번호 — 없으면 메일 리포트의 싱크로율만 빠집니다. 묶음 만드는 법은 `nego/corpus.py` 맨 위 설명 |
 
 > 한 번 저장하면 **다시 볼 수 없습니다.** 값을 바꾸려면 새로 덮어써야 합니다. 정상입니다.
 

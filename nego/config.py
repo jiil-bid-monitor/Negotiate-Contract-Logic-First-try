@@ -61,7 +61,9 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
         min_budget_amount=keywords.get("minBudgetAmount"),
         budget_exempt_keywords=list(keywords.get("minBudgetExemptKeywords", [])),
         keyword_skip_when=dict(keywords.get("keywordSkipWhen", {})),
-        product_codes=list(codes.get("productCodes", [])),
+        # 물품 공고 수집 세부품명 = 등록증 유효 품목(held_qualifications.json) — 2026-10-19 통합 결정 9번
+        product_codes=[{"code": str(e.get("code", "")).strip(), "name": e.get("name", "")}
+                       for e in held.get("heldProducts", []) if str(e.get("code", "")).strip()],
         industry_codes=list(codes.get("industryCodes", [])),
     )
 
@@ -82,7 +84,8 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
         api=api,
         lookback_days=int(os.environ.get("LOOKBACK_DAYS", "1")),
         output_dir=Path(os.environ.get("OUTPUT_DIR", "output")),
-        code_names=load_code_names(codes, code_names_raw),
+        # 이름 사전엔 등록 품목(세부품명)도 넣는다 — codes.json엔 이제 업종만 있다
+        code_names=load_code_names({**codes, "productCodes": held.get("heldProducts", [])}, code_names_raw),
     )
 
 

@@ -2334,7 +2334,7 @@ function enrichBadges(n) {
  */
 function regionBadge(n) {
   const r = n.regionCheck || {};
-  const req = (r.required || []).join("·");
+  const req = regionList(r.required);
   const hq = r.company ? `<p>지일 본점 소재지: <b>${esc(r.company)}</b></p>` : "";
   const src = `<p class="src">출처: ${esc(r.source || "나라장터 참가가능지역 정보")}</p>`;
   if (r.status === "충족")
@@ -2351,9 +2351,19 @@ function regionBadge(n) {
 }
 
 /** 첨부 공고문의 소재지 요건 — 나라장터엔 지역제한이 없는데 공고문엔 있을 때. 빼지 않고 표시만 (통합 결정 7번) */
+/** ["강원 속초시", "강원 고성군", "경기"] → "강원 속초시·고성군 / 경기" — 같은 시·도는 한 번만 쓴다 */
+function regionList(list) {
+  const groups = new Map();
+  for (const label of list || []) {
+    const [sido, ...rest] = String(label).split(" ");
+    if (!groups.has(sido)) groups.set(sido, []);
+    if (rest.length) groups.get(sido).push(rest.join(" "));
+  }
+  return [...groups].map(([sido, sub]) => (sub.length ? `${sido} ${sub.join("·")}` : sido)).join(" / ");
+}
 function regionSuspectBadge(n) {
   const t = n.regionText || {};
-  const req = (t.required || []).join("·");
+  const req = regionList(t.required);
   const sum = t.summary || {};
   const rows = [["요건", sum.basis], ["기간", sum.period], ["개인사업자", sum.individual ? "공고문에 언급 있음" : null]].filter(([, v]) => v);
   return tipBadge("warn", `⚠ 지역 제한 의심 ${esc(req)}`, "지역 제한 의심 (첨부 공고문)",

@@ -56,7 +56,9 @@ _LOCATION_HINT_RE = re.compile(r"소재지|소재한|소재하는|주된\s*영�
 _NOT_LIMIT_RE = re.compile(r"공동수급|공동으로|분담|지역의무|구성원|하도급|납품\s*장소|설치\s*장소|현장|권장|권고|우대|가점|가산")
 
 
-_SIGUNGU_RE = re.compile(r"([가-힣]{1,6}?(?:시|군|구))(?![가-힣])")
+_SIGUNGU_RE = re.compile(r"([가-힣]{1,6}?(?:시|군|구))(?:(?![가-힣])|(?=에|의|내|소재))")  # "정선군에 있는", "정선군 내"
+# 시·군 나열의 다음 항목 — "속초시·고성군", "속초시, 고성군", "속초시 및 고성군"
+_SIGUNGU_LIST_RE = re.compile(r"\s*(?:[·ㆍ‧,、/]|및|또는)\s*([가-힣]{1,6}?(?:시|군|구))(?:(?![가-힣])|(?=에|의|내|소재))")
 
 
 def split_location(name: str | None) -> tuple[str | None, str | None]:
@@ -146,8 +148,17 @@ def from_text(items: list[str], company: str | None) -> RegionCheck | None:
                 sido = sido_of(m.group(0))
                 if sido is None:
                     continue
-                after = _SIGUNGU_RE.match(re.sub(r"^\s+", "", sentence[m.end():]))
-                required.add((sido, after.group(1) if after and not after.group(1).endswith("구") else None))
+                rest = re.sub(r"^\s+", "", sentence[m.end():])
+                after = _SIGUNGU_RE.match(rest)
+                if not after or after.group(1).endswith("구"):
+                    required.add((sido, None))
+                    continue
+                required.add((sido, after.group(1)))
+                # "강원특별자치도 속초시·고성군·양양군·강릉시"처럼 이어 적은 시·군도 전부(2026-10-19 제보 — 속초시만 보였음)
+                rest = rest[after.end():]
+                while (more := _SIGUNGU_LIST_RE.match(rest)) and not more.group(1).endswith("구"):
+                    required.add((sido, more.group(1)))
+                    rest = rest[more.end():]
             if not required:
                 continue
             evidence = re.sub(r"\s+", " ", sentence).strip()[:300]

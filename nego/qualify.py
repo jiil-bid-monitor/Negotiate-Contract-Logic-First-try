@@ -423,8 +423,47 @@ def _inner_item_name(text: str) -> str | None:
     return best.group(2).strip()
 _BARE_GROUP_ENTRY_CODE_RE = re.compile(r"[0-9]{10}")
 _GROUP_ENTRY_STRIP_CHARS = " ,·/;、"
-# "다음 중 어느 하나"는 항목 전체를 OR로 만든다.
+# "다음 중 어느 하나"는 그 표시가 걸리는 범위(하위 항목이 없으면 항목 전체)를 OR로 만든다.
 _OR_MARKER_RE = re.compile(r"어느\s*하나")
+# "중 1개 이상"·"중 한 개 이상"·"중 하나 이상"은 **하위 항목 안에서만** OR 표시로 본다 — 항목 전체에 적용하면
+# "아래 조건을 모두 충족 … 1) 1469 2) 3244 3) 산업디자인(…중 1개 이상) 4) 4990"이 통째로 OR가 됐다(10/19 되돌린 시도).
+_SCOPED_OR_MARKER_RE = re.compile(r"중\s*(?:1|한)\s*개\s*이상|중\s*하나\s*이상")
+# 하위 항목 번호 — "(1)" / "1)" / "①". 앞이 공백·줄머리일 때만(본문 속 "제1)" 등은 아님).
+_SUBITEM_MARK_RES = (
+    re.compile(r"(?:(?<=\s)|^)[(（]\d{1,2}[)）]"),
+    re.compile(r"(?:(?<=\s)|^)\d{1,2}\)"),
+    re.compile(r"(?:(?<=\s)|^)[①-⑳]"),
+)
+
+
+def _numbered_parts(item: str) -> list[str]:
+    """항목을 [머리말, 하위 항목1, 하위 항목2, …]로 나눈다. 번호 종류는 항목에서 **처음 나오는 것**만 쓰므로
+    "(3) … 다음 중 어느 하나 ① … ② …"의 ①②는 (3)에 딸린다. 하위 항목이 2개 미만이면 [항목] 그대로."""
+    firsts = [(m.start(), rx) for rx in _SUBITEM_MARK_RES if (m := rx.search(item))]
+    if not firsts:
+        return [item]
+    rx = min(firsts, key=lambda t: t[0])[1]
+    starts = [m.start() for m in rx.finditer(item)]
+    if len(starts) < 2:
+        return [item]
+    return [item[: starts[0]]] + [item[a:b] for a, b in zip(starts, starts[1:] + [len(item)])]
+
+
+def _or_scope(item: str) -> tuple[bool, list[tuple[str, bool]]]:
+    """OR 표시가 걸리는 범위. (항목 전체가 OR인지, [(조각, 그 조각이 OR인지)]).
+
+    - 하위 항목이 없으면 예전처럼 "어느 하나"가 있을 때만 항목 전체 OR("중 1개 이상"은 안 봄).
+    - 머리말에 표시가 있으면("다음 중 어느 하나에 해당하는 자 1) … 2) …") 항목 전체 OR.
+    - 그 밖엔 표시가 든 하위 항목만 OR(양남 물빛사랑교 "(3) … 어느 하나 ① 4444 ② 4442 (4) … 6012100201 (5) … 중 1개 이상 ① 4991 ② 4998").
+    """
+    parts = _numbered_parts(item)
+    if len(parts) == 1:
+        return bool(_OR_MARKER_RE.search(item)), [(item, False)]
+    marked = lambda t: bool(_OR_MARKER_RE.search(t) or _SCOPED_OR_MARKER_RE.search(t))
+    if marked(parts[0]):
+        return True, [(item, False)]
+    return False, [(parts[0], False)] + [(p, marked(p)) for p in parts[1:]]
+
 _CODE_HINT_RE = re.compile(r"업종\s*코드|세부\s*품명\s*번호|분류\s*번호|(?<!\d)\d{10}(?!\d)")
 # 코드 바로 뒤(닫는 괄호 다음)에 "또는/혹은"이 오면 그 앞뒤 두 코드만 OR로 묶는다
 # (실측: 2026 대한민국 지방시대 엑스포 R26BK01739064 — "전시부스설치및디자인서비스
@@ -743,18 +782,35 @@ def _name_before_bracket(before_paren: str, line: str, lines: list[str], line_no
 def _or_groups(item: str) -> list[list[tuple[str, str]]]:
     """항목 안 코드 요건을 "하나만 있으면 되는" 묶음들로 나눈다. 묶음 사이는 AND다.
 
-    - 항목에 "어느 하나"가 있으면 항목 전체가 한 묶음(OR).
+    - "어느 하나"·"중 1개 이상"이 걸리는 범위가 한 묶음(OR) — 하위 항목 하나에만 있으면 그 하위 항목만(`_or_scope`).
     - 코드 뒤에 "또는/혹은"이 오면 그 앞뒤 코드를 한 묶음으로 잇는다.
     - "A, B 또는 C"처럼 쉼표로 이어지다 "또는"으로 끝나는 나열은 전체를 한 묶음으로.
     - 그 밖은 코드마다 따로(= 모두 보유해야 충족).
     """
+    whole, parts = _or_scope(item)
+    if not whole and any(m for _, m in parts):
+        # 표시가 든 하위 항목만 한 묶음(OR), 나머지 하위 항목은 평소 규칙대로
+        groups: list[list[tuple[str, str]]] = []
+        for text, marked in parts:
+            sub = _or_groups_linked(text)
+            if marked and sub:
+                groups.append([pair for bundle in sub for pair in bundle])
+            else:
+                groups.extend(sub)
+        return groups
+    if whole:
+        merged, located = _locate_code_requirements(item)
+        return [[(code, label) for _, _, code, label in sorted(located, key=lambda r: r[0])]] if located else []
+    return _or_groups_linked(item)
+
+
+def _or_groups_linked(item: str) -> list[list[tuple[str, str]]]:
+    """OR 표시 없이 "또는"·쉼표 연결만으로 묶음을 나눈다(`_or_groups`의 기본 규칙)."""
     merged, located = _locate_code_requirements(item)
     if not located:
         return []
     ordered = sorted(located, key=lambda r: r[0])
     pairs = [(code, label) for _, _, code, label in ordered]
-    if _OR_MARKER_RE.search(item):
-        return [pairs]
 
     # links[i]: ordered[i]와 ordered[i+1] 사이 연결 — "or" / "comma" / "and"
     links = []
@@ -814,8 +870,8 @@ def evaluate_attachment_text(
     코드가 안 붙은 일반 결격사유(나라장터 등록 여부, 부정당업자 여부, 공동수급
     구성 방식 등)는 판정 대상에서 뺀다 — 문장만 보고 "이게 자격요건이다"를
     추정하면 오탈락 위험이 크지만, 코드는 문서에 명시된 값 그대로라 비교가
-    정확하다. "다음 중 어느 하나"가 있으면 그 항목 안 코드 중 하나만 있어도
-    충족(OR)이다(실측: 정선군 복합문화센터 공고문 — "라"항은 품목 3개를 모두
+    정확하다. "다음 중 어느 하나"가 있으면 그 표시가 걸리는 범위(하위 항목 하나, 머리말이면 항목 전체 —
+    `_or_scope`) 안 코드 중 하나만 있어도 충족(OR)이다(실측: 정선군 복합문화센터 공고문 — "라"항은 품목 3개를 모두
     소지해야 하고, "바"항은 "다음 중 어느 하나"로 명시됨). 그 밖에는 "또는"으로
     이어진 코드끼리만 OR 묶음이 되고, 묶음(과 홀로 선 코드)은 전부 충족해야
     항목이 충족이다(`_or_groups`) — 예: "모두 소지: (A 또는 B), C"에서 B만
@@ -873,12 +929,23 @@ def evaluate_attachment_text(
 
         # 코드가 적힌 항목 안에 코드 없이 이름만 적힌 하위 항목이 섞여 있으면("1) 직접생산[세부품명번호 …] 2) 산업디자인
         # [업종코드 …] 3) 소프트웨어산업 진흥법에 따른 소프트웨어사업자") 그 하위 항목은 이름으로 따로 본다
-        # (2026-10-01 제보: 하남역사박물관 — 소프트웨어사업자 요건이 빠졌음). "어느 하나"면 코드 쪽과 OR라 건너뜀.
-        if not _OR_MARKER_RE.search(item):
+        # (2026-10-01 제보: 하남역사박물관 — 소프트웨어사업자 요건이 빠졌음). "어느 하나"면 코드 쪽과 OR라 건너뜀 —
+        # 표시가 하위 항목 하나에만 있으면 그 하위 항목만 건너뛴다(코드 없이 이름만 적힌 표시 하위 항목은 이름 판정).
+        whole, scoped = _or_scope(item)
+        if not whole:
             from .text_requirements import name_bundles, sub_items
 
+            if not any(marked for _, marked in scoped):
+                pieces = sub_items(item)
+            else:
+                pieces = []
+                for text, marked in scoped:
+                    if not marked:
+                        pieces.extend(sub_items(text))
+                    elif not _or_groups(text) and not _CODE_HINT_RE.search(text):
+                        pieces.append(text)
             # 하위 항목에 코드 표기 흔적이 있으면(정규식이 못 읽은 "세부품명번호-6012100201" 등) 이름 판정하지 않는다
-            plain = [p for p in sub_items(item) if not _or_groups(p) and not _CODE_HINT_RE.search(p)]
+            plain = [p for p in pieces if not _or_groups(p) and not _CODE_HINT_RE.search(p)]
             for j, part in enumerate(plain):
                 bundles = name_bundles(part, held_code_names, code_names or {})
                 if not bundles:

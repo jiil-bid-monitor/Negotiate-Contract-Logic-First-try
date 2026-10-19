@@ -849,6 +849,8 @@ UNNAMED_LABEL = "이름 미확인"
 # 이름으로 쓰지 않고 다른 출처(같은 공고의 다른 표기)나 "이름 미확인"으로 넘긴다.
 _GENERIC_LABEL_RE = re.compile(r"증명서|확인서|등록증|물품분류번호|세부품명|업종코드|입찰참가자격|자격을?\s*등록")
 _TRAILING_CODE_RE = re.compile(r"\(([0-9]{4,10})\)$")
+# 세무(사업자등록) 업종을 말하는 문맥 — 건설업 면허·나라장터 등록 업종과 다르다
+_TAX_CONTEXT_RE = re.compile(r"사업자\s*등록\s*증|업\s*태|종\s*목|국세청|세무서|사업자\s*신고")
 
 
 def named_codes(items: list[str]) -> dict[str, str]:
@@ -923,6 +925,15 @@ def evaluate_attachment_text(
     or_ok: list[LicenseGroup] = []
     for idx, item in enumerate(items):
         or_groups = [[(code, _label(code, label)) for code, label in bundle] for bundle in _or_groups(item)]
+        # 나라장터 번호(4·10자리)가 아닌 코드가 사업자등록·업태·종목 문맥이면 세무 업종코드다 — 건설업 면허와 별개라
+        # 이름이 같아도 보유로 치지 않고 이름표에 밝힌다(2026-10-19 재검토: "실내건축공사업(452106)"은 국세청 업종코드)
+        if _TAX_CONTEXT_RE.search(item):
+            def _tax_label(code: str, label: str) -> str:
+                name = _TRAILING_CODE_RE.sub("", label).split()[-1] if _TRAILING_CODE_RE.sub("", label).split() else label
+                return f"{name}[사업자등록 업종]({code})"
+
+            or_groups = [[(code, label if len(code) in (4, 10) else _tax_label(code, label)) for code, label in bundle]
+                         for bundle in or_groups]
         if not or_groups:
             # 코드 없이 이름만 적힌 업종·직접생산 품목 — 보유 목록·코드 사전에 있는 이름으로만 판정한다
             from .text_requirements import name_bundles

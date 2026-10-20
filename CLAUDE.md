@@ -4,6 +4,12 @@
 
 **새 계정·새 세션에서 이어받을 때는 `docs/HANDOFF.md`부터 읽을 것** (2026-10-16 계정 이전용 인수인계 — 현재 상태·준비할 것·다음 할 일 요약).
 
+## 2026-10-20 — HTML 리포트 표 칸 세로 가운데 정렬 (브랜치 `claude/report-cell-middle`, 사용자 요청)
+
+- 텔레그램 첨부·메일 HTML(`nego/report.py`)의 표 칸을 `vertical-align:top` → `middle`. 자격판정 동그라미·공동수급·예가방법처럼
+  한 줄짜리 칸이 두 줄짜리 금액 칸(추정/배정) 위쪽에 붙어 보였음(사용자 캡처). 메일 전용 '자격 미보유' 펼침 줄은 인라인 스타일로 위 정렬 유지
+  (CSS에 `qual-row`를 쓰면 "텔레그램 첨부엔 qual-row 없음" 테스트에 걸려서). 텔레그램 시험 발송은 개발자 방으로만(`TELEGRAM_CHAT_ID=-5393247797`, `--sent-state`·`--report-log` 없이).
+
 ## 2026-10-20 — 피드백 구글 시트 적재 (브랜치 `claude/feedback-sheet`, 사용자 요청)
 
 - 팀원 레포가 9월부터 쌓던 **같은 구글 시트·같은 22열**(팀원 `feedbackRow.ts` FEEDBACK_HEADER)에 정기 보고(`--report-log daily|weekly`)에

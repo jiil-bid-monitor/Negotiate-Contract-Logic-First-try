@@ -430,7 +430,10 @@ _HTML_HEAD = """<meta charset="utf-8">
   .tablewrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:#fff; }
   table { border-collapse:collapse; width:100%; min-width:820px; }
   th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line);
-           vertical-align:top; font-size:0.75rem; line-height:1.4; }
+           vertical-align:middle; font-size:0.75rem; line-height:1.4; }
+  /* 2026-10-20 사용자 요청: 한 줄짜리 칸(자격판정 동그라미·공동수급·예가방법 등)이
+     두 줄짜리 금액 칸 위쪽에 붙어 보여서 행 높이 기준 세로 가운데로 맞춘다.
+     줄 아래 '자격 미보유' 펼침 칸(메일 전용)은 그 칸 인라인 스타일로 위 정렬. */
   /* 셀 내용을 항상 블록(div)으로 감싸서 시작점을 맞춘다 — 뱃지/버튼 같은
      인라인 요소가 셀에 바로 있으면 브라우저가 셀마다 다른 줄상자 높이를
      잡아 계약방법/예가방법/수요기관/개찰일 같은 옆 칸과 첫 줄이 미묘하게
@@ -664,7 +667,7 @@ def _table_html(section_title: str, candidates: list[Candidate], esc, qualificat
             # 미보유 자격은 줄 아래에 펼쳐 둔다 — 동그라미 팝업은 메일에서 안 열린다 (주간 메일 리포트만)
             panel = _qualification_panel_html(c, esc) if qualification_panel else ""
             if panel:
-                parts.append(f'<tr class="qual-row"><td colspan="10" style="padding:0 12px 12px;">{panel}</td></tr>')
+                parts.append(f'<tr class="qual-row"><td colspan="10" style="padding:0 12px 12px;vertical-align:top;">{panel}</td></tr>')
         parts.append("</tbody></table></div>")
 
     return parts

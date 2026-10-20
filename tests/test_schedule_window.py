@@ -108,3 +108,13 @@ def test_joint_only_api_uses_attachment_deadline_and_spaced_table_header():
     assert s.joint_only
     assert s.earliest == ("첨부파일 제출기한", datetime(2026, 10, 13, 17, 0))
     assert [label for label, _ in s.all_deadlines] == ["공동수급협정 마감", "첨부파일 제출기한"]
+
+
+def test_bid_registration_table_label():
+    """2026-10-20 제보(UAE 두바이 의료기기전시회 한국관) — 나라장터 일정 칸이 비고 공고문 표에만 "입찰 등록 및 서류접수"."""
+    from nego.schedule_text import extract_deadlines
+
+    text = "공 통 사 항\n입찰 등록 및 서류접수\n 2026년 10월 1일(목) 17:00 까지 제출\n※ 메일 송부 및 최종확인 후 원본 접수 요망"
+    assert extract_deadlines(text) == [("첨부 참가등록 마감", datetime(2026, 10, 1, 17, 0))]
+    # 참가자격 문장의 "입찰등록 마감일시까지"는 날짜가 없어 잡지 않는다
+    assert extract_deadlines("입찰등록에 필요한 소정의 서류를 구비하여 입찰등록 마감일시까지 등록을 필한 자") == []

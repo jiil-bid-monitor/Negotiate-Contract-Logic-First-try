@@ -92,7 +92,8 @@ class Notice:
         """금액 기준을 하나로 통일한다. 추정가격 우선, 없으면 배정예산(부가세 포함 금액 그대로 — 1.1로 나누지 않음).
 
         0이나 음수는 금액이 아니라 "미입력"이라 None(금액 모름)으로 본다 — 0원으로 두면 최소예산에서 조용히 빠진다
-        (2026-10-16 통합 결정 2번, 팀원 수집기 실측 7일치 75건)."""
+        (2026-10-16 통합 결정 2번, 팀원 수집기 실측 7일치 75건). 1원·10원처럼 칸만 채운 자리 표시 값(1,000원 미만)도
+        금액 모름(2026-10-20 사용자 제보: 배정금액 1원 공고 — 1원으로 보면 최소예산으로 빠졌음)."""
         return _positive(self.estimated_price) or _positive(self.assigned_budget)
 
     @property
@@ -108,8 +109,12 @@ class Notice:
         return asdict(self)
 
 
+# 이보다 작은 금액은 실제 사업 금액이 아니라 칸만 채운 값(0원·1원 등)으로 본다
+PLACEHOLDER_AMOUNT = 1000
+
+
 def _positive(value: float | None) -> float | None:
-    return value if value is not None and value > 0 else None
+    return value if value is not None and value >= PLACEHOLDER_AMOUNT else None
 
 
 PRESPEC_KIND = "사전규격"

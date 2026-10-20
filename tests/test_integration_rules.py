@@ -205,6 +205,24 @@ class TestSection(unittest.TestCase):
             self.assertEqual(r.excluded_reason, "보수공사")
 
 
+class TestSubitemOr(unittest.TestCase):
+    """2026-10-20 제보(울산안전체험관) — "가) A 또는 B / 나) C"에서 "또는"은 가) 안에서만, 나)는 단독 요건."""
+
+    ITEM = (
+        "7) 직접생산확인증명서를 모두 소지한 자\n"
+        "가) 세부품명번호 : 8111159901(정보시스템개발서비스) 또는 {b}(패키지소프트\n웨어개발 및 도입서비스)\n"
+        "나) 세부품명번호 : 6010989901(실물모형 및 전시물)"
+    )
+
+    def test_or_stays_in_subitem(self):
+        from nego import qualify
+
+        for b in ("8111159801", "811159801"):  # 원문은 9자리 오기
+            with self.subTest(b=b):
+                groups = [[code for code, _ in g] for g in qualify._or_groups(self.ITEM.format(b=b))]
+                self.assertEqual(groups, [["8111159901", b], ["6010989901"]])
+
+
 class TestRegion(unittest.TestCase):
     """결정 7번 — 제외는 API로만, 시·군 단위까지. 첨부는 의심 표시."""
 

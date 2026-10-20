@@ -171,6 +171,8 @@ class TestOverseas(unittest.TestCase):
         self.assertTrue(r.matched)
         self.assertEqual(r.overseas_suspect, "제목에 '한국관' (해외 행사 표시 없음)")
         self.assertFalse(self._excluded("2026년 울산 한국관 체험관 리모델링"))
+        self.assertFalse(self._excluded("울산 KTX역 한국관 안내시설 개선"), "국가 약자가 아닌 대문자 약어는 안 봄")
+        self.assertTrue(self._excluded("KOR 한국관 부스 디자인"))
         for title in ("2027 UAE 두바이 의료기기전시회 한국관 전시디자인설치공사 입찰", "베트남 하노이 한국관 부스 조성",
                       "Interior Expo 한국관 조성"):
             with self.subTest(title=title):

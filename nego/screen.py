@@ -14,7 +14,7 @@
 **해외 개최 판별** (2026-10-19 통합 결정 8번 — 팀원 수집기 규칙을 그대로 옮김, 목록은 `config/overseas.json`).
 공고명에 아래 중 하나가 있으면 국내 공고가 아니라 해외 전시회 국가관·부스 공고로 보고 뺀다.
   ① '한국관'(통합한국관 포함 — 한국관광·한국관리 등 다른 낱말 제외) + 해외 행사 표시(연도·전시회/박람회/엑스포/페어·
-     영문 행사명·해외 지명·국가 약자). 팀원 규칙은 '한국관'만으로 뺐는데 국내 '옥동 한국관~송현동' 교통 개선공사가 같이 빠져서
+     영문 국가 약자(KOR 포함)·해외 지명). 팀원 규칙은 '한국관'만으로 뺐는데 국내 '옥동 한국관~송현동' 교통 개선공사가 같이 빠져서
      (2026-10-20 사용자 결정) 표시가 없는 '한국관'은 빼지 않고 "해외 개최 의심" 표시만 한다.
   ② 전시회·박람회·엑스포 + 단체관  ③ 해외 지명 + 단체관  ④ 영문 국가 약자(USA·UAE 등, 대문자 단어)
 단체관람·단체관광은 단체관이 아니다. 몽골(도시명 포함)이면 빼지 않고 플래그(🌐)만 남긴다(키워드 불일치 제외도 건너뜀).
@@ -203,18 +203,19 @@ def _overseas_exhibition_evidence(notice: Notice, rules: OverseasRules | None = 
 
 
 # 해외 박람회 국가관 공고명에 함께 오는 표시 — "CES 2027 통합한국관", "2027 UAE 두바이 의료기기전시회 한국관", "NANO TECH 2027 한국관".
-# 연도는 "2027 …"처럼 행사명에 붙은 것만("2026년 …"은 국내 공고에도 흔해서 안 봄), 영문은 대문자 두 글자 이상 단어.
-_EVENT_SIGN_RE = re.compile(
-    r"(?<![0-9])20\d{2}(?![0-9]|\s*년)|전시회|박람회|엑스포|페어|(?<![A-Za-z])[A-Z]{2,}(?![a-z])"
-)
+# 연도는 "2027 …"처럼 행사명에 붙은 것만("2026년 …"은 국내 공고에도 흔해서 안 봄). 영문은 국가 약자만(KOR·JPN·USA … —
+# 2026-10-20 사용자 결정: 아무 대문자 약어나 보면 "울산 KTX역 한국관" 같은 국내 공고가 걸려서).
+_EVENT_SIGN_RE = re.compile(r"(?<![0-9])20\d{2}(?![0-9]|\s*년)|전시회|박람회|엑스포|페어")
+_EVENT_WORD_RE = re.compile(r"(?<![A-Za-z])(?:expo|fair|show)(?![A-Za-z])", re.IGNORECASE)
 
 
 def _overseas_event_sign(title: str, rules: OverseasRules) -> bool:
-    """'한국관'이 해외 박람회 국가관인지 — 연도·전시회류·영문 행사명·해외 지명 중 하나가 함께 있어야 한다."""
+    """'한국관'이 해외 박람회 국가관인지 — 연도·전시회류·영문 국가 약자(KOR 포함)·해외 지명 중 하나가 함께 있어야 한다."""
     skip = set(rules.flag_skip_places)
     return bool(
         _EVENT_SIGN_RE.search(title)
-        or re.search(r"(?<![A-Za-z])(?:expo|fair|show)(?![A-Za-z])", title, re.IGNORECASE)
+        or _EVENT_WORD_RE.search(title)
+        or _find_abbreviation(title, (*rules.abbreviations, "KOR"))
         or _find_place(title, tuple(p for p in rules.places if p not in skip))
     )
 

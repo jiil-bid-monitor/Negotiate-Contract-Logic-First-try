@@ -747,10 +747,12 @@ class TestScreen(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertEqual(result.excluded_by, "해외개최")
 
-    def test_korea_pavilion_alone_is_excluded_without_event_keyword(self):
-        """"한국관"은 "전시회/박람회/엑스포" 같은 행사 키워드 없이 단독으로도 제외된다."""
+    def test_korea_pavilion_alone_is_not_excluded_without_event_sign(self):
+        """"한국관"만 있고 해외 행사 표시(연도·전시회류·영문 행사명·해외 지명)가 없으면 빼지 않는다(2026-10-20 사용자 결정 —
+        국내 "옥동 한국관~송현동" 공사가 해외로 빠졌음). 예전엔 단독으로도 뺐다."""
         result = self._screen(fixtures.notice("X", title="□□센터 한국관 조성 및 운영 지원"))
-        self.assertFalse(result.matched)
+        self.assertNotEqual(result.excluded_by, "해외개최")
+        result = self._screen(fixtures.notice("X", title="□□센터 2027 한국관 조성 및 운영 지원"))
         self.assertEqual(result.excluded_by, "해외개최")
 
     def test_group_pavilion_alone_without_event_keyword_is_unaffected(self):

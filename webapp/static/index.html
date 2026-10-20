@@ -2393,20 +2393,12 @@ function attachBadge(n) {
   return "";
 }
 
-// 판정하지 않는 글로 된 요건 — 실적·기술인력(건축사사무소 포함). 칩 글자에 요건 핵심을 바로 적는다
-// ("⚠ 실적제한 최근 3년 · 단일 7,000만원 이상", 2026-10-14 요청). 원문·출처는 팝업에.
+// 판정하지 않는 글로 된 요건 — 실적·기술인력(건축사사무소 포함)·업종. 칩에는 요건 종류만 적고(2026-10-20 요청 — 핵심 값까지
+// 적으면 좁은 화면에서 칩이 카드 선을 넘었음), 요약 표·원문·출처는 팝업에.
 const FLAG_LABEL = { 실적: "실적 요건", 현장설명회: "현장설명회 참가 필수", 인력: "기술인력 요건", 건축사사무소: "기술인력 요건", 업종: "업종 요건" };
-const FLAG_HEAD = { 실적: "실적제한", 인력: "기술인력", 건축사사무소: "기술인력", 업종: "업종" };
 // 이름 사전에 없는 업종(코드 없이 이름만 적힘) — 지일 보유 여부를 판정하지 못한다 (2026-10-19 요청)
 const FLAG_NOTE = { 업종: "지일 보유 업종 목록·코드 사전에 없는 이름이라 자동 판정하지 않았습니다 — 보유 여부를 공고문과 등록 현황에서 확인하세요." };
-function flagChipText(f) {
-  const vals = (f.summary || []).map(([, v]) => String(v || "").trim()).filter((v) => v && !v.includes("못 찾음"))
-    .map((v) => v.replace(/(\d+)억\s*(\d+)천만원/g, (_, a, b) => `${(Number(a) * 10000 + Number(b) * 1000).toLocaleString()}만원`)
-      .replace(/(\d+)천만원/g, (_, a) => `${(Number(a) * 1000).toLocaleString()}만원`));
-  const head = FLAG_HEAD[f.kind];
-  if (!head || !vals.length) return FLAG_LABEL[f.kind] || f.kind;
-  return `${head} ${vals.join(" · ")}`;
-}
+const flagChipText = (f) => FLAG_LABEL[f.kind] || f.kind;
 function flagBadges(n) {
   return (n.textFlags || []).map((f) => {
     const rows = f.summary && f.summary.length ? f.summary : f.date ? [["일시", f.date]] : [];

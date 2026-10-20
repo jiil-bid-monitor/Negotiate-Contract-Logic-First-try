@@ -518,6 +518,11 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
   background: var(--brand); color: var(--on-brand); border: 1px solid var(--brand); white-space: nowrap;
 }
 .reason-edit { flex-basis: 100%; }
+/* 칩이 있으면 자세히 적기는 선택 — 경고색 테두리를 빼서 꼭 써야 하는 칸처럼 보이지 않게(2026-10-20) */
+.reason-form.optional input { border-color: var(--line-strong); }
+.reason-form.optional button { background: var(--panel); color: var(--ink); border-color: var(--line-strong); }
+.reason-saved { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--brand); }
+.reason-need { flex-basis: 100%; font-size: 12px; color: var(--warn); }
 /* 보류·불참 주된 사유 버튼 (사진 시안 — 둥근 칩, 여러 개 선택) */
 .reason-tags { flex-basis: 100%; }
 .reason-tags-h { margin: 2px 0 8px; font-size: 13px; color: var(--ink-strong); }
@@ -2686,12 +2691,12 @@ function decisionRow(p) {
   const options = tagsFor(p.status);
   const chips = options
     ? `<div class="reason-tags">
-        <p class="reason-tags-h"><b>${p.status === "참가" ? "참가 이유를" : "사유를"} 골라 주세요</b> <span>(여러 개 가능 · 다음 수집 때 비슷한 공고에 이 판단이 함께 보입니다)</span></p>
+        <p class="reason-tags-h"><b>${p.status === "참가" ? "참가 이유를" : "사유를"} 골라 주세요</b> <span>(여러 개 가능 · 누르면 바로 저장 · 다음 수집 때 비슷한 공고에 이 판단이 함께 보입니다)</span>${tags.length ? `<span class="reason-saved">✓ 저장됨</span>` : ""}</p>
         <div class="reason-chips">${options.map((t) => `<button type="button" class="rchip ${tags.includes(t) ? "on" : ""}" data-rtag="${esc(t)}" aria-pressed="${tags.includes(t)}">${esc(t)}</button>`).join("")}</div>
       </div>`
     : "";
   const who = p.decidedBy ? `판단 <b>${esc(p.decidedBy)}</b>${p.decidedAt ? ` · ${esc(fmtDT(p.decidedAt))}` : ""}` : "";
-  const form = `<form class="reason-form"><input maxlength="500" placeholder="${chips ? "자세히 적기 (선택)" : esc(p.status) + " 사유"} — ${esc(REASON_HINT[p.status] || "")}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">사유 저장</button></form>`;
+  const form = `<form class="reason-form${chips ? " optional" : ""}"><input maxlength="500" placeholder="${chips ? "자세히 적기 (선택)" : esc(p.status) + " 사유"} — ${esc(REASON_HINT[p.status] || "")}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">${chips ? "자세히 저장" : "사유 저장"}</button></form>`;
   return `<div class="decision">
     ${chips}
     ${p.reason
@@ -3668,7 +3673,21 @@ document.addEventListener("submit", (ev) => {
   const reasonForm = ev.target.closest(".reason-form");
   if (reasonForm) {
     ev.preventDefault();
-    postParticipation(reasonForm.closest("[data-part]"), { reason: reasonForm.querySelector("input").value.trim() });
+    const box = reasonForm.closest("[data-part]");
+    const text = reasonForm.querySelector("input").value.trim();
+    const p = participation[box.dataset.part] || {};
+    // 칩만 고르고 자세히 적기를 비워 두는 것도 저장이다(칩은 누를 때 이미 저장됨) — 빈 칸 저장을 실패처럼 보이지 않게
+    if (!text && !p.reason) {
+      const decision = reasonForm.closest(".decision");
+      decision.querySelector(".reason-need")?.remove();
+      if (!(p.tags || []).length && decision.querySelector(".reason-tags")) {
+        decision.insertAdjacentHTML("beforeend", `<p class="reason-need">위 칩 중 하나 이상을 누르면 저장됩니다. 자세히 적기는 비워 둬도 됩니다.</p>`);
+      } else if (!(p.tags || []).length) {
+        postParticipation(box, { reason: "" });
+      }
+      return;
+    }
+    postParticipation(box, { reason: text });
     return;
   }
   const form = ev.target.closest(".talk-form");

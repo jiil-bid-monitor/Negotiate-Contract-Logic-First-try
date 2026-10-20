@@ -49,10 +49,11 @@ class TestFormatters(unittest.TestCase):
 
 
 class TestQualificationPanel(unittest.TestCase):
-    """미보유 자격이 있는 공고는 표 줄 아래에 '자격 미보유' 칸을 펼쳐 둔다 — 동그라미 팝업은 메일·휴대폰에서 안 열린다
-    (2026-10-20 팀원 레포 10/19 리포트 카드 이식). 묶음은 웹앱 자격 팝업과 같다(webapp/qualview.build)."""
+    """미보유 자격이 있는 공고는 표 줄 아래에 '자격 미보유' 칸을 펼쳐 둔다 — 동그라미 팝업은 메일에서 안 열린다
+    (2026-10-20 팀원 레포 10/19 리포트 카드 이식). 묶음은 웹앱 자격 팝업과 같다(webapp/qualview.build).
+    주간 메일 리포트에만 넣고, 텔레그램 첨부 HTML은 원래 구조 그대로(사용자 결정)."""
 
-    def _html(self, joint_name: str = "(전자)공동이행 또는 분담이행"):
+    def _cands(self, joint_name: str = "(전자)공동이행 또는 분담이행"):
         from nego import qualify
 
         config = load_config()
@@ -68,7 +69,27 @@ class TestQualificationPanel(unittest.TestCase):
         stats = RunStats(period_begin=datetime(2026, 8, 24), period_end=NOW)
         cands = build_candidates([notice_from_raw(r, "공사") for r in raws], config, qualify.group_license_rows(rows),
                                  {}, NOW, stats)
-        return render_html(cands, stats, NOW)
+        return cands, stats
+
+    def _html(self, joint_name: str = "(전자)공동이행 또는 분담이행"):
+        cands, stats = self._cands(joint_name)
+        return render_html(cands, stats, NOW, qualification_panel=True)
+
+    def test_telegram_html_keeps_original_structure(self):
+        cands, stats = self._cands()
+        self.assertNotIn("qual-row", render_html(cands, stats, NOW), "기본(텔레그램 첨부)은 칸 없음")
+
+    def test_save_reports_writes_email_html_only_for_email(self):
+        import tempfile
+
+        from nego.report import save_reports
+
+        cands, stats = self._cands()
+        out = Path(tempfile.mkdtemp())
+        self.assertNotIn("email_html", save_reports(cands, stats, out, NOW))
+        paths = save_reports(cands, stats, out, NOW, email=True)
+        self.assertIn("qual-row", paths["email_html"].read_text(encoding="utf-8"))
+        self.assertNotIn("qual-row", paths["html"].read_text(encoding="utf-8"))
 
     def test_panel_only_for_missing_with_marks(self):
         out = self._html()

@@ -885,6 +885,19 @@ UNNAMED_LABEL = "이름 미확인"
 _GENERIC_LABEL_RE = re.compile(r"증명서|확인서|등록증|물품분류번호|세부품명|업종코드|입찰참가자격|자격을?\s*등록")
 _TRAILING_CODE_RE = re.compile(r"\(([0-9]{4,10})\)$")
 # 세무(사업자등록) 업종을 말하는 문맥 — 건설업 면허·나라장터 등록 업종과 다르다
+# 공동수급으로 채울 수 있는 조건부 요건 (2026-10-20 팀원 레포 10/19 이식). 미보유로 세지 않고 "조건부 — 없으면 공동수급"으로 보인다.
+#  · 항목 안 "…면허를 단독으로 보유하지 않은 경우에는 해당 면허를 보유한 업체와 분담이행방식으로 공동수급체를 구성"
+#    (휘문고 역사관 조성 2차 — 실내건축공사업) → 그 항목의 미보유 요건
+#  · 참가자격 절 어디든 "입찰참여업체는 공동으로 입찰참가자격을 모두 갖추어야" (한국디자인진흥원 — 대표사 디자인
+#    전문회사, 수급사 조경면허[4993]) → 미보유 업종(4자리) 요건 전부
+_JOINT_ALT_RE = re.compile(
+    r"(?:보\s*유\s*하\s*지\s*(?:않|못)|없\s*는|미\s*보\s*유)[^.]{0,30}?경\s*우[^.]{0,120}?"
+    r"(?:공\s*동\s*수\s*급|분\s*담\s*이\s*행|공\s*동\s*이\s*행)"
+)
+_COLLECTIVE_RE = re.compile(
+    r"공\s*동\s*(?:으\s*로|수\s*급\s*체\s*(?:가|구\s*성\s*원\s*이))\s*(?:입\s*찰\s*)?(?:참\s*가\s*)?자\s*격\s*을?\s*(?:모\s*두\s*)?갖\s*추"
+)
+JOINT_GROUP = "공동수급"
 _TAX_CONTEXT_RE = re.compile(r"사업자\s*등록\s*증|업\s*태|종\s*목|국세청|세무서|사업자\s*신고")
 
 
@@ -969,7 +982,18 @@ def evaluate_attachment_text(
                 return fixed, label
         return code, label
 
+    # 조건부 요건 — 미보유 대신 여기에 (JOINT_GROUP 그룹으로 satisfied_groups에 실려 화면에 "조건부"로 보인다)
+    joint: list[LicenseGroup] = []
+    collective = bool(_COLLECTIVE_RE.search("\n".join(items)))
+
+    def _miss(group_no: str, labels: list[str], codes: list[str], item_joint: bool) -> None:
+        if item_joint or (collective and codes and all(len(c) == 4 for c in codes)):
+            joint.append(LicenseGroup(group_no=JOINT_GROUP, allowed_names=labels))
+        else:
+            missing.append(LicenseGroup(group_no=group_no, allowed_names=labels))
+
     for idx, item in enumerate(items):
+        item_joint = bool(_JOINT_ALT_RE.search(item))
         or_groups = [[(code, _label(code, label)) for code, label in (_fix_typo(c, l) for c, l in bundle)]
                      for bundle in _or_groups(item)]
         # 나라장터 번호(4·10자리)가 아닌 코드가 사업자등록·업태·종목 문맥이면 세무 업종코드다 — 건설업 면허와 별개라
@@ -993,7 +1017,7 @@ def evaluate_attachment_text(
             # 묶음(OR)끼리는 모두 필요 — 빠진 묶음마다 요건 1건 (한 덩어리로 합치면 화면에 "N개 중 1개"로 보인다)
             for b in bundles:
                 if not any(r.held for r in b):
-                    missing.append(LicenseGroup(group_no=group_no, allowed_names=[r.label for r in b]))
+                    _miss(group_no, [r.label for r in b], [], item_joint)
                 elif len(b) > 1:
                     or_ok.append(LicenseGroup(group_no="또는", allowed_names=[r.label for r in b]))
             name_held.extend(r.label for b in bundles for r in b if r.held)
@@ -1026,7 +1050,7 @@ def evaluate_attachment_text(
                 groups.append(LicenseGroup(group_no=sub_no, allowed_names=[r.label for b in bundles for r in b]))
                 for b in bundles:
                     if not any(r.held for r in b):
-                        missing.append(LicenseGroup(group_no=sub_no, allowed_names=[r.label for r in b]))
+                        _miss(sub_no, [r.label for r in b], [], item_joint)
                     elif len(b) > 1:
                         or_ok.append(LicenseGroup(group_no="또는", allowed_names=[r.label for r in b]))
                 name_held.extend(r.label for b in bundles for r in b if r.held)
@@ -1043,7 +1067,7 @@ def evaluate_attachment_text(
         # 요건 1건으로 둔다. 한 덩어리로 합치면 화면에 "아래 2개 중 1개 이상"(또는)으로 잘못 보였다.
         for bundle in or_groups:
             if not any(_held(code, label) for code, label in bundle):
-                missing.append(LicenseGroup(group_no=group_no, allowed_names=[label for _, label in bundle]))
+                _miss(group_no, [label for _, label in bundle], [code for code, _ in bundle], item_joint)
             elif len(bundle) > 1:
                 or_ok.append(LicenseGroup(group_no="또는", allowed_names=[label for _, label in bundle]))
             else:
@@ -1066,7 +1090,7 @@ def evaluate_attachment_text(
         if code in held_codes
     ]
     satisfied_names += [n for n in dict.fromkeys(name_held) if n not in satisfied_names]
-    satisfied_groups = or_ok + ([LicenseGroup(group_no="held", allowed_names=satisfied_names)] if satisfied_names else [])
+    satisfied_groups = or_ok + joint + ([LicenseGroup(group_no="held", allowed_names=satisfied_names)] if satisfied_names else [])
 
     return QualificationResult(
         total_groups=len(groups),

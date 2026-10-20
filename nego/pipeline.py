@@ -53,6 +53,8 @@ class Candidate:
     overseas_attachment: str | None = None
     # 싱크로율(`sync.PastIndex.score` 결과) — 화면·메일에만 표시, 판정엔 안 씀(2026-10-19 통합 결정 16번)
     sync: dict | None = None
+    # 키워드·세부품명 하나만 안 맞아 빠진 공고 — 보유 면허·지역·마감은 통과(제외 탭 '세부품명 미달', 2026-10-20 팀원 레포 이식)
+    only_keyword_miss: bool = False
     # 매일 입찰 보고에서 이미 보낸 공고의 정정공고(차수가 오름) — 보고에 [정정] (`sent_state.select_new`)
     corrected: bool = False
     # `--llm-similarity`를 줬을 때만 채워진다 (`llm_similarity.LlmJudgement`).
@@ -292,6 +294,14 @@ def build_candidates(
             stats.screened_out[reason] = stats.screened_out.get(reason, 0) + 1
             record.is_candidate = False
             record.excluded_reason = f"{reason}{f' ({detail})' if detail else ''}"
+            if reason == "미매칭":
+                # 제외 키워드·해외·최소예산은 선별에서 이미 통과했다. 나머지(보유 면허·API 지역·마감)도 통과했으면
+                # 키워드·세부품명 하나만 안 맞은 공고 — 참가는 할 수 있어 제외 탭 '세부품명 미달'에 싣는다(팀원 레포 10/19 결정 이식)
+                record.only_keyword_miss = (
+                    not qualify.no_held_license(license_groups.get(notice.notice_no, []), config.held_names, held_codes)
+                    and record.region_check.status != "미달"
+                    and not schedule.is_expired(now)
+                )
             stats.rejected.append(record)
             continue
 

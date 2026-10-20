@@ -106,6 +106,21 @@ class TestView(unittest.TestCase):
         self.assertFalse({s["step"]: s for s in region["steps"]}["참가지역"]["ok"])
         self.assertIn("error", mview.excluded(None, {}, HELD))
 
+    def test_excluded_shows_keyword_only_miss(self):
+        """키워드·세부품명 하나만 안 맞고 다른 조건은 통과한 공고(only_keyword_miss)는 '세부품명 미달'로 싣는다
+        (2026-10-20 팀원 레포 10/19 이식). 다른 조건에도 걸린 미매칭은 그대로 숨긴다."""
+        run = {**RUN, "rejected": RUN["rejected"] + [
+            card("R26BK00000020", is_candidate=False, excluded_reason="미매칭 (키워드·품명코드 모두 불일치)",
+                 only_keyword_miss=True, work_type="용역", product_name="공간정보DB구축서비스", matched_keywords=[]),
+        ]}
+        data = mview.excluded(run, {}, HELD)
+        low = [i for i in data["items"] if i["excludedAt"] == "키워드·품목"]
+        self.assertEqual([i["noticeNo"] for i in low], ["R26BK00000020"], "R26BK00000012(플래그 없음)는 숨김")
+        self.assertEqual(data["byStage"]["키워드·품목"], 1)
+        step = {s["step"]: s for s in low[0]["steps"]}["키워드·품목"]
+        self.assertFalse(step["ok"])
+        self.assertIn("용역분류(공간정보DB구축서비스)", step["detail"])
+
     def test_search_by_notice_number(self):
         past = FakePast()
         found = mview.search("R26BK00000012", RUN, past, HELD)

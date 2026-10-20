@@ -17,6 +17,7 @@ import re
 from types import SimpleNamespace
 from typing import Any, Iterable
 
+from nego.qualify import JOINT_GROUP
 from nego.report import _dedupe_names_preferring_code, _display_name
 
 _TRAILING_CODE = re.compile(r"\((\d{4}|\d{10})\)\s*$")
@@ -205,11 +206,18 @@ def build(qualification, held: tuple[set[str], set[str]], had_source: dict[str, 
                 continue
             by_sig[sig] = items
             # 첨부 판정의 "held" 그룹은 요건이 아니라 참가자격 절에서 찾은 보유 코드 목록이다
-            order.append((state, sig, g.group_no == "held"))
-    for state, sig, held_list in order:
+            order.append((state, sig, g.group_no == "held", g.group_no == JOINT_GROUP))
+    for state, sig, held_list, joint in order:
         items = by_sig[sig]
         if state == "missing":
             missing[_section_of(items)].append(items)
+            continue
+        if joint:
+            # 공고문이 "없으면 공동수급"으로 건 조건부 요건 — 미보유로 세지 않고 "–"로 (2026-10-20 팀원 레포 이식)
+            key = _section_of(items)
+            satisfied[key].append({"any_of": len(items) > 1, "items": items, "why": "조건부 — 없으면 공동수급으로 참가 가능",
+                                   "joint": True})
+            satisfied_any[key] = True
             continue
         if held_list:
             for i in items:

@@ -30,6 +30,7 @@ from nego.http_client import ApiError
 
 from . import mview
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
+from .docscan import DocScan
 from .mstore import TeamStore
 from .reportsync import ReportSync
 from .store import DECISION_REASONS, DECISION_SUMMARY_MIN, STATUSES, Store
@@ -52,10 +53,12 @@ def static_version() -> str:
 
 class App:
     def __init__(self, store: Store, past: PastIndex, collector: Collector, token: str | None,
-                 team: TeamStore | None = None, backup_dir: Path | None = None):
+                 team: TeamStore | None = None, backup_dir: Path | None = None, docscan: DocScan | None = None):
         self.store = store
         self.past = past
         self.collector = collector
+        # 공고문으로 찾은 세부품명 공고 — 수집기가 뒤에서 채운다(webapp/docscan.py). 없으면 빈 결과
+        self.docscan = docscan or getattr(collector, "docscan", None)
         self.token = token
         self.static_version = static_version()
         # 참가여부·올리기 — 팀원 화면 모양(2026-10-19 화면 이식). 예전 sqlite 기록은 처음 한 번 옮겨 온다
@@ -212,10 +215,15 @@ def make_handler(app: App):
                     except RuntimeError:
                         pass  # 이미 누가 수집 중 — 그 진행을 같이 본다
                     return self._json({"running": True, "job": app.collector.job.snapshot()})
-                data = mview.notices(app.latest_run(), app.team.promoted, app.held_raw())
-                return self._json({**data, "job": job, "static_version": app.static_version, "resultFormat": RESULT_FORMAT})
+                data = mview.notices(app.latest_run(), app.team.promoted, app.held_raw(),
+                                     app.docscan.codes() if app.docscan else None)
+                return self._json({**data, "job": job, "static_version": app.static_version, "resultFormat": RESULT_FORMAT,
+                                   "docScan": app.docscan.state if app.docscan else None})
             if url.path == "/api/excluded":
                 return self._json(mview.excluded(app.latest_run(), app.team.promoted, app.held_raw()))
+            if url.path == "/api/docscan":
+                # '세부품명 미달' 용역 공고 공고문 확인 진행 — 화면이 찾은 건수가 늘면 세부품명 공고 탭을 다시 받는다
+                return self._json(app.docscan.state if app.docscan else {"running": False, "done": 0, "total": 0, "found": 0})
             if url.path == "/api/enrich":
                 # 첨부 읽기는 수집할 때 끝나 있다 — 화면이 기다릴 것이 없다
                 return self._json({"running": False, "done": 0, "total": 0, "byNo": {}, "keepQualifications": [],
@@ -354,7 +362,8 @@ def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, c
               backup_dir: Path | None = None) -> App:
     store = Store(db_path)
     past = past or PastIndex.load()
-    return App(store, past, collector or Collector(store, past), token, backup_dir=backup_dir)
+    docscan = DocScan(store.path.parent / "doc_products.json")
+    return App(store, past, collector or Collector(store, past, docscan=docscan), token, backup_dir=backup_dir, docscan=docscan)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1099,7 +1099,7 @@ footer b { color: var(--muted); }
   </section>
 
   <section id="tab-excluded" hidden>
-    <p class="sub ex-summary" id="exSummary" title="키워드·품목은 맞지만 다른 조건에 걸려 목록에서 빠진 공고입니다. 여러 조건에 걸리면 처음 걸린 조건에만 셉니다.">불러오는 중…</p>
+    <p class="sub ex-summary" id="exSummary" title="키워드·품목은 맞지만 다른 조건에 걸려 목록에서 빠진 공고와, 다른 조건은 모두 통과했는데 키워드·세부품명만 안 맞은 공고(세부품명 미달)입니다. 여러 조건에 걸리면 처음 걸린 조건에만 셉니다.">불러오는 중…</p>
     <div class="filter-row">
       <div class="filters" id="exFilters"></div>
       <label class="sort-box">정렬
@@ -1581,6 +1581,9 @@ async function loadNotices(refresh) {
       `싱크로율 높음 <b>${hi}</b> · 경계선 <b>${mid}</b> · 낮음 <b>${data.items.length - hi - mid}</b>`;
     if (!jobTimer) $("loadState").textContent = `완료 ${fmtDT(new Date())}`;
     renderNotices(data.items, (data.titleExcludedItems || []).filter(stillOpen), (data.heldItems || []).filter(stillOpen), data.heldProducts || []);
+    // 공고문 세부품명 확인이 뒤에서 돌고 있으면 진행을 보여 주고, 찾을 때마다 세부품명 공고 탭을 다시 받는다
+    lastDocFound = data.docScan?.found ?? 0;
+    if (data.docScan?.running) pollDocScan();
     // 제외된 공고는 이번 조회 결과로 다시 계산해야 한다
     exData = null;
     if (!$("tab-excluded").hidden) loadExcluded();
@@ -2190,6 +2193,13 @@ function renderNotice(n) {
 const productOnly = (n) => !!n.matchedBy?.products?.length && !n.matchedBy?.keywords?.length;
 function productOnlyBadge(n) {
   const names = n.matchedBy.products.map((x) => `${esc(x.name)}(${esc(x.code)})`).join(", ");
+  // 공고문 참가자격에서 찾은 세부품명 — 나라장터 분류(용역분류)에는 없어 공고문을 읽고 찾은 공고 (서버 webapp/docscan.py)
+  if (n.fromDoc) {
+    return tipBadge("warn", "공고문 세부품명으로 수집", "공고문 세부품명으로 수집한 공고",
+      `<p>제목에 관심 키워드가 없지만, 공고문 참가자격에 지일 등록 세부품명 <b>${names}</b>이(가) 적혀 있어 찾은 공고입니다.</p>` +
+        `<p>나라장터 공고 분류에는 세부품명이 없는 용역 공고라 공고문을 읽어야 보입니다. 매일 텔레그램 보고에는 나가지 않습니다.</p>` +
+        `<p>과업 내용이 맞는지 공고 원문을 확인하세요.</p>`);
+  }
   return tipBadge("warn", "세부품명으로만 수집", "세부품명으로만 수집한 공고",
     `<p>제목에 관심 키워드가 없고, 세부품명 <b>${names}</b>이(가) 지일 등록 품목이라 들어온 공고입니다.</p>` +
       (n.outside
@@ -2315,6 +2325,41 @@ function renderEnrichMeta() {
 // 카드를 그릴 때 공고 자료(n.qual·n.regionCheck·n.textFlags …)로 바로 배지를 만든다.
 let enrich = { running: false, done: 0, total: 0, byNo: {} };
 function pollEnrich() {}
+
+// ── 공고문 세부품명 확인 (2026-10-20 팀원 레포 이식) ─────────────
+// '세부품명 미달' 용역 공고의 공고문을 수집이 끝난 뒤 서버가 뒤에서 읽는다(webapp/docscan.py). 지일 등록 세부품명을
+// 요구하는 공고를 찾으면 '세부품명 공고' 탭에 붙는다 — 그 탭 목록만 다시 받는다(카드 전체를 다시 그리지 않게)
+let docScanTimer = null;
+let lastDocFound = 0;
+async function pollDocScan() {
+  clearTimeout(docScanTimer);
+  let s = null;
+  try {
+    s = await getJson("/api/docscan");
+  } catch (e) {
+    // 다음 폴링 때 다시
+  }
+  if (s) {
+    $("enrichMeta").textContent = s.running
+      ? `용역 공고문 세부품명 확인 ${s.done}/${s.total} (찾음 ${s.found}건) — 찾는 대로 '세부품명 공고' 탭에 붙습니다`
+      : "";
+    if (s.found !== lastDocFound) {
+      lastDocFound = s.found;
+      reloadHeld();
+    }
+  }
+  if (!s || s.running) docScanTimer = setTimeout(pollDocScan, 3000);
+}
+async function reloadHeld() {
+  try {
+    const data = await getJson("/api/notices");
+    if (data.error || data.empty) return;
+    lastHeld = (data.heldItems || []).filter(stillOpen);
+    applyFilters();
+  } catch (e) {
+    // 다음 폴링 때 다시 받는다
+  }
+}
 
 /** 카드의 두 번째 배지 줄 — 참가여부 · 자격 | 지역·공동수급 | 확인 */
 function enrichBadges(n) {
@@ -2556,8 +2601,9 @@ function reqBlocksHtml(all, mixed) {
         return `<li class="${cls}">${sym} ${optHtml(i, mixed)}</li>`;
       }).join(LAY_OR)}</ul></div>`);
     } else {
+      // 조건부 요건(r.joint — 공고문이 "없으면 공동수급"으로 건 것)은 없어도 "–"로
       const i = r.items[0];
-      const [cls, sym] = mark(i.held, false);
+      const [cls, sym] = mark(i.held, !!r.joint);
       blocks.push(`<div class="lay-blk"><p class="lay-h">${esc(r.why || "필수 보유")}</p><ul><li class="${cls}">${sym} ${optHtml(i, mixed)}</li></ul></div>`);
     }
   }
@@ -2580,7 +2626,7 @@ function nQualBadges(n) {
     if (all.length) {
       const mixed = all.some((r) => new Set((r.items || []).map((i) => i.kind)).size > 1);
       title = `${esc(p.name)} ${all.length}건 — 충족 ${ok.length} · 미달 ${miss.length}`;
-      body = reqBlocksHtml(all, mixed) + `<p class="lay-legend">✓ 보유 · ✗ 미보유 · – 이미 충족해서 없어도 됨<br>${esc(QUAL_NOTES[p.key])}</p>`;
+      body = reqBlocksHtml(all, mixed) + `<p class="lay-legend">✓ 보유 · ✗ 미보유 · – 이미 충족했거나 공동수급으로 채울 수 있어 없어도 됨<br>${esc(QUAL_NOTES[p.key])}</p>`;
     } else if ((p.held || []).length) {
       title = "보유로 충족한 자격";
       body = `<ul>${p.held.map((x) => `<li class="lay-ok">✓ ${esc(x)}</li>`).join("")}</ul>`;
@@ -2976,7 +3022,7 @@ const STAGE_LABEL = {
   낙찰방법: "수의계약·설계공모",
   검토필요: "관심·제외 키워드 함께 있음",
   해외개최: "해외 개최",
-  "키워드·품목": "키워드 없음",
+  "키워드·품목": "세부품명 미달",
   // 참가자격 단계에서 빠지는 경우: 조경·토목·건축사 면허 필수, 또는 (용역·공사) 요구 업종을 하나도 보유하지 않음.
   // 일부만 보유한 공고는 빼지 않고 표시만 한다 (공동수급)
   참가자격: "보유하지 않은 자격 필요",
@@ -2993,7 +3039,7 @@ const STAGE_NOTE = {
   최소예산: "사업금액이 설정한 최소 금액보다 작습니다.",
   낙찰방법: "수집하지 않는 낙찰방법입니다(수의계약, 설계공모).",
   해외개최: "몽골이 아닌 해외 개최 공고입니다. 제목에 한국관이 있거나, 전시회·해외 지명과 단체관이 함께 있거나, USA·UAE 같은 영문 국가 약자가 있으면 해외 개최로 봅니다.",
-  "키워드·품목": "제목·품명에 등록 키워드가 없고, 공고 품목도 지일 등록 품목이 아닙니다.",
+  "키워드·품목": "공고명·품명에 등록 키워드가 없고, 공고의 세부품명(용역은 용역분류)도 지일 등록 품목이 아닙니다.<br>다른 조건(금액·자격·지역·마감)은 모두 통과한 공고만 싣습니다.",
   참가자격: "나라장터 업종제한의 요구 면허를 지일이 하나도 보유하지 않았습니다.<br>공동수급으로도 지일이 맡을 몫이 없습니다.",
   참가지역: "다른 지역(시·도, 시·군 단위)에 본사가 있는 업체만 참가할 수 있는 공고입니다.<br>나라장터 참가가능지역 정보로만 판단합니다 — 첨부 문서의 지역 문구는 '지역 제한 의심' 표시만 합니다.",
   "과업 내용": "첨부 과업지시서를 읽어 보니 전시·제작 사업이 아닙니다.<br>제목에 키워드가 없고 과업에도 전시·제작 내용이 없거나, 사업 목적이 휴게·독서 공간 조성입니다.",
@@ -3055,7 +3101,7 @@ const STAGE_RULE = {
   최소예산: "사업금액이 최소 금액 미만",
   낙찰방법: "수의계약 또는 설계공모",
   해외개최: "몽골 외 한국관, 전시회·해외 지명 + 단체관, 영문 국가 약자(USA 등)",
-  "키워드·품목": "등록 키워드·품목이 없음",
+  "키워드·품목": "세부품명·용역분류가 지일 등록 품목이 아님 (공고명·품명에 관심 키워드도 없음)",
   참가자격: "요구 면허를 지일이 하나도 보유하지 않음",
   참가지역: "본점(정선군) 지역 밖 업체만 참가 가능 (나라장터 기준)",
   "과업 내용": "과업지시서에 전시·제작 내용 없음, 휴게·독서 공간 조성",
@@ -3193,8 +3239,12 @@ function exStepBadges(n) {
           ? tipBadge("faint", "지역제한 미정", "참가 지역", `<p>${esc(r.detail)}</p>`)
           : tipBadge("okb", "지역제한 · 본점 충족", "참가 지역", `<p>${esc(r.detail)}</p>`);
   const group = (label, html) => (html ? `<div class="tag-group"><span class="tg-label">${label}</span>${html}</div>` : "");
-  // 제외된 공고는 첨부 공고문을 읽지 않아 세부품명 요건은 확인하지 않았다 — 사실대로 '미확인'
-  const product = tipBadge("faint", "세부품명번호 미확인", "세부품명", `<p>제외된 공고는 첨부 공고문을 읽지 않아<br>세부품명번호 요건을 확인하지 않았습니다.</p>`);
+  // 키워드·세부품명 단계에서 빠진 공고는 나라장터 분류로 이미 미달이 확인됐다
+  const k = step("키워드·품목");
+  // 그 밖에는 첨부 공고문을 읽지 않아 세부품명 요건은 확인하지 않았다 — 사실대로 '미확인'
+  const product = k && !k.ok
+    ? tipBadge("block", "세부품명번호 미달", "세부품명", `<p>${esc(k.detail)}</p>`)
+    : tipBadge("faint", "세부품명번호 미확인", "세부품명", `<p>제외된 공고는 첨부 공고문을 읽지 않아<br>세부품명번호 요건을 확인하지 않았습니다.</p>`);
   return group("자격", qual + product) + group("지역", region);
 }
 
@@ -3219,7 +3269,8 @@ function exReasonBlock(n, kw) {
     : "";
   const kwRow = inTitle.length || inName.length
     ? [inTitle.length ? `공고명에 관심 키워드 ${esc(inTitle.join(", "))}` : "", inName.length ? `세부품명 이름에 관심 키워드 ${esc(inName.join(", "))}` : ""].filter(Boolean).join(" · ")
-    : step && !step.ok
+    // 세부품명 미달 공고는 위 사유 줄에 같은 설명이 이미 있다
+    : step && !step.ok && n.excludedAt !== "키워드·품목"
       ? esc(step.detail)
       : "공고명·세부품명에 관심 키워드가 없음";
   const rows = [

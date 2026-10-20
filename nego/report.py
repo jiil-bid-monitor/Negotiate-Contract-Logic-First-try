@@ -428,7 +428,10 @@ _HTML_HEAD = """<meta charset="utf-8">
   .section { font-size:1.05rem; font-weight:700; margin:28px 0 14px;
              padding-bottom:8px; border-bottom:2px solid var(--fg); }
   .tablewrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:#fff; }
-  table { border-collapse:collapse; width:100%; min-width:820px; }
+  /* 2026-10-20 사용자 요청: 관심 공고·세부품명 공고 표가 내용 길이에 따라 칸 폭을 따로 잡아
+     위아래 표의 칸 위치가 어긋났다 — 칸 폭을 <colgroup>으로 고정해 모든 표가 같은 자리에 칸을 둔다.
+     수요기관만 폭을 정하지 않아 남는 폭을 쓰고, 긴 기관명은 줄바꿈. */
+  table { border-collapse:collapse; width:100%; min-width:1220px; table-layout:fixed; }
   th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line);
            vertical-align:middle; font-size:0.75rem; line-height:1.4; }
   /* 2026-10-20 사용자 요청: 한 줄짜리 칸(자격판정 동그라미·공동수급·예가방법 등)이
@@ -561,13 +564,22 @@ _TOOLTIP_FLIP_SCRIPT = """<script>
 </script>"""
 
 
+# 칸 폭(px) — 분야·계약방법·공고명·금액·자격판정·공동수급·예가방법·수요기관(남는 폭)·공고일/개찰일·입찰마감일.
+# 분야는 '규격가격동시입찰' 뱃지, 금액은 '배정 10,000,000,000원 (부가세 포함)'이 한 줄에 들어가는 폭.
+_COLGROUP = (
+    "<colgroup>"
+    + "".join(f'<col style="width:{w}px">' if w else "<col>" for w in (110, 72, 200, 225, 64, 116, 72, 0, 100, 150))
+    + "</colgroup>"
+)
+
+
 def _table_html(section_title: str, candidates: list[Candidate], esc, qualification_panel: bool = False) -> list[str]:
     parts = [f'<div class="section">{esc(section_title)} ({len(candidates)}건)</div>']
 
     if not candidates:
         parts.append('<div class="empty">조건에 맞는 공고가 없습니다.</div>')
     else:
-        parts.append('<div class="tablewrap"><table>')
+        parts.append('<div class="tablewrap"><table>' + _COLGROUP)
         parts.append(
             "<thead><tr>"
             "<th>분야</th><th>계약방법</th><th>공고번호 / 공고명</th>"
@@ -659,7 +671,7 @@ def _table_html(section_title: str, candidates: list[Candidate], esc, qualificat
                 f'<td class="center"><div>{_qualification_cell_html(c.qualification, esc)}</div></td>'
                 f'<td><div class="nowrap">{esc(c.joint.label)}</div></td>'
                 f'<td><div class="nowrap">{esc(c.notice.estimate_price_method) or "-"}</div></td>'
-                f'<td><div class="nowrap">{esc(c.notice.demand_institution) or "-"}</div></td>'
+                f'<td><div>{esc(c.notice.demand_institution) or "-"}</div></td>'
                 f'<td class="center"><div>{_opening_cell_html(c, esc)}</div></td>'
                 f"<td><div>{_deadline_cell_html(c, esc)}</div></td>"
                 "</tr>"

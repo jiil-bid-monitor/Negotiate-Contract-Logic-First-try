@@ -390,6 +390,10 @@ _CODE_REQUIREMENT_RE = re.compile(
     # PDF에선 "측지측량업 (5021)"처럼 괄호 앞에 공백 한 칸이 끼기도 한다(제천 공고문 — 5021을 못 읽어 5023의 "또는"이
     # 멀리 있는 측량용역(8115160401)에 이어졌음)
     r"|(?:(?<=[업자사소])|(?<=[업자사소] ))\((?P<short_code>[0-9]{4})\)(?!\s*년)"
+    # "세부품명번호 : 8111159901(정보시스템개발서비스) 또는 8111159801(패키지…)" — "또는" 뒤 번호 + (이름)도 세부품명번호.
+    # 9자리는 원문 오기("811159801")로 보고 그대로 둔다 — 이름으로 보유를 확인한다(2026-10-20 제보: 울산안전체험관).
+    # 줄에 "세부품명번호"가 먼저 나와야 한다(`_locate_code_requirements`).
+    r"|(?:(?<=또는 )|(?<=혹은 ))(?P<or_code>[0-9]{9,10})(?=\s*\([가-힣])"
 )
 # 문서마다 괄호를 쓰는지 대괄호를 쓰는지, 코드 여러 개를 콤마로 나열하는지
 # 세미콜론이나 공백으로 나열하는지가 제각각이다 — 문서마다 정규식을 하나씩
@@ -491,6 +495,11 @@ _OR_AFTER_SUBJECT = (
 )
 _OR_LINK_RE = re.compile(_LINK_HEAD + r"(?:,?\s*(?:또는|혹은)|\(\s*허용\s*업종|" + _OR_AFTER_SUBJECT + r")")
 _COMMA_LINK_RE = re.compile(_LINK_HEAD + r",")
+# 코드 사이에 새 하위 항목이 시작됨 — 줄머리 "가)"·"나."·"1)"·"(1)"·"①"
+_SUBITEM_BREAK_RE = re.compile(r"\n\s*(?:[가-하][).]|[(（]?\d{1,2}[)）]|[①-⑳])")
+# 코드 바로 뒤 "(이름)" — "8111159901(정보시스템개발서비스) 또는 …"의 "또는"을 보려고 건너뛴다
+_CODE_NAME_PAREN_RE = re.compile(r"^\s*\([^()\n]{1,40}\)")
+_STRAY_NUMBER_RE = re.compile(r"(?<![0-9])[0-9]{8,11}(?![0-9])")
 # 같은 줄에 요건이 둘 이상 나열되면(PDF 등) 뒷 요건의 이름표 앞에 앞 요건의
 # 괄호와 접속어가 딸려온다 — 닫는 괄호 이후만 남기고 앞머리 접속어를 뗀다.
 # 줄바꿈으로 "…에\n따른 기술사사무소"처럼 연결어 뒷부분·조사만 줄머리에 남은 경우도 뗀다(2026-10-14 제보).
@@ -691,9 +700,17 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
             if any(_spans_overlap(match.span(), span) for span in consumed):
                 continue
             consumed.append(match.span())
-            code_group = next(g for g in ("code", "bare_code", "short_code") if match.group(g))
+            code_group = next(g for g in ("code", "bare_code", "short_code", "or_code") if match.group(g))
             code = match.group(code_group)
             prefix = line[: match.start()]
+            if code_group == "or_code":
+                if not re.search(r"세부\s*품명\s*번호", prefix):
+                    continue
+                label = re.match(r"\s*\(([^()]*)\)", line[match.end():])
+                name = _truncate_label(label.group(1).strip()) if label else ""
+                start = base + match.start(code_group)
+                results.append((start, start + len(code), code, f"{name}({code})" if name else code))
+                continue
             # 코드가 **아직 닫히지 않은** 괄호 안에 있을 때만 괄호 안쪽을 이름으로 본다.
             # 예전엔 앞에 "("가 있기만 하면 안쪽으로 봐서, "영상정보디스플레이장치(4511189301),
             # 교육용로봇(6010621401)"의 두 번째 코드 이름이 "4511189301), 교육용로봇"이 됐다(2026-09-30 제보).
@@ -822,7 +839,11 @@ def _or_groups_linked(item: str) -> list[list[tuple[str, str]]]:
     links = []
     for cur, nxt in zip(ordered, ordered[1:]):
         between = merged[cur[1] : nxt[0]]
-        if _OR_LINK_RE.match(between):
+        if _SUBITEM_BREAK_RE.search(between) or _STRAY_NUMBER_RE.search(between):
+            # "가) A 또는 B / 나) C" — 하위 항목이 바뀌면 "또는"이 C까지 잇지 않는다. 코드로 못 읽은 번호(오기 등)가 사이에
+            # 있으면 "또는"은 그 번호에 걸린 것이다(2026-10-20 제보: 울산안전체험관 "8111159901 또는 811159801 / 나) 6010989901")
+            links.append("and")
+        elif _OR_LINK_RE.match(_CODE_NAME_PAREN_RE.sub("", between, count=1)):
             links.append("or")
         elif _COMMA_LINK_RE.match(between):
             links.append("comma")

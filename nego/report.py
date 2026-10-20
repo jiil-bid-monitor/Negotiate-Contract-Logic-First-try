@@ -516,7 +516,7 @@ _HTML_HEAD = """<meta charset="utf-8">
   .qual-dot .tip .tip-item:first-child { border-top:none; }
   .qual-dot .tip .tip-note { color:var(--muted); font-size:0.65rem; margin-top:6px; }
 
-  td.center { text-align:center; }
+  th.center, td.center { text-align:center; }
 
   .empty { text-align:center; color:var(--muted); padding:48px 0; }
   @media (max-width:520px) { .wrap { padding:20px 16px 48px; } }
@@ -571,9 +571,9 @@ def _table_html(section_title: str, candidates: list[Candidate], esc, qualificat
         parts.append(
             "<thead><tr>"
             "<th>분야</th><th>계약방법</th><th>공고번호 / 공고명</th>"
-            "<th>추정가격(원) / 배정예산(원)</th><th>자격판정</th>"
+            "<th>추정가격(원) / 배정예산(원)</th><th class='center'>자격판정</th>"
             "<th>공동수급(컨소시엄)</th><th>예가방법</th><th>수요기관</th>"
-            "<th>공고일 / 개찰일</th><th>입찰마감일</th>"
+            "<th class='center'>공고일 / 개찰일</th><th>입찰마감일</th>"
             "</tr></thead><tbody>"
         )
         for c in candidates:

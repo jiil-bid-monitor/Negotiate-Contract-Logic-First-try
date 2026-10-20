@@ -236,6 +236,19 @@ class TestSubitemOr(unittest.TestCase):
                 groups = [[code for code, _ in g] for g in qualify._or_groups(self.ITEM.format(b=b))]
                 self.assertEqual(groups, [["8111159901", b], ["6010989901"]])
 
+    def test_disqualification_note_is_not_or_marker(self):
+        """항목 끝 ※ "다음 중 어느 하나에 해당하는 경우에는 입찰참가자격이 없습니다"는 OR 표시가 아니다(실제 원인)."""
+        from nego import qualify
+
+        item = ("가. 다음 각 호의 조건을 모두 갖추어야 합니다.\n1) 비디오물제작업(업종코드 : 3244)으로 입찰참가 등록한 자\n"
+                + self.ITEM.format(b="811159801")
+                + "\n※ 확인서를 신청한 업체는 입찰참가가 가능하나 다음 중 어느 하나에 해당하는 경우에는 입찰참가자격이 없습니다.")
+        groups = [[code for code, _ in g] for g in qualify._or_groups(item)]
+        self.assertEqual(groups, [["3244"], ["8111159901", "811159801"], ["6010989901"]])
+        # 9자리 오기는 이름이 같은 10자리 품목 번호로 바로잡는다
+        r = qualify.evaluate_attachment_text([item], {"8111159801"}, {"8111159801": "패키지소프트웨어개발및도입서비스"})
+        self.assertIn("패키지소프트웨어개발및도입서비스(8111159801)", [n for g in r.satisfied_groups for n in g.allowed_names])
+
 
 class TestRegion(unittest.TestCase):
     """결정 7번 — 제외는 API로만, 시·군 단위까지. 첨부는 의심 표시."""

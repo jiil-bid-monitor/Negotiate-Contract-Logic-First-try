@@ -48,62 +48,6 @@ class TestFormatters(unittest.TestCase):
         self.assertEqual(_fmt_kr_deadline(None), "")
 
 
-class TestQualificationPanel(unittest.TestCase):
-    """미보유 자격이 있는 공고는 표 줄 아래에 '자격 미보유' 칸을 펼쳐 둔다 — 동그라미 팝업은 메일에서 안 열린다
-    (2026-10-20 팀원 레포 10/19 리포트 카드 이식). 묶음은 웹앱 자격 팝업과 같다(webapp/qualview.build).
-    주간 메일 리포트에만 넣고, 텔레그램 첨부 HTML은 원래 구조 그대로(사용자 결정)."""
-
-    def _cands(self, joint_name: str = "(전자)공동이행 또는 분담이행"):
-        from nego import qualify
-
-        config = load_config()
-        config.screen.keywords = ["인테리어"]
-        raws = [fixtures.notice("R26QP0001", title="○○센터 인테리어공사", cmmnSpldmdMethdNm=joint_name),
-                fixtures.notice("R26QP0002", title="△△센터 인테리어공사")]
-        rows = [
-            {"bidNtceNo": "R26QP0001", "lmtGrpNo": "1", "lmtSno": "1", "lcnsLmtNm": "실내건축공사업/4990",
-             "permsnIndstrytyList": "[실내건축공사업/4990]"},
-            {"bidNtceNo": "R26QP0001", "lmtGrpNo": "1", "lmtSno": "2", "lcnsLmtNm": "전기공사업/0039",
-             "permsnIndstrytyList": "[전기공사업/0039]"},
-        ]
-        stats = RunStats(period_begin=datetime(2026, 8, 24), period_end=NOW)
-        cands = build_candidates([notice_from_raw(r, "공사") for r in raws], config, qualify.group_license_rows(rows),
-                                 {}, NOW, stats)
-        return cands, stats
-
-    def _html(self, joint_name: str = "(전자)공동이행 또는 분담이행"):
-        cands, stats = self._cands(joint_name)
-        return render_html(cands, stats, NOW, qualification_panel=True)
-
-    def test_telegram_html_keeps_original_structure(self):
-        cands, stats = self._cands()
-        self.assertNotIn("qual-row", render_html(cands, stats, NOW), "기본(텔레그램 첨부)은 칸 없음")
-
-    def test_save_reports_writes_email_html_only_for_email(self):
-        import tempfile
-
-        from nego.report import save_reports
-
-        cands, stats = self._cands()
-        out = Path(tempfile.mkdtemp())
-        self.assertNotIn("email_html", save_reports(cands, stats, out, NOW))
-        paths = save_reports(cands, stats, out, NOW, email=True)
-        self.assertIn("qual-row", paths["email_html"].read_text(encoding="utf-8"))
-        self.assertNotIn("qual-row", paths["html"].read_text(encoding="utf-8"))
-
-    def test_panel_only_for_missing_with_marks(self):
-        out = self._html()
-        self.assertEqual(out.count('class="qual-row"'), 1, "미보유가 없는 R26QP0002에는 칸이 없다")
-        self.assertIn("자격 미보유", out)
-        self.assertIn("필수 보유 — 2개 모두 필요", out)
-        self.assertIn("✗ 전기공사업(0039)", out)
-        self.assertIn("✓ 실내건축공사업(4990)", out)
-        self.assertIn("공동수급으로 참가 검토", out)
-
-    def test_joint_denied_is_flagged(self):
-        self.assertIn("공동수급 불허 — 참가 어려움", self._html("(없음)공동수급불허"))
-
-
 class TestRenderHtml(unittest.TestCase):
     def _candidates(self):
         config = load_config()

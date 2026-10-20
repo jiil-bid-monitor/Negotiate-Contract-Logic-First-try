@@ -393,7 +393,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_supabase:
         _save_to_supabase(candidates, stats)
 
-    paths = save_reports(candidates, stats, config.output_dir, now)
+    # 주간 메일이면 '자격 미보유' 칸을 넣은 메일용 HTML도 만든다 — 텔레그램 첨부 HTML은 원래 구조 그대로(2026-10-20)
+    paths = save_reports(candidates, stats, config.output_dir, now, email=args.email)
     for kind, path in {**paths, **llm_paths}.items():
         print(f"{kind.upper()} 저장: {path}")
 
@@ -408,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
             _save_report_log(args.report_log, candidates, config, now)
 
     if args.email:
-        _send_email(candidates, stats, paths.get("html"), now)
+        _send_email(candidates, stats, paths.get("email_html") or paths.get("html"), now)
 
     # 일부 조회가 실패했으면 종료코드 2로 구분한다 (CI에서 성공/부분성공 구분).
     return 2 if stats.failed_operations else 0

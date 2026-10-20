@@ -172,9 +172,10 @@ def _qualification_cell_html(q, esc) -> str:
 
 
 # ── 자격 미보유 칸 (2026-10-20, 팀원 레포 10/19 리포트 카드 이식) ─────────────────────────
-# 표의 자격판정 동그라미는 마우스를 올려야 미보유 자격이 보여, 메일·휴대폰으로 열면 볼 수 없었다. 미보유 자격이 있는 공고는
+# 표의 자격판정 동그라미는 마우스를 올려야 미보유 자격이 보여, 메일로 열면 볼 수 없었다. 미보유 자격이 있는 공고는
 # 줄 아래에 "필수 보유 / N개 중 1개 이상 / 방법 중 하나 / 조건부" 묶음을 ✓·✗·–로 펼쳐 둔다 — 웹앱 자격 팝업(index.html
 # reqBlocksHtml)과 같은 자료(webapp/qualview.build). 메일 프로그램이 <style>을 지우는 경우가 있어 스타일은 칸 안에 직접 쓴다.
+# **주간 메일 리포트에만** 넣는다 — 텔레그램 첨부 HTML은 원래 구조 그대로(2026-10-20 사용자 결정, render_html qualification_panel).
 _QUAL_OK = "color:#15803d;"
 _QUAL_MISS = "color:#b91c1c;font-weight:600;"
 _QUAL_SPARE = "color:#9ca3af;"
@@ -557,7 +558,7 @@ _TOOLTIP_FLIP_SCRIPT = """<script>
 </script>"""
 
 
-def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[str]:
+def _table_html(section_title: str, candidates: list[Candidate], esc, qualification_panel: bool = False) -> list[str]:
     parts = [f'<div class="section">{esc(section_title)} ({len(candidates)}건)</div>']
 
     if not candidates:
@@ -660,8 +661,8 @@ def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[st
                 f"<td><div>{_deadline_cell_html(c, esc)}</div></td>"
                 "</tr>"
             )
-            # 미보유 자격은 줄 아래에 펼쳐 둔다 — 동그라미 팝업은 메일·휴대폰에서 안 열린다
-            panel = _qualification_panel_html(c, esc)
+            # 미보유 자격은 줄 아래에 펼쳐 둔다 — 동그라미 팝업은 메일에서 안 열린다 (주간 메일 리포트만)
+            panel = _qualification_panel_html(c, esc) if qualification_panel else ""
             if panel:
                 parts.append(f'<tr class="qual-row"><td colspan="10" style="padding:0 12px 12px;">{panel}</td></tr>')
         parts.append("</tbody></table></div>")
@@ -669,7 +670,9 @@ def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[st
     return parts
 
 
-def render_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime) -> str:
+def render_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime,
+                qualification_panel: bool = False) -> str:
+    """`qualification_panel`: 미보유 자격 공고 줄 아래에 '자격 미보유' 칸 — 주간 메일 리포트만 켠다(텔레그램 첨부는 원래 구조)."""
     def esc(text: str | None) -> str:
         return html.escape(str(text or ""))
 
@@ -692,7 +695,7 @@ def render_html(candidates: list[Candidate], stats: RunStats, generated_at: date
     for section_title, rows in (("관심 공고", interest), ("세부품명 공고 (키워드 없이 보유 품목으로 수집)", product_only)):
         if section_title.startswith("세부품명") and not rows:
             continue
-        parts.extend(_table_html(section_title, rows, esc))
+        parts.extend(_table_html(section_title, rows, esc, qualification_panel))
 
     parts.append("</div>")
     parts.append(_TOOLTIP_FLIP_SCRIPT)
@@ -700,8 +703,9 @@ def render_html(candidates: list[Candidate], stats: RunStats, generated_at: date
 
 
 def save_reports(
-    candidates: list[Candidate], stats: RunStats, output_dir: Path, generated_at: datetime
+    candidates: list[Candidate], stats: RunStats, output_dir: Path, generated_at: datetime, email: bool = False
 ) -> dict[str, Path]:
+    """CSV + HTML(텔레그램 첨부·보관용). `email`이면 '자격 미보유' 칸을 넣은 메일용 HTML도 따로(`email_html`)."""
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = generated_at.strftime("%Y%m%d_%H%M")
 
@@ -709,5 +713,9 @@ def save_reports(
     csv_path = write_csv(candidates, output_dir / f"공고_{prefix}_{stamp}.csv")
     html_path = output_dir / f"공고_{prefix}_{stamp}.html"
     html_path.write_text(render_html(candidates, stats, generated_at), encoding="utf-8")
-
-    return {"csv": csv_path, "html": html_path}
+    paths = {"csv": csv_path, "html": html_path}
+    if email:
+        email_path = output_dir / f"공고_{prefix}_{stamp}_메일.html"
+        email_path.write_text(render_html(candidates, stats, generated_at, qualification_panel=True), encoding="utf-8")
+        paths["email_html"] = email_path
+    return paths

@@ -174,6 +174,21 @@ def _send_telegram(candidates, stats, html_path) -> bool:
     return sent > 0
 
 
+def _save_report_log(kind: str, candidates, config, now) -> None:
+    """보고에 나간 공고 목록 → output/report-log/{보고일}-{종류}.json (nego/report_log.py). 실패해도 보고는 이미 나갔으니
+    종료코드는 그대로 — 사내 웹앱 판단 기록에 이번 보고가 안 쌓일 뿐이다."""
+    from . import report_log
+
+    held_names = {str(p.get("code") or "").strip(): p.get("name") or ""
+                  for p in (config.held_raw or {}).get("heldProducts", []) if p.get("code")}
+    try:
+        path = report_log.write(Path(config.output_dir) / "report-log",
+                                report_log.build_entry(kind, candidates, now, held_names))
+        print(f"보고 기록 저장 (사내 웹앱 판단 기록용): {path}")
+    except OSError as err:
+        logging.warning("보고 기록을 남기지 못했습니다 — 사내 웹앱 판단 기록에 이번 보고가 쌓이지 않습니다: %s", err)
+
+
 def _send_email(candidates, stats, html_path, now) -> None:
     """주간 리포트 메일(2026-10-19 통합 결정 15번). 실패해도 종료코드는 그대로 — 텔레그램과 같은 이유."""
     from .email_report import send, subject_for
@@ -239,6 +254,12 @@ def main(argv: list[str] | None = None) -> int:
         "--sent-state",
         help="보낸 공고 기록 파일(JSON). 주면 처음 보는 공고와 정정공고([정정])만 보고하고, 텔레그램 발송 뒤 기록한다 "
         "(매일 '입찰' 보고용 — 2026-10-19 통합 결정 14번)",
+    )
+    parser.add_argument(
+        "--report-log",
+        choices=["daily", "weekly"],
+        help="텔레그램 발송 뒤 보낸 공고 목록을 output/report-log/에 남긴다 — 워크플로가 bot-state 브랜치에 올리고 "
+        "사내 웹앱이 받아 판단 기록에 '미판단'으로 쌓는다 (매일·주간 보고용, nego/report_log.py)",
     )
     parser.add_argument(
         "--email",
@@ -383,6 +404,8 @@ def main(argv: list[str] | None = None) -> int:
 
             _sent.save(Path(args.sent_state), _sent.mark(sent_state, candidates, now))
             print(f"보낸 공고 기록 저장: {args.sent_state}")
+        if args.report_log and delivered and candidates:
+            _save_report_log(args.report_log, candidates, config, now)
 
     if args.email:
         _send_email(candidates, stats, paths.get("html"), now)

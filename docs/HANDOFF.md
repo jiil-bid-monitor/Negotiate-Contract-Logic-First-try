@@ -81,7 +81,7 @@
 | 설정 | `config/keywords.json`, `codes.json`, `held_qualifications.json`, `code_names.json` | 보유 자격은 최정미 차장님 관리 자료로 갱신 |
 | 사내 웹앱 | `webapp/` (`server.py`, `collect.py`, `store.py`, `static/`) | 실행 `bash webapp/start.sh`, 설명 `webapp/README.md` |
 | 텔레그램 | `nego/telegram.py`, 문서 `docs/telegram.md` | 담당자 방·개발자 방 2개, 봇 `@jiil_bid_bot` |
-| 예약 실행 | `.github/workflows/daily.yml` | 매일 09:00 KST 입찰(어제분), 월 09:10 KST 협상·규격가격·사전규격(지난 7일). Supabase 저장은 꺼둠 |
+| 예약 실행 | `.github/workflows/daily.yml` | 평일 09:00 KST 입찰(어제분, 월요일은 금~일분), 월 09:10 KST 협상·규격가격·사전규격(지난 7일). 보낸 공고·보고 기록은 bot-state 브랜치. Supabase 저장은 꺼둠 |
 | 투찰가 분석 수집기 | `nego/bidprice.py`, `.github/workflows/bidprice.yml` | 수동 실행, 과거 개찰결과·예비가격 |
 | 담당자 안내 | `docs/user_guide.md`, `docs/user_guide.pptx` | 기능 바뀌면 같이 고칠 것 |
 | 필터 판단 사례 | `docs/filter_cases.md` | 새 사례 나오면 한 줄 추가 |
@@ -95,7 +95,8 @@
 2. **비밀값은 계정이 아니라 저장소·PC에 있음** — 계정을 바꿔도 그대로 동작:
    - GitHub 저장소 Secrets: `NARA_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`(-1004487982383), `TELEGRAM_DEV_CHAT_ID`(-5536307994),
      (선택) `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
-   - 서버 PC: 레포 루트 `.env`(나라장터 인증키, `APP_TOKEN=jiil2026`), `data/webapp.sqlite3`(참가여부·사유·대화 — 이 PC에만 있음).
+   - 서버 PC: 레포 루트 `.env`(나라장터 인증키, `APP_TOKEN=jiil2026`, 판단 기록 백업 폴더 `BACKUP_DIR`),
+     `data/participation.json`·`promoted.json`(참가여부·사유·대화 — 원본은 이 PC, `BACKUP_DIR`을 켜면 구글 드라이브에 사본, `docs/decision_log.md` 8절).
 3. **이 클라우드 환경의 제약** — 나라장터 API·g2b.go.kr·api.telegram.org는 막혀 있음. 실제 호출 확인은
    GitHub Actions 수동 실행(`workflow_dispatch`)이나 사용자 PC 웹앱으로 해야 함.
 4. **작업 방식** — 답변은 항상 한국어. 사용자가 명시적으로 원할 때만 PR 생성, 지정된 브랜치에서 작업 후 PR → main 병합(사용자가 병합).

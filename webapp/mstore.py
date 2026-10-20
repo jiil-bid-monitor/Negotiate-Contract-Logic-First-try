@@ -4,6 +4,10 @@
 공고번호(차수 없이)로 묶는다 — 정정공고로 차수가 올라도 판단·대화가 그대로 이어진다.
 파일 두 개(`data/participation.json`, `data/promoted.json`)에 둔다. 예전 화면의 sqlite 기록(`data/webapp.sqlite3`의
 notice_state·decisions·comments)이 있으면 **처음 한 번만** 옮겨 온다(sqlite 파일은 지우지 않음).
+
+백업(2026-10-20, 팀원 레포 10/19 이식): `backup_dir`(환경변수 `BACKUP_DIR` — 구글 드라이브 동기화 폴더)이 있으면 저장할 때마다
+두 파일을 그 폴더에 복사하고(날짜별 사본 30일), 판단 기록 표 `판단기록.csv`도 함께 쓴다. 이 PC에 파일이 없으면 백업에서
+되살린다. 텔레그램 보고에 나간 공고는 `merge_report`로 판단 기록에 '미판단'으로 합친다(`webapp/reportsync.py`).
 """
 
 from __future__ import annotations
@@ -14,6 +18,10 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+from nego import report_log
+
+from .backup import backup_content, restore_if_missing
 
 STATUSES = ["검토중", "참가", "보류", "불참"]
 
@@ -40,11 +48,16 @@ def _snapshot(p: dict[str, Any]) -> dict[str, Any]:
 
 
 class TeamStore:
-    def __init__(self, folder: Path, legacy_db: Path | None = None, titles: Callable[[], dict[str, str]] | None = None):
+    def __init__(self, folder: Path, legacy_db: Path | None = None, titles: Callable[[], dict[str, str]] | None = None,
+                 backup_dir: Path | None = None):
         folder.mkdir(parents=True, exist_ok=True)
         self.part_path = folder / "participation.json"
         self.promo_path = folder / "promoted.json"
+        self.backup_dir = backup_dir
         self._lock = threading.Lock()
+        # 새 PC에 설치했거나 data가 지워졌으면 백업에서 되살린다 (이 PC에 파일이 있으면 건드리지 않는다)
+        restore_if_missing(self.part_path, backup_dir)
+        restore_if_missing(self.promo_path, backup_dir)
         self.participation: dict[str, dict[str, Any]] = self._read(self.part_path)
         self.promoted: dict[str, dict[str, Any]] = self._read(self.promo_path)
         if not self.part_path.exists() and legacy_db is not None and legacy_db.exists():
@@ -59,8 +72,34 @@ class TeamStore:
             return {}
 
     def _save(self) -> None:
-        self.part_path.write_text(json.dumps(self.participation, ensure_ascii=False, indent=1), encoding="utf-8")
-        self.promo_path.write_text(json.dumps(self.promoted, ensure_ascii=False, indent=1), encoding="utf-8")
+        part = json.dumps(self.participation, ensure_ascii=False, indent=1)
+        promo = json.dumps(self.promoted, ensure_ascii=False, indent=1)
+        self.part_path.write_text(part, encoding="utf-8")
+        self.promo_path.write_text(promo, encoding="utf-8")
+        self._backup(part, promo)
+
+    def _backup(self, part: str, promo: str) -> None:
+        if self.backup_dir is None:
+            return
+        now = datetime.now(timezone.utc)
+        backup_content(self.part_path.name, part, self.backup_dir, now)
+        backup_content(self.promo_path.name, promo, self.backup_dir, now)
+        # 팀원이 구글 드라이브에서 표로 보는 판단 기록 — 화면 'CSV 내려받기'와 같은 표 (보기용이라 날짜별 사본은 두지 않는다)
+        backup_content("판단기록.csv", report_log.decisions_csv(self.participation, now), self.backup_dir, now, daily=False)
+
+    def backup_now(self) -> None:
+        """지금 기록을 백업한다 — 서버가 뜰 때(판단을 새로 누르지 않아도 백업이 최신이 되게)."""
+        with self._lock:
+            self._backup(json.dumps(self.participation, ensure_ascii=False, indent=1),
+                         json.dumps(self.promoted, ensure_ascii=False, indent=1))
+
+    def merge_report(self, entry: dict[str, Any]) -> int:
+        """보고 기록 하나를 판단 기록에 합친다 (`report_log.merge`). 새로 생긴 공고 수를 돌려준다."""
+        with self._lock:
+            before = len(self.participation)
+            if report_log.merge(self.participation, entry, _now()):
+                self._save()
+            return len(self.participation) - before
 
     def _migrate(self, db: Path, titles: dict[str, str]) -> None:
         """예전 화면 기록(공고번호-차수 키) → 공고번호 키. 같은 공고의 여러 차수는 마지막 것으로."""

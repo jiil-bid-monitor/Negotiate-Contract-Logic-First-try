@@ -4,6 +4,20 @@
 
 **새 계정·새 세션에서 이어받을 때는 `docs/HANDOFF.md`부터 읽을 것** (2026-10-16 계정 이전용 인수인계 — 현재 상태·준비할 것·다음 할 일 요약).
 
+## 2026-10-20 — 팀원 레포 10/19 작업 이식 A묶음 (브랜치 `claude/port-team-1019-ops`, 사용자 요청)
+
+팀원 레포(`iamhiki/narajangter-bid-monitor`, TS)에서 10/19에 한 작업 중 운영 기능 셋을 파이썬으로 옮김. **해외 개최는 옮기지 않음**
+(이 레포의 10/20 "한국관은 해외 행사 표시가 함께 있을 때만" 결정 유지 — 사용자 지시). 수집·판정 쪽(B묶음: 제외 공고 '세부품명 미달',
+공고문 세부품명으로 용역 공고 찾기, 키워드 제목만·참가자격 절 끝까지 등)은 다음 브랜치에서.
+- **평일만 매일 보고**: cron `0 0 * * 1-5`. 3일치 조회 + 보낸 공고 기록이라 월요일 보고에 금~일 게시분이 들어감.
+- **보고된 공고 → 판단 기록 '미판단'·'놓침'**: `python -m nego --report-log daily|weekly`가 텔레그램 발송 뒤 `output/report-log/`에
+  남기고(`nego/report_log.py`, 공개된 공고 정보만), 워크플로 "보낸 공고 기록 저장"이 bot-state `reports/`에 올림 — **예전 `sent_bids.json`
+  덮어쓰기(-f)를 받아서 더하기로 바꿈**(매일·주간이 서로 안 지우게, 밀리면 rebase 3회). 웹앱이 5분마다 받아 `TeamStore.merge_report`
+  (`webapp/reportsync.py`). 판단 기록 탭·CSV에 미판단·놓침·보고일. 키워드 집계는 실제 판단만.
+- **판단 기록 구글 드라이브 백업**: `.env` `BACKUP_DIR` → 저장할 때마다 participation·promoted 사본(날짜별 30일) + `판단기록.csv`,
+  이 PC에 파일이 없으면 백업에서 되살림(`webapp/backup.py`). 팀원 레포는 구글 시트에도 매일 보고를 쌓지만 이 레포엔 시트가 없어 CSV로 대신.
+- 자세한 규칙 `docs/decision_log.md` 8절. 테스트 `tests/test_report_log.py`. 실측 미확인: Actions 첫 실행(bot-state reports/), 서버 PC 드라이브 백업.
+
 ## 2026-10-19 — 팀원 수집기와 통합 (브랜치 `claude/collector-integration`, 사용자 요청)
 
 N(이 레포)·M(팀원 `iamhiki/narajangter-bid-monitor`, TS) 비교 → 16개 항목 결정(10/16, 10/19 8·10번 변경). **팀원 레포는 수정 금지**

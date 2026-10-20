@@ -17,6 +17,7 @@ import logging
 import mimetypes
 import os
 import secrets
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,6 +31,7 @@ from nego.http_client import ApiError
 from . import mview
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .mstore import TeamStore
+from .reportsync import ReportSync
 from .store import DECISION_REASONS, DECISION_SUMMARY_MIN, STATUSES, Store
 from .sync import BORDER, HIGH, PastIndex
 
@@ -50,14 +52,15 @@ def static_version() -> str:
 
 class App:
     def __init__(self, store: Store, past: PastIndex, collector: Collector, token: str | None,
-                 team: TeamStore | None = None):
+                 team: TeamStore | None = None, backup_dir: Path | None = None):
         self.store = store
         self.past = past
         self.collector = collector
         self.token = token
         self.static_version = static_version()
         # 참가여부·올리기 — 팀원 화면 모양(2026-10-19 화면 이식). 예전 sqlite 기록은 처음 한 번 옮겨 온다
-        self.team = team or TeamStore(store.path.parent, legacy_db=store.path, titles=self._titles)
+        # backup_dir: 판단 기록을 한 부 더 둘 구글 드라이브 동기화 폴더 (webapp/backup.py, 환경변수 BACKUP_DIR)
+        self.team = team or TeamStore(store.path.parent, legacy_db=store.path, titles=self._titles, backup_dir=backup_dir)
         self._run_cache: tuple[int | None, dict[str, Any] | None] = (None, None)
         self._held_raw: dict[str, Any] | None = None
 
@@ -347,10 +350,11 @@ def decisions_csv(rows: list[dict[str, Any]]) -> str:
     return buf.getvalue()
 
 
-def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, collector: Collector | None = None) -> App:
+def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, collector: Collector | None = None,
+              backup_dir: Path | None = None) -> App:
     store = Store(db_path)
     past = past or PastIndex.load()
-    return App(store, past, collector or Collector(store, past), token)
+    return App(store, past, collector or Collector(store, past), token, backup_dir=backup_dir)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -367,7 +371,17 @@ def main(argv: list[str] | None = None) -> int:
         # 사내망에 열 때는 토큰 없이 열지 않는다 — 누구나 수집(API 호출)을 돌리지 못하게.
         token = secrets.token_urlsafe(9)
 
-    app = build_app(Path(args.db), token)
+    # 판단 기록 백업 폴더 — 구글 드라이브 데스크톱이 동기화하는 폴더 (webapp/backup.py). 비어 있으면 백업하지 않는다
+    backup_dir = Path(os.environ["BACKUP_DIR"].strip()) if os.environ.get("BACKUP_DIR", "").strip() else None
+    app = build_app(Path(args.db), token, backup_dir=backup_dir)
+    if backup_dir is not None:
+        app.team.backup_now()
+        # 로그인하자마자 서버가 뜨면 구글 드라이브가 아직 연결되기 전일 수 있어 2분 뒤 한 번 더
+        timer = threading.Timer(120, app.team.backup_now)
+        timer.daemon = True
+        timer.start()
+    # 텔레그램 보고에 나간 공고 → 판단 기록 '미판단' (bot-state 브랜치의 보고 기록을 몇 분마다 받아 합친다)
+    ReportSync(app.team.merge_report).start()
     if app.past.error:
         logging.warning(app.past.error)
     else:
@@ -380,6 +394,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n  입찰 공고 싱크로율 탐색기: http://{shown}:{args.port}/" + (f"?t={token}" if token else ""))
     if not local_only:
         print("  (0.0.0.0이면 이 PC의 사내 IP로 바꿔 팀원에게 공유. 토큰이 든 주소는 사내에서만 공유하세요)")
+    if backup_dir is not None:
+        print(f"  판단 기록 백업: {backup_dir}" + ("" if backup_dir.exists() else "  ⚠ 폴더가 없습니다 — 구글 드라이브가 켜져 있는지 확인하세요"))
+    else:
+        print("  판단 기록 백업: 꺼져 있음 (환경변수 BACKUP_DIR에 구글 드라이브 폴더를 적으면 켜집니다)")
     print("  종료: Ctrl+C\n")
     try:
         httpd.serve_forever()

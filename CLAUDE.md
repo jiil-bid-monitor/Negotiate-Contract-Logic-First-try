@@ -9,7 +9,7 @@
 N(이 레포)·M(팀원 `iamhiki/narajangter-bid-monitor`, TS) 비교 → 16개 항목 결정(10/16, 10/19 8·10번 변경). **팀원 레포는 수정 금지**
 (사용자 지시 — 읽기만). 결정 전문은 팀원 레포 `claude/collector-integration-plan` 브랜치 `INTEGRATION_HANDOFF.md`(10/16 작성, 이후 그 레포엔 손대지 않음)와
 공유 문서 https://claude.ai/code/artifact/c641cab6-44be-460c-934a-b079939c80af. 여기엔 바뀐 규칙만:
-- **2 예산**: 추정가격 → 배정예산 그대로(÷1.1 없음). 0원·빈 값 = 금액 모름(최소예산 통과). `Notice.budget_kind`, 표기 "(배정)"/"금액 모름".
+- **2 예산**: 추정가격 → 배정예산 그대로(÷1.1 없음). 0원·빈 값 = 금액 모름(최소예산 통과). `Notice.budget_kind`, 표기 "(배정)"/"금액 모름". (10/20 제보) 1,000원 미만(배정금액 1원 같은 자리 표시 값)도 금액 모름(`models.PLACEHOLDER_AMOUNT`, RESULT_FORMAT 55).
 - **3 면제**: "공사 설계 용역" + 공사 기본·실시·기본 및 실시설계 용역 변형(`screen._canonical_title`) — 관심 키워드·예산 예외 둘 다.
 - **4 마감**: 기준 마감 = 자격등록·입찰·의견등록 중 **가장 이른 것**(셋 다 없으면 첨부 마감), 공동수급협정 마감은 기준에서 뺌(팝업·툴팁만).
   지나면 `pipeline.drop_expired`(첨부 읽은 뒤). "마감 지난 N건 제외" 문구 삭제. HTML 마감 칸 title 툴팁 = 전체 마감.

@@ -43,6 +43,15 @@ class TestBudget(unittest.TestCase):
         self.assertIsNone(n.budget_kind)
         self.assertTrue(screen.screen(n, _screen_config()).matched, "금액 모름은 최소예산에서 빼지 않는다")
 
+    def test_placeholder_one_won_is_unknown(self):
+        """2026-10-20 제보 — 배정금액 1원은 자리 표시 값이라 금액 모름(최소예산으로 빼지 않음)."""
+        for est, asg in (("", "1"), ("1", "1"), ("0", "999")):
+            n = _notice(presmptPrce=est, asignBdgtAmt=asg)
+            self.assertIsNone(n.budget)
+            self.assertTrue(screen.screen(n, _screen_config()).matched)
+        n = _notice(presmptPrce="1", asignBdgtAmt="150000000")
+        self.assertEqual((n.budget, n.budget_kind), (150000000, "배정예산"))
+
 
 class TestDesignServiceVariants(unittest.TestCase):
     """결정 3번 — '공사 설계 용역'의 기본·실시·기본 및 실시설계 변형도 관심 키워드·예산 예외."""

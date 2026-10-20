@@ -164,6 +164,18 @@ class TestOverseas(unittest.TestCase):
             with self.subTest(title=title):
                 self.assertFalse(self._excluded(title))
 
+    def test_korea_pavilion_needs_event_sign(self):
+        """2026-10-20 — 국내 지명·전시실 '한국관'은 빼지 않고 의심 표시만(옥동 한국관~송현동 교통 개선공사가 해외로 빠졌음)."""
+        self.assertFalse(self._excluded("옥동 한국관~송현동 교통사고 잦은곳 개선공사"))
+        r = screen.screen(_notice(title="울산박물관 한국관 전시물 제작 설치"), _screen_config())
+        self.assertTrue(r.matched)
+        self.assertEqual(r.overseas_suspect, "제목에 '한국관' (해외 행사 표시 없음)")
+        self.assertFalse(self._excluded("2026년 울산 한국관 체험관 리모델링"))
+        for title in ("2027 UAE 두바이 의료기기전시회 한국관 전시디자인설치공사 입찰", "베트남 하노이 한국관 부스 조성",
+                      "Interior Expo 한국관 조성"):
+            with self.subTest(title=title):
+                self.assertTrue(self._excluded(title))
+
     def test_mongolia_flag(self):
         r = screen.screen(_notice(title="울란바토르 박람회 한국관 조성"), _screen_config())
         self.assertTrue(r.matched)

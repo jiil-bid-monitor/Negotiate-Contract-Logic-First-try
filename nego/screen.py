@@ -13,8 +13,9 @@
 
 **해외 개최 판별** (2026-10-19 통합 결정 8번 — 팀원 수집기 규칙을 그대로 옮김, 목록은 `config/overseas.json`).
 공고명에 아래 중 하나가 있으면 국내 공고가 아니라 해외 전시회 국가관·부스 공고로 보고 뺀다.
-  ① '한국관'(통합한국관 포함 — 한국관광·한국관리 등 다른 낱말 제외). 팀원 60일치 실측: 해외 한국관 18건 모두 이것으로
-     빠지고 같이 빠진 국내 공고는 '옥동 한국관~송현동' 교통 개선공사뿐. 국내 '한국관' 전시실 공고는 화면에서 되살린다.
+  ① '한국관'(통합한국관 포함 — 한국관광·한국관리 등 다른 낱말 제외) + 해외 행사 표시(연도·전시회/박람회/엑스포/페어·
+     영문 행사명·해외 지명·국가 약자). 팀원 규칙은 '한국관'만으로 뺐는데 국내 '옥동 한국관~송현동' 교통 개선공사가 같이 빠져서
+     (2026-10-20 사용자 결정) 표시가 없는 '한국관'은 빼지 않고 "해외 개최 의심" 표시만 한다.
   ② 전시회·박람회·엑스포 + 단체관  ③ 해외 지명 + 단체관  ④ 영문 국가 약자(USA·UAE 등, 대문자 단어)
 단체관람·단체관광은 단체관이 아니다. 몽골(도시명 포함)이면 빼지 않고 플래그(🌐)만 남긴다(키워드 불일치 제외도 건너뜀).
 위에 안 걸려도 공고명에 해외 지명이 있으면 "해외 개최 의심" 표시만 붙인다(`overseas_suspect`).
@@ -187,7 +188,7 @@ def _overseas_exhibition_evidence(notice: Notice, rules: OverseasRules | None = 
     """공고명으로 해외 개최(국가관·부스) 공고인지 판별하고, 맞으면 근거 문구를 돌려준다. 아니면 None."""
     rules = rules or load_overseas_rules()
     title = notice.title or ""
-    if _KOREA_PAVILION_RE.search(title):
+    if _KOREA_PAVILION_RE.search(title) and _overseas_event_sign(title, rules):
         return "제목에 '한국관'"
     if _EXPO_GROUP_RE.search(title):
         return "전시회·박람회 단체관"
@@ -201,9 +202,28 @@ def _overseas_exhibition_evidence(notice: Notice, rules: OverseasRules | None = 
     return None
 
 
+# 해외 박람회 국가관 공고명에 함께 오는 표시 — "CES 2027 통합한국관", "2027 UAE 두바이 의료기기전시회 한국관", "NANO TECH 2027 한국관".
+# 연도는 "2027 …"처럼 행사명에 붙은 것만("2026년 …"은 국내 공고에도 흔해서 안 봄), 영문은 대문자 두 글자 이상 단어.
+_EVENT_SIGN_RE = re.compile(
+    r"(?<![0-9])20\d{2}(?![0-9]|\s*년)|전시회|박람회|엑스포|페어|(?<![A-Za-z])[A-Z]{2,}(?![a-z])"
+)
+
+
+def _overseas_event_sign(title: str, rules: OverseasRules) -> bool:
+    """'한국관'이 해외 박람회 국가관인지 — 연도·전시회류·영문 행사명·해외 지명 중 하나가 함께 있어야 한다."""
+    skip = set(rules.flag_skip_places)
+    return bool(
+        _EVENT_SIGN_RE.search(title)
+        or re.search(r"(?<![A-Za-z])(?:expo|fair|show)(?![A-Za-z])", title, re.IGNORECASE)
+        or _find_place(title, tuple(p for p in rules.places if p not in skip))
+    )
+
+
 def _overseas_suspect(notice: Notice, rules: OverseasRules | None = None) -> str | None:
-    """제외 규칙엔 안 걸린 공고명의 해외 지명 — 표시만 한다."""
+    """제외 규칙엔 안 걸린 공고명의 해외 지명 — 표시만 한다. 해외 행사 표시 없는 '한국관'도 여기(2026-10-20)."""
     rules = rules or load_overseas_rules()
+    if _KOREA_PAVILION_RE.search(notice.title or ""):
+        return "제목에 '한국관' (해외 행사 표시 없음)"
     skip = set(rules.flag_skip_places)
     place = _find_place(notice.title or "", tuple(p for p in rules.places if p not in skip))
     return f"제목에 해외 지명 '{place}'" if place else None

@@ -1,6 +1,7 @@
 # 판단 기록(참가·보류·불참) 코드 정리
 
 2026-10-19 기준, 브랜치 `claude/collector-integration`. 담당자 화면을 팀원 화면(ui.html)으로 바꾸면서 저장 방식도 팀원 화면과 같게 바뀌었다.
+2026-10-20: 팀원 레포 10/19 작업을 옮겨 **판단 기록 백업(구글 드라이브)**과 **텔레그램 보고에 나간 공고 → '미판단'·'놓침'**을 더했다 (8절).
 
 ## 1. 한눈에
 
@@ -11,10 +12,13 @@
 webapp/server.py  →  webapp/mstore.py  TeamStore.update()
         │  공고번호 키로 한 건씩 덮어씀 (+ 바로 앞 상태 prev 하나)
         ▼
-data/participation.json   (서버 PC에만 있음 — git에 안 올라감)
+data/participation.json   (서버 PC — git에 안 올라감)  ──저장할 때마다──▶  BACKUP_DIR (구글 드라이브 동기화 폴더)
+        ▲                                                         participation.json·promoted.json·판단기록.csv·날짜별/
+        │  5분마다 merge_report (webapp/reportsync.py)
+        │  ◀── bot-state 브랜치 reports/*.json ◀── 텔레그램 보고(Actions, --report-log)
         │  GET /api/participation  (화면이 10초마다 다시 받음)
         ▼
-[카드: "비슷한 공고 지난 판단"]   [판단 기록 탭: 목록·검색·CSV·집계]
+[카드: "비슷한 공고 지난 판단"]   [판단 기록 탭: 미판단·놓침·참가·보류·불참, 검색·CSV·집계]
 ```
 
 - **저장 단위**: 공고번호(차수 없이). 정정공고로 차수가 올라도 판단·대화가 그대로 이어진다.
@@ -28,7 +32,11 @@ data/participation.json   (서버 PC에만 있음 — git에 안 올라감)
 | `webapp/mstore.py` | 저장. `TeamStore.update()`(참가여부·사유·담당·대화), `TeamStore.promote()`(제외 공고 올리기), 예전 sqlite 기록을 처음 한 번 옮기기(`_migrate`) |
 | `webapp/server.py` | `GET /api/participation` → `{participation, statuses}`, `POST /api/participation` → `team.update(data)`, `POST /api/promote` |
 | `webapp/static/index.html` | 화면. 카드 참가여부 칸(`partBlock`·`decisionRow`), 비슷한 지난 판단(`similarDecisions`·`pastHint`), 판단 기록 탭(`renderLog`·`logAggHtml`·`downloadLogCsv`), 클릭 처리(`data-pstatus`·`data-rtag`·`data-pundo`…) |
+| `webapp/backup.py` | 판단 기록을 `BACKUP_DIR`에 복사(날짜별 사본 30일), 이 PC에 파일이 없으면 백업에서 되살리기 |
+| `nego/report_log.py` | 보고 기록 만들기·읽기·판단 기록에 합치기(`merge`), '미판단'·'놓침' 판정(`log_status`), `판단기록.csv`(`decisions_csv`) |
+| `webapp/reportsync.py` | bot-state의 보고 기록을 5분마다 받아 `TeamStore.merge_report` |
 | `tests/test_team_ui.py` | 저장 규칙 테스트 |
+| `tests/test_report_log.py` | 백업·보고 기록·미판단/놓침·CSV 테스트 |
 
 ## 3. 저장되는 모양 (`data/participation.json`)
 
@@ -50,6 +58,7 @@ data/participation.json   (서버 PC에만 있음 — git에 안 올라감)
     },
     "prev": { "status": "보류", "reason": "", "tags": [], "owner": "", … },  // 되돌리기용, 하나만
     "comments": [{ "by": "홍길동", "text": "공동수급 상대 찾는 중", "at": "…", "editedAt": "…" }],
+    "reports": [{ "date": "2026-10-20", "kind": "daily" }],  // 이 공고가 나간 텔레그램 보고 (8절) — 있으면 판단 전이어도 탭에 '미판단'
     "updatedAt": "2026-10-19T01:23:45.678Z"
   }
 }
@@ -82,10 +91,11 @@ data/participation.json   (서버 PC에만 있음 — git에 안 올라감)
 - **비슷한 공고 지난 판단**(`similarDecisions`): 공고명 낱말(두 글자 이상, "사업·용역·제작·설치" 같은 흔한 말 제외)이
   **2개 이상 겹치고 자카드 0.35 이상**, 또는 **수요기관이 같고 1개 이상 겹치면** 비슷한 것으로 보고 가장 많이 겹친 2건을 카드에 표시. **표시만 — 수집·판정은 안 바꿈.**
 - **다른 사람 판단 반영**: 10초마다 `GET /api/participation`. 입력 중인 칸·펼친 대화창은 건드리지 않는다(`refreshCards`).
-- **판단 기록 탭**(`renderLog`): 판단(참가·보류·불참)만 최근 순, 검색(공고명·번호·판단자·담당·사유)·상태 고르기, "목록에서 보기".
+- **판단 기록 탭**(`renderLog`·`logEntriesOf`): 판단(참가·보류·불참)과 **보고됐지만 판단 전인 공고**('미판단', 판단 없이 마감 지나면 '놓침' — 8절)를 최근 순,
+  검색(공고명·번호·판단자·담당·사유)·상태 고르기(미판단·놓침 포함), 보고일 표시, "목록에서 보기"(판단 전이면 "판단하러 가기").
   - **CSV 내려받기**(`downloadLogCsv`, 엑셀 한글용 BOM): 판단일시·판단·주된 사유·사유·판단자·담당·공고번호·공고명·구분·업무·수요기관·
-    사업금액·추천등급·낙찰방법·관심 키워드·등록 품목·싱크로율·마감·링크.
-  - **집계**(`logAggHtml`, 판단 **30건 이상**부터): 보류·불참 주된 사유별 건수 + **관심 키워드별 참가·보류·불참·참가율**
+    사업금액·추천등급·낙찰방법·관심 키워드·등록 품목·싱크로율·마감·링크·**보고일·보고(매일/주간)**. 구글 드라이브의 `판단기록.csv`와 같은 열.
+  - **집계**(`logAggHtml`, **실제 판단(참가·보류·불참) 30건 이상**부터 — 미판단·놓침은 세지 않음): 보류·불참 주된 사유별 건수 + **관심 키워드별 참가·보류·불참·참가율**
     (3건 이상이고 불참 70% 이상이면 "키워드 조정 검토" 표시). **자동으로 규칙을 바꾸지 않음** — CSV를 받아 키워드 변경안을 제안 → 사용자 승인 후 반영.
 
 ## 6. 예전 기록 옮기기와 남아 있는 예전 코드
@@ -99,6 +109,29 @@ data/participation.json   (서버 PC에만 있음 — git에 안 올라감)
 
 ## 7. 알아 둘 점
 
-- `data/participation.json`은 **서버 PC에만** 있다 — 집계하려면 판단 기록 탭에서 CSV를 내려받아 주면 된다.
+- `data/participation.json`의 원본은 **서버 PC**에 있다. `BACKUP_DIR`을 켜 두면 구글 드라이브에 사본과 `판단기록.csv`가 있어
+  PC가 고장 나도 남고, 드라이브에서 표로 볼 수 있다(8절). 백업을 켜지 않았으면 서버 PC에만 있다.
 - 판단을 바꾸면 사유가 지워진다(새 판단엔 새 사유). 앞 판단은 `prev` 하나만 남아, 판단이 어떻게 바뀌어 왔는지는 기록되지 않는다.
 - 이름 칸이 비어 있으면 저장하지 않는다("이름을 먼저 입력하세요").
+
+## 8. 판단 기록 백업 · 보고된 공고 '미판단' (2026-10-20, 팀원 레포 10/19 이식)
+
+**백업** (`webapp/backup.py`, `TeamStore._backup`)
+- 서버 환경변수 `BACKUP_DIR`에 구글 드라이브 데스크톱이 동기화하는 폴더를 적으면 켜진다(레포 루트 `.env`에 `BACKUP_DIR='G:/내 드라이브/입찰모니터_백업'` 등 — 띄어쓰기가 있으면 작은따옴표로). 비어 있으면 꺼짐.
+- 저장할 때마다 `participation.json`·`promoted.json`을 그 폴더에 복사하고, `날짜별/`에 하루 한 개씩 30일치를 남긴다(드라이브 버전 기록 30일과 이중).
+- `판단기록.csv` — 판단 기록 탭 CSV와 같은 표(미판단·놓침 포함). 드라이브에서 누르면 표로 보인다. 보기용이라 날짜별 사본은 없음.
+- 서버가 뜰 때와 2분 뒤(로그인 직후 드라이브가 늦게 붙는 경우) 한 번씩 백업. 백업이 실패해도 저장은 그대로 되고 경고만 남긴다.
+- 서버가 뜰 때 이 PC에 `participation.json`·`promoted.json`이 없으면 백업에서 가져온다(새 PC·고장 후 재설치). 있으면 건드리지 않는다.
+- 백업에는 담당자 이름·사유·대화가 있다 — 드라이브 폴더는 팀원에게 '뷰어'로만 공유.
+
+**보고된 공고 → 판단 기록** (`nego/report_log.py`, `webapp/reportsync.py`)
+1. 텔레그램 보고(Actions)가 `--report-log daily|weekly`로 나간 공고 목록을 `output/report-log/{보고일}-{종류}.json`에 남긴다
+   (공고번호·공고명·meta — 공개된 공고 정보만. 판단·담당자 이름은 없다. 저장소가 공개라서).
+2. 워크플로 "보낸 공고 기록 저장"이 bot-state 브랜치의 `reports/`에 올린다(`sent_bids.json`과 같은 브랜치, 예전 덮어쓰기 대신 받아서 더하기).
+3. 웹앱 서버가 15초 뒤 한 번, 그 뒤 5분마다 `git fetch origin bot-state`(원격 기록만 갱신, 작업 폴더는 안 건드림)로 받아 `merge_report`.
+   - 처음 보는 공고 → `status: null` + `reports` + 보고 때 meta → 탭에 **미판단**
+   - 이미 있는 공고 → 판단·담당·대화·판단 때 meta는 그대로, `reports`에 보고일만 더함 (매일·주간에 같이 나와도 한 줄)
+   - 같은 보고를 여러 번 받아도 결과가 같다
+4. 판단 전인데 기준 마감(meta.deadline)이 지나면 **놓침**(시각 없는 마감은 그날 23:59까지). 서버 `log_status`와 화면 `logStatusOf`가 같은 규칙.
+- PC가 꺼져 있던 동안의 보고는 켜진 뒤 한꺼번에 들어온다. 꺼져 있던 사이 마감된 공고는 들어오자마자 '놓침'.
+- 첫 보고 전(bot-state에 reports/가 없을 때)에는 서버 로그에 "보고 기록을 받아오지 못했습니다"가 한 번 남는다 — 정상.

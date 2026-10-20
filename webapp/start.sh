@@ -24,6 +24,7 @@ if [ ! -f "$ENV_FILE" ]; then
     echo "PORT='8765'"
     echo "APP_TOKEN='jiil2026'"
     echo "# AI 판단을 쓸 때만: ANTHROPIC_API_KEY='...'"
+    echo "# 판단 기록 백업(구글 드라이브 동기화 폴더, docs/decision_log.md 8절): BACKUP_DIR='G:/내 드라이브/입찰모니터_백업'"
   } > "$ENV_FILE"
   echo "설정을 $ENV_FILE 에 저장했습니다 (서비스키를 바꾸려면 이 파일을 메모장으로 고치면 됨)."
 fi

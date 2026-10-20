@@ -51,7 +51,7 @@
 | F-23 | 웹앱 | 사내 웹앱(수집 버튼·카드·필터 메뉴·정렬·구역 이동·검색) | `webapp/` |
 | F-24 | 웹앱 | 자격 팝업(필수 보유 / N개 중 1개 / 조합) | `webapp/qualview.py`, `static/index.html` |
 | F-25 | 웹앱 | 싱크로율(과거 실적 유사도) | `webapp/sync.py` (+ 비공개 `jiil-past-contracts`) |
-| F-26 | 웹앱 | 참가여부·담당·대화·사유 기록, 판단 기록 집계·CSV | `webapp/store.py`, `server.py` |
+| F-26 | 웹앱 | 참가여부·담당·대화·사유 기록, 판단 기록 집계·CSV, 보고된 공고 '미판단'·'놓침', 구글 드라이브 백업 | `webapp/mstore.py`·`backup.py`·`reportsync.py`, `nego/report_log.py` |
 | F-27 | 웹앱 | 제외 공고 → "실제 공고로 올리기" | `webapp/mstore.py`·`mview.py`, `static/index.html` |
 | F-28 | 웹앱 | 옛 화면·옛 결과 경고(RESULT_FORMAT·static 지문) | `collect.RESULT_FORMAT`, `server.static_version` |
 | F-29 | 투찰 | 투찰 계산기(공고번호로 기초금액·하한율·A값 불러오기, 예비가격 15개 생성) | `nego/bidcalc.py`, `static/bidcalc*.js` |
@@ -178,7 +178,8 @@
 - 첨부에서 "사업/과업(내용의) 범위" 절의 항목을 그대로 뽑음(없으면 "주요 과업·과업 내용"). 목차·위치·안내문 목록은 건너뜀. 과거 문서 216건 중 151건.
 
 ### F-20 텔레그램 보고 — `nego/telegram.py`, `docs/telegram.md`
-- 매일 09:00 KST 입찰(어제분), 월 09:10 KST 협상·규격가격·사전규격(지난 7일).
+- 평일 09:00 KST 입찰(어제분, 월요일은 금~일분), 월 09:10 KST 협상·규격가격·사전규격(지난 7일).
+- 보고에 나간 공고 목록을 bot-state 브랜치 `reports/`에 남김(`--report-log`) → 웹앱 판단 기록 탭에 '미판단' (`docs/decision_log.md` 8절).
 - 공고마다 2줄: 공고명 링크 / "3.2억 · D-5 · 자격 충족|미달(공동수급 가능|불허|정보 없음)". 마감 10일 이내는 "🔴 D-N" 굵게.
 - 마감 임박순, 본공고·사전규격 구역 분리, 후보 있으면 HTML 리포트 첨부, 0건이어도 "새 공고 없음".
 - 발송 실패는 종료코드에 반영 안 함(재시도가 중복 발송하지 않게).

@@ -3,7 +3,8 @@ name: 나라장터 공고 수집
 # 실행 방법
 #  · 수동: GitHub 저장소 → Actions 탭 → 이 워크플로 선택 → "Run workflow"
 #  · 자동 스케줄 (2026-10-12 사용자 결정: 입찰은 매일, 나머지는 매주 텔레그램으로):
-#      매일 09:00 KST — 어제 게시된 "입찰" → 텔레그램   (2026-10-14 사용자 요청으로 08:00 → 09:00)
+#      평일 09:00 KST — 어제 게시된 "입찰" → 텔레그램   (2026-10-14 사용자 요청으로 08:00 → 09:00,
+#        2026-10-20 팀원 레포 10/19 결정 이식: 평일만 — 월요일은 3일치 조회라 금~일 게시분이 함께 들어간다)
 #      매주 월 09:10 KST — 지난 7일 "협상·규격가격동시입찰" + 사전규격 → 텔레그램
 #    ※ GitHub 예약 실행은 붐비면 몇 시간씩 늦게 시작한다(실측 10/13 08:00 예약 → 12:21 시작, 10/14 → 10:35 시작).
 #    조회 기간을 날짜 단위로 딱 잘라(--complete-days) 주기끼리 겹치지 않으므로
@@ -21,7 +22,7 @@ name: 나라장터 공고 수집
 #   TELEGRAM_DEV_CHAT_ID (선택 — 개발자 알림 방. 없으면 개발자 알림만 건너뜀)
 on:
   schedule:
-    - cron: "0 0 * * *"     # 00:00 UTC = 09:00 KST — 매일, 입찰
+    - cron: "0 0 * * 1-5"   # 00:00 UTC = 09:00 KST — 평일, 입찰
     - cron: "10 0 * * 1"    # 월 00:10 UTC = 월 09:10 KST — 주간, 협상·규격가격동시입찰·사전규격
   workflow_dispatch:
     inputs:
@@ -153,8 +154,13 @@ jobs:
           SENT_STATE="false"; EMAIL="false"
           if [ "$TELEGRAM" = "true" ] && [ "$CATEGORIES" = "입찰" ]; then SENT_STATE="true"; fi
           if [ "$TELEGRAM" = "true" ] && [ "$PRESPEC" = "true" ]; then EMAIL="true"; fi
+          # 보고 기록 — 텔레그램으로 나간 공고를 사내 웹앱 판단 기록에 '미판단'으로 쌓는다 (nego/report_log.py, 2026-10-20)
+          REPORT_LOG=""
+          if [ "$TELEGRAM" = "true" ] && [ "$CATEGORIES" = "입찰" ]; then REPORT_LOG="daily"; fi
+          if [ "$TELEGRAM" = "true" ] && [ "$PRESPEC" = "true" ]; then REPORT_LOG="weekly"; fi
           {
             echo "sent_state=$SENT_STATE"
+            echo "report_log=$REPORT_LOG"
             echo "email=$EMAIL"
             echo "categories=$CATEGORIES"
             echo "complete_days=$COMPLETE_DAYS"
@@ -166,7 +172,7 @@ jobs:
             echo "attempt=$ATTEMPT"
           } >> "$GITHUB_OUTPUT"
           if [ -n "$COMPLETE_DAYS" ]; then PERIOD="오늘 뺀 직전 ${COMPLETE_DAYS}일"; else PERIOD="최근 ${DAYS}일"; fi
-          echo "유형=${CATEGORIES:-전체} / 기간=${PERIOD} / 사전규격=$PRESPEC / 텔레그램=$TELEGRAM / 보낸공고기록=$SENT_STATE / 메일=$EMAIL / 시도 ${ATTEMPT}회차"
+          echo "유형=${CATEGORIES:-전체} / 기간=${PERIOD} / 사전규격=$PRESPEC / 텔레그램=$TELEGRAM / 보낸공고기록=$SENT_STATE / 보고기록=${REPORT_LOG:-없음} / 메일=$EMAIL / 시도 ${ATTEMPT}회차"
 
       # 필드명이 비어 보이거나(예: 예가방법에 해당하는 실제 필드명을 모를 때)
       # 원본 응답을 직접 봐야 할 때 쓰는 1회성 진단. 이 스텝을 타면 아래
@@ -228,6 +234,7 @@ jobs:
           SMTP_FROM: ${{ secrets.SMTP_FROM }}
           JIIL_REPO: data/jiil
           SENT_STATE: ${{ steps.mode.outputs.sent_state }}
+          REPORT_LOG: ${{ steps.mode.outputs.report_log }}
           EMAIL: ${{ steps.mode.outputs.email }}
           CATEGORIES: ${{ steps.mode.outputs.categories }}
           COMPLETE_DAYS: ${{ steps.mode.outputs.complete_days }}
@@ -247,24 +254,49 @@ jobs:
           [ "$NO_SUPABASE" = "true" ] && ARGS+=(--no-supabase)
           [ "$LLM" = "true" ] && ARGS+=(--llm-similarity)
           [ "$SENT_STATE" = "true" ] && ARGS+=(--sent-state state/sent_bids.json)
+          [ -n "$REPORT_LOG" ] && ARGS+=(--report-log "$REPORT_LOG")
           [ "$EMAIL" = "true" ] && ARGS+=(--email)
           # 개발자 알림에 마지막 오류 줄을 붙이려고 로그를 파일로도 남긴다(output/ 밖 — 아티팩트에 안 올림)
           set -o pipefail
           python -m nego "${ARGS[@]}" 2>&1 | tee collect.log
 
-      # 텔레그램 발송 뒤 기록이 바뀌었으면 bot-state 브랜치에 커밋(코드 브랜치와 섞이지 않게 기록 파일 하나만 둔 브랜치)
+      # 텔레그램 발송 뒤 기록을 상태 전용 브랜치 bot-state에 커밋 (코드 브랜치와 섞이지 않게).
+      #  · sent_bids.json — 매일 입찰 보고의 보낸 공고 기록 (중복 방지)
+      #  · reports/{보고일}-{daily|weekly}.json — 보고에 나간 공고 목록. 사내 웹앱이 받아 판단 기록에 '미판단'으로 쌓는다
+      #    (2026-10-20, webapp/reportsync.py). 저장소가 공개라 공개된 공고 정보만 — 판단·담당자 이름은 없다
+      # 예전엔 sent_bids.json 하나를 덮어썼는데(-f), 보고 기록이 쌓이도록 기존 브랜치를 받아 바뀐 파일만 더한다.
+      # 매일·주간이 겹쳐 돌 수 있어 올리다 밀리면 받아서 다시 올린다.
       - name: 보낸 공고 기록 저장
-        if: steps.mode.outputs.sent_state == 'true' && steps.collect.outcome == 'success'
+        if: (steps.mode.outputs.sent_state == 'true' || steps.mode.outputs.report_log != '') && steps.collect.outcome == 'success'
+        env:
+          SENT_STATE: ${{ steps.mode.outputs.sent_state }}
+          REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
         run: |
-          [ -f state/sent_bids.json ] || exit 0
+          shopt -s nullglob
+          REPORTS=(output/report-log/*.json)
+          if [ "$SENT_STATE" != "true" ] && [ ${#REPORTS[@]} -eq 0 ]; then echo "올릴 기록 없음 (보내지 않았거나 0건)"; exit 0; fi
           TMP=$(mktemp -d)
-          cp state/sent_bids.json "$TMP/sent_bids.json"
+          if git ls-remote --exit-code --heads "$REMOTE" bot-state >/dev/null 2>&1; then
+            git clone -q --depth 1 --branch bot-state "$REMOTE" "$TMP"
+          else
+            git init -q "$TMP" && git -C "$TMP" checkout -q --orphan bot-state && git -C "$TMP" remote add origin "$REMOTE"
+          fi
+          if [ "$SENT_STATE" = "true" ] && [ -f state/sent_bids.json ]; then cp state/sent_bids.json "$TMP/sent_bids.json"; fi
+          if [ ${#REPORTS[@]} -gt 0 ]; then mkdir -p "$TMP/reports" && cp "${REPORTS[@]}" "$TMP/reports/"; fi
           cd "$TMP"
-          git init -q && git checkout -q -b bot-state
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add sent_bids.json && git commit -q -m "보낸 공고 기록 갱신 (run ${{ github.run_id }})"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" bot-state
+          git add -A
+          if git diff --cached --quiet; then echo "바뀐 기록 없음"; exit 0; fi
+          git commit -q -m "보낸 공고·보고 기록 갱신 (run ${{ github.run_id }})"
+          for attempt in 1 2 3; do
+            if git push -q origin HEAD:bot-state; then echo "bot-state에 기록을 올렸습니다"; exit 0; fi
+            echo "올리다 밀렸습니다 — 받아서 다시 올립니다 (${attempt}/3)"
+            sleep $((attempt * 5))
+            git pull -q --rebase origin bot-state
+          done
+          echo "::error::bot-state에 기록을 올리지 못했습니다"
+          exit 1
 
       # 수집 원문(data/)은 올리지 않는다 — 담당자 연락처가 섞일 수 있다.
       # 리포트(output/)만 아티팩트로 남긴다.

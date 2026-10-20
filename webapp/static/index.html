@@ -572,6 +572,9 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 .badge.pstat.hi { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
 .badge.pstat.warn { background: var(--warn-tint); color: var(--warn); border-color: var(--warn); }
 .badge.pstat.muted { background: var(--line); color: var(--muted); border-color: var(--line); }
+/* 판단 기록 — 보고됐는데 아직 판단 안 함(미판단), 판단 없이 마감됨(놓침) */
+.badge.pstat.todo { background: var(--urgent-tint); color: var(--urgent); border-color: var(--urgent); }
+.badge.pstat.missed { background: var(--panel); color: var(--faint); border-color: var(--faint); border-style: dashed; }
 .qtip li.miss { color: var(--urgent); }
 .qtip li.fixable { color: var(--warn); }
 .qtip .grp { font-size: 11px; color: var(--faint); margin-left: 4px; white-space: nowrap; }
@@ -1158,13 +1161,15 @@ footer b { color: var(--muted); }
       <input id="logQ" type="search" placeholder="공고명·공고번호·판단자·사유로 찾기" autocomplete="off" aria-label="판단 기록에서 찾기">
       <select id="logStatus" aria-label="판단">
         <option value="">모든 판단</option>
+        <option value="미판단">미판단</option>
+        <option value="놓침">놓침</option>
         <option value="참가">참가</option>
         <option value="보류">보류</option>
         <option value="불참">불참</option>
       </select>
     </div>
     <div id="logList"></div>
-    <div class="log-empty" id="logEmpty" hidden>아직 판단 기록이 없습니다. 실제 공고 카드에서 참가·보류·불참을 고르면 사유와 함께 쌓입니다.</div>
+    <div class="log-empty" id="logEmpty" hidden>아직 판단 기록이 없습니다. 텔레그램으로 보고된 공고가 '미판단'으로 쌓이고, 실제 공고 카드에서 참가·보류·불참을 고르면 사유와 함께 남습니다.</div>
     <div id="logAgg"></div>
   </section>
 
@@ -2594,7 +2599,7 @@ function nQualBadges(n) {
 // ── 참가여부 · 담당자 · 대화 (같은 링크로 보는 사람 모두 공유) ────────────────
 let participation = {};
 const PART_STATUSES = ["검토중", "참가", "보류", "불참"];
-const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted" };
+const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted", 미판단: "todo", 놓침: "missed" };
 
 async function loadParticipation() {
   try {
@@ -2810,25 +2815,48 @@ function refreshCards(what, force = false) {
 // ── 판단 기록 — 참가·보류·불참 판단을 사유와 함께, 최근 판단 순 (팀원 화면과 같은 구성, 2026-10-15) ─────
 /** 판단 기록이 이만큼 쌓이면 키워드 조정용 집계를 연다 — 몇 건으로는 비율이 흔들린다 */
 const LOG_AGG_MIN = 30;
-const decisionsOf = () => Object.values(participation).filter((p) => DECISIONS.includes(p.status));
+/**
+ * 판단 기록 탭에 보이는 상태 — 참가·보류·불참, 또는 텔레그램으로 보고됐는데 아직 판단하지 않았으면 '미판단',
+ * 판단 없이 마감이 지났으면 '놓침' (2026-10-19, 4단계). 보고되지 않았고 판단도 없으면 null (싣지 않는다).
+ * 서버 nego/report_log.py log_status와 같은 규칙.
+ */
+function logStatusOf(p) {
+  if (DECISIONS.includes(p.status)) return p.status;
+  if (!p.reports?.length) return null;
+  return deadlineAt(p.meta?.deadline) < Date.now() ? "놓침" : "미판단";
+}
+const UNDECIDED = ["미판단", "놓침"];
+/** 판단 기록 탭에 싣는 공고와 그 상태 — 최근 순 (판단한 공고는 판단 시각, 판단 전 공고는 마지막 보고일) */
+function logEntriesOf() {
+  const key = (e) => (UNDECIDED.includes(e.st) ? e.p.reports.at(-1).date : String(e.p.decidedAt || e.p.updatedAt || ""));
+  return Object.values(participation)
+    .map((p) => ({ p, st: logStatusOf(p) }))
+    .filter((e) => e.st)
+    .sort((a, b) => key(b).localeCompare(key(a)));
+}
+const REPORT_KIND = { daily: "매일", weekly: "주간" };
+/** "10/20 매일 보고 · 10/20 주간 보고" — 이 공고가 나간 보고 */
+const reportsText = (p) => (p.reports || []).map((r) => `${r.date.slice(5).replace("-", "/")} ${REPORT_KIND[r.kind] || ""} 보고`).join(" · ");
 
 function renderLog() {
-  const all = decisionsOf().sort((a, b) => String(b.decidedAt || b.updatedAt || "").localeCompare(String(a.decidedAt || a.updatedAt || "")));
-  const count = (s) => all.filter((p) => p.status === s).length;
+  const entries = logEntriesOf();
+  // 키워드 조정용 집계는 실제로 판단한 공고만으로 센다
+  const all = entries.filter((e) => !UNDECIDED.includes(e.st)).map((e) => e.p);
+  const count = (s) => entries.filter((e) => e.st === s).length;
   $("logMeta").innerHTML =
-    `판단 기록 <b>${num(all.length)}</b>건 — ${DECISIONS.map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
+    `판단 기록 <b>${num(entries.length)}</b>건 — ${[...UNDECIDED, ...DECISIONS].filter((s) => s !== "놓침" || count(s)).map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
     `<button type="button" class="linkish" id="logCsv">CSV 내려받기</button>`;
   $("logAggNote").textContent = all.length >= LOG_AGG_MIN
     ? "아래 키워드 조정용 집계는 판단할 때 공고에 걸린 관심 키워드 기준입니다."
-    : `기록이 ${LOG_AGG_MIN}건 쌓이면 아래에 키워드 조정용 집계가 열립니다 (${all.length}/${LOG_AGG_MIN}).`;
-  $("logSearch").hidden = all.length === 0;
-  $("logEmpty").hidden = all.length > 0;
+    : `판단이 ${LOG_AGG_MIN}건 쌓이면 아래에 키워드 조정용 집계가 열립니다 (${all.length}/${LOG_AGG_MIN}).`;
+  $("logSearch").hidden = entries.length === 0;
+  $("logEmpty").hidden = entries.length > 0;
 
   const q = ($("logQ").value || "").replace(/\s+/g, "").toLowerCase();
-  const st = $("logStatus").value;
-  const list = all.filter((p) => (!st || p.status === st) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
+  const stf = $("logStatus").value;
+  const list = entries.filter(({ p, st }) => (!stf || st === stf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
   const byNo = new Map(lastItems.map((n) => [n.noticeNo, n]));
-  const row = (p) => {
+  const row = ({ p, st }) => {
     const n = byNo.get(p.noticeNo);
     const url = n?.detailUrl || p.meta?.detailUrl;
     const title = url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(p.title || p.noticeNo)}</a>` : esc(p.title || p.noticeNo);
@@ -2836,18 +2864,25 @@ function renderLog() {
     const inList = Boolean(n);
     const m = p.meta || {};
     const info = [p.noticeNo, m.institution, m.budgetAmount ? won(m.budgetAmount) : null, m.confidence].filter(Boolean).map(esc).join(" · ");
+    const reported = reportsText(p);
+    // 판단 전 공고는 판단·사유 줄 대신 언제 보고됐는지와 마감을 보여 준다
+    const undecided = UNDECIDED.includes(st);
+    const due = m.deadline ? `마감 ${esc(String(m.deadline).slice(5, 16).replace("-", "/"))}` : "";
+    const metaLine = undecided
+      ? `<p class="log-meta">${st === "놓침" ? "판단 없이 마감됨" : "아직 판단하지 않음"}${due ? ` · ${due}` : ""}${reported ? ` · ${esc(reported)}` : ""}${p.owner ? ` · 담당 ${esc(p.owner)}` : ""}${info ? ` · ${info}` : ""}</p>`
+      : `<p class="log-reason">${(p.tags || []).map((t) => `<span class="rchip on static">${esc(t)}</span>`).join("")}${p.reason ? `<b>사유</b> ${esc(p.reason)}` : (p.tags || []).length ? "" : `<span class="faint-note">사유 없음</span>`}</p>
+      <p class="log-meta">판단 <b>${esc(p.decidedBy || p.owner || "—")}</b>${p.decidedAt ? ` · ${esc(fmtDT(p.decidedAt))}` : ""} · 담당 ${esc(p.owner || "없음")}${reported ? ` · ${esc(reported)}` : ""}${info ? ` · ${info}` : ""}</p>`;
     return `<div class="log-row" data-part="${esc(p.noticeNo)}" data-title="${esc(p.title || "")}">
       <div class="log-top">
-        <span class="badge pstat ${PART_TONE[p.status]}">${esc(p.status)}</span>
+        <span class="badge pstat ${PART_TONE[st]}">${esc(st)}</span>
         <h3>${title}${noticeNoTag(p.noticeNo)}</h3>
-        ${inList ? `<button type="button" class="linkish" data-goto="${esc(p.noticeNo)}">목록에서 보기</button>` : ""}
-        ${p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단으로 되돌립니다">되돌리기</button>` : ""}
+        ${inList ? `<button type="button" class="linkish" data-goto="${esc(p.noticeNo)}">${undecided ? "판단하러 가기" : "목록에서 보기"}</button>` : ""}
+        ${!undecided && p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단으로 되돌립니다">되돌리기</button>` : ""}
       </div>
-      <p class="log-reason">${(p.tags || []).map((t) => `<span class="rchip on static">${esc(t)}</span>`).join("")}${p.reason ? `<b>사유</b> ${esc(p.reason)}` : (p.tags || []).length ? "" : `<span class="faint-note">사유 없음</span>`}</p>
-      <p class="log-meta">판단 <b>${esc(p.decidedBy || p.owner || "—")}</b>${p.decidedAt ? ` · ${esc(fmtDT(p.decidedAt))}` : ""} · 담당 ${esc(p.owner || "없음")}${info ? ` · ${info}` : ""}</p>
+      ${metaLine}
     </div>`;
   };
-  $("logList").innerHTML = all.length
+  $("logList").innerHTML = entries.length
     ? list.length ? list.map(row).join("") : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
     : "";
   $("logAgg").innerHTML = all.length >= LOG_AGG_MIN ? logAggHtml(all) : "";
@@ -2886,17 +2921,16 @@ function logAggHtml(all) {
 
 /** 판단 기록 CSV — 엑셀에서 한글이 깨지지 않게 BOM을 붙인다 */
 function downloadLogCsv() {
-  const head = ["판단일시", "판단", "주된 사유", "사유", "판단자", "담당", "공고번호", "공고명", "구분", "업무", "수요기관", "사업금액(원)", "추천등급", "낙찰방법", "관심 키워드", "등록 품목", "싱크로율(%)", "마감", "링크"];
+  const head = ["판단일시", "판단", "주된 사유", "사유", "판단자", "담당", "공고번호", "공고명", "구분", "업무", "수요기관", "사업금액(원)", "추천등급", "낙찰방법", "관심 키워드", "등록 품목", "싱크로율(%)", "마감", "링크", "보고일", "보고"];
   const cell = (v) => {
     const s = v == null ? "" : String(v);
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const rows = decisionsOf()
-    .sort((a, b) => String(b.decidedAt || "").localeCompare(String(a.decidedAt || "")))
-    .map((p) => {
-      const m = p.meta || {};
-      return [p.decidedAt ? fmtDT(p.decidedAt) : "", p.status, (p.tags || []).join(", "), p.reason || "", p.decidedBy || "", p.owner || "", p.noticeNo, p.title, m.sourceType, m.businessType, m.institution, m.budgetAmount, m.confidence, m.bidMethod, (m.keywords || []).join(", "), (m.products || []).join(", "), m.score, m.deadline, m.detailUrl];
-    });
+  const rows = logEntriesOf().map(({ p, st }) => {
+    const m = p.meta || {};
+    const d = !UNDECIDED.includes(st);
+    return [d && p.decidedAt ? fmtDT(p.decidedAt) : "", st, d ? (p.tags || []).join(", ") : "", d ? p.reason || "" : "", d ? p.decidedBy || "" : "", p.owner || "", p.noticeNo, p.title, m.sourceType, m.businessType, m.institution, m.budgetAmount, m.confidence, m.bidMethod, (m.keywords || []).join(", "), (m.products || []).join(", "), m.score, m.deadline, m.detailUrl, [...new Set((p.reports || []).map((r) => r.date))].join(", "), [...new Set((p.reports || []).map((r) => REPORT_KIND[r.kind]))].join(", ")];
+  });
   const csv = "\ufeff" + [head, ...rows].map((r) => r.map(cell).join(",")).join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -2907,7 +2941,7 @@ function downloadLogCsv() {
 }
 $("logMeta").addEventListener("click", (ev) => {
   if (ev.target.id !== "logCsv") return;
-  if (!decisionsOf().length) return void alert("아직 판단 기록이 없습니다. 실제 공고 카드에서 참가·보류·불참을 고르면 쌓이고, 그때 내려받을 수 있습니다.");
+  if (!logEntriesOf().length) return void alert("아직 판단 기록이 없습니다. 보고된 공고가 쌓이거나 실제 공고 카드에서 참가·보류·불참을 고르면 내려받을 수 있습니다.");
   downloadLogCsv();
 });
 $("logQ").oninput = () => renderLog();

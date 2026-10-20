@@ -63,7 +63,12 @@ def _steps(c: dict[str, Any], held_names: dict[str, str]) -> list[dict[str, Any]
     parts = [f"[공고 제목] '{k}' — 우리 키워드" for k in kws]
     parts += [f"[나라장터 물품분류] {held_names[p]}({p}) — 지일 등록 품목" for p in prods]
     if stage == "키워드·품목":
-        steps.append({"step": "키워드·품목", "ok": False, "detail": "관심 키워드·등록 품목 어느 쪽에도 해당 없음"})
+        # 무엇이 안 맞았는지 이름으로 — 용역 공고는 세부품명 칸에 용역분류 이름이 든다(fields.product_class_name)
+        name = c.get("product_name")
+        what = "용역분류" if c.get("work_type") == "용역" else "세부품명"
+        steps.append({"step": "키워드·품목", "ok": False,
+                      "detail": f"공고명·품명에 관심 키워드가 없고 {what}({name})도 지일 등록 품목이 아님" if name
+                      else "공고명에 관심 키워드가 없고 공고에 세부품명번호도 없음"})
     else:
         steps.append({"step": "키워드·품목", "ok": bool(parts), "detail": " · ".join(parts) or "키워드·품목 없음"})
     q = c.get("qualification") or {}
@@ -155,8 +160,12 @@ def held_products(held_raw: dict[str, Any]) -> list[dict[str, str]]:
             for p in (held_raw or {}).get("heldProducts", []) or [] if p.get("code")]
 
 
-def notices(run: dict[str, Any] | None, promoted: dict[str, Any], held_raw: dict[str, Any]) -> dict[str, Any]:
-    """`/api/notices` — 목록(items) · 검토필요(titleExcludedItems) · 세부품명 공고 탭의 목록 밖 공고(heldItems)."""
+def notices(run: dict[str, Any] | None, promoted: dict[str, Any], held_raw: dict[str, Any],
+            doc_products: dict[str, list[str]] | None = None) -> dict[str, Any]:
+    """`/api/notices` — 목록(items) · 검토필요(titleExcludedItems) · 세부품명 공고 탭의 목록 밖 공고(heldItems).
+
+    `doc_products`: 공고문 참가자격에서 찾은 지일 등록 세부품명 {공고번호: [코드]} (webapp/docscan.py) — '세부품명 미달'
+    용역 공고 중 찾은 것도 세부품명 공고 탭에 싣는다(`fromDoc`, 2026-10-20 팀원 레포 10/19 이식)."""
     hp = held_products(held_raw)
     names = {p["code"]: p["name"] for p in hp}
     base = {"heldProducts": hp, "thresholds": {"high": HIGH, "border": BORDER}}
@@ -179,6 +188,13 @@ def notices(run: dict[str, Any] | None, promoted: dict[str, Any], held_raw: dict
             items.append(item(c, names, promoted[no]))
             continue
         stage, _ = stage_of(c.get("excluded_reason"))
+        doc_codes = [p for p in (doc_products or {}).get(no) or [] if p in names]
+        if stage == "키워드·품목" and c.get("only_keyword_miss") and doc_codes:
+            row = item(c, names)
+            row["matchedBy"]["products"] = [{"code": p, "name": names[p]} for p in doc_codes]
+            row["matchedBy"]["keywords"] = []
+            held.append({**row, "outside": True, "fromDoc": True, "productCode": doc_codes[0], "productName": names[doc_codes[0]]})
+            continue
         if stage not in HELD_SKIP_STAGES and any(p in names for p in c.get("product_codes") or []):
             row = item(c, names)
             row["matchedBy"]["products"] = [{"code": p, "name": names[p]} for p in c.get("product_codes") or [] if p in names]
@@ -221,8 +237,11 @@ def excluded(run: dict[str, Any] | None, promoted: dict[str, Any], held_raw: dic
         return {"error": "먼저 '실제 공고' 탭에서 나라장터 공고를 불러오세요."}
     names = {p["code"]: p["name"] for p in held_products(held_raw)}
     payload = run
+    # 키워드·품목 단계는 다른 조건은 모두 통과한 공고(only_keyword_miss)만 '세부품명 미달'로 싣는다 — 다른 조건에도 걸린
+    # 미매칭은 수천 건이라 싣지 않는다(2026-10-20 팀원 레포 10/19 이식, 기본 '전체' 보기에 함께)
     rows = [item(c, names) for c in payload.get("rejected") or [] if c.get("notice_no") not in promoted]
-    rows = [r for r in rows if r["excludedAt"] not in HIDDEN_STAGES]
+    keep = {c.get("notice_no") for c in payload.get("rejected") or [] if c.get("only_keyword_miss")}
+    rows = [r for r in rows if r["excludedAt"] not in HIDDEN_STAGES or (r["excludedAt"] == "키워드·품목" and r["noticeNo"] in keep)]
     by_stage: dict[str, int] = {}
     for r in rows:
         by_stage[r["excludedAt"]] = by_stage.get(r["excludedAt"], 0) + 1

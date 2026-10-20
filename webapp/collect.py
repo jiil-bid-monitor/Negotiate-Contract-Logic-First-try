@@ -47,7 +47,7 @@ def custom_period(begin: str, end: str, now: datetime) -> tuple[datetime, dateti
 # 저장되는 수집 결과의 판정·표시 형식 버전. 자격 판정·팝업 자료가 바뀔 때 올린다 — 화면이 예전 버전으로
 # 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다(화면은 서버가 알려 주는 이 값과 결과의 format을 비교 — 2026-09-30: 코드를 받고도 옛 결과를 보고
 # 중복·개수 오류가 그대로라고 여긴 일이 두 번 있었음).
-RESULT_FORMAT = 59
+RESULT_FORMAT = 60
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -128,6 +128,8 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "review_exclude": candidate.screen_result.review_exclude,
         "is_candidate": candidate.is_candidate,
         "excluded_reason": candidate.excluded_reason,
+        # 키워드·세부품명 하나만 안 맞은 공고 — 제외 탭 '세부품명 미달'에 싣는다(2026-10-20 팀원 레포 이식)
+        "only_keyword_miss": getattr(candidate, "only_keyword_miss", False),
         "match_explain": candidate.screen_result.match_explain if not candidate.is_candidate else [],
         "match_detail": candidate.screen_result.match_detail if not candidate.is_candidate else {},
         "is_re_notice": candidate.is_re_notice,
@@ -231,9 +233,12 @@ class Collector:
 
     def __init__(self, store: Store, past: PastIndex,
                  runner: Callable[..., tuple[list, Any]] | None = None,
-                 config_loader: Callable[[], AppConfig] = load_config):
+                 config_loader: Callable[[], AppConfig] = load_config,
+                 docscan: Any = None):
         self.store = store
         self.past = past
+        # 수집이 끝난 뒤 '세부품명 미달' 용역 공고의 공고문을 뒤에서 읽는다(webapp/docscan.py, 2026-10-20 팀원 레포 이식)
+        self.docscan = docscan
         self.job = Job()
         self._lock = threading.Lock()
         self._runner = runner or self._run_nego
@@ -334,6 +339,13 @@ class Collector:
             }
             job.run_id = self.store.save_run(job.started_at, job.params, payload)
             log.info("수집 완료: 후보 %d건 · 제외 %d건", len(payload["candidates"]), len(payload["rejected"]))
+            # 첨부를 읽는 수집이면, 키워드·세부품명 하나만 안 맞은 용역 공고의 공고문을 뒤에서 읽어 지일 등록 세부품명을
+            # 찾는다 — 찾은 공고는 '세부품명 공고' 탭에 붙는다(mview.notices). 화면은 /api/docscan으로 진행을 본다
+            if attachments and self.docscan is not None:
+                targets = [c.notice for c in stats.rejected
+                           if getattr(c, "only_keyword_miss", False) and c.notice.work_type == "용역"]
+                held_products = {str(p.get("code") or "").strip() for p in (config.held_raw or {}).get("heldProducts", [])}
+                self.docscan.start(targets, held_products - {""})
         except Exception as err:  # 화면에 사유를 그대로 보여준다 (서비스키는 가림)
             key = config.api.service_key if config else ""
             job.error = redact(f"{type(err).__name__}: {err}", [key] if key else [])

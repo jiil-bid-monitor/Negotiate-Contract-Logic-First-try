@@ -1034,6 +1034,23 @@ class TestEndToEnd(unittest.TestCase):
         days = [c.days_left if c.days_left is not None else 9999 for c in candidates]
         self.assertEqual(days, sorted(days), "마감 임박 순으로 정렬되어야 한다")
 
+    def test_keyword_only_miss_flag(self):
+        """키워드·세부품명 하나만 안 맞고 보유 면허·지역·마감은 통과한 미매칭 공고에만 only_keyword_miss
+        (제외 탭 '세부품명 미달', 2026-10-20 팀원 레포 10/19 이식)."""
+        config = load_config()
+        config.screen.keywords = ["전시관"]
+        raws = [
+            fixtures.notice("R26LOW00001", title="청사 사무공간 재배치 용역"),  # 미매칭 · 나머지 통과
+            fixtures.notice("R26LOW00002", title="도로 정비 계획 용역", bidQlfctRgstDt="2026-09-10 18:00:00",
+                            bidClseDt="2026-09-11 10:00:00"),  # 미매칭 · 마감 지남(NOW 9/14)
+            fixtures.notice("R26LOW00003", title="○○전시관 전시물 제작설치"),  # 후보
+        ]
+        groups: dict = {}
+        stats = RunStats()
+        build_candidates([notice_from_raw(r, "용역") for r in raws], config, groups, {}, NOW, stats)
+        flags = {c.notice.notice_no: c.only_keyword_miss for c in stats.rejected}
+        self.assertEqual(flags, {"R26LOW00001": True, "R26LOW00002": False})
+
 
 class TestAnswers20261013(unittest.TestCase):
     """2026-10-13: "건축" 제외가 "실내건축"을 안 빼고(대리님 답변), 요구 면허를 지일이 하나도 없는 공고는 뺀다(사용자 결정)."""

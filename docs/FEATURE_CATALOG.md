@@ -39,7 +39,7 @@
 | F-11 | 자격 | 면허제한 API 해석(그룹끼리 또는 / 그룹 안 모두 / 허용업종) | `nego/qualify.py` |
 | F-12 | 첨부 | 첨부 내려받기·HWP/HWPX/PDF/ZIP 텍스트 추출, DRM 건너뜀, 개인 연락처 제거 | `nego/attachments.py` |
 | F-13 | 첨부 | 참가자격 절 찾기(목차 건너뛰기·제목 형태 다양·항목 묶음) | `nego/qualification_text.py` |
-| F-14 | 자격 | 첨부 참가자격 코드 판정("또는"/"모두" 규칙, 이름표 복원) | `nego/qualify.py` `evaluate_attachment_text` |
+| F-14 | 자격 | 첨부 참가자격 코드 판정("또는"/"모두" 규칙, 이름표 복원, 공동수급 조건부 요건) | `nego/qualify.py` `evaluate_attachment_text` |
 | F-15 | 자격 | 코드 없이 이름만 적힌 자격 판정 + "확인 필요" 칩(실적·기술인력) | `nego/text_requirements.py` |
 | F-16 | 자격 | 코드 이름 사전(미보유 코드를 이름으로 표시) | `config/code_names.json`, `qualify.load_code_names` |
 | F-17 | 일정 | 마감 우선순위 + 첨부 공고문에서 마감 찾기 + 전체 일정 | `nego/screen.py` `Schedule`, `nego/schedule_text.py` |
@@ -52,7 +52,8 @@
 | F-24 | 웹앱 | 자격 팝업(필수 보유 / N개 중 1개 / 조합) | `webapp/qualview.py`, `static/index.html` |
 | F-25 | 웹앱 | 싱크로율(과거 실적 유사도) | `webapp/sync.py` (+ 비공개 `jiil-past-contracts`) |
 | F-26 | 웹앱 | 참가여부·담당·대화·사유 기록, 판단 기록 집계·CSV, 보고된 공고 '미판단'·'놓침', 구글 드라이브 백업 | `webapp/mstore.py`·`backup.py`·`reportsync.py`, `nego/report_log.py` |
-| F-27 | 웹앱 | 제외 공고 → "실제 공고로 올리기" | `webapp/mstore.py`·`mview.py`, `static/index.html` |
+| F-27 | 웹앱 | 제외 공고 → "실제 공고로 올리기", 제외 탭 '세부품명 미달'(키워드·세부품명만 안 맞은 공고) | `webapp/mstore.py`·`mview.py`, `static/index.html` |
+| F-33 | 웹앱 | 공고문 세부품명으로 용역 공고 찾기 — '세부품명 미달' 용역 공고의 공고문을 수집 뒤 뒤에서 읽어 지일 등록 세부품명이면 세부품명 공고 탭에 | `nego/doc_products.py`, `webapp/docscan.py` |
 | F-28 | 웹앱 | 옛 화면·옛 결과 경고(RESULT_FORMAT·static 지문) | `collect.RESULT_FORMAT`, `server.static_version` |
 | F-29 | 투찰 | 투찰 계산기(공고번호로 기초금액·하한율·A값 불러오기, 예비가격 15개 생성) | `nego/bidcalc.py`, `static/bidcalc*.js` |
 | F-30 | 투찰 | 투찰가격 분석 수집기(과거 개찰결과·예비가격·참가업체) | `nego/bidprice.py`, `.github/workflows/bidprice.yml` |

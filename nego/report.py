@@ -6,6 +6,7 @@ import csv
 import html
 import re
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 from .pipeline import Candidate, RunStats
@@ -167,6 +168,94 @@ def _qualification_cell_html(q, esc) -> str:
         '<div class="tip-note">이름 뒤 괄호 숫자는 세부품명번호·업종코드입니다. '
         "코드가 없는 항목은 면허제한정보 API에 코드 필드 자체가 없어 이름만 표시됩니다.</div></span>"
         "</button>"
+    )
+
+
+# ── 자격 미보유 칸 (2026-10-20, 팀원 레포 10/19 리포트 카드 이식) ─────────────────────────
+# 표의 자격판정 동그라미는 마우스를 올려야 미보유 자격이 보여, 메일·휴대폰으로 열면 볼 수 없었다. 미보유 자격이 있는 공고는
+# 줄 아래에 "필수 보유 / N개 중 1개 이상 / 방법 중 하나 / 조건부" 묶음을 ✓·✗·–로 펼쳐 둔다 — 웹앱 자격 팝업(index.html
+# reqBlocksHtml)과 같은 자료(webapp/qualview.build). 메일 프로그램이 <style>을 지우는 경우가 있어 스타일은 칸 안에 직접 쓴다.
+_QUAL_OK = "color:#15803d;"
+_QUAL_MISS = "color:#b91c1c;font-weight:600;"
+_QUAL_SPARE = "color:#9ca3af;"
+_QUAL_OR = '<div style="color:#9ca3af;font-size:11px;padding:1px 0 1px 16px;">또는</div>'
+
+
+@lru_cache(maxsize=1)
+def _held_lookup() -> tuple:
+    """보유 자격(config/held_qualifications.json) — 리포트를 만들 때마다 다시 읽지 않게."""
+    from webapp.qualview import held_lookup  # 웹앱 팝업과 같은 판정 자료 (webapp → nego 순환 import를 피해 여기서)
+
+    from .config import load_config
+
+    return held_lookup(load_config().held_raw)
+
+
+def _qual_line(label: str, held: bool, spare: bool, esc) -> str:
+    style, mark = (_QUAL_OK, "✓") if held else (_QUAL_SPARE, "–") if spare else (_QUAL_MISS, "✗")
+    return f'<div style="{style}padding:1px 0;">{mark} {esc(label)}</div>'
+
+
+def _qual_block(heading: str, lines: list[str], joiner: str = "") -> str:
+    return (f'<div style="margin-top:6px;"><div style="font-size:12px;color:#6b7280;margin-bottom:1px;">{heading}</div>'
+            f"{joiner.join(lines)}</div>")
+
+
+def _qual_req_blocks(reqs: list[dict], esc) -> list[str]:
+    """요건 목록 → 묶음 블록 (index.html reqBlocksHtml과 같은 규칙). 필수 보유(하나뿐인 요건)는 한 칸에 미보유 먼저."""
+    blocks: list[str] = []
+    must = [r["items"][0] for r in reqs if not r.get("any_of") and not r.get("combos") and not r.get("why") and r.get("items")]
+    must = sorted(dict((i["label"], i) for i in must).values(), key=lambda i: i["held"])
+    if must:
+        head = "필수 보유" if len(must) == 1 else f"필수 보유 — {len(must)}개 모두 필요"
+        blocks.append(_qual_block(head, [_qual_line(i["label"], i["held"], False, esc) for i in must]))
+    for r in reqs:
+        if r.get("combos"):
+            done = any(c["held"] for c in r["combos"])
+            lines = [_qual_line(" + ".join(x["label"] for x in c["rows"]), c["held"], done, esc) for c in r["combos"]]
+            blocks.append(_qual_block(f"아래 방법 중 하나 — {'보유로 충족' if done else '미보유'}", lines, _QUAL_OR))
+        elif r.get("any_of"):
+            items = list(dict((i["label"], i) for i in r["items"]).values())
+            done = any(i["held"] for i in items)
+            lines = [_qual_line(i["label"], i["held"], done, esc) for i in items]
+            blocks.append(_qual_block(f"아래 {len(items)}개 중 1개 이상 — {'보유로 충족' if done else '미보유'}", lines, _QUAL_OR))
+        elif r.get("why") and r.get("items"):
+            # 조건부(없으면 공동수급) 요건은 없어도 "–", 첨부에서 찾은 "보유 확인"은 ✓
+            i = r["items"][0]
+            blocks.append(_qual_block(esc(r["why"]), [_qual_line(i["label"], i["held"], bool(r.get("joint")), esc)]))
+    return blocks
+
+
+def _qualification_panel_html(c: Candidate, esc) -> str:
+    """미보유 자격이 있는 공고만 — 표 줄 아래에 펼쳐 둘 '자격 미보유' 칸. 없으면 빈 문자열."""
+    q = c.qualification
+    if not q.checked or not q.missing_count:
+        return ""
+    from webapp.qualview import build
+
+    has_text = bool((getattr(c, "attachment_text", "") or "").strip())
+    parts = build(q, _held_lookup(), {"industry": c.notice.kind == "본공고" or has_text, "product": has_text})
+    sections = []
+    for p in parts:
+        reqs = list(p.get("missing") or []) + list(p.get("satisfied") or [])
+        blocks = _qual_req_blocks(reqs, esc) if p.get("status") == "미달" else []
+        if blocks:
+            sections.append(f'<div style="margin-top:6px;font-weight:700;color:#374151;">{esc(p["name"])}</div>' + "".join(blocks))
+    if not sections:
+        return ""
+    # 공동수급 불허면 부족한 자격을 함께 채울 업체를 구할 수 없어 빨강, 허용이면 노랑, 정보 없으면 원문 확인
+    denied = c.joint.raw_value is not None and not c.joint.allowed
+    joint = ("공동수급 여부는 원문 확인" if c.joint.raw_value is None
+             else "공동수급 불허 — 참가 어려움" if denied else f"공동수급으로 참가 검토 ({c.joint.label})")
+    bg, border, fg = ("#fef2f2", "#fecaca", "#b91c1c") if denied else ("#fffbeb", "#fde68a", "#b45309")
+    return (
+        f'<div style="background:{bg};border:1px solid {border};border-radius:8px;padding:10px 14px;font-size:12px;'
+        f'line-height:1.5;color:#374151;max-width:640px;">'
+        f'<div style="font-size:13px;font-weight:700;color:{fg};">자격 미보유</div>'
+        f'<div style="color:#6b7280;">{esc(joint)}</div>'
+        + "".join(sections)
+        + '<div style="margin-top:6px;font-size:11px;color:#9ca3af;">✓ 보유 · ✗ 미보유 · – 없어도 됨(이미 충족했거나 공동수급으로 채울 수 있음)</div>'
+        "</div>"
     )
 
 
@@ -571,6 +660,10 @@ def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[st
                 f"<td><div>{_deadline_cell_html(c, esc)}</div></td>"
                 "</tr>"
             )
+            # 미보유 자격은 줄 아래에 펼쳐 둔다 — 동그라미 팝업은 메일·휴대폰에서 안 열린다
+            panel = _qualification_panel_html(c, esc)
+            if panel:
+                parts.append(f'<tr class="qual-row"><td colspan="10" style="padding:0 12px 12px;">{panel}</td></tr>')
         parts.append("</tbody></table></div>")
 
     return parts

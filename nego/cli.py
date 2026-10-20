@@ -189,6 +189,23 @@ def _save_report_log(kind: str, candidates, config, now) -> None:
         logging.warning("보고 기록을 남기지 못했습니다 — 사내 웹앱 판단 기록에 이번 보고가 쌓이지 않습니다: %s", err)
 
 
+def _append_feedback_sheet(candidates, now) -> None:
+    """피드백 시트 적재(nego/feedback_sheet.py). 실패해도 보고는 이미 나갔으니 종료코드는 그대로 — Actions에 오류 표시만."""
+    from .feedback_sheet import SheetsError, append_candidates
+
+    try:
+        result = append_candidates(candidates, now)
+    except (SheetsError, OSError, KeyError, ValueError) as err:
+        logging.error("피드백 시트 기록 실패: %s", err)
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(f"::error::피드백 시트 기록 실패 {err}")
+        return
+    if result is None:
+        logging.info("피드백 시트 설정이 없어 건너뜀 (GOOGLE_SERVICE_ACCOUNT_JSON·FEEDBACK_SHEET_ID)")
+    else:
+        print(f"피드백 시트 기록: 추가 {result['appended']}건 · 이미 있음 {result['skipped']}건")
+
+
 def _send_email(candidates, stats, html_path, now) -> None:
     """주간 리포트 메일(2026-10-19 통합 결정 15번). 실패해도 종료코드는 그대로 — 텔레그램과 같은 이유."""
     from .email_report import send, subject_for
@@ -407,6 +424,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"보낸 공고 기록 저장: {args.sent_state}")
         if args.report_log and delivered and candidates:
             _save_report_log(args.report_log, candidates, config, now)
+        # 정기 보고(매일·주간)면 보고된 공고를 피드백 구글 시트에도 쌓는다 — 사무실 밖에서 시트로 보게(2026-10-20)
+        if args.report_log and candidates:
+            _append_feedback_sheet(candidates, now)
 
     if args.email:
         _send_email(candidates, stats, paths.get("email_html") or paths.get("html"), now)

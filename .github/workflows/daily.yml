@@ -232,6 +232,9 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          # 피드백 구글 시트 — 정기 보고에 나간 공고를 쌓는다(nego/feedback_sheet.py, 2026-10-20). 없으면 건너뜀
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          FEEDBACK_SHEET_ID: ${{ secrets.FEEDBACK_SHEET_ID }}
           JIIL_REPO: data/jiil
           SENT_STATE: ${{ steps.mode.outputs.sent_state }}
           REPORT_LOG: ${{ steps.mode.outputs.report_log }}

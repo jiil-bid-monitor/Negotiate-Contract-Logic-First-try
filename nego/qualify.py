@@ -455,6 +455,20 @@ def _numbered_parts(item: str) -> list[str]:
     return [item[: starts[0]]] + [item[a:b] for a, b in zip(starts, starts[1:] + [len(item)])]
 
 
+# "다음 중 어느 하나에 해당하는 경우에는 입찰참가자격이 없습니다"처럼 결격 사유를 나열하는 "어느 하나"는 OR 표시가 아니다
+# (2026-10-20 제보: 울산안전체험관 R26BK01763222 — 7) 직접생산증명 항목 끝 ※ 안내 때문에 "가) 8111159901 또는 811159801 /
+# 나) 6010989901"이 셋 중 하나로 묶였음). 표시 뒤 같은 문장(60자 안)에 결격·제외 표현이 있으면 안 본다.
+_DISQUALIFY_AFTER_RE = re.compile(r"해당하는\s*경우|자격이\s*없|제외|불가|할\s*수\s*없|무효")
+
+
+def _has_or_marker(text: str, marker_re: re.Pattern) -> bool:
+    for m in marker_re.finditer(text):
+        tail = re.split(r"[.。\n]", text[m.end() : m.end() + 60], maxsplit=1)[0]
+        if not _DISQUALIFY_AFTER_RE.search(tail):
+            return True
+    return False
+
+
 def _or_scope(item: str) -> tuple[bool, list[tuple[str, bool]]]:
     """OR 표시가 걸리는 범위. (항목 전체가 OR인지, [(조각, 그 조각이 OR인지)]).
 
@@ -464,10 +478,10 @@ def _or_scope(item: str) -> tuple[bool, list[tuple[str, bool]]]:
     """
     parts = _numbered_parts(item)
     if len(parts) == 1:
-        return bool(_OR_MARKER_RE.search(item)), [(item, False)]
-    marked = lambda t: bool(_OR_MARKER_RE.search(t) or _SCOPED_OR_MARKER_RE.search(t))
+        return _has_or_marker(item, _OR_MARKER_RE), [(item, False)]
+    marked = lambda t: _has_or_marker(t, _OR_MARKER_RE) or _has_or_marker(t, _SCOPED_OR_MARKER_RE)
     # 머리말은 "어느 하나"만 본다 — "산업디자인(… 중 1개 이상)로 등록하고 다음을 모두 갖춘 자 1) … 2) …"가 통째로 OR이 되지 않게
-    if _OR_MARKER_RE.search(parts[0]):
+    if _has_or_marker(parts[0], _OR_MARKER_RE):
         return True, [(item, False)]
     return False, [(parts[0], False)] + [(p, marked(p)) for p in parts[1:]]
 
@@ -944,8 +958,20 @@ def evaluate_attachment_text(
     # 보유로 채운 "A 또는 B" 묶음 — 팝업에 "아래 N개 중 1개 이상"으로 보이게 따로 남긴다(2026-10-01 요청:
     # "환경디자인(4442) 또는 종합디자인(4444)"을 둘 다 보유하면 "보유 확인" 두 줄로만 나와 "또는"인지 몰랐음)
     or_ok: list[LicenseGroup] = []
+    # 9자리 세부품명번호는 원문 오기("811159801(패키지소프트웨어개발 및 도입서비스)") — 이름이 사전·등록증의 10자리 품목과
+    # 같으면 그 번호로 바로잡는다(2026-10-20 울산안전체험관: 같은 요건이 다른 첨부의 바른 번호와 따로 나왔음)
+    name_to_product = {re.sub(r"[\s·ㆍ]", "", n): c for c, n in lookup.items() if n and len(c) == 10}
+
+    def _fix_typo(code: str, label: str) -> tuple[str, str]:
+        if len(code) == 9:
+            fixed = name_to_product.get(re.sub(r"[\s·ㆍ]", "", _TRAILING_CODE_RE.sub("", label)))
+            if fixed:
+                return fixed, label
+        return code, label
+
     for idx, item in enumerate(items):
-        or_groups = [[(code, _label(code, label)) for code, label in bundle] for bundle in _or_groups(item)]
+        or_groups = [[(code, _label(code, label)) for code, label in (_fix_typo(c, l) for c, l in bundle)]
+                     for bundle in _or_groups(item)]
         # 나라장터 번호(4·10자리)가 아닌 코드가 사업자등록·업태·종목 문맥이면 세무 업종코드다 — 건설업 면허와 별개라
         # 이름이 같아도 보유로 치지 않고 이름표에 밝힌다(2026-10-19 재검토: "실내건축공사업(452106)"은 국세청 업종코드)
         if _TAX_CONTEXT_RE.search(item):

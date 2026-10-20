@@ -57,9 +57,11 @@ import requests
 log = logging.getLogger(__name__)
 
 API_BASE = "https://api.telegram.org"
-# 텔레그램 한도는 4096자. 태그·이모지 여유를 두고 자른다.
-MESSAGE_LIMIT = 3800
+# 텔레그램 한도는 4096자. 태그·이모지 여유를 두고 자른다(2026-10-20 팀원 수집기와 같은 3,500자로).
+MESSAGE_LIMIT = 3500
 MAX_ATTEMPTS = 3
+# 같은 대화방에 연달아 보낼 때 메시지 사이 간격(초) — 텔레그램 권장 "대화방당 초당 1건 이하", 넘으면 429(팀원 수집기 방식)
+SEND_INTERVAL = 1.0
 
 # 이 날수 이하로 남은 공고는 "🔴 D-N"을 굵게 (2026-10-12 사용자 요청: "10일 이내 마감은 붉게")
 URGENT_DAYS = 10
@@ -310,7 +312,9 @@ def send_messages(
     errors: list[str] = []
 
     def send_to(chat_id: str) -> None:
-        for text in messages:
+        for i, text in enumerate(messages):
+            if i:
+                time.sleep(SEND_INTERVAL)
             _call(
                 session,
                 config,
@@ -323,6 +327,8 @@ def send_messages(
                 },
             )
         if document is not None and document.exists():
+            if messages:
+                time.sleep(SEND_INTERVAL)
             with document.open("rb") as handle:
                 _call(
                     session,
@@ -351,6 +357,17 @@ def migration_notes(config: TelegramConfig, secret_name: str) -> list[str]:
             f"GitHub Secrets {secret_name}의 예전 ID를 {new}로 바꿔 주세요." for new in config.migrated.values()]
 
 
+def report_messages(candidates: list[Any], stats: Any) -> tuple[list[str], bool]:
+    """보낼 메시지들과 HTML 리포트를 붙일지(마감 안 지난 후보가 있을 때만). 미리보기(--dry-run)도 이걸 쓴다."""
+    rows = [Row.from_candidate(c) for c in candidates]
+    title = report_title(stats.categories, bool(getattr(stats, "prespec_requested", False)),
+                         stats.period_begin, stats.period_end)
+    has_open = any(r.days_left is None or r.days_left >= 0 for r in rows)
+    messages = build_messages(rows, title, stats_warnings(stats),
+                              footer="지역·공동수급·확인 필요 요건 등 자세한 내용은 첨부 HTML 리포트" if has_open else None)
+    return messages, has_open
+
+
 def send_report(
     config: TelegramConfig,
     candidates: list[Any],
@@ -359,13 +376,8 @@ def send_report(
     session: requests.Session | None = None,
 ) -> list[str]:
     """후보 목록 + (후보가 있으면) HTML 리포트 파일."""
-    rows = [Row.from_candidate(c) for c in candidates]
-    title = report_title(stats.categories, bool(getattr(stats, "prespec_requested", False)),
-                         stats.period_begin, stats.period_end)
-    has_open = any(r.days_left is None or r.days_left >= 0 for r in rows)
-    messages = build_messages(rows, title, stats_warnings(stats),
-                              footer="지역·공동수급·확인 필요 요건 등 자세한 내용은 첨부 HTML 리포트" if has_open else None)
-    return send_messages(config, messages, html_path if has_open else None, session)
+    messages, attach = report_messages(candidates, stats)
+    return send_messages(config, messages, html_path if attach else None, session)
 
 
 def send_dev_alert(text: str, session: requests.Session | None = None) -> list[str] | None:

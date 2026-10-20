@@ -1,16 +1,11 @@
 name: 나라장터 공고 수집
 
 # 실행 방법
-#  · 수동: GitHub 저장소 → Actions 탭 → 이 워크플로 선택 → "Run workflow"
-#  · 자동 스케줄 (2026-10-12 사용자 결정: 입찰은 매일, 나머지는 매주 텔레그램으로):
-#      매일 09:00 KST — 어제 게시된 "입찰" → 텔레그램   (2026-10-14 사용자 요청으로 08:00 → 09:00)
-#      매주 월 09:10 KST — 지난 7일 "협상·규격가격동시입찰" + 사전규격 → 텔레그램
-#    ※ GitHub 예약 실행은 붐비면 몇 시간씩 늦게 시작한다(실측 10/13 08:00 예약 → 12:21 시작, 10/14 → 10:35 시작).
-#    조회 기간을 날짜 단위로 딱 잘라(--complete-days) 주기끼리 겹치지 않으므로
-#    같은 공고가 두 번 잡히지 않는다. 스케줄은 **기본 브랜치(main)에 이 파일이 있어야** 돈다.
-#    스케줄 실행도 Supabase 저장은 하지 않는다(9/28 "저장은 수집 기능 완성 후" 결정 유지 —
-#    켜려면 아래 "실행 모드 결정"의 스케줄 쪽 NO_SUPABASE를 "false"로).
-#    수동 실행은 telegram 입력이 true일 때만 보낸다.
+#  · 수동 전용: GitHub 저장소 → Actions 탭 → 이 워크플로 선택 → "Run workflow" (수집·진단·시험 발송용)
+#  · 정기 보고는 2026-10-20부터 report-daily.yml(평일 09:00 입찰)·report-weekly.yml(월 09:10 주간)이 맡는다 —
+#    cron-job.org가 정시에 깨우고 GitHub 예약은 예비, 이미 보낸 보고는 다시 안 감(팀원 수집기 운영 방식).
+#    여기 있던 schedule은 그쪽과 겹쳐 같은 보고가 두 번 가지 않게 뺐다.
+#    수동 실행은 telegram 입력이 true일 때만 보낸다. Supabase 저장 기본값은 끔(9/28 결정).
 #
 # 수집이 실패하면(나라장터 접속 끊김 등) 60분 뒤 새 Run으로 다시 시도한다 — 최대 5회(약 4시간).
 #   담당자 방에는 실패 알림을 보내지 않는다. 개발자 방(TELEGRAM_DEV_CHAT_ID)에만
@@ -20,9 +15,6 @@ name: 나라장터 공고 수집
 #   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (텔레그램 두 개가 없으면 발송만 건너뜀),
 #   TELEGRAM_DEV_CHAT_ID (선택 — 개발자 알림 방. 없으면 개발자 알림만 건너뜀)
 on:
-  schedule:
-    - cron: "0 0 * * *"     # 00:00 UTC = 09:00 KST — 매일, 입찰
-    - cron: "10 0 * * 1"    # 월 00:10 UTC = 월 09:10 KST — 주간, 협상·규격가격동시입찰·사전규격
   workflow_dispatch:
     inputs:
       categories:
@@ -118,13 +110,10 @@ jobs:
       - name: 테스트
         run: python -m unittest discover -s tests -t .
 
-      # 스케줄 실행에는 입력값이 없으므로 여기서 실행 모드를 정한다. 수동 실행은
-      # 입력값을 그대로 쓴다. 아래 수집·재시도 단계는 모두 이 출력값만 본다.
+      # 수동 실행 입력값으로 실행 모드를 정한다. 아래 수집·재시도 단계는 모두 이 출력값만 본다.
       - name: 실행 모드 결정
         id: mode
         env:
-          EVENT: ${{ github.event_name }}
-          SCHEDULE: ${{ github.event.schedule }}
           IN_CATEGORIES: ${{ github.event.inputs.categories }}
           IN_COMPLETE_DAYS: ${{ github.event.inputs.complete_days }}
           IN_DAYS: ${{ github.event.inputs.days }}
@@ -134,20 +123,9 @@ jobs:
           IN_LLM: ${{ github.event.inputs.llm_similarity }}
           IN_ATTEMPT: ${{ github.event.inputs.attempt }}
         run: |
-          if [ "$EVENT" = "schedule" ]; then
-            if [ "$SCHEDULE" = "10 0 * * 1" ]; then
-              CATEGORIES="협상,규격가격동시입찰"; COMPLETE_DAYS="7"; PRESPEC="true"
-            else
-              # 3일치를 보되 보낸 공고 기록으로 새 공고만 보낸다(2026-10-19 통합 결정 14번) — 예약 실행이 밀리거나
-              # 늦게 등록된 공고도 빠지지 않게
-              CATEGORIES="입찰"; COMPLETE_DAYS="3"; PRESPEC="false"
-            fi
-            DAYS="1"; TELEGRAM="true"; NO_SUPABASE="true"; LLM="false"; ATTEMPT="1"
-          else
-            CATEGORIES="$IN_CATEGORIES"; COMPLETE_DAYS="$IN_COMPLETE_DAYS"
-            DAYS="${IN_DAYS:-1}"; TELEGRAM="${IN_TELEGRAM:-false}"; PRESPEC="${IN_PRESPEC:-false}"
-            NO_SUPABASE="${IN_NO_SUPABASE:-true}"; LLM="${IN_LLM:-false}"; ATTEMPT="${IN_ATTEMPT:-1}"
-          fi
+          CATEGORIES="$IN_CATEGORIES"; COMPLETE_DAYS="$IN_COMPLETE_DAYS"
+          DAYS="${IN_DAYS:-1}"; TELEGRAM="${IN_TELEGRAM:-false}"; PRESPEC="${IN_PRESPEC:-false}"
+          NO_SUPABASE="${IN_NO_SUPABASE:-true}"; LLM="${IN_LLM:-false}"; ATTEMPT="${IN_ATTEMPT:-1}"
           # 텔레그램으로 실제 보내는 실행에서만: '입찰'만 보면 보낸 공고 기록(중복 방지), 사전규격까지 보는 주간이면 메일도
           # (workflow_dispatch 입력이 10개 한도라 입력을 늘리지 않고 실행 모드로 정한다)
           SENT_STATE="false"; EMAIL="false"
@@ -252,19 +230,13 @@ jobs:
           set -o pipefail
           python -m nego "${ARGS[@]}" 2>&1 | tee collect.log
 
-      # 텔레그램 발송 뒤 기록이 바뀌었으면 bot-state 브랜치에 커밋(코드 브랜치와 섞이지 않게 기록 파일 하나만 둔 브랜치)
+      # 텔레그램 발송 뒤 기록이 바뀌었으면 bot-state 브랜치에 커밋(코드 브랜치와 섞이지 않게 기록 전용 브랜치).
+      # 정기 보고 기록(sent_report_*.json)도 같은 브랜치에 있어 강제로 덮어쓰지 않고 이 파일만 올린다
       - name: 보낸 공고 기록 저장
         if: steps.mode.outputs.sent_state == 'true' && steps.collect.outcome == 'success'
-        run: |
-          [ -f state/sent_bids.json ] || exit 0
-          TMP=$(mktemp -d)
-          cp state/sent_bids.json "$TMP/sent_bids.json"
-          cd "$TMP"
-          git init -q && git checkout -q -b bot-state
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add sent_bids.json && git commit -q -m "보낸 공고 기록 갱신 (run ${{ github.run_id }})"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" bot-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/push-bot-state.sh state/sent_bids.json
 
       # 수집 원문(data/)은 올리지 않는다 — 담당자 연락처가 섞일 수 있다.
       # 리포트(output/)만 아티팩트로 남긴다.

@@ -9,6 +9,8 @@
     python -m nego --categories 입찰 --complete-days 1   # 어제 게시된 입찰 공고만
     python -m nego --categories 협상,규격가격동시입찰 --complete-days 7  # 지난 7일
     python -m nego --categories 입찰 --complete-days 1 --telegram   # + 결과를 텔레그램으로 발송
+    python -m nego ... --telegram --report daily --sent-reports state/sent_report_daily.json   # 정기 보고(주말·이미 보냄 확인)
+    python -m nego ... --telegram --dry-run   # 보내지 않고 메시지 미리보기만
 """
 
 from __future__ import annotations
@@ -150,10 +152,40 @@ def _run_llm_similarity(candidates, config, now) -> dict[str, Path]:
     return llm_similarity.save_results(results, config.output_dir, now)
 
 
-def _send_telegram(candidates, stats, html_path) -> bool:
+def _preview_telegram(candidates, stats) -> None:
+    """--dry-run: 보내지 않고 보낼 메시지를 그대로 찍는다(팀원 수집기 DRY_RUN과 같은 용도)."""
+    from .telegram import report_messages
+
+    messages, attach = report_messages(candidates, stats)
+    print(f"\n텔레그램 미리보기 (메시지 {len(messages)}건{' + HTML 리포트 첨부' if attach else ''}) — 보내지 않음")
+    for i, message in enumerate(messages, 1):
+        print(f"\n--- 메시지 {i}/{len(messages)} ---\n{message}")
+
+
+def _dev_alert_send_failure(sent: int, total: int, errors: list[str], scheduled: bool) -> None:
+    """대화방 일부·전부에 못 보냈을 때 개발자 방에 알린다 — 실행은 성공으로 끝나 Actions 화면에선 안 보인다."""
+    from .dev_alert import describe_failure
+    from .telegram import send_dev_alert
+
+    if sent:
+        then = "다른 대화방에는 보냈습니다. 실패한 대화방에서 봇이 내보내졌거나 글쓰기 권한이 없는지 확인하세요."
+    elif scheduled:
+        then = "발송 기록을 남기지 않아 예비 실행(10:10)이 다시 보냅니다."
+    else:
+        then = "보고가 나가지 않았습니다."
+    run_url = ""
+    if os.environ.get("GITHUB_RUN_ID"):
+        run_url = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+                   f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ['GITHUB_RUN_ID']}")
+    text = (f"[개발자 알림] 텔레그램 발송 — 대화방 {sent}/{total}곳만 성공\n원인: {describe_failure(' '.join(errors))}\n"
+            f"{then}\n\n" + "\n".join(errors)[:1500] + (f"\n\n로그: {run_url}" if run_url else ""))
+    send_dev_alert(text)
+
+
+def _send_telegram(candidates, stats, html_path, scheduled: bool = False) -> bool:
     """발송 실패는 종료코드에 반영하지 않는다 — 실패로 끝내면 워크플로 자동 재시도가
     수집부터 다시 돌려 이미 받은 대화방에 같은 보고서가 또 간다. 대신 Actions 화면에
-    오류 표시(::error::)를 남긴다."""
+    오류 표시(::error::)를 남기고 개발자 방에 알린다."""
     from .telegram import TelegramConfig, migration_notes, send_report
 
     tg_config = TelegramConfig.from_env()
@@ -171,6 +203,8 @@ def _send_telegram(candidates, stats, html_path) -> bool:
         logging.warning(note)
         if os.environ.get("GITHUB_ACTIONS"):
             print(f"::warning::{note}")
+    if errors:
+        _dev_alert_send_failure(sent, len(tg_config.chat_ids), errors, scheduled)
     return sent > 0
 
 
@@ -245,6 +279,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="HTML 리포트를 메일로 보낸다(주간 보고용, SMTP_* 환경변수·config/recipients.json — 통합 결정 15번)",
     )
+    parser.add_argument(
+        "--report",
+        choices=("daily", "weekly"),
+        help="정기 보고로 돈다: daily면 한국 주말엔 바로 끝내고(평일만 — 2026-10-19 담당자 요청), "
+        "--sent-reports를 같이 주면 이번 기간(그날/그 주)에 이미 보낸 보고는 수집도 하지 않고 끝낸다",
+    )
+    parser.add_argument("--sent-reports", help="정기 보고 발송 기록 파일(JSON, --report와 같이) — 텔레그램을 보내면 기록")
+    parser.add_argument("--force", action="store_true", help="--report: 주말이거나 이미 보냈어도 다시 보낸다")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="텔레그램·메일을 보내지 않고 메시지 미리보기만 찍는다. 발송 기록(--sent-state·--sent-reports)도 안 바꾼다",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -274,6 +321,18 @@ def main(argv: list[str] | None = None) -> int:
         return _verify_api(config)
 
     now = datetime.now()
+    # 정기 보고는 cron-job.org(정시)·GitHub 예약(예비)·실패 재시도가 같은 보고를 여러 번 깨운다 — 수집 전에 거른다
+    if args.report:
+        from . import sent_reports as _reports
+
+        if args.report == "daily" and not args.force and _reports.is_weekend(now):
+            print("주말에는 매일 입찰 보고를 보내지 않습니다 — 월요일 보고에 금~일 게시분이 함께 담깁니다.")
+            return 0
+        if (args.sent_reports and not args.force and not args.dry_run
+                and _reports.already_sent(Path(args.sent_reports), args.report, now)):
+            print(f"이번 기간({_reports.period_key(args.report, now)}) {args.report} 보고는 이미 보냈습니다 — 건너뜁니다 "
+                  "(다시 받으려면 force)")
+            return 0
     repo = JsonlRepository(Path(args.store))
 
     try:
@@ -297,6 +356,19 @@ def main(argv: list[str] | None = None) -> int:
     except ApiError as err:
         print(redact(str(err), [config.api.service_key]), file=sys.stderr)
         return 1
+
+    # 보낸 공고 기록은 첨부를 읽기 전에 적용한다(2026-10-20) — 매일 보고는 3일치를 보는데 그중 2일치는 이미 보낸 공고라
+    # 그 첨부를 다시 내려받고 읽는 건 버리는 일이다. 걸러진 공고는 보고에 안 나가니 판정이 빠져도 손해가 없다.
+    sent_state = None
+    if args.sent_state:
+        from . import sent_state as _sent
+
+        sent_state = _sent.load(Path(args.sent_state))
+        before = len(candidates)
+        candidates = _sent.select_new(candidates, sent_state)
+        corrected = sum(1 for c in candidates if getattr(c, "corrected", False))
+        print(f"보낸 공고 기록 적용: {before}건 중 새 공고 {len(candidates) - corrected}건 · 정정공고 {corrected}건 (첨부 읽기 전)")
+        stats.candidates = len(candidates)
 
     if args.fetch_attachment_text:
         # 리포트/Supabase 저장보다 먼저 실행한다 — 여기서 갱신되는
@@ -356,17 +428,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.llm_similarity:
         llm_paths = _run_llm_similarity(candidates, config, now)
 
-    sent_state = None
-    if args.sent_state:
-        from . import sent_state as _sent
-
-        sent_state = _sent.load(Path(args.sent_state))
-        before = len(candidates)
-        candidates = _sent.select_new(candidates, sent_state)
-        corrected = sum(1 for c in candidates if getattr(c, "corrected", False))
-        print(f"보낸 공고 기록 적용: {before}건 중 새 공고 {len(candidates) - corrected}건 · 정정공고 {corrected}건 보고")
-        stats.candidates = len(candidates)
-
     print(render_console(candidates, stats))
 
     if not args.no_supabase:
@@ -376,15 +437,24 @@ def main(argv: list[str] | None = None) -> int:
     for kind, path in {**paths, **llm_paths}.items():
         print(f"{kind.upper()} 저장: {path}")
 
-    if args.telegram:
-        delivered = _send_telegram(candidates, stats, paths.get("html"))
+    if args.telegram and args.dry_run:
+        _preview_telegram(candidates, stats)
+    elif args.telegram:
+        delivered = _send_telegram(candidates, stats, paths.get("html"), scheduled=bool(args.report))
         if sent_state is not None and delivered:
             from . import sent_state as _sent
 
             _sent.save(Path(args.sent_state), _sent.mark(sent_state, candidates, now))
             print(f"보낸 공고 기록 저장: {args.sent_state}")
+        if args.report and args.sent_reports and delivered:
+            from . import sent_reports as _reports
 
-    if args.email:
+            _reports.mark(Path(args.sent_reports), args.report, now)
+            print(f"보고 발송 기록 저장: {args.sent_reports} ({_reports.period_key(args.report, now)})")
+
+    if args.email and args.dry_run:
+        print("메일 미리보기 생략 — HTML 리포트 파일(output/)을 보세요 (dry-run이라 보내지 않음)")
+    elif args.email:
         _send_email(candidates, stats, paths.get("html"), now)
 
     # 일부 조회가 실패했으면 종료코드 2로 구분한다 (CI에서 성공/부분성공 구분).

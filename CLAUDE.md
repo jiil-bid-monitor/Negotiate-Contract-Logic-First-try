@@ -66,6 +66,25 @@ N(이 레포)·M(팀원 `iamhiki/narajangter-bid-monitor`, TS) 비교 → 16개 
   전부 읽으면 수천 건이라 수집이 수십 배 길어짐(내 권장: 일정 빈 제외 공고만).
 - **남은 것**: 싱크로율 묶음 파일 만들기, 실측 확인(d2b·bot-state·메일·새 화면 실수집), `docs/user_guide.*` 새 화면으로 고치기.
 
+## 2026-10-20 — 정기 보고 운영을 팀원 수집기 방식으로 (1단계, 브랜치 `claude/report-ops-phase1`, 사용자 요청)
+
+사용자 결정: **판정은 N(이 레포), 운영은 M(팀원 레포 — 읽기만, 수정 금지)**. 3단계로 진행 — 1단계 운영 껍데기(이번),
+2단계 구글 시트 기록(M `src/sheets/`, 시트를 M과 같이 쓸지 새로 만들지 사용자 결정 대기), 3단계 report-log → 화면 "미판단/놓침"(M `reportLog.ts`·`ui.ts pullReportLog`).
+- **워크플로**: `report-daily.yml`(평일 입찰, 3일치 + `sent_bids.json`) · `report-weekly.yml`(월 협상·규격·사전규격 + 메일, 7일). cron-job.org가
+  평일 09:00 `report-daily.yml` dispatch(사용자 계정 가입 완료 — 설정법 `docs/telegram.md` 9절, main 병합 뒤 설정), 월요일엔 `kick-weekly` 잡이 09:10까지 기다렸다
+  주간을 깨움, GitHub 예약 10:10 KST는 예비. 입력 `dry_run`·`force`·`attempt`. concurrency는 **잡 단위**(retry 잡이 60분 자는 동안 예비 실행을 막지 않게).
+  실패 재시도(60분×5)는 N 것 유지. `daily.yml`은 schedule 뺌 — 수동 수집·시험 전용.
+- **기간 발송 기록** `nego/sent_reports.py`: bot-state의 `sent_report_daily.json`/`sent_report_weekly.json`(`{"last": 날짜/그 주 월요일}`) — 이미 보냈으면
+  수집도 안 하고 끝(`cli --report daily|weekly --sent-reports`), daily는 **KST 주말이면 바로 끝**. 텔레그램이 한 곳이라도 가면 기록. M은 Actions 캐시를 썼지만
+  7일 미사용이면 지워져 bot-state로(종류별 파일 — 월요일 동시 커밋 충돌 방지). 공고 단위 `sent_bids.json`([정정])은 그대로 같이 씀.
+- **bot-state 올리기** `scripts/push-bot-state.sh`: 브랜치를 받아 해당 파일만 바꿔 커밋, 밀리면 rebase 후 재시도(예전 daily.yml은 sent_bids.json 하나로 강제 덮어쓰기였음).
+  워크플로는 불러온 그대로(`state/.loaded`)와 다른 파일만 올림 — 불러오기 실패로 빈 기록이 덮어쓰지 않게.
+- **성능**: 보낸 공고 거르기(`sent_state.select_new`)를 **첨부 읽기 앞**으로 옮김 — 매일 3일치 중 이미 보낸 2일치 첨부를 안 읽음.
+- **텔레그램** 3,500자 분할(예전 3,800)·같은 방 연속 발송 1초 간격(`SEND_INTERVAL`), `report_messages`(미리보기 `--dry-run`도 씀).
+- **개발자 알림** `nego/dev_alert.py`: 원인 분류(텔레그램·메일 먼저 — 텔레그램 403이 "키 거절"로 읽혀서) + 첫 실패·소진·해결됨만(가운데 재시도 실패는 조용히),
+  대화방 일부/전부 발송 실패도 알림(`cli._dev_alert_send_failure`).
+- 메시지 형식은 N 그대로("마감 지난 N건 제외" 없음 — 10/19 결정 4번). 매일 보고도 첨부 읽음(판정 품질). 실측은 아직(main 병합 후 `dry_run`으로).
+
 ## 2026-10-14 오전에 할 것 (10/13 퇴근 전 사용자 요청 — 세션 시작하면 먼저 말해줄 것)
 
 1. **(10/14 완료) 지역 미달 공고 제외** — 9/28 "지역제한은 표시만" 결정을 바꿈. 사용자 확인: 지역제한 입찰은 공동수급을 허용해도 구성원

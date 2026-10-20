@@ -1,0 +1,211 @@
+name: 매일 입찰 보고 (평일 09:00)
+
+# 평일 09:00, 직전 3일 게시 "입찰" 본공고 중 아직 안 보낸 공고·[정정]을 텔레그램으로 보낸다. 없으면 "새 공고 없음".
+# 2026-10-20 팀원 수집기(iamhiki/narajangter-bid-monitor daily-closing-alert.yml) 운영 방식으로 옮김 — 판정은 이 레포 그대로.
+#
+# 깨우는 곳 두 개:
+#   ① 외부 예약 서비스(cron-job.org)가 평일 09:00에 workflow_dispatch API로 깨운다 — 정시 담당.
+#   ② 아래 schedule(평일 10:10 KST)은 예비. GitHub 예약 실행은 몇 시간씩 밀리거나 건너뛰어서(실측 10/13 08:00 → 12:21)
+#      하나에만 맡기면 보고가 늦거나 빠진다.
+# 둘 다 돌아도 두 번 오지 않는다 — 먼저 보낸 쪽이 bot-state의 sent_report_daily.json에 그날을 남기고, 뒤에 도는 쪽은 수집도
+# 안 하고 끝낸다(nego/sent_reports.py). 주말엔 깨워도 조용히 끝나고(평일만 — 2026-10-19 담당자 요청), 월요일 보고가 금~일 게시분을
+# 받는다(3일치 조회 + 보낸 공고 기록 sent_bids.json). 실패하면 60분 뒤 다시 시도(최대 5번), 개발자 방에만 알린다.
+on:
+  schedule:
+    # 평일(월~금) 10:10 KST = 01:10 UTC. 정각은 GitHub 예약 실행이 몰려 지연이 커서 피한다.
+    - cron: "10 1 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true면 텔레그램을 보내지 않고 미리보기만 로그에 찍는다 (발송 기록도 안 바꿈)"
+        required: false
+        default: "false"
+      force:
+        description: "true면 주말이거나 오늘 이미 보냈어도 다시 보낸다 (보낸 공고 기록은 그대로라 새 공고만)"
+        required: false
+        default: "false"
+      attempt:
+        description: "몇 번째 시도인지 — 실패 재시도가 자동으로 채운다. 손으로 돌릴 땐 그대로 1"
+        required: false
+        default: "1"
+
+# contents: write — 발송 기록을 bot-state 브랜치에 커밋 / actions: write — 주간 보고 깨우기·실패 재시도 Run 띄우기
+permissions:
+  contents: write
+  actions: write
+
+env:
+  # 조회 기간("직전 3일")·D-N·주말 판단을 한국 날짜로
+  TZ: Asia/Seoul
+  RETRY_DELAY_MINUTES: "60"
+  MAX_ATTEMPTS: "5"
+
+jobs:
+  # 월요일이면 주간 보고(report-weekly.yml)도 깨운다 — 09:10까지 기다렸다가. 매일 아침 호출 하나로 둘 다 정시에 돌게
+  # (팀원 수집기에서 주간용 외부 호출이 두 번 다 안 왔던 일 때문에 생긴 방식). 이미 보낸 주라면 주간 쪽이 기록을 보고 바로 끝난다.
+  # 실패 재시도 Run(attempt>1)에선 다시 깨우지 않는다.
+  kick-weekly:
+    if: (github.event.inputs.attempt || '1') == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 월요일이면 주간 보고도 깨우기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          if [ "$(TZ=Asia/Seoul date +%u)" != "1" ]; then
+            echo "월요일이 아니라 주간 보고를 깨우지 않습니다."
+            exit 0
+          fi
+          # 주간 보고는 09:10 — 매일 보고(09:00)보다 10분 늦게 오도록 그때까지 기다린다(이미 지났으면 바로)
+          wait=$(( $(TZ=Asia/Seoul date -d "09:10" +%s) - $(date +%s) ))
+          if [ "$wait" -gt 0 ] && [ "$wait" -le 900 ]; then
+            echo "09:10까지 ${wait}초 기다립니다."
+            sleep "$wait"
+          fi
+          gh workflow run report-weekly.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f dry_run="$DRY_RUN"
+          echo "주간 보고를 깨웠습니다 (dry_run=$DRY_RUN)."
+
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # 두 곳이 거의 같이 깨워도 한 번에 하나만 — 뒤에 도는 쪽이 앞 실행의 발송 기록을 보고 건너뛴다.
+    # (잡 단위로 건다 — 워크플로 단위면 아래 retry 잡이 60분 자는 동안 예비 실행까지 막힌다)
+    concurrency:
+      group: report-daily
+      cancel-in-progress: false
+    outputs:
+      failed: ${{ steps.fail.outputs.failed }}
+      attempt: ${{ steps.mode.outputs.attempt }}
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 의존성 설치
+        run: pip install -r requirements.txt
+
+      - name: 테스트
+        run: python -m unittest discover -s tests -t .
+
+      - name: 실행 모드
+        id: mode
+        env:
+          ATTEMPT: ${{ github.event.inputs.attempt || '1' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          { echo "attempt=$ATTEMPT"; echo "dry_run=$DRY_RUN"; echo "force=$FORCE"; } >> "$GITHUB_OUTPUT"
+          echo "깨운 곳=$EVENT (schedule=GitHub 예비 실행) / 시도 ${ATTEMPT}회차 / dry_run=$DRY_RUN / force=$FORCE"
+
+      # 기록은 상태 전용 브랜치 bot-state에 — 없으면 빈 기록으로 시작. 불러온 그대로를 state/.loaded에 두고, 저장할 때 바뀐 파일만 올린다
+      # (불러오기가 잠깐 실패해 빈 기록으로 돌았을 때 그 빈 기록으로 덮어쓰지 않게)
+      - name: 발송 기록 불러오기
+        run: |
+          mkdir -p state/.loaded
+          if git fetch --depth 1 origin bot-state 2>/dev/null; then
+            for f in sent_bids.json sent_report_daily.json; do
+              git show "FETCH_HEAD:$f" > "state/$f" 2>/dev/null || rm -f "state/$f"
+            done
+          fi
+          [ -f state/sent_bids.json ] || echo '{}' > state/sent_bids.json
+          cp state/*.json state/.loaded/
+          echo "보낸 공고 기록 $(python -c "import json;print(len(json.load(open('state/sent_bids.json'))))")건 · 마지막 매일 보고 $(cat state/sent_report_daily.json 2>/dev/null || echo 없음)"
+
+      # 싱크로율 자료(비공개 과거 실적)는 암호화 묶음으로 커밋돼 있다 — Secret이 없으면 싱크로율만 빠진다
+      - name: 싱크로율 자료 풀기
+        env:
+          CORPUS_PASSPHRASE: ${{ secrets.CORPUS_PASSPHRASE }}
+        run: python -m nego.corpus open
+
+      - name: 입찰 공고 수집 · 텔레그램 보고
+        id: collect
+        continue-on-error: true
+        env:
+          NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+          JIIL_REPO: data/jiil
+          LOOKBACK_DAYS: "1"
+          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+          FORCE: ${{ steps.mode.outputs.force }}
+        run: |
+          ARGS=(--fetch-attachment-text --categories 입찰 --complete-days 3 --telegram --no-supabase
+                --sent-state state/sent_bids.json --report daily --sent-reports state/sent_report_daily.json)
+          [ "$DRY_RUN" = "true" ] && ARGS+=(--dry-run)
+          [ "$FORCE" = "true" ] && ARGS+=(--force)
+          set -o pipefail
+          python -m nego "${ARGS[@]}" 2>&1 | tee collect.log
+
+      - name: 발송 기록 저장
+        if: always() && steps.mode.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          changed=()
+          for f in state/*.json; do
+            cmp -s "$f" "state/.loaded/$(basename "$f")" || changed+=("$f")
+          done
+          bash scripts/push-bot-state.sh "${changed[@]}"
+
+      # 수집 원문(data/)은 올리지 않는다 — 담당자 연락처가 섞일 수 있다. 리포트(output/)만.
+      - name: 리포트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-daily-${{ github.run_id }}
+          path: output/
+          retention-days: 90
+          if-no-files-found: ignore
+
+      # 개발자 방에만 — 첫 실패·재시도 소진·재시도 끝 성공(nego/dev_alert.py가 보낼지 정함). 알림이 실패해도 Run 결과는 그대로.
+      - name: 개발자 알림
+        if: always() && (steps.collect.outcome == 'failure' || steps.collect.outcome == 'success')
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python -m nego.dev_alert --outcome "${{ steps.collect.outcome }}" --attempt "${{ steps.mode.outputs.attempt }}" \
+            --max-attempts "$MAX_ATTEMPTS" --retry-minutes "$RETRY_DELAY_MINUTES" \
+            --mode "매일 입찰 보고" --log collect.log --run-url "$RUN_URL"
+
+      - name: 실패 처리
+        id: fail
+        if: steps.collect.outcome == 'failure'
+        run: |
+          echo "failed=true" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.mode.outputs.attempt }}" -ge "$MAX_ATTEMPTS" ]; then
+            echo "::error::${{ steps.mode.outputs.attempt }}번째 시도에서도 실패 — 자동 재시도를 멈춥니다."
+          fi
+          exit 1
+
+  # 나라장터 접속이 몇 시간 끊길 수 있어(10/7) 60분 뒤 같은 입력으로 새 Run을 띄운다. 그 사이 예비 실행이 먼저 보내면
+  # 재시도 Run은 발송 기록을 보고 바로 끝난다.
+  retry:
+    needs: report
+    if: always() && needs.report.outputs.failed == 'true' && fromJSON(needs.report.outputs.attempt) < 5
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - name: 기다렸다가 다시 시도
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTEMPT: ${{ needs.report.outputs.attempt }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
+        run: |
+          NEXT=$(( ATTEMPT + 1 ))
+          echo "실패 — ${RETRY_DELAY_MINUTES}분 뒤 ${NEXT}번째 시도를 띄웁니다."
+          sleep $(( RETRY_DELAY_MINUTES * 60 ))
+          gh workflow run report-daily.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" \
+            -f attempt="$NEXT" -f dry_run="$DRY_RUN" -f force="$FORCE"
+          echo "${NEXT}번째 시도 Run을 띄웠습니다."

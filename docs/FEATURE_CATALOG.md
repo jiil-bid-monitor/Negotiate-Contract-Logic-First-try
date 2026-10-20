@@ -47,7 +47,7 @@
 | F-19 | 정보 | 사업 범위 목록 추출 | `nego/business_scope.py` |
 | F-20 | 보고 | 텔레그램 보고(간결 2줄·구역 분리·마감 임박·HTML 첨부·0건 보고) | `nego/telegram.py`, `docs/telegram.md` |
 | F-21 | 보고 | 실패 처리: 개발자 방 알림·60분 뒤 재시도·슈퍼그룹 ID 자동 전환 | `.github/workflows/daily.yml`, `nego/telegram.py` |
-| F-22 | 보고 | HTML/CSV/콘솔 리포트, 주간 메일 HTML만 표 줄 아래 '자격 미보유' 칸(필수/택1 묶음 ✓·✗·–, 공동수급 — 텔레그램 첨부는 그대로) | `nego/report.py` |
+| F-22 | 보고 | HTML/CSV/콘솔 리포트 | `nego/report.py` |
 | F-23 | 웹앱 | 사내 웹앱(수집 버튼·카드·필터 메뉴·정렬·구역 이동·검색) | `webapp/` |
 | F-24 | 웹앱 | 자격 팝업(필수 보유 / N개 중 1개 / 조합) | `webapp/qualview.py`, `static/index.html` |
 | F-25 | 웹앱 | 싱크로율(과거 실적 유사도) | `webapp/sync.py` (+ 비공개 `jiil-past-contracts`) |

@@ -6,7 +6,6 @@ import csv
 import html
 import re
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 
 from .pipeline import Candidate, RunStats
@@ -168,95 +167,6 @@ def _qualification_cell_html(q, esc) -> str:
         '<div class="tip-note">이름 뒤 괄호 숫자는 세부품명번호·업종코드입니다. '
         "코드가 없는 항목은 면허제한정보 API에 코드 필드 자체가 없어 이름만 표시됩니다.</div></span>"
         "</button>"
-    )
-
-
-# ── 자격 미보유 칸 (2026-10-20, 팀원 레포 10/19 리포트 카드 이식) ─────────────────────────
-# 표의 자격판정 동그라미는 마우스를 올려야 미보유 자격이 보여, 메일로 열면 볼 수 없었다. 미보유 자격이 있는 공고는
-# 줄 아래에 "필수 보유 / N개 중 1개 이상 / 방법 중 하나 / 조건부" 묶음을 ✓·✗·–로 펼쳐 둔다 — 웹앱 자격 팝업(index.html
-# reqBlocksHtml)과 같은 자료(webapp/qualview.build). 메일 프로그램이 <style>을 지우는 경우가 있어 스타일은 칸 안에 직접 쓴다.
-# **주간 메일 리포트에만** 넣는다 — 텔레그램 첨부 HTML은 원래 구조 그대로(2026-10-20 사용자 결정, render_html qualification_panel).
-_QUAL_OK = "color:#15803d;"
-_QUAL_MISS = "color:#b91c1c;font-weight:600;"
-_QUAL_SPARE = "color:#9ca3af;"
-_QUAL_OR = '<div style="color:#9ca3af;font-size:11px;padding:1px 0 1px 16px;">또는</div>'
-
-
-@lru_cache(maxsize=1)
-def _held_lookup() -> tuple:
-    """보유 자격(config/held_qualifications.json) — 리포트를 만들 때마다 다시 읽지 않게."""
-    from webapp.qualview import held_lookup  # 웹앱 팝업과 같은 판정 자료 (webapp → nego 순환 import를 피해 여기서)
-
-    from .config import load_config
-
-    return held_lookup(load_config().held_raw)
-
-
-def _qual_line(label: str, held: bool, spare: bool, esc) -> str:
-    style, mark = (_QUAL_OK, "✓") if held else (_QUAL_SPARE, "–") if spare else (_QUAL_MISS, "✗")
-    return f'<div style="{style}padding:1px 0;">{mark} {esc(label)}</div>'
-
-
-def _qual_block(heading: str, lines: list[str], joiner: str = "") -> str:
-    return (f'<div style="margin-top:6px;"><div style="font-size:12px;color:#6b7280;margin-bottom:1px;">{heading}</div>'
-            f"{joiner.join(lines)}</div>")
-
-
-def _qual_req_blocks(reqs: list[dict], esc) -> list[str]:
-    """요건 목록 → 묶음 블록 (index.html reqBlocksHtml과 같은 규칙). 필수 보유(하나뿐인 요건)는 한 칸에 미보유 먼저."""
-    blocks: list[str] = []
-    must = [r["items"][0] for r in reqs if not r.get("any_of") and not r.get("combos") and not r.get("why") and r.get("items")]
-    must = sorted(dict((i["label"], i) for i in must).values(), key=lambda i: i["held"])
-    if must:
-        head = "필수 보유" if len(must) == 1 else f"필수 보유 — {len(must)}개 모두 필요"
-        blocks.append(_qual_block(head, [_qual_line(i["label"], i["held"], False, esc) for i in must]))
-    for r in reqs:
-        if r.get("combos"):
-            done = any(c["held"] for c in r["combos"])
-            lines = [_qual_line(" + ".join(x["label"] for x in c["rows"]), c["held"], done, esc) for c in r["combos"]]
-            blocks.append(_qual_block(f"아래 방법 중 하나 — {'보유로 충족' if done else '미보유'}", lines, _QUAL_OR))
-        elif r.get("any_of"):
-            items = list(dict((i["label"], i) for i in r["items"]).values())
-            done = any(i["held"] for i in items)
-            lines = [_qual_line(i["label"], i["held"], done, esc) for i in items]
-            blocks.append(_qual_block(f"아래 {len(items)}개 중 1개 이상 — {'보유로 충족' if done else '미보유'}", lines, _QUAL_OR))
-        elif r.get("why") and r.get("items"):
-            # 조건부(없으면 공동수급) 요건은 없어도 "–", 첨부에서 찾은 "보유 확인"은 ✓
-            i = r["items"][0]
-            blocks.append(_qual_block(esc(r["why"]), [_qual_line(i["label"], i["held"], bool(r.get("joint")), esc)]))
-    return blocks
-
-
-def _qualification_panel_html(c: Candidate, esc) -> str:
-    """미보유 자격이 있는 공고만 — 표 줄 아래에 펼쳐 둘 '자격 미보유' 칸. 없으면 빈 문자열."""
-    q = c.qualification
-    if not q.checked or not q.missing_count:
-        return ""
-    from webapp.qualview import build
-
-    has_text = bool((getattr(c, "attachment_text", "") or "").strip())
-    parts = build(q, _held_lookup(), {"industry": c.notice.kind == "본공고" or has_text, "product": has_text})
-    sections = []
-    for p in parts:
-        reqs = list(p.get("missing") or []) + list(p.get("satisfied") or [])
-        blocks = _qual_req_blocks(reqs, esc) if p.get("status") == "미달" else []
-        if blocks:
-            sections.append(f'<div style="margin-top:6px;font-weight:700;color:#374151;">{esc(p["name"])}</div>' + "".join(blocks))
-    if not sections:
-        return ""
-    # 공동수급 불허면 부족한 자격을 함께 채울 업체를 구할 수 없어 빨강, 허용이면 노랑, 정보 없으면 원문 확인
-    denied = c.joint.raw_value is not None and not c.joint.allowed
-    joint = ("공동수급 여부는 원문 확인" if c.joint.raw_value is None
-             else "공동수급 불허 — 참가 어려움" if denied else f"공동수급으로 참가 검토 ({c.joint.label})")
-    bg, border, fg = ("#fef2f2", "#fecaca", "#b91c1c") if denied else ("#fffbeb", "#fde68a", "#b45309")
-    return (
-        f'<div style="background:{bg};border:1px solid {border};border-radius:8px;padding:10px 14px;font-size:12px;'
-        f'line-height:1.5;color:#374151;max-width:640px;">'
-        f'<div style="font-size:13px;font-weight:700;color:{fg};">자격 미보유</div>'
-        f'<div style="color:#6b7280;">{esc(joint)}</div>'
-        + "".join(sections)
-        + '<div style="margin-top:6px;font-size:11px;color:#9ca3af;">✓ 보유 · ✗ 미보유 · – 없어도 됨(이미 충족했거나 공동수급으로 채울 수 있음)</div>'
-        "</div>"
     )
 
 
@@ -432,8 +342,7 @@ _HTML_HEAD = """<meta charset="utf-8">
   th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line);
            vertical-align:middle; font-size:0.75rem; line-height:1.4; }
   /* 2026-10-20 사용자 요청: 한 줄짜리 칸(자격판정 동그라미·공동수급·예가방법 등)이
-     두 줄짜리 금액 칸 위쪽에 붙어 보여서 행 높이 기준 세로 가운데로 맞춘다.
-     줄 아래 '자격 미보유' 펼침 칸(메일 전용)은 그 칸 인라인 스타일로 위 정렬. */
+     두 줄짜리 금액 칸 위쪽에 붙어 보여서 행 높이 기준 세로 가운데로 맞춘다. */
   /* 셀 내용을 항상 블록(div)으로 감싸서 시작점을 맞춘다 — 뱃지/버튼 같은
      인라인 요소가 셀에 바로 있으면 브라우저가 셀마다 다른 줄상자 높이를
      잡아 계약방법/예가방법/수요기관/개찰일 같은 옆 칸과 첫 줄이 미묘하게
@@ -561,7 +470,7 @@ _TOOLTIP_FLIP_SCRIPT = """<script>
 </script>"""
 
 
-def _table_html(section_title: str, candidates: list[Candidate], esc, qualification_panel: bool = False) -> list[str]:
+def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[str]:
     parts = [f'<div class="section">{esc(section_title)} ({len(candidates)}건)</div>']
 
     if not candidates:
@@ -664,18 +573,12 @@ def _table_html(section_title: str, candidates: list[Candidate], esc, qualificat
                 f"<td><div>{_deadline_cell_html(c, esc)}</div></td>"
                 "</tr>"
             )
-            # 미보유 자격은 줄 아래에 펼쳐 둔다 — 동그라미 팝업은 메일에서 안 열린다 (주간 메일 리포트만)
-            panel = _qualification_panel_html(c, esc) if qualification_panel else ""
-            if panel:
-                parts.append(f'<tr class="qual-row"><td colspan="10" style="padding:0 12px 12px;vertical-align:top;">{panel}</td></tr>')
         parts.append("</tbody></table></div>")
 
     return parts
 
 
-def render_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime,
-                qualification_panel: bool = False) -> str:
-    """`qualification_panel`: 미보유 자격 공고 줄 아래에 '자격 미보유' 칸 — 주간 메일 리포트만 켠다(텔레그램 첨부는 원래 구조)."""
+def render_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime) -> str:
     def esc(text: str | None) -> str:
         return html.escape(str(text or ""))
 
@@ -698,7 +601,7 @@ def render_html(candidates: list[Candidate], stats: RunStats, generated_at: date
     for section_title, rows in (("관심 공고", interest), ("세부품명 공고 (키워드 없이 보유 품목으로 수집)", product_only)):
         if section_title.startswith("세부품명") and not rows:
             continue
-        parts.extend(_table_html(section_title, rows, esc, qualification_panel))
+        parts.extend(_table_html(section_title, rows, esc))
 
     parts.append("</div>")
     parts.append(_TOOLTIP_FLIP_SCRIPT)
@@ -706,9 +609,8 @@ def render_html(candidates: list[Candidate], stats: RunStats, generated_at: date
 
 
 def save_reports(
-    candidates: list[Candidate], stats: RunStats, output_dir: Path, generated_at: datetime, email: bool = False
+    candidates: list[Candidate], stats: RunStats, output_dir: Path, generated_at: datetime
 ) -> dict[str, Path]:
-    """CSV + HTML(텔레그램 첨부·보관용). `email`이면 '자격 미보유' 칸을 넣은 메일용 HTML도 따로(`email_html`)."""
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = generated_at.strftime("%Y%m%d_%H%M")
 
@@ -716,9 +618,5 @@ def save_reports(
     csv_path = write_csv(candidates, output_dir / f"공고_{prefix}_{stamp}.csv")
     html_path = output_dir / f"공고_{prefix}_{stamp}.html"
     html_path.write_text(render_html(candidates, stats, generated_at), encoding="utf-8")
-    paths = {"csv": csv_path, "html": html_path}
-    if email:
-        email_path = output_dir / f"공고_{prefix}_{stamp}_메일.html"
-        email_path.write_text(render_html(candidates, stats, generated_at, qualification_panel=True), encoding="utf-8")
-        paths["email_html"] = email_path
-    return paths
+
+    return {"csv": csv_path, "html": html_path}

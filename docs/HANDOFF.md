@@ -95,7 +95,7 @@
 2. **비밀값은 계정이 아니라 저장소·PC에 있음** — 계정을 바꿔도 그대로 동작:
    - GitHub 저장소 Secrets: `NARA_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`(-1004487982383), `TELEGRAM_DEV_CHAT_ID`(-5536307994),
      (선택) `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
-   - 서버 PC: 레포 루트 `.env`(나라장터 인증키, `APP_TOKEN=jiil2026`, 판단 기록 백업 폴더 `BACKUP_DIR`),
+   - 서버 PC: 레포 루트 `.env`(나라장터 인증키, `APP_TOKEN=jiil2026`, 판단 기록 백업 폴더는 `.env`가 아니라 Windows 사용자 환경변수 `BACKUP_DIR` — 웹앱은 `.env`를 스스로 읽지 않음, `docs/decision_log.md` 8절),
      `data/participation.json`·`promoted.json`(참가여부·사유·대화 — 원본은 이 PC, `BACKUP_DIR`을 켜면 구글 드라이브에 사본, `docs/decision_log.md` 8절).
 3. **이 클라우드 환경의 제약** — 나라장터 API·g2b.go.kr·api.telegram.org는 막혀 있음. 실제 호출 확인은
    GitHub Actions 수동 실행(`workflow_dispatch`)이나 사용자 PC 웹앱으로 해야 함.

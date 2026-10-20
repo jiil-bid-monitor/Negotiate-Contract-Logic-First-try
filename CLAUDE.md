@@ -68,6 +68,7 @@ N(이 레포)·M(팀원 `iamhiki/narajangter-bid-monitor`, TS) 비교 → 16개 
 
 ## 2026-10-20 — 정기 보고 운영을 팀원 수집기 방식으로 (1단계, 브랜치 `claude/report-ops-phase1`, 사용자 요청)
 
+**(10/20 사용자 결정) 이 작업은 멈춤 — 팀원이 같은 구조(판정 N·알림 M)로 새로 만들고, 끝나면 그 결과를 이 브랜치에 옮겨 붙임.** cron-job.org·토큰 설정도 팀원 쪽에서. 옮길 때 아래 내용과 겹치거나 빠진 것(daily.yml schedule 제거·bot-state 덮어쓰기·첨부 전 거르기)을 대조할 것.
 사용자 결정: **판정은 N(이 레포), 운영은 M(팀원 레포 — 읽기만, 수정 금지)**. 3단계로 진행 — 1단계 운영 껍데기(이번),
 2단계 구글 시트 기록(M `src/sheets/`, 시트를 M과 같이 쓸지 새로 만들지 사용자 결정 대기), 3단계 report-log → 화면 "미판단/놓침"(M `reportLog.ts`·`ui.ts pullReportLog`).
 - **워크플로**: `report-daily.yml`(평일 입찰, 3일치 + `sent_bids.json`) · `report-weekly.yml`(월 협상·규격·사전규격 + 메일, 7일). cron-job.org가

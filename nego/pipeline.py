@@ -76,11 +76,11 @@ class Candidate:
 
     @property
     def region_suspect(self) -> str | None:
-        """첨부 공고문 판정이 미달인데 API로는 미달이 아닐 때 — "지역 제한 의심: 경기 (첨부)"."""
+        """첨부 공고문 판정이 미달인데 API로는 미달이 아닐 때 — "지역 제한 의심: 경기" (10/21 사용자 요청: "(첨부)"가 리포트 금액 칸을 침범해 뺌)."""
         text = self.region_text
         if text is None or text.status != "미달" or self.region_check.status == "미달":
             return None
-        return f"지역 제한 의심: {'·'.join(text.required)} (첨부)"
+        return f"지역 제한 의심: {'·'.join(text.required)}"
     # 첨부 공고문에서 찾은, 판정하지 않고 "확인 필요"로만 보여줄 요건 — 실적·기술인력·건축사사무소
     # (`text_requirements.flag_requirements`, [{kind, text, date?}])
     text_flags: list = field(default_factory=list)

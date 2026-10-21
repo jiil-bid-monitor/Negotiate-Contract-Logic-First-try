@@ -269,7 +269,7 @@ class TestRegion(unittest.TestCase):
 
         c = Candidate.__new__(Candidate)
         c.region_check, c.region_text = api, text
-        self.assertEqual(c.region_suspect, "지역 제한 의심: 경기 (첨부)")
+        self.assertEqual(c.region_suspect, "지역 제한 의심: 경기")
         stats = RunStats(screened_in=1)
         self.assertEqual(drop_region_unmet([c], stats), [c])
 

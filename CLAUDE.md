@@ -18,9 +18,9 @@
 - cron-job.org가 평일 09:00·월 09:10 KST에 `workflow_dispatch` API를 부름(입력값·토큰 만드는 법 `docs/telegram.md` 9절 — Fine-grained PAT, Actions 읽기·쓰기).
 - GitHub `schedule`은 **12:00/12:10 KST 백업**(`0 3 * * 1-5`·`10 3 * * 1`). `run-name`에 모드를 넣고, 백업 실행은 오늘(KST) 같은 이름의
   수동 실행이 진행 중·성공이면 skip(수집·기록 단계 건너뜀). Runs 조회 실패면 그냥 수집. 외부 예약 본문 값을 바꾸면 이름이 달라져 중복 발송됨.
-- 토큰은 **팀원 계정 `iamhiki`**로 만듦(조직 jiil-bid-monitor에서 fine-grained PAT 허용 켬). iamhiki는 저장소 admin 협업자였지만
-  **조직 멤버가 아니라 Resource owner에 조직이 안 떴음** → 조직 멤버로 초대해 해결. 처음 만든 토큰(주인 iamhiki 개인)은 못 씀 — 지울 것.
-- 실측 미확인: cron-job.org 첫 호출(204)·백업 skip. 토큰 만료일(최대 1년) 전에 갱신 필요.
+- 토큰 주인 **`kdh-007`**(Run #108 실행자). 처음엔 `iamhiki`로 만들었는데 저장소 admin 협업자여도 **조직 멤버가 아니면 Resource owner에
+  조직이 안 뜸** → 조직 멤버로 해결(인수인계 표에 적음). iamhiki 개인 소유 토큰은 못 씀 — 지울 것.
+- 실측: cron-job.org Test run 204 → Run #108(10/21 11:29 KST) 전 단계 성공. 미확인: 12:00 백업 skip, 다음 날 09:00 정시 호출. 토큰 만료일(최대 1년) 전에 갱신 필요.
 
 ## 2026-10-20 — HTML 리포트 표 칸 세로 가운데 정렬 (브랜치 `claude/report-cell-middle`, 사용자 요청)
 

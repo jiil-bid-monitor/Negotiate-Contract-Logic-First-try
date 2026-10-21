@@ -39,7 +39,7 @@ def _candidates(n: int = 2):
 class TestRows(unittest.TestCase):
     def test_header_matches_team_repo(self):
         self.assertEqual(len(F.HEADER), 22)
-        self.assertEqual(F.HEADER[F.VERDICT_COLUMN_INDEX], "판정")
+        self.assertEqual(F.HEADER[F.VERDICT_COLUMN_INDEX], "판단")
         self.assertEqual(F.HEADER[:F.SYSTEM_COLUMNS][-1], "공동수급방식")
 
     def test_row_has_18_system_columns_in_order(self):
@@ -153,6 +153,146 @@ class TestAppend(unittest.TestCase):
         with mock.patch.dict(os.environ, {"GOOGLE_SERVICE_ACCOUNT_JSON": "not json", "FEEDBACK_SHEET_ID": "SHEET"}):
             with self.assertRaises(F.SheetsError):
                 F.append_candidates(_candidates(), NOW, session=FakeSession())
+
+
+# ── 웹앱 판단 → S~V (2026-10-21) ──
+
+DECIDED = {"noticeNo": "R1", "status": "불참", "tags": ["자격 미달", "규모"], "reason": "=공동수급 어려움",
+           "decidedBy": "홍길동", "decidedAt": "2026-10-21T01:30:00.000Z"}
+REPORTED = {"noticeNo": "R2", "status": None, "reports": [{"date": "2026-10-21", "kind": "daily"}],
+            "meta": {"deadline": "2099-01-01 10:00"}}
+NOW_UTC = datetime(2026, 10, 21, 3, 0, tzinfo=__import__("datetime").timezone.utc)
+
+
+class TestVerdicts(unittest.TestCase):
+    def test_cells(self):
+        self.assertEqual(F.verdict_cells(DECIDED, NOW_UTC),
+                         ["불참", "자격 미달, 규모 / =공동수급 어려움", "홍길동", "2026-10-21 10:30"])
+        self.assertEqual(F.verdict_cells(REPORTED, NOW_UTC), ["미판단", "", "", ""])
+        self.assertEqual(F.verdict_cells({"noticeNo": "R3", "status": None}, NOW_UTC), ["", "", "", ""])
+
+    def test_reason_is_written_as_is(self):
+        self.assertEqual(F.verdict_cells(dict(DECIDED, tags=[]), NOW_UTC)[1], "=공동수급 어려움", "RAW로 써서 수식이 안 됨")
+
+    def test_plan_only_changed_rows_and_keeps_manual_entries(self):
+        rows = [
+            ["R1"],                                            # 2행 — 판단 새로 씀
+            ["R2"] + [""] * 17 + ["미판단"],                   # 3행 — 이미 같음
+            ["R3"] + [""] * 17 + ["O (맞음)", "직접 적음"],    # 4행 — 웹앱 판단 없음, 사람이 적은 값은 그대로
+            ["R4"] + [""] * 17 + ["참가", "", "김", "x"],      # 5행 — 웹앱에서 판단을 지움 → 비움
+            ["R9"],                                            # 판단 기록에 없는 공고
+            [],
+        ]
+        wanted = {"R1": ["불참", "a", "b", "c"], "R2": ["미판단", "", "", ""], "R3": ["", "", "", ""],
+                  "R4": ["", "", "", ""]}
+        self.assertEqual(F.plan_verdicts(rows, wanted), [(2, ["불참", "a", "b", "c"]), (5, ["", "", "", ""])])
+
+
+class VerdictSession(FakeSession):
+    def __init__(self, rows, head=None):
+        super().__init__()
+        self.rows, self.head = rows, head if head is not None else F.OLD_VERDICT_HEADER
+        self.batch = None
+        self.head_written = None
+        self.validation = None
+
+    def request(self, method, url, json=None, timeout=None, headers=None):
+        if "fields=sheets.properties" in url:
+            return FakeResponse(200, {"sheets": [{"properties": {"title": "피드백", "sheetId": 7}}]})
+        if "S1%3AV1" in url:
+            if method == "PUT":
+                self.head_written = json["values"][0]
+                return FakeResponse(200, {})
+            return FakeResponse(200, {"values": [self.head]})
+        if "A2%3AV" in url:
+            return FakeResponse(200, {"values": self.rows})
+        if "values:batchUpdate" in url:
+            self.batch = json
+            return FakeResponse(200, {})
+        if ":batchUpdate" in url:
+            self.validation = json
+            return FakeResponse(200, {})
+        raise AssertionError(url)
+
+
+class TestWriteVerdicts(unittest.TestCase):
+    def _env(self, **extra):
+        return mock.patch.dict(os.environ, {"GOOGLE_SERVICE_ACCOUNT_JSON": _key_json(), "FEEDBACK_SHEET_ID": "SHEET",
+                                            "GOOGLE_SERVICE_ACCOUNT_FILE": "", **extra})
+
+    def test_writes_s_to_v_and_renames_old_header(self):
+        session = VerdictSession([["R1"], ["R2"]])
+        with self._env():
+            result = F.write_verdicts({"R1": DECIDED, "R2": REPORTED, "R7": dict(DECIDED, noticeNo="R7")}, NOW_UTC,
+                                      session=session)
+        self.assertEqual(result, {"updated": 2, "not_in_sheet": 1})
+        self.assertEqual([d["range"] for d in session.batch["data"]], ["피드백!S2:V2", "피드백!S3:V3"])
+        self.assertEqual(session.batch["valueInputOption"], "RAW")
+        self.assertEqual(session.head_written, ["판단", "사유", "판단자", "판단일"])
+        opts = session.validation["requests"][0]["setDataValidation"]["rule"]["condition"]["values"]
+        self.assertEqual([o["userEnteredValue"] for o in opts], F.VERDICT_OPTIONS)
+
+    def test_custom_header_is_kept_and_prepare_once(self):
+        session = VerdictSession([["R1"] + [""] * 17 + ["불참", "자격 미달, 규모 / =공동수급 어려움", "홍길동",
+                                                         "2026-10-21 10:30"]], head=["내 머리글"])
+        with self._env():
+            result = F.write_verdicts({"R1": DECIDED}, NOW_UTC, session=session, prepare=False)
+        self.assertEqual(result["updated"], 0, "같은 값이면 안 씀")
+        self.assertIsNone(session.batch)
+        self.assertIsNone(session.head_written)
+        self.assertIsNone(session.validation)
+
+    def test_key_file_setting(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "key.json"
+            path.write_text(_key_json(), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"GOOGLE_SERVICE_ACCOUNT_JSON": "", "GOOGLE_SERVICE_ACCOUNT_FILE": f"'{path}'",
+                                              "FEEDBACK_SHEET_ID": "SHEET"}):
+                self.assertEqual(F.settings()[1:], ("SHEET", "피드백"))
+            with mock.patch.dict(os.environ, {"GOOGLE_SERVICE_ACCOUNT_JSON": "", "GOOGLE_SERVICE_ACCOUNT_FILE": str(path) + "x",
+                                              "FEEDBACK_SHEET_ID": "SHEET"}):
+                with self.assertRaises(F.SheetsError):
+                    F.settings()
+
+
+class TestSheetSync(unittest.TestCase):
+    def test_only_when_changed_or_resync_due(self):
+        from webapp import sheetsync
+
+        state = {"v": 1, "t": 0.0}
+        calls = []
+
+        def write(records, now, prepare):
+            calls.append(prepare)
+            return {"updated": 1, "not_in_sheet": 0}
+
+        sync = sheetsync.SheetSync(lambda: (state["v"], {}), write=write, clock=lambda: state["t"])
+        sync.tick()
+        sync.tick()
+        self.assertEqual(calls, [True], "바뀐 게 없으면 안 부름, 머리글·드롭다운은 처음 한 번")
+        state["v"] = 2
+        sync.tick()
+        state["t"] = sheetsync.RESYNC_SECONDS + 1
+        sync.tick()
+        self.assertEqual(calls, [True, False, False])
+
+    def test_error_keeps_retrying(self):
+        from webapp import sheetsync
+
+        calls = []
+
+        def write(records, now, prepare):
+            calls.append(prepare)
+            if len(calls) == 1:
+                raise F.SheetsError("403")
+            return {"updated": 0, "not_in_sheet": 0}
+
+        sync = sheetsync.SheetSync(lambda: (1, {}), write=write, clock=lambda: 0.0)
+        with self.assertLogs("webapp.sheetsync", "WARNING"):
+            self.assertIsNone(sync.tick())
+        sync.tick()
+        self.assertEqual(calls, [True, True], "실패하면 다음에 다시, 준비도 다시")
 
 
 if __name__ == "__main__":

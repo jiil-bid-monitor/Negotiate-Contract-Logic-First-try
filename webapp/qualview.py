@@ -17,7 +17,7 @@ import re
 from types import SimpleNamespace
 from typing import Any, Iterable
 
-from nego.qualify import JOINT_GROUP
+from nego.qualify import JOINT_GROUP, drop_item_marks
 from nego.report import _dedupe_names_preferring_code, _display_name
 
 _TRAILING_CODE = re.compile(r"\((\d{4}|\d{10})\)\s*$")
@@ -61,7 +61,7 @@ def _clean_label(label: str) -> str:
     if not code:
         return label
     name = _TRAILING_CODE.sub("", label).strip()
-    name = _NAME_PREFIX.sub("", name).strip()
+    name = _NAME_PREFIX.sub("", drop_item_marks(name)).strip()  # 예전 결과·다른 공고에서 배운 "①전시부스…"도
     return f"{name}({code})" if name else code
 
 

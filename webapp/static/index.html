@@ -739,8 +739,9 @@ ol.steps li.first { background: var(--urgent-tint); }
 .qtip p { margin: 8px 0 0; font-size: 11.5px; color: var(--muted); }
 /* 한글은 어절 단위로만 줄을 바꾸고, 마지막 줄에 한두 어절만 남지 않게 한다 */
 .qtip { word-break: keep-all; overflow-wrap: anywhere; }
-/* 직접 쓴 설명은 의미 단위에서 <br>로 끊는다. 원문에서 온 긴 문장(실적 요건 등)은 줄 길이를 고르게 */
-.qtip p, .qtip li { text-wrap: balance; }
+/* 직접 쓴 설명은 의미 단위에서 <br>로 끊는다. 마지막 줄에 한 어절만 남지 않게(pretty) — balance는 줄을 고르게 짧게 만들어
+   박스(max-content 너비) 오른쪽에 빈 여백이 생겼다(2026-10-21 제보: 해외 개최 의심 팝업) */
+.qtip p, .qtip li { text-wrap: pretty; }
 .qtip li .def { display: block; font-size: 12px; color: var(--muted); }
 
 
@@ -2521,7 +2522,7 @@ function overseasBadges(n) {
   if (n.overseas) out.push(tipBadge("okb", "몽골 공고 유력", "몽골 공고 유력",
     `<p>근거: ${esc(n.overseas)}</p><p>지일이 진출 중인 시장이라 해외 개최여도 목록에서 빼지 않습니다.<br>사업 장소를 원문에서 확인하세요.</p>`));
   if (n.overseasSuspect) out.push(tipBadge("warn", "해외 개최 의심", "해외 개최 의심",
-    `<p>${esc(n.overseasSuspect)}</p><p>제외 규칙(한국관 · 전시회류/해외 지명 + 단체관 · 국가 약자)에는 걸리지 않아 빼지 않았습니다.<br>개최지를 원문에서 확인하세요.</p>`));
+    `<p class="lead">${esc(n.overseasSuspect)}</p><p>해외 개최 제외 규칙에는 걸리지 않아 목록에 남겼습니다.<br>개최지가 해외인지 공고 원문에서 확인하세요.</p>`));
   if (n.overseasAttachment) out.push(tipBadge("warn", "해외 개최 (첨부)", "첨부의 개최·사업 장소",
     `<p>첨부 공고문·과업지시서의 장소: <b>${esc(n.overseasAttachment)}</b></p><p>첨부 판정은 표시만 합니다 — 원문에서 확인하세요.</p>`));
   return out.join("");

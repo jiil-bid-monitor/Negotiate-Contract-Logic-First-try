@@ -152,14 +152,12 @@ def _missing_tip_html(c: Candidate, esc) -> str | None:
            + section(f"미보유 {miss_n}건", "var(--fail-fg)", miss)
            + (section(f"보유 {held_n}건", "var(--pass-fg)", held) if held else "")
            + (section("조건부 — 없으면 공동수급", "var(--muted)", joint) if joint else ""))
-    mark = (f'<span class="circle circle-partial">{_PARTIAL_CHECK_SVG}</span>' if partial
+    mark = (f'<span class="circle circle-partial">{_CHECK_SVG}</span>' if partial
             else f'<span class="circle circle-fail">{_CHECK_SVG}</span>')
     return (f'<button type="button" class="qual-dot" aria-label="{esc(title)}">{mark}'
             f'<span class="tip tip-wide">{tip}</span></button>')
 
 
-# 일부 보유 노란 원 안 체크 — 노란 바탕이 밝아 흰 체크 대신 짙은 갈색
-_PARTIAL_CHECK_SVG = _CHECK_SVG.replace('stroke="#fff"', 'stroke="#7a5a00"')
 
 
 def _qualification_cell_html(c: Candidate, esc) -> str:
@@ -463,7 +461,7 @@ _HTML_HEAD = """<meta charset="utf-8">
   .circle-fail { background:#c0392b; }
   .circle-pass { background:#2554c7; }
   .circle-unchecked { background:#e3cf8f; }
-  /* 일부 보유: 노란 원 + 체크 — 다른 원과 같은 모양(사용자 요청), 미확인(옅은 노랑, 체크 없음)과는 색·체크로 구분 */
+  /* 일부 보유: 노란 원 + 흰 체크 — 다른 원과 같은 모양·체크(사용자 요청), 미확인(옅은 노랑, 체크 없음)과는 색·체크로 구분 */
   .circle-partial { background:#f2c200; }
   /* 위/아래로 고정해서 열면(둘 다 실측으로 확인됨) 표의 반대쪽 끝 행에서
      뷰포트 밖으로 잘린다 — 원 오른쪽(공간이 없으면 왼쪽)에, 세로로는

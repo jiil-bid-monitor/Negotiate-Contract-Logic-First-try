@@ -134,7 +134,7 @@ def _card(c: Candidate) -> str:
     title = _esc(n.title)
     if n.detail_url:
         title = f'<a href="{_esc(n.detail_url)}" style="color:{LINK};text-decoration:none;">{title}</a>'
-    money = f"{_fmt_money(n.budget)}원" if n.budget else "금액 모름"
+    money = _fmt_money(n.budget) if n.budget else "금액 모름"  # _fmt_money가 이미 "원"을 붙임
     rows = [("기관", n.demand_institution or n.notice_institution or "-"), ("사업금액", money),
             ("마감/일정", _deadline(c)), ("공고번호", n.notice_no), ("낙찰방법", n.award_method or "-"),
             ("공동수급", c.joint.label)]

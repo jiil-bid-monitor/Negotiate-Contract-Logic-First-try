@@ -49,6 +49,12 @@ class TestEmailHtml(unittest.TestCase):
         self.assertLess(body.index("사전규격 — 면허제한 정보 없음"), body.index("R26EM0001"))
         self.assertIn("자격: 사전규격 — 면허제한 정보 없음, 원문 확인", body)
 
+    def test_budget_has_single_won(self):
+        """2026-10-21: 사업금액이 "500,000,000원원"으로 '원'이 두 번 찍히던 것."""
+        body = render_email_html(self.cands, self.stats, NOW)
+        self.assertIn("사업금액: ", body)
+        self.assertNotIn("원원", body)
+
     def test_empty(self):
         self.assertIn("조건에 맞는 공고가 없습니다", render_email_html([], self.stats, NOW))
 

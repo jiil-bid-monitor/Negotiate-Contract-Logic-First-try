@@ -15,7 +15,7 @@ from datetime import datetime
 from functools import lru_cache
 
 from .pipeline import Candidate, RunStats
-from .report import _fmt_kr_date, _fmt_kr_datetime, _fmt_kr_deadline, _fmt_money, report_title
+from .report import _fmt_kr_date, _fmt_kr_datetime, _fmt_kr_deadline, _fmt_money, is_prespec, report_title, split_prespec
 
 INK, DIM, LINE = "#1f2937", "#6b7280", "#e5e7eb"
 LINK = "#1d4ed8"
@@ -142,7 +142,7 @@ def _card(c: Candidate) -> str:
         best = (sync.get("top") or [{}])[0]
         rows.append(("싱크로율", f'{round(sync["score"] * 100)}%' + (f' · 유사: {best.get("year") or ""} {best.get("title")}' if best.get("title") else "")))
     if not c.qualification.checked:
-        rows.append(("자격", "확인 못 함 — 원문 확인"))
+        rows.append(("자격", "사전규격 — 면허제한 정보 없음, 원문 확인" if is_prespec(c) else "확인 못 함 — 원문 확인"))
     info = "".join(f'<div style="margin:2px 0;">{k}: {_esc(v)}</div>' for k, v in rows)
     tags = ([f"품목:{p}" for p in sr.matched_product_codes or []] if getattr(sr, "section", None) == "세부품명" else []) \
         + [f"키워드:{k}" for k in sr.matched_keywords or []]
@@ -163,7 +163,13 @@ def _section(title: str, rows: list[Candidate]) -> str:
             f"{_esc(title)} ({len(rows)}건)</h3>")
     if not rows:
         return head + f'<p style="color:{DIM};font-size:13px;">조건에 맞는 공고가 없습니다.</p>'
-    return head + "".join(_card(c) for c in rows)
+    body = ""
+    for sub, sub_rows in split_prespec(rows):  # 본공고·사전규격이 섞이면 소구역으로
+        if sub:
+            body += (f'<div style="margin:14px 0 8px;font-size:14px;font-weight:700;color:{DIM};">'
+                     f"{_esc(sub)} ({len(sub_rows)}건)</div>")
+        body += "".join(_card(c) for c in sub_rows)
+    return head + body
 
 
 def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime) -> str:

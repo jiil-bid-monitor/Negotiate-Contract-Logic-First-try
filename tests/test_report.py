@@ -71,6 +71,33 @@ class TestRenderHtml(unittest.TestCase):
         out = render_html(candidates, stats, NOW)
         self.assertIn(f"관심 공고 ({len(candidates)}건)", out)  # 2026-10-19 통합 결정 12번: 관심 / 세부품명 구역
 
+    def _mixed(self):
+        """본공고 1건 + 같은 공고를 사전규격으로 바꾼 1건(자격 미확인)."""
+        import copy
+        import dataclasses
+        candidates, stats = self._candidates()
+        pre = copy.copy(candidates[0])
+        pre.notice = dataclasses.replace(pre.notice, kind="사전규격", notice_no="R26BD00000001", title="사전규격 인테리어")
+        pre.qualification = dataclasses.replace(pre.qualification, checked=False)
+        return [pre, candidates[0]], stats
+
+    def test_main_and_prespec_get_sub_sections(self):
+        """2026-10-21 사용자 요청: 텔레그램 첨부도 본공고·사전규격 소구역 — 면허 정보 없는 사전규격이 섞여 헷갈리지 않게."""
+        rows, stats = self._mixed()
+        out = render_html(rows, stats, NOW)
+        self.assertIn("관심 공고 (2건)", out)
+        main_at = out.index('<div class="subsection">본공고 (1건)</div>')
+        pre_at = out.index('<div class="subsection">사전규격 — 면허제한 정보 없음')
+        self.assertLess(main_at, pre_at)
+        self.assertLess(out.index("R26TEST0001"), pre_at)
+        self.assertGreater(out.index("R26BD00000001"), pre_at)
+        self.assertIn("사전규격엔 나라장터 면허제한 정보가 아직 없습니다", out)
+
+    def test_main_only_has_no_sub_section(self):
+        candidates, stats = self._candidates()
+        out = render_html(candidates, stats, NOW)
+        self.assertNotIn('<div class="subsection">', out)
+
     def test_row_shows_confidence_and_worktype_badges(self):
         candidates, stats = self._candidates()
         out = render_html(candidates, stats, NOW)

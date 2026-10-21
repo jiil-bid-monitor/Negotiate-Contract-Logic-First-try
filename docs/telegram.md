@@ -230,9 +230,9 @@ https://console.cron-job.org 가입 → **Create cronjob**. 두 개 모두 공�
 
 | 순서 | 누가 | 할 일 |
 |---|---|---|
-| 1 | 조직 소유자 | 새 담당자를 조직 `jiil-bid-monitor`에 초대하고 이 저장소에 **Write 이상** 권한 주기 (조직 → People / 저장소 → Settings → Collaborators and teams) |
+| 1 | 조직 소유자 | 새 담당자를 조직 `jiil-bid-monitor`의 **멤버로 초대**(조직 → People → Invite member)하고 이 저장소에 **Write 이상** 권한 주기. **저장소 협업자(외부 협업자)로만 넣으면 admin이어도 토큰의 Resource owner에 조직이 안 뜸**(2026-10-21 실제로 막힌 곳) |
 | 2 | 조직 소유자 | Fine-grained 토큰 허용이 켜져 있는지 확인 — https://github.com/organizations/jiil-bid-monitor/settings/personal-access-tokens (2026-10-21에 켬, 보통 그대로) |
-| 3 | 새 담당자 | **①**대로 토큰 만들기 — Resource owner는 반드시 `jiil-bid-monitor`(내 이름이 아니라). 목록에 없으면 2번이 꺼진 것 |
+| 3 | 새 담당자 | **①**대로 토큰 만들기 — Resource owner는 반드시 `jiil-bid-monitor`(내 이름이 아니라). 목록에 없으면 1번(조직 멤버 아님)이나 2번(허용 꺼짐) |
 | 4 | 새 담당자 | cron-job.org: 예전 계정 로그인 정보를 넘겨받았으면 두 예약의 `Authorization` 헤더만 새 토큰으로 바꿈. 못 받았으면 새로 가입해서 **②**대로 예약 두 개를 다시 만듦 |
 | 5 | 새 담당자 | 두 예약 모두 **Test run → 204** 확인 (403 = 1번 권한 부족, 401 = 토큰 오타·만료, 404 = 주소 오타) |
 | 6 | 조직 소유자 | 예전 토큰 끊기 — 조직 Settings → Personal access tokens → **Active tokens**에서 예전 담당자 토큰 Revoke, 필요하면 조직에서 그 계정 제거 |

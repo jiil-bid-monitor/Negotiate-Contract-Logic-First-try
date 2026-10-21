@@ -97,7 +97,7 @@
      (선택) `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
    - 서버 PC: 레포 루트 `.env`(나라장터 인증키, `APP_TOKEN=jiil2026`, 판단 기록 백업 폴더는 `.env`가 아니라 Windows 사용자 환경변수 `BACKUP_DIR` — 웹앱은 `.env`를 스스로 읽지 않음, `docs/decision_log.md` 8절, 설정 안내 `docs/backup_setup.md`),
      `data/participation.json`·`promoted.json`(참가여부·사유·대화 — 원본은 이 PC, `BACKUP_DIR`을 켜면 구글 드라이브에 사본, `docs/decision_log.md` 8절).
-   - **텔레그램 09:00 정시 호출만은 사람 계정에 묶임**(2026-10-21) — GitHub 토큰(지금 팀원 `iamhiki`)과 cron-job.org 계정.
+   - **텔레그램 09:00 정시 호출만은 사람 계정에 묶임**(2026-10-21) — GitHub 토큰(지금 `kdh-007`)과 cron-job.org 계정.
      담당자가 바뀌면 `docs/telegram.md` 9절 ③ 순서로 새로 만들 것(그 전까지는 12:00 백업 실행으로 옴).
 3. **이 클라우드 환경의 제약** — 나라장터 API·g2b.go.kr·api.telegram.org는 막혀 있음. 실제 호출 확인은
    GitHub Actions 수동 실행(`workflow_dispatch`)이나 사용자 PC 웹앱으로 해야 함.

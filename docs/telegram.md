@@ -18,7 +18,8 @@
 - 수의계약은 처음부터 뺍니다. 관심·제외 키워드, 최소 예산 필터를 거친 **후보 공고만** 보냅니다.
 - 조회 기간을 날짜 단위로 딱 잘라서 돌리기 때문에 **같은 공고가 두 번 오거나 빠지지 않습니다.**
 - 새 공고가 없는 날에도 "조건에 맞는 새 공고가 없습니다"를 보냅니다(시스템이 돌았는지 알 수 있게).
-- GitHub 예약 실행은 서버가 붐비면 **몇 분에서 길게는 한 시간까지 늦을 수 있습니다.**
+- 시각은 **외부 예약 서비스(cron-job.org)가 맞춥니다**(2026-10-21부터 — GitHub 예약 실행이 매일 1~3시간 늦게 시작해서).
+  GitHub 예약은 12:00 백업으로 남아 있어, 외부 예약이 안 돈 날에만 점심 무렵에 옵니다. 설정은 9절.
 - 발송은 회사 PC가 아니라 **GitHub 서버**에서 합니다. PC를 꺼 두어도, 회사망에서 텔레그램 주소가 막혀 있어도 옵니다.
 - **수집이 실패하면 담당자 방에는 아무것도 보내지 않고**, 60분 뒤 다시 시도합니다(아래 "실패했을 때").
 
@@ -158,8 +159,9 @@ GitHub 서버(미국)에서 나라장터로 가는 접속이 잠깐 끊기는 �
 | 로그에 `group chat was upgraded to a supergroup chat` 또는 노란 경고 "대화방이 슈퍼그룹으로 바뀌어…" | 방 설정(관리자 지정·이전 대화 공개 등)을 바꾸면 텔레그램이 방 ID를 바꿉니다. 발송은 새 ID로 자동으로 다시 보내지만, 경고에 적힌 **새 ID(-100…)로 Secrets를 바꿔야** 다음부터 바로 갑니다 |
 | 로그에 `Unauthorized` | 토큰이 틀림, 또는 `/revoke`로 바꾼 뒤 옛 토큰이 남아 있음 |
 | 토큰이 남에게 노출됨 | `@BotFather` → `/revoke` → 봇 선택 → 새 토큰을 Secrets에 다시 저장 |
-| 아침에 안 옴 | 예약 실행 지연(최대 1시간 정도). Actions 탭에서 실행 여부 확인 |
-| 60일 넘게 저장소 활동이 없음 | GitHub가 예약 실행을 자동으로 멈춤 — 아무 커밋이나 하나 하면 다시 돎 |
+| 아침에 안 옴 (점심 무렵에 옴) | 외부 예약이 안 돌아서 12:00 백업이 보낸 것. cron-job.org 실행 기록에서 응답 확인 — `401`이면 토큰 만료·오타(9절에서 새로 만들어 바꿈), `422`면 본문(입력값) 오타 |
+| 하루 종일 안 옴 | Actions 탭에 그날 실행이 있는지 확인. 백업 예약도 GitHub가 늦게 시작할 수 있음 |
+| 60일 넘게 저장소 활동이 없음 | GitHub가 **백업** 예약 실행을 자동으로 멈춤(외부 예약은 그대로 돎) — 아무 커밋이나 하나 하면 다시 돎 |
 
 발송이 실패해도 수집·리포트는 정상으로 끝납니다(실패로 처리하면 자동 재시도가 같은 보고서를 또 보내기 때문). 대신 Actions 화면에 빨간 오류 표시가 남습니다.
 
@@ -173,3 +175,46 @@ GitHub 서버(미국)에서 나라장터로 가는 접속이 잠깐 끊기는 �
 - 후보가 있는 실제 보고는 10/13(월) 아침이 처음 — 받아 보고 모양을 더 다듬을 예정.
 
 관련 코드: `nego/telegram.py`(메시지 모양), `.github/workflows/daily.yml`(일정), `nego/cli.py --telegram`.
+
+---
+
+## 9. 정시 발송 — 외부 예약 서비스 (2026-10-21, 사용자 결정)
+
+GitHub 예약 실행은 붐비는 정시(09:00)에 1~3시간씩 늦게 시작했습니다(10/16~10/20 실측 10:57~11:28). 그래서 **cron-job.org**(무료)가
+정해진 시각에 GitHub "Run workflow" 버튼을 대신 누르게 했습니다(`workflow_dispatch` API — 보통 1분 안에 시작).
+
+- 같은 날 같은 모드의 실행이 이미 있으면(진행 중·성공) **12:00 백업 예약은 수집 없이 끝납니다** — 두 번 오지 않습니다.
+  Run 이름("수동 실행 · 입찰 · 직전 3일 · 사전규격 false · 텔레그램 true")으로 확인하므로 **아래 본문 값을 바꾸면 안 됩니다.**
+- 수집이 실패하면 예전처럼 60분 뒤 재시도합니다(재시도 Run도 같은 이름).
+
+### ① GitHub 토큰 만들기 (저장소 관리자)
+
+1. GitHub 오른쪽 위 프로필 → **Settings** → 왼쪽 맨 아래 **Developer settings** → **Personal access tokens** → **Fine-grained tokens** → **Generate new token**
+2. Token name `cron-job.org 정시 발송`, Expiration **최대(1년)** — 만료일을 달력에 적어 둘 것
+3. Resource owner **jiil-bid-monitor**, Repository access **Only select repositories** → `Negotiate-Contract-Logic-First-try`
+4. Permissions → Repository permissions → **Actions: Read and write** (나머지는 그대로)
+5. Generate → `github_pat_…` 토큰을 복사(이 화면을 벗어나면 다시 못 봄). 조직 설정에 따라 조직 관리자 승인이 필요할 수 있음
+
+이 토큰으로는 이 저장소의 워크플로 실행만 할 수 있습니다(코드·Secrets 못 봄). 노출되면 같은 화면에서 지우고 새로 만들면 됩니다.
+
+### ② cron-job.org 예약 두 개 만들기
+
+https://console.cron-job.org 가입 → **Create cronjob**. 두 개 모두 공통:
+
+| 항목 | 값 |
+|---|---|
+| URL | `https://api.github.com/repos/jiil-bid-monitor/Negotiate-Contract-Logic-First-try/actions/workflows/daily.yml/dispatches` |
+| Schedule | Custom, **Time zone: Asia/Seoul** |
+| Advanced → Request method | **POST** |
+| Advanced → Headers | `Authorization: Bearer github_pat_…`(①의 토큰) · `Accept: application/vnd.github+json` · `Content-Type: application/json` · `X-GitHub-Api-Version: 2022-11-28` |
+| Notifications | 실행 실패 시 메일 받기 켜기 |
+
+| 이름 | 시각 | Request body |
+|---|---|---|
+| 매일 입찰 보고 | 월~금 09:00 | `{"ref":"main","inputs":{"categories":"입찰","complete_days":"3","telegram":"true"}}` |
+| 주간 보고 | 월 09:10 | `{"ref":"main","inputs":{"categories":"협상,규격가격동시입찰","complete_days":"7","pre_spec":"true","telegram":"true"}}` |
+
+- 성공 응답은 **204**(본문 없음)입니다. cron-job.org의 **Test run**으로 한 번 눌러 보면 바로 텔레그램 보고가 갑니다(매일 보고는
+  보낸 공고 기록이 있어 이미 보낸 공고는 다시 안 감 — 새 공고가 없으면 "새 공고 없음" 한 통).
+- 공휴일에도 평일이면 돕니다(예전 GitHub 예약과 같음).
+- 시각을 바꾸려면 cron-job.org에서만 바꾸면 됩니다(워크플로 수정 불필요). 백업 시각은 `daily.yml`의 `schedule`.

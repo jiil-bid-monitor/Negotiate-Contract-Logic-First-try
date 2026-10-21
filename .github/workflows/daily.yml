@@ -1,8 +1,16 @@
 name: 나라장터 공고 수집
+# Run 이름에 실행 모드를 넣는다 — 백업 예약 실행이 "오늘 외부 예약으로 이미 돌았는지"를 이 이름으로 확인한다(아래 "실행 모드 결정").
+# 재시도 Run도 attempt만 다르고 같은 입력이라 같은 이름이 된다.
+run-name: >-
+  ${{ github.event_name == 'schedule' && format('백업 예약 실행 ({0})', github.event.schedule)
+  || format('수동 실행 · {0} · 직전 {1}일 · 사전규격 {2} · 텔레그램 {3}', inputs.categories, inputs.complete_days, inputs.pre_spec, inputs.telegram) }}
 
 # 실행 방법
 #  · 수동: GitHub 저장소 → Actions 탭 → 이 워크플로 선택 → "Run workflow"
-#  · 자동 스케줄 (2026-10-12 사용자 결정: 입찰은 매일, 나머지는 매주 텔레그램으로):
+#  · 자동 실행 (2026-10-12 사용자 결정: 입찰은 매일, 나머지는 매주 텔레그램으로):
+#    2026-10-21부터 **외부 예약(cron-job.org)이 정시에 workflow_dispatch를 부른다** (사용자 결정 — GitHub 예약이 매일
+#    1~3시간 늦게 시작해서). 부르는 입력값은 docs/telegram.md 9절. 아래 schedule은 12:00 KST 백업 — 그날 같은 모드의
+#    수동 실행이 이미 있으면(진행 중·성공) 수집 없이 끝난다.
 #      평일 09:00 KST — 어제 게시된 "입찰" → 텔레그램   (2026-10-14 사용자 요청으로 08:00 → 09:00,
 #        2026-10-20 팀원 레포 10/19 결정 이식: 평일만 — 월요일은 3일치 조회라 금~일 게시분이 함께 들어간다)
 #      매주 월 09:10 KST — 지난 7일 "협상·규격가격동시입찰" + 사전규격 → 텔레그램
@@ -22,8 +30,9 @@ name: 나라장터 공고 수집
 #   TELEGRAM_DEV_CHAT_ID (선택 — 개발자 알림 방. 없으면 개발자 알림만 건너뜀)
 on:
   schedule:
-    - cron: "0 0 * * 1-5"   # 00:00 UTC = 09:00 KST — 평일, 입찰
-    - cron: "10 0 * * 1"    # 월 00:10 UTC = 월 09:10 KST — 주간, 협상·규격가격동시입찰·사전규격
+    # 백업 — 평소엔 외부 예약이 09:00/09:10 KST에 workflow_dispatch로 부른다(위 설명). 외부 예약이 안 돌았을 때만 실제로 수집한다
+    - cron: "0 3 * * 1-5"   # 03:00 UTC = 12:00 KST — 평일, 입찰 (백업)
+    - cron: "10 3 * * 1"    # 월 03:10 UTC = 월 12:10 KST — 주간, 협상·규격가격동시입찰·사전규격 (백업)
   workflow_dispatch:
     inputs:
       categories:
@@ -134,9 +143,11 @@ jobs:
           IN_NO_SUPABASE: ${{ github.event.inputs.no_supabase }}
           IN_LLM: ${{ github.event.inputs.llm_similarity }}
           IN_ATTEMPT: ${{ github.event.inputs.attempt }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           if [ "$EVENT" = "schedule" ]; then
-            if [ "$SCHEDULE" = "10 0 * * 1" ]; then
+            if [ "$SCHEDULE" = "10 3 * * 1" ]; then
               CATEGORIES="협상,규격가격동시입찰"; COMPLETE_DAYS="7"; PRESPEC="true"
             else
               # 3일치를 보되 보낸 공고 기록으로 새 공고만 보낸다(2026-10-19 통합 결정 14번) — 예약 실행이 밀리거나
@@ -171,6 +182,27 @@ jobs:
             echo "llm=$LLM"
             echo "attempt=$ATTEMPT"
           } >> "$GITHUB_OUTPUT"
+          # 백업 예약 실행: 오늘(한국 날짜) 같은 모드의 수동 실행(외부 예약·재시도)이 진행 중이거나 성공했으면 건너뛴다.
+          # 수동 실행 Run 이름(맨 위 run-name)과 똑같이 만들어 비교한다. 조회가 실패하면 건너뛰지 않고 수집한다(안 오는 것보다 낫다).
+          SKIP="false"
+          if [ "$EVENT" = "schedule" ]; then
+            EXPECT="수동 실행 · ${CATEGORIES} · 직전 ${COMPLETE_DAYS}일 · 사전규격 ${PRESPEC} · 텔레그램 ${TELEGRAM}"
+            FOUND=$(curl -sS --fail -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json"               "https://api.github.com/repos/${REPO}/actions/workflows/daily.yml/runs?event=workflow_dispatch&per_page=50"               | EXPECT="$EXPECT" python -c "
+          import json, os, sys, datetime as d
+          kst = d.timezone(d.timedelta(hours=9)); today = d.datetime.now(kst).date()
+          n = 0
+          for r in json.load(sys.stdin)['workflow_runs']:
+              made = d.datetime.fromisoformat(r['created_at'].replace('Z', '+00:00')).astimezone(kst).date()
+              if made == today and r['display_title'] == os.environ['EXPECT'] and r['conclusion'] in (None, 'success'):
+                  n += 1
+          print(n)" ) || FOUND="조회 실패"
+            echo "오늘 외부 예약으로 돈 같은 모드 실행: ${FOUND}"
+            if [ "$FOUND" != "조회 실패" ] && [ "$FOUND" -gt 0 ]; then
+              SKIP="true"
+              echo "::notice::오늘 외부 예약 실행이 이미 있어 백업 예약 실행은 수집 없이 끝냅니다."
+            fi
+          fi
+          echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
           if [ -n "$COMPLETE_DAYS" ]; then PERIOD="오늘 뺀 직전 ${COMPLETE_DAYS}일"; else PERIOD="최근 ${DAYS}일"; fi
           echo "유형=${CATEGORIES:-전체} / 기간=${PERIOD} / 사전규격=$PRESPEC / 텔레그램=$TELEGRAM / 보낸공고기록=$SENT_STATE / 보고기록=${REPORT_LOG:-없음} / 메일=$EMAIL / 시도 ${ATTEMPT}회차"
 
@@ -195,7 +227,7 @@ jobs:
 
       # 보낸 공고 기록은 상태 전용 브랜치 bot-state의 sent_bids.json — 없으면 빈 기록으로 시작
       - name: 보낸 공고 기록 불러오기
-        if: steps.mode.outputs.sent_state == 'true' && github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
+        if: steps.mode.outputs.skip != 'true' && steps.mode.outputs.sent_state == 'true' && github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
         run: |
           mkdir -p state
           if git fetch --depth 1 origin bot-state 2>/dev/null; then
@@ -207,14 +239,14 @@ jobs:
 
       # 싱크로율 자료(비공개 과거 실적)는 암호화 묶음 corpus/sync_bundle.enc로 커밋돼 있다 — Secret이 없으면 싱크로율만 빠진다
       - name: 싱크로율 자료 풀기
-        if: github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
+        if: steps.mode.outputs.skip != 'true' && github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
         env:
           CORPUS_PASSPHRASE: ${{ secrets.CORPUS_PASSPHRASE }}
         run: python -m nego.corpus open
 
       - name: 수집 실행
         id: collect
-        if: github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
+        if: steps.mode.outputs.skip != 'true' && github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
         continue-on-error: true
         env:
           NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}

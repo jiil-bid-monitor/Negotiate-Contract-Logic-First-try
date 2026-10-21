@@ -32,8 +32,11 @@ def load_recipients(path: Path = RECIPIENTS_PATH) -> list[str]:
     return [r.strip() for r in data.get("recipients", []) if str(r).strip()]
 
 
-def subject_for(date_text: str, total: int, partial: bool = False) -> str:
-    return f"[나라장터 입찰 모니터링] {date_text} 주간 리포트 - 매칭 {total}건" + (" (일부 조회 실패)" if partial else "")
+def subject_for(date_text: str, total: int, partial: bool = False, part: str | None = None) -> str:
+    """part("관심 공고"·"세부품명 공고")가 있으면 나눠 보낸 메일 — 제목에 구역과 그 구역 건수."""
+    head = f"[나라장터 입찰 모니터링] {date_text} 주간 리포트"
+    body = f"{part} {total}건" if part else f"매칭 {total}건"
+    return f"{head} - {body}" + (" (일부 조회 실패)" if partial else "")
 
 
 def build_message(subject: str, html_body: str, sender: str, recipients: list[str], attachment: Path | None = None) -> EmailMessage:

@@ -28,8 +28,10 @@ MAX_WIDTH = 760  # 본문 최대 너비(px) — 넓은 화면에선 가운데, �
 _BOX_WIDTH = 300  # 자격 미보유 상자 너비 — 카드 안쪽 718px(760 − 테두리 2 − 좌우 여백 40) = 정보 칸 416 + 상자 300 (+2 여유)
 FONT = "font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;"
 WRAP = "word-break:keep-all;overflow-wrap:break-word;"  # 한글은 낱말 단위로 줄바꿈, 긴 번호·주소만 중간에서
-PILL = ("display:inline-block;padding:2px 8px;margin:0 4px 4px 0;border-radius:999px;"
-        "font-size:11px;line-height:16px;white-space:nowrap;")
+_BASE = "font-size:13px;line-height:20px;"  # 본문 글자 — 바깥 틀에서 물려받고, 두 칸 배치에서 font-size:0을 되돌릴 때만 다시 씀
+PILL = "display:inline-block;padding:2px 8px;margin:0 4px 4px 0;border-radius:9px;font-size:11px;line-height:16px;"
+# 지메일은 본문이 약 102KB를 넘으면 "[메일 내용 잘림]"으로 접는다(10/21 시험 메일 — 57건 180KB). 그래서 글자 크기·색·줄바꿈은
+# 바깥 틀에 한 번만 두고 물려받게 하고, 칸마다 붙는 스타일은 최소로(모양은 그대로, 크기만 줄임)
 _OK = "color:#15803d;"
 _MISS = "color:#b91c1c;font-weight:600;"
 _SPARE = "color:#9ca3af;"
@@ -54,7 +56,7 @@ def _held_lookup() -> tuple:
 
 def _line(label: str, held: bool, spare: bool) -> str:
     style, mark = (_OK, "✓") if held else (_SPARE, "–") if spare else (_MISS, "✗")
-    return f'<div style="{style}padding:1px 0;{WRAP}">{mark} {_esc(label)}</div>'
+    return f'<div style="{style}">{mark} {_esc(label)}</div>'
 
 
 def _block(heading: str, lines: list[str], joiner: str = "") -> str:
@@ -116,7 +118,7 @@ def qualification_box(c: Candidate) -> str:
              else "공동수급 불허 — 참가 어려움" if denied else "공동수급으로 참가 검토")
     bg, border, fg = ("#fef2f2", "#fecaca", "#b91c1c") if denied else ("#fffbeb", "#fde68a", "#b45309")
     return (f'<div style="background:{bg};border:1px solid {border};border-radius:8px;padding:12px 14px;'
-            f'font-size:12px;line-height:18px;color:#374151;{WRAP}">'
+            f'font-size:12px;line-height:19px;">'
             f'<div style="font-size:13px;font-weight:700;color:{fg};">자격 미보유</div>'
             f'<div style="color:{DIM};">{_esc(joint)}</div>' + "".join(sections) + "</div>")
 
@@ -134,13 +136,10 @@ def _deadline(c: Candidate) -> str:
 
 
 def _info_table(rows: list[tuple[str, str]]) -> str:
-    """이름표 | 값 두 칸 표 — 값이 길어 줄이 바뀌어도 값끼리 왼쪽 끝이 맞는다."""
-    cells = "".join(
-        f'<tr><td style="width:64px;padding:3px 10px 3px 0;color:{DIM};vertical-align:top;white-space:nowrap;">{k}</td>'
-        f'<td style="padding:3px 0;color:#374151;vertical-align:top;{WRAP}">{_esc(v)}</td></tr>'
-        for k, v in rows)
-    return (f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-            f'style="width:100%;border-collapse:collapse;font-size:13px;line-height:20px;">{cells}</table>')
+    """이름표 | 값 두 칸 표 — 값이 길어 줄이 바뀌어도 값끼리 왼쪽 끝이 맞는다. 칸 여백은 표 속성 cellpadding으로(크기 줄이기)."""
+    cells = "".join(f'<tr valign="top"><td width="72"><font color="{DIM}">{k}</font></td><td>{_esc(v)}</td></tr>'
+                    for k, v in rows)
+    return f'<table role="presentation" cellpadding="2" cellspacing="0" style="margin-left:-2px">{cells}</table>'
 
 
 def _card(c: Candidate) -> str:
@@ -165,11 +164,11 @@ def _card(c: Candidate) -> str:
         rows.append(("자격", "사전규격 — 면허제한 정보 없음, 원문 확인" if is_prespec(c) else unchecked_reason(c)))
     tags = ([f"품목:{p}" for p in sr.matched_product_codes or []] if getattr(sr, "section", None) == "세부품명" else []) \
         + [f"키워드:{k}" for k in sr.matched_keywords or []]
-    tag_html = "".join(f'<span style="{PILL}background:#eef2ff;color:#4338ca;">{_esc(t)}</span>' for t in tags)
-    left = (f'<div style="line-height:16px;">{pills}</div>'
-            f'<div style="font-size:16px;line-height:24px;font-weight:700;margin:4px 0 10px;{WRAP}">{title}</div>'
+    tag_html = f'<span style="{PILL}background:#eef2ff;color:#4338ca;">{_esc(" · ".join(tags))}</span>' if tags else ""
+    left = (f'<div>{pills}</div>'
+            f'<div style="font-size:16px;line-height:24px;font-weight:700;margin:2px 0 8px;">{title}</div>'
             + _info_table(rows)
-            + (f'<div style="margin-top:10px;line-height:16px;">{tag_html}</div>' if tag_html else ""))
+            + (f'<div style="margin-top:8px;">{tag_html}</div>' if tag_html else ""))
     box = qualification_box(c)
     if box:
         # 넓으면 나란히(정보 | 자격 상자는 카드 오른쪽 끝), 좁아지면(확대·휴대폰) 자격 상자가 아래로.
@@ -178,13 +177,13 @@ def _card(c: Candidate) -> str:
         # 나란히 놓이면 상자가 오른쪽 끝에 붙는다. 바깥 font-size:0은 두 칸 사이 빈칸을 없애려고
         body = (f'<div style="font-size:0;line-height:0;">'
                 f'<div style="display:inline-block;vertical-align:top;width:100%;max-width:416px;'
-                f'padding:0 16px 12px 0;box-sizing:border-box;font-size:13px;line-height:20px;">{left}</div>'
+                f'padding:0 16px 12px 0;box-sizing:border-box;{_BASE}">{left}</div>'
                 f'<div style="display:inline-block;vertical-align:top;width:100%;max-width:{_BOX_WIDTH}px;'
-                f'box-sizing:border-box;font-size:12px;line-height:18px;">{box}</div></div>')
+                f'box-sizing:border-box;{_BASE}">{box}</div></div>')
     else:
         body = left
-    return (f'<div style="background:#ffffff;border:1px solid {LINE};border-radius:12px;padding:18px 20px;'
-            f'margin:0 0 14px;">{body}</div>')
+    return (f'<div style="background:#fff;border:1px solid {LINE};border-radius:12px;padding:18px 20px;'
+            f'margin-bottom:14px">{body}</div>\n')
 
 
 def _section(title: str, rows: list[Candidate]) -> str:
@@ -201,14 +200,27 @@ def _section(title: str, rows: list[Candidate]) -> str:
     return head + body
 
 
-def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime) -> str:
+INTEREST, PRODUCT = "관심 공고", "세부품명 공고"
+_PRODUCT_TITLE = "세부품명 공고 (키워드 없이 보유 품목으로 수집)"
+
+
+def split_parts(candidates: list[Candidate]) -> list[tuple[str, list[Candidate]]]:
+    """메일을 나눠 보낼 구역 — 관심 공고(늘), 세부품명 공고(있을 때만). 10/21 사용자 요청: 한 통이 길어 뒤가 잘려서."""
+    interest = [c for c in candidates if getattr(c.screen_result, "section", "관심") != "세부품명"]
+    product_only = [c for c in candidates if getattr(c.screen_result, "section", "관심") == "세부품명"]
+    return [(INTEREST, interest)] + ([(PRODUCT, product_only)] if product_only else [])
+
+
+def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime, part: str | None = None) -> str:
+    """메일 본문. part가 INTEREST·PRODUCT면 그 구역만(메일 나눠 보내기), None이면 두 구역 다."""
     period = ""
     if stats.period_begin and stats.period_end:
         period = f"조회 기간: {_fmt_kr_date(stats.period_begin)} ~ {_fmt_kr_date(stats.period_end)} · "
     meta = f"color:{DIM};font-size:12px;line-height:18px;"
     alert = "color:#b91c1c;font-size:13px;line-height:20px;margin-top:8px;"
-    header = (f'<div style="background:#ffffff;border:1px solid {LINE};border-radius:12px;padding:20px 22px;">'
-              f'<h2 style="margin:0 0 6px;font-size:20px;line-height:28px;color:{INK};{WRAP}">{_esc(report_title(stats))}</h2>'
+    heading = report_title(stats) + (f" — {part}" if part else "")
+    header = (f'<div style="background:#fff;border:1px solid {LINE};border-radius:12px;padding:20px 22px;">'
+              f'<h2 style="margin:0 0 6px;font-size:20px;line-height:28px;color:{INK};">{_esc(heading)}</h2>'
               f'<div style="{meta}">{period}생성 시각: {_esc(_fmt_kr_datetime(generated_at))}</div>'
               f'<div style="{meta}">표로 한눈에 보려면 첨부한 HTML 파일(텔레그램과 같은 리포트)을 여세요.</div>')
     if stats.failed_operations:
@@ -216,14 +228,13 @@ def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at
     if stats.license_error:
         header += f'<div style="{alert}">⚠ 면허제한정보 조회 실패 → 자격 게이트 미적용(fail-open)</div>'
     header += "</div>"
-    interest = [c for c in candidates if getattr(c.screen_result, "section", "관심") != "세부품명"]
-    product_only = [c for c in candidates if getattr(c.screen_result, "section", "관심") == "세부품명"]
-    content = header + _section("관심 공고", interest)
-    if product_only:
-        content += _section("세부품명 공고 (키워드 없이 보유 품목으로 수집)", product_only)
+    content = header
+    for name, rows in split_parts(candidates):
+        if part in (None, name):
+            content += _section(_PRODUCT_TITLE if name == PRODUCT else name, rows)
     # 바깥 표로 가운데 정렬 — div의 margin:auto를 무시하는 메일 프로그램도 표의 align은 지킨다
     return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
             f'style="width:100%;background:{PAGE_BG};border-collapse:collapse;">\n'
             f'<tr><td align="center" style="padding:24px 12px;">\n'
-            f'<div style="max-width:{MAX_WIDTH}px;margin:0 auto;text-align:left;{FONT}color:{INK};">\n'
+            f'<div style="max-width:{MAX_WIDTH}px;margin:0 auto;text-align:left;{FONT}color:#374151;{_BASE}{WRAP}">\n'
             f"{content}\n</div>\n</td></tr>\n</table>")

@@ -160,6 +160,20 @@ def _missing_tip_html(c: Candidate, esc) -> str | None:
 
 
 
+def unchecked_reason(c: Candidate) -> str:
+    """본공고 자격정보 미확인의 이유 한 줄(2026-10-21 사용자 결정 — 참가자격 원문 정리본은 PDF 등에서 깔끔하지 않아
+    이유만). 나라장터 면허제한이 비었고(그래서 미확인), 첨부를 읽었는지·참가자격 절을 찾았는지로 나눈다."""
+    from .qualification_text import find_qualification_section
+
+    text = (getattr(c, "attachment_text", "") or "").strip()
+    if not text:
+        return "나라장터 면허제한 없음 + 첨부를 읽지 못함(첨부 없음 포함) — 원문 확인"
+    docs = re.split(r"(?m)^=== .* ===$", text)
+    if any(find_qualification_section(d) for d in docs if d.strip()):
+        return "나라장터 면허제한 없음 + 공고문 자격이 업종코드 없이 이름으로만 적혀 판정 못 함 — 원문 확인"
+    return "나라장터 면허제한 없음 + 첨부에서 참가자격 절을 찾지 못함 — 원문 확인"
+
+
 def _qualification_cell_html(c: Candidate, esc) -> str:
     """표의 '자격판정' 칸. 이름표 문구 대신 원 아이콘 하나로 보여주고,
     미보유 자격이 있으면(빨간 원, 일부 보유면 노란 원) 호버/포커스 시 요건 목록을 팝업으로
@@ -184,7 +198,7 @@ def _qualification_cell_html(c: Candidate, esc) -> str:
             '<button type="button" class="qual-dot" aria-label="자격정보 미확인 (통과)">'
             '<span class="circle circle-unchecked"></span>'
             '<span class="tip"><div class="tip-title" style="color:var(--unchecked-fg);">자격정보 미확인 (통과)</div>'
-            "<div class=\"tip-note\">API·첨부파일 모두 판정 근거가 없어 fail-open으로 통과 처리됩니다.</div></span>"
+            f'<div class="tip-note">{esc(unchecked_reason(c))}</div></span>'
             "</button>"
         )
     # 같은 미보유 자격이 여러 그룹에 걸쳐 잡히면(예: 첨부문서 내 같은 코드가

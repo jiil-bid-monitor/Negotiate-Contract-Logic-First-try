@@ -93,6 +93,24 @@ class TestRenderHtml(unittest.TestCase):
         self.assertGreater(out.index("R26BD00000001"), pre_at)
         self.assertIn("사전규격엔 나라장터 면허제한 정보가 아직 없습니다", out)
 
+    def test_unchecked_main_notice_says_why(self):
+        """2026-10-21 사용자 결정: 본공고 자격 미확인 팝업은 이유 한 줄(첨부 못 읽음 / 참가자격 절 못 찾음 / 코드 없이 이름만)."""
+        import dataclasses
+        from nego.report import unchecked_reason
+        candidates, stats = self._candidates()
+        c = candidates[0]
+        c.qualification = dataclasses.replace(c.qualification, checked=False)
+        c.attachment_text = ""
+        self.assertIn("첨부를 읽지 못함", unchecked_reason(c))
+        c.attachment_text = "\n\n=== 과업지시서.hwp ===\n과업 내용 전시물 제작 설치"
+        self.assertIn("참가자격 절을 찾지 못함", unchecked_reason(c))
+        c.attachment_text += ("\n\n=== 공고문.hwpx ===\n2. 입찰참가자격 :\n\n가. 건설엔지니어링업(설계·사업관리-일반)으로 "
+                              "등록한 업체 중 엔지니어링 업체등록을 필한 업체로서 해당분야별 기술인을 보유한 업체\n\n3. 입찰방법\n")
+        self.assertIn("업종코드 없이 이름으로만", unchecked_reason(c))
+        out = render_html([c], stats, NOW)
+        self.assertIn("업종코드 없이 이름으로만", out)
+        self.assertNotIn("fail-open", out)
+
     def test_main_only_has_no_sub_section(self):
         candidates, stats = self._candidates()
         out = render_html(candidates, stats, NOW)

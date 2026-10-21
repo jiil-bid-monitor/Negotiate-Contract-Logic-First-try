@@ -15,7 +15,8 @@ from datetime import datetime
 from functools import lru_cache
 
 from .pipeline import Candidate, RunStats
-from .report import _fmt_kr_date, _fmt_kr_datetime, _fmt_kr_deadline, _fmt_money, is_prespec, report_title, split_prespec
+from .report import (_fmt_kr_date, _fmt_kr_datetime, _fmt_kr_deadline, _fmt_money, is_prespec, report_title,
+                     split_prespec, unchecked_reason)
 
 INK, DIM, LINE = "#1f2937", "#6b7280", "#e5e7eb"
 LINK = "#1d4ed8"
@@ -142,7 +143,7 @@ def _card(c: Candidate) -> str:
         best = (sync.get("top") or [{}])[0]
         rows.append(("싱크로율", f'{round(sync["score"] * 100)}%' + (f' · 유사: {best.get("year") or ""} {best.get("title")}' if best.get("title") else "")))
     if not c.qualification.checked:
-        rows.append(("자격", "사전규격 — 면허제한 정보 없음, 원문 확인" if is_prespec(c) else "확인 못 함 — 원문 확인"))
+        rows.append(("자격", "사전규격 — 면허제한 정보 없음, 원문 확인" if is_prespec(c) else unchecked_reason(c)))
     info = "".join(f'<div style="margin:2px 0;">{k}: {_esc(v)}</div>' for k, v in rows)
     tags = ([f"품목:{p}" for p in sr.matched_product_codes or []] if getattr(sr, "section", None) == "세부품명" else []) \
         + [f"키워드:{k}" for k in sr.matched_keywords or []]

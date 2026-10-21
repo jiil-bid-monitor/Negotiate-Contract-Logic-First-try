@@ -28,6 +28,8 @@ _NOT_REQUIREMENT = re.compile(r"공동수급|공동도급|공동이행|분담이
 # (2026-10-02 제보: 고흥분청문화박물관 실감콘텐츠 — 원문에 없는 "소프트웨어사업자(1470)"가 보유 확인으로 뜸).
 # 진짜 요건 항목 안에 "※ … 대기업 참여는 불가" 주석으로 끼어 있는 경우가 많아 항목 전체가 아니라 그 문장만 뺀다.
 _RESTRICTION_SENTENCE = re.compile(r"대기업|중견\s*기업|상호\s*출자")
+# 괄호 안에서만 쓴 "또는" — "측지측량업(또는 공공측량업)"
+_PAREN_OR = re.compile(r"\(\s*(?:또는|혹은)[^()]*\)")
 _DESIGN_FIELDS = ("시각", "제품", "포장", "환경", "멀티미디어", "서비스", "종합")
 _DESIGN_RE = re.compile(r"산업\s*디자인\s*전문\s*회사\s*[(\[]([^)\]]{1,80})[)\]]")
 _DIRECT_RE = re.compile(r"직접\s*생산\s*(?:확인)?\s*증명(?:서)?")
@@ -135,6 +137,7 @@ def name_bundles(
     # ② 사전에 있는 업종명 (긴 이름부터 — "실내건축공사업" 안의 "건축공사업"을 따로 세지 않게)
     text = _norm(_DESIGN_RE.sub("", item))
     taken: list[tuple[int, int]] = []
+    at: dict[str, tuple[int, int]] = {}  # 찾은 업종명의 위치 — 괄호 속 "(또는 …)" 짝을 찾으려고
     for key, (name, code) in sorted(_industry_dictionary(held_code_names, lookup).items(), key=lambda kv: -len(kv[0])):
         if len(key) < 4 or key.startswith("산업디자인전문회사"):
             continue
@@ -142,7 +145,9 @@ def name_bundles(
             if any(s < m.end() and m.start() < e for s, e in taken):
                 continue
             taken.append((m.start(), m.end()))
-            found.append(NameReq(f"{name}({code})" if code else name, _is_held_name(name, held_names), code))
+            req = NameReq(f"{name}({code})" if code else name, _is_held_name(name, held_names), code)
+            found.append(req)
+            at.setdefault(req.label, (m.start(), m.end()))
             break
 
     # ③ 직접생산증명 품목 — 괄호 속 품명, 또는 8자리 물품분류번호(보유 10자리 세부품명번호의 앞자리)
@@ -163,9 +168,26 @@ def name_bundles(
     if not found:
         return []
     found = list({(r.label): r for r in found}.values())
-    if len(found) > 1 and _OR_HINT.search(item):
+    if len(found) > 1 and _OR_HINT.search(_PAREN_OR.sub("", item)):
         return [found]
-    return [[r] for r in found]
+    # "또는"이 괄호 안에만 있으면 그 괄호와 바로 앞 이름만 "또는" — "측지측량업(또는 공공측량업), 수치지도제작업의 등록을
+    # 모두 필한"은 (5021 또는 5023) 그리고 5029다. 항목 전체를 "또는"으로 봐서 "5029 또는 5021"이 따로 생겼음
+    # (2026-10-21 제보: 하동군 군도 및 농어촌도로 전산화 용역 R26BK01775480 — 웹앱 팝업에 같은 요건이 겹쳐 보임)
+    bundles: list[list[NameReq]] = [[r] for r in found]
+    for m in _PAREN_OR.finditer(text):
+        inside = [b for b in bundles if any(r.label in at and m.start() <= at[r.label][0] < m.end() for r in b)]
+        before = [b for b in bundles if any(r.label in at and at[r.label][1] == m.start() for r in b)]
+        if before and not inside:
+            # 괄호 속 대안을 사전에서 못 찾음 — 앞 이름만 "필수"로 두면 대안 보유 업체도 미달이 된다. 아는 이름만 판정하므로 뺀다
+            bundles = [b for b in bundles if b is not before[0]]
+            continue
+        if not before:
+            continue
+        merged = before[0] + [r for b in inside for r in b if r not in before[0]]
+        drop = {id(before[0])} | {id(b) for b in inside}
+        bundles = [merged] + [b for b in bundles if id(b) not in drop]
+    order = {r.label: i for i, r in enumerate(found)}
+    return sorted(bundles, key=lambda b: min(order[r.label] for r in b))
 
 
 # ── 판정하지 않고 칩으로만 보여주는 요건 ─────────────────────────────

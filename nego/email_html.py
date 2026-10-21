@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import html
+import uuid
 from datetime import datetime
 from functools import lru_cache
 
@@ -242,4 +243,11 @@ def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at
             f'style="width:100%;background:{PAGE_BG};border-collapse:collapse;">\n'
             f'<tr><td align="center" style="padding:24px 12px;">\n'
             f'<div style="max-width:{MAX_WIDTH}px;margin:0 auto;text-align:left;{FONT}color:#374151;{_BASE}{WRAP}">\n'
-            f"{content}\n</div>\n</td></tr>\n</table>")
+            f"{content}\n</div>\n</td></tr>\n</table>{_unique_tail()}")
+
+
+def _unique_tail() -> str:
+    """메일마다 다른, 보이지 않는 끝 글자. 지메일은 같은 대화(제목)의 앞 메일과 끝부분이 같으면 '•••'로 접는데
+    (10/21 시험 메일 — 사용자: 접지 말 것), 끝이 매번 다르면 접지 않는다."""
+    return (f'<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:{PAGE_BG};'
+            f'mso-hide:all;">{uuid.uuid4().hex}</div>')

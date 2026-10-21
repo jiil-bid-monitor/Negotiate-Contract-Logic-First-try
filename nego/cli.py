@@ -208,21 +208,24 @@ def _append_feedback_sheet(candidates, now) -> None:
 
 def _send_email(candidates, stats, html_path, now) -> None:
     """주간 리포트 메일(2026-10-19 통합 결정 15번). 실패해도 종료코드는 그대로 — 텔레그램과 같은 이유.
-    본문은 메일 전용 HTML(nego/email_html.py — 메일 프로그램이 <style>을 지워도 안 깨지게), 첨부는 텔레그램과 같은 HTML(2026-10-20)."""
-    from .email_html import render_email_html
+    본문은 메일 전용 HTML(nego/email_html.py — 메일 프로그램이 <style>을 지워도 안 깨지게), 첨부는 텔레그램과 같은 HTML(2026-10-20).
+    (10/21 사용자 요청) 관심 공고·세부품명 공고를 따로 한 통씩 — 한 통이 길면 지메일이 뒤를 잘라서. 첨부(전체 리포트)는 첫 통에만."""
+    from .email_html import render_email_html, split_parts
     from .email_report import send, subject_for
 
     if html_path is None or not Path(html_path).exists():
         logging.warning("HTML 리포트가 없어 메일을 보내지 않습니다")
         return
-    subject = subject_for(now.strftime("%Y-%m-%d"), len(candidates), bool(stats.failed_operations))
-    error = send(subject, render_email_html(candidates, stats, now), Path(html_path))
-    if error:
-        logging.error(error)
-        if os.environ.get("GITHUB_ACTIONS"):
-            print(f"::error::{error}")
-    else:
-        print("주간 리포트 메일 발송")
+    for i, (part, rows) in enumerate(split_parts(candidates)):
+        subject = subject_for(now.strftime("%Y-%m-%d"), len(rows), bool(stats.failed_operations), part)
+        body = render_email_html(candidates, stats, now, part, attached=i == 0)
+        error = send(subject, body, Path(html_path) if i == 0 else None)
+        if error:
+            logging.error(error)
+            if os.environ.get("GITHUB_ACTIONS"):
+                print(f"::error::{error}")
+            return  # 설정 문제면 다음 통도 실패하니 멈춤
+        print(f"주간 리포트 메일 발송 ({part} {len(rows)}건)")
 
 
 def main(argv: list[str] | None = None) -> int:

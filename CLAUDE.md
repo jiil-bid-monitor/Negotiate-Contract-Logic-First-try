@@ -13,7 +13,7 @@
   '일부 보유' 판단은 나라장터 면허 + 첨부 요건 합쳐서(사용자에게 안 물은 기본값 — 바꾸려면 `held` 계산).
 - (같은 날, 브랜치 `claude/partial-circle-9999`) 네모 → **다른 원과 같은 노란 원 + 짙은 체크**(`.circle-partial`, 사용자 요청).
   표 칸 너비 고정(`_COLGROUP`, table-layout:fixed, 합 1,240px) — 관심·세부품명 두 표의 칸이 따로 잡혀 어긋나 보였음. 분야 배지
-  '규격가격동시입찰'은 "규격가격/동시입찰" 두 줄(`_category_html`).
+  '규격가격동시입찰'은 "규격가격/동시입찰" 두 줄(`_category_html`). 수요기관·공동수급·예가방법·계약방법은 nowrap을 빼서 칸 안 줄바꿈(고정 너비라 옆 칸을 침범해 겹쳤음).
 - (같은 날 제보: 탑승동 이동여객확인기기 설치사업 "자격 미달(기타자유업종/9999)") **기타자유업종(9999) = 업종 제한 없음 → 늘 보유**
   (`qualify.FREE_INDUSTRIES`·`held_entries` — load_held_names/codes/code_names, `qualview.held_lookup` 모두). 보유면허없음 제외에도 안 걸림. RESULT_FORMAT 61.
 

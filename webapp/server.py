@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from nego import bidcalc, scope
+from nego import bidcalc, feedback_sheet, scope
 from nego.config import ConfigError, load_config, redact
 from nego.http_client import ApiError
 
@@ -33,6 +33,7 @@ from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .docscan import DocScan
 from .mstore import TeamStore
 from .reportsync import ReportSync
+from .sheetsync import SheetSync
 from .store import DECISION_REASONS, DECISION_SUMMARY_MIN, STATUSES, Store
 from .sync import BORDER, HIGH, PastIndex
 
@@ -391,6 +392,14 @@ def main(argv: list[str] | None = None) -> int:
         timer.start()
     # 텔레그램 보고에 나간 공고 → 판단 기록 '미판단' (bot-state 브랜치의 보고 기록을 몇 분마다 받아 합친다)
     ReportSync(app.team.merge_report).start()
+    # 판단 기록 → 피드백 구글 시트 S~V열 (FEEDBACK_SHEET_ID + 서비스 계정 키가 있을 때만, webapp/sheetsync.py)
+    try:
+        sheet_cfg = feedback_sheet.settings()
+    except feedback_sheet.SheetsError as err:
+        sheet_cfg = None
+        logging.warning("피드백 시트: %s", err)
+    if sheet_cfg is not None:
+        SheetSync(app.team.snapshot).start()
     if app.past.error:
         logging.warning(app.past.error)
     else:
@@ -407,6 +416,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  판단 기록 백업: {backup_dir}" + ("" if backup_dir.exists() else "  ⚠ 폴더가 없습니다 — 구글 드라이브가 켜져 있는지 확인하세요"))
     else:
         print("  판단 기록 백업: 꺼져 있음 (환경변수 BACKUP_DIR에 구글 드라이브 폴더를 적으면 켜집니다)")
+    print("  피드백 시트에 판단 쓰기: " + ("켜짐" if sheet_cfg is not None else
+          "꺼져 있음 (.env에 FEEDBACK_SHEET_ID·GOOGLE_SERVICE_ACCOUNT_FILE을 적으면 켜집니다 — docs/decision_log.md 9절)"))
     print("  종료: Ctrl+C\n")
     try:
         httpd.serve_forever()

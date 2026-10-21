@@ -55,6 +55,8 @@ class TeamStore:
         self.promo_path = folder / "promoted.json"
         self.backup_dir = backup_dir
         self._lock = threading.Lock()
+        # 저장할 때마다 1씩 — 피드백 시트로 옮겨 쓰는 쪽(webapp/sheetsync.py)이 바뀐 게 있는지 본다
+        self.version = 0
         # 새 PC에 설치했거나 data가 지워졌으면 백업에서 되살린다 (이 PC에 파일이 있으면 건드리지 않는다)
         restore_if_missing(self.part_path, backup_dir)
         restore_if_missing(self.promo_path, backup_dir)
@@ -76,6 +78,7 @@ class TeamStore:
         promo = json.dumps(self.promoted, ensure_ascii=False, indent=1)
         self.part_path.write_text(part, encoding="utf-8")
         self.promo_path.write_text(promo, encoding="utf-8")
+        self.version += 1
         self._backup(part, promo)
 
     def _backup(self, part: str, promo: str) -> None:
@@ -92,6 +95,11 @@ class TeamStore:
         with self._lock:
             self._backup(json.dumps(self.participation, ensure_ascii=False, indent=1),
                          json.dumps(self.promoted, ensure_ascii=False, indent=1))
+
+    def snapshot(self) -> tuple[int, dict[str, dict[str, Any]]]:
+        """(version, 판단 기록 사본) — 다른 스레드가 저장하는 중에 읽어도 반쯤 바뀐 기록을 보지 않게."""
+        with self._lock:
+            return self.version, json.loads(json.dumps(self.participation, ensure_ascii=False))
 
     def merge_report(self, entry: dict[str, Any]) -> int:
         """보고 기록 하나를 판단 기록에 합친다 (`report_log.merge`). 새로 생긴 공고 수를 돌려준다."""

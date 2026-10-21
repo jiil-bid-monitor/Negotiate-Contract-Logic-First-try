@@ -274,7 +274,8 @@ class TestQualification(unittest.TestCase):
         }
         self.assertEqual(
             qualify.load_held_code_names(held_config),
-            {"6010989901": "실물모형및전시물", "4990": "실내건축공사업"},
+            # 기타자유업종(9999)은 업종 제한 없음이라 늘 보유로 더한다 (2026-10-21)
+            {"6010989901": "실물모형및전시물", "4990": "실내건축공사업", "9999": "기타자유업종"},
         )
 
     def test_extract_code_requirements_skips_digit_count_filler(self):

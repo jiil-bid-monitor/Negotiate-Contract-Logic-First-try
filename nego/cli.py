@@ -207,14 +207,16 @@ def _append_feedback_sheet(candidates, now) -> None:
 
 
 def _send_email(candidates, stats, html_path, now) -> None:
-    """주간 리포트 메일(2026-10-19 통합 결정 15번). 실패해도 종료코드는 그대로 — 텔레그램과 같은 이유."""
+    """주간 리포트 메일(2026-10-19 통합 결정 15번). 실패해도 종료코드는 그대로 — 텔레그램과 같은 이유.
+    본문은 메일 전용 HTML(nego/email_html.py — 메일 프로그램이 <style>을 지워도 안 깨지게), 첨부는 텔레그램과 같은 HTML(2026-10-20)."""
+    from .email_html import render_email_html
     from .email_report import send, subject_for
 
     if html_path is None or not Path(html_path).exists():
         logging.warning("HTML 리포트가 없어 메일을 보내지 않습니다")
         return
     subject = subject_for(now.strftime("%Y-%m-%d"), len(candidates), bool(stats.failed_operations))
-    error = send(subject, Path(html_path).read_text(encoding="utf-8"), Path(html_path))
+    error = send(subject, render_email_html(candidates, stats, now), Path(html_path))
     if error:
         logging.error(error)
         if os.environ.get("GITHUB_ACTIONS"):

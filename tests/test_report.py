@@ -227,7 +227,45 @@ class TestRenderHtml(unittest.TestCase):
         )
         out = render_html(candidates, stats, NOW)
         self.assertIn('<span class="circle circle-fail">', out)
-        self.assertEqual(out.count(f'<div class="tip-item">{name}</div>'), 1)
+        self.assertEqual(out.count(f"✗ {name}</div>"), 1)
+        self.assertIn("미보유 자격 1건</div>", out)
+
+    def test_partial_qualification_is_yellow_box_with_held_and_missing_split(self):
+        """2026-10-21 사용자 요청: 일부 보유(충족 요건 1개 이상 + 미보유 1개 이상)면 빨간 원 대신 노란 바탕 체크박스,
+        팝업은 메일 '자격 미보유' 상자와 같은 묶음으로 미보유 / 보유를 나눠 보여준다."""
+        from nego.qualify import LicenseGroup, QualificationResult
+
+        candidates, stats = self._candidates()
+        candidates[0].qualification = QualificationResult(
+            total_groups=2,
+            missing_groups=[LicenseGroup(group_no="1", allowed_names=["조명용제어장치(3912110702)"])],
+            passes=False,
+            checked=True,
+            satisfied_groups=[LicenseGroup(group_no="2", allowed_names=["실내건축공사업(4990)"])],
+        )
+        out = render_html(candidates, stats, NOW)
+        self.assertIn('<span class="circle box-partial">', out)
+        self.assertNotIn('<span class="circle circle-fail">', out)
+        self.assertIn("일부 보유 — 보유 1 · 미보유 1", out)
+        miss, held = out.index("미보유 1건</div>"), out.index(";\">보유 1건</div>")
+        self.assertLess(miss, out.index("✗ 조명용제어장치(3912110702)"))
+        self.assertLess(out.index("✗ 조명용제어장치(3912110702)"), held, "미보유 칸이 보유 칸보다 먼저")
+        self.assertLess(held, out.index("✓ 실내건축공사업(4990)"))
+
+    def test_or_requirement_shows_alternatives_in_one_block(self):
+        """'A 또는 B' 요건은 한 묶음("아래 2개 중 1개 이상")으로 — 각각 미보유 줄로 늘어놓지 않는다."""
+        from nego.qualify import LicenseGroup, QualificationResult
+
+        candidates, stats = self._candidates()
+        candidates[0].qualification = QualificationResult(
+            total_groups=1,
+            missing_groups=[LicenseGroup(group_no="1", allowed_names=["조경공사업(0005)", "토목공사업(0001)"])],
+            passes=False,
+            checked=True,
+        )
+        out = render_html(candidates, stats, NOW)
+        self.assertIn('<span class="circle circle-fail">', out)
+        self.assertIn("아래 2개 중 1개 이상 — 미보유", out)
 
     def test_qualification_unchecked_is_a_neutral_circle(self):
         """자격정보가 없어 판정을 못 한(통과 처리된) 경우는 노란 원(circle-unchecked)으로,

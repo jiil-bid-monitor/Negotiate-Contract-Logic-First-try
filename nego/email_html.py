@@ -77,15 +77,20 @@ def _req_blocks(reqs: list[dict]) -> list[str]:
     return blocks
 
 
+def qualification_parts(c: Candidate) -> list[dict]:
+    """웹앱 자격 팝업과 같은 부문별 요건 자료(`webapp/qualview.build`) — 메일 상자·텔레그램 HTML 팝업이 같이 쓴다."""
+    from webapp.qualview import build
+
+    has_text = bool((getattr(c, "attachment_text", "") or "").strip())
+    return build(c.qualification, _held_lookup(), {"industry": c.notice.kind == "본공고" or has_text, "product": has_text})
+
+
 def qualification_box(c: Candidate) -> str:
     """미보유 자격이 있는 공고만 '자격 미보유' 상자. 없으면 빈 문자열."""
     q = c.qualification
     if not q.checked or not q.missing_count:
         return ""
-    from webapp.qualview import build
-
-    has_text = bool((getattr(c, "attachment_text", "") or "").strip())
-    parts = build(q, _held_lookup(), {"industry": c.notice.kind == "본공고" or has_text, "product": has_text})
+    parts = qualification_parts(c)
     sections = []
     for p in parts:
         blocks = _req_blocks(list(p.get("missing") or []) + list(p.get("satisfied") or [])) if p.get("status") == "미달" else []

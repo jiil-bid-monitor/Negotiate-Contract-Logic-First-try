@@ -128,13 +128,13 @@ class TestRenderHtml(unittest.TestCase):
         candidates, stats = self._candidates()
         candidates[0].notice.estimate_price_method = "단일예가"
         out = render_html(candidates, stats, NOW)
-        self.assertIn('<td><div class="nowrap">단일예가</div></td>', out)
+        self.assertIn('<td><div>단일예가</div></td>', out)
 
     def test_estimate_price_method_missing_shows_dash(self):
         candidates, stats = self._candidates()
         candidates[0].notice.estimate_price_method = None
         out = render_html(candidates, stats, NOW)
-        self.assertIn('<td><div class="nowrap">-</div></td>', out)
+        self.assertIn('<td><div>-</div></td>', out)
 
     def test_no_period_line_when_stats_lack_period(self):
         """--from-store처럼 조회 기간 정보가 없는 실행에서도 죽지 않아야 한다."""

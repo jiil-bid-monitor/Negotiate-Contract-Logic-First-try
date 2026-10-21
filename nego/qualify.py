@@ -1140,23 +1140,32 @@ def merge_results(base: QualificationResult, extra: QualificationResult) -> Qual
     )
 
 
+# 나라장터 "기타자유업종(9999)" = 업종 제한 없음(누구나 참가) 자리 값 — 면허제한에 이것만 와도 미보유로 세면 안 된다
+# (2026-10-21 제보: 탑승동 이동여객확인기기 설치사업이 "자격 미달(기타자유업종/9999)"). 등록증 목록엔 없어서 여기서 늘 보유로 더한다.
+FREE_INDUSTRIES = ({"code": "9999", "name": "기타자유업종"},)
+
+
+def held_entries(held_config: dict) -> list[dict]:
+    """보유 자격 항목(품목 + 업종) + 누구나 가진 것으로 보는 기타자유업종."""
+    out = [e for key in ("heldProducts", "heldIndustries") for e in held_config.get(key, []) or []]
+    return out + [dict(e) for e in FREE_INDUSTRIES]
+
+
 def load_held_names(held_config: dict) -> list[str]:
     names: list[str] = []
-    for key in ("heldProducts", "heldIndustries"):
-        for entry in held_config.get(key, []):
-            name = str(entry.get("name", "")).strip()
-            if name:
-                names.append(name)
+    for entry in held_entries(held_config):
+        name = str(entry.get("name", "")).strip()
+        if name:
+            names.append(name)
     return names
 
 
 def load_held_codes(held_config: dict) -> set[str]:
     codes: set[str] = set()
-    for key in ("heldProducts", "heldIndustries"):
-        for entry in held_config.get(key, []):
-            code = str(entry.get("code", "")).strip()
-            if code:
-                codes.add(code)
+    for entry in held_entries(held_config):
+        code = str(entry.get("code", "")).strip()
+        if code:
+            codes.add(code)
     return codes
 
 
@@ -1197,12 +1206,11 @@ def load_held_code_names(held_config: dict) -> dict[str, str]:
     성공한다. 첨부문서 원문에서 파싱한 이름표(문서 표기가 제각각이라 fragile함)
     대신 등록증 원문 표기를 그대로 보여줄 수 있다."""
     names: dict[str, str] = {}
-    for key in ("heldProducts", "heldIndustries"):
-        for entry in held_config.get(key, []):
-            code = str(entry.get("code", "")).strip()
-            name = str(entry.get("name", "")).strip()
-            if code and name:
-                names[code] = name
+    for entry in held_entries(held_config):
+        code = str(entry.get("code", "")).strip()
+        name = str(entry.get("name", "")).strip()
+        if code and name:
+            names[code] = name
     return names
 
 

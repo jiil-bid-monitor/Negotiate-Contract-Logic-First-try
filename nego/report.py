@@ -116,10 +116,61 @@ def _dedupe_names_preferring_code(names: list[str]) -> list[str]:
     return [by_base[b] for b in order]
 
 
-def _qualification_cell_html(q, esc) -> str:
+def _missing_tip_html(c: Candidate, esc) -> str | None:
+    """미보유 자격이 있는 공고의 자격판정 칸 (2026-10-21 사용자 요청).
+
+    팝업은 주간 메일 '자격 미보유' 상자와 같은 묶음(필수 보유 / N개 중 1개 이상 / 방법 중 하나, ✓·✗·–)으로,
+    미보유 요건과 보유(충족) 요건을 나눠 보여준다. 보유 요건이 하나라도 있으면(일부 보유) 빨간 원 대신
+    노란 바탕 체크박스. 요건 자료를 못 만들면 None — 예전 미보유 이름 목록으로.
+    """
+    from .email_html import _req_blocks, qualification_parts  # email_html이 report를 import해서 여기서
+
+    parts = [p for p in qualification_parts(c) if p["missing"] or p["satisfied"]]
+    miss = [(p["name"], p["missing"]) for p in parts if p["missing"]]
+    if not miss:
+        return None
+    held = [(p["name"], [r for r in p["satisfied"] if not r.get("joint")]) for p in parts]
+    held = [(name, reqs) for name, reqs in held if reqs]
+    joint = [(p["name"], [r for r in p["satisfied"] if r.get("joint")]) for p in parts]
+    joint = [(name, reqs) for name, reqs in joint if reqs]
+    miss_n = sum(len(reqs) for _, reqs in miss)
+    held_n = sum(len(reqs) for _, reqs in held)
+
+    partial = held_n > 0
+
+    def section(title: str, color: str, groups: list) -> str:
+        body = "".join(
+            # 자격 종류(자격요건/세부품명번호)가 둘 이상 섞일 때만 종류 이름을 붙인다
+            (f'<div class="tip-part">{esc(name)}</div>' if len(groups) > 1 else "") + "".join(_req_blocks(reqs))
+            for name, reqs in groups)
+        # 보유가 없으면 칸이 미보유 하나뿐이라 칸 제목은 팝업 제목과 겹친다 — 생략
+        head = f'<div class="tip-sec-title" style="color:{color};">{title}</div>' if partial or joint else ""
+        return f'<div class="tip-sec">{head}{body}</div>'
+
+    title = f"일부 보유 — 보유 {held_n} · 미보유 {miss_n}" if partial else f"미보유 자격 {miss_n}건"
+    tip = (f'<div class="tip-title" style="color:{"var(--partial-fg)" if partial else "var(--fail-fg)"};">{title}</div>'
+           + section(f"미보유 {miss_n}건", "var(--fail-fg)", miss)
+           + (section(f"보유 {held_n}건", "var(--pass-fg)", held) if held else "")
+           + (section("조건부 — 없으면 공동수급", "var(--muted)", joint) if joint else ""))
+    mark = (f'<span class="circle box-partial">{_PARTIAL_CHECK_SVG}</span>' if partial
+            else f'<span class="circle circle-fail">{_CHECK_SVG}</span>')
+    return (f'<button type="button" class="qual-dot" aria-label="{esc(title)}">{mark}'
+            f'<span class="tip tip-wide">{tip}</span></button>')
+
+
+# 일부 보유 체크박스(노란 바탕) 안 체크 — 바탕이 밝아 흰 체크 대신 짙은 갈색
+_PARTIAL_CHECK_SVG = _CHECK_SVG.replace('stroke="#fff"', 'stroke="#7a5a00"')
+
+
+def _qualification_cell_html(c: Candidate, esc) -> str:
     """표의 '자격판정' 칸. 이름표 문구 대신 원 아이콘 하나로 보여주고,
-    미보유 자격이 있으면(빨간 원) 호버/포커스 시 이름·코드 목록을 팝업으로
+    미보유 자격이 있으면(빨간 원, 일부 보유면 노란 체크박스) 호버/포커스 시 요건 목록을 팝업으로
     띄운다 — 여러 개일 때 칸 안에 태그를 줄줄이 나열하면 표가 지저분해지므로."""
+    q = c.qualification
+    if q.checked and q.missing_groups:
+        tip = _missing_tip_html(c, esc)
+        if tip:
+            return tip
     if not q.checked:
         return (
             '<button type="button" class="qual-dot" aria-label="자격정보 미확인 (통과)">'
@@ -328,6 +379,7 @@ _HTML_HEAD = """<meta charset="utf-8">
     --pass-bg:#eaf2fb; --pass-bd:#a8c7e6; --pass-fg:#1d5a99;
     --fail-bg:#fdeeea; --fail-bd:#e6b8ae; --fail-fg:#9a3412;
     --unchecked-bg:#fbf3d9; --unchecked-bd:#e3cf8f; --unchecked-fg:#8a6d16;
+    --partial-fg:#8a6400;
   }
   body { margin:0; background:var(--bg); color:var(--fg);
          font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif; line-height:1.55; }
@@ -407,6 +459,8 @@ _HTML_HEAD = """<meta charset="utf-8">
   .circle-fail { background:#c0392b; }
   .circle-pass { background:#2554c7; }
   .circle-unchecked { background:#e3cf8f; }
+  /* 일부 보유: 노란 바탕 체크박스(네모) — 미확인 노란 원과 모양으로 구분 */
+  .qual-dot .box-partial { border-radius:3px; background:#f8d548; box-shadow:inset 0 0 0 1.5px #c99a06; }
   /* 위/아래로 고정해서 열면(둘 다 실측으로 확인됨) 표의 반대쪽 끝 행에서
      뷰포트 밖으로 잘린다 — 원 오른쪽(공간이 없으면 왼쪽)에, 세로로는
      버튼 위치를 기준으로 뷰포트 안에 들어오게 JS가 top/left를 직접
@@ -424,6 +478,10 @@ _HTML_HEAD = """<meta charset="utf-8">
   .qual-dot .tip .tip-item { padding:4px 2px; border-top:1px solid var(--line); word-break:break-all; }
   .qual-dot .tip .tip-item:first-child { border-top:none; }
   .qual-dot .tip .tip-note { color:var(--muted); font-size:0.65rem; margin-top:6px; }
+  .qual-dot .tip.tip-wide { width:300px; }
+  .qual-dot .tip .tip-sec { border-top:1px solid var(--line); padding-top:4px; margin-top:6px; }
+  .qual-dot .tip .tip-sec-title { font-weight:700; }
+  .qual-dot .tip .tip-part { font-weight:600; color:#374151; margin-top:6px; }
 
   td.center { text-align:center; }
 
@@ -565,7 +623,7 @@ def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[st
                 f'<div class="notice-no">{esc(c.notice.notice_no)}{re_badge}{overseas_badge}</div>'
                 f"{title}{kwtags}</td>"
                 f"<td><div>{money_html}</div></td>"
-                f'<td class="center"><div>{_qualification_cell_html(c.qualification, esc)}</div></td>'
+                f'<td class="center"><div>{_qualification_cell_html(c, esc)}</div></td>'
                 f'<td><div class="nowrap">{esc(c.joint.label)}</div></td>'
                 f'<td><div class="nowrap">{esc(c.notice.estimate_price_method) or "-"}</div></td>'
                 f'<td><div class="nowrap">{esc(c.notice.demand_institution) or "-"}</div></td>'

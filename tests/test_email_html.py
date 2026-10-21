@@ -74,6 +74,13 @@ class TestEmailHtml(unittest.TestCase):
             render_email_html([], self.stats, NOW).encode())
         self.assertLess(per_card, 2500, "카드 한 장이 커지면(예전 3KB) 40~50건에서 지메일이 본문을 자름")
 
+    def test_unique_tail_so_gmail_does_not_trim(self):
+        """10/21 사용자: 지메일 '•••' 접힘 없애기 — 같은 내용을 두 번 보내도 본문 끝이 달라야 한다."""
+        a = render_email_html(self.cands, self.stats, NOW)
+        b = render_email_html(self.cands, self.stats, NOW)
+        self.assertNotEqual(a[-200:], b[-200:])
+        self.assertIn("display:none", a[-300:])
+
     def test_empty(self):
         self.assertIn("조건에 맞는 공고가 없습니다", render_email_html([], self.stats, NOW))
 

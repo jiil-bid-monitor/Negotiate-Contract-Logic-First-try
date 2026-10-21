@@ -393,7 +393,8 @@ _HTML_HEAD = """<meta charset="utf-8">
   /* 칸 너비를 고정(colgroup) — 자동 너비면 관심 공고·세부품명 공고 표가 내용 길이에 따라 칸 너비를 따로 잡아
      두 표의 칸이 서로 어긋나 보였다(2026-10-21 사용자 제보). 좁은 화면은 .tablewrap이 가로로 스크롤한다. */
   table { border-collapse:collapse; width:100%; min-width:1240px; table-layout:fixed; }
-  td { overflow-wrap:anywhere; }
+  /* 글이 긴 칸(수요기관·공동수급 등)은 칸 안에서 줄바꿈 — 고정 너비라 nowrap이면 옆 칸으로 넘쳐 글씨가 겹쳤다 */
+  td { overflow-wrap:anywhere; word-break:keep-all; }
   th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line);
            vertical-align:middle; font-size:0.75rem; line-height:1.4; }
   /* 2026-10-20 사용자 요청: 한 줄짜리 칸(자격판정 동그라미·공동수급·예가방법 등)이
@@ -533,7 +534,7 @@ _TOOLTIP_FLIP_SCRIPT = """<script>
 
 # 표 칸 너비(px) — 분야·계약방법·공고·금액·자격판정·공동수급·예가방법·수요기관·공고일/개찰일·입찰마감일. 합 1,240px
 _COLGROUP = "<colgroup>" + "".join(
-    f'<col style="width:{w}px">' for w in (84, 76, 210, 200, 64, 140, 86, 140, 94, 146)) + "</colgroup>"
+    f'<col style="width:{w}px">' for w in (84, 76, 190, 205, 56, 145, 70, 174, 94, 146)) + "</colgroup>"
 
 
 def _category_html(category: str | None, esc) -> str:
@@ -621,8 +622,9 @@ def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[st
             if (c.notice.assigned_budget and c.notice.assigned_budget > 0
                     and c.notice.assigned_budget != c.notice.estimated_price):
                 money_parts.append(
-                    f'<div class="{"nowrap" if not money_parts else "dim nowrap"}">배정 '
-                    f'{esc(_fmt_money(c.notice.assigned_budget))} (부가세 포함)</div>'
+                    # 칸 너비가 고정이라 금액만 한 줄로 두고 "(부가세 포함)"은 넘치면 다음 줄로
+                    f'<div class="{"" if not money_parts else "dim"}">배정 '
+                    f'<span class="nowrap">{esc(_fmt_money(c.notice.assigned_budget))}</span> <span class="nowrap">(부가세 포함)</span></div>'
                 )
             money_html = "".join(money_parts) or '<span class="dim">금액 모름</span>'
 
@@ -632,15 +634,15 @@ def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[st
                 f'<span class="badge category">{_category_html(c.category, esc)}</span>'
                 f'<span class="badge{confidence_cls}">{esc(c.screen_result.confidence)}</span>'
                 f'<span class="badge">{esc(c.notice.work_type)}</span></div></td>'
-                f'<td><div class="nowrap">{esc(c.notice.contract_method) or "-"}</div></td>'
+                f'<td><div>{esc(c.notice.contract_method) or "-"}</div></td>'
                 f'<td class="notice-title">'
                 f'<div class="notice-no">{esc(c.notice.notice_no)}{re_badge}{overseas_badge}</div>'
                 f"{title}{kwtags}</td>"
                 f"<td><div>{money_html}</div></td>"
                 f'<td class="center"><div>{_qualification_cell_html(c, esc)}</div></td>'
-                f'<td><div class="nowrap">{esc(c.joint.label)}</div></td>'
-                f'<td><div class="nowrap">{esc(c.notice.estimate_price_method) or "-"}</div></td>'
-                f'<td><div class="nowrap">{esc(c.notice.demand_institution) or "-"}</div></td>'
+                f'<td><div>{esc(c.joint.label)}</div></td>'
+                f'<td><div>{esc(c.notice.estimate_price_method) or "-"}</div></td>'
+                f'<td><div>{esc(c.notice.demand_institution) or "-"}</div></td>'
                 f'<td class="center"><div>{_opening_cell_html(c, esc)}</div></td>'
                 f"<td><div>{_deadline_cell_html(c, esc)}</div></td>"
                 "</tr>"

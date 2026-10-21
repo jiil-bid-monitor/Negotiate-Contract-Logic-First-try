@@ -4,6 +4,14 @@
 
 **새 계정·새 세션에서 이어받을 때는 `docs/HANDOFF.md`부터 읽을 것** (2026-10-16 계정 이전용 인수인계 — 현재 상태·준비할 것·다음 할 일 요약).
 
+## 2026-10-21 — 텔레그램 정시 발송: 외부 예약(cron-job.org) (브랜치 `claude/external-cron`, 사용자 결정)
+
+- 계기: "알림이 안 온다" — GitHub 예약(09:00)이 매일 10:57~11:28에 시작(10/16~10/20 실측), 10/21은 09:50까지 시작 안 함. 코드 문제 아님.
+- cron-job.org가 평일 09:00·월 09:10 KST에 `workflow_dispatch` API를 부름(입력값·토큰 만드는 법 `docs/telegram.md` 9절 — Fine-grained PAT, Actions 읽기·쓰기).
+- GitHub `schedule`은 **12:00/12:10 KST 백업**(`0 3 * * 1-5`·`10 3 * * 1`). `run-name`에 모드를 넣고, 백업 실행은 오늘(KST) 같은 이름의
+  수동 실행이 진행 중·성공이면 skip(수집·기록 단계 건너뜀). Runs 조회 실패면 그냥 수집. 외부 예약 본문 값을 바꾸면 이름이 달라져 중복 발송됨.
+- 실측 미확인: cron-job.org 첫 호출(204)·백업 skip. 토큰 만료일(최대 1년) 전에 갱신 필요.
+
 ## 2026-10-20 — HTML 리포트 표 칸 세로 가운데 정렬 (브랜치 `claude/report-cell-middle`, 사용자 요청)
 
 - 텔레그램 첨부·메일 HTML(`nego/report.py`)의 표 칸을 `vertical-align:top` → `middle`. 자격판정 동그라미·공동수급·예가방법처럼

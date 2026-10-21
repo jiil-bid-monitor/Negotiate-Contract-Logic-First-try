@@ -261,7 +261,7 @@ def verdict_cells(record: dict[str, Any], now: datetime) -> list[str]:
 def plan_verdicts(rows: list[list[Any]], wanted: dict[str, list[str]]) -> list[tuple[int, list[str]]]:
     """시트 2행부터의 값(A~V) + 공고번호별 원하는 S~V → 바꿀 (행 번호, 4칸) 목록.
     판단 기록에 없는 공고 줄은 건드리지 않는다. 판단이 없어진 공고(빈 4칸)는 S칸이 웹앱이 쓴 값일 때만 지운다 —
-    누가 시트에 직접 적은 판정은 남긴다."""
+    누가 시트에 직접 적은 판정은 남긴다. 웹앱이 '미판단·놓침'뿐인데 시트에 판단이 있으면 그것도 남긴다."""
     plan = []
     for i, row in enumerate(rows):
         no = str(row[0]).strip().lstrip("'") if row else ""
@@ -270,6 +270,10 @@ def plan_verdicts(rows: list[list[Any]], wanted: dict[str, list[str]]) -> list[t
         current = [str(v) for v in (list(row[VERDICT_COLUMN_INDEX:VERDICT_COLUMN_INDEX + 4]) + [""] * 4)[:4]]
         want = wanted[no]
         if not any(want) and current[0] not in VERDICT_OPTIONS:
+            continue
+        # 웹앱엔 아직 판단이 없는데(미판단·놓침) 시트에 판단이 적혀 있으면 사람이 시트에서 직접 고른 것 — 덮어쓰지 않는다
+        # (서버 PC가 꺼진 날 시트에서 판단해 둔 경우)
+        if want[0] in ("미판단", "놓침") and current[0] and current[0] not in ("미판단", "놓침"):
             continue
         if current != want:
             plan.append((i + 2, want))

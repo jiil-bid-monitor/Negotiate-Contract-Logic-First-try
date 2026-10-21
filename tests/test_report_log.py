@@ -183,13 +183,13 @@ class TestBackup(unittest.TestCase):
 
 
 class TestTeamStoreBackupAndReports(unittest.TestCase):
-    def test_save_backs_up_and_writes_csv(self):
+    def test_save_backs_up_without_csv(self):
         bk = Path(tempfile.mkdtemp())
         store = TeamStore(Path(tempfile.mkdtemp()), backup_dir=bk)
         store.update({"noticeNo": "A", "title": "공고 A", "by": "김", "status": "불참", "tags": ["금액 적음"]})
         self.assertEqual(json.loads((bk / "participation.json").read_text(encoding="utf-8"))["A"]["status"], "불참")
         self.assertTrue((bk / "promoted.json").exists())
-        self.assertIn("불참", (bk / "판단기록.csv").read_text(encoding="utf-8"))
+        self.assertFalse((bk / "판단기록.csv").exists(), "보기용 CSV는 안 쓴다 — 피드백 시트로 본다 (10/21)")
 
     def test_new_pc_restores_from_backup(self):
         bk = Path(tempfile.mkdtemp())

@@ -33,7 +33,12 @@ class TestEmailHtml(unittest.TestCase):
         body = render_email_html(self.cands, self.stats, NOW)
         for no in ("R26EM0000", "R26EM0001"):
             self.assertIn(no, body)
-        self.assertEqual(body.count("<table"), len(self.cands), "공고마다 카드(표) 한 장")
+        self.assertEqual(body.count(">공고번호</td>"), len(self.cands), "공고마다 카드 한 장")
+        self.assertIn('align="center"', body, "본문은 가운데 정렬(10/21)")
+        self.assertIn("max-width:760px", body)
+        self.assertNotIn("width:42%", body, "칸 너비는 %가 아니라 flex 최소 너비로 — 확대해도 같은 모양")
+        self.assertIn("500,000,000원<", body)
+        self.assertNotIn("원원", body)
         for banned in ("<style", "<script", "<svg", 'class="tip"'):
             self.assertNotIn(banned, body, f"메일 본문에 {banned}가 있으면 지메일에서 깨진다")
         self.assertIn("키워드:전시관", body)
@@ -47,7 +52,8 @@ class TestEmailHtml(unittest.TestCase):
         body = render_email_html(self.cands, self.stats, NOW)
         self.assertLess(body.index("본공고 (1건)"), body.index("R26EM0000"))
         self.assertLess(body.index("사전규격 — 면허제한 정보 없음"), body.index("R26EM0001"))
-        self.assertIn("자격: 사전규격 — 면허제한 정보 없음, 원문 확인", body)
+        self.assertIn(">자격</td>", body)
+        self.assertIn(">사전규격 — 면허제한 정보 없음, 원문 확인</td>", body)
 
     def test_empty(self):
         self.assertIn("조건에 맞는 공고가 없습니다", render_email_html([], self.stats, NOW))

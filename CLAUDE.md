@@ -85,7 +85,7 @@
   남기고(`nego/report_log.py`, 공개된 공고 정보만), 워크플로 "보낸 공고 기록 저장"이 bot-state `reports/`에 올림 — **예전 `sent_bids.json`
   덮어쓰기(-f)를 받아서 더하기로 바꿈**(매일·주간이 서로 안 지우게, 밀리면 rebase 3회). 웹앱이 5분마다 받아 `TeamStore.merge_report`
   (`webapp/reportsync.py`). 판단 기록 탭·CSV에 미판단·놓침·보고일. 키워드 집계는 실제 판단만.
-- **판단 기록 구글 드라이브 백업**: 환경변수 `BACKUP_DIR`(웹앱은 `.env`를 읽지 않음 — 서버 PC의 Windows 사용자 환경변수, 10/20 정정) → 저장할 때마다 participation·promoted 사본(날짜별 30일) + `판단기록.csv`,
+- **판단 기록 구글 드라이브 백업**: 환경변수 `BACKUP_DIR`(웹앱은 `.env`를 읽지 않음 — 서버 PC의 Windows 사용자 환경변수, 10/20 정정) → 저장할 때마다 participation·promoted 사본(날짜별 30일)(`판단기록.csv`는 10/21 뺌 — 피드백 시트로),
   이 PC에 파일이 없으면 백업에서 되살림(`webapp/backup.py`). 팀원 레포는 구글 시트에도 매일 보고를 쌓지만 이 레포엔 시트가 없어 CSV로 대신.
 - 자세한 규칙 `docs/decision_log.md` 8절. 테스트 `tests/test_report_log.py`. 실측 미확인: Actions 첫 실행(bot-state reports/), 서버 PC 드라이브 백업.
 

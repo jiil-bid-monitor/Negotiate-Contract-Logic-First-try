@@ -6,7 +6,7 @@
 notice_state·decisions·comments)이 있으면 **처음 한 번만** 옮겨 온다(sqlite 파일은 지우지 않음).
 
 백업(2026-10-20, 팀원 레포 10/19 이식): `backup_dir`(환경변수 `BACKUP_DIR` — 구글 드라이브 동기화 폴더)이 있으면 저장할 때마다
-두 파일을 그 폴더에 복사하고(날짜별 사본 30일), 판단 기록 표 `판단기록.csv`도 함께 쓴다. 이 PC에 파일이 없으면 백업에서
+두 파일을 그 폴더에 복사하고(날짜별 사본 30일), 이 PC에 파일이 없으면 백업에서
 되살린다. 텔레그램 보고에 나간 공고는 `merge_report`로 판단 기록에 '미판단'으로 합친다(`webapp/reportsync.py`).
 """
 
@@ -87,8 +87,7 @@ class TeamStore:
         now = datetime.now(timezone.utc)
         backup_content(self.part_path.name, part, self.backup_dir, now)
         backup_content(self.promo_path.name, promo, self.backup_dir, now)
-        # 팀원이 구글 드라이브에서 표로 보는 판단 기록 — 화면 'CSV 내려받기'와 같은 표 (보기용이라 날짜별 사본은 두지 않는다)
-        backup_content("판단기록.csv", report_log.decisions_csv(self.participation, now), self.backup_dir, now, daily=False)
+        # 보기용 `판단기록.csv`는 2026-10-21에 뺐다 — 팀은 피드백 구글 시트 S~V열로 본다(webapp/sheetsync.py, 사용자 결정)
 
     def backup_now(self) -> None:
         """지금 기록을 백업한다 — 서버가 뜰 때(판단을 새로 누르지 않아도 백업이 최신이 되게)."""

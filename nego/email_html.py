@@ -5,7 +5,7 @@
 사라졌다(10/20 테스트 메일로 확인). 그래서 메일 본문은 팀원 레포 주간 메일과 같은 카드 모양으로 따로 그린다(사용자 결정):
 - 스타일은 칸마다 직접 쓰고(`style="…"`), 팝업·스크립트·SVG를 쓰지 않는다
 - (10/21 사용자 요청) 가운데 정렬·확대/축소해도 같은 모양: 바깥은 가운데 표 하나(최대 760px), 카드 안 공고 정보 | 자격 미보유는
-  flex 줄바꿈 — 넓으면 나란히, 확대해 좁아지면 위아래로. flex를 모르는 메일 프로그램(아웃룩 등)은 처음부터 위아래로 쌓인다.
+  inline-block 두 칸 — 넓으면 나란히(자격 상자는 오른쪽 끝), 확대해 좁아지면 위아래로. flex는 메일마다 지원이 달라 안 씀.
   글자 크기·줄 간격은 px로 고정, 칸 너비는 %가 아니라 최소·최대 너비로
 - 미보유 자격은 웹앱 자격 팝업과 같은 자료(`webapp/qualview.build`)로 필수 보유 / N개 중 1개 이상 / 방법 중 하나 / 조건부를 ✓·✗·–로
 - 메일은 본문 + 텔레그램과 같은 HTML 첨부(`cli._send_email`)
@@ -25,6 +25,7 @@ INK, DIM, LINE = "#1f2937", "#6b7280", "#e5e7eb"
 LINK = "#1d4ed8"
 PAGE_BG = "#f3f4f6"
 MAX_WIDTH = 760  # 본문 최대 너비(px) — 넓은 화면에선 가운데, 좁으면 화면 너비에 맞춰 줄어듦
+_BOX_WIDTH = 300  # 자격 미보유 상자 너비 — 카드 안쪽 718px(760 − 테두리 2 − 좌우 여백 40) = 정보 칸 416 + 상자 300 (+2 여유)
 FONT = "font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;"
 WRAP = "word-break:keep-all;overflow-wrap:break-word;"  # 한글은 낱말 단위로 줄바꿈, 긴 번호·주소만 중간에서
 PILL = ("display:inline-block;padding:2px 8px;margin:0 4px 4px 0;border-radius:999px;"
@@ -171,14 +172,15 @@ def _card(c: Candidate) -> str:
             + (f'<div style="margin-top:10px;line-height:16px;">{tag_html}</div>' if tag_html else ""))
     box = qualification_box(c)
     if box:
-        # 넓으면 나란히(정보 3 : 자격 2), 좁아지면(확대·휴대폰) 자격 상자가 아래로. 칸 사이는 양쪽 안쪽 여백 8px.
-        # 메일 프로그램이 flex 늘이기를 지워도(10/21 실제 메일에서 확인 — 칸이 글자 길이만큼만 잡혀 오른쪽이 빔)
-        # 자격 상자는 너비 300px로 오른쪽 끝에 붙게 space-between·margin-left:auto
-        body = (f'<div style="display:flex;flex-wrap:wrap;justify-content:space-between;margin:0 -8px;">'
-                f'<div style="flex:3 1 330px;min-width:0;max-width:100%;padding:0 8px;margin-bottom:12px;'
-                f'box-sizing:border-box;">{left}</div>'
-                f'<div style="flex:2 1 250px;width:316px;min-width:0;max-width:100%;padding:0 8px;margin-left:auto;'
-                f'box-sizing:border-box;">{box}</div></div>')
+        # 넓으면 나란히(정보 | 자격 상자는 카드 오른쪽 끝), 좁아지면(확대·휴대폰) 자격 상자가 아래로.
+        # flex는 메일 프로그램마다 늘이기를 지워(10/21 실제 메일 — 칸이 글자 길이만큼만 잡혀 오른쪽이 빔) 쓰지 않고,
+        # 거의 모든 메일이 지키는 inline-block + 최대 너비로: 두 칸 최대 너비 합(416+300)이 카드 안쪽 너비(718)와 같아
+        # 나란히 놓이면 상자가 오른쪽 끝에 붙는다. 바깥 font-size:0은 두 칸 사이 빈칸을 없애려고
+        body = (f'<div style="font-size:0;line-height:0;">'
+                f'<div style="display:inline-block;vertical-align:top;width:100%;max-width:416px;'
+                f'padding:0 16px 12px 0;box-sizing:border-box;font-size:13px;line-height:20px;">{left}</div>'
+                f'<div style="display:inline-block;vertical-align:top;width:100%;max-width:{_BOX_WIDTH}px;'
+                f'box-sizing:border-box;font-size:12px;line-height:18px;">{box}</div></div>')
     else:
         body = left
     return (f'<div style="background:#ffffff;border:1px solid {LINE};border-radius:12px;padding:18px 20px;'

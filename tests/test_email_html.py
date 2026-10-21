@@ -38,6 +38,17 @@ class TestEmailHtml(unittest.TestCase):
             self.assertNotIn(banned, body, f"메일 본문에 {banned}가 있으면 지메일에서 깨진다")
         self.assertIn("키워드:전시관", body)
 
+    def test_main_and_prespec_sub_sections(self):
+        """2026-10-21 사용자 요청: 본공고·사전규격이 섞이면 소구역, 사전규격 자격 미확인은 그 이유를 적음."""
+        import dataclasses
+        pre = self.cands[1]
+        pre.notice = dataclasses.replace(pre.notice, kind="사전규격")
+        pre.qualification = dataclasses.replace(pre.qualification, checked=False)
+        body = render_email_html(self.cands, self.stats, NOW)
+        self.assertLess(body.index("본공고 (1건)"), body.index("R26EM0000"))
+        self.assertLess(body.index("사전규격 — 면허제한 정보 없음"), body.index("R26EM0001"))
+        self.assertIn("자격: 사전규격 — 면허제한 정보 없음, 원문 확인", body)
+
     def test_empty(self):
         self.assertIn("조건에 맞는 공고가 없습니다", render_email_html([], self.stats, NOW))
 

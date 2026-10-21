@@ -160,6 +160,20 @@ def _missing_tip_html(c: Candidate, esc) -> str | None:
 
 
 
+def unchecked_reason(c: Candidate) -> str:
+    """본공고 자격정보 미확인의 이유 한 줄(2026-10-21 사용자 결정 — 참가자격 원문 정리본은 PDF 등에서 깔끔하지 않아
+    이유만). 나라장터 면허제한이 비었고(그래서 미확인), 첨부를 읽었는지·참가자격 절을 찾았는지로 나눈다."""
+    from .qualification_text import find_qualification_section
+
+    text = (getattr(c, "attachment_text", "") or "").strip()
+    if not text:
+        return "나라장터 면허제한 없음 + 첨부를 읽지 못함(첨부 없음 포함) — 원문 확인"
+    docs = re.split(r"(?m)^=== .* ===$", text)
+    if any(find_qualification_section(d) for d in docs if d.strip()):
+        return "나라장터 면허제한 없음 + 공고문 자격이 업종코드 없이 이름으로만 적혀 판정 못 함 — 원문 확인"
+    return "나라장터 면허제한 없음 + 첨부에서 참가자격 절을 찾지 못함 — 원문 확인"
+
+
 def _qualification_cell_html(c: Candidate, esc) -> str:
     """표의 '자격판정' 칸. 이름표 문구 대신 원 아이콘 하나로 보여주고,
     미보유 자격이 있으면(빨간 원, 일부 보유면 노란 원) 호버/포커스 시 요건 목록을 팝업으로
@@ -169,12 +183,22 @@ def _qualification_cell_html(c: Candidate, esc) -> str:
         tip = _missing_tip_html(c, esc)
         if tip:
             return tip
+    if not q.checked and is_prespec(c):
+        # 사전규격은 나라장터 면허제한 정보가 없다(본공고 때 정해짐) — 첨부 규격서에서도 참가자격을 못 찾은 경우
+        return (
+            '<button type="button" class="qual-dot" aria-label="사전규격 — 면허제한 정보 없음">'
+            '<span class="circle circle-unchecked"></span>'
+            '<span class="tip"><div class="tip-title" style="color:var(--unchecked-fg);">사전규격 — 면허제한 정보 없음</div>'
+            '<div class="tip-note">사전규격엔 나라장터 면허제한 정보가 아직 없습니다(본공고 때 정해짐). '
+            "첨부 규격서에서도 참가자격을 찾지 못해 판정하지 않았습니다 — 원문 확인.</div></span>"
+            "</button>"
+        )
     if not q.checked:
         return (
             '<button type="button" class="qual-dot" aria-label="자격정보 미확인 (통과)">'
             '<span class="circle circle-unchecked"></span>'
             '<span class="tip"><div class="tip-title" style="color:var(--unchecked-fg);">자격정보 미확인 (통과)</div>'
-            "<div class=\"tip-note\">API·첨부파일 모두 판정 근거가 없어 fail-open으로 통과 처리됩니다.</div></span>"
+            f'<div class="tip-note">{esc(unchecked_reason(c))}</div></span>'
             "</button>"
         )
     # 같은 미보유 자격이 여러 그룹에 걸쳐 잡히면(예: 첨부문서 내 같은 코드가
@@ -387,6 +411,7 @@ _HTML_HEAD = """<meta charset="utf-8">
   .warn { color:#9a3412; font-size:0.85rem; display:block; margin-bottom:16px; }
   .section { font-size:1.05rem; font-weight:700; margin:28px 0 14px;
              padding-bottom:8px; border-bottom:2px solid var(--fg); }
+  .subsection { font-size:0.92rem; font-weight:700; margin:18px 0 8px; color:var(--muted); }
   .tablewrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:#fff; }
   /* 칸 너비를 고정(colgroup) — 자동 너비면 관심 공고·세부품명 공고 표가 내용 길이에 따라 칸 너비를 따로 잡아
      두 표의 칸이 서로 어긋나 보였다(2026-10-21 사용자 제보). 좁은 화면은 .tablewrap이 가로로 스크롤한다. */
@@ -541,8 +566,31 @@ def _category_html(category: str | None, esc) -> str:
     return text.replace("규격가격동시입찰", "규격가격<br>동시입찰")
 
 
-def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[str]:
+def is_prespec(c: Candidate) -> bool:
+    return c.notice.kind == "사전규격"
+
+
+def split_prespec(rows: list[Candidate]) -> list[tuple[str, list[Candidate]]]:
+    """본공고 / 사전규격 소구역(텔레그램 메시지와 같은 규칙, 2026-10-21 사용자 요청) — 둘 다 있을 때만 나눈다.
+    사전규격은 면허제한 정보가 없어 자격판정이 비어 보이기 쉬워, 본공고와 섞이면 헷갈린다."""
+    main = [c for c in rows if not is_prespec(c)]
+    prespec = [c for c in rows if is_prespec(c)]
+    if main and prespec:
+        return [("본공고", main), ("사전규격 — 면허제한 정보 없음, 자격은 첨부 규격서로만 판정", prespec)]
+    return [("", rows)]
+
+
+def _section_html(section_title: str, candidates: list[Candidate], esc) -> list[str]:
     parts = [f'<div class="section">{esc(section_title)} ({len(candidates)}건)</div>']
+    for sub, rows in split_prespec(candidates):
+        if sub:
+            parts.append(f'<div class="subsection">{esc(sub)} ({len(rows)}건)</div>')
+        parts.extend(_table_html(rows, esc))
+    return parts
+
+
+def _table_html(candidates: list[Candidate], esc) -> list[str]:
+    parts: list[str] = []
 
     if not candidates:
         parts.append('<div class="empty">조건에 맞는 공고가 없습니다.</div>')
@@ -673,7 +721,7 @@ def render_html(candidates: list[Candidate], stats: RunStats, generated_at: date
     for section_title, rows in (("관심 공고", interest), ("세부품명 공고 (키워드 없이 보유 품목으로 수집)", product_only)):
         if section_title.startswith("세부품명") and not rows:
             continue
-        parts.extend(_table_html(section_title, rows, esc))
+        parts.extend(_section_html(section_title, rows, esc))
 
     parts.append("</div>")
     parts.append(_TOOLTIP_FLIP_SCRIPT)

@@ -24,8 +24,10 @@ from .report import (_fmt_kr_date, _fmt_kr_datetime, _fmt_kr_deadline, _fmt_mone
 INK, DIM, LINE = "#1f2937", "#6b7280", "#e5e7eb"
 LINK = "#1d4ed8"
 PAGE_BG = "#f3f4f6"
-MAX_WIDTH = 760  # 본문 최대 너비(px) — 넓은 화면에선 가운데, 좁으면 화면 너비에 맞춰 줄어듦
-_BOX_WIDTH = 300  # 자격 미보유 상자 너비 — 카드 안쪽 718px(760 − 테두리 2 − 좌우 여백 40) = 정보 칸 416 + 상자 300 (+2 여유)
+MAX_WIDTH = 1000  # 본문 최대 너비(px) — 넓은 화면에선 가운데, 좁으면 화면 너비에 맞춰 줄어듦 (10/21 760 → 1000, 사용자: 여백이 많음)
+_BOX_WIDTH = 340  # 자격 미보유 상자 너비
+# 정보 칸 최대 너비 — 카드 안쪽(MAX_WIDTH − 테두리 2 − 좌우 여백 40) − 상자 − 2(어긋남 여유). 둘이 나란히면 상자가 오른쪽 끝
+_INFO_WIDTH = MAX_WIDTH - 42 - _BOX_WIDTH - 2
 FONT = "font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;"
 WRAP = "word-break:keep-all;overflow-wrap:break-word;"  # 한글은 낱말 단위로 줄바꿈, 긴 번호·주소만 중간에서
 _BASE = "font-size:13px;line-height:20px;"  # 본문 글자 — 바깥 틀에서 물려받고, 두 칸 배치에서 font-size:0을 되돌릴 때만 다시 씀
@@ -173,10 +175,10 @@ def _card(c: Candidate) -> str:
     if box:
         # 넓으면 나란히(정보 | 자격 상자는 카드 오른쪽 끝), 좁아지면(확대·휴대폰) 자격 상자가 아래로.
         # flex는 메일 프로그램마다 늘이기를 지워(10/21 실제 메일 — 칸이 글자 길이만큼만 잡혀 오른쪽이 빔) 쓰지 않고,
-        # 거의 모든 메일이 지키는 inline-block + 최대 너비로: 두 칸 최대 너비 합(416+300)이 카드 안쪽 너비(718)와 같아
+        # 거의 모든 메일이 지키는 inline-block + 최대 너비로: 두 칸 최대 너비 합이 카드 안쪽 너비와 같아
         # 나란히 놓이면 상자가 오른쪽 끝에 붙는다. 바깥 font-size:0은 두 칸 사이 빈칸을 없애려고
         body = (f'<div style="font-size:0;line-height:0;">'
-                f'<div style="display:inline-block;vertical-align:top;width:100%;max-width:416px;'
+                f'<div style="display:inline-block;vertical-align:top;width:100%;max-width:{_INFO_WIDTH}px;'
                 f'padding:0 16px 12px 0;box-sizing:border-box;{_BASE}">{left}</div>'
                 f'<div style="display:inline-block;vertical-align:top;width:100%;max-width:{_BOX_WIDTH}px;'
                 f'box-sizing:border-box;{_BASE}">{box}</div></div>')
@@ -211,8 +213,10 @@ def split_parts(candidates: list[Candidate]) -> list[tuple[str, list[Candidate]]
     return [(INTEREST, interest)] + ([(PRODUCT, product_only)] if product_only else [])
 
 
-def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime, part: str | None = None) -> str:
-    """메일 본문. part가 INTEREST·PRODUCT면 그 구역만(메일 나눠 보내기), None이면 두 구역 다."""
+def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime, part: str | None = None,
+                      attached: bool = True) -> str:
+    """메일 본문. part가 INTEREST·PRODUCT면 그 구역만(메일 나눠 보내기), None이면 두 구역 다.
+    attached=False면(첨부 없는 두 번째 통) '첨부 파일을 여세요' 안내를 뺀다."""
     period = ""
     if stats.period_begin and stats.period_end:
         period = f"조회 기간: {_fmt_kr_date(stats.period_begin)} ~ {_fmt_kr_date(stats.period_end)} · "
@@ -222,7 +226,8 @@ def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at
     header = (f'<div style="background:#fff;border:1px solid {LINE};border-radius:12px;padding:20px 22px;">'
               f'<h2 style="margin:0 0 6px;font-size:20px;line-height:28px;color:{INK};">{_esc(heading)}</h2>'
               f'<div style="{meta}">{period}생성 시각: {_esc(_fmt_kr_datetime(generated_at))}</div>'
-              f'<div style="{meta}">표로 한눈에 보려면 첨부한 HTML 파일(텔레그램과 같은 리포트)을 여세요.</div>')
+              + (f'<div style="{meta}">표로 한눈에 보려면 첨부한 HTML 파일(텔레그램과 같은 리포트)을 여세요.</div>'
+                 if attached else ""))
     if stats.failed_operations:
         header += f'<div style="{alert}">⚠ 조회 실패: {_esc(", ".join(stats.failed_operations))}</div>'
     if stats.license_error:

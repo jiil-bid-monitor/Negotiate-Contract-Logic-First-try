@@ -35,7 +35,7 @@ class TestEmailHtml(unittest.TestCase):
             self.assertIn(no, body)
         self.assertEqual(body.count(">공고번호</font>"), len(self.cands), "공고마다 카드 한 장")
         self.assertIn('align="center"', body, "본문은 가운데 정렬(10/21)")
-        self.assertIn("max-width:760px", body)
+        self.assertIn("max-width:1000px", body)
         self.assertNotIn("width:42%", body, "칸 너비는 %가 아니라 flex 최소 너비로 — 확대해도 같은 모양")
         self.assertIn("500,000,000원<", body)
         self.assertNotIn("원원", body)

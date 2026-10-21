@@ -218,7 +218,8 @@ def _send_email(candidates, stats, html_path, now) -> None:
         return
     for i, (part, rows) in enumerate(split_parts(candidates)):
         subject = subject_for(now.strftime("%Y-%m-%d"), len(rows), bool(stats.failed_operations), part)
-        error = send(subject, render_email_html(candidates, stats, now, part), Path(html_path) if i == 0 else None)
+        body = render_email_html(candidates, stats, now, part, attached=i == 0)
+        error = send(subject, body, Path(html_path) if i == 0 else None)
         if error:
             logging.error(error)
             if os.environ.get("GITHUB_ACTIONS"):

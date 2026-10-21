@@ -522,7 +522,6 @@ def save_attachment_texts(
             continue
 
         lookup = dict(code_names or {})
-        lookup.update(learned_names)
         product_no = getattr(notice, "product_class_no", None)
         product_name = getattr(notice, "product_class_name", None)
         if product_no and product_name:
@@ -534,7 +533,8 @@ def save_attachment_texts(
             )
         )
 
-        result = evaluate_attachment_text(all_items, held_codes, held_code_names, lookup)
+        # 다른 공고에서 가져온 이름은 이 공고가 코드만 적었을 때만(이 공고 문서의 이름이 먼저 — 2026-10-21 제보)
+        result = evaluate_attachment_text(all_items, held_codes, held_code_names, lookup, learned_names)
         for code, label in named_codes(all_items).items():
             learned_names.setdefault(code, label.rsplit("(", 1)[0])
         for code in result.unnamed_codes:

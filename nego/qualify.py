@@ -950,6 +950,7 @@ def evaluate_attachment_text(
     held_codes: set[str],
     held_code_names: dict[str, str] | None = None,
     code_names: dict[str, str] | None = None,
+    fallback_names: dict[str, str] | None = None,
 ) -> QualificationResult:
     """첨부파일 참가자격 절에서 업종코드·세부품명번호가 명시된 항목만 뽑아,
     API 판정(`evaluate`)과 같은 형태의 결과를 만든다 — 리포트에서 "자격 충족" /
@@ -967,7 +968,9 @@ def evaluate_attachment_text(
 
     이름표는 ① `held_code_names`(등록증) ② `code_names`(코드 이름 사전·공고 API 정보
     등, 호출 쪽이 모아서 넘김)에 있으면 그 이름을 쓰고, 없으면 ③ 문서에서 뽑은 이름표
-    ④ 같은 공고의 다른 곳에 "이름(코드)"로 적힌 이름 순으로 쓴다. 문서가 코드만 적고
+    ④ 같은 공고의 다른 곳에 "이름(코드)"로 적힌 이름 ⑤ `fallback_names`(같은 실행의 **다른 공고**가 적은 이름) 순으로 쓴다.
+    다른 공고에서 가져온 이름은 그 공고 문장에서 잘린 조각일 수 있어("측량부문은 측량", "①전시부스…") 이 공고 문서의 이름보다
+    앞세우지 않는다(2026-10-21 제보: 제천 신월~모산 R26BK01775782 — 공고문엔 "측량용역(8115160401)"). 문서가 코드만 적고
     (예: "[업종코드 4440, 4442, 4444]") 어디에도 이름이 없으면 "이름 미확인(코드)"로
     두고 `unnamed_codes`에 남긴다.
     """
@@ -985,6 +988,8 @@ def evaluate_attachment_text(
             return label
         if code in seen_in_notice:
             return seen_in_notice[code]
+        if fallback_names and fallback_names.get(code):
+            return f"{fallback_names[code]}({code})"
         return f"{UNNAMED_LABEL}({code})"
 
     # 코드가 달라도 이름이 보유 면허와 똑같으면 보유 — 공고문이 나라장터 업종코드가 아닌 번호를 적는 경우

@@ -61,7 +61,7 @@ def _clean_label(label: str) -> str:
     if not code:
         return label
     name = _TRAILING_CODE.sub("", label).strip()
-    name = _NAME_PREFIX.sub("", drop_item_marks(name)).strip()  # 예전 결과·다른 공고에서 배운 "①전시부스…"도
+    name = _NAME_PREFIX.sub("", drop_item_marks(name)).strip()  # 예전 결과·다른 공고에서 가져온 "①전시부스…"도
     return f"{name}({code})" if name else code
 
 

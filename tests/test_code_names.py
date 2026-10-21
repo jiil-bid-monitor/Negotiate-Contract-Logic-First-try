@@ -220,3 +220,18 @@ class TestLabelCleanup(unittest.TestCase):
             "직접생산확인증명서(전 시 부 스 설 치 및 디 자 인 서 비 스  7215409901 또 는  전 시 홍 보 관 설 치 및 디 자 인 서 비 스 \n"
             "7215409902)를 소지한 자")
         self.assertEqual([l for _, l in got], ["전시부스설치및디자인서비스(7215409901)", "전시홍보관설치및디자인서비스(7215409902)"])
+
+
+class TestLearnedNamesAreFallback(unittest.TestCase):
+    """2026-10-21 제보: 제천 신월~모산 R26BK01775782 — 공고문엔 "측량용역(분류번호:8115160401)"인데 같은 실행의 다른 공고에서
+    가져온 "측량부문은 측량"이 앞서 팝업에 그대로 나왔다. 다른 공고 이름은 이 공고가 코드만 적었을 때만 쓴다."""
+
+    def test_own_label_beats_learned_name(self):
+        item = "다. 직접생산확인증명서[측량용역(분류번호:8115160401)-필수특이사항에 공공측량업 또는 측지측량업에 한함]를 소지한 업체"
+        r = qualify.evaluate_attachment_text([item], set(), {}, {}, {"8115160401": "측량부문은 측량"})
+        self.assertEqual(r.missing_groups[0].allowed_names, ["측량용역(8115160401)"])
+
+    def test_learned_name_fills_bare_code(self):
+        item = "다. 세부품명번호 8115160401 직접생산확인증명서를 소지한 업체"
+        r = qualify.evaluate_attachment_text([item], set(), {}, {}, {"8115160401": "측량용역"})
+        self.assertEqual(r.missing_groups[0].allowed_names, ["측량용역(8115160401)"])

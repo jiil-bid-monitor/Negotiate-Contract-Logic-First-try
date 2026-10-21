@@ -168,3 +168,70 @@ class TestFreeIndustry(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOrLinkAcrossPdfLayout(unittest.TestCase):
+    """2026-10-21 검수: 같은 공고의 hwp는 "또는", pdf는 줄바꿈·글자 띄움 때문에 "필수"로 읽혀 팝업에 같은 요건이 겹쳐 나왔다."""
+
+    def codes(self, item):
+        return [[c for c, _ in b] for b in qualify._or_groups(item)]
+
+    def test_or_after_wrapped_description(self):
+        """국립부산과학관 4D R26BK01780275 공고서 PDF — 3230이 "필수"로 잡혀 자격 미달이 됐다."""
+        item = ("4) ⌜ 영화 및 비디오물의 진흥에 관한 법률 ⌟ 제 57 조에 따른 비디오물제작업 ( 업종코드 : 3244) \n"
+                "신고필증을 교부받은 업체 또는 ⌜ 문화산업진흥 기본법 시행령 ｣ 제 11 조에 따른 방송영상독 \n"
+                "립제작사 ( 업종코드 : 3230)  신고를 필한 업체 ")
+        self.assertEqual(self.codes(item), [["3244", "3230"]])
+
+    def test_letter_spaced_or(self):
+        """R26BK01759031 PDF — "7215409901 또 는 전 시 홍 보 관 …"."""
+        item = ("1) 실내건축공사업(업종코드 : 4990)으로 입찰 참가 등록한 자로 직접생산확인증명서(전 시 부 스 설 치 및 디 자 인 서 비 스  "
+                "7215409901 또 는  전 시 홍 보 관 설 치 및 디 자 인 서 비 스 \n7215409902)를 소지한 자")
+        self.assertEqual(self.codes(item), [["4990"], ["7215409901", "7215409902"]])
+
+    def test_or_inside_parenthesis(self):
+        """R26BK01764739 제안요청서 — "측지측량업(업종코드: 5021)(또는 공공측량업(업종코드: 5023)), 수치지도제작업(…5029)"."""
+        item = ("가. 측지측량업(업종코드: 5021)(또는 공공측량업(업종코드: 5023)), 수치지도제작업(업종코드: 5029), "
+                "지하시설물측량업(업종코드 5031)을 모두 등록한 업체로서,")
+        self.assertEqual(self.codes(item), [["5021", "5023"], ["5029"], ["5031"]])
+
+    def test_wrapped_line_without_subject_or_stays_and(self):
+        """줄바꿈을 넘어도 "또는" 바로 앞이 업체/자가 아니면 잇지 않는다 — "공동수급 또는 단독"."""
+        item = "가. 실내건축공사업(업종코드 4990)을 등록한\n업체로서 공동수급 또는 단독으로 참여하며 조형물(6012100201)을 소지한 자"
+        self.assertEqual(self.codes(item), [["4990"], ["6012100201"]])
+
+
+class TestLabelCleanup(unittest.TestCase):
+    """2026-10-21 제보: R26BK01759031 팝업에 "①전시부스설치및디자인서비스", 7215409901 이름이 옆 품목("또는 전시홍보관…")."""
+
+    def test_item_mark_inside_label(self):
+        got = qualify._extract_code_requirements(
+            "직접생산확인증명서를 소지한 자: ①전시부스설치및디자인서비스(7215409901), ②전시홍보관설치서비스(7215409902)")
+        self.assertEqual([l for _, l in got], ["전시부스설치및디자인서비스(7215409901)", "전시홍보관설치서비스(7215409902)"])
+        self.assertEqual(qualify.drop_item_marks("㉮ 측량업(측지측량업)(5021)"), "측량업(측지측량업)(5021)")
+
+    def test_name_before_code_in_parenthesis(self):
+        got = qualify._extract_code_requirements(
+            "직접생산확인증명서(전시부스설치및디자인서비스 7215409901 또는 전시홍보관설치및디자인서비스 7215409902)를 소지한 자")
+        self.assertEqual([l for _, l in got], ["전시부스설치및디자인서비스(7215409901)", "전시홍보관설치및디자인서비스(7215409902)"])
+
+    def test_name_before_code_letter_spaced_pdf(self):
+        got = qualify._extract_code_requirements(
+            "직접생산확인증명서(전 시 부 스 설 치 및 디 자 인 서 비 스  7215409901 또 는  전 시 홍 보 관 설 치 및 디 자 인 서 비 스 \n"
+            "7215409902)를 소지한 자")
+        self.assertEqual([l for _, l in got], ["전시부스설치및디자인서비스(7215409901)", "전시홍보관설치및디자인서비스(7215409902)"])
+
+
+class TestLearnedNamesAreFallback(unittest.TestCase):
+    """2026-10-21 제보: 제천 신월~모산 R26BK01775782 — 공고문엔 "측량용역(분류번호:8115160401)"인데 같은 실행의 다른 공고에서
+    가져온 "측량부문은 측량"이 앞서 팝업에 그대로 나왔다. 다른 공고 이름은 이 공고가 코드만 적었을 때만 쓴다."""
+
+    def test_own_label_beats_learned_name(self):
+        item = "다. 직접생산확인증명서[측량용역(분류번호:8115160401)-필수특이사항에 공공측량업 또는 측지측량업에 한함]를 소지한 업체"
+        r = qualify.evaluate_attachment_text([item], set(), {}, {}, {"8115160401": "측량부문은 측량"})
+        self.assertEqual(r.missing_groups[0].allowed_names, ["측량용역(8115160401)"])
+
+    def test_learned_name_fills_bare_code(self):
+        item = "다. 세부품명번호 8115160401 직접생산확인증명서를 소지한 업체"
+        r = qualify.evaluate_attachment_text([item], set(), {}, {}, {"8115160401": "측량용역"})
+        self.assertEqual(r.missing_groups[0].allowed_names, ["측량용역(8115160401)"])

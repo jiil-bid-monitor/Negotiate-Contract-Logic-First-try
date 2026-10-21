@@ -368,3 +368,27 @@ class TestUnknownIndustryFlag(unittest.TestCase):
     def test_code_or_document_sentences_not_flagged(self):
         self.assertEqual(self.industry(["다. 공공측량업(5023) 또는 측지측량업(5021)에 등록된 업체"]), [])
         self.assertEqual(self.industry(["※ 최근 연도 결산 신고된 SW사업자 신고확인서, 정보통신공사업등록증 제출"]), [])
+
+
+class TestParenOr(unittest.TestCase):
+    """2026-10-21 제보: 하동군 군도 및 농어촌도로 전산화 용역 R26BK01775480 — "측지측량업(또는 공공측량업), 수치지도제작업의 등록을
+    모두 필한"을 항목 전체 "또는"으로 봐서 팝업에 "수치지도제작업 또는 측지측량업"이 따로 생겼다."""
+
+    ITEM = ("나. 공고일 현재「공간정보의 구축 및 관리 등에 관한 법률」제44조에 의한 측지측량업(또는 공공측량업), 수치지도제작업의 "
+            "등록을 모두 필한 업체")
+
+    def bundles(self, lookup):
+        return [sorted(r.code for r in b) for b in name_bundles(self.ITEM, HELD, {**LOOKUP, **lookup})]
+
+    def test_or_only_inside_parenthesis(self):
+        got = self.bundles({"5021": "측지측량업", "5023": "공공측량업", "5029": "수치지도제작업"})
+        self.assertEqual(sorted(got), [["5021", "5023"], ["5029"]])
+
+    def test_unknown_alternative_is_not_judged(self):
+        """괄호 속 대안을 사전에서 못 찾으면 앞 이름도 "필수"로 두지 않는다 — 대안 보유 업체가 미달이 된다."""
+        self.assertEqual(self.bundles({"5021": "측지측량업", "5029": "수치지도제작업"}), [["5029"]])
+
+    def test_or_outside_parenthesis_still_whole_item(self):
+        item = "가. 측지측량업 또는 수치지도제작업을 등록한 업체"
+        lookup = {**LOOKUP, "5021": "측지측량업", "5029": "수치지도제작업"}
+        self.assertEqual([sorted(r.code for r in b) for b in name_bundles(item, HELD, lookup)], [["5021", "5029"]])

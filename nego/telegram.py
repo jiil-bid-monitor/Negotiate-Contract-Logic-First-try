@@ -11,17 +11,18 @@ GitHub Actions 스케줄(`daily.yml`)이 `python -m nego --telegram`으로 부�
     입찰 공고 보고 (10/11 게시분)
     후보 3건
 
-    1. ○○체험관 전시물 제작설치          ← 누르면 나라장터 공고
+    1. [입찰] ○○체험관 전시물 제작설치          ← 누르면 나라장터 공고
        3.2억 · 🔴 D-5 · 자격 충족
-    2. △△박물관 전시시설 공사
+    2. [입찰] △△박물관 전시시설 공사
        8.5억 · D-16 · 자격 미달(공동수급 가능)
 
   - 마감 10일 이내(D-0~D-10)는 굵은 "🔴 D-N" — 텔레그램은 글자 색을 못 바꿔서 빨간 점으로(사용자 결정, 이모지는 이것만 예외).
   - 자격 미달이면 바로 옆 괄호에 공동수급 가능/불허/정보 없음 — 미달이어도 공동수급으로 참가할 수 있는지 바로 보이게.
 
   - 지역·공동수급·확인 필요 요건 등 자세한 건 첨부 HTML 리포트(전체 표)에서 본다.
-  - 본공고·사전규격이 함께 있으면 "── 본공고 N건 ──" / "── 사전규격 N건 ──" 구역으로 나눈다(번호는 이어서).
-    본공고 구역 안에서 유형이 섞이면 공고명 앞에 [협상]·[규격가격]·[입찰]을 붙인다.
+  - 사전규격이 있으면 "── 본공고 N건 ──" / "── 사전규격 N건 ──" 구역으로 나눈다(번호는 이어서).
+    본공고는 늘 공고명 앞에 [협상]·[규격가격]·[입찰](모르면 [유형 미상]), 사전규격은 구역 제목으로 갈음하고
+    자격 미확인이면 "(면허제한 정보 없음)"을 붙인다(2026-10-21 사용자 요청 — 예전엔 유형이 섞일 때만 표시).
   - 관심 공고 / 세부품명 공고(키워드 없이 보유 품목으로 수집) 두 구역으로 나눈다(2026-10-19 통합 결정 12번).
     세부품명 공고 줄 끝엔 걸린 품목을 적는다. 정정공고(이미 보낸 공고의 차수가 오름)는 [정정]을 붙인다(결정 14번).
   - 마감 지난 공고는 수집 단계에서 이미 빠진다(결정 4번) — "마감 지난 N건 제외" 문구는 없앴다.
@@ -107,6 +108,9 @@ class Row:
         q = c.qualification
         # 요건이 하나라도 빠지면 미달 — 예전엔 `passes`(빠진 요건 1개까지 허용)라 1개가 빠져도 "자격 충족"이었다(2026-10-19 수정)
         qual = "자격 미확인" if not q.checked else ("자격 충족" if not getattr(q, "missing_count", 0) and q.passes else "자격 미달")
+        if qual == "자격 미확인" and c.notice.kind == "사전규격":
+            # 사전규격은 나라장터 면허제한 정보가 없어 첨부 규격서로만 판정 — 왜 미확인인지 적는다(2026-10-21 사용자 요청)
+            qual += "(면허제한 정보 없음)"
         if qual == "자격 미달":
             j = c.joint
             joint = "공동수급 정보 없음" if j.raw_value is None else ("공동수급 가능" if j.allowed else "공동수급 불허")
@@ -162,8 +166,8 @@ def _line(index: int, row: Row, tagged: bool) -> str:
         title = f'<a href="{esc(row.detail_url, quote=True)}">{title}</a>'
     if row.corrected:
         title = f"[정정] {title}"
-    if tagged and row.kind:
-        title = f"[{esc(_KIND_TAG.get(row.kind, row.kind))}] {title}"
+    if tagged:
+        title = f"[{esc(_KIND_TAG.get(row.kind, row.kind) if row.kind else '유형 미상')}] {title}"
     if row.days_left is None:
         days = "마감 미상"
     elif row.days_left <= URGENT_DAYS:
@@ -212,15 +216,17 @@ def build_messages(rows: list[Row], title: str, warnings: list[str] | None = Non
             continue
         sec_main = [r for r in section_rows if r.kind != "사전규격"]
         sec_prespec = [r for r in section_rows if r.kind == "사전규격"]
-        both = bool(sec_main and sec_prespec)
+        # 사전규격만 있는 구역도 제목을 달아 본공고와 헷갈리지 않게 한다
+        both = bool(sec_prespec)
         first_block = len(blocks)
         # 본공고·사전규격을 나눠서 보여준다(2026-10-12 사용자 요청) — 둘 다 있을 때만 구역 제목을 단다.
         # 번호는 구역을 넘어 이어서 매긴다(대화에서 "3번 공고"라고 부를 때 헷갈리지 않게).
         for sub, rows_in in (("본공고", sec_main), ("사전규격", sec_prespec)):
             if not rows_in:
                 continue
-            # 구역 안에서 유형이 섞일 때만 [협상]·[입찰] 표시 — 사전규격 구역은 제목이 이미 말해 줌
-            tagged = len({r.kind for r in rows_in}) > 1 or (not both and len({r.kind for r in section_rows}) > 1)
+            # 본공고는 늘 [협상]·[입찰]·[규격가격](유형을 모르면 [유형 미상]) — 예전엔 섞일 때만이라 메시지마다
+            # 있다 없다 해서 헷갈렸음(2026-10-21 사용자 요청). 사전규격 구역은 제목이 이미 말해 줌
+            tagged = sub == "본공고"
             lines = [_line(index + i, r, tagged) for i, r in enumerate(rows_in)]
             index += len(rows_in)
             if both:  # 구역 제목이 첫 공고와 같은 메시지에 붙어 가게 한 블록으로

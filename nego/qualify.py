@@ -504,10 +504,15 @@ _LINK_HEAD = r"(?:[ \t\u3000]*[)\]])*[ \t\u3000]*(?:업종[ \t\u3000]*)?"
 # "업체로서 공동수급 또는 단독"처럼 "또는" 바로 앞이 업체/자가 아니면 잇지 않는다.
 # "엔지니어링사업자(업종코드 3583)로 신고 또는 기술사사무소(업종코드 1351)로 등록한 자"처럼 "신고/등록 또는"·"신고하거나"도
 # 두 요건을 잇는 말이다(2026-10-14 제보: 도시계획 엔지니어링 3583 / 기술사사무소 1351이 "모두 필요"로 나옴).
+# PDF는 서술 중간에서 줄을 바꾸고("3244) \n신고필증을 교부받은 업체 또는") 글자를 띄워("또 는") 적어 "또는"을 놓쳤다 — 줄바꿈과
+# 한 칸 띄운 "또 는"도 잇는다(새 하위 항목 줄은 앞에서 `_SUBITEM_BREAK_RE`가 먼저 끊는다). "측지측량업(5021)(또는 공공측량업(5023))"처럼
+# 괄호를 열고 쓴 "또는"도 같다. 같은 공고의 hwp는 "또는", pdf는 "필수"로 읽혀 팝업에 같은 요건이 겹쳐 나왔음
+# (2026-10-21 검수: 국립부산과학관 4D R26BK01780275 — 3230이 "필수"로 잡혀 자격 미달, R26BK01764739·R26BK01759031).
+_OR_WORD = r"(?:또\s?는|혹\s?은)"
 _OR_AFTER_SUBJECT = (
-    r"[^\n。.]{0,40}?(?:(?:업체|업자|자|(?:신고|등록)(?:한|된)?)\s*,?\s*(?:또는|혹은)|(?:신고|등록)하거나)(?=\s)"
+    r"[^。.]{0,40}?(?:(?:업체|업자|자|(?:신고|등록)(?:한|된)?)\s*,?\s*" + _OR_WORD + r"|(?:신고|등록)하거나)(?=\s)"
 )
-_OR_LINK_RE = re.compile(_LINK_HEAD + r"(?:,?\s*(?:또는|혹은)|\(\s*허용\s*업종|" + _OR_AFTER_SUBJECT + r")")
+_OR_LINK_RE = re.compile(_LINK_HEAD + r"(?:,?\s*\(?\s*" + _OR_WORD + r"|\(\s*허용\s*업종|" + _OR_AFTER_SUBJECT + r")")
 _COMMA_LINK_RE = re.compile(_LINK_HEAD + r",")
 # 코드 사이에 새 하위 항목이 시작됨 — 줄머리 "가)"·"나."·"1)"·"(1)"·"①"
 _SUBITEM_BREAK_RE = re.compile(r"\n\s*(?:[가-하][).]|[(（]?\d{1,2}[)）]|[①-⑳])")
@@ -574,6 +579,18 @@ def _last_name_chunk(text: str) -> str:
     return re.split(r"[)\]]", text)[-1]
 
 
+# 이름 가운데 남은 항목 기호 — "자로 직접생산확인증명서 ①전시부스설치및디자인서비스"를 20자로 자르면 "①전시부스…"가 되고,
+# "소지한 자: ①전시부스…(7215409901)"는 기호 앞 "자:"까지 이름으로 남았다(2026-10-21 제보: R26BK01759031 팝업 "①전시부스설치및디자인서비스").
+_CIRCLED_MARK_RE = re.compile(r"[①-⑳㉮-㉻㉠-㉭⑴-⒇⒜-⒵Ⓐ-Ⓩⓐ-ⓩ]\s*")
+
+
+def drop_item_marks(label: str) -> str:
+    """이름표 안 항목 기호(①·㉮·⑴ …)와 그 앞 조각을 뗀다 — 기호 뒤가 이름이다. 뒤에 남는 게 없으면 그대로."""
+    tail = _CIRCLED_MARK_RE.split(label)[-1]
+    tail = re.sub(r"^[\s,;，:：·\-\[]+", "", tail)
+    return tail if tail and not re.fullmatch(r"\(?[0-9]{4,10}\)?", tail) else label
+
+
 def _truncate_label(name: str) -> str:
     name = _ITEM_MARKER_RE.sub("", name)
     # "산업디자인전문회사(환경디자인을포함한종합디자인분야)"처럼 괄호 분야명이 붙은 이름은 길다 —
@@ -597,6 +614,21 @@ def _split_group_entries(content: str, code_re: re.Pattern) -> list[tuple[int, s
     자르면 이름이 온전히 남는다)."""
     matches = list(code_re.finditer(content))
     pairs = []
+    # "(전시부스설치및디자인서비스 7215409901 또는 전시홍보관설치및디자인서비스 7215409902)"처럼 이름이 코드 **앞**에 오는 표기 —
+    # 첫 코드 앞에 이름이 있고 마지막 코드 뒤엔 없으면 코드마다 바로 앞 조각이 이름이다. 예전엔 뒤 조각을 이름으로 봐서
+    # 7215409901이 "또는 전시홍보관…"이 됐다(2026-10-21 제보: R26BK01759031)
+    if matches and not content[matches[-1].end() :].strip(_GROUP_ENTRY_STRIP_CHARS):
+        head = content[: matches[0].start()].strip(_GROUP_ENTRY_STRIP_CHARS)
+        if len(re.findall(r"[가-힣]", head)) >= 2 and not re.search(r"코드|번호|분류|품명\s*[:：]", head):
+            prev = 0
+            for match in matches:
+                name = content[prev : match.start()].strip(_GROUP_ENTRY_STRIP_CHARS)
+                name = re.sub(r"^(?:또\s?는|혹\s?은|및)\s*", "", name).strip(_GROUP_ENTRY_STRIP_CHARS)
+                if re.fullmatch(r"(?:\S\s)+\S", name):  # PDF 글자 띄움 "전 시 부 스 …"
+                    name = name.replace(" ", "")
+                pairs.append((match.start(), match.group(0), "" if _CONJUNCTION_ONLY_RE.fullmatch(name) else name))
+                prev = match.end()
+            return pairs
     for i, match in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
         name = content[match.end() : end].strip(_GROUP_ENTRY_STRIP_CHARS)
@@ -760,7 +792,7 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
                 name = _truncate_label(name)
                 start = base + bare_match.start(1) + pos
                 results.append((start, start + len(code), code, f"{name}({code})" if name else code))
-    return merged, results
+    return merged, [(a, b, code, drop_item_marks(label)) for a, b, code, label in results]
 
 
 # 괄호 안 코드 앞 설명 — "(분류번호:8115160401)", "(물품분류번호 …)"
@@ -918,6 +950,7 @@ def evaluate_attachment_text(
     held_codes: set[str],
     held_code_names: dict[str, str] | None = None,
     code_names: dict[str, str] | None = None,
+    fallback_names: dict[str, str] | None = None,
 ) -> QualificationResult:
     """첨부파일 참가자격 절에서 업종코드·세부품명번호가 명시된 항목만 뽑아,
     API 판정(`evaluate`)과 같은 형태의 결과를 만든다 — 리포트에서 "자격 충족" /
@@ -935,7 +968,9 @@ def evaluate_attachment_text(
 
     이름표는 ① `held_code_names`(등록증) ② `code_names`(코드 이름 사전·공고 API 정보
     등, 호출 쪽이 모아서 넘김)에 있으면 그 이름을 쓰고, 없으면 ③ 문서에서 뽑은 이름표
-    ④ 같은 공고의 다른 곳에 "이름(코드)"로 적힌 이름 순으로 쓴다. 문서가 코드만 적고
+    ④ 같은 공고의 다른 곳에 "이름(코드)"로 적힌 이름 ⑤ `fallback_names`(같은 실행의 **다른 공고**가 적은 이름) 순으로 쓴다.
+    다른 공고에서 가져온 이름은 그 공고 문장에서 잘린 조각일 수 있어("측량부문은 측량", "①전시부스…") 이 공고 문서의 이름보다
+    앞세우지 않는다(2026-10-21 제보: 제천 신월~모산 R26BK01775782 — 공고문엔 "측량용역(8115160401)"). 문서가 코드만 적고
     (예: "[업종코드 4440, 4442, 4444]") 어디에도 이름이 없으면 "이름 미확인(코드)"로
     두고 `unnamed_codes`에 남긴다.
     """
@@ -953,6 +988,8 @@ def evaluate_attachment_text(
             return label
         if code in seen_in_notice:
             return seen_in_notice[code]
+        if fallback_names and fallback_names.get(code):
+            return f"{fallback_names[code]}({code})"
         return f"{UNNAMED_LABEL}({code})"
 
     # 코드가 달라도 이름이 보유 면허와 똑같으면 보유 — 공고문이 나라장터 업종코드가 아닌 번호를 적는 경우

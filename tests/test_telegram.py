@@ -70,8 +70,7 @@ class TestBuildMessages(unittest.TestCase):
         text = _messages(candidates, stats)[0]
         self.assertIn("<b>입찰 공고 보고 (8/31 게시분)</b>", text)
         self.assertIn("후보 <b>2건</b>", text)
-        self.assertRegex(text, r'1\. <a href="[^"]+">○○전시관 전시물 제작설치 0</a>\n   5\.0억 · D-\d+ · 자격 미확인')
-        self.assertNotIn("[입찰]", text, "한 유형만이면 유형 표시 없음")
+        self.assertRegex(text, r'1\. \[입찰\] <a href="[^"]+">○○전시관 전시물 제작설치 0</a>\n   5\.0억 · D-\d+ · 자격 미확인')
         self.assertFalse(any(ord(ch) >= 0x1F000 or 0x2600 <= ord(ch) < 0x2800 for ch in text), "이모지 없음")
 
     def test_sorted_by_deadline_and_closed_counted(self):
@@ -145,6 +144,25 @@ class TestBuildMessages(unittest.TestCase):
         self.assertIn('3. <a href="https://g2b/나">나</a>', text, "사전규격 구역은 [사전규격] 표시 없이, 번호는 이어서")
         self.assertIn("4,500만원", text)
 
+    def test_kind_tag_always_on_main_and_missing_kind(self):
+        """10/21 사용자 요청: 본공고는 유형이 하나뿐이어도 [입찰] 등, 유형을 모르면 [유형 미상]."""
+        text = T.build_messages([_row("가", 3, "협상"), _row("나", 5, None)], "보고")[0]
+        self.assertIn('1. [협상] <a href="https://g2b/가">가</a>', text)
+        self.assertIn('2. [유형 미상] <a href="https://g2b/나">나</a>', text)
+
+    def test_prespec_only_gets_section_title_and_no_tag(self):
+        text = T.build_messages([_row("가", 3, "사전규격")], "보고")[0]
+        self.assertIn("── 사전규격 1건 ──", text)
+        self.assertIn('1. <a href="https://g2b/가">가</a>', text)
+
+    def test_prespec_unchecked_says_why(self):
+        from types import SimpleNamespace as NS
+        c = NS(qualification=NS(checked=False, passes=True, missing_count=0), joint=NS(raw_value=None, allowed=False),
+               notice=NS(kind="사전규격", title="t", detail_url=None, budget=None, linked_system=None), category=None, days_left=3)
+        self.assertEqual(T.Row.from_candidate(c).qualification, "자격 미확인(면허제한 정보 없음)")
+        c.notice.kind = "본공고"
+        self.assertEqual(T.Row.from_candidate(c).qualification, "자격 미확인")
+
     def test_single_kind_has_no_sections(self):
         text = T.build_messages([_row("가", 3, "입찰"), _row("나", 5, "입찰")], "입찰 공고 보고")[0]
         self.assertNotIn("──", text)
@@ -165,7 +183,7 @@ class TestBuildMessages(unittest.TestCase):
             self.assertLessEqual(len(m), T.MESSAGE_LIMIT)
         joined = "\n\n".join(messages)
         for i in range(1, 81):
-            self.assertEqual(joined.count(f"\n{i}. <a"), 1)
+            self.assertEqual(joined.count(f"\n{i}. [입찰] <a"), 1)
 
     def test_title_is_html_escaped(self):
         candidates, stats = _candidates(1)

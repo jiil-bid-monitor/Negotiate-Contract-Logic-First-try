@@ -171,10 +171,14 @@ def _card(c: Candidate) -> str:
             + (f'<div style="margin-top:10px;line-height:16px;">{tag_html}</div>' if tag_html else ""))
     box = qualification_box(c)
     if box:
-        # 넓으면 나란히(정보 3 : 자격 2), 좁아지면(확대·휴대폰) 자격 상자가 아래로. 칸 사이는 양쪽 안쪽 여백 8px
-        body = (f'<div style="display:flex;flex-wrap:wrap;margin:0 -8px;">'
-                f'<div style="flex:3 1 330px;min-width:0;padding:0 8px;margin-bottom:12px;">{left}</div>'
-                f'<div style="flex:2 1 250px;min-width:0;padding:0 8px;">{box}</div></div>')
+        # 넓으면 나란히(정보 3 : 자격 2), 좁아지면(확대·휴대폰) 자격 상자가 아래로. 칸 사이는 양쪽 안쪽 여백 8px.
+        # 메일 프로그램이 flex 늘이기를 지워도(10/21 실제 메일에서 확인 — 칸이 글자 길이만큼만 잡혀 오른쪽이 빔)
+        # 자격 상자는 너비 300px로 오른쪽 끝에 붙게 space-between·margin-left:auto
+        body = (f'<div style="display:flex;flex-wrap:wrap;justify-content:space-between;margin:0 -8px;">'
+                f'<div style="flex:3 1 330px;min-width:0;max-width:100%;padding:0 8px;margin-bottom:12px;'
+                f'box-sizing:border-box;">{left}</div>'
+                f'<div style="flex:2 1 250px;width:316px;min-width:0;max-width:100%;padding:0 8px;margin-left:auto;'
+                f'box-sizing:border-box;">{box}</div></div>')
     else:
         body = left
     return (f'<div style="background:#ffffff;border:1px solid {LINE};border-radius:12px;padding:18px 20px;'

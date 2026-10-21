@@ -121,7 +121,7 @@ def _missing_tip_html(c: Candidate, esc) -> str | None:
 
     팝업은 주간 메일 '자격 미보유' 상자와 같은 묶음(필수 보유 / N개 중 1개 이상 / 방법 중 하나, ✓·✗·–)으로,
     미보유 요건과 보유(충족) 요건을 나눠 보여준다. 보유 요건이 하나라도 있으면(일부 보유) 빨간 원 대신
-    노란 바탕 체크박스. 요건 자료를 못 만들면 None — 예전 미보유 이름 목록으로.
+    노란 원(체크). 요건 자료를 못 만들면 None — 예전 미보유 이름 목록으로.
     """
     from .email_html import _req_blocks, qualification_parts  # email_html이 report를 import해서 여기서
 
@@ -152,19 +152,19 @@ def _missing_tip_html(c: Candidate, esc) -> str | None:
            + section(f"미보유 {miss_n}건", "var(--fail-fg)", miss)
            + (section(f"보유 {held_n}건", "var(--pass-fg)", held) if held else "")
            + (section("조건부 — 없으면 공동수급", "var(--muted)", joint) if joint else ""))
-    mark = (f'<span class="circle box-partial">{_PARTIAL_CHECK_SVG}</span>' if partial
+    mark = (f'<span class="circle circle-partial">{_PARTIAL_CHECK_SVG}</span>' if partial
             else f'<span class="circle circle-fail">{_CHECK_SVG}</span>')
     return (f'<button type="button" class="qual-dot" aria-label="{esc(title)}">{mark}'
             f'<span class="tip tip-wide">{tip}</span></button>')
 
 
-# 일부 보유 체크박스(노란 바탕) 안 체크 — 바탕이 밝아 흰 체크 대신 짙은 갈색
+# 일부 보유 노란 원 안 체크 — 노란 바탕이 밝아 흰 체크 대신 짙은 갈색
 _PARTIAL_CHECK_SVG = _CHECK_SVG.replace('stroke="#fff"', 'stroke="#7a5a00"')
 
 
 def _qualification_cell_html(c: Candidate, esc) -> str:
     """표의 '자격판정' 칸. 이름표 문구 대신 원 아이콘 하나로 보여주고,
-    미보유 자격이 있으면(빨간 원, 일부 보유면 노란 체크박스) 호버/포커스 시 요건 목록을 팝업으로
+    미보유 자격이 있으면(빨간 원, 일부 보유면 노란 원) 호버/포커스 시 요건 목록을 팝업으로
     띄운다 — 여러 개일 때 칸 안에 태그를 줄줄이 나열하면 표가 지저분해지므로."""
     q = c.qualification
     if q.checked and q.missing_groups:
@@ -390,7 +390,11 @@ _HTML_HEAD = """<meta charset="utf-8">
   .section { font-size:1.05rem; font-weight:700; margin:28px 0 14px;
              padding-bottom:8px; border-bottom:2px solid var(--fg); }
   .tablewrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:#fff; }
-  table { border-collapse:collapse; width:100%; min-width:820px; }
+  /* 칸 너비를 고정(colgroup) — 자동 너비면 관심 공고·세부품명 공고 표가 내용 길이에 따라 칸 너비를 따로 잡아
+     두 표의 칸이 서로 어긋나 보였다(2026-10-21 사용자 제보). 좁은 화면은 .tablewrap이 가로로 스크롤한다. */
+  table { border-collapse:collapse; width:100%; min-width:1240px; table-layout:fixed; }
+  /* 글이 긴 칸(수요기관·공동수급 등)은 칸 안에서 줄바꿈 — 고정 너비라 nowrap이면 옆 칸으로 넘쳐 글씨가 겹쳤다 */
+  td { overflow-wrap:anywhere; word-break:keep-all; }
   th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line);
            vertical-align:middle; font-size:0.75rem; line-height:1.4; }
   /* 2026-10-20 사용자 요청: 한 줄짜리 칸(자격판정 동그라미·공동수급·예가방법 등)이
@@ -437,7 +441,7 @@ _HTML_HEAD = """<meta charset="utf-8">
   .notice-title { font-weight:600; }
   .notice-title a { color:var(--accent); text-decoration:none; }
   .notice-title a:hover { text-decoration:underline; }
-  .title-text { display:block; max-width:175px; overflow:hidden;
+  .title-text { display:block; max-width:100%; overflow:hidden;
                 text-overflow:ellipsis; white-space:nowrap; }
   .kwtags { margin-top:6px; display:flex; flex-wrap:wrap; gap:4px; }
   .kwtag { font-size:0.65rem; padding:2px 7px; border-radius:6px;
@@ -459,8 +463,8 @@ _HTML_HEAD = """<meta charset="utf-8">
   .circle-fail { background:#c0392b; }
   .circle-pass { background:#2554c7; }
   .circle-unchecked { background:#e3cf8f; }
-  /* 일부 보유: 노란 바탕 체크박스(네모) — 미확인 노란 원과 모양으로 구분 */
-  .qual-dot .box-partial { border-radius:3px; background:#f8d548; box-shadow:inset 0 0 0 1.5px #c99a06; }
+  /* 일부 보유: 노란 원 + 체크 — 다른 원과 같은 모양(사용자 요청), 미확인(옅은 노랑, 체크 없음)과는 색·체크로 구분 */
+  .circle-partial { background:#f2c200; }
   /* 위/아래로 고정해서 열면(둘 다 실측으로 확인됨) 표의 반대쪽 끝 행에서
      뷰포트 밖으로 잘린다 — 원 오른쪽(공간이 없으면 왼쪽)에, 세로로는
      버튼 위치를 기준으로 뷰포트 안에 들어오게 JS가 top/left를 직접
@@ -528,13 +532,24 @@ _TOOLTIP_FLIP_SCRIPT = """<script>
 </script>"""
 
 
+# 표 칸 너비(px) — 분야·계약방법·공고·금액·자격판정·공동수급·예가방법·수요기관·공고일/개찰일·입찰마감일. 합 1,240px
+_COLGROUP = "<colgroup>" + "".join(
+    f'<col style="width:{w}px">' for w in (84, 76, 190, 205, 56, 145, 70, 174, 94, 146)) + "</colgroup>"
+
+
+def _category_html(category: str | None, esc) -> str:
+    """분야 배지 — '규격가격동시입찰'은 길어서 두 줄로(분야 칸 너비를 다른 유형과 맞추려고, 2026-10-21 사용자 요청)."""
+    text = esc(category or "유형 미상")
+    return text.replace("규격가격동시입찰", "규격가격<br>동시입찰")
+
+
 def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[str]:
     parts = [f'<div class="section">{esc(section_title)} ({len(candidates)}건)</div>']
 
     if not candidates:
         parts.append('<div class="empty">조건에 맞는 공고가 없습니다.</div>')
     else:
-        parts.append('<div class="tablewrap"><table>')
+        parts.append('<div class="tablewrap"><table>' + _COLGROUP)
         parts.append(
             "<thead><tr>"
             "<th>분야</th><th>계약방법</th><th>공고번호 / 공고명</th>"
@@ -607,26 +622,27 @@ def _table_html(section_title: str, candidates: list[Candidate], esc) -> list[st
             if (c.notice.assigned_budget and c.notice.assigned_budget > 0
                     and c.notice.assigned_budget != c.notice.estimated_price):
                 money_parts.append(
-                    f'<div class="{"nowrap" if not money_parts else "dim nowrap"}">배정 '
-                    f'{esc(_fmt_money(c.notice.assigned_budget))} (부가세 포함)</div>'
+                    # 칸 너비가 고정이라 금액만 한 줄로 두고 "(부가세 포함)"은 넘치면 다음 줄로
+                    f'<div class="{"" if not money_parts else "dim"}">배정 '
+                    f'<span class="nowrap">{esc(_fmt_money(c.notice.assigned_budget))}</span> <span class="nowrap">(부가세 포함)</span></div>'
                 )
             money_html = "".join(money_parts) or '<span class="dim">금액 모름</span>'
 
             parts.append(
                 "<tr>"
                 '<td><div class="badges">'
-                f'<span class="badge category">{esc(c.category or "유형 미상")}</span>'
+                f'<span class="badge category">{_category_html(c.category, esc)}</span>'
                 f'<span class="badge{confidence_cls}">{esc(c.screen_result.confidence)}</span>'
                 f'<span class="badge">{esc(c.notice.work_type)}</span></div></td>'
-                f'<td><div class="nowrap">{esc(c.notice.contract_method) or "-"}</div></td>'
+                f'<td><div>{esc(c.notice.contract_method) or "-"}</div></td>'
                 f'<td class="notice-title">'
                 f'<div class="notice-no">{esc(c.notice.notice_no)}{re_badge}{overseas_badge}</div>'
                 f"{title}{kwtags}</td>"
                 f"<td><div>{money_html}</div></td>"
                 f'<td class="center"><div>{_qualification_cell_html(c, esc)}</div></td>'
-                f'<td><div class="nowrap">{esc(c.joint.label)}</div></td>'
-                f'<td><div class="nowrap">{esc(c.notice.estimate_price_method) or "-"}</div></td>'
-                f'<td><div class="nowrap">{esc(c.notice.demand_institution) or "-"}</div></td>'
+                f'<td><div>{esc(c.joint.label)}</div></td>'
+                f'<td><div>{esc(c.notice.estimate_price_method) or "-"}</div></td>'
+                f'<td><div>{esc(c.notice.demand_institution) or "-"}</div></td>'
                 f'<td class="center"><div>{_opening_cell_html(c, esc)}</div></td>'
                 f"<td><div>{_deadline_cell_html(c, esc)}</div></td>"
                 "</tr>"

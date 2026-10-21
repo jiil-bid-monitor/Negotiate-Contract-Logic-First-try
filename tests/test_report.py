@@ -128,13 +128,13 @@ class TestRenderHtml(unittest.TestCase):
         candidates, stats = self._candidates()
         candidates[0].notice.estimate_price_method = "단일예가"
         out = render_html(candidates, stats, NOW)
-        self.assertIn('<td><div class="nowrap">단일예가</div></td>', out)
+        self.assertIn('<td><div>단일예가</div></td>', out)
 
     def test_estimate_price_method_missing_shows_dash(self):
         candidates, stats = self._candidates()
         candidates[0].notice.estimate_price_method = None
         out = render_html(candidates, stats, NOW)
-        self.assertIn('<td><div class="nowrap">-</div></td>', out)
+        self.assertIn('<td><div>-</div></td>', out)
 
     def test_no_period_line_when_stats_lack_period(self):
         """--from-store처럼 조회 기간 정보가 없는 실행에서도 죽지 않아야 한다."""
@@ -230,8 +230,8 @@ class TestRenderHtml(unittest.TestCase):
         self.assertEqual(out.count(f"✗ {name}</div>"), 1)
         self.assertIn("미보유 자격 1건</div>", out)
 
-    def test_partial_qualification_is_yellow_box_with_held_and_missing_split(self):
-        """2026-10-21 사용자 요청: 일부 보유(충족 요건 1개 이상 + 미보유 1개 이상)면 빨간 원 대신 노란 바탕 체크박스,
+    def test_partial_qualification_is_yellow_circle_with_held_and_missing_split(self):
+        """2026-10-21 사용자 요청: 일부 보유(충족 요건 1개 이상 + 미보유 1개 이상)면 빨간 원 대신 노란 원(체크),
         팝업은 메일 '자격 미보유' 상자와 같은 묶음으로 미보유 / 보유를 나눠 보여준다."""
         from nego.qualify import LicenseGroup, QualificationResult
 
@@ -244,7 +244,7 @@ class TestRenderHtml(unittest.TestCase):
             satisfied_groups=[LicenseGroup(group_no="2", allowed_names=["실내건축공사업(4990)"])],
         )
         out = render_html(candidates, stats, NOW)
-        self.assertIn('<span class="circle box-partial">', out)
+        self.assertIn('<span class="circle circle-partial">', out)
         self.assertNotIn('<span class="circle circle-fail">', out)
         self.assertIn("일부 보유 — 보유 1 · 미보유 1", out)
         miss, held = out.index("미보유 1건</div>"), out.index(";\">보유 1건</div>")

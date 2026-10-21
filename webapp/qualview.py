@@ -37,17 +37,18 @@ def _base(label: str) -> str:
 
 def held_lookup(held_raw: dict) -> tuple[set[str], set[str], set[str]]:
     """보유 자격 → (코드 집합, 정규화한 이름 집합(통칭 포함), 정규화한 정식 이름 집합)."""
+    from nego.qualify import held_entries  # 기타자유업종(9999)도 보유로 — 판정과 같은 목록
+
     codes, names, exact = set(), set(), set()
-    for key in ("heldProducts", "heldIndustries"):
-        for entry in held_raw.get(key, []) or []:
-            if entry.get("code"):
-                codes.add(str(entry["code"]).strip())
-            if entry.get("name"):
-                names.add(_NORM.sub("", str(entry["name"])))
-                exact.add(_NORM.sub("", str(entry["name"])))
-                # 분야 없이 적은 통칭("소프트웨어사업자")도 보유로 — 보유 이름이 "소프트웨어사업자(컴퓨터관련서비스사업)"
-                if "(" in str(entry["name"]):
-                    names.add(_NORM.sub("", str(entry["name"]).split("(")[0]))
+    for entry in held_entries(held_raw):
+        if entry.get("code"):
+            codes.add(str(entry["code"]).strip())
+        if entry.get("name"):
+            names.add(_NORM.sub("", str(entry["name"])))
+            exact.add(_NORM.sub("", str(entry["name"])))
+            # 분야 없이 적은 통칭("소프트웨어사업자")도 보유로 — 보유 이름이 "소프트웨어사업자(컴퓨터관련서비스사업)"
+            if "(" in str(entry["name"]):
+                names.add(_NORM.sub("", str(entry["name"]).split("(")[0]))
     return codes, names, exact
 
 

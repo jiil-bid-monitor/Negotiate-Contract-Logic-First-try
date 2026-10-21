@@ -155,5 +155,16 @@ class TestUnheldCodeNames(unittest.TestCase):
         self.assertIn("6012100201", config.code_names, "codes.json 이름도 포함")
 
 
+class TestFreeIndustry(unittest.TestCase):
+    def test_free_industry_9999_counts_as_held(self):
+        """2026-10-21 제보(탑승동 이동여객확인기기 설치사업): 나라장터 '기타자유업종(9999)'은 업종 제한 없음 —
+        면허제한에 이것만 와도 미보유로 세면 안 된다."""
+        cfg = load_config()
+        held_names, held_codes = qualify.load_held_names(cfg.held_raw), qualify.load_held_codes(cfg.held_raw)
+        groups = [qualify.LicenseGroup("1", ["기타자유업종/9999"], rows=[["기타자유업종/9999"]])]
+        self.assertEqual(qualify.evaluate(groups, held_names, held_codes).missing_groups, [])
+        self.assertIsNone(qualify.no_held_license(groups, held_names, held_codes))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -345,9 +345,11 @@ jobs:
           if-no-files-found: ignore
 
       # 개발자 알림 — 담당자 방이 아니라 TELEGRAM_DEV_CHAT_ID로만. 알림이 실패해도 Run 결과는 그대로.
-      - name: 개발자 알림 (재시도 소진 · 회복)
+      # 시도마다 실패하면 바로 알림(다음 재시도 시각 포함, 2026-10-22 사용자 요청 — 첫 실패부터 로그를 보려고),
+      # 재시도 끝에 성공하면 회복 알림.
+      - name: 개발자 알림 (실패 · 회복)
         if: >-
-          (steps.collect.outcome == 'failure' && fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.MAX_ATTEMPTS))
+          steps.collect.outcome == 'failure'
           || (steps.collect.outcome == 'success' && fromJSON(steps.mode.outputs.attempt) > 1)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -366,11 +368,17 @@ jobs:
           if [ "$OUTCOME" = "failure" ]; then
             ERRORS=$( (grep -E " ERROR |Error|조회 실패" collect.log 2>/dev/null || true) | tail -5 | cut -c1-300)
             [ -z "$ERRORS" ] && ERRORS="(오류 줄 없음 — Actions 로그 확인)"
-            WAITED=$(( (ATTEMPT - 1) * RETRY_DELAY_MINUTES ))
             REPORT="담당자 보고는 나가지 않았습니다."
             [ "$TELEGRAM" != "true" ] && REPORT="(텔레그램 발송을 켜지 않은 실행)"
-            TEXT=$(printf '[개발자 알림] 나라장터 수집 실패 — %s회 모두 실패\n%s\n첫 시도 후 약 %s분 동안 재시도. %s\n\n마지막 오류:\n%s\n\n로그: %s' \
-              "$ATTEMPT" "$MODE" "$WAITED" "$REPORT" "$ERRORS" "$RUN_URL")
+            if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
+              WAITED=$(( (ATTEMPT - 1) * RETRY_DELAY_MINUTES ))
+              TEXT=$(printf '[개발자 알림] 나라장터 수집 실패 — %s회 모두 실패, 자동 재시도 중단\n%s\n첫 시도 후 약 %s분 동안 재시도. %s\n\n마지막 오류:\n%s\n\n로그: %s' \
+                "$ATTEMPT" "$MODE" "$WAITED" "$REPORT" "$ERRORS" "$RUN_URL")
+            else
+              NEXT_AT=$(date -d "+${RETRY_DELAY_MINUTES} minutes" +%H:%M)
+              TEXT=$(printf '[개발자 알림] 나라장터 수집 실패 — %s번째 시도 (최대 %s회)\n%s\n%s분 뒤(약 %s) %s번째 시도를 자동으로 합니다. %s\n\n마지막 오류:\n%s\n\n로그: %s' \
+                "$ATTEMPT" "$MAX_ATTEMPTS" "$MODE" "$RETRY_DELAY_MINUTES" "$NEXT_AT" "$((ATTEMPT + 1))" "$REPORT" "$ERRORS" "$RUN_URL")
+            fi
           else
             REPORT="담당자 보고 발송됨."
             [ "$TELEGRAM" != "true" ] && REPORT="(텔레그램 발송을 켜지 않은 실행)"

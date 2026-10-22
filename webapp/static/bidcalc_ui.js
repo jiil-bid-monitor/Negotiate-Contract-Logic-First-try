@@ -16,7 +16,8 @@
   };
   // 금액 — 단가(소수점) 계산이면 소수점 둘째 자리까지 보임
   const won = (v) => (v == null || Number.isNaN(v) ? "-" : Number(v).toLocaleString("ko-KR", { maximumFractionDigits: 2 }));
-  const p4 = (v) => (v == null || Number.isNaN(v) ? "-" : v.toFixed(4));
+  // 소수 넷째 자리까지, 끝의 0은 뺌(21라인 표기 — 97 · -3 · 100.4286)
+  const p4 = (v) => (v == null || Number.isNaN(v) ? "-" : String(Number(v.toFixed(4)) || 0));
   // 번호 동그라미 — ①② 같은 글자는 글꼴에 따라 너무 작게 나와(10/15 제보) 숫자에 원 테두리를 그린다
   const circled = (n) => `<span class="calc-num">${n}</span>`;
   const numIn = (id) => {
@@ -64,7 +65,8 @@
         basis: numIn("#cBasis"), lo: numIn("#cLo"), hi: numIn("#cHi"), n: radio("cN"), method,
         down: parseInt($("#cDown").value, 10), up: parseInt($("#cUp").value, 10), decimal: $("#cDecimal").value,
       });
-      SLOTS = C.shuffle(prices);  // 나라장터처럼 번호와 금액은 무관하게
+      // 나라장터처럼 번호와 금액은 무관하게 — 단 등비추출은 21라인처럼 ①이 가장 낮은 금액부터 차례로(10/22 캡처 대조)
+      SLOTS = method === "geometric" ? prices : C.shuffle(prices);
       SELECTED.clear(); AUTO = []; SHOW_SORTED = false;
       render();
     } catch (err) { $("#cMsg").textContent = err.message; }

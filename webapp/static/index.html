@@ -650,6 +650,7 @@ ol.steps li.ok .mark, ol.steps li.ok b { color: var(--brand); }
 ol.steps li.no .mark, ol.steps li.no b { color: var(--urgent); }
 ol.steps li.first { background: var(--urgent-tint); }
 .qtip li.lay-spare { color: var(--faint); }
+.qtip li .lay-note { display: block; margin: 2px 0 0 14px; font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .qtip li.lay-or { color: var(--faint); font-size: 11px; padding: 0 0 0 22px; }
 /* "또는" 묶음은 한 덩어리로 — 사이에 구분선을 긋지 않는다 */
 .qtip li.lay-or, .qtip li.lay-or + li { border-top: 0; }
@@ -3286,9 +3287,31 @@ function exStepBadges(n) {
   const k = step("키워드·품목");
   // 그 밖에는 첨부 공고문을 읽지 않아 세부품명 요건은 확인하지 않았다 — 사실대로 '미확인'
   const product = k && !k.ok
-    ? tipBadge("block", "세부품명번호 미달", "세부품명", `<p>${esc(k.detail)}</p>`)
+    ? productMissBadge(n, k)
     : tipBadge("faint", "세부품명번호 미확인", "세부품명", `<p>제외된 공고는 첨부 공고문을 읽지 않아<br>세부품명번호 요건을 확인하지 않았습니다.</p>`);
   return group("자격", qual + product) + group("지역", region);
+}
+
+/**
+ * '세부품명 미달' 배지 — 팝업은 자격 팝업(예시: 세부품명번호 2건)처럼 항목마다 한 칸, ✗·– 표시.
+ * 사전규격은 나라장터가 세부품명번호를 주지 않아 판정 자체를 못 한 것이라 본공고 '미달'과 칩부터 다르게 (2026-10-22 사용자 결정).
+ */
+function productMissBadge(n, k) {
+  // 예전 결과(what·name 없음)는 문장 그대로
+  if (k.name === undefined) return tipBadge("block", "세부품명번호 미달", "세부품명", `<p>${esc(k.detail)}</p>`);
+  const pre = n.sourceType === "사전규격";
+  const blk = (h, cls, sym, text, note) =>
+    `<div class="lay-blk"><p class="lay-h">${h}</p><ul><li class="${cls}">${sym} ${text}${note ? `<span class="lay-note">${note}</span>` : ""}</li></ul></div>`;
+  const kw = blk("관심 키워드", "miss", "✗", k.name ? "공고명·품명에 없음" : "공고명에 없음");
+  if (pre && !k.name)
+    return tipBadge("faint", "사전규격 · 품목 정보 없음", "세부품명 — 사전규격 (판정 못 함)",
+      kw + blk("세부품명번호", "lay-spare", "–", "정보 없음", "사전규격 응답에는 번호가 없습니다") +
+      `<p class="lay-legend">본공고가 나오면 다시 판정합니다.</p>`);
+  const prod = k.name
+    ? blk(`${esc(k.what || "세부품명")} (나라장터)`, "miss", "✗", esc(k.name), "지일 등록 품목이 아님")
+    : blk("세부품명번호", "miss", "✗", "공고에 번호가 없음");
+  return tipBadge("block", "세부품명번호 미달", pre ? "세부품명 — 미달 (사전규격)" : "세부품명 — 미달",
+    kw + prod + `<p class="lay-legend">관심 키워드나 지일 등록 품목 중 하나라도 맞으면 수집합니다.</p>`);
 }
 
 /**
@@ -3318,7 +3341,9 @@ function exReasonBlock(n, kw) {
       : "공고명·세부품명에 관심 키워드가 없음";
   const rows = [
     ["키워드", kwRow + allKw],
-    ["품명코드", products.length ? `우리 등록 품목 ${esc(products.join(", "))}` : `등록 품목과 맞지 않음${n.businessType !== "물품" ? ` <span class="er-note">(용역·공사 공고는 세부품명번호가 대부분 없음)</span>` : ""}`],
+    ["품명코드", products.length ? `우리 등록 품목 ${esc(products.join(", "))}`
+      : n.sourceType === "사전규격" && step && !step.ok && step.name === "" ? "사전규격이라 세부품명번호 정보 없음"
+      : `등록 품목과 맞지 않음${n.businessType !== "물품" ? ` <span class="er-note">(용역·공사 공고는 세부품명번호가 대부분 없음)</span>` : ""}`],
     services.length ? ["용역분류", `우리 등록 분야 ${esc(services.join(", "))}`] : null,
   ].filter(Boolean);
   return `<div class="ex-reason">

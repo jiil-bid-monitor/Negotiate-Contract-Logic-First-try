@@ -6,6 +6,20 @@
 
 **하루 작업 정리는 `docs/worklog/날짜.md`**(10/21부터, 사용자 요청).
 
+## 2026-10-22 — 서버 PC 피드백 시트 실측 + 클라우드 서버 이전 준비 (브랜치 `claude/cloud-server`, 사용자 결정 — 자세한 것 `docs/worklog/2026-10-22.md`)
+
+- **피드백 시트 S~V 실측 확인**: 서버 PC `.env`에 `FEEDBACK_SHEET_ID`·`GOOGLE_SERVICE_ACCOUNT_FILE` → "켜짐" → 시트 채워짐(사용자 확인).
+  서버 PC 배치: `C:/Users/HJE/나라장터 수집/` 안에 레포(`Negotiate-Contract-Logic-First-try`)·`jiil-keys/keys.json`·`jiil-past-contracts` 나란히.
+  (`C:/Users/HJE/Negotiate-Contract-Logic-First-try`는 예전 사본 — `webapp/start.sh` 없음, 쓰지 말 것.)
+- **사용자 결정: 서버 PC를 꺼도 팀원이 쓰게 클라우드 서버로** — 네이버클라우드(Lightsail도 제안했으나 원화 결제·한국어 화면으로 사용자가 고름),
+  Micro(1GB, 서버 비용 1년 무료, 공인 IP 별도, 1년 뒤 자동 과금). 회사 밖 접속도 됨.
+- `deploy/`: `upload_from_pc.sh`(PC Git Bash — 판단 기록·과거 실적·키·인증키 묶어 scp → 서버 설치 실행, PC 웹앱 켜져 있으면 멈춤),
+  `setup_server.sh`(우분투 — 스왑·파이썬(3.10 미만이면 deadsnakes 3.11)·Caddy https(`<IP>.sslip.io`, Let's Encrypt)·systemd `jiil-webapp`·
+  새 무작위 토큰, 다시 돌려도 판단 기록·.env 유지), `update_server.sh`, `backup_from_server.sh`(서버 `/home/jiil/backup` → PC BACKUP_DIR/클라우드서버).
+  `COOKIE_SECURE=1`이면 토큰 쿠키에 Secure(`server.py`). 안내 `docs/cloud_server_setup.md`(네이버 콘솔 순서는 기억 기준 — 메뉴 이름 다를 수 있음).
+- 이 환경에서 설치 스크립트를 systemctl·apt만 가짜로 두고 실제 실행: 설치·판단 기록 복원·bot-state 보고 8건 합치기·토큰 없으면 401·재실행 유지 확인.
+  실측 미확인: 네이버클라우드 실제 서버, https 인증서, 나라장터 호출, 시트 쓰기.
+
 ## 2026-10-21 — 주간 메일 본문 화면 (PR #168, 사용자 요청 — 자세한 것 `docs/worklog/2026-10-21.md`)
 
 - `nego/email_html.py`: 가운데 정렬(바깥 표, 최대 1,000px), 카드 두 칸은 **flex 말고 inline-block + 최대 너비**(메일 프로그램이 flex 늘이기를

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 import tempfile
@@ -12,6 +13,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from unittest import mock
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -234,6 +236,12 @@ class TestServerRoutes(unittest.TestCase):
         status, _, body = self.get("/api/notices", cookie="app_token=secret-token")
         self.assertEqual(status, 200)
         self.assertTrue(json.loads(body)["empty"], "아직 수집 전")
+        self.assertNotIn("Secure", headers.get("Set-Cookie"), "사내 http 서버는 Secure 없이")
+
+    def test_cookie_secure_behind_https(self):
+        with mock.patch.dict(os.environ, {"COOKIE_SECURE": "1"}):
+            _, headers, _ = self.get("/?t=secret-token")
+        self.assertIn("; Secure", headers.get("Set-Cookie"))
 
     def test_refresh_collects_then_lists(self):
         status, _, body = self.get("/api/notices?days=7&refresh=1", cookie="app_token=secret-token")

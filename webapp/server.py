@@ -266,6 +266,8 @@ def make_handler(app: App):
                 if given and hmac.compare_digest(given.encode(), app.token.encode()):
                     # HttpOnly·SameSite=Lax, 1년 — 한 번 토큰 주소로 들어오면 그 뒤로는 주소에 토큰이 없어도 된다
                     cookie = f"app_token={app.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000"
+                    if os.environ.get("COOKIE_SECURE") == "1":  # 클라우드 서버(https 뒤) — http로는 쿠키를 안 보내게
+                        cookie += "; Secure"
             self._send(200, target.read_bytes(), ctype, cookie)
 
         # ── POST ──────────────────────────────────────────

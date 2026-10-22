@@ -9,3 +9,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# 클라우드 서버에서 받아 온 판단 기록 백업 (deploy/backup_from_server.sh)
+server-backup/

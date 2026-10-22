@@ -73,6 +73,14 @@
   }
   document.querySelectorAll(".calc-btns [data-method]").forEach((b) => b.addEventListener("click", () => generate(b.dataset.method)));
 
+  // 반전배치(21라인 버튼, 10/22 캡처): 지금 번호 순서를 거꾸로 — ①↔⑮. 21라인은 반전 직후 백분율 칸만 예전 순서로 남는데
+  // (번호를 고르면 다시 맞춰짐) 그건 따라 하지 않는다
+  $("#cReverse").addEventListener("click", () => {
+    if (!SLOTS.length) return;
+    SLOTS = SLOTS.slice().reverse();
+    SELECTED.clear(); AUTO = [];
+    render();
+  });
   $("#cRandom").addEventListener("click", () => {
     if (!SLOTS.length) return;
     SLOTS = C.shuffle(SLOTS);

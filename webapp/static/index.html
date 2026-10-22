@@ -1003,7 +1003,8 @@ footer b { color: var(--muted); }
    text-box로 글자 위아래 여백을 잘라 글꼴과 상관없이 숫자 높이 기준으로 가운데 — 지원 안 하는 브라우저는 flex 가운데 그대로 */
 .calc-num { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; margin-right: 3px;
   border: 1.2px solid currentColor; border-radius: 50%; font-family: Arial, Helvetica, sans-serif; font-size: 10.5px; font-weight: 700;
-  letter-spacing: -0.3px; line-height: 1; text-box: trim-both cap alphabetic; font-variant-numeric: tabular-nums; box-sizing: border-box; flex: none; }
+  line-height: 1; text-box: trim-both cap alphabetic; font-variant-numeric: tabular-nums; box-sizing: border-box; flex: none; }
+.calc-num > span { display: inline-block; text-box: inherit; }
 .calc-price .calc-num { margin-right: 0; }
 .calc-price input { justify-self: center; }
 .calc-price.on { background: var(--accent); color: var(--accent-ink); }

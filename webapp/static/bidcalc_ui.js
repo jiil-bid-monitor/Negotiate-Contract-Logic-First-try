@@ -19,7 +19,20 @@
   // 소수 넷째 자리까지, 끝의 0은 뺌(21라인 표기 — 97 · -3 · 100.4286)
   const p4 = (v) => (v == null || Number.isNaN(v) ? "-" : String(Number(v.toFixed(4)) || 0));
   // 번호 동그라미 — ①② 같은 글자는 글꼴에 따라 너무 작게 나와(10/15 제보) 숫자에 원 테두리를 그린다
-  const circled = (n) => `<span class="calc-num">${n}</span>`;
+  // 가운데 정렬은 글자 폭 기준이라 "1"처럼 잉크가 한쪽에 쏠린 숫자는 치우쳐 보임(10/22 제보) — 실제 글꼴로 잉크 중심을 재서 그만큼 옮김
+  const NUM_SHIFT = {};
+  const numShift = (n) => {
+    if (n in NUM_SHIFT) return NUM_SHIFT[n];
+    let shift = 0;
+    try {
+      const ctx = document.createElement("canvas").getContext("2d");
+      ctx.font = "700 105px Arial, Helvetica, sans-serif"; // .calc-num 글자의 10배 — 소수점 정밀도
+      const m = ctx.measureText(String(n));
+      shift = ((m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2 - m.width / 2) / 10;
+    } catch (e) { /* 못 재면 그대로 */ }
+    return (NUM_SHIFT[n] = Math.round(shift * 100) / 100);
+  };
+  const circled = (n) => `<span class="calc-num"><span style="transform:translateX(${-numShift(n)}px)">${n}</span></span>`;
   const numIn = (id) => {
     const v = parseFloat(String($(id).value).replace(/[,\s원%+]/g, ""));
     return Number.isFinite(v) ? v : null;

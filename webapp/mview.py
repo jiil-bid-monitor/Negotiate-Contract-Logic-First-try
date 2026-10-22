@@ -66,7 +66,8 @@ def _steps(c: dict[str, Any], held_names: dict[str, str]) -> list[dict[str, Any]
         # 무엇이 안 맞았는지 이름으로 — 용역 공고는 세부품명 칸에 용역분류 이름이 든다(fields.product_class_name)
         name = c.get("product_name")
         what = "용역분류" if c.get("work_type") == "용역" else "세부품명"
-        steps.append({"step": "키워드·품목", "ok": False,
+        # what·name은 화면 팝업이 항목별로 나눠 그릴 때 쓴다(index.html productMissTip)
+        steps.append({"step": "키워드·품목", "ok": False, "what": what, "name": name or "",
                       "detail": f"공고명·품명에 관심 키워드가 없고 {what}({name})도 지일 등록 품목이 아님" if name
                       else "공고명에 관심 키워드가 없고 공고에 세부품명번호도 없음"})
     else:

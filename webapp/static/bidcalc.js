@@ -150,11 +150,13 @@
   }
 
   // 순공사원가 투찰가격 — 순공사원가(기초금액 기준)를 예정가격 비율로 맞춰 98%. 300억 미만 공사는
-  // 순공사원가 98% 미만 투찰이 낙찰에서 빠지므로 투찰금액과 비교해 높은 쪽으로 투찰
-  function netCostBid({ planned, basis, netCost, rate = 98, how = "ceil", unit = 1 }) {
-    if (!(netCost > 0) || !(planned > 0)) return null;
-    const scaled = basis > 0 ? netCost * (planned / basis) : netCost;
-    return roundAmount(scaled * (rate / 100), how, unit);
+  // 순공사원가 98% 미만 투찰이 낙찰에서 빠지므로 투찰금액과 비교해 높은 쪽으로 투찰.
+  // 21라인과 같게(10/22 캡처 4장): 끝자리 처리 **전** 고른 예비가격 평균(average)으로 계산하고 원 미만 올림 —
+  // 기타설정(절상·절사·단위)은 따르지 않음. 순공사원가 2천만·5천만·1억 → 19,663,000 · 49,157,499 · 98,314,997
+  function netCostBid({ average, basis, netCost, rate = 98 }) {
+    if (!(netCost > 0) || !(average > 0)) return null;
+    const scaled = basis > 0 ? netCost * (average / basis) : netCost;
+    return roundAmount(scaled * (rate / 100), "ceil", 1);
   }
 
   // 재현 가능한 난수(테스트용) — mulberry32

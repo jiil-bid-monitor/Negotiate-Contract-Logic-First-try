@@ -184,9 +184,14 @@
     $("#cAuto").innerHTML = AUTO.length ? AUTO.map(circled).join("") : "-";
     const done = SLOTS.length && nos.length === take;
     const r = rounding();
-    const planned = done ? C.plannedPrice(nos.map((no) => SLOTS[no - 1]), r.planned, r.unit) : null;
-    const bid = planned ? C.bidAmount({ planned, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
-    const netBid = planned ? C.netCostBid({ planned, basis, netCost: numIn("#cNet"), how: r.bid, unit: r.unit }) : null;
+    const picks = nos.map((no) => SLOTS[no - 1]);
+    const planned = done ? C.plannedPrice(picks, r.planned, r.unit) : null;
+    // 투찰금액은 화면 단위(백원·천원…)로 자른 예정가격이 아니라 **원 단위 예정가격**(같은 절상·절사)에 하한율을 곱한 뒤 단위 처리 —
+    // 21라인 캡처(10/22): 절사·천원 123,853,000 → 투찰 108,675,000, 절상·백원 123,853,700 → 108,675,400 (자른 값이면 108,674,000·108,675,500)
+    const plannedWon = done ? C.plannedPrice(picks, r.planned, 1) : null;
+    const bid = planned ? C.bidAmount({ planned: plannedWon, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
+    const average = done ? nos.reduce((sum, no) => sum + SLOTS[no - 1], 0) / nos.length : null;  // 끝자리 처리 전 평균
+    const netBid = planned ? C.netCostBid({ average, basis, netCost: numIn("#cNet") }) : null;
     const higher = bid != null && netBid != null && netBid > bid;
     $("#cPlanned").textContent = planned ? won(planned) : "-";
     $("#cBid").innerHTML = bid != null ? `<span${higher ? "" : ' class="calc-final"'}>${won(bid)}</span>` : (planned ? "하한율 필요" : "-");

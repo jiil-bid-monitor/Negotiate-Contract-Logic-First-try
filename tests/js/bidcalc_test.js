@@ -109,6 +109,22 @@ assert.deepStrictEqual(C.MOIS_TABLE.slots[8], [100.00000001, 100.42857142]);
   assert.strictEqual(C.plannedPrice(pick(g("cnst")), "ceil", 1), 123853650);
 }
 
+// 순공사원가 투찰가격 — 21라인 캡처: 기초금액 123,456,789·등비·④⑧⑩⑬(평균 123,853,610.5), 기타설정과 무관
+{
+  const p = C.makePrices({ basis: 123456789, lo: -3, hi: 3, method: "geometric" });
+  const average = [4, 8, 10, 13].reduce((s, i) => s + p[i - 1], 0) / 4;
+  assert.strictEqual(average, 123853610.5);
+  const net = (netCost) => C.netCostBid({ average, basis: 123456789, netCost });
+  assert.strictEqual(net(100000000), 98314997);
+  assert.strictEqual(net(50000000), 49157499);
+  assert.strictEqual(net(20000000), 19663000);
+  // 투찰금액은 원 단위 예정가격(같은 절상·절사)으로 계산한 뒤 단위 처리(화면 예정가격 123,853,000·…700과 별개)
+  const picks = [4, 8, 10, 13].map((i) => p[i - 1]);
+  assert.strictEqual(C.bidAmount({ planned: C.plannedPrice(picks, "floor", 1), lowerRate: 87.745, how: "floor", unit: 1000 }), 108675000);
+  assert.strictEqual(C.bidAmount({ planned: C.plannedPrice(picks, "ceil", 1), lowerRate: 87.745, how: "ceil", unit: 100 }), 108675400);
+  assert.strictEqual(C.plannedPrice(picks, "ceil", 100), 123853700);  // 원 단위 예정가격(…611)으로 반올림하면 19,662,999 — 평균 그대로·올림이 맞음
+}
+
 // 등비추출 = 21라인과 같은 등간격 — 2026-10-22 21라인 캡처(울산안전체험관 R26BK01763222, 기초금액 10.5억 ±3% 15개) 그대로
 {
   const p = C.makePrices({ basis: 1050000000, lo: -3, hi: 3, method: "geometric" });
@@ -150,8 +166,8 @@ for (let seed = 1; seed <= 30; seed++) {
   assert.strictEqual(C.bidAmount({ planned, lowerRate: 87.745, unit: 1000 }), 879644000);
   assert.strictEqual(C.bidAmount({ planned, lowerRate: null }), null);
   // 순공사원가 투찰가격: 9억 × 1.0025 × 98% = 884,205,000
-  assert.strictEqual(C.netCostBid({ planned, basis: 1e9, netCost: 9e8 }), 884205000);
-  assert.strictEqual(C.netCostBid({ planned, basis: 1e9, netCost: null }), null);
+  assert.strictEqual(C.netCostBid({ average: planned, basis: 1e9, netCost: 9e8 }), 884205000);
+  assert.strictEqual(C.netCostBid({ average: planned, basis: 1e9, netCost: null }), null);
 }
 
 // 잘못된 입력

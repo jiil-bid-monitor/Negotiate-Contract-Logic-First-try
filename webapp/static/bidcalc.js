@@ -64,8 +64,8 @@
       return pct >= 0 ? (pct * hi) / table.range : (pct * -lo) / table.range;
     });
   }
-  const usesTable = (method, n, down, up) =>
-    n === 15 && ((method === "mois" && (down ?? 8) === 8 && (up ?? 7) === 7) || method === "pps");
+  // 15개면 늘 표 — 21라인 행자부는 추출범위(−7/+8 등)를 바꿔도 표대로 아래 8·위 7(10/22 캡처). 10개는 21라인이 못 골라 기존 칸 나누기
+  const usesTable = (method, n) => n === 15 && (method === "mois" || method === "pps");
 
   // 예비가격 끝자리 처리 — 소수점 종류(화면 기타설정 첫 상자)별. 2026-10-22 21라인 캡처(기초금액 123,456,789·123,456,798, 등비 15개) 대조:
   // 총액·단가 = 1원 미만 올림(단가도 예비가격은 정수 — 소수 둘째 자리 아님), 시설공사·감리및설계 = **10원 미만 버린 뒤** 100원 미만 올림
@@ -89,8 +89,8 @@
       return [...Array.from({ length: n - upN }, () => inSlot(lo, -STEP, rng)),
         ...Array.from({ length: upN }, () => inSlot(STEP, hi, rng))];
     }
-    if (method === "mois" && usesTable(method, n, down, up)) return tableRates(MOIS_TABLE, lo, hi, rng);
-    if (method === "pps" && usesTable(method, n, down, up)) return tableRates(PPS_TABLE, lo, hi, rng);
+    if (method === "mois" && usesTable(method, n)) return tableRates(MOIS_TABLE, lo, hi, rng);
+    if (method === "pps" && usesTable(method, n)) return tableRates(PPS_TABLE, lo, hi, rng);
     if (method === "mois") {
       // 표와 다른 개수(10개·추출범위 변경) — 아래 down개는 lo~0, 위 up개는 0~hi — 각 쪽을 개수만큼 칸으로 나눠 칸마다 1개
       const upN = Math.max(0, Math.min(n, up ?? n - (down ?? Math.ceil(n / 2))));
@@ -128,7 +128,7 @@
       if (new Set(prices).size === prices.length) break;  // 서로 다른 n개 (금액이 작아 같은 값이 나오면 다시)
     }
     // 번호 순서 = 21라인: 표 방식은 구간 순서 그대로, 나머지는 금액순(① 가장 낮음). 섞는 건 "랜덤배치" 버튼만
-    return usesTable(method, n, down, up) ? prices : prices.sort((a, b) => a - b);
+    return usesTable(method, n) ? prices : prices.sort((a, b) => a - b);
   }
 
   // 1~n 중 서로 다른 번호 k개(자동선택)

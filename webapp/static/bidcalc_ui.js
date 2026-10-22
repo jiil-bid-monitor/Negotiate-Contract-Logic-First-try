@@ -73,6 +73,11 @@
   function generate(method) {
     $("#cMsg").textContent = "";
     try {
+      // 21라인은 행자부·조달청 버튼을 누르면 변동폭을 표 범위로 바꿈(행자부 −3~3, 조달청 −2~2 — 10/22 캡처). 15개만(표가 15구간)
+      if (radio("cN") === 15 && (method === "mois" || method === "pps")) {
+        const w = method === "mois" ? 3 : 2;
+        $("#cLo").value = -w; $("#cHi").value = w;
+      }
       const prices = C.makePrices({
         basis: numIn("#cBasis"), lo: numIn("#cLo"), hi: numIn("#cHi"), n: radio("cN"), method,
         down: parseInt($("#cDown").value, 10), up: parseInt($("#cUp").value, 10), decimal: $("#cDecimal").value,

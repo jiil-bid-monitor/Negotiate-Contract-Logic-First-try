@@ -34,10 +34,13 @@ for (let seed = 1; seed <= 50; seed++) {
   p.forEach((x) => assert.ok(x >= 0.97e9 && x <= 1.03e9, String(x)));
   assert.deepStrictEqual(p, p.slice().sort((a, b) => a - b));
 }
-// 추출범위를 바꾸면 그대로: 아래 5 · 위 10
+// 15개면 추출범위를 바꿔도 표대로 아래 8 · 위 7(21라인 −7/+8 캡처), 10개는 추출범위대로
 {
-  const p = C.makePrices({ basis: 1e9, lo: -3, hi: 3, method: "mois", down: 5, up: 10, rng: C.seeded(3) });
-  assert.strictEqual(p.filter((x) => x >= 1e9).length, 10);
+  const p = C.makePrices({ basis: 1e9, lo: -3, hi: 3, method: "mois", down: 7, up: 8, rng: C.seeded(3) });
+  assert.strictEqual(p.filter((x) => x >= 1e9).length, 7);
+  const q = C.makePrices({ basis: 1e9, lo: -3, hi: 3, n: 10, method: "mois", down: 4, up: 6, rng: C.seeded(3) });
+  assert.strictEqual(q.filter((x) => x > 1e9).length, 6);
+  assert.deepStrictEqual(q, q.slice().sort((a, b) => a - b));
 }
 
 // 조달청(기본서 표, ±2%): 구간 i의 예비가격이 그 구간 안 — 1원 미만 올림이라 하한 이상·상한 + 1원 이내

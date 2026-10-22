@@ -202,12 +202,13 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
     out: dict = {"notice_no": notice_no, "notes": []}
     params = {"inqryDiv": "2", "bidNtceNo": notice_no}
 
-    notice, work_type = None, None
+    notice, work_type, failed = None, None, 0
     for wt in WORK_TYPES:
         try:
             rows = client.fetch_all_pages(F.BID_NOTICE_BASE_URL, F.BID_NOTICE_OPERATIONS[wt], params, f"계산기 공고/{wt}")
         except ApiError as err:
             log.info("계산기 공고 조회 실패 %s %s: %s", wt, notice_no, err)
+            failed += 1
             continue
         notice = _latest(rows, notice_no)
         if notice:
@@ -231,6 +232,9 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
         })
     else:
         out["notes"].append("공고를 찾지 못함 — 공고번호를 확인하거나 값을 직접 입력하세요")
+    # 화면이 오입력(found=False)과 나라장터 조회 실패(lookup_error — 공고 조회가 전부 오류)를 구분해 경고
+    out["found"] = notice is not None
+    out["lookup_error"] = notice is None and failed == len(WORK_TYPES)
 
     if notice:
         out["licenses"] = _licenses(client, notice, notice_no, out.get("notice_ord", ""))

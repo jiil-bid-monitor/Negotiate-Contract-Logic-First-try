@@ -209,13 +209,31 @@
   $("#cBasis").addEventListener("input", render);
 
   // 공고번호로 불러오기
+  const lookupMsg = (msg, err = false) => { $("#cLookupMsg").textContent = msg; $("#cLookupMsg").classList.toggle("err", err); };
+  // 공고번호 모양(R26BK01778736, 차수 "-000"이 붙어도 됨) — 글자 수·문자가 틀리면 나라장터에 묻기 전에 다시 입력하게
+  const NOTICE_NO_RE = /^[A-Z0-9]{10,14}(-\d{1,3})?$/;
+  const badNo = (msg) => { lookupMsg(msg, true); $("#cNo").focus(); $("#cNo").select(); };
+  // 못 찾은 공고면 앞 공고 값이 남지 않게 위 표·입력칸을 비움
+  const clearForm = () => {
+    ["#cTitle", "#cInst", "#cNoShow", "#cLicense", "#cEst", "#cStd", "#cContract"].forEach((id) => { $(id).textContent = "-"; });
+    ["#cBasis", "#cRate", "#cA", "#cNet"].forEach((id) => { $(id).value = ""; });
+    $("#cAOn").checked = false;
+    $("#cAItems").innerHTML = "";
+    $("#cNotes").innerHTML = "";
+    SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
+    render();
+  };
   async function lookup() {
-    const no = $("#cNo").value.trim();
-    if (!no) { $("#cLookupMsg").textContent = "공고번호를 입력하세요"; return; }
-    $("#cLookupMsg").textContent = "불러오는 중…";
+    const no = $("#cNo").value.replace(/\s/g, "").toUpperCase();
+    if (!no) { badNo("공고번호를 입력하세요"); return; }
+    if (!NOTICE_NO_RE.test(no)) { badNo(`공고번호 "${no}" 형식이 맞지 않습니다 — 다시 입력하세요 (예: R26BK01778736)`); return; }
+    $("#cNo").value = no;
+    lookupMsg("불러오는 중…");
     $("#cLookup").disabled = true;
     try {
       const d = await api(`/api/bidcalc?no=${encodeURIComponent(no)}`);
+      if (d.lookup_error) { lookupMsg("나라장터 조회 실패 — 잠시 뒤 다시 불러오세요", true); return; }
+      if (d.found === false) { clearForm(); badNo(`공고번호 ${d.notice_no || no}를 나라장터에서 찾지 못했습니다 — 공고번호를 확인해 다시 입력하세요`); return; }
       const text = (id, v) => { $(id).textContent = v || "-"; };
       text("#cTitle", d.title);
       text("#cInst", d.institution);
@@ -224,12 +242,13 @@
       text("#cEst", d.est_price ? `${won(d.est_price)}원` : "");
       text("#cStd", d.award_method);
       text("#cContract", d.contract_method);
-      if (d.basis != null) setNum("#cBasis", d.basis);
+      // 못 찾은 값은 비움 — 앞 공고 값이 남으면 그 값으로 계산됨(10/22 휘문고: 제천 하한율 85.495가 남음)
+      setNum("#cBasis", d.basis);
       // 변동폭을 못 찾으면 예가 방식의 기본 범위(기본서 — 행자부 ±3%, 조달청 ±2%) — 이전 공고 값이 남지 않게
       const rangeGuess = (d.range_lo == null || d.range_hi == null) && d.method ? (d.method === "mois" ? 3 : 2) : null;
       $("#cLo").value = rangeGuess != null ? -rangeGuess : d.range_lo ?? $("#cLo").value;
       $("#cHi").value = rangeGuess != null ? rangeGuess : d.range_hi ?? $("#cHi").value;
-      if (d.lower_rate != null) $("#cRate").value = d.lower_rate;
+      $("#cRate").value = d.lower_rate ?? "";
       // 예비가격 소수점 처리기준(기본서): 시설공사·감리/설계 용역은 100원 미만 올림, 그 밖은 총액(1원 미만 올림)
       $("#cDecimal").value = d.work_type === "공사" || /감리|설계\s*용역/.test(d.title || "") ? "cnst" : "total";
       setNum("#cA", d.a_value || null);
@@ -254,11 +273,11 @@
       if (d.price_method) notes.push(`예가방법: ${d.price_method}${/복수/.test(d.price_method) ? "" : " — 복수예비가격 추첨이 없는 공고, 계산기 결과는 참고만"}`);
       notes.push(...(d.notes || []));
       $("#cNotes").innerHTML = notes.map((n) => `<div>${esc(n)}</div>`).join("");
-      $("#cLookupMsg").textContent = d.basis != null ? "불러옴 — 값을 확인하세요" : "일부만 불러옴";
+      lookupMsg(d.basis != null ? "불러옴 — 값을 확인하세요" : "일부만 불러옴");
       SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
       render();
     } catch (err) {
-      $("#cLookupMsg").textContent = `실패: ${err.message}`;
+      lookupMsg(`실패: ${err.message}`, true);
     } finally {
       $("#cLookup").disabled = false;
     }

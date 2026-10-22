@@ -250,6 +250,10 @@ jobs:
         continue-on-error: true
         env:
           NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}
+          # GitHub 서버(미국)→나라장터 접속이 가끔 1~2분 끊긴다(10/22 09:01~09:03 실측 — 1·2·4·8초 간격 5번이 2분 반 만에 다 소진).
+          # 요청마다 20·40·80·160·320초 간격 6번으로 벌려 약 10분을 버틴다(팀원 레포와 같은 값). 사내 웹앱은 기본값(1초) 그대로.
+          API_MAX_RETRIES: "5"
+          API_RETRY_DELAY_SEC: "20"
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_TABLE: ${{ vars.SUPABASE_TABLE }}

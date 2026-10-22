@@ -225,8 +225,10 @@
       text("#cStd", d.award_method);
       text("#cContract", d.contract_method);
       if (d.basis != null) setNum("#cBasis", d.basis);
-      if (d.range_lo != null) $("#cLo").value = d.range_lo;
-      if (d.range_hi != null) $("#cHi").value = d.range_hi;
+      // 변동폭을 못 찾으면 예가 방식의 기본 범위(기본서 — 행자부 ±3%, 조달청 ±2%) — 이전 공고 값이 남지 않게
+      const rangeGuess = (d.range_lo == null || d.range_hi == null) && d.method ? (d.method === "mois" ? 3 : 2) : null;
+      $("#cLo").value = rangeGuess != null ? -rangeGuess : d.range_lo ?? $("#cLo").value;
+      $("#cHi").value = rangeGuess != null ? rangeGuess : d.range_hi ?? $("#cHi").value;
       if (d.lower_rate != null) $("#cRate").value = d.lower_rate;
       // 예비가격 소수점 처리기준(기본서): 시설공사·감리/설계 용역은 100원 미만 올림, 그 밖은 총액(1원 미만 올림)
       $("#cDecimal").value = d.work_type === "공사" || /감리|설계\s*용역/.test(d.title || "") ? "cnst" : "total";
@@ -248,6 +250,7 @@
         notes.push(`예비가격 방식: ${d.method === "mois" ? `지방계약${why} — 행자부난수추출` : `국가계약${why} — 조달청난수추출`} 권장`);
       }
       // 예가방법이 복수예가가 아니면(단일예가·비예가) 15개 추첨이 없는 공고 — 계산기가 맞지 않음
+      if (rangeGuess != null) notes.push(`변동폭 정보 없음 — ${d.method === "mois" ? "행자부" : "조달청"} 기준 ±${rangeGuess}%로 채움, 공고문 확인`);
       if (d.price_method) notes.push(`예가방법: ${d.price_method}${/복수/.test(d.price_method) ? "" : " — 복수예비가격 추첨이 없는 공고, 계산기 결과는 참고만"}`);
       notes.push(...(d.notes || []));
       $("#cNotes").innerHTML = notes.map((n) => `<div>${esc(n)}</div>`).join("");

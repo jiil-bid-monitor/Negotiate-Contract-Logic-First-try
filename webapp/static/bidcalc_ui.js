@@ -229,7 +229,12 @@
         : "";
       const notes = [];
       if (d.basis != null) notes.push(`기초금액 출처: ${d.basis_source || "나라장터"}${d.basis_open_at ? ` (공개 ${d.basis_open_at})` : ""}`);
-      if (d.method) notes.push(`예비가격 방식: ${d.method === "mois" ? "지방계약 — 행자부난수추출" : "국가계약 — 조달청난수추출"} 권장`);
+      if (d.method) {
+        const why = d.method_reason ? ` (${d.method_reason})` : "";
+        notes.push(`예비가격 방식: ${d.method === "mois" ? `지방계약${why} — 행자부난수추출` : `국가계약${why} — 조달청난수추출`} 권장`);
+      }
+      // 예가방법이 복수예가가 아니면(단일예가·비예가) 15개 추첨이 없는 공고 — 계산기가 맞지 않음
+      if (d.price_method) notes.push(`예가방법: ${d.price_method}${/복수/.test(d.price_method) ? "" : " — 복수예비가격 추첨이 없는 공고, 계산기 결과는 참고만"}`);
       notes.push(...(d.notes || []));
       $("#cNotes").innerHTML = notes.map((n) => `<div>${esc(n)}</div>`).join("");
       $("#cLookupMsg").textContent = d.basis != null ? "불러옴 — 값을 확인하세요" : "일부만 불러옴";

@@ -82,14 +82,29 @@ def parse_basis(row: dict) -> dict:
     }
 
 
-def guess_method(standard: str, range_lo: float | None, range_hi: float | None) -> str:
-    """예비가격 방식 추정 — 지방계약(행안부) 'mois' / 국가계약(조달청) 'pps'.
-    낙찰자 결정기준 문구에 '지방'이 있거나 범위가 ±3%면 지방, 아니면 국가."""
+# 지방자치단체·교육청 — 이름에 이 낱말이 있으면 지방계약법 기관(2026-10-22 제보: 울산광역시 울산안전체험관이 '조달청'으로 나왔음).
+# "경기도 …"·"정선군"·"종로구청"처럼 낱말 끝이 시·도·군·구여야 함("부산지방국토관리청"·"한국도로공사" 같은 국가기관은 안 걸림).
+# 지방공기업(○○도시공사 등)은 이름으로 가리기 어려워 안 봄 — 그때는 아래 결정기준·범위 규칙으로.
+_LOCAL_GOV_RE = re.compile(r"(특별시|광역시|특별자치시|특별자치도|교육청|교육지원청|[가-힣]{1,4}(?:도|시|군|구)(?:청)?)(?=\s|$|\()")
+
+
+def method_reason(standard: str, range_lo: float | None, range_hi: float | None,
+                  institutions: list[str] | None = None) -> tuple[str, str]:
+    """예비가격 방식 추정 — (지방계약(행안부) 'mois' / 국가계약(조달청) 'pps', 근거 문구).
+    ① 수요기관·공고기관이 지방자치단체·교육청이면 지방 ② 낙찰자 결정기준에 '지방' ③ 범위 ±3% ④ 아니면 국가."""
+    for name in institutions or []:
+        if name and (m := _LOCAL_GOV_RE.search(name)):
+            return "mois", f"발주기관 {name.strip()}"
     if "지방" in (standard or ""):
-        return "mois"
+        return "mois", "낙찰자 결정기준"
     if range_lo is not None and range_hi is not None and abs(range_lo) >= 3 and abs(range_hi) >= 3:
-        return "mois"
-    return "pps"
+        return "mois", "기초금액 ±3%"
+    return "pps", "지방자치단체 표시 없음"
+
+
+def guess_method(standard: str, range_lo: float | None, range_hi: float | None,
+                 institutions: list[str] | None = None) -> str:
+    return method_reason(standard, range_lo, range_hi, institutions)[0]
 
 
 # 첨부 공고문에서 읽는 값 — 기초금액 API가 비거나(물품 등) 하한율이 없을 때만 쓴다.
@@ -203,6 +218,9 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
             "notice_ord": str(notice.get("bidNtceOrd") or ""),
             "title": str(notice.get("bidNtceNm") or ""),
             "institution": str(notice.get("dminsttNm") or notice.get("ntceInsttNm") or ""),
+            "notice_institution": str(notice.get("ntceInsttNm") or ""),
+            # 예가방법(단일예가·복수예가·비예가) — 복수예가가 아니면 예비가격 추첨이 없는 공고
+            "price_method": str(notice.get("prearngPrceDcsnMthdNm") or ""),
             "work_type": work_type,
             "lower_rate": _num(notice.get("sucsfbidLwltRate")),
             "standard": str(notice.get("sucsfbidMthdAppStd") or ""),
@@ -240,7 +258,9 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
 
     if notice and out.get("lower_rate") is None:
         out["notes"].append("낙찰하한율이 없는 공고 — 협상·최저가 등 하한율 방식이 아닐 수 있음")
-    out["method"] = guess_method(out.get("standard", ""), out.get("range_lo"), out.get("range_hi"))
+    out["method"], out["method_reason"] = method_reason(
+        out.get("standard", ""), out.get("range_lo"), out.get("range_hi"),
+        [out.get("institution", ""), out.get("notice_institution", "")])
     return out
 
 

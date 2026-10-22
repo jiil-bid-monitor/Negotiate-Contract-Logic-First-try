@@ -63,11 +63,10 @@
 
   const aValue = () => ($("#cAOn").checked ? numIn("#cA") || 0 : 0);
   // 기타설정(21라인과 같은 세 상자): 소수점 종류 · 예정가격/투찰금액 절상·절사·사사오입 · 끝자리 단위
-  // 단위는 예정가격·투찰금액 둘 다에 적용. 단가 계약이면 "원미만"을 소수점 둘째 자리로 본다(추정 — 21라인 동작 미확인)
+  // 단위는 예정가격·투찰금액 둘 다에 적용. 단가도 "원미만" = 1원(10/22 21라인 대조 — ④⑧⑩⑬ 예정가격 123,853,611, 총액과 같음)
   function rounding() {
     const [planned, bid] = $("#cRoundMode").value.split("/");
-    let unit = parseInt($("#cRoundUnit").value, 10);
-    if ($("#cDecimal").value === "unit" && unit === 1) unit = 0.01;
+    const unit = parseInt($("#cRoundUnit").value, 10);
     return { planned, bid, unit };
   }
 

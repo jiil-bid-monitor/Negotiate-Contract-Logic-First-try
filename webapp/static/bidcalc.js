@@ -60,8 +60,13 @@
     });
   }
 
-  // 예비가격 끝자리 처리 — 소수점 종류(화면 기타설정 첫 상자)별 올림 단위
-  const PRICE_ROUNDING = { total: 1, unit: 0.01, cnst: 100 };
+  // 예비가격 끝자리 처리 — 소수점 종류(화면 기타설정 첫 상자)별. 2026-10-22 21라인 캡처(기초금액 123,456,789·123,456,798, 등비 15개) 대조:
+  // 총액·단가 = 1원 미만 올림(단가도 예비가격은 정수 — 소수 둘째 자리 아님), 시설공사·감리및설계 = **10원 미만 버린 뒤** 100원 미만 올림
+  // (125,573,208.73 → 125,573,200 · 121,869,505.06 → 121,869,500 — 그냥 100원 올림이면 …300·…600)
+  function roundPrice(value, decimal) {
+    if (decimal === "cnst") return roundAmount(roundAmount(value, "floor", 10), "ceil", 100);
+    return roundAmount(value, "ceil", 1);
+  }
 
   // 변동률(%) 목록 n개 — lo~hi는 기초금액 대비 %(예: -3, 3). down/up = 기초금액 아래/위 개수(행자부)
   function rates(method, n, lo, hi, rng, down, up) {
@@ -98,7 +103,7 @@
   }
 
   // 예비가격 n개(금액 오름차순) — 번호는 화면이 배치(랜덤배치 등)하며 붙인다
-  // decimal: "total"(1원 미만 올림) | "unit"(소수점 셋째 자리에서 올림) | "cnst"(100원 미만 올림)
+  // decimal: "total"·"unit"(1원 미만 올림) | "cnst"(10원 미만 버림 → 100원 미만 올림) — roundPrice
   function makePrices({ basis, lo, hi, n = 15, method = "mois", down, up, decimal = "total", rng = Math.random }) {
     if (!(basis > 0)) throw new Error("기초금액을 입력하세요");
     if (!(hi > lo)) throw new Error("변동폭(최소 < 최대)을 확인하세요");
@@ -106,7 +111,7 @@
     for (let tries = 0; tries < 20; tries++) {
       // 등비추출은 21라인처럼 백분율을 소수 넷째 자리로 반올림한 뒤 기초금액을 곱한다(97.4286% × 10.5억 = 1,023,000,300 — 캡처와 같음)
       const pctOf = method === "geometric" ? (r) => Math.round((100 + r) * 1e4) / 1e4 : (r) => 100 + r;
-      prices = rates(method, n, lo, hi, rng, down, up).map((r) => roundAmount((basis * pctOf(r)) / 100, "ceil", PRICE_ROUNDING[decimal] || 1));
+      prices = rates(method, n, lo, hi, rng, down, up).map((r) => roundPrice((basis * pctOf(r)) / 100, decimal));
       if (new Set(prices).size === prices.length) break;  // 서로 다른 n개 (금액이 작아 같은 값이 나오면 다시)
     }
     return prices.sort((a, b) => a - b);
@@ -149,7 +154,7 @@
     };
   }
 
-  const api = { METHODS, PPS_TABLE, MOIS_TABLE, PRICE_ROUNDING, roundAmount, rates, makePrices, shuffle, pickRandom, plannedPrice, bidAmount, netCostBid, seeded };
+  const api = { METHODS, PPS_TABLE, MOIS_TABLE, roundPrice, roundAmount, rates, makePrices, shuffle, pickRandom, plannedPrice, bidAmount, netCostBid, seeded };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.BidCalc = api;
 })(typeof window !== "undefined" ? window : globalThis);

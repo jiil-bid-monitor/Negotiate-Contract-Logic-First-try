@@ -21,9 +21,9 @@ run-name: >-
 #    켜려면 아래 "실행 모드 결정"의 스케줄 쪽 NO_SUPABASE를 "false"로).
 #    수동 실행은 telegram 입력이 true일 때만 보낸다.
 #
-# 수집이 실패하면(나라장터 접속 끊김 등) 60분 뒤 새 Run으로 다시 시도한다 — 최대 5회(약 4시간).
+# 수집이 실패하면(나라장터 접속 끊김 등) 1분 뒤 새 Run으로 다시 시도한다 — 최대 20회(약 3시간 반, 2026-10-22).
 #   담당자 방에는 실패 알림을 보내지 않는다. 개발자 방(TELEGRAM_DEV_CHAT_ID)에만
-#   ① 5회 모두 실패했을 때 ② 재시도 끝에 성공했을 때 알린다 (2026-10-12 사용자 결정).
+#   ① 첫 시도 실패 ② 20회 모두 실패 ③ 재시도 끝에 성공했을 때 알린다 (2026-10-12·10-22 사용자 결정).
 #
 # 필요한 저장소 secrets: NARA_SERVICE_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
 #   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (텔레그램 두 개가 없으면 발송만 건너뜀),
@@ -89,10 +89,12 @@ env:
   # 한국 시간대로 돌려야 한다 — 안 그러면 UTC 날짜 기준이라 실행 시각에 따라 "어제"가 한국 기준과
   # 하루 어긋날 수 있다(예약 실행이 늦게 시작하거나 수동 실행할 때).
   TZ: Asia/Seoul
-  # 실패 후 다음 시도까지 기다리는 시간(분). 나라장터 접속 끊김은 몇 시간 이어질 수 있어서
-  # 바로 다시 하지 않고 간격을 둔다 (10/7 팀원 시스템 사례 — 몇 시간 뒤 정상화).
-  RETRY_DELAY_MINUTES: "60"
-  MAX_ATTEMPTS: "5"
+  # 실패하면 거의 바로(1분 뒤) 새 Run으로 다시 시도한다 — 새 Run은 다른 GitHub 서버에 배정될 수 있어 같은 서버에서
+  # 계속 두드리는 것보다 낫고, 접속 자체가 안 된 것이라 나라장터 쪽 부담·차단 걱정도 없다(2026-10-22 사용자 결정).
+  # 시도 하나가 요청 재시도(약 10분)를 품고 있어 20회면 약 3시간 반 — 몇 시간 이어지는 끊김(10/7 팀원 시스템)도 덮는다.
+  # 예전엔 60분 간격 5회.
+  RETRY_DELAY_MINUTES: "1"
+  MAX_ATTEMPTS: "20"
 
 jobs:
   collect:
@@ -111,6 +113,8 @@ jobs:
       no_supabase: ${{ steps.mode.outputs.no_supabase }}
       llm: ${{ steps.mode.outputs.llm }}
       attempt: ${{ steps.mode.outputs.attempt }}
+      # 잡 if에선 env를 못 읽어서 retry 잡에 넘긴다
+      max_attempts: ${{ env.MAX_ATTEMPTS }}
 
     steps:
       - name: 저장소 체크아웃
@@ -223,7 +227,7 @@ jobs:
           TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          python -m nego.telegram dev-alert "$(printf '[개발자 알림] 시험 메시지입니다 (실제 오류 아님).\n앞으로 수집이 %s번 모두 실패하거나, 재시도 끝에 성공하면 이 방으로 알림이 옵니다.\n\n로그: %s' "$MAX_ATTEMPTS" "$RUN_URL")"
+          python -m nego.telegram dev-alert "$(printf '[개발자 알림] 시험 메시지입니다 (실제 오류 아님).\n앞으로 수집이 처음 실패할 때, %s번 모두 실패할 때, 재시도 끝에 성공할 때 이 방으로 알림이 옵니다.\n\n로그: %s' "$MAX_ATTEMPTS" "$RUN_URL")"
 
       # 보낸 공고 기록은 상태 전용 브랜치 bot-state의 sent_bids.json — 없으면 빈 기록으로 시작
       - name: 보낸 공고 기록 불러오기
@@ -349,11 +353,11 @@ jobs:
           if-no-files-found: ignore
 
       # 개발자 알림 — 담당자 방이 아니라 TELEGRAM_DEV_CHAT_ID로만. 알림이 실패해도 Run 결과는 그대로.
-      # 시도마다 실패하면 바로 알림(다음 재시도 시각 포함, 2026-10-22 사용자 요청 — 첫 실패부터 로그를 보려고),
-      # 재시도 끝에 성공하면 회복 알림.
-      - name: 개발자 알림 (실패 · 회복)
+      # 첫 시도 실패(2026-10-22 사용자 요청 — 첫 실패부터 로그를 보려고)·마지막 시도 실패·재시도 끝 성공 때만.
+      # 재시도가 1분 간격·최대 20회라 중간 실패까지 알리면 방이 넘친다.
+      - name: 개발자 알림 (첫 실패 · 최종 실패 · 회복)
         if: >-
-          steps.collect.outcome == 'failure'
+          (steps.collect.outcome == 'failure' && (fromJSON(steps.mode.outputs.attempt) == 1 || fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.MAX_ATTEMPTS)))
           || (steps.collect.outcome == 'success' && fromJSON(steps.mode.outputs.attempt) > 1)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -375,13 +379,11 @@ jobs:
             REPORT="담당자 보고는 나가지 않았습니다."
             [ "$TELEGRAM" != "true" ] && REPORT="(텔레그램 발송을 켜지 않은 실행)"
             if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
-              WAITED=$(( (ATTEMPT - 1) * RETRY_DELAY_MINUTES ))
-              TEXT=$(printf '[개발자 알림] 나라장터 수집 실패 — %s회 모두 실패, 자동 재시도 중단\n%s\n첫 시도 후 약 %s분 동안 재시도. %s\n\n마지막 오류:\n%s\n\n로그: %s' \
-                "$ATTEMPT" "$MODE" "$WAITED" "$REPORT" "$ERRORS" "$RUN_URL")
+              TEXT=$(printf '[개발자 알림] 나라장터 수집 실패 — %s회 모두 실패, 자동 재시도 중단\n%s\n%s\n\n마지막 오류:\n%s\n\n로그: %s' \
+                "$ATTEMPT" "$MODE" "$REPORT" "$ERRORS" "$RUN_URL")
             else
-              NEXT_AT=$(date -d "+${RETRY_DELAY_MINUTES} minutes" +%H:%M)
-              TEXT=$(printf '[개발자 알림] 나라장터 수집 실패 — %s번째 시도 (최대 %s회)\n%s\n%s분 뒤(약 %s) %s번째 시도를 자동으로 합니다. %s\n\n마지막 오류:\n%s\n\n로그: %s' \
-                "$ATTEMPT" "$MAX_ATTEMPTS" "$MODE" "$RETRY_DELAY_MINUTES" "$NEXT_AT" "$((ATTEMPT + 1))" "$REPORT" "$ERRORS" "$RUN_URL")
+              TEXT=$(printf '[개발자 알림] 나라장터 수집 실패 — 첫 시도\n%s\n%s분 뒤부터 최대 %s회까지 자동으로 다시 시도합니다 (중간 실패는 알리지 않음 — 성공하면 회복 알림, 끝내 실패하면 최종 알림). %s\n\n마지막 오류:\n%s\n\n로그: %s' \
+                "$MODE" "$RETRY_DELAY_MINUTES" "$MAX_ATTEMPTS" "$REPORT" "$ERRORS" "$RUN_URL")
             fi
           else
             REPORT="담당자 보고 발송됨."
@@ -406,10 +408,10 @@ jobs:
   # 처리한다(부분 데이터로 리포트를 내지 않는다). 그럴 때 RETRY_DELAY_MINUTES만큼 기다렸다가 같은
   # 실행 모드로 새 Run을 큐에 올린다 — 스케줄 실행이 실패해도 입력값으로 모드를 넘겨주므로 재시도
   # Run도 같은 유형·기간으로 돈다(조회 기간은 날짜 단위라 몇 시간 뒤에 돌아도 같다).
-  # 기다리는 동안 러너 시간이 든다(실패한 날만, 회당 약 60분).
+  # 기다리는 동안 러너 시간이 든다(실패한 날만, 회당 RETRY_DELAY_MINUTES분).
   retry:
     needs: collect
-    if: always() && needs.collect.outputs.failed == 'true' && fromJSON(needs.collect.outputs.attempt) < 5
+    if: always() && needs.collect.outputs.failed == 'true' && fromJSON(needs.collect.outputs.attempt) < fromJSON(needs.collect.outputs.max_attempts)
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:

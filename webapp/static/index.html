@@ -3112,6 +3112,8 @@ const STAGE_RULE = {
   참가지역: "본점(정선군) 지역 밖 업체만 참가 가능 (나라장터 기준)",
   "과업 내용": "과업지시서에 전시·제작 내용 없음, 휴게·독서 공간 조성",
 };
+/** 제외 사유 메뉴에 늘 보이는 사유 — 이 서버가 제외된 공고 탭에 싣는 단계(`webapp/mview.py` STAGE_OF, 마감·미매칭 빼고) */
+const EX_STAGES = ["제외키워드", "키워드·품목", "최소예산", "해외개최", "본공고 게시", "참가자격", "참가지역"];
 const num = (v) => v.toLocaleString("ko-KR");
 
 /**
@@ -3170,10 +3172,16 @@ function renderExcluded() {
   const pool = (g) => d.items.filter((n) => exPass(n, g));
   const stagePool = pool("stage");
   const exDd = (group, name, opts) => dropdown(group, name, opts, "", exF);
+  // 메뉴엔 0건인 사유도 흐리게 늘 보인다(2026-10-22 요청 — 해외 개최가 0건이라 메뉴에서 사라져 필터가 없어진 줄 알았음).
+  // 많은 순, 같으면 EX_STAGES 순서. 고른 사유가 0건이 돼도 되돌릴 수 있게 그 칸은 누를 수 있게 둔다
+  const stageCount = (s) => stagePool.filter((n) => n.excludedAt === s).length;
+  const menuStages = [...new Set([...EX_STAGES, ...stages.map(([s]) => s)])]
+    .map((s) => [s, stageCount(s)])
+    .sort((a, b) => b[1] - a[1] || EX_STAGES.indexOf(a[0]) - EX_STAGES.indexOf(b[0]));
   $("exFilters").innerHTML = [
     exDd("stage", "제외 사유", [
       ["active", "전체", stagePool.length, `${d.periodLabel || ""} 조회 기준 · 마감 전`],
-      ...stages.map(([s]) => [s, stageLabel(s), stagePool.filter((n) => n.excludedAt === s).length, STAGE_RULE[s] || null]),
+      ...menuStages.map(([s, c]) => [s, stageLabel(s), c, STAGE_RULE[s] || null, c === 0 && exF.stage !== s]),
     ]),
     exDd("kw", "제외 키워드", [["all", "전체", null], ...countBy(pool("kw"), exKeyword).map(([k, c]) => [k, k, c])]),
     exDd("kind", "공고", [["all", "본공고+사전규격", null], ...countBy(pool("kind"), (n) => n.sourceType).map(([k, c]) => [k, k, c])]),

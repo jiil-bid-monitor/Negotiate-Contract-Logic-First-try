@@ -216,6 +216,9 @@ class ApiConfig:
     # 늦게 발동한다.
     max_retries: int = 4
     retry_delay_sec: float = 1.0
+    # 재시도 간격을 직접 정한다(초, 예: (10, 10, 30, 70)) — 있으면 retry_delay_sec·2배 대신 이걸 쓰고
+    # 재시도 횟수도 이 길이(config.py가 맞춤). GitHub Actions만 씀(2026-10-22, daily.yml API_RETRY_DELAYS).
+    retry_delays: tuple[float, ...] = ()
     num_of_rows: int = 999
     max_pages: int = 100
     request_interval_sec: float = 0.0
@@ -248,6 +251,12 @@ class DataGoKrClient:
 
         return envelope
 
+    def _retry_delay(self, attempt: int) -> float:
+        delays = self.config.retry_delays
+        if delays:
+            return delays[min(attempt, len(delays) - 1)]
+        return self.config.retry_delay_sec * (2**attempt)
+
     def _call_with_retry(self, base_url: str, operation: str, params: dict[str, str], label: str) -> Envelope:
         last_error: Exception | None = None
         for attempt in range(self.config.max_retries + 1):
@@ -270,7 +279,7 @@ class DataGoKrClient:
             )
             if not retryable or is_last:
                 break
-            time.sleep(self.config.retry_delay_sec * (2**attempt))
+            time.sleep(self._retry_delay(attempt))
 
         assert last_error is not None
         raise last_error

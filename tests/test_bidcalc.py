@@ -88,6 +88,15 @@ class LookupTest(unittest.TestCase):
         self.assertNotIn("basis", out)
         self.assertEqual(len(out["notes"]), 2)
         self.assertEqual(out["method"], "pps")
+        self.assertFalse(out["found"])
+        self.assertFalse(out["lookup_error"])  # 물품만 오류 — 공고번호 오입력으로 봄
+
+    def test_lookup_all_errors_is_lookup_error(self):
+        """공고 조회가 전부 오류면 오입력이 아니라 나라장터 조회 실패(화면이 다른 경고를 띄움)."""
+        client = FakeClient({}, fail=set(F.BID_NOTICE_OPERATIONS.values()))
+        out = bidcalc.lookup(client, "R26BK00000001")
+        self.assertFalse(out["found"])
+        self.assertTrue(out["lookup_error"])
 
     def test_attachment_fallback_for_goods(self):
         """물품 공고: 기초금액 API가 비면 첨부 공고문에서 기초금액·범위를 읽음(2026-10-15 서당골천 R26BK01764801)."""

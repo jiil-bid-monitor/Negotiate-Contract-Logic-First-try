@@ -117,7 +117,12 @@ assert.deepStrictEqual(C.MOIS_TABLE.slots[8], [100.00000001, 100.42857142]);
   const net = (netCost) => C.netCostBid({ average, basis: 123456789, netCost });
   assert.strictEqual(net(100000000), 98314997);
   assert.strictEqual(net(50000000), 49157499);
-  assert.strictEqual(net(20000000), 19663000);  // 원 단위 예정가격(…611)으로 반올림하면 19,662,999 — 평균 그대로·올림이 맞음
+  assert.strictEqual(net(20000000), 19663000);
+  // 투찰금액은 원 단위 예정가격(같은 절상·절사)으로 계산한 뒤 단위 처리(화면 예정가격 123,853,000·…700과 별개)
+  const picks = [4, 8, 10, 13].map((i) => p[i - 1]);
+  assert.strictEqual(C.bidAmount({ planned: C.plannedPrice(picks, "floor", 1), lowerRate: 87.745, how: "floor", unit: 1000 }), 108675000);
+  assert.strictEqual(C.bidAmount({ planned: C.plannedPrice(picks, "ceil", 1), lowerRate: 87.745, how: "ceil", unit: 100 }), 108675400);
+  assert.strictEqual(C.plannedPrice(picks, "ceil", 100), 123853700);  // 원 단위 예정가격(…611)으로 반올림하면 19,662,999 — 평균 그대로·올림이 맞음
 }
 
 // 등비추출 = 21라인과 같은 등간격 — 2026-10-22 21라인 캡처(울산안전체험관 R26BK01763222, 기초금액 10.5억 ±3% 15개) 그대로

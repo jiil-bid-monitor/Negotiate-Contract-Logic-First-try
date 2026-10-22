@@ -78,7 +78,7 @@ def _steps(c: dict[str, Any], held_names: dict[str, str]) -> list[dict[str, Any]
         steps.append({"step": "참가자격", "ok": True, "detail": "사전규격 — 나라장터 업종제한 정보 없음(첨부로만 확인)"})
     elif not q.get("checked"):
         steps.append({"step": "참가자격", "ok": True, "detail": "업종제한 없음"})
-    elif q.get("passes"):
+    elif not q.get("missing"):  # passes는 미보유 1개까지 통과(후보 선정용)라 충족 표시엔 안 씀
         steps.append({"step": "참가자격", "ok": True, "detail": f"충족 — {q.get('summary') or ''}".rstrip(" —")})
     else:
         steps.append({"step": "참가자격", "ok": True, "detail": f"자격 미보유 — {', '.join(q.get('missing') or [])} (공동수급 확인)"})

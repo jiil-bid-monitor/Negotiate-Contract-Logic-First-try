@@ -125,6 +125,17 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(bidcalc.guess_method("지방자치단체 입찰시 낙찰자 결정기준", -2, 2), "mois")
         self.assertEqual(bidcalc.guess_method("", None, None), "pps")
 
+    def test_method_by_agency(self):
+        """발주기관이 지방자치단체·교육청이면 행자부(2026-10-22 제보: 울산광역시 울산안전체험관 협상 공고가 조달청으로 나옴)."""
+        협상 = "협상에의한계약-협상에 의한 낙찰자 결정"
+        for name in ["울산광역시 울산안전체험관", "경상남도 거제시", "강원특별자치도 정선군", "서울특별시 종로구", "경기도교육청",
+                     "세종특별자치시", "제주특별자치도", "거제시", "종로구청", "충청북도 교육청"]:
+            self.assertEqual(bidcalc.method_reason(협상, None, None, [name]), ("mois", f"발주기관 {name}"), name)
+        for name in ["국방부 국군재정관리단", "부산지방국토관리청", "한국도로공사", "조달청", "국립중앙박물관", "한국관광공사"]:
+            self.assertEqual(bidcalc.guess_method(협상, None, None, [name]), "pps", name)
+        # 수요기관이 비고 공고기관만 지자체여도
+        self.assertEqual(bidcalc.guess_method("", None, None, ["", "울산광역시"]), "mois")
+
 
 @unittest.skipUnless(shutil.which("node"), "node 없음 — 화면 계산 테스트 건너뜀")
 class BidCalcJsTest(unittest.TestCase):

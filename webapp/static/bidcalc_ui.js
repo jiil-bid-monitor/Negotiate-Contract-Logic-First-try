@@ -190,6 +190,20 @@
 
   function render() { renderGrid(); renderResult(); }
 
+  // 금액 칸(기초금액·A값·순공사원가)은 칠 때마다 천 단위 쉼표(10/22 요청 — 21라인 "30,000,000"처럼). 커서는 같은 숫자 뒤에 둔다
+  function commaInput(el) {
+    const caret = el.selectionStart ?? el.value.length;
+    const digitsBefore = el.value.slice(0, caret).replace(/[^\d.]/g, "").length;
+    const raw = el.value.replace(/[^\d.]/g, "");
+    if (!raw) { el.value = ""; return; }
+    const [int, frac] = raw.split(".");
+    const out = Number(int || 0).toLocaleString("ko-KR") + (frac != null ? "." + frac : "");
+    el.value = out;
+    let seen = 0, pos = 0;
+    while (pos < out.length && seen < digitsBefore) { if (/[\d.]/.test(out[pos])) seen++; pos++; }
+    el.setSelectionRange(pos, pos);
+  }
+  ["#cBasis", "#cA", "#cNet"].forEach((id) => $(id).addEventListener("input", (e) => commaInput(e.target)));
   ["#cRate", "#cA", "#cNet"].forEach((id) => $(id).addEventListener("input", renderResult));
   ["#cAOn", "#cDecimal", "#cRoundMode", "#cRoundUnit"].forEach((id) => $(id).addEventListener("change", renderResult));
   $("#cBasis").addEventListener("input", render);

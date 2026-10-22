@@ -46,11 +46,13 @@ for (let seed = 1; seed <= 30; seed++) {
   r.forEach((x, i) => {
     const [a, b] = C.PPS_TABLE.slots[i];
     assert.ok(x >= a - 100 - 1e-9 && x <= b - 100 + 1e-9, `${i}: ${x}`);
-    assert.ok(Math.abs(x * 1000 - Math.round(x * 1000)) < 1e-6, "0.001% 단위");
+    assert.ok(Math.abs(x * 1e4 - Math.round(x * 1e4)) < 1e-6, "0.0001% 단위");
   });
   const p = C.makePrices({ basis: 1e9, lo: -2, hi: 2, method: "pps", rng: C.seeded(seed) });
   assert.strictEqual(new Set(p).size, 15);
   p.forEach((x) => assert.ok(x >= 0.98e9 && x <= 1.02e9));
+  // 21라인처럼 ①이 1구간(가장 높음) → ⑮ 가장 낮음, 섞지 않음
+  assert.deepStrictEqual(p, p.slice().sort((a, b) => b - a));
 }
 // 조달청 표인데 공고 범위가 ±3%면 같은 비율로 늘림: 1번 구간(101.735~102.000) → 102.6025~103
 {
@@ -64,6 +66,7 @@ for (let seed = 1; seed <= 30; seed++) {
   r.forEach((x, i) => {
     const [a, b] = C.MOIS_TABLE.slots[i];
     assert.ok(x >= a - 100 - 1e-9 && x <= b - 100 + 1e-9, `${i}: ${x}`);
+    assert.ok(Math.abs(x * 1e4 - Math.round(x * 1e4)) < 1e-6, "0.0001% 단위");
   });
 }
 // 표 끝값이 기본서 그대로
@@ -114,10 +117,15 @@ assert.deepStrictEqual(C.MOIS_TABLE.slots[8], [100.00000001, 100.42857142]);
   assert.ok(Math.abs(r[1] - r[0] - 6 / 14) < 1e-12 && Math.abs(r[14] - r[13] - 6 / 14) < 1e-12, "같은 간격");
 }
 
-// 단순 난수: 범위 안
-{
-  const p = C.makePrices({ basis: 1e8, lo: -3, hi: 3, method: "uniform", rng: C.seeded(9) });
-  p.forEach((x) => assert.ok(x >= 97e6 && x <= 103e6));
+// 난수추출적용(21라인 캡처 대조): 아래 8개·위 7개, 구간 없이 범위 안, 0.0001% 단위, ① 가장 낮음 → ⑮ 가장 높음
+for (let seed = 1; seed <= 30; seed++) {
+  const r = C.rates("uniform", 15, -3, 3, C.seeded(seed), 8, 7);
+  assert.strictEqual(r.filter((x) => x < 0).length, 8);
+  assert.strictEqual(r.filter((x) => x > 0).length, 7);
+  r.forEach((x) => assert.ok(x >= -3 - 1e-9 && x <= 3 + 1e-9 && Math.abs(x * 1e4 - Math.round(x * 1e4)) < 1e-6, String(x)));
+  const p = C.makePrices({ basis: 1e8, lo: -3, hi: 3, method: "uniform", down: 8, up: 7, rng: C.seeded(seed) });
+  assert.deepStrictEqual(p, p.slice().sort((a, b) => a - b));
+  assert.strictEqual(p.filter((x) => x < 1e8).length, 8);
 }
 
 // 자동선택: 서로 다른 번호 k개, 1~n

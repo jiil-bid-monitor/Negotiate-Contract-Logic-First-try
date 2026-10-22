@@ -16,8 +16,8 @@
   };
   // 금액 — 단가(소수점) 계산이면 소수점 둘째 자리까지 보임
   const won = (v) => (v == null || Number.isNaN(v) ? "-" : Number(v).toLocaleString("ko-KR", { maximumFractionDigits: 2 }));
-  // 소수 넷째 자리까지, 끝의 0은 뺌(21라인 표기 — 97 · -3 · 100.4286)
-  const p4 = (v) => (v == null || Number.isNaN(v) ? "-" : String(Number(v.toFixed(4)) || 0));
+  // 소수 넷째 자리까지 늘 표시(21라인 표기 — 97.0000 · -3.0000 · 100.4286, 10/22 캡처), -0은 0.0000
+  const p4 = (v) => (v == null || Number.isNaN(v) ? "-" : (Number(v.toFixed(4)) || 0).toFixed(4));
   // 번호 동그라미 — ①② 같은 글자는 글꼴에 따라 너무 작게 나와(10/15 제보) 숫자에 원 테두리를 그린다
   // 가운데 정렬은 글자 폭 기준이라 "1"처럼 잉크가 한쪽에 쏠린 숫자는 치우쳐 보임(10/22 제보) — 실제 글꼴로 잉크 중심을 재서 그만큼 옮김
   const NUM_SHIFT = {};

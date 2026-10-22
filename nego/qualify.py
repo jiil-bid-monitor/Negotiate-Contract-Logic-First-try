@@ -1311,7 +1311,8 @@ def fetch_region_limits(
 
 # ── 공동수급 (정보 수집 전용) ───────────────────────────────────
 
-_JOINT_PATTERN = re.compile(r"^\((?P<submit>전자|수기|없음)\)(?P<exec>.+)$")
+# 제출방식 괄호가 비어 오는 공고도 있음 — "()공동수급불허"(10/22 실측, 다수공급자계약 R26BK01450117)
+_JOINT_PATTERN = re.compile(r"^\((?P<submit>[^()]*)\)\s*(?P<exec>.+)$")
 
 
 @dataclass
@@ -1338,7 +1339,7 @@ def parse_joint_supply(value: str | None) -> JointSupply:
 
     text = value.strip()
     match = _JOINT_PATTERN.match(text)
-    submit_type = match.group("submit") if match else None
+    submit_type = (match.group("submit").strip() or None) if match else None
     exec_type = match.group("exec").strip() if match else text
 
     allowed = "불허" not in exec_type

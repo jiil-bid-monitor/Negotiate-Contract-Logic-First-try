@@ -2616,9 +2616,9 @@ function reqBlocksHtml(all, mixed) {
   return blocks.join("");
 }
 
-function nQualBadges(n) {
+function nQualBadges(n, noShare = false) {
   const parts = n.qual?.parts || [];
-  const denied = /불허/.test(n.joint?.label || "");
+  const denied = noShare || /불허/.test(n.joint?.label || "");
   return parts.map((p) => {
     const label = QUAL_LABEL[p.key]?.[p.status] || `${p.name} ${p.status}`;
     const tone = p.status === "충족" ? "ok" : p.status === "미달" ? (denied ? "block" : "fix") : "faint";
@@ -2641,7 +2641,9 @@ function nQualBadges(n) {
       body = `<p>${esc(QUAL_EMPTY[p.key]?.[p.status] || "")}</p>`;
     }
     if (p.status === "미달" && p.key === "industry")
-      body += denied
+      body += noShare
+        ? `<p class="warnline">지일이 보유한 요구 면허가 하나도 없어 공동수급으로도 맡을 부분이 없습니다.</p>`
+        : denied
         ? `<p class="warnline">공동수급 불허 — 부족한 자격을 함께 채울 업체를 구할 수 없습니다.</p>`
         : `<p>공동수급이 허용되면 이 자격을 가진 업체와 함께 참가할 수 있습니다 — 옆 공동수급 배지를 보세요.</p>`;
     return `<span class="badge qual ${tone}" tabindex="0">${ico ? `<span class="ico" aria-hidden="true">${ico}</span>` : ""}${esc(label)}${qtip(title, body)}</span>`;
@@ -3232,9 +3234,15 @@ function exStepBadges(n) {
   const step = (name) => (n.steps || []).find((s) => s.step === name);
   const q = step("참가자격");
   const r = step("참가지역");
+  // 나라장터 면허제한 판정 자료(n.qual.parts)가 있으면 실제 공고 탭과 같은 ✓·✗ 팝업으로 (2026-10-22 사용자 요청)
+  const ind = (n.qual?.parts || []).find((p) => p.key === "industry" && ((p.missing || []).length || (p.satisfied || []).length));
+  const indBadge = ind ? nQualBadges({ ...n, qual: { parts: [ind] } }, q && !q.ok)[0] : "";
   const qual = !q
     ? ""
-    : !q.ok
+    : indBadge
+      // 참가자격 단계에서 빠진 공고(보유면허없음)는 공동수급으로도 못 들어가니 붉은 배지(noShare)
+      ? indBadge
+      : !q.ok
       ? tipBadge("block", "자격요건 미달", "참가 자격", `<p>${esc(q.detail)}</p>`)
       : /^충족/.test(q.detail)
         ? `<span class="badge qual ok" tabindex="0"><span class="ico" aria-hidden="true">✓</span>자격요건 충족${qtip("참가 자격", `<p>${esc(q.detail)}</p>`)}</span>`

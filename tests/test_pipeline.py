@@ -149,6 +149,12 @@ class TestJointSupply(unittest.TestCase):
         self.assertFalse(joint.allowed)
         self.assertEqual(joint.submit_type, "없음")
 
+    def test_empty_submit_parens(self):
+        joint = qualify.parse_joint_supply("()공동수급불허")
+        self.assertFalse(joint.allowed)
+        self.assertIsNone(joint.submit_type)
+        self.assertEqual(joint.label, "공동수급불허")
+
     def test_missing_value(self):
         joint = qualify.parse_joint_supply(None)
         self.assertEqual(joint.label, "정보 없음")

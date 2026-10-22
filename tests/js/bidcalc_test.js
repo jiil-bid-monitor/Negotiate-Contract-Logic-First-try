@@ -77,17 +77,30 @@ assert.deepStrictEqual(C.MOIS_TABLE.slots[8], [100.00000001, 100.42857142]);
   assert.strictEqual(p.length, 10);
 }
 
-// 예비가격 소수점 처리(기본서): 총액 1원 미만 올림 · 단가 소수점 셋째 자리에서 올림 · 시설공사/감리·설계 100원 미만 올림
+// 예비가격 소수점 처리 — 2026-10-22 21라인 캡처(등비추출 ±3% 15개)와 15개 모두 같게
 {
-  const fixed = () => 0;  // 각 구간 하한
-  const total = C.makePrices({ basis: 123456789, lo: -3, hi: 3, method: "mois", rng: fixed });
-  // 1번 구간 하한 97% → 119,753,085.33 → 119,753,086
-  assert.strictEqual(total[0], 119753086);
-  const cnst = C.makePrices({ basis: 123456789, lo: -3, hi: 3, method: "mois", decimal: "cnst", rng: fixed });
-  assert.strictEqual(cnst[0], 119753100);
-  cnst.forEach((x) => assert.strictEqual(x % 100, 0));
-  const unit = C.makePrices({ basis: 1234.5678, lo: -3, hi: 3, method: "mois", decimal: "unit", rng: fixed });
-  assert.strictEqual(unit[0], 1197.54);  // 1197.530766 → 셋째 자리 이하가 남아 둘째 자리로 올림
+  const g = (basis, decimal) => C.makePrices({ basis, lo: -3, hi: 3, method: "geometric", decimal });
+  const total = [119753086, 120282222, 120811234, 121340370, 121869506, 122398641, 122927654, 123456789,
+    123985925, 124514938, 125044073, 125573209, 126102345, 126631357, 127160493];
+  assert.deepStrictEqual(g(123456789, "total"), total);
+  assert.deepStrictEqual(g(123456789, "unit"), total);  // 21라인은 단가도 예비가격이 총액과 같음
+  // 시설공사/감리및설계: 10원 미만 버린 뒤 100원 미만 올림 — ⑤ 121,869,505.06 → …500, ⑫ 125,573,208.73 → …200
+  assert.deepStrictEqual(g(123456789, "cnst"), [119753100, 120282300, 120811300, 121340400, 121869500, 122398700, 122927700,
+    123456800, 123986000, 124515000, 125044100, 125573200, 126102400, 126631400, 127160500]);
+  // 기초금액 123,456,798 캡처 — ⑮ 127,160,501.94 → 127,160,500
+  assert.deepStrictEqual(g(123456798, "cnst"), [119753100, 120282300, 120811300, 121340400, 121869600, 122398700, 122927700,
+    123456800, 123986000, 124515000, 125044100, 125573300, 126102400, 126631400, 127160500]);
+  assert.deepStrictEqual(g(123456798, "total"), [119753095, 120282230, 120811243, 121340379, 121869514, 122398650, 122927663,
+    123456798, 123985934, 124514947, 125044083, 125573218, 126102354, 126631367, 127160502]);
+}
+
+// 예정가격 — 21라인 ④⑧⑩⑬ 선택, 절상·원미만: 총액·단가 123,853,611 (495,414,442 ÷ 4 = …610.5), 시설공사 123,853,650
+{
+  const g = (decimal) => C.makePrices({ basis: 123456789, lo: -3, hi: 3, method: "geometric", decimal });
+  const pick = (p) => [4, 8, 10, 13].map((i) => p[i - 1]);
+  assert.strictEqual(C.plannedPrice(pick(g("total")), "ceil", 1), 123853611);
+  assert.strictEqual(C.plannedPrice(pick(g("unit")), "ceil", 1), 123853611);
+  assert.strictEqual(C.plannedPrice(pick(g("cnst")), "ceil", 1), 123853650);
 }
 
 // 등비추출 = 21라인과 같은 등간격 — 2026-10-22 21라인 캡처(울산안전체험관 R26BK01763222, 기초금액 10.5억 ±3% 15개) 그대로

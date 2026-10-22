@@ -31,7 +31,13 @@
     return unit < 1 ? Math.round(r * unit * 100) / 100 : r * unit;
   }
 
-  const inSlot = (a, b, rng) => a + (b - a) * rng();
+  // 난수 버튼은 21라인처럼 백분율을 0.0001% 단위로 뽑는다(10/22 21라인 캡처 3장씩 대조 — 97.2569·99.7969·101.8141 …,
+  // 예전엔 행자부 0.00000001%·조달청 0.001%·난수 연속값). a~b 안(양끝 포함)의 0.0001 배수 하나
+  const STEP = 1e-4;
+  const inSlot = (a, b, rng) => {
+    const ia = Math.ceil(a / STEP - 1e-6), ib = Math.floor(b / STEP + 1e-6);
+    return (ia + Math.floor(rng() * (ib - ia + 1))) * STEP;
+  };
 
   // 기본서 구간표 — [하한, 상한] 기초금액 대비 %. 표에 적힌 숫자 그대로(번호 순서 = 표의 구간 1~15)
   const PPS_TABLE = {
@@ -50,15 +56,16 @@
     ],
   };
 
-  // 구간 안 표 단위(step)로 균등 추출 → 변동률(%). 공고 범위가 표와 다르면(예: 조달청인데 ±3%) 같은 비율로 늘이고 줄임
+  // 구간마다 1개(0.0001% 단위) → 변동률(%), 표의 구간 순서 그대로(행자부 ① 가장 낮음, 조달청 ① 가장 높음 — 21라인과 같음).
+  // 공고 범위가 표와 다르면(예: 조달청인데 ±3%) 같은 비율로 늘이고 줄임
   function tableRates(table, lo, hi, rng) {
-    const k = 1 / table.step;
     return table.slots.map(([a, b]) => {
-      const ia = Math.round(a * k), ib = Math.round(b * k);
-      const pct = (ia + Math.floor(rng() * (ib - ia + 1))) / k - 100;
+      const pct = inSlot(a, b, rng) - 100;
       return pct >= 0 ? (pct * hi) / table.range : (pct * -lo) / table.range;
     });
   }
+  // 15개면 늘 표 — 21라인 행자부는 추출범위(−7/+8 등)를 바꿔도 표대로 아래 8·위 7(10/22 캡처). 10개는 21라인이 못 골라 기존 칸 나누기
+  const usesTable = (method, n) => n === 15 && (method === "mois" || method === "pps");
 
   // 예비가격 끝자리 처리 — 소수점 종류(화면 기타설정 첫 상자)별. 2026-10-22 21라인 캡처(기초금액 123,456,789·123,456,798, 등비 15개) 대조:
   // 총액·단가 = 1원 미만 올림(단가도 예비가격은 정수 — 소수 둘째 자리 아님), 시설공사·감리및설계 = **10원 미만 버린 뒤** 100원 미만 올림
@@ -76,16 +83,22 @@
       if (n === 1) return [(lo + hi) / 2];
       return Array.from({ length: n }, (_, i) => lo + ((hi - lo) * i) / (n - 1));
     }
-    if (method === "uniform") return Array.from({ length: n }, () => inSlot(lo, hi, rng));
-    if (method === "mois" && n === 15 && (down ?? 8) === 8 && (up ?? 7) === 7) return tableRates(MOIS_TABLE, lo, hi, rng);
-    if (method === "pps" && n === 15) return tableRates(PPS_TABLE, lo, hi, rng);
+    if (method === "uniform") {
+      // 21라인 "난수추출적용": 추출범위대로 아래 down개는 lo~0, 위 up개는 0~hi 안 아무 데서(구간 없음) — 캡처 3장 모두 8/7
+      const upN = Math.max(0, Math.min(n, up ?? n - (down ?? Math.ceil(n / 2))));
+      return [...Array.from({ length: n - upN }, () => inSlot(lo, -STEP, rng)),
+        ...Array.from({ length: upN }, () => inSlot(STEP, hi, rng))];
+    }
+    if (method === "mois" && usesTable(method, n)) return tableRates(MOIS_TABLE, lo, hi, rng);
+    if (method === "pps" && usesTable(method, n)) return tableRates(PPS_TABLE, lo, hi, rng);
     if (method === "mois") {
       // 표와 다른 개수(10개·추출범위 변경) — 아래 down개는 lo~0, 위 up개는 0~hi — 각 쪽을 개수만큼 칸으로 나눠 칸마다 1개
       const upN = Math.max(0, Math.min(n, up ?? n - (down ?? Math.ceil(n / 2))));
       const downN = n - upN;
       const out = [];
-      for (let i = 0; i < downN; i++) out.push(inSlot((lo * (i + 1)) / downN, (lo * i) / downN, rng));
-      for (let i = 0; i < upN; i++) out.push(inSlot((hi * i) / upN, (hi * (i + 1)) / upN, rng));
+      // 0(기초금액 그대로)은 어느 쪽에도 안 넣음 — 아래·위 개수가 흔들리지 않게
+      for (let i = 0; i < downN; i++) out.push(inSlot((lo * (i + 1)) / downN, i ? (lo * i) / downN : -STEP, rng));
+      for (let i = 0; i < upN; i++) out.push(inSlot(i ? (hi * i) / upN : STEP, (hi * (i + 1)) / upN, rng));
       return out;
     }
     // pps 10개: 범위 전체를 n칸으로
@@ -102,7 +115,7 @@
     return a;
   }
 
-  // 예비가격 n개(금액 오름차순) — 번호는 화면이 배치(랜덤배치 등)하며 붙인다
+  // 예비가격 n개 — 배열 순서가 곧 번호(①부터). 표 방식은 구간 순서, 그 밖은 금액 오름차순
   // decimal: "total"·"unit"(1원 미만 올림) | "cnst"(10원 미만 버림 → 100원 미만 올림) — roundPrice
   function makePrices({ basis, lo, hi, n = 15, method = "mois", down, up, decimal = "total", rng = Math.random }) {
     if (!(basis > 0)) throw new Error("기초금액을 입력하세요");
@@ -114,7 +127,8 @@
       prices = rates(method, n, lo, hi, rng, down, up).map((r) => roundPrice((basis * pctOf(r)) / 100, decimal));
       if (new Set(prices).size === prices.length) break;  // 서로 다른 n개 (금액이 작아 같은 값이 나오면 다시)
     }
-    return prices.sort((a, b) => a - b);
+    // 번호 순서 = 21라인: 표 방식은 구간 순서 그대로, 나머지는 금액순(① 가장 낮음). 섞는 건 "랜덤배치" 버튼만
+    return usesTable(method, n) ? prices : prices.sort((a, b) => a - b);
   }
 
   // 1~n 중 서로 다른 번호 k개(자동선택)

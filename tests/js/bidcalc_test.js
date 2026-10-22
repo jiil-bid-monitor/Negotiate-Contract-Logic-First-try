@@ -125,6 +125,16 @@ assert.deepStrictEqual(C.MOIS_TABLE.slots[8], [100.00000001, 100.42857142]);
   assert.strictEqual(C.plannedPrice(picks, "ceil", 100), 123853700);  // 원 단위 예정가격(…611)으로 반올림하면 19,662,999 — 평균 그대로·올림이 맞음
 }
 
+// A값 30,000,000 + 단위·소수점 — 21라인 캡처(10/22) 4가지 모두 같음
+{
+  const pick = (decimal) => { const p = C.makePrices({ basis: 123456789, lo: -3, hi: 3, method: "geometric", decimal }); return [4, 8, 10, 13].map((i) => p[i - 1]); };
+  const bid = (decimal, pm, bm, unit) => C.bidAmount({ planned: C.plannedPrice(pick(decimal), pm, 1), lowerRate: 87.745, a: 30000000, how: bm, unit });
+  assert.strictEqual(bid("total", "ceil", "ceil", 1), 112351851);
+  assert.strictEqual(bid("total", "ceil", "ceil", 100), 112351900);  // 자른 예정가격(…700)으로 하면 112,352,000
+  assert.strictEqual(bid("total", "floor", "floor", 1000), 112351000);
+  assert.strictEqual(bid("cnst", "ceil", "ceil", 1), 112351886);
+}
+
 // 등비추출 = 21라인과 같은 등간격 — 2026-10-22 21라인 캡처(울산안전체험관 R26BK01763222, 기초금액 10.5억 ±3% 15개) 그대로
 {
   const p = C.makePrices({ basis: 1050000000, lo: -3, hi: 3, method: "geometric" });

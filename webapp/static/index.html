@@ -2220,17 +2220,34 @@ function productOnlyBadge(n) {
 
 /**
  * 공고명 옆 작은 공고번호와 복사 버튼 (2026-10-15 요청). 나라장터·메신저에 붙여 넣을 때 쓴다.
- * 클립보드를 못 쓰는 환경이면 번호를 선택해 둬서 Ctrl+C로 복사하게 한다.
+ * 사내망 http 주소(192.168…)는 브라우저가 navigator.clipboard를 막아서(https·localhost만 허용) 숨긴 입력칸 +
+ * execCommand("copy")로 복사한다(2026-10-22 제보: 버튼은 눌리는데 복사가 안 됨). 그것도 안 되면 번호를 선택해 둬서 Ctrl+C.
  */
 const noticeNoTag = (no) =>
   no ? ` <span class="notice-no"><span class="no-text">${esc(no)}</span><button type="button" class="no-copy" data-copy="${esc(no)}" title="공고번호 복사">복사</button></span>` : "";
+const copyByCommand = (text) => {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;";
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { ok = false; }
+  ta.remove();
+  return ok;
+};
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest?.("[data-copy]");
   if (!b) return;
   ev.preventDefault();
+  const text = b.dataset.copy;
   const done = () => { b.textContent = "복사됨"; setTimeout(() => (b.textContent = "복사"), 1200); };
-  const select = () => { const r = document.createRange(); r.selectNodeContents(b.previousElementSibling); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); };
-  try { navigator.clipboard.writeText(b.dataset.copy).then(done, select); } catch { select(); }
+  const select = () => { const r = document.createRange(); r.selectNodeContents(b.previousElementSibling); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent = "Ctrl+C"; setTimeout(() => (b.textContent = "복사"), 2000); };
+  const fallback = () => (copyByCommand(text) ? done() : select());
+  if (window.isSecureContext && navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+  else fallback();
 });
 
 const reNoticeBadge = () => tipBadge("renotice", "재공고", "재공고", `<p>나라장터에 재공고로 올라온 공고입니다.</p>`);

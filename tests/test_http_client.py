@@ -35,6 +35,33 @@ class TestServiceKeyMasked(unittest.TestCase):
         self.assertNotIn("SECRET", msg)
 
 
+class TestRetryDelays(unittest.TestCase):
+    def test_explicit_delays_used_in_order(self):
+        """API_RETRY_DELAYS처럼 간격을 직접 주면 그 순서대로 쉰다 (2배씩 아님)."""
+        from unittest import mock
+
+        class Down:
+            def get(self, url, timeout=None):
+                raise requests.ConnectionError("timeout")
+
+        client = DataGoKrClient(ApiConfig(service_key="k", max_retries=4, retry_delays=(10, 10, 30, 70)), Down())
+        with mock.patch("nego.http_client.time.sleep") as sleep, self.assertRaises(ApiError):
+            client.fetch_all_pages("https://apis.data.go.kr/x", "op", {}, "본공고/용역")
+        self.assertEqual([c.args[0] for c in sleep.call_args_list], [10, 10, 30, 70])
+
+    def test_default_doubles(self):
+        from unittest import mock
+
+        class Down:
+            def get(self, url, timeout=None):
+                raise requests.ConnectionError("timeout")
+
+        client = DataGoKrClient(ApiConfig(service_key="k", max_retries=3, retry_delay_sec=1), Down())
+        with mock.patch("nego.http_client.time.sleep") as sleep, self.assertRaises(ApiError):
+            client.fetch_all_pages("https://apis.data.go.kr/x", "op", {}, "본공고/용역")
+        self.assertEqual([c.args[0] for c in sleep.call_args_list], [1, 2, 4])
+
+
 class TestChunkDateRange(unittest.TestCase):
     def test_short_range_is_a_single_chunk(self):
         chunks = list(chunk_date_range("202609010000", "202609150000", days=30))

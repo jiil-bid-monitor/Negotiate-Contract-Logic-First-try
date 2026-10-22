@@ -21,9 +21,9 @@ run-name: >-
 #    켜려면 아래 "실행 모드 결정"의 스케줄 쪽 NO_SUPABASE를 "false"로).
 #    수동 실행은 telegram 입력이 true일 때만 보낸다.
 #
-# 수집이 실패하면(나라장터 접속 끊김 등) 1분 뒤 새 Run으로 다시 시도한다 — 최대 20회(약 3시간 반, 2026-10-22).
+# 수집이 실패하면(나라장터 접속 끊김 등) 1분 뒤 새 Run으로 다시 시도한다 — 최대 30회(약 3시간, 2026-10-22).
 #   담당자 방에는 실패 알림을 보내지 않는다. 개발자 방(TELEGRAM_DEV_CHAT_ID)에만
-#   ① 첫 시도 실패 ② 20회 모두 실패 ③ 재시도 끝에 성공했을 때 알린다 (2026-10-12·10-22 사용자 결정).
+#   ① 첫 시도 실패 ② 30회 모두 실패 ③ 재시도 끝에 성공했을 때 알린다 (2026-10-12·10-22 사용자 결정).
 #
 # 필요한 저장소 secrets: NARA_SERVICE_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
 #   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (텔레그램 두 개가 없으면 발송만 건너뜀),
@@ -91,10 +91,10 @@ env:
   TZ: Asia/Seoul
   # 실패하면 거의 바로(1분 뒤) 새 Run으로 다시 시도한다 — 새 Run은 다른 GitHub 서버에 배정될 수 있어 같은 서버에서
   # 계속 두드리는 것보다 낫고, 접속 자체가 안 된 것이라 나라장터 쪽 부담·차단 걱정도 없다(2026-10-22 사용자 결정).
-  # 시도 하나가 요청 재시도(약 10분)를 품고 있어 20회면 약 3시간 반 — 몇 시간 이어지는 끊김(10/7 팀원 시스템)도 덮는다.
+  # 시도 하나가 요청 재시도(약 4~5분)+실행 준비·대기(약 2분)라 30회면 약 3시간 — 몇 시간 이어지는 끊김(10/7 팀원 시스템)도 덮는다.
   # 예전엔 60분 간격 5회.
   RETRY_DELAY_MINUTES: "1"
-  MAX_ATTEMPTS: "20"
+  MAX_ATTEMPTS: "30"
 
 jobs:
   collect:
@@ -255,9 +255,9 @@ jobs:
         env:
           NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}
           # GitHub 서버(미국)→나라장터 접속이 가끔 1~2분 끊긴다(10/22 09:01~09:03 실측 — 1·2·4·8초 간격 5번이 2분 반 만에 다 소진).
-          # 요청마다 20·40·80·160·320초 간격 6번으로 벌려 약 10분을 버틴다(팀원 레포와 같은 값). 사내 웹앱은 기본값(1초) 그대로.
-          API_MAX_RETRIES: "5"
-          API_RETRY_DELAY_SEC: "20"
+          # 요청마다 10·10·30·70초 간격으로 5번 시도(접속 대기 30초씩 포함 약 4~5분) — 그래도 안 되면 1분 뒤 새 Run(다른 서버일 수 있음)으로
+          # 넘어가는 게 같은 서버에서 오래 두드리는 것보다 낫다(2026-10-22 사용자 결정). 사내 웹앱은 기본값(1초부터 2배씩) 그대로.
+          API_RETRY_DELAYS: "10,10,30,70"
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_TABLE: ${{ vars.SUPABASE_TABLE }}
@@ -354,7 +354,7 @@ jobs:
 
       # 개발자 알림 — 담당자 방이 아니라 TELEGRAM_DEV_CHAT_ID로만. 알림이 실패해도 Run 결과는 그대로.
       # 첫 시도 실패(2026-10-22 사용자 요청 — 첫 실패부터 로그를 보려고)·마지막 시도 실패·재시도 끝 성공 때만.
-      # 재시도가 1분 간격·최대 20회라 중간 실패까지 알리면 방이 넘친다.
+      # 재시도가 1분 간격·최대 30회라 중간 실패까지 알리면 방이 넘친다.
       - name: 개발자 알림 (첫 실패 · 최종 실패 · 회복)
         if: >-
           (steps.collect.outcome == 'failure' && (fromJSON(steps.mode.outputs.attempt) == 1 || fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.MAX_ATTEMPTS)))

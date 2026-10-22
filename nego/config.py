@@ -67,11 +67,14 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
         industry_codes=list(codes.get("industryCodes", [])),
     )
 
+    # API_RETRY_DELAYS="10,10,30,70"이면 그 간격으로 그 횟수만큼 재시도(API_MAX_RETRIES보다 우선)
+    retry_delays = tuple(float(x) for x in os.environ.get("API_RETRY_DELAYS", "").split(",") if x.strip())
     api = ApiConfig(
         service_key=service_key,
         timeout_sec=float(os.environ.get("API_TIMEOUT_SEC", "30")),
-        max_retries=int(os.environ.get("API_MAX_RETRIES", "4")),
+        max_retries=len(retry_delays) if retry_delays else int(os.environ.get("API_MAX_RETRIES", "4")),
         retry_delay_sec=float(os.environ.get("API_RETRY_DELAY_SEC", "1")),
+        retry_delays=retry_delays,
         num_of_rows=int(os.environ.get("API_NUM_OF_ROWS", "999")),
         max_pages=int(os.environ.get("API_MAX_PAGES", "100")),
         request_interval_sec=float(os.environ.get("API_REQUEST_INTERVAL_SEC", "0")),

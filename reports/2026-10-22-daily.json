@@ -1,0 +1,126 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-10-22",
+ "reportedAt": "2026-10-22T01:04:42+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01783391",
+   "title": "영동일라이트 지식산업센터 일라이트전시실 전시물 제작설치사업(지명경쟁)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "충청북도 영동군",
+    "budgetAmount": 147646364.0,
+    "confidence": "강력추천",
+    "bidMethod": "입찰",
+    "keywords": [
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "score": null,
+    "deadline": "2026-10-28T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01783391&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01766049",
+   "title": "2026년 부천시 송내지하차도 방재시설 설치공사 실시설계용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경기도 부천시 소사구",
+    "budgetAmount": 179490099.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": null,
+    "deadline": "2026-10-28T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01766049&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01784744",
+   "title": "한동대학교 비전관(생활관) 다목적 RC공간 구축 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한동대학교",
+    "budgetAmount": null,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": null,
+    "deadline": "2026-10-28T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01784744&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01784753",
+   "title": "보은옥천영동축협 한우이야기 영동점 인테리어 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "보은옥천영동축산업협동조합 영동지점",
+    "budgetAmount": 235454545.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "인테리어"
+    ],
+    "products": [],
+    "score": null,
+    "deadline": "2026-10-29T14:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01784753&bidPbancOrd=001"
+   }
+  },
+  {
+   "noticeNo": "R26BK01450117",
+   "title": "인공지능(AI)소프트웨어외 2종",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "각 수요기관",
+    "budgetAmount": null,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "패키지소프트웨어개발및도입서비스",
+     "소프트웨어유지및지원서비스"
+    ],
+    "score": null,
+    "deadline": "2029-10-12T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01450117&bidPbancOrd=002"
+   }
+  },
+  {
+   "noticeNo": "20240344841",
+   "title": "인증관리소프트웨어외 37종",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "각 수요기관",
+    "budgetAmount": null,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "패키지소프트웨어개발및도입서비스",
+     "소프트웨어유지및지원서비스"
+    ],
+    "score": null,
+    "deadline": "2034-09-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=20240344841&bidPbancOrd=005"
+   }
+  }
+ ]
+}

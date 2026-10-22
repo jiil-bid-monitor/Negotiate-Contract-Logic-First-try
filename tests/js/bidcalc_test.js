@@ -90,13 +90,15 @@ assert.deepStrictEqual(C.MOIS_TABLE.slots[8], [100.00000001, 100.42857142]);
   assert.strictEqual(unit[0], 1197.54);  // 1197.530766 → 셋째 자리 이하가 남아 둘째 자리로 올림
 }
 
-// 등비: 양 끝이 범위 끝, 이웃 비율이 같음
+// 등비추출 = 21라인과 같은 등간격 — 2026-10-22 21라인 캡처(울산안전체험관 R26BK01763222, 기초금액 10.5억 ±3% 15개) 그대로
 {
-  const p = C.makePrices({ basis: 1e8, lo: -2, hi: 2, method: "geometric" });
-  assert.strictEqual(p[0], 98000000);
-  assert.ok(Math.abs(p[14] - 102000000) <= 1);
-  const r1 = p[1] / p[0], r2 = p[14] / p[13];
-  assert.ok(Math.abs(r1 - r2) < 1e-6);
+  const p = C.makePrices({ basis: 1050000000, lo: -3, hi: 3, method: "geometric" });
+  assert.deepStrictEqual(p, [
+    1018500000, 1023000300, 1027499550, 1031999850, 1036500150, 1041000450, 1045499700, 1050000000,
+    1054500300, 1058999550, 1063499850, 1068000150, 1072500450, 1076999700, 1081500000,
+  ]);
+  const r = C.rates("geometric", 15, -3, 3);
+  assert.ok(Math.abs(r[1] - r[0] - 6 / 14) < 1e-12 && Math.abs(r[14] - r[13] - 6 / 14) < 1e-12, "같은 간격");
 }
 
 // 단순 난수: 범위 안

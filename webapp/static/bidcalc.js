@@ -17,7 +17,7 @@
   // 21라인 버튼 이름과 같게
   const METHODS = {
     uniform: "난수추출",
-    geometric: "등비추출",
+    geometric: "등비추출",  // 실제 동작은 등간격(21라인과 같게)
     pps: "조달청난수추출",
     mois: "행자부난수추출",
   };
@@ -66,10 +66,10 @@
   // 변동률(%) 목록 n개 — lo~hi는 기초금액 대비 %(예: -3, 3). down/up = 기초금액 아래/위 개수(행자부)
   function rates(method, n, lo, hi, rng, down, up) {
     if (method === "geometric") {
-      // 범위 양 끝을 같은 비율로 나눔
+      // 21라인 "등비추출"은 이름과 달리 변동률을 **같은 간격**으로 나눈다(2026-10-22 21라인 캡처 대조:
+      // ±3%·15개 → -3, -2.5714, … 0 … 2.5714, 3 — 6/14씩). 예전엔 금액을 같은 비율로 나눴음
       if (n === 1) return [(lo + hi) / 2];
-      const a = 1 + lo / 100, ratio = Math.pow((1 + hi / 100) / a, 1 / (n - 1));
-      return Array.from({ length: n }, (_, i) => (a * Math.pow(ratio, i) - 1) * 100);
+      return Array.from({ length: n }, (_, i) => lo + ((hi - lo) * i) / (n - 1));
     }
     if (method === "uniform") return Array.from({ length: n }, () => inSlot(lo, hi, rng));
     if (method === "mois" && n === 15 && (down ?? 8) === 8 && (up ?? 7) === 7) return tableRates(MOIS_TABLE, lo, hi, rng);
@@ -104,7 +104,9 @@
     if (!(hi > lo)) throw new Error("변동폭(최소 < 최대)을 확인하세요");
     let prices = [];
     for (let tries = 0; tries < 20; tries++) {
-      prices = rates(method, n, lo, hi, rng, down, up).map((r) => roundAmount(basis * (1 + r / 100), "ceil", PRICE_ROUNDING[decimal] || 1));
+      // 등비추출은 21라인처럼 백분율을 소수 넷째 자리로 반올림한 뒤 기초금액을 곱한다(97.4286% × 10.5억 = 1,023,000,300 — 캡처와 같음)
+      const pctOf = method === "geometric" ? (r) => Math.round((100 + r) * 1e4) / 1e4 : (r) => 100 + r;
+      prices = rates(method, n, lo, hi, rng, down, up).map((r) => roundAmount((basis * pctOf(r)) / 100, "ceil", PRICE_ROUNDING[decimal] || 1));
       if (new Set(prices).size === prices.length) break;  // 서로 다른 n개 (금액이 작아 같은 값이 나오면 다시)
     }
     return prices.sort((a, b) => a - b);

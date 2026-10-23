@@ -34,4 +34,4 @@ jobs:
       - name: 진단 실행
         env:
           NARA_SERVICE_KEY: ${{ secrets.NARA_SERVICE_KEY }}
-        run: python scripts/inspect_notice.py "${{ github.event.inputs.notice_no }}" --days "${{ github.event.inputs.days }}"
+        run: python scripts/inspect_bidcalc.py "${{ github.event.inputs.notice_no }}"  # 진단 브랜치 전용(10/23) — main엔 안 넣음

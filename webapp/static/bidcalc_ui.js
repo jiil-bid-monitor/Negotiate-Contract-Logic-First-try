@@ -63,11 +63,13 @@
 
   const aValue = () => ($("#cAOn").checked ? numIn("#cA") || 0 : 0);
   // 기타설정(21라인과 같은 세 상자): 소수점 종류 · 예정가격/투찰금액 절상·절사·사사오입 · 끝자리 단위
-  // 단위는 예정가격·투찰금액 둘 다에 적용. 단가도 "원미만" = 1원(10/22 21라인 대조 — ④⑧⑩⑬ 예정가격 123,853,611, 총액과 같음)
+  // 단위는 예정가격·투찰금액 둘 다에 적용. 단가는 조달 기본서대로 소수 둘째 자리까지라 "원미만" = 0.01원(base) —
+  // 2026-10-23 사용자 결정(10/22엔 21라인을 따라 단가도 1원이었음). 원단위 이상은 그대로
   function rounding() {
     const [planned, bid] = $("#cRoundMode").value.split("/");
-    const unit = parseInt($("#cRoundUnit").value, 10);
-    return { planned, bid, unit };
+    const base = $("#cDecimal").value === "unit" ? C.UNIT_PRICE_STEP : 1;
+    const picked = parseInt($("#cRoundUnit").value, 10);
+    return { planned, bid, unit: picked === 1 ? base : picked, base };
   }
 
   function generate(method) {
@@ -188,7 +190,7 @@
     const planned = done ? C.plannedPrice(picks, r.planned, r.unit) : null;
     // 투찰금액은 화면 단위(백원·천원…)로 자른 예정가격이 아니라 **원 단위 예정가격**(같은 절상·절사)에 하한율을 곱한 뒤 단위 처리 —
     // 21라인 캡처(10/22): 절사·천원 123,853,000 → 투찰 108,675,000, 절상·백원 123,853,700 → 108,675,400 (자른 값이면 108,674,000·108,675,500)
-    const plannedWon = done ? C.plannedPrice(picks, r.planned, 1) : null;
+    const plannedWon = done ? C.plannedPrice(picks, r.planned, r.base) : null;
     const bid = planned ? C.bidAmount({ planned: plannedWon, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
     const average = done ? nos.reduce((sum, no) => sum + SLOTS[no - 1], 0) / nos.length : null;  // 끝자리 처리 전 평균
     const netBid = planned ? C.netCostBid({ average, basis, netCost: numIn("#cNet") }) : null;

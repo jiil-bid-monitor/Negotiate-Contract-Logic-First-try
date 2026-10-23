@@ -68,10 +68,14 @@
   const usesTable = (method, n) => n === 15 && (method === "mois" || method === "pps");
 
   // 예비가격 끝자리 처리 — 소수점 종류(화면 기타설정 첫 상자)별. 2026-10-22 21라인 캡처(기초금액 123,456,789·123,456,798, 등비 15개) 대조:
-  // 총액·단가 = 1원 미만 올림(단가도 예비가격은 정수 — 소수 둘째 자리 아님), 시설공사·감리및설계 = **10원 미만 버린 뒤** 100원 미만 올림
-  // (125,573,208.73 → 125,573,200 · 121,869,505.06 → 121,869,500 — 그냥 100원 올림이면 …300·…600)
+  // 총액 = 1원 미만 올림, 시설공사·감리및설계 = **10원 미만 버린 뒤** 100원 미만 올림
+  // (125,573,208.73 → 125,573,200 · 121,869,505.06 → 121,869,500 — 그냥 100원 올림이면 …300·…600).
+  // 단가 = **조달 기본서대로 소수점 셋째 자리에서 올림**(소수 둘째 자리까지 — 2026-10-23 사용자 결정. 21라인은 단가도 총액과 같은
+  // 정수로 냈지만 기본서를 따름)
+  const UNIT_PRICE_STEP = 0.01;
   function roundPrice(value, decimal) {
     if (decimal === "cnst") return roundAmount(roundAmount(value, "floor", 10), "ceil", 100);
+    if (decimal === "unit") return roundAmount(value, "ceil", UNIT_PRICE_STEP);
     return roundAmount(value, "ceil", 1);
   }
 
@@ -183,7 +187,7 @@
     };
   }
 
-  const api = { METHODS, METHOD_NAMES, PPS_TABLE, MOIS_TABLE, roundPrice, roundAmount, rates, makePrices, shuffle, pickRandom, autoPlan, plannedPrice, bidAmount, netCostBid, seeded };
+  const api = { METHODS, METHOD_NAMES, UNIT_PRICE_STEP, PPS_TABLE, MOIS_TABLE, roundPrice, roundAmount, rates, makePrices, shuffle, pickRandom, autoPlan, plannedPrice, bidAmount, netCostBid, seeded };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.BidCalc = api;
 })(typeof window !== "undefined" ? window : globalThis);

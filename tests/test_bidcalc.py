@@ -73,6 +73,7 @@ class LookupTest(unittest.TestCase):
         self.assertTrue(out["a_applies"])
         self.assertEqual(out["net_cost"], 145398641)
         self.assertEqual(out["method"], "mois")
+        self.assertEqual(out["agency"], "local")
         self.assertEqual(out["est_price"], 167746809)
         self.assertEqual(out["contract_method"], "제한경쟁")
         self.assertEqual(out["licenses"], ["전기공사업"])
@@ -144,6 +145,25 @@ class LookupTest(unittest.TestCase):
             self.assertEqual(bidcalc.guess_method(협상, None, None, [name]), "pps", name)
         # 수요기관이 비고 공고기관만 지자체여도
         self.assertEqual(bidcalc.guess_method("", None, None, ["", "울산광역시"]), "mois")
+
+    def test_agency_judgment(self):
+        """공고기관·수요기관을 함께 보고 발주기관 최종 판단(2026-10-23) — 조달청 대행 지자체 공고는 수요기관 기준(결정 대기)."""
+        kind, note = bidcalc.agency_judgment("경기도 부천시 소사구", "경기지방조달청")
+        self.assertEqual(kind, "local")
+        self.assertIn("조달청 대행", note)
+        self.assertIn("공고기관 경기지방조달청 · 수요기관 경기도 부천시 소사구", note)
+        self.assertEqual(bidcalc.agency_judgment("경기도 부천시 소사구", "경기도 부천시 소사구")[1],
+                         "공고기관 경기도 부천시 소사구 · 수요기관 경기도 부천시 소사구 → 지방계약 (수요기관이 지방자치단체·교육청)")
+        self.assertIn("공고기관이", bidcalc.agency_judgment("", "울산광역시")[1])
+        self.assertEqual(bidcalc.agency_judgment("국립중앙박물관", "조달청")[0], "national")
+        # 이름으로 못 가리면 예비가격 방식 추정(결정기준 '지방'·±3%)을 따름 — 지방공기업 등
+        kind, note = bidcalc.agency_judgment("○○도시공사", "○○도시공사", "mois", "낙찰자 결정기준")
+        self.assertEqual(kind, "local")
+        self.assertIn("추정", note)
+        self.assertEqual(bidcalc.agency_judgment("", ""), (None, "공고기관·수요기관 정보 없음"))
+        # 지방조달청 이름이 지자체로 잘못 걸리지 않음
+        for name in ["조달청", "서울지방조달청", "부산지방조달청", "경기지방조달청"]:
+            self.assertEqual(bidcalc.guess_method("", None, None, [name]), "pps", name)
 
 
 @unittest.skipUnless(shutil.which("node"), "node 없음 — 화면 계산 테스트 건너뜀")

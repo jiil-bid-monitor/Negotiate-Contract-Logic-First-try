@@ -102,6 +102,31 @@ def method_reason(standard: str, range_lo: float | None, range_hi: float | None,
     return "pps", "지방자치단체 표시 없음"
 
 
+# 조달청·지방조달청(○○지방조달청) — 공고기관이 이것이고 수요기관이 따로 있으면 조달청이 대신 낸(대행) 공고
+_PPS_AGENCY_RE = re.compile(r"조달청")
+
+
+def agency_judgment(demand: str, notice: str, method: str = "", reason: str = "") -> tuple[str | None, str]:
+    """공고기관·수요기관을 함께 보고 발주기관을 최종 판단 — ('local' 지방계약 / 'national' 국가계약 / None 모름, 화면 문구).
+    기관 이름이 먼저(지방자치단체·교육청), 이름으로 못 가리면 예비가격 방식 추정(`method_reason` — 결정기준 '지방'·±3%)을 따른다.
+    조달청이 지자체 대신 낸 공고(공고기관 조달청 + 수요기관 지자체)는 지금처럼 **수요기관 기준**(지방계약) —
+    공고기관을 먼저 볼지는 사용자 결정 대기(사례가 나오면)."""
+    demand, notice = (demand or "").strip(), (notice or "").strip()
+    if not (demand or notice):
+        return None, "공고기관·수요기관 정보 없음"
+    both = f"공고기관 {notice or '-'} · 수요기관 {demand or '-'}"
+    local = lambda name: bool(name and _LOCAL_GOV_RE.search(name))
+    if local(demand) and notice != demand and _PPS_AGENCY_RE.search(notice):
+        return "local", f"{both} → 지방계약 (조달청 대행 공고 — 수요기관 기준)"
+    if local(demand):
+        return "local", f"{both} → 지방계약 (수요기관이 지방자치단체·교육청)"
+    if local(notice):
+        return "local", f"{both} → 지방계약 (공고기관이 지방자치단체·교육청)"
+    if method == "mois":
+        return "local", f"{both} → 지방계약으로 추정 (기관 이름엔 지자체 표시 없음 — {reason})"
+    return "national", f"{both} → 국가계약 (지방자치단체·교육청 아님)"
+
+
 def guess_method(standard: str, range_lo: float | None, range_hi: float | None,
                  institutions: list[str] | None = None) -> str:
     return method_reason(standard, range_lo, range_hi, institutions)[0]
@@ -220,6 +245,7 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
             "title": str(notice.get("bidNtceNm") or ""),
             "institution": str(notice.get("dminsttNm") or notice.get("ntceInsttNm") or ""),
             "notice_institution": str(notice.get("ntceInsttNm") or ""),
+            "demand_institution": str(notice.get("dminsttNm") or ""),
             # 예가방법(단일예가·복수예가·비예가) — 복수예가가 아니면 예비가격 추첨이 없는 공고
             "price_method": str(notice.get("prearngPrceDcsnMthdNm") or ""),
             "work_type": work_type,
@@ -265,6 +291,9 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
     out["method"], out["method_reason"] = method_reason(
         out.get("standard", ""), out.get("range_lo"), out.get("range_hi"),
         [out.get("institution", ""), out.get("notice_institution", "")])
+    if notice:
+        out["agency"], out["agency_note"] = agency_judgment(out.get("demand_institution", ""), out.get("notice_institution", ""),
+                                                         out["method"], out["method_reason"])
     return out
 
 

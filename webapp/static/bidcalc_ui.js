@@ -284,6 +284,8 @@
         ? `${items.map((i) => `${esc(i.name)} ${won(i.amount)}`).join(" + ")}${d.a_applies ? "" : " — A값 적용 표시가 없는 공고"}`
         : "";
       const notes = [];
+      // 발주기관 최종 판단(공고기관·수요기관을 함께 봄 — 서버 agency_judgment). 예비가격 방식·자동 계산이 이걸 따른다
+      if (d.agency_note) notes.push(`발주기관: ${d.agency_note}`);
       if (d.basis != null) notes.push(`기초금액 출처: ${d.basis_source || "나라장터"}${d.basis_open_at ? ` (공개 ${d.basis_open_at})` : ""}`);
       if (d.method) {
         const why = d.method_reason ? ` (${d.method_reason})` : "";
@@ -297,12 +299,27 @@
       lookupMsg(d.basis != null ? "불러옴 — 값을 확인하세요" : "일부만 불러옴");
       SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
       render();
+      const auto = autoRun(d.method);
+      if (auto) $("#cNotes").insertAdjacentHTML("beforeend", `<div class="calc-auto">${esc(auto)}</div>`);
     } catch (err) {
       lookupMsg(`실패: ${err.message}`, true);
     } finally {
       $("#cLookup").disabled = false;
     }
   }
+  // 불러온 뒤 자동 계산(2026-10-23 사용자 요청): 발주기관 판단에 맞는 추출 버튼 → 무작위 번호(선택개수만큼) → 예정가격·투찰금액.
+  // 모의 추첨 1회일 뿐 — 실제 예정가격은 개찰 때 업체들이 고른 번호로 정해짐. 기초금액이 없으면 하지 않음
+  function autoRun(method) {
+    if (numIn("#cBasis") == null) return "";
+    const plan = C.autoPlan({ method, lo: numIn("#cLo"), hi: numIn("#cHi"), n: radio("cN") });
+    generate(plan.method);
+    if (!SLOTS.length) return "";
+    AUTO = C.pickRandom(SLOTS.length, radio("cTake"));
+    select(AUTO);
+    return `자동 계산: ${plan.name}(${plan.why}) → 무작위 번호 ${AUTO.join("·")}번 — 모의 추첨 1회라 실제 예정가격과 다름. `
+      + "다시 뽑으려면 자동선택 '시작 → 적용'";
+  }
+
   $("#cLookup").addEventListener("click", lookup);
   $("#cNo").addEventListener("keydown", (e) => { if (e.key === "Enter") lookup(); });
 

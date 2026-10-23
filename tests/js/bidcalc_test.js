@@ -165,6 +165,15 @@ for (let seed = 1; seed <= 30; seed++) {
   d.forEach((x) => assert.ok(x >= 1 && x <= 15));
 }
 
+// 불러온 뒤 자동 계산 버튼: 지방 → 행자부, 국가 → 조달청, 변동폭이 그 방식 기준과 다르면(15개) 난수추출적용
+assert.strictEqual(C.autoPlan({ method: "mois", lo: -3, hi: 3 }).method, "mois");
+assert.strictEqual(C.autoPlan({ method: "pps", lo: -2, hi: 2 }).method, "pps");
+assert.strictEqual(C.autoPlan({ method: "mois", lo: -2, hi: 2 }).method, "uniform");
+assert.strictEqual(C.autoPlan({ method: "pps", lo: -3, hi: 3 }).method, "uniform");
+assert.strictEqual(C.autoPlan({ method: "mois", lo: -2, hi: 2, n: 10 }).method, "mois");  // 10개는 표를 안 써서 범위를 안 바꿈
+assert.strictEqual(C.autoPlan({ method: "mois", lo: null, hi: null }).method, "mois");
+assert.strictEqual(C.autoPlan({ method: "", lo: -2, hi: 2 }).method, "pps");
+
 // 예정가격·투찰금액: 예정가격 1,002,500,000 · 하한율 87.745% · A값 0 → 879,643,625
 {
   const planned = C.plannedPrice([1005000000, 998000000, 1012000000, 995000000]);

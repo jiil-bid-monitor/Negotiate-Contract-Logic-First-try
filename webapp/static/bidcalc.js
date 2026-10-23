@@ -136,6 +136,19 @@
     return shuffle(Array.from({ length: n }, (_, i) => i + 1), rng).slice(0, Math.min(k, n)).sort((a, b) => a - b);
   }
 
+  // 불러온 뒤 자동 계산에 쓸 추출 버튼(2026-10-23 사용자 요청: 발주기관 판단 → 추출방식 → 무작위 번호 → 예정가격·투찰금액).
+  // 지방계약은 행자부, 국가계약은 조달청. 단 15개인데 공고 변동폭이 그 방식의 표(행자부 ±3·조달청 ±2)와 다르면
+  // 그 버튼이 변동폭을 표 범위로 바꿔 버리므로(21라인 동작) 공고 범위를 그대로 쓰는 난수추출적용으로
+  const METHOD_NAMES = { mois: "행자부난수추출", pps: "조달청난수추출", uniform: "난수추출적용", geometric: "등비추출적용" };
+  function autoPlan({ method, lo, hi, n = 15 }) {
+    const m = method === "mois" || method === "pps" ? method : "pps";
+    const w = m === "mois" ? 3 : 2;
+    if (n === 15 && Number.isFinite(lo) && Number.isFinite(hi) && !(lo === -w && hi === w)) {
+      return { method: "uniform", name: METHOD_NAMES.uniform, why: `공고 변동폭 ${lo}~${hi}%가 ${METHOD_NAMES[m]} 기준(±${w}%)과 달라 공고 범위로` };
+    }
+    return { method: m, name: METHOD_NAMES[m], why: m === "mois" ? "지방계약" : "국가계약" };
+  }
+
   // 고른 예비가격들의 평균 → 예정가격(끝자리 처리)
   function plannedPrice(selectedPrices, how = "ceil", unit = 1) {
     if (!selectedPrices.length) return null;
@@ -170,7 +183,7 @@
     };
   }
 
-  const api = { METHODS, PPS_TABLE, MOIS_TABLE, roundPrice, roundAmount, rates, makePrices, shuffle, pickRandom, plannedPrice, bidAmount, netCostBid, seeded };
+  const api = { METHODS, METHOD_NAMES, PPS_TABLE, MOIS_TABLE, roundPrice, roundAmount, rates, makePrices, shuffle, pickRandom, autoPlan, plannedPrice, bidAmount, netCostBid, seeded };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.BidCalc = api;
 })(typeof window !== "undefined" ? window : globalThis);

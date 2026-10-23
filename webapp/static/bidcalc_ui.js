@@ -265,10 +265,9 @@
       text("#cContract", d.contract_method);
       // 못 찾은 값은 비움 — 앞 공고 값이 남으면 그 값으로 계산됨(10/22 휘문고: 제천 하한율 85.495가 남음)
       setNum("#cBasis", d.basis);
-      // 변동폭을 못 찾으면 예가 방식의 기본 범위(기본서 — 행자부 ±3%, 조달청 ±2%) — 이전 공고 값이 남지 않게
-      const rangeGuess = (d.range_lo == null || d.range_hi == null) && d.method ? (d.method === "mois" ? 3 : 2) : null;
-      $("#cLo").value = rangeGuess != null ? -rangeGuess : d.range_lo ?? $("#cLo").value;
-      $("#cHi").value = rangeGuess != null ? rangeGuess : d.range_hi ?? $("#cHi").value;
+      // 나라장터·공고문 어디에도 없는 값은 비워서 "-"로 보임(21라인과 같게, 10/23 사용자 요청 — 10/22의 "방식 기본값으로 채움"을 대체)
+      $("#cLo").value = d.range_lo ?? "";
+      $("#cHi").value = d.range_hi ?? "";
       $("#cRate").value = d.lower_rate ?? "";
       // 예비가격 소수점 처리기준(기본서): 시설공사·감리/설계 용역은 100원 미만 올림, 그 밖은 총액(1원 미만 올림)
       $("#cDecimal").value = d.work_type === "공사" || /감리|설계\s*용역/.test(d.title || "") ? "cnst" : "total";
@@ -284,25 +283,42 @@
         ? `${items.map((i) => `${esc(i.name)} ${won(i.amount)}`).join(" + ")}${d.a_applies ? "" : " — A값 적용 표시가 없는 공고"}`
         : "";
       const notes = [];
+      // 발주기관 최종 판단(서버 judge — 낙찰자 결정기준 문구 → 공고문 인용 법령 → 기관 이름). 예비가격 방식·자동 계산이 이걸 따른다
+      if (d.agency_note) notes.push(`발주기관: ${d.agency_note}`);
       if (d.basis != null) notes.push(`기초금액 출처: ${d.basis_source || "나라장터"}${d.basis_open_at ? ` (공개 ${d.basis_open_at})` : ""}`);
       if (d.method) {
         const why = d.method_reason ? ` (${d.method_reason})` : "";
         notes.push(`예비가격 방식: ${d.method === "mois" ? `지방계약${why} — 행자부난수추출` : `국가계약${why} — 조달청난수추출`} 권장`);
       }
       // 예가방법이 복수예가가 아니면(단일예가·비예가) 15개 추첨이 없는 공고 — 계산기가 맞지 않음
-      if (rangeGuess != null) notes.push(`변동폭 정보 없음 — ${d.method === "mois" ? "행자부" : "조달청"} 기준 ±${rangeGuess}%로 채움, 공고문 확인`);
       if (d.price_method) notes.push(`예가방법: ${d.price_method}${/복수/.test(d.price_method) ? "" : " — 복수예비가격 추첨이 없는 공고, 계산기 결과는 참고만"}`);
       notes.push(...(d.notes || []));
       $("#cNotes").innerHTML = notes.map((n) => `<div>${esc(n)}</div>`).join("");
       lookupMsg(d.basis != null ? "불러옴 — 값을 확인하세요" : "일부만 불러옴");
       SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
       render();
+      const auto = autoRun(d.method);
+      if (auto) $("#cNotes").insertAdjacentHTML("beforeend", `<div class="calc-auto">${esc(auto)}</div>`);
     } catch (err) {
       lookupMsg(`실패: ${err.message}`, true);
     } finally {
       $("#cLookup").disabled = false;
     }
   }
+  // 불러온 뒤 자동 계산(2026-10-23 사용자 요청): 발주기관 판단에 맞는 추출 버튼 → 무작위 번호(선택개수만큼) → 예정가격·투찰금액.
+  // 모의 추첨 1회일 뿐 — 실제 예정가격은 개찰 때 업체들이 고른 번호로 정해짐. 기초금액이 없으면 하지 않음
+  function autoRun(method) {
+    const missing = [["기초금액", "#cBasis"], ["변동폭", "#cLo"], ["변동폭", "#cHi"]].filter(([, id]) => numIn(id) == null).map(([n]) => n);
+    if (missing.length) return `자동 계산 안 함 — ${[...new Set(missing)].join("·")} 정보 없음(-). 직접 입력한 뒤 추출 버튼을 누르세요`;
+    const plan = C.autoPlan({ method, lo: numIn("#cLo"), hi: numIn("#cHi"), n: radio("cN") });
+    generate(plan.method);
+    if (!SLOTS.length) return "";
+    AUTO = C.pickRandom(SLOTS.length, radio("cTake"));
+    select(AUTO);
+    return `자동 계산: ${plan.name}(${plan.why}) → 무작위 번호 ${AUTO.join("·")}번 — 모의 추첨 1회라 실제 예정가격과 다름. `
+      + "다시 뽑으려면 자동선택 '시작 → 적용'";
+  }
+
   $("#cLookup").addEventListener("click", lookup);
   $("#cNo").addEventListener("keydown", (e) => { if (e.key === "Enter") lookup(); });
 

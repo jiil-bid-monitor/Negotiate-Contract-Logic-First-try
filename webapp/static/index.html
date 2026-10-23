@@ -992,6 +992,9 @@ footer b { color: var(--muted); }
 .calc-form .num { text-align: right; font-variant-numeric: tabular-nums; }
 .calc-form .why { font-size: 12px; }
 .calc-notes { margin: -4px 0 10px; font-size: 12px; }
+.calc-notes .calc-auto { color: var(--accent); }
+/* 못 찾은 값은 21라인처럼 "-" — 빈 칸 안내 글자가 아니라 값처럼 보이게 */
+.calc-form input::placeholder { color: inherit; opacity: 1; text-align: center; }
 .calc-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
 .calc-btns button { font-size: 13px; padding: 5px 10px; }
 .calc-prices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 12px; margin-bottom: 10px; background: var(--panel); border-top: 2px solid var(--accent); }
@@ -1197,9 +1200,9 @@ footer b { color: var(--muted); }
       <tr><th>공고번호</th><td colspan="3" id="cNoShow">-</td><th>업종제한</th><td colspan="3" id="cLicense">-</td></tr>
       <tr><th>추정가격</th><td id="cEst">-</td><th>적격심사기준</th><td colspan="3" id="cStd">-</td><th>계약방법</th><td id="cContract">-</td></tr>
       <tr>
-        <th>기초금액</th><td><input id="cBasis" inputmode="numeric"></td>
-        <th>변동폭(%)</th><td><span class="calc-pair"><input id="cLo" value="-3" inputmode="decimal"> ~ <input id="cHi" value="3" inputmode="decimal"></span></td>
-        <th>하한율</th><td><span class="calc-pair"><input id="cRate" inputmode="decimal"> %</span></td>
+        <th>기초금액</th><td><input id="cBasis" inputmode="numeric" placeholder="-"></td>
+        <th>변동폭(%)</th><td><span class="calc-pair"><input id="cLo" value="-3" inputmode="decimal" placeholder="-"> ~ <input id="cHi" value="3" inputmode="decimal" placeholder="-"></span></td>
+        <th>하한율</th><td><span class="calc-pair"><input id="cRate" inputmode="decimal" placeholder="-"> %</span></td>
         <th>예가개수</th>
         <td><label class="chk"><input type="radio" name="cN" value="15" checked> 15개</label> <label class="chk"><input type="radio" name="cN" value="10"> 10개</label></td>
       </tr>
@@ -1213,7 +1216,7 @@ footer b { color: var(--muted); }
       </tr>
       <tr>
         <th>순공사원가</th>
-        <td colspan="7"><span class="calc-pair"><input id="cNet" inputmode="numeric" class="calc-net"> 원</span>
+        <td colspan="7"><span class="calc-pair"><input id="cNet" inputmode="numeric" class="calc-net" placeholder="-"> 원</span>
           <span class="why">투찰금액 산정 시 투찰금액과 순공사원가 투찰금액을 검토 후 높은 금액으로 투찰해 주셔야 합니다.</span></td>
       </tr>
     </table>

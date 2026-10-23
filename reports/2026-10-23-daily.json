@@ -1,0 +1,27 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-10-23",
+ "reportedAt": "2026-10-22T23:57:41+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01784753",
+   "title": "보은옥천영동축협 한우이야기 영동점 인테리어 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "보은옥천영동축산업협동조합 영동지점",
+    "budgetAmount": 235454545.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "인테리어"
+    ],
+    "products": [],
+    "score": null,
+    "deadline": "2026-10-29T14:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01784753&bidPbancOrd=002"
+   }
+  }
+ ]
+}

@@ -88,43 +88,52 @@ def parse_basis(row: dict) -> dict:
 _LOCAL_GOV_RE = re.compile(r"(특별시|광역시|특별자치시|특별자치도|교육청|교육지원청|[가-힣]{1,4}(?:도|시|군|구)(?:청)?)(?=\s|$|\()")
 
 
-def method_reason(standard: str, range_lo: float | None, range_hi: float | None,
-                  institutions: list[str] | None = None) -> tuple[str, str]:
-    """예비가격 방식 추정 — (지방계약(행안부) 'mois' / 국가계약(조달청) 'pps', 근거 문구).
-    ① 수요기관·공고기관이 지방자치단체·교육청이면 지방 ② 낙찰자 결정기준에 '지방' ③ 범위 ±3% ④ 아니면 국가."""
-    for name in institutions or []:
-        if name and (m := _LOCAL_GOV_RE.search(name)):
-            return "mois", f"발주기관 {name.strip()}"
-    if "지방" in (standard or ""):
-        return "mois", "낙찰자 결정기준"
-    if range_lo is not None and range_hi is not None and abs(range_lo) >= 3 and abs(range_hi) >= 3:
-        return "mois", "기초금액 ±3%"
-    return "pps", "지방자치단체 표시 없음"
-
-
 # 조달청·지방조달청(○○지방조달청) — 공고기관이 이것이고 수요기관이 따로 있으면 조달청이 대신 낸(대행) 공고
 _PPS_AGENCY_RE = re.compile(r"조달청")
+# 나라장터 낙찰자 결정기준(sucsfbidMthdAppStd) 문구 — 지방계약/국가계약 표시
+_STD_NATIONAL_RE = re.compile(r"조달청|국가")
 
 
-def agency_judgment(demand: str, notice: str, method: str = "", reason: str = "") -> tuple[str | None, str]:
-    """공고기관·수요기관을 함께 보고 발주기관을 최종 판단 — ('local' 지방계약 / 'national' 국가계약 / None 모름, 화면 문구).
-    기관 이름이 먼저(지방자치단체·교육청), 이름으로 못 가리면 예비가격 방식 추정(`method_reason` — 결정기준 '지방'·±3%)을 따른다.
-    조달청이 지자체 대신 낸 공고(공고기관 조달청 + 수요기관 지자체)는 지금처럼 **수요기관 기준**(지방계약) —
-    공고기관을 먼저 볼지는 사용자 결정 대기(사례가 나오면)."""
+def judge(standard: str = "", law: tuple[str | None, str] = (None, ""), demand: str = "", notice: str = "",
+          range_lo: float | None = None, range_hi: float | None = None) -> dict:
+    """발주기관 최종 판단 — 적용 기준 문구·인용 법령을 기관 이름보다 먼저 본다(2026-10-23 사용자 결정).
+    ① 나라장터 낙찰자 결정기준 문구('지방' → 지방, '조달청'·'국가' → 국가) ② 첨부 공고문이 인용한 법령
+    ③ 수요기관·공고기관 이름(지방자치단체·교육청) ④ 변동폭 ±3% ⑤ 아니면 국가계약.
+    → {method: 'mois'(행자부)/'pps'(조달청), kind: 'local'/'national', reason: 짧은 근거, note: 화면 안내 줄}"""
     demand, notice = (demand or "").strip(), (notice or "").strip()
-    if not (demand or notice):
-        return None, "공고기관·수요기관 정보 없음"
     both = f"공고기관 {notice or '-'} · 수요기관 {demand or '-'}"
+
+    def result(kind: str, reason: str) -> dict:
+        word = "지방계약" if kind == "local" else "국가계약"
+        return {"method": "mois" if kind == "local" else "pps", "kind": kind, "reason": reason,
+                "note": f"{both} → {word} ({reason})"}
+
+    std = standard or ""
+    if "지방" in std:
+        return result("local", f"낙찰자 결정기준 '{std}'")
+    if _STD_NATIONAL_RE.search(std):
+        return result("national", f"낙찰자 결정기준 '{std}'")
+    kind, quote = law or (None, "")
+    if kind:
+        return result(kind, f"공고문 인용 법령 「{quote}」")
     local = lambda name: bool(name and _LOCAL_GOV_RE.search(name))
     if local(demand) and notice != demand and _PPS_AGENCY_RE.search(notice):
-        return "local", f"{both} → 지방계약 (조달청 대행 공고 — 수요기관 기준)"
+        return result("local", "적용 기준 문구 없음 — 조달청 대행 공고, 수요기관 기준")
     if local(demand):
-        return "local", f"{both} → 지방계약 (수요기관이 지방자치단체·교육청)"
+        return result("local", "적용 기준 문구 없음 — 수요기관이 지방자치단체·교육청")
     if local(notice):
-        return "local", f"{both} → 지방계약 (공고기관이 지방자치단체·교육청)"
-    if method == "mois":
-        return "local", f"{both} → 지방계약으로 추정 (기관 이름엔 지자체 표시 없음 — {reason})"
-    return "national", f"{both} → 국가계약 (지방자치단체·교육청 아님)"
+        return result("local", "적용 기준 문구 없음 — 공고기관이 지방자치단체·교육청")
+    if range_lo is not None and range_hi is not None and abs(range_lo) >= 3 and abs(range_hi) >= 3:
+        return result("local", "적용 기준 문구 없음 — 변동폭 ±3%")
+    return result("national", "적용 기준 문구 없음 — 지방자치단체·교육청 표시 없음")
+
+
+def method_reason(standard: str, range_lo: float | None, range_hi: float | None,
+                  institutions: list[str] | None = None) -> tuple[str, str]:
+    """예비가격 방식 — ('mois' / 'pps', 근거). 기관 이름은 [수요기관, 공고기관] 순서."""
+    names = list(institutions or []) + ["", ""]
+    j = judge(standard, (None, ""), names[0], names[1], range_lo, range_hi)
+    return j["method"], j["reason"]
 
 
 def guess_method(standard: str, range_lo: float | None, range_hi: float | None,
@@ -132,18 +141,49 @@ def guess_method(standard: str, range_lo: float | None, range_hi: float | None,
     return method_reason(standard, range_lo, range_hi, institutions)[0]
 
 
-# 첨부 공고문에서 읽는 값 — 기초금액 API가 비거나(물품 등) 하한율이 없을 때만 쓴다.
+# 첨부 공고문에서 읽는 값 — 늘 읽는다(2026-10-23 사용자 요청). 나라장터 값이 있으면 그대로 두고 빈 칸만 채우며, 다르면 안내.
 # "※ 기초금액 : 금 | 139,000,000원"(hwpx 표 칸 구분 |), "기초금액(부가세 포함): 139,000,000원" 등
 _BASIS_TEXT_RE = re.compile(r"기초\s*금액\s*(?:\([^)]{0,20}\))?[\s|:：]*(?:금\s*)?[\s|]*([\d,]{7,})\s*원")
 _RATE_TEXT_RE = re.compile(r"낙찰\s*하한율[^\d\n]{0,15}(\d{2}(?:\.\d+)?)\s*%")
-_RANGE_TEXT_RE = re.compile(r"기초\s*금액의?\s*[±+\-]\s*(\d(?:\.\d+)?)\s*%")
+# "기초금액의 ±3%" · "기초금액 대비 ±2%" · "기초금액의 ±3퍼센트"
+_RANGE_TEXT_RE = re.compile(r"기초\s*금액(?:의|\s*대비)?\s*[±+\-]\s*(\d(?:\.\d+)?)\s*(?:%|퍼센트)")
+
+# 공고문이 인용한 적용 법령·기준 — 지방계약/국가계약을 정하는 가장 직접적인 근거(2026-10-23 사용자 결정: 기관 이름보다 먼저)
+_LOCAL_LAW_RE = re.compile(
+    r"지방\s*자치\s*단체\s*(?:입찰\s*및\s*계약\s*집행\s*기준|를\s*당사자로\s*하는\s*계약에\s*관한\s*법률|입찰\s*시\s*낙찰자\s*결정\s*기준)"
+    r"|지방\s*계약\s*법")
+_NATIONAL_LAW_RE = re.compile(
+    r"국가를\s*당사자로\s*하는\s*계약에\s*관한\s*법률|국가\s*계약\s*법"
+    r"|공기업\s*[·ㆍ.]?\s*준정부\s*기관\s*계약\s*사무\s*규칙"
+    r"|조달청\s*(?:시설\s*공사|용역|물품)?\s*(?:적격\s*심사|계약\s*심사)")
+# 예정가격·낙찰자 결정 문장 근처에서 먼저 찾는다 — 공고문 다른 곳(부정당업자 제재 등)에 국가계약법이 함께 인용되는 경우가 많아서
+_PRICE_WORD_RE = re.compile(r"예정\s*가격|복수\s*예비\s*가격|낙찰\s*하한율|낙찰자\s*결정")
+_LAW_WINDOW = 200
 # 먼저 읽을 첨부 — 공고문이 기초금액·하한율을 적는 곳
 _NOTICE_FILE_RE = re.compile(r"공고")
 MAX_TEXT_FILES = 3
 
 
+def law_kind(text: str) -> tuple[str | None, str]:
+    """공고문 원문 → ('local' / 'national' / None, 인용 법령 이름). 예정가격·낙찰 문장 근처를 먼저 보고,
+    없으면 문서 전체에서 한 종류만 나올 때만 쓴다(둘 다 나오면 못 정함)."""
+    flat = re.sub(r"\s+", " ", text or "")
+    def found(chunk: str) -> tuple[str | None, str]:
+        local, national = _LOCAL_LAW_RE.search(chunk), _NATIONAL_LAW_RE.search(chunk)
+        if local and not national:
+            return "local", local.group(0)
+        if national and not local:
+            return "national", national.group(0)
+        return None, ""
+    for m in _PRICE_WORD_RE.finditer(flat):
+        kind, quote = found(flat[max(0, m.start() - _LAW_WINDOW):m.end() + _LAW_WINDOW])
+        if kind:
+            return kind, quote
+    return found(flat)
+
+
 def parse_notice_text(text: str) -> dict:
-    """공고문 원문 → {basis, lower_rate, range_lo, range_hi} 중 찾은 것만."""
+    """공고문 원문 → {basis, lower_rate, range_lo, range_hi, law_kind, law_quote} 중 찾은 것만."""
     out: dict = {}
     for m in _BASIS_TEXT_RE.finditer(text):
         amount = _num(m.group(1))
@@ -158,28 +198,60 @@ def parse_notice_text(text: str) -> dict:
         width = _num(m.group(1))
         if width and width <= 5:
             out["range_lo"], out["range_hi"] = -width, width
+    kind, quote = law_kind(text)
+    if kind:
+        out["law_kind"], out["law_quote"] = kind, quote
     return out
 
 
-def _from_attachments(notice: dict, out: dict, fetch: Callable) -> None:
-    """기초금액·하한율·범위 중 빈 칸을 첨부 공고문에서 채운다(파일명에 '공고'가 든 것부터, 최대 3개)."""
+_DOC_KEYS = ("basis", "lower_rate", "range_lo", "range_hi", "law_kind", "law_quote")
+
+
+def _read_notice_docs(notice: dict, out: dict, fetch: Callable) -> None:
+    """첨부 공고문을 늘 읽어(파일명에 '공고'가 든 것부터, 최대 3개) 빈 칸을 채우고, 나라장터 값과 다르면 안내 줄을 남긴다."""
     files = F.extract_attachments(notice)
     files.sort(key=lambda a: not _NOTICE_FILE_RE.search(a.get("file_name", "")))
     session = requests.Session()
+    doc: dict = {}
     for att in files[:MAX_TEXT_FILES]:
-        result = fetch(session, att, timeout=30.0)
+        try:
+            result = fetch(session, att, timeout=30.0)
+        except Exception as err:  # 첨부 하나 못 읽어도 불러오기는 계속
+            log.info("계산기 첨부 읽기 실패 %s: %s", att.get("file_name"), err)
+            continue
         if not result.ok or not result.text:
             continue
-        found = parse_notice_text(result.text)
-        filled = [k for k in ("basis", "lower_rate", "range_lo", "range_hi") if out.get(k) is None and k in found]
-        for k in filled:
-            out[k] = found[k]
-        if "basis" in filled:
-            out["basis_source"] = f"첨부 {att.get('file_name') or '공고문'}"
-        if filled:
-            out["notes"].append(f"{', '.join(_FIELD_NAMES[k] for k in filled if k in _FIELD_NAMES)}: 첨부 '{att.get('file_name')}'에서 읽음 — 원문과 확인하세요")
-        if all(out.get(k) is not None for k in ("basis", "lower_rate", "range_lo")):
+        name = att.get("file_name") or "공고문"
+        for k, v in parse_notice_text(result.text).items():
+            doc.setdefault(k, (v, name))
+        if all(k in doc for k in ("basis", "lower_rate", "range_lo", "law_kind")):
             break
+    out["doc_read"] = bool(files)
+    if "law_kind" in doc:
+        out["law_kind"], out["law_quote"] = doc["law_kind"][0], doc["law_quote"][0]
+        out["law_file"] = doc["law_kind"][1]
+    filled, differ = [], []
+    for k in ("basis", "lower_rate", "range_lo"):
+        if k not in doc:
+            continue
+        value, name = doc[k]
+        if out.get(k) is None:
+            out[k] = value
+            if k == "range_lo":
+                out["range_hi"] = doc["range_hi"][0]
+            filled.append((k, name))
+        elif abs(out[k] - value) > 1e-6:
+            differ.append((k, name, out[k], value))
+    for k, name in filled:
+        if k == "basis":
+            out["basis_source"] = f"첨부 {name}"
+        out["notes"].append(f"{_FIELD_NAMES[k]}: 나라장터에 없어 첨부 '{name}'에서 읽음 — 원문과 확인하세요")
+    for k, name, api, text in differ:
+        out["notes"].append(f"{_FIELD_NAMES[k]}: 나라장터 {_fmt(api)} · 첨부 '{name}' {_fmt(text)} — 서로 다름, 나라장터 값을 씀(원문 확인)")
+
+
+def _fmt(v: float) -> str:
+    return f"{v:,.0f}" if abs(v) >= 1000 else f"{v:g}"
 
 
 _FIELD_NAMES = {"basis": "기초금액", "lower_rate": "낙찰하한율", "range_lo": "변동폭"}
@@ -281,19 +353,20 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
     if basis_row:
         out.update(parse_basis(basis_row))
         out["basis_source"] = "나라장터 기초금액"
-    if notice and (out.get("basis") is None or out.get("lower_rate") is None):
-        _from_attachments(notice, out, fetch)
+    if notice:
+        _read_notice_docs(notice, out, fetch)
     if out.get("basis") is None:
         out["notes"].append("기초금액을 나라장터·첨부 공고문에서 찾지 못함 (아직 비공개일 수 있음) — 직접 입력하세요")
-
     if notice and out.get("lower_rate") is None:
-        out["notes"].append("낙찰하한율이 없는 공고 — 협상·최저가 등 하한율 방식이 아닐 수 있음")
-    out["method"], out["method_reason"] = method_reason(
-        out.get("standard", ""), out.get("range_lo"), out.get("range_hi"),
-        [out.get("institution", ""), out.get("notice_institution", "")])
+        out["notes"].append("낙찰하한율을 나라장터·첨부 공고문에서 찾지 못함 — 협상·최저가 등 하한율 방식이 아닐 수 있음")
+    if notice and out.get("range_lo") is None:
+        out["notes"].append("변동폭을 나라장터·첨부 공고문에서 찾지 못함 — 공고문 확인 후 직접 입력하세요")
+
+    j = judge(out.get("standard", ""), (out.get("law_kind"), out.get("law_quote", "")),
+              out.get("demand_institution", ""), out.get("notice_institution", ""), out.get("range_lo"), out.get("range_hi"))
+    out["method"], out["method_reason"] = j["method"], j["reason"]
     if notice:
-        out["agency"], out["agency_note"] = agency_judgment(out.get("demand_institution", ""), out.get("notice_institution", ""),
-                                                         out["method"], out["method_reason"])
+        out["agency"], out["agency_note"] = j["kind"], j["note"]
     return out
 
 

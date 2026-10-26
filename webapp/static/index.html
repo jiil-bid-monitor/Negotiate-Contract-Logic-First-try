@@ -375,6 +375,15 @@ body {
 .me-top input::placeholder { color: rgba(255,255,255,.45); }
 .me-top input:focus { outline: none; border-color: rgba(255,255,255,.7); }
 .topbar .me-top + .theme { margin-left: 0; flex: none; }
+/* 바로가기 — 나라장터·21라인 (10/26 사용자 요청) */
+.quick-links { display: flex; flex: none; gap: 6px; }
+.quick-links a {
+  display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px;
+  font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,.88); text-decoration: none;
+  border: 1px solid rgba(255,255,255,.24); border-radius: 4px; background: rgba(255,255,255,.06); white-space: nowrap;
+}
+.quick-links a:hover { color: #fff; background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.5); }
+.quick-links a::after { content: "↗"; font-size: 11px; opacity: .7; }
 .me-note { margin: -16px 0 6px; font-size: 12px; color: var(--muted); }
 @media (max-width: 760px) {
   .me-top { margin-left: 0; }
@@ -1047,6 +1056,10 @@ footer b { color: var(--muted); }
       <p class="corpus-sum" id="corpusSum">과거 실적을 불러오는 중…</p>
     </div>
 
+    <nav class="quick-links" aria-label="바로가기">
+      <a href="https://www.g2b.go.kr/" target="_blank" rel="noopener" title="나라장터 새 창으로 열기">나라장터</a>
+      <a href="https://www.21line.co.kr/conty/?cd=first" target="_blank" rel="noopener" title="21라인 새 창으로 열기">21라인</a>
+    </nav>
     <label class="me-top">내 이름 <input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></label>
     <div class="theme" role="group" aria-label="화면 테마">
       <button type="button" data-theme-set="light" title="라이트 모드">라이트</button>

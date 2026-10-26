@@ -1,0 +1,46 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-10-26",
+ "reportedAt": "2026-10-25T23:57:38+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01789390",
+   "title": "(긴급)보은옥천영동축협 한우이야기 영동점 인테리어 공사 입찰 재공고",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "보은옥천영동축산업협동조합 영동지점",
+    "budgetAmount": 235454545.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "인테리어"
+    ],
+    "products": [],
+    "score": null,
+    "deadline": "2026-10-29T14:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01789390&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01788857",
+   "title": "양산시 서부건강생활지원센터 어린이건강체험관 전시 및 환경조성공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "경상남도 양산시 양산시보건소",
+    "budgetAmount": 272570000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "체험관"
+    ],
+    "products": [],
+    "score": null,
+    "deadline": "2026-10-29T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01788857&bidPbancOrd=000"
+   }
+  }
+ ]
+}

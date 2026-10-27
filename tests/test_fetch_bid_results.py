@@ -45,6 +45,28 @@ class FetchBidResultsTest(unittest.TestCase):
         self.assertEqual(rec["work"], "공사")
         self.assertIn("error", rec)
 
+    def test_notice_award_method_and_work(self):
+        notices = [{"bidNtceOrd": "000", "sucsfbidMthdNm": "적격심사", "bidNtceNm": "가"},
+                   {"bidNtceOrd": "001", "sucsfbidMthdNm": "협상에의한계약", "cntrctCnclsMthdNm": "제한경쟁", "sucsfbidLwltRate": "0"}]
+        client = FakeClient({F.BID_NOTICE_OPERATIONS["물품"]: notices,
+                             fb.PRICE_OPS["물품"]: [{"bidNtceOrd": "001", "bsisPlnprc": "1"}]})
+        rec = fb.fetch_one(client, "u", "R26BK00000001-001", "")
+        self.assertEqual(rec["work"], "물품")  # 본공고에서 찾은 업무로 예비가격도 물품만 조회
+        self.assertEqual(rec["notice"]["award_method"], "협상에의한계약")
+        self.assertEqual(rec["notice"]["contract_method"], "제한경쟁")
+        self.assertEqual(rec["notice"]["ord"], "001")
+        self.assertNotIn(fb.PRICE_OPS["공사"], client.calls)
+
+    def test_notice_only_skips_results(self):
+        client = FakeClient({F.BID_NOTICE_OPERATIONS["공사"]: [{"bidNtceOrd": "00", "sucsfbidMthdNm": "적격심사"}]})
+        rec = fb.fetch_one(client, "u", "20201217355-00", "시설", notice_only=True)
+        self.assertEqual(rec["notice"]["award_method"], "적격심사")
+        self.assertNotIn("prices", rec)
+        self.assertEqual(client.calls, [F.BID_NOTICE_OPERATIONS["공사"]])
+        missing = fb.fetch_one(FakeClient({}), "u", "20201217355-00", "", notice_only=True)
+        self.assertIsNone(missing["notice"])
+        self.assertIn("error", missing)
+
     def test_resume_skips_only_successes(self):
         with tempfile.TemporaryDirectory() as d:
             out = Path(d) / "r.jsonl"

@@ -4,7 +4,8 @@
 
     py scripts/analyze_bid_results.py data/g2b_all_targets.csv
     py scripts/analyze_bid_results.py data/g2b_all_targets.csv --history data/bid_history   # API 하한율이 0·빈칸이면 투찰 이력 하한율로
-    (A값은 수집 결과의 basis, 없으면 output/bid_basis.jsonl — fetch_bid_results.py --basis-only로 받은 것)
+    (A값은 수집 결과의 basis, 없으면 output/bid_basis.jsonl — fetch_bid_results.py --basis-only로 받은 것.
+     낙찰방법·하한율은 수집 결과의 notice, 없으면 output/bid_notices.jsonl — --notice-only로 받은 것. 10/23 수집 383건 보충용)
 
 받은 공고를 전부 한 표에 넣되, 공고마다 하한선을 구했는지에 맞는 비율로 계산해 칸을 나눈다(10/27 사용자 결정 — 두 비율은 단위가 달라 섞지 않음):
 - 하한선 확인 공고: 업체 투찰률(bidprcrt, 예정가격 대비 %) − 하한선 투찰률. 0보다 작으면 하한 미달
@@ -83,6 +84,7 @@ def size_group(n: int) -> str:
 
 
 def method_group(rec: dict) -> str:
+    """rec = 수집 결과 한 줄 또는 {"notice": …}."""
     award = (rec.get("notice") or {}).get("award_method", "")
     if "협상" in award:
         return "협상"
@@ -214,12 +216,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--history", default="", help="투찰 이력 폴더(API 하한율이 0·빈칸일 때만 씀)")
     parser.add_argument("--basis", default=str(ROOT / "output" / "bid_basis.jsonl"),
                         help="A값·기초금액 결과(fetch_bid_results.py --basis-only). 수집 결과에 basis가 없는 공고만 씀")
+    parser.add_argument("--notices", default=str(ROOT / "output" / "bid_notices.jsonl"),
+                        help="낙찰방법·하한율 결과(fetch_bid_results.py --notice-only). 수집 결과에 notice가 없는 공고만 씀")
     parser.add_argument("--out", default=str(ROOT / "output" / "bid_results_trend.txt"), help="결과 파일")
     args = parser.parse_args(argv)
 
     targets = {t["no"]: t for t in read_targets(Path(args.targets))}
     ok, _ = read_results(Path(args.results))
     basis_file, _ = read_results(Path(args.basis)) if Path(args.basis).exists() else ({}, {})
+    notice_file, _ = read_results(Path(args.notices)) if Path(args.notices).exists() else ({}, {})
     hist = history_lower(Path(args.history)) if args.history else {}
     own = jiil_bizno()
     lines: list[str] = []
@@ -235,7 +240,8 @@ def main(argv: list[str] | None = None) -> int:
         if t is None:
             skipped["목록에 없는 공고"] += 1
             continue
-        api_lower = _float((rec.get("notice") or {}).get("lower_rate"))
+        notice = rec.get("notice") or (notice_file.get(no) or {}).get("notice") or {}
+        api_lower = _float(notice.get("lower_rate"))
         lower = api_lower or hist.get(no)
         if api_lower and no in hist and abs(api_lower - hist[no]) > 1e-9:
             mismatch += 1
@@ -248,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         src["API" if api_lower else "투찰 이력" if lower else "없음"] += 1
         floor_src[how] += 1
-        s.update(work=t["work"] or "빈칸", year=t["date"][:4] or "모름", method=method_group(rec), size=size_group(s["n"]))
+        s.update(work=t["work"] or "빈칸", year=t["date"][:4] or "모름", method=method_group({"notice": notice}), size=size_group(s["n"]))
         items.append(s)
 
     say("사전분석 — 지금 저장된 개찰결과 기준(전수 수집 전이라 목록 전체를 대표하지 않음)")

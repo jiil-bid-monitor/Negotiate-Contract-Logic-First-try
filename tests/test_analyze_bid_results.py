@@ -63,6 +63,25 @@ class AnalyzeBidResultsTest(unittest.TestCase):
             # 개찰 1위 88.98 − 하한선 88.9705 = +0.010, 87.75로 쓴 업체는 실제 하한선 아래(미달 50%)
             self.assertIn("‖ 1 | +0.010 | +0.010 | 50% | 50% ‖ 0", text)
 
+    def test_main_uses_notice_file(self):
+        """10/23에 받은 기록처럼 notice가 없는 공고는 --notices 파일의 하한율·낙찰방법을 씀."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "t.csv").write_text("공고번호,업무,기관,입력일\nA-000,시설,조달청,2024/01/02\n", encoding="utf-8-sig")
+            rec = {"input": "A-000", "prices": [{"plnprc": "100", "bssamt": "100"}], "bidders": [_b(1, 87.80)],
+                   "basis": {"a_value": 0, "a_applies": False}}
+            (d / "r.jsonl").write_text(json.dumps(rec) + "\n", encoding="utf-8")
+            (d / "n.jsonl").write_text(json.dumps({"input": "A-000", "notice": {"lower_rate": "87.745", "award_method": "적격심사"}}) + "\n",
+                                       encoding="utf-8")
+            out = d / "o.txt"
+            args = [str(d / "t.csv"), "--results", str(d / "r.jsonl"), "--basis", str(d / "none.jsonl"), "--out", str(out)]
+            self.assertEqual(ab.main(args + ["--notices", str(d / "n.jsonl")]), 0)
+            text = out.read_text(encoding="utf-8")
+            self.assertIn("하한율 출처: {'API': 1}", text)
+            self.assertIn("그 외 | 1 | 1 | +0.000", text)  # 낙찰방법도 파일에서
+            self.assertEqual(ab.main(args + ["--notices", str(d / "none.jsonl")]), 0)
+            self.assertIn("하한율 출처: {'없음': 1}", out.read_text(encoding="utf-8"))
+
     def test_notice_stats_without_lower(self):
         rec = {"prices": [{"plnprc": "1000", "bssamt": "1000"}],
                "bidders": [_b(1, 87.8, amount="877"), _b(2, 87.9, amount="879"), _b("", 85.0, bizno="2068636338", amount="850")]}

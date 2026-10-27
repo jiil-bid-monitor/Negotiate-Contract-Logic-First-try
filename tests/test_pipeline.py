@@ -616,7 +616,6 @@ class TestScreen(unittest.TestCase):
     config = screen.ScreenConfig(
         keywords=["전시관", "박물관", "과학관", "체험관", "전시디자인", "전시홍보관", "미디어아트", "전시콘텐츠"],
         exclude_keywords=["유지보수", "정비", "진단"],
-        min_budget_amount=100_000_000,
         product_codes=[],
         industry_codes=[],
     )
@@ -641,9 +640,6 @@ class TestScreen(unittest.TestCase):
         only_exclude = fixtures.notice("Y", title="청사 정비 용역")
         self.assertEqual(screen.screen(notice_from_raw(only_exclude, "용역"),
                                        replace(self.config, review_conflicts=True)).excluded_by, "제외키워드")
-        cheap = fixtures.notice("Z", title="체험관 정비", presmptPrce="50000000")
-        self.assertEqual(screen.screen(notice_from_raw(cheap, "용역"),
-                                       replace(self.config, review_conflicts=True)).excluded_by, "최소예산", "예산 조건은 그대로")
 
     def test_hard_exclude_ignores_interest_keyword(self):
         """특별전·순회전은 무조건 제외 — 관심 키워드(박물관)가 있어도 웹앱 "검토 필요"로 올리지 않는다(2026-10-01)."""
@@ -696,35 +692,21 @@ class TestScreen(unittest.TestCase):
                               purchsObjPrdctList="[1^5310270502^여자학생복(하)],[2^6012100201^조형물]")
         self.assertEqual(screen.screen(notice_from_raw(raw, "물품"), config).matched_product_codes, ["조형물"])
 
-    def test_budget_below_minimum_blocks(self):
+    def test_small_budget_is_collected(self):
+        """2026-10-27 회의 결정 — 최소 예산 없음: 5천만 원 공고도 관심 키워드가 맞으면 수집."""
         result = self._screen(fixtures.notice("X", title="○○과학관 전시", presmptPrce="50000000"))
-        self.assertFalse(result.matched)
-        self.assertEqual(result.excluded_by, "최소예산")
-
-    def test_budget_exempt_keyword(self):
-        """공고명에 "공사 설계 용역"(띄어쓰기 무시)이 있으면 1억 미만이어도 수집, 나머지는 그대로 1억 기준(2026-10-14 사용자 요청)."""
-        from dataclasses import replace
-
-        config = replace(self.config, keywords=self.config.keywords + ["공사 설계 용역"],
-                         budget_exempt_keywords=["공사 설계 용역"])
-        small = fixtures.notice("X", title="○○체험관 리모델링 공사설계용역", presmptPrce="30000000")
-        self.assertTrue(screen.screen(notice_from_raw(small, "용역"), config).matched)
-        other = fixtures.notice("Y", title="○○과학관 전시", presmptPrce="50000000")
-        self.assertEqual(screen.screen(notice_from_raw(other, "용역"), config).excluded_by, "최소예산")
+        self.assertTrue(result.matched)
 
     def test_design_service_only_for_new_builds(self):
-        """"공사 설계 용역"은 새로 짓는 신설만 — 수리·증축 같은 부수적 설계 용역은 관심 키워드·예산 예외 둘 다 안 됨(2026-10-14)."""
+        """keyword_skip_when — 그 낱말이 있으면 해당 관심 키워드는 안 맞은 것으로(2026-10-14, 설정은 지금 비어 있음)."""
         from dataclasses import replace
 
-        config = replace(self.config, keywords=["공사 설계 용역"], budget_exempt_keywords=["공사 설계 용역"],
-                         keyword_skip_when={"공사 설계 용역": ["수리", "증축"]})
+        config = replace(self.config, keywords=["공사 설계 용역"], keyword_skip_when={"공사 설계 용역": ["수리", "증축"]})
         new = fixtures.notice("N", title="○○문화센터 신축 공사 설계용역", presmptPrce="30000000")
         self.assertTrue(screen.screen(notice_from_raw(new, "용역"), config).matched)
         for title in ["○○문화센터 증축공사 설계용역", "○○회관 수리공사 설계 용역"]:
-            # 관심 키워드로는 안 잡힘(신설만) — 예산은 상관없이 통과(무조건 예산 예외, 2026-10-14)
             small = fixtures.notice("R", title=title, presmptPrce="30000000")
             self.assertEqual(screen.screen(notice_from_raw(small, "용역"), config).excluded_by, "미매칭", title)
-        # 다른 관심 키워드("공간")로 잡히는 리모델링 설계용역은 예산이 작아도 수집
         cfg2 = replace(config, keywords=["공간", "공사 설계 용역"])
         gumi = fixtures.notice("G", title="구미시 스타트업 필드 공용공간 리모델링 공사 설계용역", presmptPrce="30000000")
         self.assertTrue(screen.screen(notice_from_raw(gumi, "용역"), cfg2).matched)
@@ -1004,7 +986,7 @@ class TestEndToEnd(unittest.TestCase):
         self.assertNotIn("R26TEST00004", numbers, "협상 아님")
         self.assertNotIn("R26TEST00005", numbers, "설계공모")
         self.assertNotIn("R26TEST00006", numbers, "제외키워드")
-        self.assertNotIn("R26TEST00007", numbers, "예산 미달")
+        self.assertIn("R26TEST00007", numbers, "예산이 작아도 수집 (2026-10-27 최소 예산 없앰)")
         self.assertIn("R26TEST00009", numbers, "자격 미충족 2그룹이어도 제외하지 않는다 (공동수급 보완 가능)")
         self.assertNotIn("R26TEST00010", numbers, "키워드 미매칭")
 

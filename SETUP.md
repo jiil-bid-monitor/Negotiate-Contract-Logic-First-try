@@ -196,7 +196,7 @@ git push -u origin main
 
 | 파일 | 무엇 |
 |---|---|
-| `config/keywords.json` | 키워드 / 제외키워드 / 최소예산 |
+| `config/keywords.json` | 키워드 / 제외키워드 |
 | `config/codes.json` | 관심 세부품명번호·업종코드 |
 | `config/held_qualifications.json` | 지일 보유 등록물품·등록업종 |
 

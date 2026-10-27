@@ -174,35 +174,7 @@ body {
 .search button.ghost { background: var(--panel); color: var(--ink); border-color: var(--line); }
 .search button.ghost:hover { background: var(--bg); border-color: var(--muted); }
 
-/* 직접 검색 */
 .search-intro { color: var(--ink); font-size: 14px; line-height: 1.65; margin: 0 0 14px; max-width: 760px; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; font-size: 12.5px; color: var(--faint); }
-.chips:empty { display: none; }
-.chips button {
-  border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: var(--radius);
-  padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; max-width: 100%; text-align: left;
-}
-.chips button:hover { border-color: var(--brand); color: var(--brand); }
-#searchOut { margin-top: 16px; }
-.search-empty { color: var(--muted); font-size: 13.5px; border-top: 1px solid var(--line); padding-top: 16px; }
-.search-empty p { margin: 0 0 6px; color: var(--ink); }
-.search-empty ul { margin: 0; padding-left: 18px; line-height: 1.8; }
-.result-head { display: flex; gap: 18px; align-items: center; padding: 16px 18px; border: 1px solid var(--line); border-left: 4px solid var(--line-strong); background: var(--panel); margin-bottom: 14px; }
-.result-head.hit { border-left-color: var(--brand); background: var(--brand-tint); }
-.result-head.edge { border-left-color: var(--warn); background: var(--warn-tint); }
-.result-head .pct { font-family: var(--head); font-size: 30px; font-weight: 700; color: var(--muted); min-width: 76px; font-variant-numeric: tabular-nums; }
-.result-head.hit .pct { color: var(--brand); }
-.result-head.edge .pct { color: var(--warn); }
-.result-head .pct i { font-style: normal; font-size: 15px; }
-.result-head h3 { margin: 0 0 3px; font-family: var(--head); font-size: 16px; color: var(--ink-strong); }
-.result-head p { margin: 0; font-size: 13.5px; color: var(--ink); line-height: 1.55; }
-.found-notice { border: 1px solid var(--line); background: var(--panel); padding: 14px 18px; margin-bottom: 14px; }
-.found-notice h4 { margin: 6px 0 4px; font-size: 15px; color: var(--ink-strong); }
-.found-notice h4 a { color: inherit; }
-.found-notice .why { margin-top: 6px; font-size: 13px; color: var(--warn); }
-.past-title { font-family: var(--head); font-size: 14px; color: var(--ink-strong); margin: 18px 0 2px; }
-.more-past summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 12px 2px; border-top: 1px solid var(--line); }
-.more-past summary:hover { color: var(--brand); }
 .examples { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 22px; }
 .examples button {
   font-family: inherit; font-size: 12.5px; cursor: pointer; padding: 6px 12px;
@@ -1097,7 +1069,6 @@ footer b { color: var(--muted); }
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="true" data-tab="live">실제 공고</button>
       <button role="tab" aria-selected="false" data-tab="excluded">제외된 공고</button>
-      <button role="tab" aria-selected="false" data-tab="search">직접 검색</button>
       <button role="tab" aria-selected="false" data-tab="corpus">과거사업 목록</button>
       <button role="tab" aria-selected="false" data-tab="log">판단 기록</button>
       <button role="tab" aria-selected="false" data-tab="calc">투찰 계산기</button>
@@ -1162,29 +1133,6 @@ footer b { color: var(--muted); }
     </div>
     <p class="sub" id="exMeta" style="margin:0 0 14px"></p>
     <div id="exResults"></div>
-  </section>
-
-  <section id="tab-search" hidden>
-    <p class="search-intro">
-      나라장터에서 본 공고가 <b>지일이 해 온 사업과 얼마나 비슷한지</b> 확인합니다.
-      공고 제목을 붙여넣거나 <b>공고번호</b>를 입력하세요. 공고번호로 찾으면 첨부된 과업지시서까지 비교하고,
-      목록에 들어 있는지·왜 빠졌는지도 함께 보여줍니다.
-    </p>
-    <form class="search" id="form">
-      <input id="q" placeholder="공고 제목 또는 공고번호 (예: R26BK01723875)" autocomplete="off" aria-label="공고 제목 또는 공고번호">
-      <button type="submit" id="go">확인</button>
-      <button type="button" id="qClear" class="ghost" hidden>지우기</button>
-    </form>
-    <div class="chips" id="recent"></div>
-    <div class="chips" id="examples"></div>
-    <div id="searchOut"><div class="search-empty">
-      <p><b>이럴 때 쓰세요</b></p>
-      <ul>
-        <li>메일·메신저로 받은 공고가 우리 일인지 빨리 보고 싶을 때</li>
-        <li>목록에 안 보이는 공고가 왜 빠졌는지 알고 싶을 때 (공고번호 입력)</li>
-        <li>제안서에 참고할 비슷한 과거 사업을 찾을 때</li>
-      </ul>
-    </div></div>
   </section>
 
   <section id="tab-corpus" hidden>
@@ -1342,13 +1290,6 @@ const money = (n) => n.budgetAmount == null ? "금액 모름" : won(n.budgetAmou
 // 2026-10-19 통합: 싱크로율은 이 레포 방식(과업 프로필 가중 코사인, nego/sync.py) — 기준은 서버가 /api/notices로 알려 준다
 let HIGH = 0.65, LOW = 0.55;
 
-const EXAMPLES = [
-  "국립낙동강생물자원관 어린이 체험공간 전시 제작설치",
-  "정선군 복합문화센터 공간디자인 및 전시물 제작설치",
-  "과학관 상설전시실 전시물 교체 제작설치",
-  "청사 승강기 교체공사",
-];
-
 let corpus = [];
 
 async function boot() {
@@ -1370,8 +1311,6 @@ async function boot() {
   const years = [...new Set(corpus.map((p) => p.year))].sort((a, b) => b - a);
   $("corpusYear").innerHTML = `<option value="">전체 연도</option>` + years.map((y) => `<option value="${y}">${y}년</option>`).join("");
   renderCorpus();
-  $("examples").innerHTML = `<span>예시</span>` + EXAMPLES.map((e) => `<button type="button" data-q="${esc(e)}">${esc(e)}</button>`).join("");
-  renderRecent();
 }
 
 function renderStats(d) {
@@ -1432,101 +1371,6 @@ async function toggleProject(btn) {
   }
 }
 
-
-// ── 직접 검색 ───────────────────────────────────────────────
-// 최근 검색어는 이 브라우저에만 남긴다 (사람마다 다르고, 잃어도 되는 편의 기능).
-const RECENT_KEY = "jiil.recentSearches";
-function loadRecent() {
-  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]").filter((s) => typeof s === "string"); } catch { return []; }
-}
-function saveRecent(q) {
-  const list = [q, ...loadRecent().filter((s) => s !== q)].slice(0, 5);
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch { /* 저장 못 해도 검색은 된다 */ }
-  renderRecent();
-}
-function renderRecent() {
-  const list = loadRecent();
-  $("recent").innerHTML = list.length
-    ? `<span>최근 검색</span>` + list.map((s) => `<button type="button" data-q="${esc(s)}" title="${esc(s)}">${esc(s.length > 34 ? s.slice(0, 34) + "…" : s)}</button>`).join("")
-    : "";
-}
-function runQuery(q) { $("q").value = q; $("qClear").hidden = false; search(); }
-
-const isNoticeNo = (q) => /^[A-Za-z]\d{2}[A-Za-z]{2}\d{6,}(-\d+)?$|^\d{11,}(-\d+)?$/.test(q);
-
-async function search() {
-  const q = $("q").value.trim();
-  if (!q) return;
-  $("go").disabled = true;
-  $("searchOut").innerHTML = `<div class="empty">${isNoticeNo(q) ? "공고를 찾아 첨부 과업지시서와 함께 과거 사업과 비교하는 중… (처음 보는 공고는 10초쯤 걸립니다)" : "과거 사업과 비교하는 중…"}</div>`;
-  try {
-    const data = await getJson("/api/search?q=" + encodeURIComponent(q));
-    if (data.error) throw new Error(data.error);
-    if (data.noticeMissing) { $("searchOut").innerHTML = missingNotice(data.noticeMissing); return; }
-    saveRecent(q);
-    $("searchOut").innerHTML = resultHead(data) + (data.notice ? foundNotice(data.notice) : "") + pastList(data.top);
-  } catch (err) {
-    $("searchOut").innerHTML = `<div class="verdict edge">확인하지 못했습니다 — ${esc(err.message)}</div>`;
-  } finally {
-    $("go").disabled = false;
-  }
-}
-
-function missingNotice(kind) {
-  return kind === "notLoaded"
-    ? `<div class="verdict edge">공고번호로 찾으려면 먼저 <b>실제 공고</b> 탭에서 나라장터 공고를 불러와 주세요. 기간은 <b>마감 전 공고 전체</b>로 고르면 가장 많이 찾을 수 있습니다.<br>바로 보고 싶다면 공고 제목을 붙여넣어도 됩니다.</div>`
-    : `<div class="verdict edge">불러온 공고 중에 이 번호가 없습니다. 번호를 다시 확인하거나, <b>실제 공고</b> 탭에서 기간을 늘려 다시 불러와 주세요.<br>공고 제목을 붙여넣으면 지금 바로 비교할 수 있습니다.</div>`;
-}
-
-/** 결론 한 줄 — %보다 "그래서 볼 만한가"가 먼저 보이게 */
-function resultHead(data) {
-  const max = data.maxScore || 0;
-  const tone = max >= HIGH ? "hit" : max >= LOW ? "edge" : "";
-  const title = max >= HIGH ? "지일이 해 온 사업과 많이 비슷합니다" : max >= LOW ? "일부 비슷합니다" : "비슷한 과거 사업이 거의 없습니다";
-  const next = max >= HIGH
-    ? "검토해 볼 만한 공고입니다. 아래 비슷한 사업을 제안서 참고 자료로 쓸 수 있습니다."
-    : max >= LOW
-    ? "겹치는 부분이 있지만 성격이 다를 수 있습니다. 공고문의 과업 내용을 직접 확인하세요."
-    : "지일 본업과 거리가 있을 가능성이 큽니다.";
-  const basis = data.basis === "제목+과업내용"
-    ? "공고 제목과 첨부 과업 문서(과업지시서·제안요청서 등)로 비교했습니다."
-    : data.notice
-    ? "첨부 과업 문서를 읽지 못해(제외된 공고는 첨부를 읽지 않습니다) 제목으로만 비교했습니다."
-    : "제목으로만 비교했습니다. 공고번호를 넣으면 수집 때 읽은 첨부 과업 문서 기준 값을 보여 줍니다.";
-  return `<div class="result-head ${tone}">
-    <div class="pct">${Math.round(max * 100)}<i>%</i></div>
-    <div><h3>${title}</h3><p>${next}</p><p class="sub" style="margin-top:4px">${basis}</p></div>
-  </div>`;
-}
-
-/** 공고번호로 찾은 공고 — 목록에 있는지, 빠졌다면 왜인지 */
-function foundNotice(n) {
-  const title = n.detailUrl ? `<a href="${esc(n.detailUrl)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title);
-  const inst = n.demandInstitution || n.institution || "기관 미상";
-  return `<div class="found-notice">
-    <div class="badges">${excludedBadge(n)}${sourceTypeBadge(n)}${businessTypeBadge(n)}</div>
-    <h4>${title}</h4>
-    <div class="meta">${esc(inst)} · ${esc(money(n))}${n.deadline ? " · 마감 " + esc(String(n.deadline).replace("T", " ").slice(0, 16)) : ""} · ${esc(n.noticeNo)}</div>
-    ${n.excludedAt ? `<div class="why">빠진 이유: ${esc(n.excludedDetail || n.excludedAt)}</div>` : ""}
-  </div>`;
-}
-
-/** 비슷한 과거 사업 — 앞 3건만 펼치고 나머지는 접는다 */
-function pastList(top) {
-  if (!top.length) return `<div class="empty">비교할 과거 사업이 없습니다.</div>`;
-  const row = (m, i) => `<div class="card"><div class="row">
-      <div class="score">${Math.round((m.shown ?? 0) * 100)}<i>%</i><small>${i + 1}위</small></div>
-      <div style="flex:1;min-width:0">
-        <div class="name">${esc(m.name)}</div>
-        <div class="meta">${m.year}년${m.budgetAmount ? " · 사업비 " + won(m.budgetAmount) : ""}${(m.shared || []).length ? ` · 겹친 과업: ${esc(m.shared.join(", "))}` : ""}</div>
-        ${m.excerpt ? `<details class="body"><summary>과업 내용 보기</summary><pre>${esc(m.excerpt)}</pre></details>` : ""}
-      </div>
-    </div></div>`;
-  const first = top.slice(0, 3).map(row).join("");
-  const rest = top.slice(3);
-  return `<div class="past-title">비슷한 과거 사업</div>${first}` +
-    (rest.length ? `<details class="more-past"><summary>${rest.length}건 더 보기</summary>${rest.map((m, i) => row(m, i + 3)).join("")}</details>` : "");
-}
 
 // ── 실제 나라장터 공고 ──────────────────────────────────────
 // 2026-10-19 통합: 수집·판정·첨부 읽기는 서버(파이썬 nego)가 작업으로 돌린다 — 나라장터 조회와 첨부 읽기에 몇 분 걸려
@@ -2453,9 +2297,9 @@ function regionBadge(n) {
   const hq = r.company ? `<p>지일 본점 소재지: <b>${esc(r.company)}</b></p>` : "";
   const src = `<p class="src">출처: ${esc(r.source || "나라장터 참가가능지역 정보")}</p>`;
   if (r.status === "충족")
-    return tipBadge("okb", `✓ 지역제한 ${esc(req)} · 본점 충족`, "지역제한", `<p>본점 소재지가 <b>${esc(req)}</b>인 업체만 참가할 수 있습니다 — 조건을 충족합니다.</p>${hq}${src}`);
+    return tipBadge("okb", "✓ 지역제한 충족", "지역제한", `<p>본점 소재지가 <b>${esc(req)}</b>인 업체만 참가할 수 있습니다 — 조건을 충족합니다.</p>${hq}${src}`);
   if (r.status === "미달")
-    return tipBadge("block", `지역제한 ${esc(req)}만 · 참가 불가`, "지역제한", `<p>본점 소재지가 <b>${esc(req)}</b>인 업체만 참가할 수 있습니다.</p>${hq}${src}`);
+    return tipBadge("block", "지역제한 · 참가 불가", "지역제한", `<p>본점 소재지가 <b>${esc(req)}</b>인 업체만 참가할 수 있습니다.</p>${hq}${src}`);
   if ((n.regions || []).length)
     return tipBadge("warn", `⚠ 지역제한 ${esc(n.regions.slice(0, 2).join("·"))}${n.regions.length > 2 ? " 외" : ""}`, "지역제한",
       `<p>나라장터 참가가능지역: <b>${esc(n.regions.join(", "))}</b></p><p>지역 이름을 알아보지 못해 충족 여부를 판정하지 못했습니다.</p>${hq}`);
@@ -3588,15 +3432,9 @@ $("corpusRows").onclick = (ev) => {
   if (btn) toggleProject(btn);
 };
 // 기간은 '나라장터에서 불러오기'를 누를 때 쓴다 (바꾸기만 해서는 다시 조회하지 않는다 — 수집이 몇 분 걸려서)
-$("form").onsubmit = (e) => { e.preventDefault(); search(); };
-for (const id of ["recent", "examples"]) {
-  $(id).onclick = (ev) => { const q = ev.target.closest("button")?.dataset.q; if (q) runQuery(q); };
-}
-$("q").oninput = () => { $("qClear").hidden = !$("q").value; };
-$("qClear").onclick = () => { $("q").value = ""; $("qClear").hidden = true; $("q").focus(); };
 function showTab(tab) {
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
-  for (const name of ["live", "excluded", "search", "corpus", "log", "calc"]) $("tab-" + name).hidden = tab !== name;
+  for (const name of ["live", "excluded", "corpus", "log", "calc"]) $("tab-" + name).hidden = tab !== name;
   // 탭 줄 오른쪽 찾기 칸은 실제 공고·제외된 공고 탭에서만
   $("liveQ").hidden = !(tab === "live" || tab === "excluded");
   if (tab === "excluded") exData ? renderExcluded() : loadExcluded();

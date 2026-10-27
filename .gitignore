@@ -9,3 +9,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# 예외 낱말 후보 보고서(공고 원문 줄 포함) — nego/exclusion_report.py
+exclusion/

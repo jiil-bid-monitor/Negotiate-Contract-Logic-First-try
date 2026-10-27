@@ -568,6 +568,11 @@ class TestServer(unittest.TestCase):
         self.assertIsNone(job["error"])
         self.assertEqual([(p[0].date().isoformat(), p[1].date().isoformat()) for p in RUN_PERIODS], [(begin, end)])
 
+    def test_job_progress_finishes_at_100(self):
+        """화면 진행 표시용 progress — 끝나면 100%·완료."""
+        job = self._collect_and_wait({"days": 7, "attachments": False})
+        self.assertEqual(job["progress"], {"pct": 100, "stage": "완료"})
+
     def _collect_and_wait(self, body):
         status, job = self.call("/api/collect", body)
         self.assertEqual(status, 202)
@@ -631,3 +636,49 @@ class TestServer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestJobProgress(unittest.TestCase):
+    """서버 기록(nego.pipeline 조회 기록)으로 진행률을 올리고, 뒤로 가지 않으며, 끝나기 전엔 99%를 넘지 않는다."""
+
+    def test_log_messages_drive_progress(self):
+        import logging
+
+        from webapp.collect import Job, _JobLogHandler
+
+        job = Job(running=True, params={"prespec": True})
+        handler = _JobLogHandler(job)
+
+        def emit(msg):
+            handler.emit(logging.LogRecord("nego.pipeline", logging.INFO, __file__, 1, msg, None, None))
+
+        emit("조회 기간: 202610200000 ~ 202610272359")
+        self.assertEqual((job.pct, job.stage), (2, "나라장터에서 공고 목록 받는 중"))
+        for label in ("본공고/용역", "본공고/물품", "본공고/공사"):
+            emit(f"{label} 조회 완료: 10건")
+        self.assertEqual(job.pct, 16)  # 6부문 중 3개
+        emit("사전규격/용역 조회 실패 — 사전규격은 건너뛰고 본공고만 진행합니다: x")
+        emit("사전규격/물품 조회 완료: 1건")
+        emit("사전규격/공사 조회 완료: 1건")
+        self.assertEqual(job.pct, 30)
+        emit("Ignoring wrong pointing object 462 65536 (offset 0)")  # 라이브러리 경고는 진행률에 영향 없음
+        self.assertEqual(job.pct, 30)
+        emit("면허제한정보: 공고 5건분 수신")
+        emit("참가가능지역: 공고 5건분 수신")
+        self.assertEqual((job.pct, job.stage), (40, "참가 자격·지역 확인 중"))
+        job.set_progress(10, "되돌림")
+        self.assertEqual(job.pct, 40)
+        job.set_progress(150, "x")
+        self.assertEqual(job.pct, 99)
+        self.assertEqual(job.snapshot()["progress"], {"pct": 99, "stage": "x"})
+
+    def test_without_prespec_three_parts(self):
+        import logging
+
+        from webapp.collect import Job, _JobLogHandler
+
+        job = Job(running=True, params={"prespec": False})
+        handler = _JobLogHandler(job)
+        for label in ("본공고/용역", "본공고/물품", "본공고/공사"):
+            handler.emit(logging.LogRecord("x", logging.INFO, __file__, 1, f"{label} 조회 완료: 1건", None, None))
+        self.assertEqual(job.pct, 30)

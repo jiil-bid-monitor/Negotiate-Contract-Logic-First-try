@@ -39,16 +39,21 @@ class AnalyzeBidResultsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             (d / "t.csv").write_text("공고번호,업무,기관,입력일\nA-000,시설,조달청,2024/01/02\nB-000,물품,조달청,2015/01/01\n", encoding="utf-8-sig")
-            recs = [{"input": "A-000", "prices": [{"plnprc": "100", "bssamt": "100"}], "bidders": [_b(1, 87.80)],
+            recs = [{"input": "A-000", "prices": [{"plnprc": "633000000", "bssamt": "633000000"}],
+                     "bidders": [_b(1, 87.80), _b(2, 87.90, amount="556000000"), _b("", 85.0, bizno="2068636338", amount="538000000")],
                      "notice": {"award_method": "적격심사", "lower_rate": "87.745"}},
                     {"input": "B-000", "prices": [], "bidders": [_b(1, 90)]}]
             (d / "r.jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
             out = d / "o.txt"
             self.assertEqual(ab.main([str(d / "t.csv"), "--results", str(d / "r.jsonl"), "--out", str(out)]), 0)
             text = out.read_text(encoding="utf-8")
-            self.assertIn("분석 1건", text)
+            self.assertIn("성공 공고 2건 중 분석 2건", text)  # 1부: 하한율 없어도 분석
+            self.assertIn("분석 1건", text)  # 2부: 하한율 있는 공고만
             self.assertIn("하한율 없음", text)
-            self.assertIn("시설 | 1 | 1 | +0.000 | +0.055", text)
+            self.assertIn("시설 | 1 | 3 | +0.000 | +0.055", text)
+            self.assertIn("시설 | 1 | 3 | +0.000 | 87.748 | 87.748 | 87.800 | 0.100 | 33%", text)
+            self.assertIn("지일 — 참가 확인 1건", text)
+            self.assertIn("1~9곳 | 1 | 84.992 | -2.756 | - | 100% | 0", text)
             for secret in ("비밀업체", "1112233333", "555444333"):
                 self.assertNotIn(secret, text)
 

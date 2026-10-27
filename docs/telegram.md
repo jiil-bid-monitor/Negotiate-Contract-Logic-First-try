@@ -247,3 +247,14 @@ https://console.cron-job.org 가입 → **Create cronjob**. 두 개 모두 공�
 - 토큰 만료(1년) 때도 3·4·5번만 하면 됩니다. 만료 7일 전쯤 GitHub가 토큰 주인에게 메일을 보냅니다.
 
 **지금 상태**: 토큰 주인 `kdh-007`(2026-10-21 생성, 만료 2027-10-21 무렵), 첫 호출 Run #108 성공(204), cron-job.org 계정 — (가입한 메일을 여기에 적을 것)
+
+## 10. 예외 낱말 후보 — 개발자 방 (2026-10-27, 사용자 결정)
+
+- **주간 보고(월요일) 뒤에 개발자 방(`TELEGRAM_DEV_CHAT_ID`)에만** 옵니다. 담당자 방엔 안 갑니다.
+- 내용: 그 주 수집의 첨부 원문에서 싱크로율 키워드가 **더 긴 낱말 속에 잡힌 곳**(도시공원 → '시공', 농식품부 → '식품')을
+  오탐 가능성 순으로. 메시지에 상위 10개, 첨부 HTML에 전체(원문 줄·공고 수·'단독' = 그 낱말만으로 칸이 생긴 공고 수).
+- 할 일: 오탐이면 승인, 제 뜻이면 기각 — 번호로 Claude에게 알려 주면 jiil 레포 `EXCLUDE_WORDS`·`evaluation/exclusion_feedback.json`에
+  반영하고 싱크로율 묶음을 다시 만든다. 판단 기록이 쌓일수록 순위가 그 판단으로 학습된다. **규칙을 스스로 바꾸지는 않는다.**
+- 법령 이름(소방법·문화재보호법) 속 키워드는 오탐으로 본다(사용자 결정).
+- 코드: `nego/exclusion_report.py`(이 레포) + jiil 레포 `evaluation/exclusion_suggest.py`. 손으로 돌리기:
+  `python -m nego.exclusion_report output/attachment_text --no-send` → `output/예외낱말_후보.html`.

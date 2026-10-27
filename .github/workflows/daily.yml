@@ -341,6 +341,18 @@ jobs:
           echo "::error::bot-state에 기록을 올리지 못했습니다"
           exit 1
 
+      # 키워드 학습 자동화(2026-10-27 사용자 결정) — 주간 수집의 첨부 원문에서 싱크로율 키워드가 더 긴 낱말 속에 잡힌 곳
+      # (도시공원 → '시공')을 오탐 가능성 순으로 모아 개발자 방(TELEGRAM_DEV_CHAT_ID)에 보낸다. 규칙은 안 바꾼다 —
+      # 승인한 낱말만 jiil 레포 EXCLUDE_WORDS에 넣는다. 보고서는 아티팩트(output/) 밖에 둔다. 실패해도 Run 결과는 그대로.
+      - name: 예외 낱말 후보 (주간, 개발자 방)
+        if: steps.mode.outputs.report_log == 'weekly' && steps.collect.outcome == 'success'
+        continue-on-error: true
+        env:
+          JIIL_REPO: data/jiil
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+        run: python -m nego.exclusion_report output/attachment_text --out exclusion/예외낱말_후보.html
+
       # 수집 원문(data/)은 올리지 않는다 — 담당자 연락처가 섞일 수 있다.
       # 리포트(output/)만 아티팩트로 남긴다.
       - name: 리포트 업로드

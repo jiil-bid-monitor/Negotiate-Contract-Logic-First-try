@@ -18,10 +18,12 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent  # 레포 루트
 
-# 과거 실적끼리(자기 자신 제외) 최고 유사도 분포: 하위 10% 0.59 · 중앙 0.72 · 상위 10% 0.84
-# (2026-09-29, 150건). 과거 실적 대부분이 넘는 선을 "높음"으로 잡았다.
+# 과거 실적끼리(자기 자신 제외) 최고 유사도 분포: 하위 10% 0.50 · 20% 0.58 · 중앙 0.68
+# (2026-10-27, 150건 — jiil-past-contracts 형태소·문맥 필터와 점수 조정 뒤). 높음 0.65 = 과거 실적 하위 37%,
+# 경계선 0.55 = 하위 16%(예전 0.45는 과거 실적 전부가 넘는 선이라 도로·전산 공고도 경계선이었음).
+# 공고 14건 대조 기준의 임시 값 — 담당자 참가·불참 기록이 30건쯤 쌓이면 다시 맞출 것.
 HIGH = 0.65
-BORDER = 0.45
+BORDER = 0.55
 
 
 def level(score: float | None) -> str:
@@ -80,7 +82,15 @@ class PastIndex:
             return index
         if str(repo) not in sys.path:
             sys.path.insert(0, str(repo))
-        from evaluation import task_profile as tp  # jiil 레포
+        try:
+            from evaluation import task_profile as tp  # jiil 레포
+            # 형태소 분석기(kiwipiepy)·줄 분류기(scikit-learn)를 지금 불러 둔다 — 없으면 첫 공고에서야 터지므로
+            for warm in ("_kiwi", "_line_classifier"):
+                if hasattr(tp, warm):
+                    getattr(tp, warm)()
+        except ImportError as exc:
+            index.error = f"싱크로율 패키지 없음: {exc} — pip install -r requirements.txt"
+            return index
 
         index._tp = tp
         index.projects = json.loads(path.read_text(encoding="utf-8"))

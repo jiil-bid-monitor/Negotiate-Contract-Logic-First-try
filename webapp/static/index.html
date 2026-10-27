@@ -2276,15 +2276,17 @@ async function reloadHeld() {
 /** 카드의 두 번째 배지 줄 — 참가여부 · 자격 | 지역·공동수급 | 확인 */
 function enrichBadges(n) {
   const p = participation[n.noticeNo];
-  const qual = nQualBadges(n);
-  const area = [regionBadge(n), jointBadge(n)];
+  // 지역제한 충족은 칩 대신 자격 팝업 아래에 (2026-10-27 사용자 요청 — 시·군 목록이 길어 줄이 깨짐)
+  const regionOk = n.regionCheck?.status === "충족";
+  const qual = nQualBadges(n, false, regionOk ? regionOkHtml(n) : "");
+  const area = [regionOk && qual.length ? "" : regionBadge(n), jointBadge(n)];
   if (n.regionSuspect) area.push(regionSuspectBadge(n));
   const check = [...flagBadges(n), attachBadge(n)];
   const group = (label, list) => {
     const html = list.filter(Boolean).join("");
     return html ? `<div class="tag-group">${label ? `<span class="tg-label">${label}</span>` : ""}${html}</div>` : "";
   };
-  return (p?.status ? group("", [partStatusBadge(p)]) : "") + group("자격", qual) + group("지역·공동수급", area) + group("확인", check);
+  return (p?.status ? group("", [partStatusBadge(p)]) : "") + group("자격", qual) + group(area[0] ? "지역·공동수급" : "공동수급", area) + group("확인", check);
 }
 
 /**
@@ -2310,6 +2312,14 @@ function regionBadge(n) {
 }
 
 /** ["강원 속초시", "강원 고성군", "경기"] → "강원 속초시·고성군 / 경기" — 같은 시·도는 한 번만 쓴다 */
+/** 자격 팝업 아래에 붙이는 지역제한 충족 내용 */
+function regionOkHtml(n) {
+  const r = n.regionCheck || {};
+  const hq = r.company ? `<p>지일 본점 소재지: <b>${esc(r.company)}</b></p>` : "";
+  return `<h4 class="sub-h">✓ 지역제한 충족</h4><p>본점 소재지가 <b>${esc(regionList(r.required))}</b>인 업체만 참가할 수 있습니다 — 조건을 충족합니다.</p>${hq}`
+    + `<p class="src">출처: ${esc(r.source || "나라장터 참가가능지역 정보")}</p>`;
+}
+
 function regionList(list) {
   const groups = new Map();
   for (const label of list || []) {
@@ -2522,10 +2532,10 @@ function reqBlocksHtml(all, mixed) {
   return blocks.join("");
 }
 
-function nQualBadges(n, noShare = false) {
+function nQualBadges(n, noShare = false, extra = "") {
   const parts = n.qual?.parts || [];
   const denied = noShare || /불허/.test(n.joint?.label || "");
-  return parts.map((p) => {
+  return parts.map((p, i) => {
     const label = QUAL_LABEL[p.key]?.[p.status] || `${p.name} ${p.status}`;
     const tone = p.status === "충족" ? "ok" : p.status === "미달" ? (denied ? "block" : "fix") : "faint";
     const ico = p.status === "충족" ? "✓" : p.status === "미달" ? "!" : "";
@@ -2552,6 +2562,7 @@ function nQualBadges(n, noShare = false) {
         : denied
         ? `<p class="warnline">공동수급 불허 — 부족한 자격을 함께 채울 업체를 구할 수 없습니다.</p>`
         : `<p>공동수급이 허용되면 이 자격을 가진 업체와 함께 참가할 수 있습니다 — 옆 공동수급 배지를 보세요.</p>`;
+    if (extra && i === 0) body += extra;
     return `<span class="badge qual ${tone}" tabindex="0">${ico ? `<span class="ico" aria-hidden="true">${ico}</span>` : ""}${esc(label)}${qtip(title, body)}</span>`;
   });
 }

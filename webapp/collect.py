@@ -213,19 +213,48 @@ class Job:
     log: list[str] = field(default_factory=list)
     error: str | None = None
     run_id: int | None = None  # 저장된 결과 번호 — 수집을 누른 사람 화면만 이 결과로 바뀐다
+    # 화면 진행 표시 "약 N% (작업 이름)" — 서버 기록 마지막 줄 대신(10/27 사용자 요청: 담당자가 단계를 알 수 있게)
+    pct: int = 0
+    stage: str = "시작하는 중"
+    fetched_parts: int = 0  # 공고 목록 조회를 마친 부문 수(본공고 3 + 사전규격 3)
+
+    def set_progress(self, pct: float, stage: str) -> None:
+        self.pct = max(self.pct, min(99, int(pct)))  # 뒤로 가지 않게, 끝나기 전엔 100 안 됨
+        self.stage = stage
 
     def snapshot(self) -> dict[str, Any]:
         return {"running": self.running, "started_at": self.started_at, "finished_at": self.finished_at,
-                "params": self.params, "log": self.log[-30:], "error": self.error, "run_id": self.run_id}
+                "params": self.params, "log": self.log[-30:], "error": self.error, "run_id": self.run_id,
+                "progress": {"pct": self.pct, "stage": self.stage}}
+
+
+# 진행률 구간(%) — 단계 비중은 대략값: 공고 목록 0~30, 자격·지역 30~40, 첨부 읽기 40~95, 정리·저장 95~99.
+# 첨부를 안 읽는 수집이면 자격·지역 다음 바로 정리.
+LIST_END, CHECK_END, ATTACH_END = 30, 40, 95
+
+
+def _list_parts(job: Job) -> int:
+    return 6 if job.params.get("prespec", True) else 3
 
 
 class _JobLogHandler(logging.Handler):
+    """서버 기록을 모으면서, 수집 단계를 알리는 기록(nego.pipeline의 조회 기록)을 보고 진행률을 올린다."""
+
     def __init__(self, job: Job):
         super().__init__(logging.INFO)
         self.job = job
 
     def emit(self, record: logging.LogRecord) -> None:
-        self.job.log.append(f"{datetime.now():%H:%M:%S} {record.getMessage()}")
+        msg = record.getMessage()
+        self.job.log.append(f"{datetime.now():%H:%M:%S} {msg}")
+        job = self.job
+        if msg.startswith("조회 기간:"):
+            job.set_progress(2, "나라장터에서 공고 목록 받는 중")
+        elif msg.startswith(("본공고/", "사전규격/")) and (" 조회 완료" in msg or " 조회 실패" in msg):
+            job.fetched_parts += 1
+            job.set_progress(2 + (LIST_END - 2) * job.fetched_parts / _list_parts(job), "나라장터에서 공고 목록 받는 중")
+        elif msg.startswith(("면허제한정보", "참가가능지역")):
+            job.set_progress(LIST_END + 5 if msg.startswith("면허") else CHECK_END, "참가 자격·지역 확인 중")
 
 
 class Collector:
@@ -279,12 +308,19 @@ class Collector:
             from nego.attachments import save_attachment_texts
             from nego.http_client import DataGoKrClient
 
+            job = self.job
+
+            def att_progress(done: int, total: int) -> None:
+                job.set_progress(CHECK_END + (ATTACH_END - CHECK_END) * done / max(total, 1), f"첨부파일 읽는 중 {done + 1}/{total}건")
+
+            job.set_progress(CHECK_END, "첨부파일 읽는 중")
             att = save_attachment_texts(
                 candidates, config.output_dir,
                 held_codes=qualify.load_held_codes(config.held_raw),
                 held_code_names=qualify.load_held_code_names(config.held_raw),
                 now=now, code_names=config.code_names, held_raw=config.held_raw,
                 client=DataGoKrClient(config.api) if config.api.service_key else None,
+                progress=att_progress,
             )
             log.info("첨부파일: 시도 %d → 성공 %d / 실패 %d · 자격판정 반영 %d건",
                      att["attempted"], att["ok"], att["failed"], att["qualification_determined"])
@@ -312,6 +348,7 @@ class Collector:
                      " + 첨부 자격판정" if attachments else "")
             candidates, stats = (self._runner(config, days, attachments, cats, prespec, period) if period
                                  else self._runner(config, days, attachments, cats, prespec))
+            job.set_progress(ATTACH_END, "결과 정리·저장 중")
             if ai:
                 import os
                 _judge_ai(candidates, self.past, int(os.environ.get("LLM_MAX_CANDIDATES", "30")))
@@ -338,6 +375,7 @@ class Collector:
                 },
             }
             job.run_id = self.store.save_run(job.started_at, job.params, payload)
+            job.pct, job.stage = 100, "완료"
             log.info("수집 완료: 후보 %d건 · 제외 %d건", len(payload["candidates"]), len(payload["rejected"]))
             # 첨부를 읽는 수집이면, 키워드·세부품명 하나만 안 맞은 용역 공고의 공고문을 뒤에서 읽어 지일 등록 세부품명을
             # 찾는다 — 찾은 공고는 '세부품명 공고' 탭에 붙는다(mview.notices). 화면은 /api/docscan으로 진행을 본다

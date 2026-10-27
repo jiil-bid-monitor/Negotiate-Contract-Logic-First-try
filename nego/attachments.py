@@ -20,7 +20,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 from xml.etree import ElementTree as ET
 
 import requests
@@ -389,8 +389,11 @@ def save_attachment_texts(
     code_names: dict[str, str] | None = None,
     held_raw: dict | None = None,
     client: "DataGoKrClient | None" = None,
+    progress: "Callable[[int, int], None] | None" = None,
 ) -> dict[str, Any]:
     """후보 공고의 첨부파일을 내려받아 텍스트를 `output_dir/attachment_text/`에 저장한다.
+
+    `progress(done, total)`을 주면 공고 하나를 끝낼 때마다 부른다(웹앱 수집 진행률 표시용).
 
     지역제한/면허제한/공동수급을 원문과 대조해볼 수 있도록 평문만 남기는
     용도다. 첨부파일 하나가 실패해도 나머지 처리는 계속한다.
@@ -442,7 +445,9 @@ def save_attachment_texts(
     # 이번 실행에서 다른 공고 문서가 "이름(코드)"로 적어준 코드 — 뒤에 오는 공고가
     # 같은 코드를 이름 없이 적었을 때 쓴다.
     learned_names: dict[str, str] = {}
-    for candidate in candidates:
+    for index, candidate in enumerate(candidates):
+        if progress is not None:
+            progress(index, len(candidates))
         notice = candidate.notice
         qualification = getattr(candidate, "qualification", None)
         needs_check = held_codes is not None and qualification is not None

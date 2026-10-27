@@ -1550,6 +1550,8 @@ function checkPageVersion(v) {
   document.body.prepend(bar);
 }
 const lastLog = (j) => String((j.log || []).slice(-1)[0] || "").replace(/^\d\d:\d\d:\d\d\s*/, "");
+// 진행 표시 "55% (첨부파일 읽는 중 12/40건)" — 서버 기록 마지막 줄(라이브러리 경고까지 보였음) 대신. 예전 서버면 기록 줄 그대로
+const jobProgress = (j) => (j.progress ? `${j.progress.pct}% (${j.progress.stage})` : lastLog(j) || "시작하는 중…");
 function setBusy(on) { $("load").disabled = $("refresh").disabled = on; }
 
 function watchJob(job, mine) {
@@ -1558,7 +1560,7 @@ function watchJob(job, mine) {
   const who = mine ? "" : " (다른 팀원이 시작한 수집)";
   const show = (j) => {
     $("loadState").classList.remove("err");
-    $("loadState").textContent = `수집 중${who} — ${lastLog(j) || "시작하는 중…"}`;
+    $("loadState").textContent = `수집 중${who} — ${jobProgress(j)}`;
   };
   const tick = async () => {
     let j;

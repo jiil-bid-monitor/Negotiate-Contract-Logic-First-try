@@ -7,6 +7,7 @@
     py scripts/fetch_bid_results.py 목록.csv                # 나머지 전부(이미 받은 공고는 건너뜀 — 끊겨도 다시 실행하면 이어서)
     py scripts/fetch_bid_results.py 목록.csv --notice-only  # 낙찰방법만(본공고 조회 1~3번) → output/bid_notices.jsonl
     py scripts/fetch_bid_results.py 목록.csv --basis-only   # A값·기초금액만(기초금액 조회 1~3번) → output/bid_basis.jsonl
+    py scripts/fetch_bid_results.py 목록.csv --results-only # 개찰결과(예비가격·참가업체)만 — 입찰공고정보서비스 한도를 안 씀
 
 목록.csv: 첫 칸 공고번호(예: R26BK01758791-000, 20201217355-00), 둘째 칸 업무(공사·시설·용역·물품, 비면 셋 다 시도).
 투찰 이력에서 목록 만들기: `py scripts/make_bid_targets.py` → data/bid_results_targets.csv.
@@ -144,7 +145,9 @@ def fetch_basis(client: DataGoKrClient, no: str, ord_: str, work: str) -> tuple[
 
 
 def fetch_one(client: DataGoKrClient, base_url: str, notice_input: str, work: str, notice_only: bool = False,
-              basis_only: bool = False) -> dict:
+              basis_only: bool = False, results_only: bool = False) -> dict:
+    """results_only: 낙찰정보서비스(예비가격·참가업체)만 — 낙찰방법·A값(입찰공고정보서비스)은 건너뛰어 그 한도를 안 씀.
+    이 기록엔 notice·basis 칸이 없으니 나중에 --notice-only·--basis-only로 채운다(10/27 낙찰정보서비스만 운영계정 승인)."""
     no, ord_ = split_notice_no(notice_input)
     rec: dict = {"input": notice_input, "no": no, "ord": ord_, "work": WORK_ALIASES.get(work, ""), "fetched_at": datetime.now().isoformat(timespec="seconds")}
     if basis_only:
@@ -152,7 +155,8 @@ def fetch_one(client: DataGoKrClient, base_url: str, notice_input: str, work: st
         if rec["basis"] is None:
             rec["error"] = "나라장터에서 기초금액을 찾지 못함"
         return rec
-    rec["notice"], rec["work"] = fetch_notice(client, no, ord_, rec["work"])
+    if not results_only:
+        rec["notice"], rec["work"] = fetch_notice(client, no, ord_, rec["work"])
     if notice_only:
         if rec["notice"] is None:
             rec["error"] = "나라장터에서 본공고를 찾지 못함"
@@ -166,7 +170,8 @@ def fetch_one(client: DataGoKrClient, base_url: str, notice_input: str, work: st
             rec["work"] = w
             break
     rec["prices"] = _same_ord(prices, ord_)
-    rec["basis"], _ = fetch_basis(client, no, ord_, rec["work"])  # 못 찾아도 오류로 안 봄(물품 기초금액 조회는 이름 추정)
+    if not results_only:
+        rec["basis"], _ = fetch_basis(client, no, ord_, rec["work"])  # 못 찾아도 오류로 안 봄(물품 기초금액 조회는 이름 추정)
     rec["bidders"] = _same_ord(client.fetch_all_pages(base_url, F.OPENING_BIDDERS_OPERATION, params, f"참가업체 {no}"), ord_)
     if not rec["prices"] and not rec["bidders"]:
         rec["error"] = "나라장터에서 개찰결과를 찾지 못함"
@@ -180,12 +185,14 @@ def main(argv: list[str] | None = None) -> int:
                         "--notice-only면 output/bid_notices.jsonl, --basis-only면 output/bid_basis.jsonl)")
     parser.add_argument("--notice-only", action="store_true", help="개찰결과 없이 낙찰방법(본공고)만 받기")
     parser.add_argument("--basis-only", action="store_true", help="개찰결과 없이 A값·기초금액만 받기(이미 받은 공고 보충용)")
+    parser.add_argument("--results-only", action="store_true",
+                        help="개찰결과(예비가격·참가업체)만 받기 — 낙찰방법·A값은 나중에 --notice-only·--basis-only로")
     parser.add_argument("--limit", type=int, default=0, help="이번에 받을 최대 공고 수(시험용, 0이면 전부)")
     parser.add_argument("--sleep", type=float, default=0.3, help="공고 사이 쉬는 초(기본 0.3)")
     args = parser.parse_args(argv)
 
-    if args.notice_only and args.basis_only:
-        print("--notice-only와 --basis-only는 함께 쓸 수 없습니다.", file=sys.stderr)
+    if sum([args.notice_only, args.basis_only, args.results_only]) > 1:
+        print("--notice-only·--basis-only·--results-only는 하나만 쓸 수 있습니다.", file=sys.stderr)
         return 1
     key = service_key()
     if not key:
@@ -209,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     with out_path.open("a", encoding="utf-8") as out:
         for i, (notice_input, work) in enumerate(todo, 1):
             try:
-                rec = fetch_one(client, base_url, notice_input, work, args.notice_only, args.basis_only)
+                rec = fetch_one(client, base_url, notice_input, work, args.notice_only, args.basis_only, args.results_only)
             except ApiError as err:
                 if is_quota_error(err):
                     print(f"\n오늘 호출 한도에 걸려 멈춥니다({i - 1}건까지 저장). 내일 같은 명령을 다시 실행하면 이어서 받습니다.")

@@ -96,6 +96,22 @@ class FetchBidResultsTest(unittest.TestCase):
         missing = fb.fetch_one(FakeClient({}), "u", "20201217355-00", "", basis_only=True)
         self.assertIn("error", missing)
 
+    def test_results_only_skips_notice_and_basis(self):
+        client = FakeClient({fb.PRICE_OPS["공사"]: [{"bidNtceOrd": "000", "plnprc": "1"}],
+                             F.OPENING_BIDDERS_OPERATION: [{"bidNtceOrd": "000", "opengRank": "1"}]})
+        rec = fb.fetch_one(client, "u", "R26BK00000001-000", "시설", results_only=True)
+        self.assertEqual(client.calls, [fb.PRICE_OPS["공사"], F.OPENING_BIDDERS_OPERATION])  # 입찰공고정보서비스는 안 부름
+        self.assertNotIn("notice", rec)  # 나중에 --notice-only 목록에 잡히게 칸 자체를 안 둠
+        self.assertNotIn("basis", rec)
+        self.assertEqual(rec["work"], "공사")
+        self.assertNotIn("error", rec)
+
+    def test_only_options_exclusive(self):
+        with tempfile.TemporaryDirectory() as d:
+            t = Path(d) / "t.csv"
+            t.write_text("A-000,시설\n", encoding="utf-8-sig")
+            self.assertEqual(fb.main([str(t), "--results-only", "--basis-only"]), 1)
+
     def test_quota_error_http_429(self):
         body = '{"OpenAPI_ServiceResponse": {"cmmMsgHeader": {"errMsg": "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR", "returnReasonCode": "22"'
         self.assertTrue(fb.is_quota_error(ApiError("참가업체 X", f"HTTP 429 (응답 앞부분: {body})")))
@@ -106,7 +122,7 @@ class FetchBidResultsTest(unittest.TestCase):
     def test_main_stops_on_quota_without_writing(self):
         calls = []
 
-        def fake_fetch(client, base_url, notice_input, work, notice_only=False, basis_only=False):
+        def fake_fetch(client, base_url, notice_input, work, notice_only=False, basis_only=False, results_only=False):
             calls.append(notice_input)
             if notice_input == "B-000":
                 raise ApiError("참가업체 B", 'HTTP 429 (응답 앞부분: {"errMsg": "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR"})')

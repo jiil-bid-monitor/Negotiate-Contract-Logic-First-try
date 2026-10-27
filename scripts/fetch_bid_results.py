@@ -6,10 +6,13 @@
     py scripts/fetch_bid_results.py 목록.csv --limit 5      # 시험 5건
     py scripts/fetch_bid_results.py 목록.csv                # 나머지 전부(이미 받은 공고는 건너뜀 — 끊겨도 다시 실행하면 이어서)
     py scripts/fetch_bid_results.py 목록.csv --notice-only  # 낙찰방법만(본공고 조회 1~3번) → output/bid_notices.jsonl
+    py scripts/fetch_bid_results.py 목록.csv --basis-only   # A값·기초금액만(기초금액 조회 1~3번) → output/bid_basis.jsonl
 
 목록.csv: 첫 칸 공고번호(예: R26BK01758791-000, 20201217355-00), 둘째 칸 업무(공사·시설·용역·물품, 비면 셋 다 시도).
 투찰 이력에서 목록 만들기: `py scripts/make_bid_targets.py` → data/bid_results_targets.csv.
 낙찰방법(`notice`)은 입찰공고정보서비스 본공고의 낙찰방법·계약방법·낙찰자 결정기준·하한율 — 협상 공고를 가려내는 데 쓴다.
+A값(`basis`)은 같은 서비스의 기초금액 조회(투찰 계산기와 같은 `bidcalc.parse_basis`) — 기초금액·변동폭·A값 항목·A값 적용 여부.
+A값 적용 공고는 실제 하한선 = A값 + (예정가격 − A값) × 하한율이라, 하한율만으로 계산하면 하한선이 낮게 잡힌다(10/27 공고문 3건 확인).
 인증키는 환경변수 NARA_SERVICE_KEY, 없으면 레포 루트 .env(webapp/start.sh가 만든 파일)에서 읽는다.
 하루 호출 한도(resultCode=22)에 걸리면 받은 데까지 저장하고 멈춘다 — 다음 날 같은 명령을 다시 실행하면 된다.
 """
@@ -30,6 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from nego import fields as F  # noqa: E402
+from nego.bidcalc import BASIS_OPERATIONS, parse_basis  # noqa: E402
 from nego.http_client import ApiConfig, ApiError, ApiResultError, DataGoKrClient  # noqa: E402
 
 # 예비가격 상세 — 업무별 오퍼레이션(물품은 이름 추정, nego/bidprice.py와 같음)
@@ -123,9 +127,31 @@ def fetch_notice(client: DataGoKrClient, no: str, ord_: str, work: str) -> tuple
     return None, work
 
 
-def fetch_one(client: DataGoKrClient, base_url: str, notice_input: str, work: str, notice_only: bool = False) -> dict:
+def fetch_basis(client: DataGoKrClient, no: str, ord_: str, work: str) -> tuple[dict | None, str]:
+    """기초금액 조회(inqryDiv=2 + 공고번호) → (기초금액·A값 칸 모음 또는 None, 찾은 업무). 업무를 모르면 셋 다 시도."""
+    params = {"inqryDiv": "2", "bidNtceNo": no}
+    for w in [work] if work else list(BASIS_OPERATIONS):
+        op = BASIS_OPERATIONS.get(w)
+        if not op:
+            continue
+        rows = _same_ord(client.fetch_all_pages(F.BID_NOTICE_BASE_URL, op, params, f"기초금액 {no}"), ord_)
+        if rows:
+            row = max(rows, key=lambda r: str(r.get("bidNtceOrd") or ""))  # 차수가 안 맞으면 마지막 차수
+            basis = parse_basis(row)
+            basis["ord"] = str(row.get("bidNtceOrd") or "")
+            return basis, w
+    return None, work
+
+
+def fetch_one(client: DataGoKrClient, base_url: str, notice_input: str, work: str, notice_only: bool = False,
+              basis_only: bool = False) -> dict:
     no, ord_ = split_notice_no(notice_input)
     rec: dict = {"input": notice_input, "no": no, "ord": ord_, "work": WORK_ALIASES.get(work, ""), "fetched_at": datetime.now().isoformat(timespec="seconds")}
+    if basis_only:
+        rec["basis"], rec["work"] = fetch_basis(client, no, ord_, rec["work"])
+        if rec["basis"] is None:
+            rec["error"] = "나라장터에서 기초금액을 찾지 못함"
+        return rec
     rec["notice"], rec["work"] = fetch_notice(client, no, ord_, rec["work"])
     if notice_only:
         if rec["notice"] is None:
@@ -140,6 +166,7 @@ def fetch_one(client: DataGoKrClient, base_url: str, notice_input: str, work: st
             rec["work"] = w
             break
     rec["prices"] = _same_ord(prices, ord_)
+    rec["basis"], _ = fetch_basis(client, no, ord_, rec["work"])  # 못 찾아도 오류로 안 봄(물품 기초금액 조회는 이름 추정)
     rec["bidders"] = _same_ord(client.fetch_all_pages(base_url, F.OPENING_BIDDERS_OPERATION, params, f"참가업체 {no}"), ord_)
     if not rec["prices"] and not rec["bidders"]:
         rec["error"] = "나라장터에서 개찰결과를 찾지 못함"
@@ -149,17 +176,23 @@ def fetch_one(client: DataGoKrClient, base_url: str, notice_input: str, work: st
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="공고번호 목록의 개찰결과(참가업체 전체·예비가격) 받기")
     parser.add_argument("targets", help="공고번호 목록 CSV (공고번호, 업무)")
-    parser.add_argument("--out", default="", help="결과 파일(JSONL, 이어 쓰기 — 기본 output/bid_results.jsonl, --notice-only면 output/bid_notices.jsonl)")
+    parser.add_argument("--out", default="", help="결과 파일(JSONL, 이어 쓰기 — 기본 output/bid_results.jsonl, "
+                        "--notice-only면 output/bid_notices.jsonl, --basis-only면 output/bid_basis.jsonl)")
     parser.add_argument("--notice-only", action="store_true", help="개찰결과 없이 낙찰방법(본공고)만 받기")
+    parser.add_argument("--basis-only", action="store_true", help="개찰결과 없이 A값·기초금액만 받기(이미 받은 공고 보충용)")
     parser.add_argument("--limit", type=int, default=0, help="이번에 받을 최대 공고 수(시험용, 0이면 전부)")
     parser.add_argument("--sleep", type=float, default=0.3, help="공고 사이 쉬는 초(기본 0.3)")
     args = parser.parse_args(argv)
 
+    if args.notice_only and args.basis_only:
+        print("--notice-only와 --basis-only는 함께 쓸 수 없습니다.", file=sys.stderr)
+        return 1
     key = service_key()
     if not key:
         print("나라장터 인증키가 없습니다 — NARA_SERVICE_KEY 환경변수나 레포 루트 .env를 확인하세요.", file=sys.stderr)
         return 1
-    out_path = Path(args.out or ROOT / "output" / ("bid_notices.jsonl" if args.notice_only else "bid_results.jsonl"))
+    default_out = "bid_notices.jsonl" if args.notice_only else "bid_basis.jsonl" if args.basis_only else "bid_results.jsonl"
+    out_path = Path(args.out or ROOT / "output" / default_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     targets = read_targets(Path(args.targets))
     done = done_numbers(out_path)
@@ -176,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
     with out_path.open("a", encoding="utf-8") as out:
         for i, (notice_input, work) in enumerate(todo, 1):
             try:
-                rec = fetch_one(client, base_url, notice_input, work, args.notice_only)
+                rec = fetch_one(client, base_url, notice_input, work, args.notice_only, args.basis_only)
             except ApiError as err:
                 if is_quota_error(err):
                     print(f"\n오늘 호출 한도에 걸려 멈춥니다({i - 1}건까지 저장). 내일 같은 명령을 다시 실행하면 이어서 받습니다.")

@@ -69,6 +69,33 @@ class FetchBidResultsTest(unittest.TestCase):
         self.assertIsNone(missing["notice"])
         self.assertIn("error", missing)
 
+    def test_full_fetch_keeps_a_value(self):
+        basis_op = fb.BASIS_OPERATIONS["공사"]
+        client = FakeClient({F.BID_NOTICE_OPERATIONS["공사"]: [{"bidNtceOrd": "000", "sucsfbidLwltRate": "87.745"}],
+                             fb.PRICE_OPS["공사"]: [{"bidNtceOrd": "000", "plnprc": "1"}],
+                             basis_op: [{"bidNtceOrd": "000", "bssamt": "223692000", "npnInsrprm": "4174428",
+                                         "mrfnHealthInsrprm": "3093715", "bidPrceCalclAYn": "Y"}]})
+        rec = fb.fetch_one(client, "u", "R26BK00000001-000", "시설")
+        self.assertTrue(rec["basis"]["a_applies"])
+        self.assertEqual(rec["basis"]["a_value"], 4174428 + 3093715)
+        self.assertEqual(rec["basis"]["basis"], 223692000)
+        self.assertNotIn("error", rec)
+        # 기초금액을 못 찾아도 개찰결과가 있으면 오류 아님
+        client2 = FakeClient({fb.PRICE_OPS["물품"]: [{"plnprc": "1"}]})
+        rec2 = fb.fetch_one(client2, "u", "R26BK00000002-000", "물품")
+        self.assertIsNone(rec2["basis"])
+        self.assertNotIn("error", rec2)
+
+    def test_basis_only(self):
+        basis_op = fb.BASIS_OPERATIONS["공사"]
+        client = FakeClient({basis_op: [{"bidNtceOrd": "00", "bssamt": "100", "bidPrceCalclAYn": "N"}]})
+        rec = fb.fetch_one(client, "u", "20201217355-00", "시설", basis_only=True)
+        self.assertEqual(client.calls, [basis_op])  # 본공고·개찰결과는 안 부름
+        self.assertFalse(rec["basis"]["a_applies"])
+        self.assertNotIn("prices", rec)
+        missing = fb.fetch_one(FakeClient({}), "u", "20201217355-00", "", basis_only=True)
+        self.assertIn("error", missing)
+
     def test_quota_error_http_429(self):
         body = '{"OpenAPI_ServiceResponse": {"cmmMsgHeader": {"errMsg": "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR", "returnReasonCode": "22"'
         self.assertTrue(fb.is_quota_error(ApiError("참가업체 X", f"HTTP 429 (응답 앞부분: {body})")))
@@ -79,7 +106,7 @@ class FetchBidResultsTest(unittest.TestCase):
     def test_main_stops_on_quota_without_writing(self):
         calls = []
 
-        def fake_fetch(client, base_url, notice_input, work, notice_only=False):
+        def fake_fetch(client, base_url, notice_input, work, notice_only=False, basis_only=False):
             calls.append(notice_input)
             if notice_input == "B-000":
                 raise ApiError("참가업체 B", 'HTTP 429 (응답 앞부분: {"errMsg": "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR"})')

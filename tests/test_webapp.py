@@ -76,7 +76,8 @@ class TestSyncLevel(unittest.TestCase):
     def test_levels(self):
         self.assertEqual(level(None), "판정 불가")
         self.assertEqual(level(0.8), "높음")
-        self.assertEqual(level(0.5), "경계선")
+        self.assertEqual(level(0.6), "경계선")
+        self.assertEqual(level(0.5), "낮음")  # 2026-10-27 경계선 0.45 → 0.55
         self.assertEqual(level(0.1), "낮음")
 
     def test_missing_repo_degrades(self):

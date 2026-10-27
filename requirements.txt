@@ -3,3 +3,5 @@ pypdf>=4.0
 olefile>=0.47
 anthropic>=1.8
 cryptography>=42
+kiwipiepy>=0.24
+scikit-learn>=1.5

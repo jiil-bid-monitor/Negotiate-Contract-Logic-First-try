@@ -41,10 +41,10 @@ class TestBudget(unittest.TestCase):
         n = _notice(presmptPrce="0", asignBdgtAmt="0")
         self.assertIsNone(n.budget)
         self.assertIsNone(n.budget_kind)
-        self.assertTrue(screen.screen(n, _screen_config()).matched, "금액 모름은 최소예산에서 빼지 않는다")
+        self.assertTrue(screen.screen(n, _screen_config()).matched, "금액 모름도 수집")
 
     def test_placeholder_one_won_is_unknown(self):
-        """2026-10-20 제보 — 배정금액 1원은 자리 표시 값이라 금액 모름(최소예산으로 빼지 않음)."""
+        """2026-10-20 제보 — 배정금액 1원은 자리 표시 값이라 금액 모름."""
         for est, asg in (("", "1"), ("1", "1"), ("0", "999")):
             n = _notice(presmptPrce=est, asignBdgtAmt=asg)
             self.assertIsNone(n.budget)
@@ -54,9 +54,9 @@ class TestBudget(unittest.TestCase):
 
 
 class TestDesignServiceVariants(unittest.TestCase):
-    """결정 3번 — '공사 설계 용역'의 기본·실시·기본 및 실시설계 변형도 관심 키워드·예산 예외."""
+    """결정 3번 — '공사 설계 용역'의 기본·실시·기본 및 실시설계 변형도 관심 키워드."""
 
-    def test_variants_match_and_are_budget_exempt(self):
+    def test_variants_match(self):
         for title in (
             "OO도서관 리모델링 공사 설계 용역",
             "OO공원 조성공사 설계용역",
@@ -73,15 +73,12 @@ class TestDesignServiceVariants(unittest.TestCase):
                 self.assertTrue(result.matched, result.excluded_reason)
                 self.assertIn("공사 설계 용역", result.matched_keywords)
 
-    def test_any_design_service_is_budget_exempt(self):
-        """10/19 결정 — '공사'가 없는 설계 용역도 예산 상관없이(관심 키워드는 맞아야 함)."""
-        n = _notice(title="OO전시관 실시설계 용역", presmptPrce="30000000", asignBdgtAmt="33000000")
-        result = screen.screen(n, _screen_config())
-        self.assertTrue(result.matched, result.excluded_reason)
+    def test_small_budget_is_collected(self):
+        """2026-10-27 회의 결정 — 최소 예산 없음(설계 용역 예외도 같이 없앰)."""
+        n = _notice(title="OO전시관 전시물 제작", presmptPrce="30000000", asignBdgtAmt="33000000")
+        self.assertTrue(screen.screen(n, _screen_config()).matched)
         n = _notice(title="OO본부 청사 실시설계 용역", presmptPrce="30000000", asignBdgtAmt="33000000")
         self.assertEqual(screen.screen(n, _screen_config()).excluded_by, "미매칭")
-        n = _notice(title="OO전시관 전시물 제작", presmptPrce="30000000", asignBdgtAmt="33000000")
-        self.assertEqual(screen.screen(n, _screen_config()).excluded_by, "최소예산")
 
     def test_design_service_with_interest_keyword_is_collected(self):
         """10/19 결정 — 관심 키워드가 있으면 제작·설치 없는 설계 용역도 수집(울란바토르 공간기획·인테리어 설계 용역)."""

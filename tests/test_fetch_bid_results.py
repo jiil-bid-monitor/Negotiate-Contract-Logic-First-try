@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -12,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 import fetch_bid_results as fb  # noqa: E402
 from nego import fields as F  # noqa: E402
+from nego.http_client import ApiError, ApiResultError  # noqa: E402
 
 
 class FakeClient:
@@ -66,6 +68,33 @@ class FetchBidResultsTest(unittest.TestCase):
         missing = fb.fetch_one(FakeClient({}), "u", "20201217355-00", "", notice_only=True)
         self.assertIsNone(missing["notice"])
         self.assertIn("error", missing)
+
+    def test_quota_error_http_429(self):
+        body = '{"OpenAPI_ServiceResponse": {"cmmMsgHeader": {"errMsg": "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR", "returnReasonCode": "22"'
+        self.assertTrue(fb.is_quota_error(ApiError("참가업체 X", f"HTTP 429 (응답 앞부분: {body})")))
+        self.assertTrue(fb.is_quota_error(ApiResultError("x", "22", "한도")))
+        self.assertFalse(fb.is_quota_error(ApiError("x", "HTTP 500 (응답 앞부분: )")))
+        self.assertFalse(fb.is_quota_error(ApiResultError("x", "03", "데이터 없음")))
+
+    def test_main_stops_on_quota_without_writing(self):
+        calls = []
+
+        def fake_fetch(client, base_url, notice_input, work, notice_only=False):
+            calls.append(notice_input)
+            if notice_input == "B-000":
+                raise ApiError("참가업체 B", 'HTTP 429 (응답 앞부분: {"errMsg": "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR"})')
+            return {"input": notice_input, "prices": [1], "bidders": [1]}
+
+        with tempfile.TemporaryDirectory() as d:
+            targets = Path(d) / "t.csv"
+            targets.write_text("A-000,시설\nB-000,시설\nC-000,시설\n", encoding="utf-8-sig")
+            out = Path(d) / "r.jsonl"
+            with mock.patch.object(fb, "service_key", return_value="k"), mock.patch.object(fb, "fetch_one", fake_fetch), \
+                    mock.patch.object(fb.time, "sleep"):
+                self.assertEqual(fb.main([str(targets), "--out", str(out)]), 0)
+            self.assertEqual(calls, ["A-000", "B-000"])  # 한도에 걸리면 C는 부르지 않음
+            self.assertEqual(fb.done_numbers(out), {"A-000"})
+            self.assertEqual(len(out.read_text(encoding="utf-8").splitlines()), 1)  # 한도 걸린 공고는 실패 줄도 안 남김
 
     def test_resume_skips_only_successes(self):
         with tempfile.TemporaryDirectory() as d:

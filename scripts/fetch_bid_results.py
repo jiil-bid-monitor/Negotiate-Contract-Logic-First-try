@@ -49,6 +49,8 @@ NOTICE_FIELDS = {
     "title": "bidNtceNm",
 }
 QUOTA_CODE = "22"  # 서비스 요청제한횟수 초과(일일 한도)
+# 한도 초과가 resultCode 대신 HTTP 429 + 이 문구로 오기도 함(10/27 서버 PC 실측 — 참가업체 조회)
+QUOTA_MARKERS = ("LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR", '"returnReasonCode": "22"')
 
 
 def split_notice_no(text: str) -> tuple[str, str]:
@@ -99,6 +101,13 @@ def _same_ord(rows: list[dict], ord_: str) -> list[dict]:
         return rows
     same = [r for r in rows if str(r.get("bidNtceOrd") or "").lstrip("0") == ord_.lstrip("0")]
     return same or rows
+
+
+def is_quota_error(err: ApiError) -> bool:
+    """하루 호출 한도 초과인지 — resultCode=22이거나, HTTP 오류 응답에 한도 초과 문구가 있으면."""
+    if isinstance(err, ApiResultError):
+        return err.result_code == QUOTA_CODE
+    return any(m in str(err) for m in QUOTA_MARKERS)
 
 
 def fetch_notice(client: DataGoKrClient, no: str, ord_: str, work: str) -> tuple[dict | None, str]:
@@ -168,12 +177,10 @@ def main(argv: list[str] | None = None) -> int:
         for i, (notice_input, work) in enumerate(todo, 1):
             try:
                 rec = fetch_one(client, base_url, notice_input, work, args.notice_only)
-            except ApiResultError as err:
-                if err.result_code == QUOTA_CODE:
+            except ApiError as err:
+                if is_quota_error(err):
                     print(f"\n오늘 호출 한도에 걸려 멈춥니다({i - 1}건까지 저장). 내일 같은 명령을 다시 실행하면 이어서 받습니다.")
                     break
-                rec = {"input": notice_input, "error": str(err)[:300]}
-            except ApiError as err:
                 rec = {"input": notice_input, "error": str(err)[:300]}
             out.write(json.dumps(rec, ensure_ascii=False) + "\n")
             out.flush()

@@ -327,7 +327,8 @@
   let WORK = "";
   const pct = (v, d = 3) => (v == null ? "-" : `${Number(v).toFixed(d)}%`);
   async function recommend() {
-    const qs = new URLSearchParams({ scale: $("#cRecScale").value, work: WORK });
+    const title = $("#cTitle").textContent.trim();
+    const qs = new URLSearchParams({ scale: $("#cRecScale").value, work: WORK, title: title === "-" ? "" : title });
     [["basis", "#cBasis"], ["lower", "#cRate"], ["lo", "#cLo"], ["hi", "#cHi"]].forEach(([k, id]) => {
       const v = numIn(id); if (v != null) qs.set(k, v);
     });
@@ -362,7 +363,8 @@
       const bid = recBid(p.rate);
       const why = p.weak
         ? `비슷한 과거 공고가 적어 검증할 수 없음 — 기본값(${esc(p.name)})으로 둠. 근거 약함`
-        : `비슷한 과거 공고에서 ${esc(p.name)} 방식이 1순위 ${ratio(p.track)}로 가장 많았음`;
+        : `비슷한 과거 공고에서 ${esc(p.name)} 방식이 1순위 ${ratio(p.track)}로 가장 많았음`
+          + (p.track && p.track.top != null ? ` (5위 안 ${p.track.top}건)` : "");
       const vs = p.own_track && p.own_track.tried
         ? `같은 공고 외주(지일 실제 투찰) 1순위 ${ratio(p.own_track)}` + (p.beats_outsourced ? "" : " — <b>외주보다 낫다는 근거 없음</b>")
         : "외주 비교 기록 없음";
@@ -380,24 +382,46 @@
     // 검증 성적 = 비슷한 과거 공고마다 "그 공고 전 자료로 이 방식대로 정했다면" 1순위·유효였나(고른 자료로 다시 맞춘 값이 아님)
     const track = (t) => (t && t.tried ? `${t.win}건 / ${t.tried}건 (${Math.round((t.win / t.tried) * 100)}%)` : "-");
     const valid = (t) => (t && t.tried ? `${t.valid}건 (${Math.round((t.valid / t.tried) * 100)}%)` : "-");
+    const top5 = (t) => (t && t.tried && t.top != null ? `${t.top}건 (${Math.round((t.top / t.tried) * 100)}%)` : "-");
     const opts = d.options || [];
     const top = Math.max(-1, ...opts.map((o) => (o.track && o.track.tried ? o.track.win / o.track.tried : -1)));
     const rows = opts.map((o) => {
       const bid = recBid(o.rate);
       const isTop = o.track && o.track.tried && o.track.win / o.track.tried === top && top > 0;
       return `<tr${isTop ? ' class="best"' : ""}><td>${esc(o.name)}</td><td>${pct(o.rate)}</td>
-        <td>${track(o.track)}</td><td>${valid(o.track)}</td>
+        <td>${track(o.track)}</td><td>${top5(o.track)}</td><td>${valid(o.track)}</td>
         <td>${bid != null ? won(bid) : "기초금액·하한율 필요"}</td></tr>`;
     }).join("");
     const o = d.outsourced;
     const ownRow = o ? `<tr class="own"><td>${esc(o.name)}</td><td>${pct(o.rate)} <span class="rec-note">(과거 중앙)</span></td>
-        <td>${track(o.track)}</td><td>${valid(o.track)}</td><td>-</td></tr>` : "";
+        <td>${track(o.track)}</td><td>${top5(o.track)}</td><td>${valid(o.track)}</td><td>-</td></tr>` : "";
     $("#cRec").innerHTML = `${pickHtml}${head}
-      <div class="rec-scroll"><table><tr><th>구분</th><th>가정 사정률</th><th>검증: 1순위</th><th>검증: 유효(하한선 이상)</th><th>투찰금액</th></tr>${rows}${ownRow}</table></div>
+      <div class="rec-scroll"><table><tr><th>구분</th><th>가정 사정률</th><th>검증: 1순위</th><th>검증: 5위 안</th><th>검증: 유효(하한선 이상)</th><th>투찰금액</th></tr>${rows}${ownRow}</table></div>
       <div class="rec-note">검증 = 비슷한 과거 공고마다 그 공고 <b>개찰 전 자료만으로</b> 이 방식대로 사정률을 정했다면 금액 기준 개찰 1순위·하한선 이상이었을 건수(적격심사 서류 심사 전).
         "${esc(o ? o.name : "지일 실제 투찰(외주)")}"은 같은 공고에 지일이 실제로 낸 금액의 나라장터 순위. 굵은 줄 = 검증 1순위 비율이 가장 높은 방식.
         건수가 적으면(수십 건 이하) 우연일 수 있음. 투찰금액 = A + (기초금액 × 사정률 − A) × 하한율, 끝자리는 기타설정대로.</div>
+      ${trendHtml(d)}
       ${notes}`;
+  }
+  // 같은 분야(공고명 키워드) 과거 공고의 1~5위 업체·지일 투찰 경향 — 사정률 차 = 그 금액을 내려면 가정했어야 할 사정률 − 실제 사정률
+  function trendHtml(d) {
+    const t = d.trend;
+    if (!t || !t.n) return "";
+    const g = (s, k = "p50") => (s && s.n ? `${s[k] >= 0 ? "+" : ""}${Number(s[k]).toFixed(3)}%p` : "-");
+    const range = (s) => (s && s.n ? `${g(s, "p25")} ~ ${g(s, "p75")}` : "-");
+    const rows = t.ranks.map((r) => `<tr><td>${r.rank}위 업체</td><td>${r.gap.n || 0}건</td><td>${g(r.gap)}</td>
+      <td>${range(r.gap)}</td><td>${g(r.bid_gap)}</td></tr>`).join("");
+    const o = t.own;
+    const pctN = (n) => `${n}건(${Math.round((n / o.tried) * 100)}%)`;
+    const ownRow = o ? `<tr class="own"><td>지일(외주)</td><td>${o.tried}건</td><td>${g(o.gap)}</td><td>${range(o.gap)}</td>
+      <td>${g(o.bid_gap)}</td></tr>` : "";
+    const ownNote = o ? `<div class="rec-note">지일: 유효 ${pctN(o.valid)} · 5위 안 ${pctN(o.top)} · 1순위 ${pctN(o.win)}
+      ${o.rank_p50 != null ? ` · 순위 중앙 ${o.rank_p50}위` : ""} · 같은 공고 1위보다 사정률 ${g(o.vs_first)}(중앙)</div>` : "";
+    return `<div class="rec-sum" style="margin-top:14px">투찰 경향 — ${esc(d.field || "분야 미정")} 등 비슷한 과거 공고 ${t.n}건의 1~5위 업체와 지일</div>
+      <div class="rec-scroll"><table><tr><th>구분</th><th>건수</th><th>사정률 차 중앙</th><th>사정률 차 25~75%</th><th>투찰률 − 하한율 중앙</th></tr>${rows}${ownRow}</table></div>
+      ${ownNote}
+      <div class="rec-note">사정률 차 = 그 업체 금액을 내려면 가정했어야 할 사정률 − 실제 사정률(0 = 하한선에 딱 붙음, 음수 = 하한 미달).
+        새 공고에선 "예상 사정률 + 이 값"이 그 순위대 금액. 분야는 공고명 키워드(config/bid_fields.json).</div>`;
   }
   $("#cRecBtn").addEventListener("click", recommend);
   $("#cRecScale").addEventListener("change", recommend);

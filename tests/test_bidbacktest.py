@@ -67,9 +67,9 @@ class BacktestTest(unittest.TestCase):
         self.assertEqual([r["공고번호"] for r in rows], ["hit", "miss"])
         self.assertEqual(rows[0]["학습 공고"], 12)
         self.assertEqual(rows[1]["학습 공고"], 13, "앞날 공고(hit)까지만 — 자기 자신은 안 씀")
-        rate, valid, win = rows[0]["results"]["추천(과거 1순위 최다)"]
+        rate, valid, win, _top = rows[0]["results"]["추천(과거 1순위 최다)"]
         self.assertTrue(valid and win, rate)
-        self.assertEqual(rows[0]["results"][bt.OWN][1:], (False, False))
+        self.assertEqual(rows[0]["results"][bt.OWN][1:], (False, False, False))
         self.assertFalse(rows[1]["results"]["추천(과거 1순위 최다)"][1])
 
     def test_same_day_notices_are_not_training(self):

@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from .bidfield import classify
 from .bidprice import parse_bidders, parse_prepare_prices
 
 log = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ MIN_PICK_TRIED = 20  # 추천 투찰금액을 고를 때 검증 건수가 이보
 HISTORY_PATTERNS = ("bid_history_*.json", "bid_results*.jsonl")
 FIXED_RATE = 100.55  # 고정 사정률 비교값 — 2020~24 지일 이력 중 참가 100곳 미만 ±3% 공고로 고른 값(10/23 분석, 10/28 검증에서 소규모 1순위 최다)
 OWN_NAME = "지일 실제 투찰(외주)"  # bidbacktest.OWN과 같은 이름
+TOP_N = 5  # 투찰 경향은 1~5위 업체까지 본다(2026-10-28 사용자 결정)
 TRACK_LIMIT = 400  # 검증 성적은 비슷한 공고 중 최근 이만큼만 채점(화면 응답 시간 — 공고마다 그 전 공고로 추천을 다시 만듦)
 
 
@@ -59,6 +61,12 @@ class PastBid:
     own_amount: float | None = None  # 지일 투찰금액(참가했을 때) — 검증(`nego.bidbacktest`)에서 외주 추천과 비교
     own_rank: int | None = None  # 지일 개찰 순위(하한 미달 등으로 순위가 없으면 None)
     floor_est: float | None = None  # 참가업체 금액으로 가늠한 하한선(A값을 모를 때) — `_estimate_floor`
+    top_amounts: list[float] = field(default_factory=list)  # 개찰 1~5위 투찰금액(순위순) — 투찰 경향(`nego.bidtrend`)
+
+    @property
+    def field(self) -> str:
+        """공고명 키워드로 나눈 분야(`nego.bidfield`)."""
+        return classify(self.title)
 
     @property
     def assessment(self) -> float:
@@ -87,6 +95,12 @@ class PastBid:
     def win_ceiling(self) -> float:
         """이 r 미만이면 1순위(이상이면 1순위보다 비쌈)."""
         return self.rate_for(self.winner_rate / 100 * self.planned)
+
+    def rank_ceiling(self, k: int = TOP_N) -> float:
+        """이 r 미만이면 k위 안(그 공고 k위 업체보다 싸게 씀). 순위 있는 업체가 k곳이 안 되면 하한선만 넘으면 k위 안."""
+        if len(self.top_amounts) < k:
+            return float("inf")
+        return self.rate_for(self.top_amounts[k - 1])
 
 
 def _num(value: Any) -> float | None:
@@ -159,6 +173,8 @@ def _make(notice_no: str, work: str, basis, planned, lower, bidders: list, price
     rec = PastBid(notice_no=notice_no, work=work or "", basis=basis, planned=planned, lower_rate=lower,
                   winner_rate=winner, bidder_count=len(bidders), range_width=width, **extra)
     rec.floor_est = _estimate_floor(bidders, planned)
+    ranked = sorted((b for b in bidders if b.rank is not None and b.amount), key=lambda b: b.rank)
+    rec.top_amounts = [b.amount for b in ranked[:TOP_N]]
     own = next((b for b in bidders if own_bizno and _clean_bizno(b.bizno) == own_bizno), None)
     if own is not None:
         rec.own_amount, rec.own_rank = own.amount, own.rank
@@ -313,18 +329,22 @@ def _scale_ok(rec: PastBid, scale: str) -> bool:
     return True
 
 
-def similar(records: list[PastBid], work: str | None, width: int | None, scale: str = "all") -> tuple[list[PastBid], list[str]]:
-    """비슷한 과거 공고 — 업무·변동폭·경쟁 규모가 같은 것. 모자라면(MIN_SAMPLES 미만) 변동폭 → 업무 순으로 조건을 푼다.
-    경쟁 규모는 사용자가 고른 것이라 풀지 않는다."""
+def similar(records: list[PastBid], work: str | None, width: int | None, scale: str = "all",
+            field_name: str | None = None) -> tuple[list[PastBid], list[str]]:
+    """비슷한 과거 공고 — 분야(공고명 키워드)·업무·변동폭·경쟁 규모가 같은 것. 모자라면(MIN_SAMPLES 미만) 변동폭 → 업무 → 분야
+    순으로 조건을 푼다. 경쟁 규모는 사용자가 고른 것이라 풀지 않는다. 분야를 모르면('공고명 없음') 분야 조건은 안 씀."""
     pool = [r for r in records if _scale_ok(r, scale)]
-    conditions = [("업무", work, lambda r: r.work == work), ("변동폭", width, lambda r: r.range_width == width)]
+    if field_name in (None, "", "공고명 없음"):
+        field_name = None
+    conditions = [("분야", field_name, lambda r: r.field == field_name), ("업무", work, lambda r: r.work == work),
+                  ("변동폭", width, lambda r: r.range_width == width)]
     active = [(name, test) for name, value, test in conditions if value]
     while True:
         picked = [r for r in pool if all(test(r) for _, test in active)]
         if len(picked) >= MIN_SAMPLES or not active:
             break
         active.pop()  # 마지막 조건(변동폭)부터 푼다
-    labels = [f"{name} {value if name == '업무' else f'±{value}%'}" for name, value, _ in conditions
+    labels = [f"{name} {f'±{value}%' if name == '변동폭' else value}" for name, value, _ in conditions
               if value and name in {n for n, _ in active}]
     if scale != "all":
         labels.append(f"참가 {SCALES[scale]}")
@@ -344,14 +364,17 @@ def _rate(index: int) -> float:
     return round(GRID_LO + index * GRID_STEP, 3)
 
 
-def coverage(records: list[PastBid]) -> tuple[list[int], list[int]]:
-    """격자 위 r마다 (1순위였을 공고 수, 유효했을 공고 수)."""
+def coverage(records: list[PastBid], ceiling=None) -> tuple[list[int], list[int]]:
+    """격자 위 r마다 (1순위였을 공고 수, 유효했을 공고 수). ceiling(공고 → 상한 r)을 주면 1순위 대신 그 구간
+    (예: `lambda r: r.rank_ceiling(5)` = 5위 안)을 센다."""
+    ceiling = ceiling or (lambda rec: rec.win_ceiling)
     size = _index(GRID_HI) + 1
     win_d, valid_d = [0] * (size + 1), [0] * (size + 1)
     for rec in records:
         start = max(0, min(size, _index(rec.assessment) + (1 if _rate(_index(rec.assessment)) < rec.assessment else 0)))
         valid_d[start] += 1
-        end = max(0, min(size, _index(rec.win_ceiling) + (1 if _rate(_index(rec.win_ceiling)) < rec.win_ceiling else 0)))
+        top = min(ceiling(rec), GRID_HI + GRID_STEP)
+        end = max(0, min(size, _index(top) + (1 if _rate(_index(top)) < top else 0)))
         if end > start:  # [start, end) — win_ceiling 미만까지
             win_d[start] += 1
             win_d[end] -= 1
@@ -364,8 +387,10 @@ def coverage(records: list[PastBid]) -> tuple[list[int], list[int]]:
     return wins, valid
 
 
-def _best(wins: list[int]) -> int | None:
-    """1순위 수가 가장 많은 r. 같은 값이 이어진 구간이 여럿이면 가장 넓은 구간의 가운데(작은 오차에 덜 흔들리게)."""
+def _best(wins: list[int], lowest: bool = False) -> int | None:
+    """1순위 수가 가장 많은 r. 같은 값이 이어진 구간이 여럿이면 가장 넓은 구간의 가운데(작은 오차에 덜 흔들리게).
+    lowest=True면 가장 많은 값이 처음 나오는 r(가장 싼 금액) — 5위 안 세기는 참가 5곳 미만 공고가 위로 끝없이 '5위 안'이라
+    가운데를 고르면 사정률이 지나치게 높아진다."""
     top = max(wins) if wins else 0
     if top <= 0:
         return None
@@ -376,6 +401,8 @@ def _best(wins: list[int]) -> int | None:
         elif w != top and start is not None:
             runs.append((start, i - 1))
             start = None
+    if lowest:
+        return runs[0][0]
     lo, hi = max(runs, key=lambda run: run[1] - run[0])
     return (lo + hi) // 2
 
@@ -386,13 +413,13 @@ def _ratio(track: dict | None, key: str = "win") -> float:
 
 def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | None:
     """화면 맨 위 '추천 투찰금액'으로 쓸 방식 하나 — 검증(개찰 전 자료로 정했다면) 1순위 비율이 가장 높은 방식,
-    같으면 유효 비율이 높은 쪽. 검증 건수가 MIN_PICK_TRIED 미만인 방식만 있으면 고정값으로 두고 '근거 약함'."""
+    같으면 5위 안 비율, 그다음 유효 비율이 높은 쪽. 검증 건수가 MIN_PICK_TRIED 미만인 방식만 있으면 고정값으로 두고 '근거 약함'."""
     if not options:
         return None
     ok = [o for o in options if (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED]
     weak = not ok
     if ok:
-        chosen = max(ok, key=lambda o: (_ratio(o["track"]), _ratio(o["track"], "valid")))
+        chosen = max(ok, key=lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid")))
     else:
         chosen = next((o for o in options if o["name"].startswith("고정")), options[0])
     own = (outsourced or {}).get("track")
@@ -427,13 +454,16 @@ def bid_amount(basis: float, rate: float, lower_rate: float, a: float = 0.0) -> 
 
 
 def recommend(history: History, work: str | None = None, lo: float | None = None, hi: float | None = None,
-              scale: str = "all", basis: float | None = None, lower_rate: float | None = None, a: float = 0.0) -> dict:
+              scale: str = "all", basis: float | None = None, lower_rate: float | None = None, a: float = 0.0,
+              title: str = "") -> dict:
     """화면 '추천 사정률' 칸 자료. 금액(basis·lower_rate)을 주면 추천 사정률로 계산한 투찰금액도 넣는다.
+    title(공고명)을 주면 같은 분야(공고명 키워드, `nego.bidfield`) 과거 공고를 먼저 고르고, 그 묶음의 1~5위·지일 경향을 함께 싣는다.
     scale="auto"(화면 기본)면 비슷한 과거 공고의 참가 업체 수 중앙값으로 경쟁 규모를 고른다(투찰 전엔 참가 수를 모르므로)."""
     width = _width_from_rates(lo, hi)
+    field_name = classify(title) if title else None
     auto_note = ""
     if scale == "auto":
-        base, _ = similar(history.records, work, width, "all")
+        base, _ = similar(history.records, work, width, "all", field_name)
         if base:
             median = statistics.median(r.bidder_count for r in base)
             scale = "small" if median < LARGE_COMPETITION else "large"
@@ -441,8 +471,8 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
         else:
             scale = "all"
     scale = scale if scale in SCALES else "all"
-    picked, labels = similar(history.records, work, width, scale)
-    out: dict[str, Any] = {
+    picked, labels = similar(history.records, work, width, scale, field_name)
+    out: dict[str, Any] = {"field": field_name,
         "samples": len(picked), "total": len(history.records), "skipped": history.skipped,
         "files": history.files, "conditions": labels, "scale": SCALES[scale], "notes": [],
     }
@@ -490,6 +520,9 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
         options.append(row("추천(과거 1순위 최다)", _rate(best)))
     options += [row("사정률 중앙값", out["assessment"]["p50"]), row("유효 70%", _pct(rates, 0.7)),
                 row("유효 90%", out["assessment"]["p90"])]
+    top_best = _best(coverage(picked, lambda r: r.rank_ceiling(TOP_N))[0], lowest=True)
+    if top_best is not None:
+        options.insert(1 if best is not None else 0, row(f"추천(과거 {TOP_N}위 안 최다)", _rate(top_best)))
     options.append(row(f"고정 {FIXED_RATE:g}%", FIXED_RATE))
     track = _track(history, picked, scale)
     for o in options:
@@ -498,6 +531,9 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     if own:
         rates_own = [r.rate_for(r.own_amount) for r in own]
         out["outsourced"] = {"name": OWN_NAME, "rate": round(statistics.median(rates_own), 3), "track": track.get(OWN_NAME)}
+    from .bidtrend import trend
+
+    out["trend"] = trend(picked)
     out["options"] = options
     out["best"] = options[0] if best is not None else None
     out["pick"] = pick_option(options, out.get("outsourced"))

@@ -21,15 +21,17 @@ import os
 import re
 import statistics
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from .bidrecommend import (LARGE_COMPETITION, MIN_SAMPLES, PastBid, _best, _pct, _rate, coverage, default_own_bizno,
-                           history_paths, load_history, similar)
+from .bidrecommend import (LARGE_COMPETITION, MIN_SAMPLES, TOP_N, PastBid, _best, _pct, _rate, coverage,
+                           default_own_bizno, history_paths, load_history, similar)
 
 OWN = "지일 실제 투찰(외주)"
-STRATEGIES = ("추천(과거 1순위 최다)", "사정률 중앙값", "유효 70%", "유효 90%")
+TOP_NAME = f"추천(과거 {TOP_N}위 안 최다)"
+STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, "사정률 중앙값", "유효 70%", "유효 90%")
 _DATE = re.compile(r"(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})")
 
 
@@ -50,6 +52,11 @@ def score(rate: float, rec: PastBid) -> tuple[bool, bool]:
     return valid, valid and rate < rec.win_ceiling
 
 
+def in_top(rate: float, rec: PastBid, k: int = TOP_N) -> bool:
+    """이 사정률로 썼으면 금액 기준 개찰 k위 안이었나(하한선 이상 + k위 업체보다 쌈)."""
+    return rate >= rec.assessment - 1e-9 and rate < rec.rank_ceiling(k)
+
+
 def own_rate(rec: PastBid) -> float | None:
     """지일 투찰금액에서 거꾸로 구한 가정 사정률(하한선 기준 — `PastBid.rate_for`)."""
     if not rec.own_amount:
@@ -61,7 +68,7 @@ def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train:
     """개찰일 전 공고(train)로 만든 후보 사정률들. 비슷한 공고가 min_train건 미만이면 비움(추천 안 함)."""
     if scale == "actual":
         scale = "large" if target.bidder_count >= LARGE_COMPETITION else "small"
-    picked, _ = similar(train, target.work, target.range_width, scale)
+    picked, _ = similar(train, target.work, target.range_width, scale, target.field)
     if len(picked) < min_train:
         return {}
     rates = [r.assessment for r in picked]
@@ -69,6 +76,9 @@ def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train:
     best = _best(coverage(picked)[0])
     if best is not None:
         out["추천(과거 1순위 최다)"] = _rate(best)
+    top = _best(coverage(picked, lambda r: r.rank_ceiling(TOP_N))[0], lowest=True)
+    if top is not None:
+        out[TOP_NAME] = _rate(top)
     return out
 
 
@@ -77,12 +87,14 @@ class Tally:
     tried: int = 0
     valid: int = 0
     win: int = 0
+    top: int = 0  # 5위 안
     gaps: list[float] = field(default_factory=list)  # 가정 사정률 − 실제 사정률(%p)
 
-    def add(self, rate: float, actual: float, valid: bool, win: bool) -> None:
+    def add(self, rate: float, actual: float, valid: bool, win: bool, top: bool = False) -> None:
         self.tried += 1
         self.valid += valid
         self.win += win
+        self.top += top
         self.gaps.append(rate - actual)
 
     def line(self, name: str) -> str:
@@ -90,7 +102,8 @@ class Tally:
             return f"  {name:<22} 대상 없음"
         pct = lambda n: f"{n:>4}건 ({n / self.tried:5.1%})"  # noqa: E731
         gap = statistics.median(self.gaps)
-        return f"  {name:<22} {self.tried:>5}건 · 유효 {pct(self.valid)} · 1순위 {pct(self.win)} · 실제보다 {gap:+.3f}%p(중앙)"
+        return (f"  {name:<22} {self.tried:>5}건 · 유효 {pct(self.valid)} · 1순위 {pct(self.win)} · {TOP_N}위 안 {pct(self.top)}"
+                f" · 실제보다 {gap:+.3f}%p(중앙)")
 
 
 def backtest(records: list[PastBid], start: str | None = None, scale: str = "all", fixed: tuple[float, ...] = (),
@@ -105,28 +118,30 @@ def backtest(records: list[PastBid], start: str | None = None, scale: str = "all
         train = [r for _, r in dated[:bisect.bisect_left(dates, d)]]  # 같은 날 열린 공고도 안 씀
         rates = strategy_rates(train, rec, scale, min_train)
         rates.update({f"고정 {f:g}%": f for f in fixed})
-        row = {"공고번호": rec.notice_no, "개찰일": d, "업무": rec.work, "변동폭": rec.range_width, "참가": rec.bidder_count,
+        row = {"공고번호": rec.notice_no, "개찰일": d, "분야": rec.field, "업무": rec.work, "변동폭": rec.range_width, "참가": rec.bidder_count,
                "학습 공고": len(train), "실제 사정률": round(rec.assessment, 4), "1순위 상한": round(rec.win_ceiling, 4),
                "하한선": rec.floor_source, "rates": rates, "results": {}}
         for name, rate in rates.items():
-            row["results"][name] = (rate, *score(rate, rec))
+            row["results"][name] = (rate, *score(rate, rec), in_top(rate, rec))
         if rec.own_amount:
-            row["results"][OWN] = (own_rate(rec), rec.own_rank is not None, rec.own_rank == 1)
+            row["results"][OWN] = (own_rate(rec), rec.own_rank is not None, rec.own_rank == 1,
+                                   rec.own_rank is not None and rec.own_rank <= TOP_N)
         rows.append(row)
     return rows, len(records) - len(dated)
 
 
 def track_records(rows: list[dict]) -> dict[str, dict]:
-    """방식별 검증 성적 {이름: {tried, valid, win}} — 웹앱 추천 칸에 그대로 싣는다."""
+    """방식별 검증 성적 {이름: {tried, valid, win, top}} — 웹앱 추천 칸에 그대로 싣는다(top = 5위 안)."""
     out: dict[str, dict] = {}
     for row in rows:
-        for name, (rate, valid, win) in row["results"].items():
+        for name, (rate, valid, win, top) in row["results"].items():
             if rate is None:
                 continue
-            t = out.setdefault(name, {"tried": 0, "valid": 0, "win": 0})
+            t = out.setdefault(name, {"tried": 0, "valid": 0, "win": 0, "top": 0})
             t["tried"] += 1
             t["valid"] += bool(valid)
             t["win"] += bool(win)
+            t["top"] += bool(top)
     return out
 
 
@@ -155,9 +170,9 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
             t = Tally()
             for r in subset:
                 if name in r["results"]:
-                    rate, valid, win = r["results"][name]
+                    rate, valid, win, top = r["results"][name]
                     if rate is not None:
-                        t.add(rate, r["실제 사정률"], valid, win)
+                        t.add(rate, r["실제 사정률"], valid, win, top)
             lines.append(t.line(name))
 
     block("전체", rows)
@@ -169,6 +184,9 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
     if small and large:
         block(f"참가 {LARGE_COMPETITION}곳 미만", small)
         block(f"참가 {LARGE_COMPETITION}곳 이상(운의 영역)", large)
+    counts = Counter(r["분야"] for r in rows)
+    for name, n in counts.most_common():
+        block(f"분야 {name}(공고명 키워드)", [r for r in rows if r["분야"] == name])
     for year in sorted({r["개찰일"][:4] for r in rows}):
         block(f"{year}년", [r for r in rows if r["개찰일"].startswith(year)])
     by = {k: sum(r["하한선"] == k for r in rows) for k in ("A값", "추정", "A=0")}
@@ -176,23 +194,22 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
     if by["A=0"]:
         lines.append(f"  A=0으로 채점한 {by['A=0']}건은 1순위 판정이 실제보다 후할 수 있음"
                      "(지일 실제 투찰의 유효·1순위는 나라장터 순위 그대로라 해당 없음)")
-    lines.append("※ 순위는 금액 기준 개찰 순위(적격심사 서류 심사 전). 1순위 = 하한선 이상 중 가장 낮은 금액.")
+    lines.append(f"※ 순위는 금액 기준 개찰 순위(적격심사 서류 심사 전). 1순위 = 하한선 이상 중 가장 낮은 금액, {TOP_N}위 안 = {TOP_N}위 업체보다 쌈.")
     return "\n".join(lines)
 
 
 def write_csv(rows: list[dict], path: Path) -> None:
     names = _names(rows)
-    base = ["공고번호", "개찰일", "업무", "변동폭", "참가", "학습 공고", "실제 사정률", "1순위 상한", "하한선"]
-    head = base + [f"{n} {k}" for n in names for k in ("사정률", "유효", "1순위")]
+    base = ["공고번호", "개찰일", "분야", "업무", "변동폭", "참가", "학습 공고", "실제 사정률", "1순위 상한", "하한선"]
+    head = base + [f"{n} {k}" for n in names for k in ("사정률", "유효", "1순위", f"{TOP_N}위 안")]
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(head)
         for r in rows:
             cells = [r[k] for k in base]
             for n in names:
-                rate, valid, win = r["results"].get(n, (None, None, None))
-                cells += [round(rate, 4) if rate is not None else "", "" if valid is None else ("O" if valid else "X"),
-                          "" if win is None else ("O" if win else "X")]
+                rate, *marks = r["results"].get(n, (None, None, None, None))
+                cells += [round(rate, 4) if rate is not None else ""] + ["" if m is None else ("O" if m else "X") for m in marks]
             w.writerow(cells)
 
 

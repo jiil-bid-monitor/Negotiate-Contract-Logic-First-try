@@ -1,0 +1,65 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-10-28",
+ "reportedAt": "2026-10-27T23:57:55+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01790348",
+   "title": "2026년 산불방지 안전공간 조성사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "산림청 동부지방산림청 평창국유림관리소",
+    "budgetAmount": 88953022.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 44,
+    "deadline": "2026-11-02T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01790348&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01783253",
+   "title": "인천스타트업파크 인스타Ⅰ 커넥트홀 LED 전광판 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "인천테크노파크",
+    "budgetAmount": 78450909.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "안내전광판"
+    ],
+    "score": 53,
+    "deadline": "2026-11-02T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01783253&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01794260",
+   "title": "빔프로젝터 단가계약",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "조선대학교",
+    "budgetAmount": 405000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "비디오프로젝터"
+    ],
+    "score": 30,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01794260&bidPbancOrd=000"
+   }
+  }
+ ]
+}

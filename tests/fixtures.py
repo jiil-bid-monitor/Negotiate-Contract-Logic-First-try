@@ -78,7 +78,7 @@ def service_notices() -> list[dict[str, Any]]:
         notice("R26TEST00005", title="◎◎전시관 설계", award=DESIGN_CONTEST),
         # 6) 제외키워드('유지보수') — 업역 스크리닝에서 제외
         notice("R26TEST00006", title="○○박물관 전시물 유지보수 용역"),
-        # 7) 예산 5천만원 — 최소 예산이 없어 수집됨(2026-10-27)
+        # 7) 예산 미달 (5천만원) — 최소예산 필터에서 제외
         notice("R26TEST00007", title="○○과학관 체험콘텐츠 제작", presmptPrce="50000000", asignBdgtAmt="50000000"),
         # 8) 공동수급 불허 + 직찰 + 재공고
         notice(

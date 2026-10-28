@@ -102,7 +102,7 @@
 - 비교 대상 = 공고명 + 대표 품목명, **띄어쓰기 무시**.
 - `keywords`(관심 18개), `excludeKeywords`(조건부 72개), `hardExcludeKeywords`(무조건: 특별전·순회전),
   `excludeKeywordExceptions`({"건축": ["실내건축"]} — "실내건축"은 "건축"으로 안 침),
-  최소 예산 없음(2026-10-27 회의 결정 — 예전 `minBudgetAmount` 1억·설계 용역 예외 삭제).
+  `minBudgetAmount` 1억(예산 정보 없으면 통과), `minBudgetExemptKeywords`(["공사 설계 용역"] — 예산 하한 면제, 10/19부터 공고명에 "설계"+"용역"이 있는 설계 용역 전부 면제).
 - `keywordSkipWhen`(특정 낱말이 있으면 그 관심 키워드를 무시) 기능은 남아 있으나 설정은 비어 있음.
 - keywords.json 안 `_…comment` 칸에 키워드마다 넣고 뺀 이유가 적혀 있음 — 이식할 때 같이 옮기면 판단 근거가 보존됨.
 

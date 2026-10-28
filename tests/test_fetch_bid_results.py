@@ -81,5 +81,60 @@ class FetchBidResultsTest(unittest.TestCase):
             self.assertEqual(fb.read_targets(targets), [("A-000", "시설"), ("B-000", "용역")])
 
 
+class FillNoticeTest(unittest.TestCase):
+    """이미 받은 줄에 공고 정보만 채우기(--fill-notice, 2026-10-28) — 개찰 결과는 다시 안 받는다."""
+
+    LINES = [
+        {"input": "A-000", "no": "A", "work": "공사", "prices": [{"x": 1}], "bidders": [{"y": 1}]},  # 10/27에 받은 줄
+        {"input": "B-000", "no": "B", "work": "", "prices": [{"x": 1}], "bidders": []},  # 업무 모름
+        {"input": "C-000", "error": "없음"},  # 개찰 결과 없음 — 건너뜀
+        {"input": "D-000", "no": "D", "work": "공사", "prices": [{"x": 1}], "bidders": [{"y": 1}],
+         "notice": {"lower_rate": "87.745"}},  # 이미 채워짐
+    ]
+
+    def _client(self):
+        return FakeClient({
+            F.BID_NOTICE_OPERATIONS["공사"]: [{"bidNtceNo": "A", "bidNtceOrd": "000", "bidNtceNm": "가", "sucsfbidLwltRate": "87.745",
+                                               "opengDt": "2025-03-04 11:00:00"}],
+            F.BID_NOTICE_OPERATIONS["물품"]: [{"bidNtceNo": "B", "bidNtceOrd": "000", "bidNtceNm": "나", "sucsfbidLwltRate": "84.245"}],
+            F.BASIS_AMOUNT_OPERATIONS["공사"]: [{"bidNtceNo": "A", "bidNtceOrd": "000", "bssamt": "100000000",
+                                                 "rsrvtnPrceRngBgnRate": "-3", "rsrvtnPrceRngEndRate": "+3"}],
+        })
+
+    def test_fills_only_missing_and_keeps_backup(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "bid_results.jsonl"
+            original = "".join(json.dumps(x, ensure_ascii=False) + "\n" for x in self.LINES)
+            path.write_text(original, encoding="utf-8")
+            client = self._client()
+            filled, tried, stopped = fb.fill_notices(client, path, sleep=0)
+            self.assertEqual((filled, tried, stopped), (2, 2, False))
+            recs = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(recs[0]["notice"]["lower_rate"], "87.745")
+            self.assertEqual(recs[0]["notice"]["opened_at"], "2025-03-04 11:00:00")
+            self.assertEqual(recs[0]["notice"]["range_hi"], 3.0)
+            self.assertEqual((recs[1]["work"], recs[1]["notice"]["lower_rate"]), ("물품", "84.245"))
+            self.assertEqual(recs[2:], self.LINES[2:])
+            self.assertEqual((Path(d) / "bid_results_채우기전.jsonl").read_text(encoding="utf-8"), original)
+            # 다시 실행하면 찾아본 줄은 건너뜀
+            self.assertEqual(fb.fill_notices(self._client(), path, sleep=0)[1], 0)
+
+    def test_quota_stops_and_saves(self):
+        class Quota(FakeClient):
+            def fetch_all_pages(self, base_url, operation, params, label):
+                if params.get("bidNtceNo") == "B":
+                    raise fb.ApiResultError("공고", "22", "LIMITED")
+                return super().fetch_all_pages(base_url, operation, params, label)
+
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "bid_results.jsonl"
+            path.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in self.LINES), encoding="utf-8")
+            filled, tried, stopped = fb.fill_notices(Quota(self._client().responses), path, sleep=0)
+            self.assertEqual((filled, tried, stopped), (1, 1, True))
+            recs = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+            self.assertIn("notice", recs[0])
+            self.assertNotIn("notice", recs[1])  # 다음 실행에서 이어서
+
+
 if __name__ == "__main__":
     unittest.main()

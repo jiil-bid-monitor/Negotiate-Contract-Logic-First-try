@@ -136,19 +136,102 @@ def notice_info(client: DataGoKrClient, no: str, work: str) -> dict:
     return info
 
 
+def needs_notice(rec: dict) -> bool:
+    """공고 정보를 채워야 하는 줄 — 개찰 결과는 있는데 공고 정보가 없거나(10/28 전에 받은 줄) 하한율이 비고 아직 안 찾아본 줄."""
+    if rec.get("error") or not (rec.get("prices") or rec.get("bidders")):
+        return False
+    info = rec.get("notice")
+    return info is None or (not info.get("checked") and not info.get("lower_rate"))
+
+
+def notice_info_any(client: DataGoKrClient, no: str, work: str) -> dict:
+    """업무를 모르면(목록에 비어 있던 줄) 공사·용역·물품 순으로 공고를 찾아본다."""
+    info: dict = {}
+    for w in [work] if work in F.BID_NOTICE_OPERATIONS else list(F.BID_NOTICE_OPERATIONS):
+        info = notice_info(client, no, w)
+        if info.get("lower_rate") or info.get("title"):
+            info["work"] = w
+            break
+    return info
+
+
+def _write_lines(path: Path, lines: list[str]) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+    os.replace(tmp, path)  # 쓰다가 끊겨도 원래 파일은 그대로
+
+
+def fill_notices(client: DataGoKrClient, path: Path, limit: int = 0, sleep: float = 0.3) -> tuple[int, int, bool]:
+    """이미 받은 결과 파일에 공고 정보(하한율·공고명·변동폭·A값·개찰일)만 채운다 — 개찰 결과는 다시 받지 않음.
+    처음 한 번 원본을 `<이름>_채우기전.jsonl`로 남기고, 100건마다 파일에 저장한다. (채운 수, 찾아본 수, 한도에 걸려 멈췄나)"""
+    raw = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    backup = path.with_name(path.stem + "_채우기전" + path.suffix)
+    if not backup.exists():
+        backup.write_text("".join(line + "\n" for line in raw), encoding="utf-8")
+    recs = [json.loads(line) for line in raw]
+    todo = [i for i, rec in enumerate(recs) if needs_notice(rec)]
+    if limit:
+        todo = todo[:limit]
+    print(f"결과 {len(recs)}줄 중 공고 정보를 채울 줄 {len(todo)}건 (원본 사본: {backup.name})")
+    filled = tried = 0
+    stopped = False
+    started = time.time()
+    for n, i in enumerate(todo, 1):
+        rec = recs[i]
+        try:
+            info = notice_info_any(client, rec.get("no") or split_notice_no(rec.get("input", ""))[0], rec.get("work", ""))
+        except ApiResultError as err:
+            if err.result_code != QUOTA_CODE:
+                raise
+            print(f"\n오늘 호출 한도에 걸려 멈춥니다({n - 1}건까지 저장). 내일 같은 명령을 다시 실행하면 이어서 채웁니다.")
+            stopped = True
+            break
+        if info.get("work") and not rec.get("work"):
+            rec["work"] = info["work"]
+        info.pop("work", None)
+        info["checked"] = datetime.now().isoformat(timespec="seconds")
+        rec["notice"] = {**(rec.get("notice") or {}), **{k: v for k, v in info.items() if v not in (None, "")}}
+        raw[i] = json.dumps(rec, ensure_ascii=False)
+        tried += 1
+        filled += bool(info.get("lower_rate"))
+        if n % 100 == 0:
+            _write_lines(path, raw)
+        if n % 20 == 0 or n == len(todo):
+            left = (time.time() - started) / n * (len(todo) - n)
+            print(f"  {n}/{len(todo)} · 하한율 찾음 {filled} · 남은 시간 약 {left / 60:.0f}분")
+        time.sleep(sleep)
+    _write_lines(path, raw)
+    return filled, tried, stopped
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="공고번호 목록의 개찰결과(참가업체 전체·예비가격) 받기")
-    parser.add_argument("targets", help="공고번호 목록 CSV (공고번호, 업무)")
+    parser.add_argument("targets", nargs="?", default="", help="공고번호 목록 CSV (공고번호, 업무) — --fill-notice면 필요 없음")
     parser.add_argument("--out", default=str(ROOT / "output" / "bid_results.jsonl"), help="결과 파일(JSONL, 이어 쓰기)")
     parser.add_argument("--limit", type=int, default=0, help="이번에 받을 최대 공고 수(시험용, 0이면 전부)")
     parser.add_argument("--sleep", type=float, default=0.3, help="공고 사이 쉬는 초(기본 0.3)")
+    parser.add_argument("--fill-notice", action="store_true",
+                        help="이미 받은 결과 파일에 공고 정보(하한율·변동폭·A값·개찰일)만 채움 — 개찰 결과는 다시 안 받음")
     args = parser.parse_args(argv)
+    if not args.fill_notice and not args.targets:
+        parser.error("공고번호 목록 CSV를 주거나 --fill-notice를 쓰세요")
 
     key = service_key()
     if not key:
         print("나라장터 인증키가 없습니다 — NARA_SERVICE_KEY 환경변수나 레포 루트 .env를 확인하세요.", file=sys.stderr)
         return 1
     out_path = Path(args.out)
+    if args.fill_notice:
+        if not out_path.exists():
+            print(f"결과 파일이 없습니다: {out_path}", file=sys.stderr)
+            return 1
+        client = DataGoKrClient(ApiConfig(service_key=key, timeout_sec=30.0, max_retries=3))
+        client.config.num_of_rows = 999
+        filled, tried, stopped = fill_notices(client, out_path, args.limit, args.sleep)
+        print(f"끝 — 찾아본 {tried}건 중 하한율 찾음 {filled}건. 결과 파일: {out_path}")
+        if not stopped and tried > filled:
+            print("하한율을 못 찾은 공고는 다시 실행해도 건너뜁니다(이미 찾아봄 표시).")
+        return 0
     out_path.parent.mkdir(parents=True, exist_ok=True)
     targets = read_targets(Path(args.targets))
     done = done_numbers(out_path)

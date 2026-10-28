@@ -354,6 +354,25 @@
     const notes = (d.notes || []).map((n) => `<div class="rec-warn">※ ${esc(n)}</div>`).join("");
     if (!d.samples) { $("#cRec").innerHTML = notes || "비슷한 과거 공고가 없습니다."; return; }
     const cond = (d.conditions || []).length ? d.conditions.join(" · ") : "조건 없음(전체)";
+    const ratio = (t) => (t && t.tried ? `${t.win}건 / ${t.tried}건 (${Math.round((t.win / t.tried) * 100)}%)` : "기록 없음");
+    // 맨 위: 추천 투찰금액 하나 — 검증 1순위 비율이 가장 높은 방식(서버 pick_option), 외주 실제 성적과 나란히
+    const p = d.pick;
+    let pickHtml = "";
+    if (p) {
+      const bid = recBid(p.rate);
+      const why = p.weak
+        ? `비슷한 과거 공고가 적어 검증할 수 없음 — 기본값(${esc(p.name)})으로 둠. 근거 약함`
+        : `비슷한 과거 공고에서 ${esc(p.name)} 방식이 1순위 ${ratio(p.track)}로 가장 많았음`;
+      const vs = p.own_track && p.own_track.tried
+        ? `같은 공고 외주(지일 실제 투찰) 1순위 ${ratio(p.own_track)}` + (p.beats_outsourced ? "" : " — <b>외주보다 낫다는 근거 없음</b>")
+        : "외주 비교 기록 없음";
+      pickHtml = `<div class="rec-pick${p.weak || !p.beats_outsourced ? " weak" : ""}">
+        <div class="rec-pick-label">추천 투찰금액</div>
+        <div class="rec-pick-amt">${bid != null ? won(bid) : "기초금액·하한율 필요"}</div>
+        <div class="rec-pick-sub">가정 사정률 ${pct(p.rate)} · ${esc(p.name)}</div>
+        <div class="rec-note">${why}<br>${vs}${d.auto_scale ? `<br>${esc(d.auto_scale)}` : ""}</div>
+      </div>`;
+    }
     const a = d.assessment, b = d.bidders;
     const head = `<div class="rec-sum">비슷한 과거 공고 <b>${d.samples}건</b> (${esc(cond)}) — 과거 개찰 자료 ${d.total}건 중</div>
       <div class="rec-note">실제 사정률 10%·중앙·90%: ${pct(a.p10)} · ${pct(a.p50)} · ${pct(a.p90)} ·
@@ -373,7 +392,7 @@
     const o = d.outsourced;
     const ownRow = o ? `<tr class="own"><td>${esc(o.name)}</td><td>${pct(o.rate)} <span class="rec-note">(과거 중앙)</span></td>
         <td>${track(o.track)}</td><td>${valid(o.track)}</td><td>-</td></tr>` : "";
-    $("#cRec").innerHTML = `${head}
+    $("#cRec").innerHTML = `${pickHtml}${head}
       <div class="rec-scroll"><table><tr><th>구분</th><th>가정 사정률</th><th>검증: 1순위</th><th>검증: 유효(하한선 이상)</th><th>투찰금액</th></tr>${rows}${ownRow}</table></div>
       <div class="rec-note">검증 = 비슷한 과거 공고마다 그 공고 <b>개찰 전 자료만으로</b> 이 방식대로 사정률을 정했다면 금액 기준 개찰 1순위·하한선 이상이었을 건수(적격심사 서류 심사 전).
         "${esc(o ? o.name : "지일 실제 투찰(외주)")}"은 같은 공고에 지일이 실제로 낸 금액의 나라장터 순위. 굵은 줄 = 검증 1순위 비율이 가장 높은 방식.

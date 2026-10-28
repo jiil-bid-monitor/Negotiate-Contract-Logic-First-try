@@ -102,6 +102,37 @@ class CoverageTest(unittest.TestCase):
         self.assertAlmostEqual(own["rate"], 99.7, places=3)
         self.assertEqual((own["track"]["tried"], own["track"]["valid"], own["track"]["win"]), (24, 0, 0))
 
+    def test_pick_uses_best_track_and_compares_outsourced(self):
+        records = []
+        for i in range(36):  # 앞 10건 뒤 26건이 검증돼 MIN_PICK_TRIED(20)를 넘김
+            rec = _past(f"N{i:02d}", 100.0 + (i % 3) * 0.1)
+            rec.opened_at = f"2025-{1 + i // 12:02d}-{1 + i % 12:02d}"
+            rec.own_amount = br.bid_amount(rec.basis, 99.7, rec.lower_rate)
+            records.append(rec)
+        out = br.recommend(br.History(records), work="용역", lo=-3, hi=3, basis=100_000_000, lower_rate=87.745)
+        pick = out["pick"]
+        self.assertFalse(pick["weak"])
+        best = max(br._ratio(o["track"]) for o in out["options"] if o["track"]["tried"] >= br.MIN_PICK_TRIED)
+        self.assertAlmostEqual(br._ratio(pick["track"]), best)
+        self.assertTrue(pick["beats_outsourced"])  # 외주는 늘 하한 미달
+
+    def test_pick_falls_back_to_fixed_when_few(self):
+        options = [{"name": "추천(과거 1순위 최다)", "rate": 100.1, "track": {"tried": 5, "valid": 5, "win": 5}},
+                   {"name": "고정 100.55%", "rate": 100.55, "track": {"tried": 5, "valid": 3, "win": 0}}]
+        pick = br.pick_option(options, {"track": {"tried": 5, "valid": 1, "win": 1}})
+        self.assertTrue(pick["weak"])
+        self.assertEqual(pick["name"], "고정 100.55%")
+        self.assertFalse(pick["beats_outsourced"])
+        self.assertIsNone(br.pick_option([]))
+
+    def test_auto_scale_from_similar_bidder_count(self):
+        small = [_past(f"s{i}", 100.0 + i * 0.01, count=20) for i in range(12)]
+        out = br.recommend(br.History(small), work="용역", scale="auto")
+        self.assertEqual(out["scale"], br.SCALES["small"])
+        self.assertIn("자동", out["auto_scale"])
+        large = [_past(f"l{i}", 100.0 + i * 0.01, count=300) for i in range(12)]
+        self.assertEqual(br.recommend(br.History(large), work="용역", scale="auto")["scale"], br.SCALES["large"])
+
     def test_large_competition_note_and_no_win(self):
         # 1순위가 하한선 바로 위(대규모 경쟁) — 서로 겹치지 않는 아주 좁은 구간뿐
         records = [_past(str(i), 99.0 + i * 0.1, winner_gap=0.004, count=300) for i in range(12)]

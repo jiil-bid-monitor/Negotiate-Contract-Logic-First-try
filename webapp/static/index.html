@@ -1030,6 +1030,11 @@ footer b { color: var(--muted); }
 .calc-rec th { background: var(--chip); color: var(--ink); text-align: center; font-weight: 600; }
 .calc-rec td:first-child { text-align: left; }
 .calc-rec tr.best td { color: var(--accent); font-weight: 700; }
+.calc-rec .rec-pick { border: 2px solid var(--accent); padding: 10px 12px; margin: 4px 0 10px; }
+.calc-rec .rec-pick.weak { border-color: var(--line); }
+.calc-rec .rec-pick-label { font-size: 12px; color: var(--muted); }
+.calc-rec .rec-pick-amt { font-size: 24px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.calc-rec .rec-pick-sub { font-size: 13px; color: var(--ink); margin: 2px 0 4px; }
 .calc-rec tr.own td { color: var(--muted); border-top: 2px solid var(--line); }
 .calc-rec .rec-sum { color: var(--ink); font-size: 13px; }
 .calc-rec .rec-note { color: var(--muted); font-size: 12px; }
@@ -1263,11 +1268,11 @@ footer b { color: var(--muted); }
     <div class="calc-rec">
       <h4 class="calc-h">추천 사정률 — 과거 개찰 결과 기준</h4>
       <div class="calc-rec-bar">
-        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="all">전체</option><option value="small">참가 100곳 미만</option><option value="large">참가 100곳 이상</option></select></label>
+        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="auto" selected>자동(과거 참가 수)</option><option value="all">전체</option><option value="small">참가 100곳 미만</option><option value="large">참가 100곳 이상</option></select></label>
         <button type="button" id="cRecBtn">추천 보기</button>
         <span id="cRecMsg" class="job"></span>
       </div>
-      <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고(업무·변동폭)의 개찰 결과로 방식별 사정률과 검증 성적(그때 이 방식대로 썼다면 1순위·유효였던 건수)을 외주 실제 투찰과 나란히 보여 줍니다.</div>
+      <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고(업무·변동폭)의 개찰 결과로 <b>추천 투찰금액</b>(과거 검증에서 1순위가 가장 많았던 방식)과 방식별 검증 성적을 외주 실제 투찰과 나란히 보여 줍니다.</div>
     </div>
   </section>
 

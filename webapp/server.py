@@ -193,7 +193,7 @@ def make_handler(app: App):
                 history = bidrecommend.history_from_dir(directory)
                 return self._json(bidrecommend.recommend(
                     history, work=q.get("work", [""])[0] or None, lo=num("lo"), hi=num("hi"),
-                    scale=q.get("scale", ["all"])[0], basis=num("basis"), lower_rate=num("lower"), a=num("a") or 0.0))
+                    scale=q.get("scale", ["auto"])[0], basis=num("basis"), lower_rate=num("lower"), a=num("a") or 0.0))
             if url.path == "/api/results":
                 # ?run=번호 — 그 브라우저가 보고 있는(직접 불러온) 결과. 없거나 지워진 번호면 최신 결과(missing=True)
                 wanted = q.get("run", [""])[0]

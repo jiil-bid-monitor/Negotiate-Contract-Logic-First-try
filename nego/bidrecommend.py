@@ -33,6 +33,7 @@ GRID_LO, GRID_HI, GRID_STEP = 96.0, 104.0, 0.001  # 사정률 후보(%) — 변�
 MIN_SAMPLES = 10  # 이보다 적으면 조건을 하나씩 풀어 비슷한 공고를 더 모은다
 LARGE_COMPETITION = 100  # 참가 100곳 이상 = 대규모 경쟁(2026-10-23 분석 기준)
 SCALES = {"all": "전체", "small": f"{LARGE_COMPETITION}곳 미만", "large": f"{LARGE_COMPETITION}곳 이상"}
+MIN_PICK_TRIED = 20  # 추천 투찰금액을 고를 때 검증 건수가 이보다 적은 방식은 믿지 않는다
 HISTORY_PATTERNS = ("bid_history_*.json", "bid_results*.jsonl")
 FIXED_RATE = 100.55  # 고정 사정률 비교값 — 2020~24 지일 이력 중 참가 100곳 미만 ±3% 공고로 고른 값(10/23 분석, 10/28 검증에서 소규모 1순위 최다)
 OWN_NAME = "지일 실제 투찰(외주)"  # bidbacktest.OWN과 같은 이름
@@ -379,6 +380,27 @@ def _best(wins: list[int]) -> int | None:
     return (lo + hi) // 2
 
 
+def _ratio(track: dict | None, key: str = "win") -> float:
+    return track[key] / track["tried"] if track and track.get("tried") else 0.0
+
+
+def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | None:
+    """화면 맨 위 '추천 투찰금액'으로 쓸 방식 하나 — 검증(개찰 전 자료로 정했다면) 1순위 비율이 가장 높은 방식,
+    같으면 유효 비율이 높은 쪽. 검증 건수가 MIN_PICK_TRIED 미만인 방식만 있으면 고정값으로 두고 '근거 약함'."""
+    if not options:
+        return None
+    ok = [o for o in options if (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED]
+    weak = not ok
+    if ok:
+        chosen = max(ok, key=lambda o: (_ratio(o["track"]), _ratio(o["track"], "valid")))
+    else:
+        chosen = next((o for o in options if o["name"].startswith("고정")), options[0])
+    own = (outsourced or {}).get("track")
+    pick = {**chosen, "weak": weak, "own_track": own,
+            "beats_outsourced": bool(own and own.get("tried") and _ratio(chosen.get("track")) > _ratio(own))}
+    return pick
+
+
 _TRACK_CACHE: dict[tuple, dict] = {}
 
 
@@ -406,13 +428,26 @@ def bid_amount(basis: float, rate: float, lower_rate: float, a: float = 0.0) -> 
 
 def recommend(history: History, work: str | None = None, lo: float | None = None, hi: float | None = None,
               scale: str = "all", basis: float | None = None, lower_rate: float | None = None, a: float = 0.0) -> dict:
-    """화면 '추천 사정률' 칸 자료. 금액(basis·lower_rate)을 주면 추천 사정률로 계산한 투찰금액도 넣는다."""
+    """화면 '추천 사정률' 칸 자료. 금액(basis·lower_rate)을 주면 추천 사정률로 계산한 투찰금액도 넣는다.
+    scale="auto"(화면 기본)면 비슷한 과거 공고의 참가 업체 수 중앙값으로 경쟁 규모를 고른다(투찰 전엔 참가 수를 모르므로)."""
     width = _width_from_rates(lo, hi)
-    picked, labels = similar(history.records, work, width, scale if scale in SCALES else "all")
+    auto_note = ""
+    if scale == "auto":
+        base, _ = similar(history.records, work, width, "all")
+        if base:
+            median = statistics.median(r.bidder_count for r in base)
+            scale = "small" if median < LARGE_COMPETITION else "large"
+            auto_note = f"경쟁 규모 자동: 비슷한 과거 공고 참가 중앙 {median:g}곳 → {SCALES[scale]}"
+        else:
+            scale = "all"
+    scale = scale if scale in SCALES else "all"
+    picked, labels = similar(history.records, work, width, scale)
     out: dict[str, Any] = {
         "samples": len(picked), "total": len(history.records), "skipped": history.skipped,
-        "files": history.files, "conditions": labels, "scale": SCALES.get(scale, "전체"), "notes": [],
+        "files": history.files, "conditions": labels, "scale": SCALES[scale], "notes": [],
     }
+    if auto_note:
+        out["auto_scale"] = auto_note
     if not history.records:
         out["notes"].append("과거 개찰 자료가 없습니다 — 서버 PC에서 `python -m nego.bidprice` 또는 "
                             "`scripts/fetch_bid_results.py`로 output/에 받아 두세요")
@@ -456,7 +491,7 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     options += [row("사정률 중앙값", out["assessment"]["p50"]), row("유효 70%", _pct(rates, 0.7)),
                 row("유효 90%", out["assessment"]["p90"])]
     options.append(row(f"고정 {FIXED_RATE:g}%", FIXED_RATE))
-    track = _track(history, picked, scale if scale in SCALES else "all")
+    track = _track(history, picked, scale)
     for o in options:
         o["track"] = track.get(o["name"])
     own = [r for r in picked if r.own_amount]
@@ -465,6 +500,7 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
         out["outsourced"] = {"name": OWN_NAME, "rate": round(statistics.median(rates_own), 3), "track": track.get(OWN_NAME)}
     out["options"] = options
     out["best"] = options[0] if best is not None else None
+    out["pick"] = pick_option(options, out.get("outsourced"))
     if best is None:
         out["notes"].append("과거 공고에서 1순위가 될 수 있었던 사정률이 없습니다(자료 부족)")
     # 그래프·표용 거친 곡선(0.05%p 간격, 자료가 있는 범위만)

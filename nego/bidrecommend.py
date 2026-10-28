@@ -265,10 +265,13 @@ def load_history(paths: Iterable[Path], own_bizno: str | None = None) -> History
     return history
 
 
+BACKUP_MARK = "_채우기전"  # scripts/fetch_bid_results.py --fill-notice가 남기는 원본 사본 — 같은 공고가 두 번 읽히지 않게 뺀다
+
+
 def history_paths(directory: Path) -> list[Path]:
     paths: list[Path] = []
     for pattern in HISTORY_PATTERNS:
-        paths.extend(sorted(directory.glob(pattern)))
+        paths.extend(p for p in sorted(directory.glob(pattern)) if BACKUP_MARK not in p.stem)
     return paths
 
 

@@ -134,6 +134,8 @@ class LoadHistoryTest(unittest.TestCase):
             (d / "bid_history_20260701_20260930.json").write_text(json.dumps(bid_history), encoding="utf-8")
             (d / "bid_results.jsonl").write_text(json.dumps(result_line) + "\n" + json.dumps({"input": "x", "error": "없음"}) + "\n",
                                                  encoding="utf-8")
+            (d / "bid_results_채우기전.jsonl").write_text(json.dumps(result_line) + "\n", encoding="utf-8")  # 원본 사본은 안 읽음
+            self.assertEqual([p.name for p in br.history_paths(d)], ["bid_history_20260701_20260930.json", "bid_results.jsonl"])
             history = br.load_history(br.history_paths(d))
         by_no = {r.notice_no: r for r in history.records}
         self.assertEqual(set(by_no), {"R26BK00000001", "R26BK00000002"})

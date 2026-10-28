@@ -136,7 +136,8 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
         lines.append(f"  그중 {no_rec}건은 개찰일 전 비슷한 공고가 {MIN_SAMPLES}건 미만이라 추천 없음(추천 줄에서 빠짐)")
 
     def block(title: str, subset: list[dict]) -> None:
-        lines.append(f"\n[{title}] {len(subset)}건")
+        src = {k: sum(r["하한선"] == k for r in subset) for k in ("A값", "추정", "A=0")}
+        lines.append(f"\n[{title}] {len(subset)}건 (하한선: A값 {src['A값']} · 추정 {src['추정']} · A=0 {src['A=0']})")
         for name in names:
             t = Tally()
             for r in subset:

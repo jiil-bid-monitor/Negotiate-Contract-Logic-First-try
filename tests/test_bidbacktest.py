@@ -50,6 +50,8 @@ class ScoreTest(unittest.TestCase):
         self.assertEqual(bt.date_of(rec), "2025-03-07")
         rec.opened_at = ""
         self.assertIsNone(bt.date_of(rec))
+        rec.notice_no = "20201217355"  # 옛 공고번호 = 공고일
+        self.assertEqual(bt.date_of(rec), "2020-12-17")
 
 
 class BacktestTest(unittest.TestCase):
@@ -94,6 +96,34 @@ class BacktestTest(unittest.TestCase):
         self.assertEqual(table[0][0], "공고번호")
         self.assertIn(f"{bt.OWN} 1순위", table[0])
         self.assertEqual(len(table), 3)
+
+
+class ResultRecordDateTest(unittest.TestCase):
+    """fetch_bid_results 줄의 개찰일 — 참가업체 줄에 opengDt가 없으면 예비가격 줄의 다른 날짜 칸, 못 쓴 줄은 이유를 센다."""
+
+    def _line(self, **extra):
+        line = {"no": "R25BK00000001", "work": "용역",
+                "prices": [{"bsisPlnprc": str(100_000_000 + i * 200_000), "drwtYn": "Y" if i < 4 else "N",
+                            "plnprc": "100300000", "bssamt": "100000000", "rlOpengDt": "2025-03-04 11:00:00"}
+                           for i in range(-7, 8)],
+                "bidders": [{"opengRank": "1", "prcbdrNm": "갑", "prcbdrBizno": "1", "bidprcAmt": "88200000"}],
+                "notice": {"lower_rate": "87.745"}}
+        line.update(extra)
+        return line
+
+    def test_date_from_price_rows(self):
+        rec = br.from_result_record(self._line())
+        self.assertEqual(bt.date_of(rec), "2025-03-04")
+        rec = br.from_result_record(self._line(notice={"lower_rate": "87.745", "opened_at": "2025-03-05 10:00"}))
+        self.assertEqual(bt.date_of(rec), "2025-03-05")
+
+    def test_skip_reasons(self):
+        lines = [self._line(notice={}), {"input": "x", "error": "없음"}, self._line(bidders=[])]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bid_results.jsonl"
+            path.write_text("\n".join(json.dumps(x) for x in lines), encoding="utf-8")
+            history = br.load_history([path])
+        self.assertEqual(dict(history.skip_reasons), {"하한율 없음": 1, "개찰 결과 없음(조회 오류)": 1, "참가업체 없음": 1})
 
 
 class MainTest(unittest.TestCase):

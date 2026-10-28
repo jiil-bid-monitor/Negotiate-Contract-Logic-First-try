@@ -38,7 +38,10 @@ def date_of(rec: PastBid) -> str | None:
     """개찰일 'YYYY-MM-DD' — 모르면 None(순서를 못 정해 검증에서 뺌)."""
     m = _DATE.search(rec.opened_at or "")
     if not m:
-        return None
+        # 옛 공고번호(2020~23 "20201217355")는 앞 8자리가 공고일 — 개찰일 칸이 없을 때만 대신 씀
+        m = re.match(r"(20\d{2})(\d{2})(\d{2})\d{3}$", rec.notice_no or "")
+        if not m or not (1 <= int(m.group(2)) <= 12 and 1 <= int(m.group(3)) <= 31):
+            return None
     return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
 
 
@@ -124,7 +127,9 @@ def _names(rows: list[dict]) -> list[str]:
 
 def summarize(rows: list[dict], undated: int = 0) -> str:
     if not rows:
-        return "채점할 공고가 없습니다 — 과거 개찰 자료(개찰일 포함)를 확인하세요."
+        if undated:
+            return (f"채점할 공고가 없습니다 — 개찰일을 찾지 못한 공고 {undated}건. 개찰 결과 파일의 날짜 칸 이름을 확인해야 합니다.")
+        return "채점할 공고가 없습니다 — `--from` 날짜 이후 공고가 없거나 과거 개찰 자료가 비었습니다."
     names = _names(rows)
     lines = [f"채점 공고 {len(rows)}건 (개찰일 모름 {undated}건 제외) · {rows[0]['개찰일']} ~ {rows[-1]['개찰일']}"]
     no_rec = sum("추천(과거 1순위 최다)" not in r["results"] for r in rows)
@@ -206,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     history = load_history(paths, _own_bizno(Path(__file__).resolve().parent.parent))
     print(f"과거 개찰 {len(history.records)}건 (못 쓴 공고 {history.skipped}건) — {', '.join(history.files)}")
+    if history.skip_reasons:
+        print("  못 쓴 이유: " + " · ".join(f"{k} {n}건" for k, n in history.skip_reasons.most_common()))
     rows, undated = backtest(history.records, args.start or None, args.scale, tuple(args.fixed), args.min_train)
     print(summarize(rows, undated))
     if rows:

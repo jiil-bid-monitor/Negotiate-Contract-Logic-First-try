@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import statistics
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -141,6 +143,39 @@ def _row_value(rows: list[dict], key: str) -> Any:
     return next((r.get(key) for r in rows if r.get(key) not in (None, "")), None)
 
 
+_DATE_VALUE = re.compile(r"^\s*(?:19|20)\d{2}[-./]?\d{1,2}[-./]?\d{1,2}")
+
+
+def _opened_at(rec: dict, rows: list[dict]) -> str:
+    """개찰일 — 공고 정보(`notice.opened_at`) → 개찰일 칸(opengDt·rlOpengDt 등 이름에 'openg'+'dt') → 그 밖의 날짜 칸
+    (inptDt·rgstDt 등 'Dt'로 끝나는 칸) 순. 응답마다 칸 이름이 달라 날짜처럼 생긴 값만 쓴다."""
+    found = (rec.get("notice") or {}).get("opened_at")
+    if found:
+        return str(found)
+    for test in (lambda k: "openg" in k.lower() and k.lower().endswith(("dt", "date")),
+                 lambda k: k.lower().endswith("dt")):
+        for row in rows:
+            for key, value in row.items():
+                if test(key) and value and _DATE_VALUE.match(str(value)):
+                    return str(value)
+    return ""
+
+
+def skip_reason(rec: dict) -> str:
+    """`from_result_record`가 못 쓴 줄의 이유(검증 화면에 건수로 보임)."""
+    if rec.get("error"):
+        return "개찰 결과 없음(조회 오류)"
+    prices_rows, bidder_rows = rec.get("prices") or [], rec.get("bidders") or []
+    planned, basis, _ = parse_prepare_prices(prices_rows)
+    if not bidder_rows:
+        return "참가업체 없음"
+    if not (planned and basis):
+        return "예정가격·기초금액 없음"
+    if not ((rec.get("notice") or {}).get("lower_rate") or _row_value(prices_rows + bidder_rows, "sucsfbidLwltRate")):
+        return "하한율 없음"
+    return "1순위 없음"
+
+
 def from_result_record(rec: dict, source: str = "", own_bizno: str = "") -> PastBid | None:
     """`scripts/fetch_bid_results.py` 결과 1줄(원본 행). 하한율·A값은 rec["notice"]에(10/28부터 함께 받음), 예전 줄이면 원본 행에서 찾는다."""
     if rec.get("error"):
@@ -153,7 +188,7 @@ def from_result_record(rec: dict, source: str = "", own_bizno: str = "") -> Past
     return _make(rec.get("no", ""), rec.get("work", ""), basis, planned, lower, parse_bidders(bidder_rows), prices,
                  range_width=_width_from_rates(info.get("range_lo"), info.get("range_hi")),
                  a_value=_num(info.get("a_value")) if info.get("a_applies", True) else 0.0,
-                 title=info.get("title", ""), opened_at=_row_value(bidder_rows, "opengDt") or "", source=source,
+                 title=info.get("title", ""), opened_at=_opened_at(rec, bidder_rows + prices_rows), source=source,
                  own_bizno=own_bizno)
 
 
@@ -161,6 +196,7 @@ def from_result_record(rec: dict, source: str = "", own_bizno: str = "") -> Past
 class History:
     records: list[PastBid] = field(default_factory=list)
     skipped: int = 0  # 하한율·예정가격·1순위가 없어 못 쓴 공고
+    skip_reasons: Counter = field(default_factory=Counter)
     files: list[str] = field(default_factory=list)
 
 
@@ -175,6 +211,7 @@ def load_history(paths: Iterable[Path], own_bizno: str | None = None) -> History
             if path.suffix == ".jsonl":
                 items = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
                 parsed = [from_result_record(i, path.name, own_bizno) for i in items]
+                history.skip_reasons.update(skip_reason(i) for i, p in zip(items, parsed) if p is None)
             else:
                 items = json.loads(path.read_text(encoding="utf-8"))
                 parsed = [from_bid_history(i, path.name, own_bizno) for i in items]

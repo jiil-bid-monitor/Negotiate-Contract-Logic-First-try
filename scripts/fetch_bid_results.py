@@ -119,6 +119,7 @@ def notice_info(client: DataGoKrClient, no: str, work: str) -> dict:
         row = _latest(client.fetch_all_pages(F.BID_NOTICE_BASE_URL, F.BID_NOTICE_OPERATIONS[work], params, f"공고 {no}"), no)
         if row:
             info.update(title=str(row.get("bidNtceNm") or ""), lower_rate=row.get("sucsfbidLwltRate"),
+                        opened_at=str(row.get("opengDt") or ""),
                         institution=str(row.get("dminsttNm") or row.get("ntceInsttNm") or ""))
         op = F.BASIS_AMOUNT_OPERATIONS.get(work)
         row = _latest(client.fetch_all_pages(F.BID_NOTICE_BASE_URL, op, params, f"기초금액 {no}"), no) if op else None

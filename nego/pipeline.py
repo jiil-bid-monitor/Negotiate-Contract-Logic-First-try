@@ -295,7 +295,7 @@ def build_candidates(
             record.is_candidate = False
             record.excluded_reason = f"{reason}{f' ({detail})' if detail else ''}"
             if reason == "미매칭":
-                # 제외 키워드·해외·최소예산은 선별에서 이미 통과했다. 나머지(보유 면허·API 지역·마감)도 통과했으면
+                # 제외 키워드·해외는 선별에서 이미 통과했다. 나머지(보유 면허·API 지역·마감)도 통과했으면
                 # 키워드·세부품명 하나만 안 맞은 공고 — 참가는 할 수 있어 제외 탭 '세부품명 미달'에 싣는다(팀원 레포 10/19 결정 이식)
                 record.only_keyword_miss = (
                     not qualify.no_held_license(license_groups.get(notice.notice_no, []), config.held_names, held_codes)

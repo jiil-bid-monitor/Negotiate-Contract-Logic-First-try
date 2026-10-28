@@ -1,10 +1,10 @@
 """업역 스크리닝 + 일정 계산.
 
-키워드·제외키워드·최소예산·코드 매칭 규칙은 **기존 시스템과 동일하게 유지한다**
+키워드·제외키워드·코드 매칭 규칙은 **기존 시스템과 동일하게 유지한다**
 (`matching/matchEngine.ts`, `keywordMatcher.ts`, `codeMatcher.ts`).
 
   - 제외키워드가 제목에 하나라도 있으면 무조건 제외
-  - 예산이 확인되는 공고 중 minBudgetAmount 미만이면 제외 (예산 미상은 통과)
+  - 예산(최소 금액)으로는 거르지 않음 (2026-10-27 회의 결정 — 예전엔 1억 미만 제외)
   - 세부품명번호(물품)는 정확일치 → 단독으로도 인정
   - 업종코드는 '투찰가능업종명' 텍스트 부분일치라 정밀도가 낮음 → 제목 키워드가
     함께 있을 때만 인정 (단독 매칭은 결과에서 제외)
@@ -38,19 +38,12 @@ def _squash(text: str | None) -> str:
 
 
 # "공사 설계 용역"의 변형 — 공사 기본설계 용역, 공사 실시설계 용역, 공사 기본 및 실시설계 용역(기본·실시설계)
-# (2026-10-16 통합 결정 3번). 띄어쓰기를 지운 공고명에서 "공사설계용역"으로 바꿔 놓으면 관심 키워드·예산 예외가 같이 맞는다.
+# (2026-10-16 통합 결정 3번). 띄어쓰기를 지운 공고명에서 "공사설계용역"으로 바꿔 놓으면 관심 키워드가 맞는다.
 _DESIGN_SERVICE_VARIANT_RE = re.compile(r"공사(?:기본및실시|기본[·ㆍ.,]?실시|기본|실시)설계용역")
 
 
 def _canonical_title(text: str | None) -> str:
     return _DESIGN_SERVICE_VARIANT_RE.sub("공사설계용역", _squash(text))
-
-
-def is_design_service(title: str | None) -> bool:
-    """공고명에 "설계"와 "용역"이 다 있으면 설계 용역 — 최소예산을 안 따진다(2026-10-19 사용자 결정: 설계 용역은 예산 상관없이,
-    관심 키워드는 그대로 맞아야 함). 설계공모는 scope에서 이미 수집 범위 밖."""
-    plain = _squash(title)
-    return "설계" in plain and "용역" in plain
 
 
 @dataclass
@@ -62,11 +55,8 @@ class ScreenConfig:
     # 제외 키워드의 예외 — {"건축": ["실내건축"]}이면 공고명의 "실내건축"은 "건축"으로 안 본다(2026-10-13 대리님 답변:
     # "건축"은 일반 건축공사를 거르려던 것이고 실내건축 공고까지 빼려던 건 아님). 다른 곳에 "건축"이 또 있으면 그대로 제외.
     exclude_exceptions: dict[str, list[str]] = field(default_factory=dict)
-    min_budget_amount: float | None = None
-    # 공고명에 이 낱말이 있으면 최소예산을 안 따진다(2026-10-14 사용자 요청: "공사 설계 용역"은 금액이 작아도 수집). 띄어쓰기 무시.
-    budget_exempt_keywords: list[str] = field(default_factory=list)
     # 관심 키워드를 무시할 조건 — {"공사 설계 용역": ["수리", "증축", …]}이면 공고명에 그 낱말이 있을 때 그 관심 키워드는 안 맞은 것으로 본다
-    # (2026-10-14 사용자 요청: 공사 설계 용역은 새로 짓는 "신설"만 — 수리·증축 같은 부수적 설계 용역은 뺌). 최소예산 예외엔 적용 안 함.
+    # (2026-10-14 사용자 요청: 공사 설계 용역은 새로 짓는 "신설"만 — 수리·증축 같은 부수적 설계 용역은 뺌).
     keyword_skip_when: dict[str, list[str]] = field(default_factory=dict)
     product_codes: list[dict[str, str]] = field(default_factory=list)
     industry_codes: list[dict[str, str]] = field(default_factory=list)
@@ -299,7 +289,7 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
         return ScreenResult(matched=False, confidence=None, excluded_by="제외키워드", excluded_reason=hard_word)
     excluded_word = _match_exclude(notice, config.exclude_keywords, config.exclude_exceptions)
     if excluded_word and config.review_conflicts and _match_keywords(notice, config.keywords, config.keyword_skip_when):
-        # 관심 키워드도 있다 — 제외하지 않고 아래 예산·해외 조건만 거친 뒤 "검토 필요"로 둔다.
+        # 관심 키워드도 있다 — 제외하지 않고 아래 해외 조건만 거친 뒤 "검토 필요"로 둔다.
         # (품명코드 일치만으로 올리는 건 2026-10-01 넣었다가 사용자 결정으로 뺌 — 관심 키워드가 있을 때만.)
         result = screen(notice, replace(config, exclude_keywords=[], review_conflicts=False))
         if result.matched:
@@ -323,21 +313,6 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
             confidence=None,
             excluded_by="해외개최",
             excluded_reason=f"해외 개최 — 국내 공고 아님 ({overseas_evidence})",
-        )
-
-    budget = notice.budget
-    title = _canonical_title(notice.title)
-    # 예산 예외는 수리·리모델링 등이 있어도 그대로 — "공사 설계 용역"이 들어가면 무조건 예산 상관없이(2026-10-14 사용자 요청),
-    # 10/19부터는 설계 용역 전부(관심 키워드는 맞아야 함)
-    budget_exempt = (any(_squash(w) and _squash(w) in title for w in config.budget_exempt_keywords)
-                     or is_design_service(notice.title))
-    if (config.min_budget_amount is not None and budget is not None and budget < config.min_budget_amount
-            and not budget_exempt):
-        return ScreenResult(
-            matched=False,
-            confidence=None,
-            excluded_by="최소예산",
-            excluded_reason=f"{budget:,.0f}원 < {config.min_budget_amount:,.0f}원",
         )
 
     product_hits, industry_hits = _match_codes(notice, config)

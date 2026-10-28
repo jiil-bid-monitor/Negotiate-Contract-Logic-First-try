@@ -46,7 +46,10 @@ class FieldTest(unittest.TestCase):
         self.assertEqual(bidfield.classify("통합홈페이지 신규사이트 추가 구축"), bidfield.OTHER)
         self.assertEqual(bidfield.classify("○○박물관 안전시설 및 전시물 교체"), "전시·체험")  # 다른 곳에 '전시'가 또 있으면 맞음
         self.assertEqual(bidfield.classify("문화체육공원 조성사업(정보통신)"), "통신·전기")  # 공종 표시가 먼저
-        self.assertEqual(bidfield.classify("○○초 교사동 천장교체공사"), "실내건축")
+        self.assertEqual(bidfield.classify("○○초 교사동 천장교체공사"), "실내건축·천장바닥")
+        self.assertEqual(bidfield.classify("○○초 교사동 환경개선공사"), "실내건축·학교")
+        self.assertEqual(bidfield.classify("○○센터 인테리어 공사"), "실내건축·인테리어")
+        self.assertEqual(bidfield.classify("○○초 교사동 창호교체공사"), "창호·보수")
 
     def test_similar_prefers_same_field_then_relaxes(self):
         recs = [_past(f"e{i}", 100, "전시관 조성") for i in range(10)] + [_past(f"r{i}", 100, "도로 정비") for i in range(10)]

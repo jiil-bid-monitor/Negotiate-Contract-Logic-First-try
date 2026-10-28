@@ -304,6 +304,10 @@ class Collector:
         config.screen.review_conflicts = True
         now = datetime.now()
         candidates, stats, _ = run(config, now, cats, include_prespec=prespec, period=period)
+        # 트랙 1(1억 미만) 공고 폴더 — 서버 PC에 TRACK1_ROOT(NAS 폴더)를 적어 두면 켜짐(2026-10-28). 첨부를 읽을 때 원본도 그 폴더에
+        from nego import track1
+
+        t1 = track1.options_from_env() if attachments else None
         if attachments:
             from nego.attachments import save_attachment_texts
             from nego.http_client import DataGoKrClient
@@ -321,14 +325,25 @@ class Collector:
                 now=now, code_names=config.code_names, held_raw=config.held_raw,
                 client=DataGoKrClient(config.api) if config.api.service_key else None,
                 progress=att_progress,
+                originals=track1.originals_hook(t1, now) if t1 else None,
             )
             log.info("첨부파일: 시도 %d → 성공 %d / 실패 %d · 자격판정 반영 %d건",
                      att["attempted"], att["ok"], att["failed"], att["qualification_determined"])
             if att["unnamed_codes"]:
                 log.info("이름 미확인 코드 (config/code_names.json에 추가): %s", ", ".join(att["unnamed_codes"]))
         # 지역 제한 미달은 제외(2026-10-14) — 첨부 공고문 판정이 API보다 우선이라 첨부를 읽은 뒤에
+        before = list(candidates)
         candidates = drop_expired(candidates, datetime.now(), stats)
         candidates = drop_region_unmet(candidates, stats)
+        if t1:
+            track1.drop_unbuilt(candidates, before, t1, now)
+            job = self.job
+
+            def t1_progress(done: int, total: int) -> None:
+                job.set_progress(ATTACH_END, f"트랙 1 공고 폴더 만드는 중 {done + 1}/{total}건")
+
+            made = track1.build_folders(candidates, config, t1, now, progress=t1_progress)
+            log.info("트랙 1 공고 폴더 %d개 (%s)", len(made), t1.root)
         return candidates, stats
 
     def _work(self, job: Job, days: int | None, attachments: bool, ai: bool, cats, prespec: bool = True,

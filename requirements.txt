@@ -5,3 +5,4 @@ anthropic>=1.8
 cryptography>=42
 kiwipiepy>=0.24
 scikit-learn>=1.5
+openpyxl>=3.1

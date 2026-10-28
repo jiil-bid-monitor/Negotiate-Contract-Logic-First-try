@@ -17,7 +17,7 @@ import re
 import zipfile
 import zlib
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -65,6 +65,8 @@ class AttachmentText:
     text: str = ""
     error: str | None = None
     skipped: bool = False  # 읽을 대상이 아닌 형식 — 실패로 세지 않는다
+    # 원본 파일 — `keep_data`로 부를 때만(트랙 1 공고 폴더에 원문을 남길 때, 2026-10-28)
+    data: bytes | None = field(default=None, repr=False)
 
     @property
     def ok(self) -> bool:
@@ -325,9 +327,10 @@ def _extract_zip_text(data: bytes, depth: int = 0) -> str:
 
 
 def fetch_attachment_text(
-    session: requests.Session, attachment: dict[str, str], timeout: float = 30.0
+    session: requests.Session, attachment: dict[str, str], timeout: float = 30.0, keep_data: bool = False
 ) -> AttachmentText:
-    """첨부파일 1건을 내려받아 텍스트를 뽑는다. 실패해도 예외를 올리지 않는다."""
+    """첨부파일 1건을 내려받아 텍스트를 뽑는다. 실패해도 예외를 올리지 않는다.
+    `keep_data`면 원본도 `data`에 남긴다 — 읽지 않는 형식(도면·엑셀 등)도 원본은 받는다."""
     seq = attachment.get("seq", "")
     file_name = attachment.get("file_name", "")
     url = attachment.get("url", "")
@@ -344,11 +347,19 @@ def fetch_attachment_text(
         # 엑셀은 공내역서만 읽는다(공종·품명 목록 = 과업 내용) — 나머지 엑셀은 예전처럼 건너뜀
         result.error = f"지원하지 않는 형식입니다: .{ext or '(확장자 없음)'}"
         result.skipped = True
+        if keep_data:
+            try:
+                result.data = download_bytes(session, url, timeout=timeout,
+                                             headers={"Referer": attachment["referer"]} if attachment.get("referer") else None)
+            except Exception as err:  # 원본을 못 받아도 수집은 계속
+                log.info("첨부 원본 받기 실패 %s: %s", file_name, err)
         return result
 
     headers = {"Referer": attachment["referer"]} if attachment.get("referer") else None
     try:
         data = download_bytes(session, url, timeout=timeout, headers=headers)
+        if keep_data:
+            result.data = data
         result.text = extract_text(data, ext)
     except AttachmentUnsupported as err:
         result.error = str(err)
@@ -363,11 +374,35 @@ def fetch_attachment_text(
 
 
 def collect_notice_attachment_texts(
-    session: requests.Session, notice: "Notice", timeout: float = 30.0, client: "DataGoKrClient | None" = None
+    session: requests.Session, notice: "Notice", timeout: float = 30.0, client: "DataGoKrClient | None" = None,
+    keep_data: bool = False,
 ) -> list[AttachmentText]:
     """공고 첨부 + 연결된 사전규격 첨부 + 군 기관 사전규격의 국방전자조달 첨부를 과업 문서 순서로 읽는다
     (`attachment_sources.attachments_for`, 2026-10-19 통합 결정 1번)."""
-    return [fetch_attachment_text(session, att, timeout=timeout) for att in attachments_for(notice, session, client)]
+    return [fetch_attachment_text(session, att, timeout=timeout, keep_data=keep_data)
+            for att in attachments_for(notice, session, client)]
+
+
+def original_name(result: AttachmentText) -> str:
+    """원본을 저장할 파일 이름 — 파일명이 없으면(사전규격 문서) 순번 + 내용으로 판별한 확장자."""
+    if result.file_name:
+        return _safe_filename(result.file_name)
+    ext = result.ext or (_sniff_ext(result.data) if result.data else None) or "bin"
+    return _safe_filename(f"첨부{result.seq or ''}.{ext}")
+
+
+def save_original(result: AttachmentText, directory: Path) -> Path | None:
+    """원본(`keep_data`로 받은 것)과 읽은 글을 폴더에 — 원본은 `directory`, 글은 `directory/텍스트`."""
+    if not result.data:
+        return None
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / original_name(result)
+    path.write_bytes(result.data)
+    if result.ok and result.text:
+        text_dir = directory / "텍스트"
+        text_dir.mkdir(exist_ok=True)
+        (text_dir / f"{path.name}.txt").write_text(result.text, encoding="utf-8")
+    return path
 
 
 _UNSAFE_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|]')
@@ -390,10 +425,13 @@ def save_attachment_texts(
     held_raw: dict | None = None,
     client: "DataGoKrClient | None" = None,
     progress: "Callable[[int, int], None] | None" = None,
+    originals: "Callable[[Any], Path | None] | None" = None,
 ) -> dict[str, Any]:
     """후보 공고의 첨부파일을 내려받아 텍스트를 `output_dir/attachment_text/`에 저장한다.
 
     `progress(done, total)`을 주면 공고 하나를 끝낼 때마다 부른다(웹앱 수집 진행률 표시용).
+    `originals(candidate)`가 폴더를 돌려주는 공고는 첨부 원본도 그 폴더에 남긴다(트랙 1 공고 폴더 `00_원문`, 2026-10-28) —
+    같은 내려받기로 원문·판정을 함께 해서 두 번 받지 않는다.
 
     지역제한/면허제한/공동수급을 원문과 대조해볼 수 있도록 평문만 남기는
     용도다. 첨부파일 하나가 실패해도 나머지 처리는 계속한다.
@@ -458,7 +496,12 @@ def save_attachment_texts(
         read_files: list[tuple[str, str]] = []  # (파일명, 원문) — 칩 원문의 출처 파일을 찾을 때 쓴다
         deadline = None
 
-        for result in collect_notice_attachment_texts(session, notice, timeout=timeout, client=client):
+        keep_dir = originals(candidate) if originals is not None else None
+        for result in collect_notice_attachment_texts(session, notice, timeout=timeout, client=client,
+                                                      keep_data=keep_dir is not None):
+            if keep_dir is not None:
+                save_original(result, keep_dir)
+                result.data = None  # 원본은 폴더에 썼으니 메모리에서 놓음
             if result.skipped:  # xlsx 내역서 등 — 읽을 대상이 아니라 시도·실패로 세지 않는다
                 log.debug("첨부파일 건너뜀 [%s] %s: %s", notice.notice_no, result.file_name, result.error)
                 continue

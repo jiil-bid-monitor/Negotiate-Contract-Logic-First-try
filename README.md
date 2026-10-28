@@ -18,7 +18,8 @@
 | 정기 보고 | 평일 09:00 입찰 / 월 09:10 협상·규격가격·사전규격을 텔레그램(+HTML 첨부)·메일로 | `.github/workflows/daily.yml`, `nego/telegram.py`, `nego/email_html.py` |
 | 사내 웹앱 | 회사 PC 한 대에서 띄워 팀원이 사내망으로 접속 — 공고 카드·자격 팝업·싱크로율·참가여부 기록·투찰 계산기 | `webapp/` |
 | 피드백 시트 | 보고된 공고(A~R열)와 웹앱 판단(S~V열)을 팀 구글 시트에 | `nego/feedback_sheet.py`, `webapp/sheetsync.py` |
-| 투찰 도구 | 투찰 계산기(예비가격 15개 생성), 과거 개찰결과 수집기 | `nego/bidcalc.py`, `nego/bidprice.py` |
+| 투찰 도구 | 투찰 계산기(예비가격 15개 생성), 과거 개찰결과 수집기, 추천 사정률 | `nego/bidcalc.py`, `nego/bidprice.py`, `nego/bidrecommend.py` |
+| 트랙 1 폴더 | 1억 미만 공고마다 NAS 폴더(원문·요약 PDF·제출서류 체크리스트·일정·관리대장) | `nego/track1.py` (`TRACK1_ROOT`) |
 
 기능 하나하나의 규칙·함정·코드 위치는 [docs/FEATURE_CATALOG.md](docs/FEATURE_CATALOG.md), 세부 판정 규칙은 [docs/LOGIC_DETAILS.md](docs/LOGIC_DETAILS.md).
 

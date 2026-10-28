@@ -1,0 +1,219 @@
+"""추천 사정률 검증 — 과거 개찰 결과로 "그때 이 추천을 따랐으면 몇 번 유효·1순위였나"를 공고 순서대로 다시 계산한다.
+
+공고마다 **그 공고 개찰일 전에 열린 공고만**으로 추천(`bidrecommend`과 같은 계산)을 만들고, 그 공고의 실제 사정률·1순위로 채점한다
+(미래 자료를 안 씀). 같은 공고에 지일이 실제로 투찰했으면(외주 추천값 그대로 투찰 — 10/12 분석) 그 결과도 나란히 센다.
+
+서버 PC에서 실행한다(과거 개찰 자료·지일 투찰 이력은 저장소에 안 올림):
+
+    py -m nego.bidbacktest                       # output/ 의 bid_history_*.json · bid_results*.jsonl 전부
+    py -m nego.bidbacktest --from 2025-01-01     # 2025년 이후 공고만 채점(그 전 공고는 학습에만)
+    py -m nego.bidbacktest --scale actual --fixed 100.55
+
+결과: 화면 요약 + `output/bid_backtest_<날짜>.csv`(공고별 — 공개 저장소에 올리지 말 것).
+"""
+
+from __future__ import annotations
+
+import argparse
+import bisect
+import csv
+import json
+import os
+import re
+import statistics
+import sys
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+
+from .bidrecommend import (LARGE_COMPETITION, MIN_SAMPLES, PastBid, _best, _pct, _rate, coverage, history_paths,
+                           load_history, similar)
+
+OWN = "지일 실제 투찰(외주)"
+STRATEGIES = ("추천(과거 1순위 최다)", "사정률 중앙값", "유효 70%", "유효 90%")
+_DATE = re.compile(r"(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})")
+
+
+def date_of(rec: PastBid) -> str | None:
+    """개찰일 'YYYY-MM-DD' — 모르면 None(순서를 못 정해 검증에서 뺌)."""
+    m = _DATE.search(rec.opened_at or "")
+    if not m:
+        return None
+    return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+
+
+def score(rate: float, rec: PastBid) -> tuple[bool, bool]:
+    """(유효, 1순위) — `bidrecommend`과 같은 식: 유효 ⇔ r ≥ s, 1순위 ⇔ s ≤ r < 1순위 상한."""
+    valid = rate >= rec.assessment - 1e-9
+    return valid, valid and rate < rec.win_ceiling
+
+
+def own_rate(rec: PastBid) -> float | None:
+    """지일 투찰금액에서 거꾸로 구한 가정 사정률: 금액 = A + (기초 × r − A) × 하한율 → r. A를 모르면 0."""
+    if not rec.own_amount:
+        return None
+    a = rec.a_value or 0.0
+    return (a + (rec.own_amount - a) / (rec.lower_rate / 100)) / rec.basis * 100
+
+
+def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train: int = MIN_SAMPLES) -> dict[str, float]:
+    """개찰일 전 공고(train)로 만든 후보 사정률들. 비슷한 공고가 min_train건 미만이면 비움(추천 안 함)."""
+    if scale == "actual":
+        scale = "large" if target.bidder_count >= LARGE_COMPETITION else "small"
+    picked, _ = similar(train, target.work, target.range_width, scale)
+    if len(picked) < min_train:
+        return {}
+    rates = [r.assessment for r in picked]
+    out = {"사정률 중앙값": statistics.median(rates), "유효 70%": _pct(rates, 0.7), "유효 90%": _pct(rates, 0.9)}
+    best = _best(coverage(picked)[0])
+    if best is not None:
+        out["추천(과거 1순위 최다)"] = _rate(best)
+    return out
+
+
+@dataclass
+class Tally:
+    tried: int = 0
+    valid: int = 0
+    win: int = 0
+    gaps: list[float] = field(default_factory=list)  # 가정 사정률 − 실제 사정률(%p)
+
+    def add(self, rate: float, actual: float, valid: bool, win: bool) -> None:
+        self.tried += 1
+        self.valid += valid
+        self.win += win
+        self.gaps.append(rate - actual)
+
+    def line(self, name: str) -> str:
+        if not self.tried:
+            return f"  {name:<22} 대상 없음"
+        pct = lambda n: f"{n:>4}건 ({n / self.tried:5.1%})"  # noqa: E731
+        gap = statistics.median(self.gaps)
+        return f"  {name:<22} {self.tried:>5}건 · 유효 {pct(self.valid)} · 1순위 {pct(self.win)} · 실제보다 {gap:+.3f}%p(중앙)"
+
+
+def backtest(records: list[PastBid], start: str | None = None, scale: str = "all", fixed: tuple[float, ...] = (),
+             min_train: int = MIN_SAMPLES) -> tuple[list[dict], int]:
+    """공고별 결과 줄과, 개찰일을 몰라 뺀 공고 수."""
+    dated = sorted(((date_of(r), r) for r in records if date_of(r)), key=lambda x: (x[0], x[1].notice_no))
+    dates = [d for d, _ in dated]
+    rows = []
+    for d, rec in dated:
+        if start and d < start:
+            continue
+        train = [r for _, r in dated[:bisect.bisect_left(dates, d)]]  # 같은 날 열린 공고도 안 씀
+        rates = strategy_rates(train, rec, scale, min_train)
+        rates.update({f"고정 {f:g}%": f for f in fixed})
+        row = {"공고번호": rec.notice_no, "개찰일": d, "업무": rec.work, "변동폭": rec.range_width, "참가": rec.bidder_count,
+               "학습 공고": len(train), "실제 사정률": round(rec.assessment, 4), "1순위 상한": round(rec.win_ceiling, 4),
+               "A값 앎": rec.a_value is not None, "rates": rates, "results": {}}
+        for name, rate in rates.items():
+            row["results"][name] = (rate, *score(rate, rec))
+        if rec.own_amount:
+            row["results"][OWN] = (own_rate(rec), rec.own_rank is not None, rec.own_rank == 1)
+        rows.append(row)
+    return rows, len(records) - len(dated)
+
+
+def _names(rows: list[dict]) -> list[str]:
+    names = list(STRATEGIES)
+    for row in rows:
+        names += [n for n in row["results"] if n not in names]
+    return [n for n in names if any(n in r["results"] for r in rows)]
+
+
+def summarize(rows: list[dict], undated: int = 0) -> str:
+    if not rows:
+        return "채점할 공고가 없습니다 — 과거 개찰 자료(개찰일 포함)를 확인하세요."
+    names = _names(rows)
+    lines = [f"채점 공고 {len(rows)}건 (개찰일 모름 {undated}건 제외) · {rows[0]['개찰일']} ~ {rows[-1]['개찰일']}"]
+    no_rec = sum("추천(과거 1순위 최다)" not in r["results"] for r in rows)
+    if no_rec:
+        lines.append(f"  그중 {no_rec}건은 개찰일 전 비슷한 공고가 {MIN_SAMPLES}건 미만이라 추천 없음(추천 줄에서 빠짐)")
+
+    def block(title: str, subset: list[dict]) -> None:
+        lines.append(f"\n[{title}] {len(subset)}건")
+        for name in names:
+            t = Tally()
+            for r in subset:
+                if name in r["results"]:
+                    rate, valid, win = r["results"][name]
+                    if rate is not None:
+                        t.add(rate, r["실제 사정률"], valid, win)
+            lines.append(t.line(name))
+
+    block("전체", rows)
+    own = [r for r in rows if OWN in r["results"]]
+    if own:
+        block("지일이 실제로 투찰한 공고 — 외주 추천과 같은 공고끼리 비교", own)
+    small = [r for r in rows if r["참가"] < LARGE_COMPETITION]
+    large = [r for r in rows if r["참가"] >= LARGE_COMPETITION]
+    if small and large:
+        block(f"참가 {LARGE_COMPETITION}곳 미만", small)
+        block(f"참가 {LARGE_COMPETITION}곳 이상(운의 영역)", large)
+    for year in sorted({r["개찰일"][:4] for r in rows}):
+        block(f"{year}년", [r for r in rows if r["개찰일"].startswith(year)])
+    no_a = sum(not r["A값 앎"] for r in rows)
+    if no_a:
+        lines.append(f"\n※ A값을 모르는 공고 {no_a}건은 A=0으로 채점 — 그 공고들의 1순위 판정이 실제보다 후할 수 있음"
+                     "(지일 실제 투찰 줄은 나라장터 순위 그대로라 해당 없음)")
+    lines.append("※ 순위는 금액 기준 개찰 순위(적격심사 서류 심사 전). 1순위 = 하한선 이상 중 가장 낮은 금액.")
+    return "\n".join(lines)
+
+
+def write_csv(rows: list[dict], path: Path) -> None:
+    names = _names(rows)
+    base = ["공고번호", "개찰일", "업무", "변동폭", "참가", "학습 공고", "실제 사정률", "1순위 상한", "A값 앎"]
+    head = base + [f"{n} {k}" for n in names for k in ("사정률", "유효", "1순위")]
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(head)
+        for r in rows:
+            cells = [r[k] for k in base]
+            for n in names:
+                rate, valid, win = r["results"].get(n, (None, None, None))
+                cells += [round(rate, 4) if rate is not None else "", "" if valid is None else ("O" if valid else "X"),
+                          "" if win is None else ("O" if win else "X")]
+            w.writerow(cells)
+
+
+def _own_bizno(root: Path) -> str:
+    env = os.environ.get("JIIL_BIZNO")
+    if env:
+        return env
+    try:
+        return json.loads((root / "config" / "held_qualifications.json").read_text(encoding="utf-8")).get("companyBizno", "")
+    except (OSError, ValueError):
+        return ""
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="추천 사정률 검증 — 과거 개찰 결과로 공고 순서대로 다시 채점")
+    parser.add_argument("--dir", default=os.environ.get("BID_HISTORY_DIR") or os.environ.get("OUTPUT_DIR") or "output",
+                        help="과거 개찰 자료 폴더(기본 output)")
+    parser.add_argument("--from", dest="start", default="", help="이 날짜(YYYY-MM-DD) 이후 개찰 공고만 채점 — 그 전은 학습에만")
+    parser.add_argument("--scale", choices=("all", "actual"), default="all",
+                        help="비슷한 공고 고를 때 경쟁 규모: all=구분 안 함, actual=그 공고의 실제 규모(100곳 미만/이상)")
+    parser.add_argument("--fixed", type=float, action="append", default=[], help="같이 비교할 고정 사정률(%%), 여러 번 가능")
+    parser.add_argument("--min-train", type=int, default=MIN_SAMPLES, help=f"추천에 필요한 비슷한 과거 공고 수(기본 {MIN_SAMPLES})")
+    parser.add_argument("--csv", default="", help="공고별 결과 CSV 경로(기본 <dir>/bid_backtest_<오늘>.csv)")
+    args = parser.parse_args(argv)
+
+    directory = Path(args.dir)
+    paths = history_paths(directory)
+    if not paths:
+        print(f"{directory}에 bid_history_*.json · bid_results*.jsonl이 없습니다.", file=sys.stderr)
+        return 1
+    history = load_history(paths, _own_bizno(Path(__file__).resolve().parent.parent))
+    print(f"과거 개찰 {len(history.records)}건 (못 쓴 공고 {history.skipped}건) — {', '.join(history.files)}")
+    rows, undated = backtest(history.records, args.start or None, args.scale, tuple(args.fixed), args.min_train)
+    print(summarize(rows, undated))
+    if rows:
+        out = Path(args.csv) if args.csv else directory / f"bid_backtest_{datetime.now():%Y%m%d}.csv"
+        write_csv(rows, out)
+        print(f"\n공고별 결과: {out} (공개 저장소에 올리지 말 것)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

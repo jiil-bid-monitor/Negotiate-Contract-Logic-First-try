@@ -1,0 +1,130 @@
+"""추천 사정률 검증(`nego/bidbacktest.py`) — 만든 과거 개찰 자료로 채점 규칙만 확인한다."""
+
+from __future__ import annotations
+
+import csv
+import io
+import json
+import sys
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from nego import bidbacktest as bt  # noqa: E402
+from nego import bidrecommend as br  # noqa: E402
+
+
+def _past(no: str, day: str, s: float, gap: float = 0.3, lower: float = 87.745, own_rate: float | None = None,
+          own_rank: int | None = None, count: int = 30) -> br.PastBid:
+    basis = 100_000_000
+    rec = br.PastBid(notice_no=no, work="용역", basis=basis, planned=basis * s / 100, lower_rate=lower,
+                     winner_rate=lower + gap, bidder_count=count, range_width=3, a_value=0.0, opened_at=f"{day} 11:00")
+    if own_rate is not None:
+        rec.own_amount = br.bid_amount(basis, own_rate, lower)
+        rec.own_rank = own_rank
+    return rec
+
+
+class ScoreTest(unittest.TestCase):
+    def test_valid_and_win(self):
+        rec = _past("1", "2025-01-01", 100.0, gap=0.255)  # 1순위 상한 ≈ 100.2906
+        self.assertEqual(bt.score(99.99, rec), (False, False))
+        self.assertEqual(bt.score(100.0, rec), (True, True))
+        self.assertEqual(bt.score(100.29, rec), (True, True))
+        self.assertEqual(bt.score(100.30, rec), (True, False))
+
+    def test_own_rate_reverses_bid_amount(self):
+        rec = _past("1", "2025-01-01", 100.0, own_rate=99.75, own_rank=None)
+        self.assertAlmostEqual(bt.own_rate(rec), 99.75)
+        rec.a_value = 5_000_000
+        rec.own_amount = br.bid_amount(rec.basis, 100.2, rec.lower_rate, 5_000_000)
+        self.assertAlmostEqual(bt.own_rate(rec), 100.2)
+
+    def test_date_of(self):
+        self.assertEqual(bt.date_of(_past("1", "2025-3-7", 100)), "2025-03-07")
+        rec = _past("1", "x", 100)
+        rec.opened_at = "20250307110000"
+        self.assertEqual(bt.date_of(rec), "2025-03-07")
+        rec.opened_at = ""
+        self.assertIsNone(bt.date_of(rec))
+
+
+class BacktestTest(unittest.TestCase):
+    def setUp(self):
+        # 2024년 12건(사정률 100.0~100.2 — 추천이 100.2 근처로 모임) + 2025년 채점 2건
+        self.train = [_past(f"t{i}", f"2024-0{1 + i % 9}-10", 100.0 + (i % 3) * 0.1) for i in range(12)]
+        self.hit = _past("hit", "2025-02-01", 100.1, own_rate=99.7, own_rank=None)  # 외주는 낮게 잡아 하한 미달
+        self.miss = _past("miss", "2025-02-02", 101.5)  # 추천보다 사정률이 높아 무효
+
+    def test_uses_only_earlier_notices(self):
+        rows, undated = bt.backtest(self.train + [self.hit, self.miss], start="2025-01-01")
+        self.assertEqual(undated, 0)
+        self.assertEqual([r["공고번호"] for r in rows], ["hit", "miss"])
+        self.assertEqual(rows[0]["학습 공고"], 12)
+        self.assertEqual(rows[1]["학습 공고"], 13, "앞날 공고(hit)까지만 — 자기 자신은 안 씀")
+        rate, valid, win = rows[0]["results"]["추천(과거 1순위 최다)"]
+        self.assertTrue(valid and win, rate)
+        self.assertEqual(rows[0]["results"][bt.OWN][1:], (False, False))
+        self.assertFalse(rows[1]["results"]["추천(과거 1순위 최다)"][1])
+
+    def test_same_day_notices_are_not_training(self):
+        same = _past("same", "2025-02-01", 100.1)
+        rows, _ = bt.backtest(self.train + [self.hit, same], start="2025-01-01")
+        self.assertTrue(all(r["학습 공고"] == 12 for r in rows))
+
+    def test_too_few_similar_means_no_recommendation(self):
+        rows, _ = bt.backtest(self.train[:3] + [self.hit], start="2025-01-01", fixed=(100.55,))
+        self.assertNotIn("추천(과거 1순위 최다)", rows[0]["results"])
+        self.assertIn("고정 100.55%", rows[0]["results"])
+        self.assertIn("추천 없음", bt.summarize(rows))
+
+    def test_summary_and_csv(self):
+        rows, _ = bt.backtest(self.train + [self.hit, self.miss], start="2025-01-01")
+        text = bt.summarize(rows)
+        self.assertIn("채점 공고 2건", text)
+        self.assertIn("지일이 실제로 투찰한 공고", text)
+        self.assertIn("2025년", text)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "out.csv"
+            bt.write_csv(rows, path)
+            table = list(csv.reader(path.open(encoding="utf-8-sig")))
+        self.assertEqual(table[0][0], "공고번호")
+        self.assertIn(f"{bt.OWN} 1순위", table[0])
+        self.assertEqual(len(table), 3)
+
+
+class MainTest(unittest.TestCase):
+    def test_reads_history_and_finds_own_bid(self):
+        items = []
+        for i in range(12):
+            s = 100.0 + (i % 3) * 0.1
+            planned = 100_000_000 * s / 100
+            items.append({"notice_no": f"R{i:02d}", "work_type": "용역", "basis_amount": 100_000_000, "planned_price": planned,
+                          "lower_limit_rate": 87.745, "range_lo": -3, "range_hi": 3, "a_value": 0,
+                          "opened_at": f"2025-01-{10 + i:02d} 11:00",
+                          "bidders": [{"rank": 1, "name": "갑", "bizno": "111", "amount": planned * 0.8805, "rate": 88.05,
+                                       "remark": ""},
+                                      {"rank": None, "name": "지일", "bizno": "206-86-36338", "amount": planned * 0.85,
+                                       "rate": 85.0, "remark": "하한미달"}]})
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "bid_history_20250101_20250131.json").write_text(json.dumps(items), encoding="utf-8")
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = bt.main(["--dir", str(d), "--from", "2025-01-20"])
+            self.assertEqual(code, 0)
+            self.assertTrue(list(d.glob("bid_backtest_*.csv")))
+        text = out.getvalue()
+        self.assertIn("과거 개찰 12건", text)
+        self.assertIn(bt.OWN, text)
+
+    def test_no_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(bt.main(["--dir", tmp]), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

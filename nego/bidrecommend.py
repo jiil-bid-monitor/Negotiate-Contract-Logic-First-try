@@ -50,6 +50,8 @@ class PastBid:
     title: str = ""
     opened_at: str = ""
     source: str = ""
+    own_amount: float | None = None  # 지일 투찰금액(참가했을 때) — 검증(`nego.bidbacktest`)에서 외주 추천과 비교
+    own_rank: int | None = None  # 지일 개찰 순위(하한 미달 등으로 순위가 없으면 None)
 
     @property
     def assessment(self) -> float:
@@ -101,7 +103,12 @@ def _winner_rate(bidders: list, planned: float) -> float | None:
     return first.rate
 
 
-def _make(notice_no: str, work: str, basis, planned, lower, bidders: list, prices: list[float], **extra) -> PastBid | None:
+def _clean_bizno(value: str | None) -> str:
+    return (value or "").replace("-", "").strip()
+
+
+def _make(notice_no: str, work: str, basis, planned, lower, bidders: list, prices: list[float], own_bizno: str = "",
+          **extra) -> PastBid | None:
     basis, planned, lower = _num(basis), _num(planned), _num(lower)
     if not (basis and planned and lower and bidders):
         return None
@@ -109,11 +116,15 @@ def _make(notice_no: str, work: str, basis, planned, lower, bidders: list, price
     if not winner:
         return None
     width = extra.pop("range_width", None) or range_width(prices, basis)
-    return PastBid(notice_no=notice_no, work=work or "", basis=basis, planned=planned, lower_rate=lower,
-                   winner_rate=winner, bidder_count=len(bidders), range_width=width, **extra)
+    rec = PastBid(notice_no=notice_no, work=work or "", basis=basis, planned=planned, lower_rate=lower,
+                  winner_rate=winner, bidder_count=len(bidders), range_width=width, **extra)
+    own = next((b for b in bidders if own_bizno and _clean_bizno(b.bizno) == own_bizno), None)
+    if own is not None:
+        rec.own_amount, rec.own_rank = own.amount, own.rank
+    return rec
 
 
-def from_bid_history(item: dict, source: str = "") -> PastBid | None:
+def from_bid_history(item: dict, source: str = "", own_bizno: str = "") -> PastBid | None:
     """`bidprice` 결과(`BidResult.to_dict`) 1건."""
     from .bidprice import Bidder
 
@@ -123,14 +134,14 @@ def from_bid_history(item: dict, source: str = "") -> PastBid | None:
                  item.get("lower_limit_rate"), bidders, prices,
                  range_width=_width_from_rates(item.get("range_lo"), item.get("range_hi")),
                  a_value=_num(item.get("a_value")), title=item.get("title", ""), opened_at=item.get("opened_at") or "",
-                 source=source)
+                 source=source, own_bizno=own_bizno)
 
 
 def _row_value(rows: list[dict], key: str) -> Any:
     return next((r.get(key) for r in rows if r.get(key) not in (None, "")), None)
 
 
-def from_result_record(rec: dict, source: str = "") -> PastBid | None:
+def from_result_record(rec: dict, source: str = "", own_bizno: str = "") -> PastBid | None:
     """`scripts/fetch_bid_results.py` 결과 1줄(원본 행). 하한율·A값은 rec["notice"]에(10/28부터 함께 받음), 예전 줄이면 원본 행에서 찾는다."""
     if rec.get("error"):
         return None
@@ -142,7 +153,8 @@ def from_result_record(rec: dict, source: str = "") -> PastBid | None:
     return _make(rec.get("no", ""), rec.get("work", ""), basis, planned, lower, parse_bidders(bidder_rows), prices,
                  range_width=_width_from_rates(info.get("range_lo"), info.get("range_hi")),
                  a_value=_num(info.get("a_value")) if info.get("a_applies", True) else 0.0,
-                 title=info.get("title", ""), opened_at=_row_value(bidder_rows, "opengDt") or "", source=source)
+                 title=info.get("title", ""), opened_at=_row_value(bidder_rows, "opengDt") or "", source=source,
+                 own_bizno=own_bizno)
 
 
 @dataclass
@@ -152,18 +164,20 @@ class History:
     files: list[str] = field(default_factory=list)
 
 
-def load_history(paths: Iterable[Path]) -> History:
-    """과거 개찰 파일들 → 공고번호당 1건(나중 파일이 앞 파일을 덮음, 정보가 더 많은 쪽을 남김)."""
+def load_history(paths: Iterable[Path], own_bizno: str | None = None) -> History:
+    """과거 개찰 파일들 → 공고번호당 1건(나중 파일이 앞 파일을 덮음, 정보가 더 많은 쪽을 남김).
+    own_bizno(지일 사업자번호)를 주면 공고마다 지일 투찰금액·순위도 남긴다."""
+    own_bizno = _clean_bizno(own_bizno)
     found: dict[str, PastBid] = {}
     history = History()
     for path in paths:
         try:
             if path.suffix == ".jsonl":
                 items = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-                parsed = [from_result_record(i, path.name) for i in items]
+                parsed = [from_result_record(i, path.name, own_bizno) for i in items]
             else:
                 items = json.loads(path.read_text(encoding="utf-8"))
-                parsed = [from_bid_history(i, path.name) for i in items]
+                parsed = [from_bid_history(i, path.name, own_bizno) for i in items]
         except (OSError, ValueError) as err:
             log.warning("과거 개찰 파일을 읽지 못함 %s: %s", path, err)
             continue

@@ -203,6 +203,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-train", type=int, default=MIN_SAMPLES, help=f"추천에 필요한 비슷한 과거 공고 수(기본 {MIN_SAMPLES})")
     parser.add_argument("--csv", default="", help="공고별 결과 CSV 경로(기본 <dir>/bid_backtest_<오늘>.csv)")
     args = parser.parse_args(argv)
+    # 윈도우에서 `> 파일`로 돌리면 cp949로 쓰다가 '—' 같은 글자에서 멈춘다 — 못 쓰는 글자는 바꿔 찍고, 요약은 아래에서 UTF-8 파일로 따로 저장
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
 
     directory = Path(args.dir)
     paths = history_paths(directory)
@@ -210,15 +213,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{directory}에 bid_history_*.json · bid_results*.jsonl이 없습니다.", file=sys.stderr)
         return 1
     history = load_history(paths, _own_bizno(Path(__file__).resolve().parent.parent))
-    print(f"과거 개찰 {len(history.records)}건 (못 쓴 공고 {history.skipped}건) — {', '.join(history.files)}")
+    head = [f"과거 개찰 {len(history.records)}건 (못 쓴 공고 {history.skipped}건) — {', '.join(history.files)}"]
     if history.skip_reasons:
-        print("  못 쓴 이유: " + " · ".join(f"{k} {n}건" for k, n in history.skip_reasons.most_common()))
+        head.append("  못 쓴 이유: " + " · ".join(f"{k} {n}건" for k, n in history.skip_reasons.most_common()))
+    head.append(f"  설정: --from {args.start or '(처음부터)'} · --scale {args.scale}"
+                + (f" · --fixed {', '.join(f'{f:g}' for f in args.fixed)}" if args.fixed else ""))
     rows, undated = backtest(history.records, args.start or None, args.scale, tuple(args.fixed), args.min_train)
-    print(summarize(rows, undated))
+    text = "\n".join(head) + "\n" + summarize(rows, undated)
+    print(text)
+    stamp = f"{datetime.now():%Y%m%d}"
+    summary_path = directory / f"bid_backtest_{stamp}.txt"
+    summary_path.write_text(text + "\n", encoding="utf-8")  # 요약만(업체 이름 없음) — 공유용
+    print(f"\n요약: {summary_path}")
     if rows:
-        out = Path(args.csv) if args.csv else directory / f"bid_backtest_{datetime.now():%Y%m%d}.csv"
+        out = Path(args.csv) if args.csv else directory / f"bid_backtest_{stamp}.csv"
         write_csv(rows, out)
-        print(f"\n공고별 결과: {out} (공개 저장소에 올리지 말 것)")
+        print(f"공고별 결과: {out} (공개 저장소에 올리지 말 것)")
     return 0
 
 

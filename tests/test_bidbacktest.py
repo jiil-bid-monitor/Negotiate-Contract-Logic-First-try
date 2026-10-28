@@ -147,6 +147,8 @@ class MainTest(unittest.TestCase):
                 code = bt.main(["--dir", str(d), "--from", "2025-01-20"])
             self.assertEqual(code, 0)
             self.assertTrue(list(d.glob("bid_backtest_*.csv")))
+            summary = next(d.glob("bid_backtest_*.txt")).read_text(encoding="utf-8")
+            self.assertIn("과거 개찰 12건", summary)
         text = out.getvalue()
         self.assertIn("과거 개찰 12건", text)
         self.assertIn(bt.OWN, text)

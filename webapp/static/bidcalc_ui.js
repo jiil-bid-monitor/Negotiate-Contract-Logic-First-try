@@ -361,18 +361,24 @@
     let pickHtml = "";
     if (p) {
       const bid = recBid(p.rate);
+      // 경향으로 고른 값이라는 설명만 — 외주와 우열 판정 문구는 안 씀(2026-10-28 사용자: 투찰은 운이 커서 경향 기반 합리적 추론이 목적)
+      const t = d.trend, gap = (s) => (s && s.n ? `${s.p50 >= 0 ? "+" : ""}${Number(s.p50).toFixed(3)}%p` : null);
+      const ranked = t && t.ranks ? t.ranks.filter((r) => r.gap && r.gap.n) : [];  // 참가가 적으면 5위가 없을 수 있음
+      const top = ranked.length ? [gap(ranked[0].gap), gap(ranked[ranked.length - 1].gap)] : [];
+      const lastRank = ranked.length ? ranked[ranked.length - 1].rank : 5;
       const why = p.weak
-        ? `비슷한 과거 공고가 적어 검증할 수 없음 — 기본값(${esc(p.name)})으로 둠. 근거 약함`
+        ? `비슷한 과거 공고가 적어 기본값(${esc(p.name)})으로 둠`
         : `비슷한 과거 공고에서 ${esc(p.name)} 방식이 1순위 ${ratio(p.track)}로 가장 많았음`
           + (p.track && p.track.top != null ? ` (5위 안 ${p.track.top}건)` : "");
-      const vs = p.own_track && p.own_track.tried
-        ? `같은 공고 외주(지일 실제 투찰) 1순위 ${ratio(p.own_track)}` + (p.beats_outsourced ? "" : " — <b>외주보다 낫다는 근거 없음</b>")
-        : "외주 비교 기록 없음";
-      pickHtml = `<div class="rec-pick${p.weak || !p.beats_outsourced ? " weak" : ""}">
+      const trendLine = top[0] && top[1]
+        ? `같은 분야 과거 1~${lastRank}위 업체는 실제 사정률보다 ${top[0]} ~ ${top[1]} 위(중앙)에 투찰 · 실제 사정률 중앙 ${pct(d.assessment.p50)}`
+        : "";
+      const vs = p.own_track && p.own_track.tried ? `참고: 같은 공고 지일 실제 투찰 1순위 ${ratio(p.own_track)}` : "";
+      pickHtml = `<div class="rec-pick${p.weak ? " weak" : ""}">
         <div class="rec-pick-label">추천 투찰금액</div>
         <div class="rec-pick-amt">${bid != null ? won(bid) : "기초금액·하한율 필요"}</div>
         <div class="rec-pick-sub">가정 사정률 ${pct(p.rate)} · ${esc(p.name)}</div>
-        <div class="rec-note">${why}<br>${vs}${d.auto_scale ? `<br>${esc(d.auto_scale)}` : ""}</div>
+        <div class="rec-note">${[why, trendLine, vs, d.auto_scale ? esc(d.auto_scale) : ""].filter(Boolean).join("<br>")}</div>
       </div>`;
     }
     const a = d.assessment, b = d.bidders;

@@ -1030,6 +1030,7 @@ footer b { color: var(--muted); }
 .calc-rec th { background: var(--chip); color: var(--ink); text-align: center; font-weight: 600; }
 .calc-rec td:first-child { text-align: left; }
 .calc-rec tr.best td { color: var(--accent); font-weight: 700; }
+.calc-rec tr.own td { color: var(--muted); border-top: 2px solid var(--line); }
 .calc-rec .rec-sum { color: var(--ink); font-size: 13px; }
 .calc-rec .rec-note { color: var(--muted); font-size: 12px; }
 .calc-rec .rec-warn { color: #b45309; font-size: 12px; }
@@ -1266,7 +1267,7 @@ footer b { color: var(--muted); }
         <button type="button" id="cRecBtn">추천 보기</button>
         <span id="cRecMsg" class="job"></span>
       </div>
-      <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고(업무·변동폭)의 개찰 결과로 사정률별 1순위·유효 건수를 보여 줍니다.</div>
+      <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고(업무·변동폭)의 개찰 결과로 방식별 사정률과 검증 성적(그때 이 방식대로 썼다면 1순위·유효였던 건수)을 외주 실제 투찰과 나란히 보여 줍니다.</div>
     </div>
   </section>
 

@@ -81,6 +81,27 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(out["samples"], 12)
         self.assertEqual(out["conditions"], ["업무 용역", "변동폭 ±3%"])
 
+    def test_track_record_fixed_row_and_outsourced(self):
+        # 날짜가 있는 과거 공고 24건 — 공고마다 그 전 공고만으로 정한 사정률로 채점(검증 성적), 고정 100.55%·외주 줄 함께
+        records = []
+        for i in range(24):
+            rec = _past(f"N{i:02d}", 100.0 + (i % 3) * 0.1)
+            rec.opened_at = f"2025-{1 + i // 12:02d}-{1 + i % 12:02d}"
+            rec.own_amount = br.bid_amount(rec.basis, 99.7, rec.lower_rate)  # 외주: 실제보다 낮게 써서 늘 하한 미달
+            rec.own_rank = None
+            records.append(rec)
+        out = br.recommend(br.History(records), work="용역", lo=-3, hi=3)
+        names = [o["name"] for o in out["options"]]
+        self.assertIn(f"고정 {br.FIXED_RATE:g}%", names)
+        best = out["options"][0]["track"]
+        self.assertEqual(best["tried"], 24 - br.MIN_SAMPLES)  # 앞의 10건은 그 전 비슷한 공고가 모자라 추천 없음
+        self.assertGreater(best["win"], 0)
+        fixed = next(o for o in out["options"] if o["name"].startswith("고정"))["track"]
+        self.assertEqual(fixed["tried"], 24)  # 고정값은 자료가 없어도 채점
+        own = out["outsourced"]
+        self.assertAlmostEqual(own["rate"], 99.7, places=3)
+        self.assertEqual((own["track"]["tried"], own["track"]["valid"], own["track"]["win"]), (24, 0, 0))
+
     def test_large_competition_note_and_no_win(self):
         # 1순위가 하한선 바로 위(대규모 경쟁) — 서로 겹치지 않는 아주 좁은 구간뿐
         records = [_past(str(i), 99.0 + i * 0.1, winner_gap=0.004, count=300) for i in range(12)]

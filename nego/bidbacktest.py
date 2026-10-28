@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import bisect
 import csv
-import json
 import os
 import re
 import statistics
@@ -26,8 +25,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from .bidrecommend import (LARGE_COMPETITION, MIN_SAMPLES, PastBid, _best, _pct, _rate, coverage, history_paths,
-                           load_history, similar)
+from .bidrecommend import (LARGE_COMPETITION, MIN_SAMPLES, PastBid, _best, _pct, _rate, coverage, default_own_bizno,
+                           history_paths, load_history, similar)
 
 OWN = "지일 실제 투찰(외주)"
 STRATEGIES = ("추천(과거 1순위 최다)", "사정률 중앙값", "유효 70%", "유효 90%")
@@ -95,13 +94,13 @@ class Tally:
 
 
 def backtest(records: list[PastBid], start: str | None = None, scale: str = "all", fixed: tuple[float, ...] = (),
-             min_train: int = MIN_SAMPLES) -> tuple[list[dict], int]:
-    """공고별 결과 줄과, 개찰일을 몰라 뺀 공고 수."""
+             min_train: int = MIN_SAMPLES, targets: set[str] | None = None) -> tuple[list[dict], int]:
+    """공고별 결과 줄과, 개찰일을 몰라 뺀 공고 수. targets(공고번호)를 주면 그 공고만 채점(웹앱 추천 칸 — 비슷한 공고만)."""
     dated = sorted(((date_of(r), r) for r in records if date_of(r)), key=lambda x: (x[0], x[1].notice_no))
     dates = [d for d, _ in dated]
     rows = []
     for d, rec in dated:
-        if start and d < start:
+        if (start and d < start) or (targets is not None and rec.notice_no not in targets):
             continue
         train = [r for _, r in dated[:bisect.bisect_left(dates, d)]]  # 같은 날 열린 공고도 안 씀
         rates = strategy_rates(train, rec, scale, min_train)
@@ -115,6 +114,20 @@ def backtest(records: list[PastBid], start: str | None = None, scale: str = "all
             row["results"][OWN] = (own_rate(rec), rec.own_rank is not None, rec.own_rank == 1)
         rows.append(row)
     return rows, len(records) - len(dated)
+
+
+def track_records(rows: list[dict]) -> dict[str, dict]:
+    """방식별 검증 성적 {이름: {tried, valid, win}} — 웹앱 추천 칸에 그대로 싣는다."""
+    out: dict[str, dict] = {}
+    for row in rows:
+        for name, (rate, valid, win) in row["results"].items():
+            if rate is None:
+                continue
+            t = out.setdefault(name, {"tried": 0, "valid": 0, "win": 0})
+            t["tried"] += 1
+            t["valid"] += bool(valid)
+            t["win"] += bool(win)
+    return out
 
 
 def _names(rows: list[dict]) -> list[str]:
@@ -183,16 +196,6 @@ def write_csv(rows: list[dict], path: Path) -> None:
             w.writerow(cells)
 
 
-def _own_bizno(root: Path) -> str:
-    env = os.environ.get("JIIL_BIZNO")
-    if env:
-        return env
-    try:
-        return json.loads((root / "config" / "held_qualifications.json").read_text(encoding="utf-8")).get("companyBizno", "")
-    except (OSError, ValueError):
-        return ""
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="추천 사정률 검증 — 과거 개찰 결과로 공고 순서대로 다시 채점")
     parser.add_argument("--dir", default=os.environ.get("BID_HISTORY_DIR") or os.environ.get("OUTPUT_DIR") or "output",
@@ -213,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     if not paths:
         print(f"{directory}에 bid_history_*.json · bid_results*.jsonl이 없습니다.", file=sys.stderr)
         return 1
-    history = load_history(paths, _own_bizno(Path(__file__).resolve().parent.parent))
+    history = load_history(paths, default_own_bizno())
     head = [f"과거 개찰 {len(history.records)}건 (못 쓴 공고 {history.skipped}건) — {', '.join(history.files)}"]
     if history.skip_reasons:
         head.append("  못 쓴 이유: " + " · ".join(f"{k} {n}건" for k, n in history.skip_reasons.most_common()))

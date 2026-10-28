@@ -34,6 +34,9 @@ MIN_SAMPLES = 10  # 이보다 적으면 조건을 하나씩 풀어 비슷한 공
 LARGE_COMPETITION = 100  # 참가 100곳 이상 = 대규모 경쟁(2026-10-23 분석 기준)
 SCALES = {"all": "전체", "small": f"{LARGE_COMPETITION}곳 미만", "large": f"{LARGE_COMPETITION}곳 이상"}
 HISTORY_PATTERNS = ("bid_history_*.json", "bid_results*.jsonl")
+FIXED_RATE = 100.55  # 고정 사정률 비교값 — 2020~24 지일 이력 중 참가 100곳 미만 ±3% 공고로 고른 값(10/23 분석, 10/28 검증에서 소규모 1순위 최다)
+OWN_NAME = "지일 실제 투찰(외주)"  # bidbacktest.OWN과 같은 이름
+TRACK_LIMIT = 400  # 검증 성적은 비슷한 공고 중 최근 이만큼만 채점(화면 응답 시간 — 공고마다 그 전 공고로 추천을 다시 만듦)
 
 
 @dataclass
@@ -278,12 +281,26 @@ def history_paths(directory: Path) -> list[Path]:
 _CACHE: dict[str, Any] = {}
 
 
+def default_own_bizno() -> str:
+    """지일 사업자번호 — 환경변수 JIIL_BIZNO, 없으면 config/held_qualifications.json의 companyBizno."""
+    import os
+
+    env = os.environ.get("JIIL_BIZNO", "").strip()
+    if env:
+        return env
+    try:
+        path = Path(__file__).resolve().parent.parent / "config" / "held_qualifications.json"
+        return str(json.loads(path.read_text(encoding="utf-8")).get("companyBizno", ""))
+    except (OSError, ValueError):
+        return ""
+
+
 def history_from_dir(directory: Path) -> History:
     """폴더의 과거 개찰 파일 — 파일이 바뀌었을 때만 다시 읽는다(웹앱이 추천을 부를 때마다 수 MB를 읽지 않게)."""
     paths = history_paths(directory)
     key = tuple((str(p), p.stat().st_mtime_ns) for p in paths)
     if _CACHE.get("key") != key:
-        _CACHE.update(key=key, history=load_history(paths))
+        _CACHE.update(key=key, history=load_history(paths, default_own_bizno()))
     return _CACHE["history"]
 
 
@@ -362,6 +379,25 @@ def _best(wins: list[int]) -> int | None:
     return (lo + hi) // 2
 
 
+_TRACK_CACHE: dict[tuple, dict] = {}
+
+
+def _track(history: History, picked: list[PastBid], scale: str) -> dict[str, dict]:
+    """비슷한 공고마다 '그 공고 개찰일 전 자료로 이 방식대로 정했다면' 1순위·유효였나(`bidbacktest`와 같은 채점).
+    in-sample 건수(위 표의 wins)는 고른 자료로 다시 맞춘 것이라 후하게 나와서, 화면엔 이 검증 성적을 함께 보인다."""
+    from .bidbacktest import backtest, date_of, track_records
+
+    dated = sorted((r for r in picked if date_of(r)), key=lambda r: date_of(r) or "")[-TRACK_LIMIT:]
+    targets = {r.notice_no for r in dated}
+    key = (id(history), len(history.records), scale, frozenset(targets))
+    if key not in _TRACK_CACHE:
+        if len(_TRACK_CACHE) > 64:
+            _TRACK_CACHE.clear()
+        rows, _ = backtest(history.records, scale=scale, fixed=(FIXED_RATE,), targets=targets)
+        _TRACK_CACHE[key] = track_records(rows)
+    return _TRACK_CACHE[key]
+
+
 def bid_amount(basis: float, rate: float, lower_rate: float, a: float = 0.0) -> float:
     """투찰금액 = A + (기초금액 × 사정률 − A) × 하한율 (끝자리 처리 전 — 화면이 기타설정대로 자른다)."""
     planned = basis * rate / 100
@@ -419,6 +455,14 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
         options.append(row("추천(과거 1순위 최다)", _rate(best)))
     options += [row("사정률 중앙값", out["assessment"]["p50"]), row("유효 70%", _pct(rates, 0.7)),
                 row("유효 90%", out["assessment"]["p90"])]
+    options.append(row(f"고정 {FIXED_RATE:g}%", FIXED_RATE))
+    track = _track(history, picked, scale if scale in SCALES else "all")
+    for o in options:
+        o["track"] = track.get(o["name"])
+    own = [r for r in picked if r.own_amount]
+    if own:
+        rates_own = [r.rate_for(r.own_amount) for r in own]
+        out["outsourced"] = {"name": OWN_NAME, "rate": round(statistics.median(rates_own), 3), "track": track.get(OWN_NAME)}
     out["options"] = options
     out["best"] = options[0] if best is not None else None
     if best is None:

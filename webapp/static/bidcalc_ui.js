@@ -358,15 +358,26 @@
     const head = `<div class="rec-sum">비슷한 과거 공고 <b>${d.samples}건</b> (${esc(cond)}) — 과거 개찰 자료 ${d.total}건 중</div>
       <div class="rec-note">실제 사정률 10%·중앙·90%: ${pct(a.p10)} · ${pct(a.p50)} · ${pct(a.p90)} ·
       1순위 투찰률 − 하한율 중앙 ${d.winner_gap >= 0 ? "+" : ""}${Number(d.winner_gap).toFixed(3)}%p · 참가 중앙 ${b.median}곳(최대 ${b.max})</div>`;
-    const rows = (d.options || []).map((o, i) => {
+    // 검증 성적 = 비슷한 과거 공고마다 "그 공고 전 자료로 이 방식대로 정했다면" 1순위·유효였나(고른 자료로 다시 맞춘 값이 아님)
+    const track = (t) => (t && t.tried ? `${t.win}건 / ${t.tried}건 (${Math.round((t.win / t.tried) * 100)}%)` : "-");
+    const valid = (t) => (t && t.tried ? `${t.valid}건 (${Math.round((t.valid / t.tried) * 100)}%)` : "-");
+    const opts = d.options || [];
+    const top = Math.max(-1, ...opts.map((o) => (o.track && o.track.tried ? o.track.win / o.track.tried : -1)));
+    const rows = opts.map((o) => {
       const bid = recBid(o.rate);
-      return `<tr${i === 0 && d.best ? ' class="best"' : ""}><td>${esc(o.name)}</td><td>${pct(o.rate)}</td>
-        <td>${o.wins}건 (${Math.round(o.win_ratio * 100)}%)</td><td>${o.valid}건 (${Math.round(o.valid_ratio * 100)}%)</td>
+      const isTop = o.track && o.track.tried && o.track.win / o.track.tried === top && top > 0;
+      return `<tr${isTop ? ' class="best"' : ""}><td>${esc(o.name)}</td><td>${pct(o.rate)}</td>
+        <td>${track(o.track)}</td><td>${valid(o.track)}</td>
         <td>${bid != null ? won(bid) : "기초금액·하한율 필요"}</td></tr>`;
     }).join("");
+    const o = d.outsourced;
+    const ownRow = o ? `<tr class="own"><td>${esc(o.name)}</td><td>${pct(o.rate)} <span class="rec-note">(과거 중앙)</span></td>
+        <td>${track(o.track)}</td><td>${valid(o.track)}</td><td>-</td></tr>` : "";
     $("#cRec").innerHTML = `${head}
-      <div class="rec-scroll"><table><tr><th>구분</th><th>가정 사정률</th><th>과거 1순위였을 공고</th><th>유효(하한선 이상)</th><th>투찰금액</th></tr>${rows}</table></div>
-      <div class="rec-note">과거 공고에 이 사정률로 투찰했다면 금액 기준 개찰 1순위·하한선 이상이었을 건수(적격심사 서류 심사 전). 투찰금액 = A + (기초금액 × 사정률 − A) × 하한율, 끝자리는 기타설정대로.</div>
+      <div class="rec-scroll"><table><tr><th>구분</th><th>가정 사정률</th><th>검증: 1순위</th><th>검증: 유효(하한선 이상)</th><th>투찰금액</th></tr>${rows}${ownRow}</table></div>
+      <div class="rec-note">검증 = 비슷한 과거 공고마다 그 공고 <b>개찰 전 자료만으로</b> 이 방식대로 사정률을 정했다면 금액 기준 개찰 1순위·하한선 이상이었을 건수(적격심사 서류 심사 전).
+        "${esc(o ? o.name : "지일 실제 투찰(외주)")}"은 같은 공고에 지일이 실제로 낸 금액의 나라장터 순위. 굵은 줄 = 검증 1순위 비율이 가장 높은 방식.
+        건수가 적으면(수십 건 이하) 우연일 수 있음. 투찰금액 = A + (기초금액 × 사정률 − A) × 하한율, 끝자리는 기타설정대로.</div>
       ${notes}`;
   }
   $("#cRecBtn").addEventListener("click", recommend);

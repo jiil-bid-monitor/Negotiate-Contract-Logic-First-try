@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from nego import bidcalc, feedback_sheet, scope
+from nego import bidcalc, bidrecommend, feedback_sheet, scope
 from nego.config import ConfigError, load_config, redact
 from nego.http_client import ApiError
 
@@ -181,6 +181,19 @@ def make_handler(app: App):
                 except (ConfigError, ApiError) as err:
                     key = os.environ.get("NARA_SERVICE_KEY", "")
                     return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
+            if url.path == "/api/bidrecommend":
+                # 추천 사정률 — 서버 PC output/의 과거 개찰 결과로 계산(공고 값은 화면 입력칸에서 받음, 나라장터는 안 부름)
+                def num(key: str) -> float | None:
+                    try:
+                        return float(q.get(key, [""])[0].replace(",", "")) if q.get(key, [""])[0].strip() else None
+                    except ValueError:
+                        return None
+
+                directory = Path(os.environ.get("BID_HISTORY_DIR") or os.environ.get("OUTPUT_DIR") or "output")
+                history = bidrecommend.history_from_dir(directory)
+                return self._json(bidrecommend.recommend(
+                    history, work=q.get("work", [""])[0] or None, lo=num("lo"), hi=num("hi"),
+                    scale=q.get("scale", ["all"])[0], basis=num("basis"), lower_rate=num("lower"), a=num("a") or 0.0))
             if url.path == "/api/results":
                 # ?run=번호 — 그 브라우저가 보고 있는(직접 불러온) 결과. 없거나 지워진 번호면 최신 결과(missing=True)
                 wanted = q.get("run", [""])[0]

@@ -1021,6 +1021,18 @@ footer b { color: var(--muted); }
 .calc-h { margin: 0 0 6px; font-size: 13px; }
 .calc-final { color: var(--accent); font-weight: 700; font-size: 15px; }
 .calc-summary th { text-align: center; }
+.calc-rec { background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; margin-top: 14px; }
+.calc-rec-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+.calc-rec-bar select { color: var(--ink); font-size: 13px; padding: 4px 8px; }
+.calc-rec .rec-scroll { overflow-x: auto; }
+.calc-rec table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; margin: 6px 0; }
+.calc-rec th, .calc-rec td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.calc-rec th { background: var(--chip); color: var(--ink); text-align: center; font-weight: 600; }
+.calc-rec td:first-child { text-align: left; }
+.calc-rec tr.best td { color: var(--accent); font-weight: 700; }
+.calc-rec .rec-sum { color: var(--ink); font-size: 13px; }
+.calc-rec .rec-note { color: var(--muted); font-size: 12px; }
+.calc-rec .rec-warn { color: #b45309; font-size: 12px; }
 @media (max-width: 760px) {
   .calc-form, .calc-form tbody, .calc-form tr { display: block; }
   .calc-form tr { display: grid; grid-template-columns: 96px 1fr; }
@@ -1245,6 +1257,17 @@ footer b { color: var(--muted); }
       <tbody id="cSummary"><tr><td colspan="3" class="why">예비가격을 만들고 번호를 고르면 나옵니다.</td></tr></tbody>
     </table>
     <p class="why">예비가격은 모의로 만든 값입니다 — 실제 예비가격은 나라장터가 무작위로 만들고 4개는 입찰자 선택으로 정해집니다.</p>
+
+    <!-- 추천 사정률(2026-10-28 사용자 결정 — 과거 개찰 통계 기반). 서버 output/의 개찰 결과로 계산, 위 입력칸 값을 씀 -->
+    <div class="calc-rec">
+      <h4 class="calc-h">추천 사정률 — 과거 개찰 결과 기준</h4>
+      <div class="calc-rec-bar">
+        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="all">전체</option><option value="small">참가 100곳 미만</option><option value="large">참가 100곳 이상</option></select></label>
+        <button type="button" id="cRecBtn">추천 보기</button>
+        <span id="cRecMsg" class="job"></span>
+      </div>
+      <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고(업무·변동폭)의 개찰 결과로 사정률별 1순위·유효 건수를 보여 줍니다.</div>
+    </div>
   </section>
 
   <footer>

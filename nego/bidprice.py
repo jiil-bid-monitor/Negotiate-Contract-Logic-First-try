@@ -81,6 +81,11 @@ class BidResult:
     basis_amount: float | None = None
     planned_price: float | None = None
     drawn_prices: list[float] = field(default_factory=list)
+    # 예비가격 15개(또는 10개) 전부 — 변동폭(±2·±3) 가늠용, 기초금액 API의 변동폭·A값(추천 사정률 `bidrecommend`, 2026-10-28)
+    prepared_prices: list[float] = field(default_factory=list)
+    range_lo: float | None = None
+    range_hi: float | None = None
+    a_value: float | None = None
     bidders: list[Bidder] = field(default_factory=list)
     error: str | None = None
 
@@ -134,6 +139,18 @@ def parse_bidders(rows: list[dict]) -> list[Bidder]:
     return sorted(bidders, key=lambda b: (b.rank is None, b.rank or 0))
 
 
+def basis_info(rows: list[dict], notice_no: str) -> tuple[float | None, float | None, float | None]:
+    """기초금액 API 행 → (변동폭 아래, 위, 하한선 계산에 넣는 A값 — 넣지 않는 공고면 0)."""
+    from .bidcalc import _latest, parse_basis
+
+    row = _latest(rows, notice_no)
+    if not row:
+        return None, None, None
+    info = parse_basis(row)
+    a = info["a_value"] if info["a_applies"] else 0.0
+    return info["range_lo"], info["range_hi"], a
+
+
 def _by_notice(client: DataGoKrClient, base_url: str, operation: str, notice_no: str, label: str) -> list[dict]:
     rows = client.fetch_all_pages(base_url, operation, {"inqryDiv": "2", "bidNtceNo": notice_no}, label)
     return rows
@@ -156,11 +173,21 @@ def fetch_result(client: DataGoKrClient, base_url: str, notice) -> BidResult:
             # 같은 공고번호의 다른 차수가 섞이면 이 공고 차수만
             same_ord = [r for r in prices if str(r.get("bidNtceOrd") or "") in ("", notice.notice_ord)]
             result.planned_price, result.basis_amount, result.drawn_prices = parse_prepare_prices(same_ord or prices)
+            result.prepared_prices = [p for r in (same_ord or prices) if (p := _num(r.get("bsisPlnprc")))]
         bidders = _by_notice(client, base_url, F.OPENING_BIDDERS_OPERATION, notice.notice_no, f"참가업체 {notice.notice_no}")
         same_ord = [r for r in bidders if str(r.get("bidNtceOrd") or "") in ("", notice.notice_ord)]
         result.bidders = parse_bidders(same_ord or bidders)
     except ApiError as err:
         result.error = str(err)[:200]
+        return result
+    basis_op = F.BASIS_AMOUNT_OPERATIONS.get(notice.work_type)
+    if basis_op:  # 변동폭·A값은 없어도 개찰 결과는 쓸 수 있다 — 실패해도 결과를 버리지 않음
+        try:
+            rows = client.fetch_all_pages(F.BID_NOTICE_BASE_URL, basis_op, {"inqryDiv": "2", "bidNtceNo": notice.notice_no},
+                                          f"기초금액 {notice.notice_no}")
+            result.range_lo, result.range_hi, result.a_value = basis_info(rows, notice.notice_no)
+        except ApiError as err:
+            log.info("기초금액 조회 실패 %s: %s", notice.notice_no, err)
     return result
 
 

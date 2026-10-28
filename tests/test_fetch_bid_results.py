@@ -40,6 +40,32 @@ class FetchBidResultsTest(unittest.TestCase):
         self.assertEqual(len(rec["bidders"]), 1)
         self.assertNotIn("error", rec)
 
+    def test_notice_info_for_recommend(self):
+        # 추천 사정률용 — 낙찰하한율(입찰공고)·변동폭·A값(기초금액)을 함께 저장(2026-10-28)
+        client = FakeClient({
+            F.SCSBID_OPERATIONS["예비가격/용역"]: [{"bidNtceOrd": "000", "bsisPlnprc": "100"}],
+            F.OPENING_BIDDERS_OPERATION: [{"bidNtceOrd": "000", "opengRank": "1"}],
+            F.BID_NOTICE_OPERATIONS["용역"]: [{"bidNtceNo": "R26BK00000001", "bidNtceOrd": "000", "bidNtceNm": "가",
+                                               "sucsfbidLwltRate": "87.745"}],
+            F.BASIS_AMOUNT_OPERATIONS["용역"]: [{"bidNtceNo": "R26BK00000001", "bidNtceOrd": "000", "bssamt": "100000000",
+                                                 "rsrvtnPrceRngBgnRate": "-2", "rsrvtnPrceRngEndRate": "+2",
+                                                 "npnInsrprm": "1000000", "bidPrceCalclAYn": "Y"}],
+        })
+        rec = fb.fetch_one(client, "u", "R26BK00000001-000", "용역")
+        self.assertEqual(rec["notice"]["lower_rate"], "87.745")
+        self.assertEqual((rec["notice"]["range_lo"], rec["notice"]["range_hi"]), (-2.0, 2.0))
+        self.assertEqual((rec["notice"]["a_value"], rec["notice"]["a_applies"]), (1_000_000.0, True))
+
+    def test_notice_info_quota_stops(self):
+        class Quota(FakeClient):
+            def fetch_all_pages(self, base_url, operation, params, label):
+                if operation == F.BID_NOTICE_OPERATIONS["공사"]:
+                    raise fb.ApiResultError("공고", "22", "LIMITED NUMBER OF SERVICE REQUESTS EXCEEDS ERROR")
+                return super().fetch_all_pages(base_url, operation, params, label)
+
+        with self.assertRaises(fb.ApiResultError):
+            fb.notice_info(Quota({}), "R26BK00000001", "공사")
+
     def test_not_found_is_error(self):
         rec = fb.fetch_one(FakeClient({}), "u", "R26BK00000001-000", "시설")
         self.assertEqual(rec["work"], "공사")

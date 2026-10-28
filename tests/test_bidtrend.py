@@ -40,6 +40,14 @@ class FieldTest(unittest.TestCase):
         self.assertEqual(bidfield.classify("청사 청소 용역"), bidfield.OTHER)
         self.assertEqual(bidfield.classify(""), bidfield.NO_TITLE)
 
+    def test_exceptions_and_trade_mark(self):
+        # 수집 로직의 제외 키워드 예외와 같은 방식 — '안전시설' 속 '전시', '추가 구축' 속 '가구'는 안 침
+        self.assertEqual(bidfield.classify("국도38호선 도로안전시설물 보수공사"), "도로·안전시설")
+        self.assertEqual(bidfield.classify("통합홈페이지 신규사이트 추가 구축"), bidfield.OTHER)
+        self.assertEqual(bidfield.classify("○○박물관 안전시설 및 전시물 교체"), "전시·체험")  # 다른 곳에 '전시'가 또 있으면 맞음
+        self.assertEqual(bidfield.classify("문화체육공원 조성사업(정보통신)"), "통신·전기")  # 공종 표시가 먼저
+        self.assertEqual(bidfield.classify("○○초 교사동 천장교체공사"), "실내건축")
+
     def test_similar_prefers_same_field_then_relaxes(self):
         recs = [_past(f"e{i}", 100, "전시관 조성") for i in range(10)] + [_past(f"r{i}", 100, "도로 정비") for i in range(10)]
         picked, labels = br.similar(recs, "용역", 3, "all", "전시·체험")

@@ -39,6 +39,8 @@ HISTORY_PATTERNS = ("bid_history_*.json", "bid_results*.jsonl")
 FIXED_RATE = 100.55  # 고정 사정률 비교값 — 2020~24 지일 이력 중 참가 100곳 미만 ±3% 공고로 고른 값(10/23 분석, 10/28 검증에서 소규모 1순위 최다)
 OWN_NAME = "지일 실제 투찰(외주)"  # bidbacktest.OWN과 같은 이름
 TOP_N = 5  # 투찰 경향은 1~5위 업체까지 본다(2026-10-28 사용자 결정)
+PICK_MIN_WIN = 0.10  # 검증 1순위 비율이 이보다 낮으면 방식 간 차이를 운으로 보고 '경향 추천'을 쓴다(10/28 백테스트: 소규모 물품·용역 23~50%, 공사·대규모 0~7%)
+TREND_NAME = f"경향 추천(사정률 중앙 + 1~{TOP_N}위 간격)"
 TRACK_LIMIT = 400  # 검증 성적은 비슷한 공고 중 최근 이만큼만 채점(화면 응답 시간 — 공고마다 그 전 공고로 추천을 다시 만듦)
 
 
@@ -411,19 +413,36 @@ def _ratio(track: dict | None, key: str = "win") -> float:
     return track[key] / track["tried"] if track and track.get("tried") else 0.0
 
 
+def trend_rate(records: list[PastBid], k: int = TOP_N) -> tuple[float, float] | None:
+    """단순 경향으로 정한 사정률 = 비슷한 과거 공고의 실제 사정률 중앙 + 그 공고들 1~k위 업체가 실제 사정률보다 위에 쓴 간격의 중앙.
+    (예상 사정률, 간격). 투찰은 운이 커서 검증 성적으로 고를 차이가 없을 때 쓰는 '합리적 추론'(2026-10-28 사용자 결정)."""
+    if not records:
+        return None
+    gaps = [r.rate_for(a) - r.assessment for r in records for a in r.top_amounts[:k]]
+    if not gaps:
+        return None
+    return statistics.median(r.assessment for r in records), statistics.median(gaps)
+
+
 def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | None:
     """화면 맨 위 '추천 투찰금액'으로 쓸 방식 하나 — 검증(개찰 전 자료로 정했다면) 1순위 비율이 가장 높은 방식,
-    같으면 5위 안 비율, 그다음 유효 비율이 높은 쪽. 검증 건수가 MIN_PICK_TRIED 미만인 방식만 있으면 고정값으로 두고 '근거 약함'."""
+    같으면 5위 안 비율, 그다음 유효 비율이 높은 쪽. 그런데 검증 건수가 MIN_PICK_TRIED 미만이거나 가장 좋은 방식도 1순위 비율이
+    PICK_MIN_WIN 미만이면(대규모 경쟁·공사 — 어떤 방식이든 운) 경향 추천(`trend_rate`)을 쓴다(mode="trend")."""
     if not options:
         return None
-    ok = [o for o in options if (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED]
-    weak = not ok
-    if ok:
-        chosen = max(ok, key=lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid")))
+    ok = [o for o in options if (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED and o["name"] != TREND_NAME]
+    best = max(ok, key=lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid"))) if ok else None
+    trend = next((o for o in options if o["name"] == TREND_NAME), None)
+    weak = best is None
+    if best is not None and _ratio(best["track"]) >= PICK_MIN_WIN:
+        chosen, mode = best, "track"
+    elif trend is not None:
+        chosen, mode = trend, "trend"
     else:
-        chosen = next((o for o in options if o["name"].startswith("고정")), options[0])
+        chosen = best or next((o for o in options if o["name"].startswith("고정")), options[0])
+        mode = "track" if best is not None else "fixed"
     own = (outsourced or {}).get("track")
-    pick = {**chosen, "weak": weak, "own_track": own,
+    pick = {**chosen, "weak": weak, "mode": mode, "own_track": own,
             "beats_outsourced": bool(own and own.get("tried") and _ratio(chosen.get("track")) > _ratio(own))}
     return pick
 
@@ -524,6 +543,9 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     if top_best is not None:
         options.insert(1 if best is not None else 0, row(f"추천(과거 {TOP_N}위 안 최다)", _rate(top_best)))
     options.append(row(f"고정 {FIXED_RATE:g}%", FIXED_RATE))
+    guess = trend_rate(picked)
+    if guess is not None:
+        options.append({**row(TREND_NAME, guess[0] + guess[1]), "base": round(guess[0], 3), "gap": round(guess[1], 3)})
     track = _track(history, picked, scale)
     for o in options:
         o["track"] = track.get(o["name"])

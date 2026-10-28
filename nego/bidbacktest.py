@@ -26,12 +26,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from .bidrecommend import (LARGE_COMPETITION, MIN_SAMPLES, TOP_N, PastBid, _best, _pct, _rate, coverage,
-                           default_own_bizno, history_paths, load_history, similar)
+from .bidrecommend import (LARGE_COMPETITION, MIN_SAMPLES, TOP_N, TREND_NAME, PastBid, _best, _pct, _rate, coverage,
+                           default_own_bizno, history_paths, load_history, similar, trend_rate)
 
 OWN = "지일 실제 투찰(외주)"
 TOP_NAME = f"추천(과거 {TOP_N}위 안 최다)"
-STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, "사정률 중앙값", "유효 70%", "유효 90%")
+STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, TREND_NAME, "사정률 중앙값", "유효 70%", "유효 90%")
 _DATE = re.compile(r"(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})")
 
 
@@ -79,6 +79,9 @@ def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train:
     top = _best(coverage(picked, lambda r: r.rank_ceiling(TOP_N))[0], lowest=True)
     if top is not None:
         out[TOP_NAME] = _rate(top)
+    guess = trend_rate(picked)
+    if guess is not None:
+        out[TREND_NAME] = guess[0] + guess[1]
     return out
 
 

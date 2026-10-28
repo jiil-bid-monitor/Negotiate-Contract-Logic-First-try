@@ -125,6 +125,27 @@ class CoverageTest(unittest.TestCase):
         self.assertFalse(pick["beats_outsourced"])
         self.assertIsNone(br.pick_option([]))
 
+    def test_pick_uses_trend_when_no_method_wins_often(self):
+        # 대규모 경쟁처럼 어느 방식도 1순위 비율이 PICK_MIN_WIN(10%) 미만이면 경향 추천
+        options = [{"name": "고정 100.55%", "rate": 100.55, "track": {"tried": 300, "valid": 250, "win": 6, "top": 10}},
+                   {"name": br.TREND_NAME, "rate": 100.1, "base": 100.0, "gap": 0.1,
+                    "track": {"tried": 300, "valid": 150, "win": 3, "top": 8}}]
+        pick = br.pick_option(options)
+        self.assertEqual((pick["mode"], pick["name"]), ("trend", br.TREND_NAME))
+        options[0]["track"]["win"] = 60  # 20% — 검증 성적이 확실하면 그 방식
+        self.assertEqual(br.pick_option(options)["mode"], "track")
+
+    def test_trend_rate_is_median_rate_plus_top_gap(self):
+        recs = []
+        for i, s in enumerate((99.0, 100.0, 101.0)):
+            rec = _past(str(i), s)
+            rec.top_amounts = [br.bid_amount(rec.basis, s + d, rec.lower_rate) for d in (0.01, 0.02, 0.03)]
+            recs.append(rec)
+        base, gap = br.trend_rate(recs)
+        self.assertAlmostEqual(base, 100.0)
+        self.assertAlmostEqual(gap, 0.02, places=6)
+        self.assertIsNone(br.trend_rate([]))
+
     def test_auto_scale_from_similar_bidder_count(self):
         small = [_past(f"s{i}", 100.0 + i * 0.01, count=20) for i in range(12)]
         out = br.recommend(br.History(small), work="용역", scale="auto")

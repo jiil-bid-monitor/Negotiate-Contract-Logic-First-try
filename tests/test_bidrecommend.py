@@ -34,6 +34,24 @@ class PastBidTest(unittest.TestCase):
         # A가 있어도 r = s면 투찰금액 = 하한선(유효), 그보다 아주 조금 위까지 1순위
         self.assertGreater(with_a.win_ceiling, with_a.assessment)
 
+    def test_floor_estimated_from_bidders_when_a_unknown(self):
+        # 실제 A = 5백만이지만 공고 값은 모름 — 순위 있는 최저 금액과 하한 미달 최고 금액 사이로 하한선을 가늠한다
+        from nego.bidprice import Bidder
+
+        basis, planned, lower, a = 100_000_000, 100_200_000, 87.745, 5_000_000
+        floor = a + (planned - a) * lower / 100
+        bidders = [Bidder(1, "갑", "1", floor + 300, None, ""), Bidder(2, "을", "2", floor + 900, None, ""),
+                   Bidder(None, "병", "3", floor - 500, None, "하한미달"), Bidder(None, "정", "4", floor + 50, None, "서류 미비"),
+                   Bidder(None, "지일", "206-86-36338", br.bid_amount(basis, 99.9, lower, a), None, "하한미달")]
+        rec = br._make("1", "공사", basis, planned, lower, bidders, [], own_bizno="2068636338", a_value=None)
+        self.assertEqual(rec.floor_source, "추정")
+        self.assertAlmostEqual(rec.floor, floor - 100)  # '미달' 표시 업체만 — 서류 미비(정)는 안 씀
+        self.assertLess(rec.win_ceiling - rec.assessment, 0.001)  # 대규모 경쟁처럼 1순위 구간이 아주 좁다
+        self.assertAlmostEqual(rec.rate_for(rec.own_amount), 99.9, places=3)  # A를 몰라도 지일 가정 사정률이 맞음
+        # A=0으로 계산하던 예전 방식은 구간을 크게 부풀렸다
+        rec.floor_est = None
+        self.assertGreater(rec.win_ceiling - rec.assessment, 0.5)
+
     def test_bid_amount_matches_formula(self):
         self.assertAlmostEqual(br.bid_amount(100_000_000, 100.5, 87.745, 3_000_000),
                                3_000_000 + (100_500_000 - 3_000_000) * 0.87745)

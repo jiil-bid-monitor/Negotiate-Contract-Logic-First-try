@@ -54,17 +54,35 @@ class PastBid:
     source: str = ""
     own_amount: float | None = None  # 지일 투찰금액(참가했을 때) — 검증(`nego.bidbacktest`)에서 외주 추천과 비교
     own_rank: int | None = None  # 지일 개찰 순위(하한 미달 등으로 순위가 없으면 None)
+    floor_est: float | None = None  # 참가업체 금액으로 가늠한 하한선(A값을 모를 때) — `_estimate_floor`
 
     @property
     def assessment(self) -> float:
         return self.planned / self.basis * 100
 
     @property
+    def floor_source(self) -> str:
+        """하한선을 무엇으로 정했나: A값(공고 값) / 추정(참가업체 금액) / A=0(둘 다 없음)."""
+        if self.a_value is not None:
+            return "A값"
+        return "추정" if self.floor_est else "A=0"
+
+    @property
+    def floor(self) -> float:
+        """하한선 금액 = A + (예정가격 − A) × 하한율. A를 모르면 참가업체 금액으로 가늠한 값, 그것도 없으면 A=0."""
+        if self.a_value is None and self.floor_est:
+            return self.floor_est
+        a = self.a_value or 0.0
+        return a + (self.planned - a) * self.lower_rate / 100
+
+    def rate_for(self, amount: float) -> float:
+        """이 공고에 이 금액을 냈을 때의 가정 사정률. 금액 − 하한선 = 하한율 × (기초 × r − 예정가격)이라 A값이 따로 필요 없다."""
+        return (self.planned + (amount - self.floor) / (self.lower_rate / 100)) / self.basis * 100
+
+    @property
     def win_ceiling(self) -> float:
-        """이 r 미만이면 1순위(이상이면 1순위보다 비쌈). A값을 모르면 0으로."""
-        lower = self.lower_rate / 100
-        a = (self.a_value or 0) / self.planned
-        return self.assessment * (self.winner_rate / 100 - a * (1 - lower)) / lower
+        """이 r 미만이면 1순위(이상이면 1순위보다 비쌈)."""
+        return self.rate_for(self.winner_rate / 100 * self.planned)
 
 
 def _num(value: Any) -> float | None:
@@ -105,6 +123,22 @@ def _winner_rate(bidders: list, planned: float) -> float | None:
     return first.rate
 
 
+def _estimate_floor(bidders: list, planned: float) -> float | None:
+    """A값을 모를 때 하한선 가늠: 순위가 있는(하한선 이상) 가장 낮은 금액과, 그보다 낮은데 순위가 없는(하한 미달) 가장 높은 금액의
+    가운데. 참가업체가 많으면 둘 사이가 아주 좁다. 비고에 '미달'이 적힌 업체가 있으면 그 업체들만 하한 미달로 본다
+    (서류 미비 등 다른 사유로 빠진 업체를 섞지 않게)."""
+    ranked = [b.amount for b in bidders if b.rank is not None and b.amount]
+    if not ranked or not planned:
+        return None
+    low_ok = min(ranked)
+    below = [b for b in bidders if b.rank is None and b.amount and b.amount < low_ok]
+    marked = [b for b in below if "미달" in (b.remark or "")]
+    below = marked or below
+    if not below:
+        return None
+    return (max(b.amount for b in below) + low_ok) / 2
+
+
 def _clean_bizno(value: str | None) -> str:
     return (value or "").replace("-", "").strip()
 
@@ -120,6 +154,7 @@ def _make(notice_no: str, work: str, basis, planned, lower, bidders: list, price
     width = extra.pop("range_width", None) or range_width(prices, basis)
     rec = PastBid(notice_no=notice_no, work=work or "", basis=basis, planned=planned, lower_rate=lower,
                   winner_rate=winner, bidder_count=len(bidders), range_width=width, **extra)
+    rec.floor_est = _estimate_floor(bidders, planned)
     own = next((b for b in bidders if own_bizno and _clean_bizno(b.bizno) == own_bizno), None)
     if own is not None:
         rec.own_amount, rec.own_rank = own.amount, own.rank
@@ -356,9 +391,10 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     out["winner_gap"] = statistics.median(gaps)
     out["bidders"] = {"median": statistics.median(counts), "max": max(counts),
                       "large": sum(c >= LARGE_COMPETITION for c in counts)}
-    no_a = sum(r.a_value is None for r in picked)
+    no_a = sum(r.floor_source == "A=0" for r in picked)
     if no_a:
-        out["notes"].append(f"A값을 모르는 과거 공고 {no_a}건은 A=0으로 계산 — 1순위 구간이 실제보다 넓게 잡힐 수 있음")
+        out["notes"].append(f"하한선을 정하지 못한 과거 공고 {no_a}건(A값·하한 미달 업체 없음)은 A=0으로 계산 — "
+                            "1순위 구간이 실제보다 넓게 잡힐 수 있음")
     if out["bidders"]["large"] > len(picked) / 2:
         out["notes"].append(f"참가 {LARGE_COMPETITION}곳 이상 대규모 경쟁이 많습니다 — 1순위가 하한선 바로 위라 "
                             "어떤 사정률도 몇 건밖에 못 이깁니다(운의 영역)")

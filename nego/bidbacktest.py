@@ -52,11 +52,10 @@ def score(rate: float, rec: PastBid) -> tuple[bool, bool]:
 
 
 def own_rate(rec: PastBid) -> float | None:
-    """지일 투찰금액에서 거꾸로 구한 가정 사정률: 금액 = A + (기초 × r − A) × 하한율 → r. A를 모르면 0."""
+    """지일 투찰금액에서 거꾸로 구한 가정 사정률(하한선 기준 — `PastBid.rate_for`)."""
     if not rec.own_amount:
         return None
-    a = rec.a_value or 0.0
-    return (a + (rec.own_amount - a) / (rec.lower_rate / 100)) / rec.basis * 100
+    return rec.rate_for(rec.own_amount)
 
 
 def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train: int = MIN_SAMPLES) -> dict[str, float]:
@@ -109,7 +108,7 @@ def backtest(records: list[PastBid], start: str | None = None, scale: str = "all
         rates.update({f"고정 {f:g}%": f for f in fixed})
         row = {"공고번호": rec.notice_no, "개찰일": d, "업무": rec.work, "변동폭": rec.range_width, "참가": rec.bidder_count,
                "학습 공고": len(train), "실제 사정률": round(rec.assessment, 4), "1순위 상한": round(rec.win_ceiling, 4),
-               "A값 앎": rec.a_value is not None, "rates": rates, "results": {}}
+               "하한선": rec.floor_source, "rates": rates, "results": {}}
         for name, rate in rates.items():
             row["results"][name] = (rate, *score(rate, rec))
         if rec.own_amount:
@@ -158,17 +157,18 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
         block(f"참가 {LARGE_COMPETITION}곳 이상(운의 영역)", large)
     for year in sorted({r["개찰일"][:4] for r in rows}):
         block(f"{year}년", [r for r in rows if r["개찰일"].startswith(year)])
-    no_a = sum(not r["A값 앎"] for r in rows)
-    if no_a:
-        lines.append(f"\n※ A값을 모르는 공고 {no_a}건은 A=0으로 채점 — 그 공고들의 1순위 판정이 실제보다 후할 수 있음"
-                     "(지일 실제 투찰 줄은 나라장터 순위 그대로라 해당 없음)")
+    by = {k: sum(r["하한선"] == k for r in rows) for k in ("A값", "추정", "A=0")}
+    lines.append(f"\n※ 하한선: 공고 A값 {by['A값']}건 · 참가업체 금액으로 추정 {by['추정']}건 · A=0 {by['A=0']}건")
+    if by["A=0"]:
+        lines.append(f"  A=0으로 채점한 {by['A=0']}건은 1순위 판정이 실제보다 후할 수 있음"
+                     "(지일 실제 투찰의 유효·1순위는 나라장터 순위 그대로라 해당 없음)")
     lines.append("※ 순위는 금액 기준 개찰 순위(적격심사 서류 심사 전). 1순위 = 하한선 이상 중 가장 낮은 금액.")
     return "\n".join(lines)
 
 
 def write_csv(rows: list[dict], path: Path) -> None:
     names = _names(rows)
-    base = ["공고번호", "개찰일", "업무", "변동폭", "참가", "학습 공고", "실제 사정률", "1순위 상한", "A값 앎"]
+    base = ["공고번호", "개찰일", "업무", "변동폭", "참가", "학습 공고", "실제 사정률", "1순위 상한", "하한선"]
     head = base + [f"{n} {k}" for n in names for k in ("사정률", "유효", "1순위")]
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)

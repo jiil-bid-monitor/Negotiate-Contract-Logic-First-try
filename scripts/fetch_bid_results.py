@@ -103,7 +103,36 @@ def fetch_one(client: DataGoKrClient, base_url: str, notice_input: str, work: st
     rec["bidders"] = _same_ord(client.fetch_all_pages(base_url, F.OPENING_BIDDERS_OPERATION, params, f"참가업체 {no}"), ord_)
     if not rec["prices"] and not rec["bidders"]:
         rec["error"] = "나라장터에서 개찰결과를 찾지 못함"
+    elif rec["work"]:
+        rec["notice"] = notice_info(client, no, rec["work"])
     return rec
+
+
+def notice_info(client: DataGoKrClient, no: str, work: str) -> dict:
+    """추천 사정률(`nego/bidrecommend.py`)에 필요한 공고 값 — 낙찰하한율·공고명(입찰공고) + 변동폭·A값(기초금액).
+    하루 한도 오류는 그대로 올려 멈추게 하고, 그 밖의 오류는 빈 칸으로 둔다(개찰 결과는 그대로 저장)."""
+    from nego.bidcalc import _latest, parse_basis
+
+    info: dict = {}
+    params = {"inqryDiv": "2", "bidNtceNo": no}
+    try:
+        row = _latest(client.fetch_all_pages(F.BID_NOTICE_BASE_URL, F.BID_NOTICE_OPERATIONS[work], params, f"공고 {no}"), no)
+        if row:
+            info.update(title=str(row.get("bidNtceNm") or ""), lower_rate=row.get("sucsfbidLwltRate"),
+                        institution=str(row.get("dminsttNm") or row.get("ntceInsttNm") or ""))
+        op = F.BASIS_AMOUNT_OPERATIONS.get(work)
+        row = _latest(client.fetch_all_pages(F.BID_NOTICE_BASE_URL, op, params, f"기초금액 {no}"), no) if op else None
+        if row:
+            basis = parse_basis(row)
+            info.update(range_lo=basis["range_lo"], range_hi=basis["range_hi"], a_value=basis["a_value"],
+                        a_applies=basis["a_applies"])
+    except ApiResultError as err:
+        if err.result_code == QUOTA_CODE:
+            raise
+        info["error"] = str(err)[:200]
+    except ApiError as err:
+        info["error"] = str(err)[:200]
+    return info
 
 
 def main(argv: list[str] | None = None) -> int:

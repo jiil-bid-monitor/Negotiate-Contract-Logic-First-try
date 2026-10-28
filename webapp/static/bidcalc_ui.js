@@ -242,6 +242,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
+    WORK = ""; $("#cRec").textContent = "";
     render();
   };
   async function lookup() {
@@ -299,6 +300,8 @@
       render();
       const auto = autoRun(d.method);
       if (auto) $("#cNotes").insertAdjacentHTML("beforeend", `<div class="calc-auto">${esc(auto)}</div>`);
+      WORK = d.work_type || "";
+      if (d.basis != null && d.lower_rate != null) recommend();
     } catch (err) {
       lookupMsg(`실패: ${err.message}`, true);
     } finally {
@@ -318,6 +321,56 @@
     return `자동 계산: ${plan.name}(${plan.why}) → 무작위 번호 ${AUTO.join("·")}번 — 모의 추첨 1회라 실제 예정가격과 다름. `
       + "다시 뽑으려면 자동선택 '시작 → 적용'";
   }
+
+  // 추천 사정률(2026-10-28) — 위 입력칸(기초금액·하한율·변동폭·A값)과 불러온 공고의 업무로 서버에 묻는다.
+  // 투찰금액은 계산기와 같은 기타설정(절상·절사·단위)으로 자름: 원 단위 예정가격(기초금액 × 사정률) → 하한율 → 끝자리
+  let WORK = "";
+  const pct = (v, d = 3) => (v == null ? "-" : `${Number(v).toFixed(d)}%`);
+  async function recommend() {
+    const qs = new URLSearchParams({ scale: $("#cRecScale").value, work: WORK });
+    [["basis", "#cBasis"], ["lower", "#cRate"], ["lo", "#cLo"], ["hi", "#cHi"]].forEach(([k, id]) => {
+      const v = numIn(id); if (v != null) qs.set(k, v);
+    });
+    qs.set("a", aValue());
+    $("#cRecMsg").textContent = "계산 중…";
+    $("#cRecBtn").disabled = true;
+    try {
+      renderRecommend(await api(`/api/bidrecommend?${qs}`));
+      $("#cRecMsg").textContent = "";
+    } catch (err) {
+      $("#cRecMsg").textContent = `실패: ${err.message}`;
+    } finally {
+      $("#cRecBtn").disabled = false;
+    }
+  }
+  function recBid(rate) {
+    const basis = numIn("#cBasis"), lower = numIn("#cRate");
+    if (!(basis > 0) || !(lower > 0)) return null;
+    const r = rounding();
+    const plannedWon = C.roundAmount((basis * rate) / 100, r.planned, 1);
+    return C.bidAmount({ planned: plannedWon, lowerRate: lower, a: aValue(), how: r.bid, unit: r.unit });
+  }
+  function renderRecommend(d) {
+    const notes = (d.notes || []).map((n) => `<div class="rec-warn">※ ${esc(n)}</div>`).join("");
+    if (!d.samples) { $("#cRec").innerHTML = notes || "비슷한 과거 공고가 없습니다."; return; }
+    const cond = (d.conditions || []).length ? d.conditions.join(" · ") : "조건 없음(전체)";
+    const a = d.assessment, b = d.bidders;
+    const head = `<div class="rec-sum">비슷한 과거 공고 <b>${d.samples}건</b> (${esc(cond)}) — 과거 개찰 자료 ${d.total}건 중</div>
+      <div class="rec-note">실제 사정률 10%·중앙·90%: ${pct(a.p10)} · ${pct(a.p50)} · ${pct(a.p90)} ·
+      1순위 투찰률 − 하한율 중앙 ${d.winner_gap >= 0 ? "+" : ""}${Number(d.winner_gap).toFixed(3)}%p · 참가 중앙 ${b.median}곳(최대 ${b.max})</div>`;
+    const rows = (d.options || []).map((o, i) => {
+      const bid = recBid(o.rate);
+      return `<tr${i === 0 && d.best ? ' class="best"' : ""}><td>${esc(o.name)}</td><td>${pct(o.rate)}</td>
+        <td>${o.wins}건 (${Math.round(o.win_ratio * 100)}%)</td><td>${o.valid}건 (${Math.round(o.valid_ratio * 100)}%)</td>
+        <td>${bid != null ? won(bid) : "기초금액·하한율 필요"}</td></tr>`;
+    }).join("");
+    $("#cRec").innerHTML = `${head}
+      <div class="rec-scroll"><table><tr><th>구분</th><th>가정 사정률</th><th>과거 1순위였을 공고</th><th>유효(하한선 이상)</th><th>투찰금액</th></tr>${rows}</table></div>
+      <div class="rec-note">과거 공고에 이 사정률로 투찰했다면 금액 기준 개찰 1순위·하한선 이상이었을 건수(적격심사 서류 심사 전). 투찰금액 = A + (기초금액 × 사정률 − A) × 하한율, 끝자리는 기타설정대로.</div>
+      ${notes}`;
+  }
+  $("#cRecBtn").addEventListener("click", recommend);
+  $("#cRecScale").addEventListener("change", recommend);
 
   $("#cLookup").addEventListener("click", lookup);
   $("#cNo").addEventListener("keydown", (e) => { if (e.key === "Enter") lookup(); });

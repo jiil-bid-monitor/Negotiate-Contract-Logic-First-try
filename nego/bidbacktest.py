@@ -110,13 +110,13 @@ class Tally:
 
 
 def backtest(records: list[PastBid], start: str | None = None, scale: str = "all", fixed: tuple[float, ...] = (),
-             min_train: int = MIN_SAMPLES, targets: set[str] | None = None) -> tuple[list[dict], int]:
+             min_train: int = MIN_SAMPLES, targets: set[str] | None = None, end: str | None = None) -> tuple[list[dict], int]:
     """공고별 결과 줄과, 개찰일을 몰라 뺀 공고 수. targets(공고번호)를 주면 그 공고만 채점(웹앱 추천 칸 — 비슷한 공고만)."""
     dated = sorted(((date_of(r), r) for r in records if date_of(r)), key=lambda x: (x[0], x[1].notice_no))
     dates = [d for d, _ in dated]
     rows = []
     for d, rec in dated:
-        if (start and d < start) or (targets is not None and rec.notice_no not in targets):
+        if (start and d < start) or (end and d > end) or (targets is not None and rec.notice_no not in targets):
             continue
         train = [r for _, r in dated[:bisect.bisect_left(dates, d)]]  # 같은 날 열린 공고도 안 씀
         rates = strategy_rates(train, rec, scale, min_train)
@@ -221,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dir", default=os.environ.get("BID_HISTORY_DIR") or os.environ.get("OUTPUT_DIR") or "output",
                         help="과거 개찰 자료 폴더(기본 output)")
     parser.add_argument("--from", dest="start", default="", help="이 날짜(YYYY-MM-DD) 이후 개찰 공고만 채점 — 그 전은 학습에만")
+    parser.add_argument("--to", dest="end", default="", help="이 날짜(YYYY-MM-DD)까지 개찰한 공고만 채점(예: 9월만 — --from 2026-09-01 --to 2026-09-30)")
     parser.add_argument("--scale", choices=("all", "actual"), default="all",
                         help="비슷한 공고 고를 때 경쟁 규모: all=구분 안 함, actual=그 공고의 실제 규모(100곳 미만/이상)")
     parser.add_argument("--fixed", type=float, action="append", default=[], help="같이 비교할 고정 사정률(%%), 여러 번 가능")
@@ -240,9 +241,10 @@ def main(argv: list[str] | None = None) -> int:
     head = [f"과거 개찰 {len(history.records)}건 (못 쓴 공고 {history.skipped}건) — {', '.join(history.files)}"]
     if history.skip_reasons:
         head.append("  못 쓴 이유: " + " · ".join(f"{k} {n}건" for k, n in history.skip_reasons.most_common()))
-    head.append(f"  설정: --from {args.start or '(처음부터)'} · --scale {args.scale}"
+    head.append(f"  설정: --from {args.start or '(처음부터)'} · --to {args.end or '(끝까지)'} · --scale {args.scale}"
                 + (f" · --fixed {', '.join(f'{f:g}' for f in args.fixed)}" if args.fixed else ""))
-    rows, undated = backtest(history.records, args.start or None, args.scale, tuple(args.fixed), args.min_train)
+    rows, undated = backtest(history.records, args.start or None, args.scale, tuple(args.fixed), args.min_train,
+                             end=args.end or None)
     text = "\n".join(head) + "\n" + summarize(rows, undated)
     print(text)
     stamp = f"{datetime.now():%Y%m%d}"

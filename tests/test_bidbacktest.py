@@ -72,6 +72,10 @@ class BacktestTest(unittest.TestCase):
         self.assertEqual(rows[0]["results"][bt.OWN][1:], (False, False, False))
         self.assertFalse(rows[1]["results"]["추천(과거 1순위 최다)"][1])
 
+    def test_end_date_limits_scoring(self):
+        rows, _ = bt.backtest(self.train + [self.hit, self.miss], start="2025-01-01", end="2025-02-01")
+        self.assertEqual([r["공고번호"] for r in rows], ["hit"])
+
     def test_same_day_notices_are_not_training(self):
         same = _past("same", "2025-02-01", 100.1)
         rows, _ = bt.backtest(self.train + [self.hit, same], start="2025-01-01")

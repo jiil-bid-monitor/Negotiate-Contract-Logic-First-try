@@ -92,6 +92,15 @@ class Track1Test(unittest.TestCase):
         self.assertIn("협상 공고 — 투찰가 계산 대상 아님", page)
         self.assertIn("Claude API 키가 없어", page)
         self.assertNotIn("배점", page)
+        # 10/28 필수 자료: 공고문 + 요약 다섯 항목
+        for heading in ("1. 나라장터 공고문", "용역명 및 주요 과업 내용", "용역 금액 및 공고 일정", "입찰 참가 자격 및 필수 조건",
+                        "제출 서류 목록", "기타 유의사항 및 제한 조건"):
+            self.assertIn(heading, page)
+        self.assertIn("27,126,000원", page)  # 추정가격·배정예산 둘 다
+        info = (folder / "00_원문" / "나라장터_공고정보.txt").read_text(encoding="utf-8")
+        self.assertIn("공고명: ○○전시관 설계: 용역/1차", info)
+        self.assertIn("배정예산: 27,126,000원", info)
+        self.assertNotIn("홍길동", info)  # 개인 연락처는 수집 때 빠짐
         ics = (folder / "일정.ics").read_text(encoding="utf-8")
         self.assertIn("SUMMARY:[입찰] 자격등록 마감", ics)
         self.assertNotIn("공고 게시", ics)
@@ -117,6 +126,19 @@ class Track1Test(unittest.TestCase):
         page = (res.folder / "01_공고요약.html").read_text(encoding="utf-8")
         for text in ("말산업 체험공간 207㎡", "이메일", "80%로 환산"):
             self.assertIn(text, page)
+
+    def test_excerpt_sections_without_llm(self):
+        text = ("=== 제안요청서.hwp ===\n6. 제출서류\n가. 제안서 10부\n=== 입찰공고문.pdf ===\n1. 입찰에 부치는 사항\n사업명: 가\n"
+                "6. 제출서류 : 서식은 제안요청서 참조\n① 입찰참가신청서(별지1) 1부\n② 사업자등록증 사본\n③ 법인인감증명서\n"
+                "7. 협상적격자 선정\n가. 기술 90\n14. 기타사항\n가. 하도급 불허\n나. 공채 매입\n다. 인지세\n")
+        docs = track1.excerpt_section(text, "documents")
+        self.assertEqual(docs["src"], "입찰공고문.pdf")  # 공고문 파일을 먼저
+        self.assertEqual(docs["lines"][-1], "③ 법인인감증명서")  # 다음 큰 제목(7.) 전까지
+        self.assertIn("가. 하도급 불허", track1.excerpt_section(text, "notes")["lines"])
+        text += "15. 입찰 무효\n가. 서류 위조\n나. 기한 경과\n"
+        notes = track1.excerpt_sections(text, "notes", 3)
+        self.assertEqual([n["lines"][0] for n in notes], ["14. 기타사항", "15. 입찰 무효"])
+        self.assertIsNone(track1.excerpt_section("본문뿐", "documents"))
 
     def test_rerun_keeps_staff_edits(self):
         from openpyxl import load_workbook

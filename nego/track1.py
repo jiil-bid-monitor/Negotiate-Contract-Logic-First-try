@@ -187,7 +187,60 @@ def rule_extraction(c, note: str) -> dict:
     out = empty_extraction(note)
     out["task_summary"] = [{"text": item, "src": "첨부 '사업 범위' 목록"}
                            for item in extract_scope_items(c.task_text or c.attachment_text)[:10]]
+    out["excerpts"] = {"documents": excerpt_sections(c.attachment_text, "documents", 1),
+                       "notes": excerpt_sections(c.attachment_text, "notes", 3)}
     return out
+
+
+# 키가 없을 때 — 제출서류·유의사항 절을 원문 그대로 발췌(담당자가 원문을 뒤지지 않게, 10/28 필수 자료 요청)
+_MARK = r"(?:\d{1,2}\s*[.)]|\(\d{1,2}\)|[가-하]\s*[.)]|[IVXⅠ-Ⅹ]+\s*\.|[□■○●◆◇▶◈※]|제\s*\d+\s*조)?\s*"
+EXCERPT_HEADINGS = {
+    "documents": re.compile(r"^\s*" + _MARK + r"(?:입찰\s*)?(?:제출\s*서류|구비\s*서류|입찰\s*참가\s*(?:신청|등록)\s*서류)"),
+    "notes": re.compile(r"^\s*" + _MARK + r"(?:기타\s*(?:유의\s*)?사항|유의\s*사항|입찰\s*무효|하도급|제한\s*사항)"),
+}
+_NEXT_HEADING = re.compile(r"^\s*(?:\d{1,2}\s*\.|[IVXⅠ-Ⅹ]+\s*\.|제\s*\d+\s*조|[□■◆◇])\s*\S")
+_FILE_LINE = re.compile(r"^=== (.+?) ===$")
+MAX_EXCERPT_LINES = 45
+
+
+def excerpt_sections(text: str, kind: str, limit: int = 1) -> list[dict]:
+    """원문에서 그 절(제목 줄 + 다음 큰 제목 전까지, 최대 45줄)을 최대 `limit`개. 공고문 파일을 먼저 본다."""
+    head_re = EXCERPT_HEADINGS[kind]
+    files: list[tuple[str, list[str]]] = [("", [])]
+    for line in (text or "").splitlines():
+        m = _FILE_LINE.match(line.strip())
+        if m:
+            files.append((m.group(1), []))
+        else:
+            files[-1][1].append(line)
+    files.sort(key=lambda f: "공고" not in f[0])
+    found: list[dict] = []
+    for name, lines in files:
+        i = 0
+        while i < len(lines) and len(found) < limit:
+            line = lines[i]
+            if len(line.strip()) > 40 or not head_re.match(line):
+                i += 1
+                continue
+            body, j = [line.strip()], i + 1
+            while j < len(lines) and len(body) < MAX_EXCERPT_LINES:
+                nxt = lines[j]
+                if len(body) > 2 and _NEXT_HEADING.match(nxt) and len(nxt.strip()) <= 40:
+                    break
+                if nxt.strip():
+                    body.append(nxt.rstrip())
+                j += 1
+            if len(body) > 2:
+                found.append({"src": name or "첨부", "lines": body})
+            i = j
+        if found:  # 한 파일에서 찾았으면 다른 파일(같은 내용 중복이 많음)은 안 봄
+            break
+    return found
+
+
+def excerpt_section(text: str, kind: str) -> dict | None:
+    found = excerpt_sections(text, kind)
+    return found[0] if found else None
 
 
 # ── 투찰 참고 ───────────────────────────────────────────────────
@@ -251,6 +304,9 @@ CSS = """
 body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'WenQuanYi Zen Hei', sans-serif;
   font-size: 9.5pt; color: #1d2433; line-height: 1.5; margin: 0; }
 h1 { font-size: 15pt; margin: 0 0 2px; }
+h3 { font-size: 9.8pt; margin: 10px 0 4px; }
+pre.excerpt { white-space: pre-wrap; font-family: inherit; font-size: 8.6pt; background: #f7f8fa; border: 1px solid #d5d9e0;
+  padding: 6px 8px; margin: 3px 0; }
 h2 { font-size: 10.5pt; margin: 14px 0 5px; padding-bottom: 3px; border-bottom: 1.5px solid #1d2433; }
 .meta, .src { color: #6b7280; font-size: 8.3pt; }
 .src { white-space: nowrap; }
@@ -318,6 +374,10 @@ def summary_html(c, ext: dict, bid: dict | None, now: datetime, files: list[str]
 
     bid_html = _bid_html(bid)
     note = ext.get("note") or ""
+    head = WORK_HEADINGS.get(n.work_type, WORK_HEADINGS["용역"])
+    basis = (bid or {}).get("basis")
+    basis_text = (f"{_money(basis)} ({_esc((bid or {}).get('basis_source') or '')})" if basis is not None
+                  else "입찰(가격) 공고가 아니거나 아직 공개 전 — 공고문 확인")
     return f"""<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>{_esc(n.title)}</title><style>{CSS}</style></head><body>
 <div class="meta">트랙 1 공고 요약 · 자동 생성 {now:%Y-%m-%d %H:%M} · 과업·제출서류·조항: {_esc(ext.get('source'))}{(' (' + _esc(note) + ')') if note else ''}</div>
 <h1>{_esc(n.title)}</h1>
@@ -330,34 +390,60 @@ def summary_html(c, ext: dict, bid: dict | None, now: datetime, files: list[str]
 {(' · <b>확인 필요</b> ' + _esc(', '.join(sorted({f.get('kind', '') for f in c.text_flags})))) if c.text_flags else ''}
 </div>
 
-<h2>1. 기본 정보</h2>
+<h2>1. 나라장터 공고문</h2>
+<div>공고 본문: {f'<a href="{_esc(n.detail_url)}">나라장터 상세</a> · ' if n.detail_url else ''}00_원문/나라장터_공고정보.txt</div>
+<div>첨부 원문 (00_원문 폴더): {_esc(', '.join(files)) if files else '받은 첨부 없음 — 나라장터 상세에서 확인'}</div>
+
+<h2>2. 공고 요약 및 검토 자료</h2>
+<h3>① {_esc(head['name'])}명 및 주요 {_esc(head['content'])}</h3>
 <table class="kv">
-<tr><td>금액</td><td>{_money(n.budget)} ({_esc(n.budget_kind or '금액 모름')})</td></tr>
-<tr><td>업무 · 유형</td><td>{_esc(n.work_type)} · {_esc(c.category)}</td></tr>
-<tr><td>낙찰 · 계약 방법</td><td>{_esc(n.award_method or '-')} · {_esc(n.contract_method or '-')}</td></tr>
-<tr><td>공동수급</td><td>{_esc(c.joint.label)}</td></tr>
+<tr><td>{_esc(head['name'])}명</td><td>{_esc(n.title)}</td></tr>
+<tr><td>업무 · 유형</td><td>{_esc(n.work_type)} · {_esc(c.category)} · {_esc(n.award_method or '-')}</td></tr>
 <tr><td>싱크로율</td><td>{sync}</td></tr>
 </table>
+{f'<ul>{tasks}</ul>' if tasks else f'<div class="meta">자동 요약 없음 — 과업지시서·제안요청서·시방서 확인</div>'}
 
-<h2>2. 일정 (굵은 줄 = 카드 마감 기준)</h2>
-<table><tr><th style="width:24%">일시</th><th>내용</th><th style="width:9%">D-day</th></tr>{deadline_rows or '<tr><td colspan=3>일정 미상 — 공고문 확인</td></tr>'}</table>
+<h3>② {_esc(head['name'])} 금액 및 공고 일정</h3>
+<table class="kv">
+<tr><td>추정가격</td><td>{_money(n.estimated_price)}{' (부가세 제외)' if n.estimated_price else ''}</td></tr>
+<tr><td>배정예산</td><td>{_money(n.assigned_budget)}</td></tr>
+<tr><td>기초금액</td><td>{basis_text}</td></tr>
+<tr><td>트랙 기준 금액</td><td>{_money(n.budget)} ({_esc(n.budget_kind or '금액 모름')}) — 1억 미만</td></tr>
+</table>
+<table style="margin-top:6px"><tr><th style="width:24%">일시</th><th>일정 (굵은 줄 = 카드 마감 기준)</th><th style="width:9%">D-day</th></tr>{deadline_rows or '<tr><td colspan=3>일정 미상 — 공고문 확인</td></tr>'}</table>
 {('<div class="meta" style="margin-top:6px"><b>제출 방법</b></div><table><tr><th>제출</th><th>일시</th><th>방법</th><th>제출처</th><th>근거</th></tr>' + submissions + '</table>') if submissions else ''}
 
-<h2>3. 참가자격</h2>
+<h3>③ 입찰 참가 자격 및 필수 조건</h3>
 {_qualification_html(c)}
+<table class="kv" style="margin-top:6px">
+<tr><td>지역 제한</td><td>{_esc(region_text)}</td></tr>
+<tr><td>공동수급</td><td>{_esc(c.joint.label)}{(' · 협정 마감 ' + _when(c.schedule.joint_agreement_deadline)) if c.schedule.joint_agreement_deadline else ''}</td></tr>
+</table>
 {('<div style="margin-top:8px"><b>확인 필요</b> (판정 안 함 — 원문 확인)</div><ul>' + flags + '</ul>') if flags else ''}
 
-{section('4. 과업 요약', f'<ul>{tasks}</ul>' if tasks else '', '자동 요약 없음 — 과업지시서·제안요청서 확인')}
-{section('5. 제출서류', '<table><tr><th style="width:36%">서류</th><th style="width:13%">서식</th><th style="width:8%">수량</th><th style="width:13%">제출 단계</th><th style="width:10%">준비</th><th>주의</th></tr>' + docs + '</table><div class=meta>체크리스트 파일(02)에 같은 목록이 있습니다.</div>' if docs else '', '자동 추출 없음 — 공고문의 제출서류 절 확인')}
-{section('6. 놓치면 손해 보는 조항', f'<table><tr><th style="width:12%">구분</th><th>내용</th></tr>{clauses}</table>' if clauses else '', '자동 추출 없음')}
-<h2>7. 투찰 참고</h2>
-{bid_html}
+<h3>④ 제출 서류 목록</h3>
+{('<table><tr><th style="width:36%">서류</th><th style="width:13%">서식</th><th style="width:8%">수량</th><th style="width:13%">제출 단계</th><th style="width:10%">준비</th><th>주의</th></tr>' + docs + '</table><div class=meta>체크리스트 파일(02)에 같은 목록이 있습니다.</div>') if docs else _excerpt_html(ext, 'documents', '제출서류 절을 찾지 못함 — 공고문 확인')}
 
-<h2>8. 첨부 원문 (00_원문 폴더)</h2>
-<ul>{''.join(f'<li>{_esc(f)}</li>' for f in files) or '<li>받은 첨부 없음</li>'}</ul>
+<h3>⑤ 기타 유의사항 및 제한 조건</h3>
+{f'<table style="margin-top:6px"><tr><th style="width:12%">구분</th><th>내용</th></tr>{clauses}</table>' if clauses else _excerpt_html(ext, 'notes', '유의사항 절을 찾지 못함 — 공고문 확인')}
+
+<h2>3. 투찰 참고</h2>
+{bid_html}
 
 <div class="foot">자동 생성 자료입니다. 판정·일정은 근거 위치의 원문과 대조하세요. 투찰 금액 결정·전자서명·서류 날인은 담당자가 직접 합니다.</div>
 </body></html>"""
+
+
+WORK_HEADINGS = {"공사": {"name": "공사", "content": "공사 내용"}, "용역": {"name": "용역", "content": "과업 내용"},
+                 "물품": {"name": "물품", "content": "규격·납품 내용"}}
+
+
+def _excerpt_html(ext: dict, kind: str, empty: str) -> str:
+    found = (ext.get("excerpts") or {}).get(kind) or []
+    if not found:
+        return f'<div class="meta">{_esc(empty)}</div>'
+    return (f'<div class="meta">원문 발췌 ({_esc(found[0]["src"])}) — 자동 정리 없이 원문 그대로</div>'
+            + "".join(f'<pre class="excerpt">{_esc(chr(10).join(f["lines"]))}</pre>' for f in found))
 
 
 def _bid_html(bid: dict | None) -> str:
@@ -564,20 +650,43 @@ class BuildResult:
     errors: list[str] = field(default_factory=list)
 
 
+NOTICE_LABELS = {
+    "title": "공고명", "notice_no": "공고번호", "notice_ord": "차수", "work_type": "업무", "notice_institution": "공고기관",
+    "demand_institution": "수요기관", "award_method": "낙찰방법", "contract_method": "계약방법", "bid_method": "입찰방식",
+    "estimated_price": "추정가격", "assigned_budget": "배정예산", "posted_at": "공고 게시", "qualification_deadline": "입찰참가자격등록 마감",
+    "bid_deadline": "입찰서 제출 마감", "opening_at": "개찰", "joint_method_name": "공동수급", "joint_agreement_deadline": "공동수급협정 마감",
+    "estimate_price_method": "예가방법", "industry_text": "업종 제한", "product_class_name": "세부품명", "product_class_no": "세부품명번호",
+    "detail_url": "나라장터 상세 주소",
+}
+
+
+def write_notice_info(path: Path, n) -> None:
+    """나라장터 공고 본문 값(첨부가 아닌 공고 상세) — 사람이 읽는 칸 + 원본 응답 전체. 개인 연락처는 수집 때 이미 뺌."""
+    lines = ["나라장터 공고 정보 (입찰공고정보서비스 응답)", ""]
+    for key, label in NOTICE_LABELS.items():
+        value = getattr(n, key, None)
+        if value not in (None, "", []):
+            lines.append(f"{label}: {f'{value:,.0f}원' if isinstance(value, float) else value}")
+    lines += ["", "첨부 목록:"] + [f"  - {a.get('file_name') or '(이름 없음)'}  {a.get('url', '')}" for a in n.attachments]
+    lines += ["", "── 원본 응답 ──", json.dumps(n.raw, ensure_ascii=False, indent=1)]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def build_folder(c, config: AppConfig, options: Track1Options, now: datetime, llm_client: Any = None) -> BuildResult:
     folder = folder_for(options.root, c, now)
     raw = folder / "00_원문"
     raw.mkdir(parents=True, exist_ok=True)
+    write_notice_info(raw / "나라장터_공고정보.txt", c.notice)
     result = BuildResult(folder=folder)
     if options.llm and llm_client is not None:
         ext = extract_with_llm(llm_client, options.llm, c)
         if ext.get("source") != "Claude":
             ext = {**rule_extraction(c, ext.get("note", "")), "note": ext.get("note", "")}
     else:
-        ext = rule_extraction(c, "Claude API 키가 없어 과업 요약은 '사업 범위' 목록만, 제출서류·조항은 뽑지 않음")
+        ext = rule_extraction(c, "Claude API 키가 없어 과업 요약은 '사업 범위' 목록, 제출서류·유의사항은 원문 발췌")
     result.extraction = ext.get("source", "")
     bid = bid_reference(c, config, raw / "텍스트", options.history_dir)
-    files = sorted(p.name for p in raw.iterdir() if p.is_file())
+    files = sorted(p.name for p in raw.iterdir() if p.is_file() and p.name != "나라장터_공고정보.txt")
 
     page = folder / "01_공고요약.html"
     page.write_text(summary_html(c, ext, bid, now, files), encoding="utf-8")

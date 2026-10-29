@@ -787,7 +787,7 @@ class TestSaveAttachmentTexts(unittest.TestCase):
 
         self.assertEqual(stats["deadline_determined"], 1)
         self.assertEqual(schedule.attachment_deadline, datetime(2026, 9, 14, 18, 0))
-        self.assertEqual(schedule.earliest, ("첨부파일 제출기한", datetime(2026, 9, 14, 18, 0)))
+        self.assertEqual(schedule.earliest, ("서류 제출기한", datetime(2026, 9, 14, 18, 0)))
 
     def test_days_left_recomputed_after_attachment_deadline_filled(self):
         """days_left는 후보 산출 시점에 미리 계산돼 있어(원래 일정 미상이라 None) —

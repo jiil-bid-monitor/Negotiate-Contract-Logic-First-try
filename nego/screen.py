@@ -377,8 +377,8 @@ class Schedule:
     # 제출기한(`attachments.save_attachment_texts` → `schedule_text.extract_deadline`).
     # API 값이 하나라도 있으면 이 필드는 아예 안 쓰인다.
     attachment_deadline: datetime | None = None
-    # 첨부에서 찾은 마감의 종류 — "첨부파일 제출기한" 또는 "응모신청 등록 마감"(2026-10-02)
-    attachment_deadline_kind: str = "첨부파일 제출기한"
+    # 첨부에서 찾은 마감의 종류 — "서류 제출기한" 또는 "응모신청 등록 마감"(2026-10-02)
+    attachment_deadline_kind: str = "서류 제출기한"
     # 사전규격의 의견등록 마감. 본공고에는 없다(항상 None) — 입찰 마감이 없는 사전규격에서만 쓰인다.
     opinion_deadline: datetime | None = None
     # 팝업에 같이 보여줄 일시(카드 마감 계산엔 안 씀) — 공고 게시·개찰, 첨부 공고문에서 찾은 참가등록·제출 마감 전부(2026-10-02 요청)

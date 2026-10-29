@@ -29,7 +29,7 @@ from pathlib import Path
 from . import bidmodels
 from .bidrecommend import (CROWD_NAME, FIXED_RATE, LARGE_COMPETITION, MIN_PICK_TRIED, MIN_SAMPLES, PICK_MIN_VALID,
                            PICK_MIN_WIN, TOP_N, TRACK_LIMIT, TREND_NAME, PastBid, _best, _pct, _rate, _ratio, _scale_ok,
-                           coverage, crowd_rate, default_own_bizno, history_paths, load_history, pick_option, similar,
+                           auto_scale, coverage, crowd_rate, default_own_bizno, history_paths, load_history, pick_option, similar,
                            trend_rate)
 
 OWN = "지일 실제 투찰(외주)"
@@ -202,9 +202,13 @@ def add_picks(rows: list[dict], records: list[PastBid]) -> None:
             continue
         train = [r for _, r in dated[:bisect.bisect_left(dates, row["개찰일"])]]
         base, _ = similar(train, rec.work, rec.range_width, "all", rec.field)
-        scale = "all"
-        if base:
-            scale = "small" if statistics.median(r.bidder_count for r in base) < LARGE_COMPETITION else "large"
+        old_scale = "all"
+        if base:  # 예전 방식(분야·업무·변동폭이 같은 공고의 참가 가운데값) — 맞힌 비율을 새 방식과 나란히 보려고
+            old_scale = "small" if statistics.median(r.bidder_count for r in base) < LARGE_COMPETITION else "large"
+        scale, _ = auto_scale(train, rec.work, rec.range_width, rec.field, rec.lower_rate, rec.basis,
+                              rec.institution, rec.method, ref=row["개찰일"])
+        actual = "small" if rec.bidder_count < LARGE_COMPETITION else "large"
+        row["규모"] = {"actual": actual, "new": scale, "old": old_scale}
         picked, _ = similar(train, rec.work, rec.range_width, scale, rec.field)
         tracked = sorted((by_no[p.notice_no] for p in picked if p.notice_no in by_no), key=lambda r: r["개찰일"])[-TRACK_LIMIT:]
         track = track_records(tracked)
@@ -362,6 +366,13 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
         for label in (PICK, LEGACY):
             lines.append(f"  {label}: " + " · ".join(f"{n} {c}" for n, c in Counter(p[label] for p in picks if label in p).most_common()))
         lines.append(f"  두 규칙이 다른 방식을 고른 공고 {sum(p.get(PICK) != p.get(LEGACY) for p in picks)}건")
+    judged = [r["규모"] for r in rows if r.get("규모")]
+    if judged:  # 경쟁 규모 자동 판정을 실제 참가 수(100곳 기준)와 대조 — 새 방식(닮은 공고·기관) vs 예전 방식(분야·업무·변동폭 가운데값)
+        def hits(key: str, kind: str) -> str:
+            sub_ = [j for j in judged if j["actual"] == kind]
+            return f"{sum(j[key] == kind for j in sub_)}/{len(sub_)}"
+        for key, name in (("new", "새 방식(닮은 공고·기관)"), ("old", "예전 방식(분야·업무·변동폭 가운데값)")):
+            lines.append(f"  경쟁 규모 맞힘 — {name}: 실제 소규모 {hits(key, 'small')} · 실제 대규모 {hits(key, 'large')}")
     block("전체", rows)
     own = [r for r in rows if OWN in r["results"]]
     if own:

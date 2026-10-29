@@ -750,6 +750,28 @@ def bid_amount(basis: float, rate: float, lower_rate: float, a: float = 0.0, net
     return amount
 
 
+def auto_scale(records: list[PastBid], work: str | None, width: int | None, field_name: str | None,
+               lower_rate: float | None, basis: float | None, institution: str, method: str,
+               ref: str | None = None) -> tuple[str, str]:
+    """경쟁 규모 자동 — 닮은 과거 공고로 가늠한 참가 수(`bidmodels.estimate_bidders`)가 100곳 미만이면 소규모.
+    가늠이 안 되면 예전 방식(분야·업무·변동폭이 같은 공고의 참가 가운데값)."""
+    from . import bidmodels
+
+    target = {"field": field_name if field_name not in (None, "", "공고명 없음") else None, "work": work, "width": width,
+              "lower_rate": lower_rate, "method": method, "region": bidmodels.region_of(institution), "basis": basis,
+              "institution": institution}
+    est = bidmodels.estimate_bidders(records, target, ref)
+    if est is not None:
+        scale = "small" if est < LARGE_COMPETITION else "large"
+        return scale, f"경쟁 규모 자동: 닮은 과거 공고(기관·분야·금액 등)로 가늠한 참가 약 {est:.0f}곳 → {SCALES[scale]}"
+    base, _ = similar(records, work, width, "all", field_name)
+    if not base:
+        return "all", ""
+    median = statistics.median(r.bidder_count for r in base)
+    scale = "small" if median < LARGE_COMPETITION else "large"
+    return scale, f"경쟁 규모 자동: 비슷한 과거 공고 참가 중앙 {median:g}곳 → {SCALES[scale]}"
+
+
 def recommend(history: History, work: str | None = None, lo: float | None = None, hi: float | None = None,
               scale: str = "all", basis: float | None = None, lower_rate: float | None = None, a: float = 0.0,
               title: str = "", institution: str = "", method: str = "", net_cost: float | None = None,
@@ -761,13 +783,7 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     field_name = classify(title) if title else None
     auto_note = ""
     if scale == "auto":
-        base, _ = similar(history.records, work, width, "all", field_name)
-        if base:
-            median = statistics.median(r.bidder_count for r in base)
-            scale = "small" if median < LARGE_COMPETITION else "large"
-            auto_note = f"경쟁 규모 자동: 비슷한 과거 공고 참가 중앙 {median:g}곳 → {SCALES[scale]}"
-        else:
-            scale = "all"
+        scale, auto_note = auto_scale(history.records, work, width, field_name, lower_rate, basis, institution, method)
     scale = scale if scale in SCALES else "all"
     picked, labels = similar(history.records, work, width, scale, field_name)
     out: dict[str, Any] = {"field": field_name,

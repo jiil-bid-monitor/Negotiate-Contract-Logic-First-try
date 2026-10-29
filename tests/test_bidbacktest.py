@@ -151,6 +151,7 @@ class BacktestTest(unittest.TestCase):
         self.assertIn(bt.PICK, text)
         self.assertIn("두 규칙이 다른 방식을 고른 공고", text)
         self.assertIn("미달=꼴찌", text)
+        self.assertIn("경쟁 규모 맞힘 — 새 방식", text)
 
     def test_summary_and_csv(self):
         rows, _ = bt.backtest(self.train + [self.hit, self.miss], start="2025-01-01")

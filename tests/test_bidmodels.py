@@ -114,6 +114,18 @@ class GapModelTest(unittest.TestCase):
         self.assertIsNotNone(model)
         self.assertIsNotNone(bm.predict_gap(model, {**bm._as_target(recs[0]), "region": "처음 보는 곳"}))
 
+    def test_estimate_bidders_by_institution(self):
+        """같은 분야·업무라도 발주기관이 소규모 공고를 내던 곳이면 소규모로 가늠(10/29 — 참가 18~19곳 공사가 대규모로 잡히던 것)."""
+        recs = [_rec(f"B{i}", _day(i), 100.0, work="공사", count=400, inst="강원특별자치도 원주시") for i in range(60)]
+        recs += [_rec(f"S{i}", _day(i), 100.0, work="공사", count=19, inst="강원특별자치도 정선군") for i in range(20)]
+        target = {**bm._as_target(recs[-1]), "institution": "강원특별자치도 정선군"}
+        self.assertLess(bm.estimate_bidders(recs, target), 100)
+        other = {**bm._as_target(recs[0]), "institution": "강원특별자치도 원주시"}
+        self.assertGreater(bm.estimate_bidders(recs, other), 100)
+        scale, note = br.auto_scale(recs, "공사", 3, None, 87.745, 100_000_000, "강원특별자치도 정선군", "행자부")
+        self.assertEqual(scale, "small")
+        self.assertIn("가늠한 참가", note)
+
     def test_too_few_records(self):
         self.assertIsNone(bm.gap_model([_rec(f"G{i}", _day(i), 100.0) for i in range(10)]))
 

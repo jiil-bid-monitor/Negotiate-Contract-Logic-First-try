@@ -188,6 +188,33 @@ def knn_weights(records, target: dict, ref: str | None = None) -> list[tuple[obj
     return out[:KNN_KEEP]
 
 
+SAME_INSTITUTION = 5.0  # 참가 수 가늠 때 같은 발주기관 공고에 더 줄 무게 — 지역제한·업종이 기관마다 비슷해 참가 규모도 비슷함
+
+
+def estimate_bidders(records, target: dict, ref: str | None = None) -> float | None:
+    """이 공고 참가 업체 수 가늠 = 닮은 과거 공고(`knn_weights`, 같은 발주기관이면 무게 ×SAME_INSTITUTION)의 참가 수 가중 가운데값.
+    10/29 사용자 요청: 분야·업무·변동폭만 같은 공고의 가운데값으로 정하던 경쟁 규모가 참가 18~19곳 공사에서 '대규모'로 잡혀
+    사정률을 102%대로 높게 씀(외주는 1위). 투찰 전에 아는 특성(기관·금액·하한율·방식·지역)으로 더 닮은 공고를 봄."""
+    records = [r for r in records if r.bidder_count]
+    if len(records) < MIN_RECORDS:
+        return None
+    if ref is None:
+        ref = max((d for d in (_date(r) for r in records) if d), default=None)
+    inst = target.get("institution") or ""
+    pairs = [(r, w * (SAME_INSTITUTION if inst and getattr(r, "institution", "") == inst else 1.0))
+             for r, w in knn_weights(records, target, ref)]
+    pairs = [(math.log10(r.bidder_count), w) for r, w in pairs if w > 0]
+    total = sum(w for _, w in pairs)
+    if not pairs or total <= 0:
+        return None
+    acc = 0.0
+    for value, w in sorted(pairs):
+        acc += w
+        if acc >= total / 2:
+            return 10 ** value
+    return 10 ** pairs[-1][0]
+
+
 def knn_rate(records, target: dict, ref: str | None = None) -> dict | None:
     if len(records) < MIN_RECORDS:
         return None

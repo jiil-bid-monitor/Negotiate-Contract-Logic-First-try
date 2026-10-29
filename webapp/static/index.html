@@ -1300,7 +1300,7 @@ footer b { color: var(--muted); }
     <div class="calc-rec">
       <h4 class="calc-h">추천 투찰금액 — 비슷한 과거 공고의 개찰 결과 기준</h4>
       <div class="calc-rec-bar">
-        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="auto" selected>자동(과거 참가 수)</option><option value="all">전체</option><option value="small">참가 100곳 미만</option><option value="large">참가 100곳 이상</option></select></label>
+        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="auto" selected>자동(닮은 공고로 가늠)</option><option value="all">전체(규모 구분 없이)</option><option value="small">소규모(100곳 미만)</option><option value="large">대규모(100곳 이상)</option></select></label> <span class="qual rec-i" tabindex="0" aria-label="설명"><span class="ico">?</span><span class="qtip"><b>자동</b> — 이번 공고와 닮은 과거 공고(분야·업무·금액·발주 방식·지역제한, 같은 발주기관은 더 크게 반영)의 참가 수로 이번 공고의 참가 수를 가늠합니다. 100곳 미만이면 소규모 공고끼리, 이상이면 대규모 공고끼리 비교합니다.<br>참가가 적을 공고(지역·업종 제한이 좁은 공고 등)라는 걸 알면 직접 <b>소규모</b>를 고르세요 — 자동 판정은 소규모를 대규모로 잡는 경우가 아직 있습니다.</span></span>
         <button type="button" id="cRecBtn">추천 보기</button>
         <span id="cRecMsg" class="job"></span>
       </div>

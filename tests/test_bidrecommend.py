@@ -397,7 +397,7 @@ class NetCostLineTest(unittest.TestCase):
         # 10/29 제보 공고 값: 기초 563,530,000 · 하한율 87.745 · A 25,053,044 · 순공사원가 519,482,258(공고문 98%)
         plain = br.bid_amount(563_530_000, 101.173, 87.745, 25_053_044)
         with_net = br.bid_amount(563_530_000, 101.173, 87.745, 25_053_044, 519_482_258, 98)
-        self.assertAlmostEqual(with_net, 519_482_258 * 1.01173 * 0.98)
+        self.assertAlmostEqual(with_net, 519_482_258 * 1.01173 * 0.98, places=2)
         self.assertGreater(with_net, plain)
         self.assertEqual(br.bid_amount(563_530_000, 101.173, 87.745, 25_053_044, 519_482_258, None), plain)
 

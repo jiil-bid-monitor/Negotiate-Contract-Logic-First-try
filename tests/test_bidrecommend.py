@@ -305,14 +305,20 @@ class CrowdRateTest(unittest.TestCase):
         small = br.recommend(br.History(records=[_past(f"S{i}", 100 + i / 100, count=10) for i in range(20)]), scale="small")
         self.assertNotIn(br.CROWD_NAME, [o["name"] for o in small["options"]])
 
-    def test_pick_prefers_crowd_when_track_is_not_worse(self):
+    def test_large_competition_picks_highest_first_place_ratio(self):
+        # 대규모 경쟁(대규모 추천 줄이 있음)은 모든 방식 중 표의 1순위 비율이 가장 높은 것 — 같으면 5위 안
         track = lambda win, top=0: {"tried": 100, "win": win, "valid": 50, "top": top}  # noqa: E731
-        opts = [{"name": "사정률 중앙값", "rate": 100.0, "track": track(1)},
+        opts = [{"name": "추천(과거 1순위 최다)", "rate": 100.3, "track": track(3, 1)},
                 {"name": br.TREND_NAME, "rate": 100.1, "track": track(2, 3)},
-                {"name": br.CROWD_NAME, "rate": 100.05, "track": track(3, 4)}]
+                {"name": br.CROWD_NAME, "rate": 100.05, "track": track(2, 4)}]
+        self.assertEqual((br.pick_option(opts)["name"], br.pick_option(opts)["mode"]), ("추천(과거 1순위 최다)", "track"))
+        opts[2]["track"] = track(3, 4)  # 1순위 같으면 5위 안이 많은 쪽
         self.assertEqual(br.pick_option(opts)["mode"], "crowd")
-        opts[2]["track"] = track(1, 1)
+        opts[2]["track"] = track(1, 9)
+        opts[1]["track"] = track(4, 0)
         self.assertEqual(br.pick_option(opts)["mode"], "trend")
+        # 대규모 추천 줄이 없으면(소규모) 예전 규칙: 1순위 비율이 10% 미만이면 경향 추천
+        self.assertEqual(br.pick_option(opts[:2])["mode"], "trend")
 
 
 if __name__ == "__main__":

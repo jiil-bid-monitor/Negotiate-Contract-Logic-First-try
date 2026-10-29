@@ -532,21 +532,24 @@ def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | N
     """화면 맨 위 '추천 투찰금액'으로 쓸 방식 하나 — 검증(개찰 전 자료로 정했다면) 1순위 비율이 가장 높은 방식,
     같으면 5위 안 비율, 그다음 유효 비율이 높은 쪽. 그런데 검증 건수가 MIN_PICK_TRIED 미만이거나 가장 좋은 방식도 1순위 비율이
     PICK_MIN_WIN 미만이면(대규모 경쟁·공사 — 어떤 방식이든 운) 경향 추천(`trend_rate`)을 쓴다(mode="trend").
-    단 대규모 추천(`crowd_rate`, 대규모 경쟁 묶음에만 있음)의 검증 성적(1순위, 같으면 5위 안)이 경향 추천 이상이면 그쪽(mode="crowd")."""
+    대규모 경쟁 묶음(대규모 추천 `crowd_rate` 줄이 있을 때)은 경향·대규모 추천까지 모든 방식 중 표의 1순위 비율이 가장 높은 방식
+    (같으면 5위 안, 그다음 하한선 통과)을 고른다(10/29 사용자 결정 — 표에서 1순위가 더 높은 방식이 있는데 다른 방식이 추천되면 헷갈림).
+    mode는 고른 방식에 따라 crowd / trend / track."""
     if not options:
         return None
-    ok = [o for o in options if (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED and o["name"] not in (TREND_NAME, CROWD_NAME)]
-    best = max(ok, key=lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid"))) if ok else None
+    rank = lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid"))  # noqa: E731
+    tried = lambda o: (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED  # noqa: E731
+    ok = [o for o in options if tried(o) and o["name"] not in (TREND_NAME, CROWD_NAME)]
+    best = max(ok, key=rank) if ok else None
     trend = next((o for o in options if o["name"] == TREND_NAME), None)
     weak = best is None
     crowd = next((o for o in options if o["name"] == CROWD_NAME), None)
-    crowd_ok = crowd is not None and (crowd.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED
-    if best is not None and _ratio(best["track"]) >= PICK_MIN_WIN:
+    every = [o for o in options if tried(o)]
+    if crowd is not None and every:
+        chosen = max(every, key=rank)  # 같은 성적이면 표 위쪽 방식
+        mode = {CROWD_NAME: "crowd", TREND_NAME: "trend"}.get(chosen["name"], "track")
+    elif best is not None and _ratio(best["track"]) >= PICK_MIN_WIN:
         chosen, mode = best, "track"
-    elif crowd_ok and (trend is None or (_ratio(crowd["track"]), _ratio(crowd["track"], "top"))
-                       >= (_ratio(trend.get("track")), _ratio(trend.get("track"), "top"))):
-        # 대규모 경쟁(모든 방식 1순위가 운의 영역) — 검증 성적이 경향 추천 이상일 때만 대규모 추천
-        chosen, mode = crowd, "crowd"
     elif trend is not None:
         chosen, mode = trend, "trend"
     else:

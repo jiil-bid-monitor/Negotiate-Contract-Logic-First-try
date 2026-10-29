@@ -226,5 +226,94 @@ class LoadHistoryTest(unittest.TestCase):
         self.assertIn("과거 개찰 자료가 없습니다", out["notes"][0])
 
 
+class OutlierTest(unittest.TestCase):
+    """10/29: 하한율 0.01 같은 값(하한선 없는 입찰)과 변동폭 밖 사정률(입력 오류)은 못 쓴 공고로."""
+
+    def _bidders(self):
+        from nego.bidprice import Bidder
+
+        return [Bidder(1, "갑", "1", 88_000_000, None, "")]
+
+    def test_tiny_lower_rate_is_skipped(self):
+        self.assertIsNone(br._make("1", "물품", 100_000_000, 100_000_000, 0.01, self._bidders(), []))
+        line = {"no": "1", "prices": [{"plnprc": "100000000", "bssamt": "100000000"}],
+                "bidders": [{"opengRank": "1", "bidprcAmt": "88000000"}], "notice": {"lower_rate": "0.1"}}
+        self.assertIsNone(br.from_result_record(line))
+        self.assertEqual(br.skip_reason(line), "하한율 이상값(하한선 없는 입찰)")
+
+    def test_assessment_outside_range_is_skipped(self):
+        # ±2% 공고인데 사정률 103% — 변동폭 + 0.5%p 밖
+        self.assertIsNone(br._make("1", "공사", 100_000_000, 103_000_000, 87.745, self._bidders(), [], range_width=2))
+        self.assertIsNotNone(br._make("1", "공사", 100_000_000, 102_300_000, 87.745, self._bidders(), [], range_width=2))
+        line = {"no": "1", "prices": [{"plnprc": "150000000", "bssamt": "100000000"}],
+                "bidders": [{"opengRank": "1", "bidprcAmt": "132000000"}], "notice": {"lower_rate": "87.745"}}
+        self.assertEqual(br.skip_reason(line), "사정률 이상치(변동폭 밖)")
+
+
+def _large(no: str, day: str, s: float, competitors: list[float], lower: float = 87.745, basis: float = 100_000_000) -> br.PastBid:
+    """대규모 경쟁 공고 — 경쟁업체가 competitors(가정 사정률 %)로 투찰, A=0."""
+    planned = basis * s / 100
+    amounts = [br.bid_amount(basis, c, lower) for c in competitors]
+    above = [a for a in amounts if a >= planned * lower / 100]
+    winner = min(above) if above else max(amounts)
+    rec = br.PastBid(notice_no=no, work="공사", basis=basis, planned=planned, lower_rate=lower,
+                     winner_rate=winner / planned * 100, bidder_count=len(competitors), range_width=3, a_value=0.0,
+                     opened_at=day)
+    rec.amounts = amounts
+    rec.top_amounts = sorted(above)[:br.TOP_N]
+    return rec
+
+
+class CrowdRateTest(unittest.TestCase):
+    def _records(self, crowd_at: float, n: int = 60):
+        import random
+
+        rnd = random.Random(7)
+        out = []
+        for i in range(n):
+            s = rnd.gauss(100.0, 0.5)
+            comp = [rnd.gauss(crowd_at, 0.01) for _ in range(150)] + [rnd.uniform(98.5, 101.5) for _ in range(30)]
+            out.append(_large(f"N{i:03d}", f"2026-{1 + i // 28:02d}-{1 + i % 28:02d}", s, comp))
+        return out
+
+    def test_rate_reverses_competitor_amounts(self):
+        rec = _large("1", "2026-01-01", 100.2, [99.5, 100.4])
+        self.assertAlmostEqual(float(br._competitor_rates(rec)[0]), 99.5, places=6)
+
+    def test_avoids_crowded_spot(self):
+        # 경쟁업체 대부분이 100.30%에 몰려 있으면 그 바로 아래(아직 덜 붐비는 쪽)를 고른다 — 몰린 곳 위는 늘 그 업체들에 진다
+        got = br.crowd_rate(self._records(100.30))
+        self.assertIsNotNone(got)
+        self.assertLess(got["rate"], 100.30)
+        self.assertGreater(got["rate"], 99.5)
+        self.assertGreater(got["win_p"], 0)
+        self.assertLess(got["win_p"], got["valid_p"])  # 1순위면 늘 유효
+
+    def test_follows_where_actual_rates_fall(self):
+        # 몰린 곳을 옮기면 추천도 따라 움직인다(고정값이 아님)
+        a = br.crowd_rate(self._records(100.30))["rate"]
+        b = br.crowd_rate(self._records(99.70))["rate"]
+        self.assertNotAlmostEqual(a, b, places=2)
+
+    def test_too_few_records(self):
+        self.assertIsNone(br.crowd_rate(self._records(100.0, n=5)))
+
+    def test_recommend_adds_crowd_option_for_large_competition(self):
+        out = br.recommend(br.History(records=self._records(100.30)), work="공사", lo=-3, hi=3, scale="large")
+        names = [o["name"] for o in out["options"]]
+        self.assertIn(br.CROWD_NAME, names)
+        small = br.recommend(br.History(records=[_past(f"S{i}", 100 + i / 100, count=10) for i in range(20)]), scale="small")
+        self.assertNotIn(br.CROWD_NAME, [o["name"] for o in small["options"]])
+
+    def test_pick_prefers_crowd_when_track_is_not_worse(self):
+        track = lambda win, top=0: {"tried": 100, "win": win, "valid": 50, "top": top}  # noqa: E731
+        opts = [{"name": "사정률 중앙값", "rate": 100.0, "track": track(1)},
+                {"name": br.TREND_NAME, "rate": 100.1, "track": track(2, 3)},
+                {"name": br.CROWD_NAME, "rate": 100.05, "track": track(3, 4)}]
+        self.assertEqual(br.pick_option(opts)["mode"], "crowd")
+        opts[2]["track"] = track(1, 1)
+        self.assertEqual(br.pick_option(opts)["mode"], "trend")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -26,12 +26,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from .bidrecommend import (LARGE_COMPETITION, MIN_SAMPLES, TOP_N, TREND_NAME, PastBid, _best, _pct, _rate, coverage,
-                           default_own_bizno, history_paths, load_history, similar, trend_rate)
+from .bidrecommend import (CROWD_NAME, LARGE_COMPETITION, MIN_SAMPLES, TOP_N, TREND_NAME, PastBid, _best, _pct, _rate,
+                           coverage, crowd_rate, default_own_bizno, history_paths, load_history, similar, trend_rate)
 
 OWN = "지일 실제 투찰(외주)"
 TOP_NAME = f"추천(과거 {TOP_N}위 안 최다)"
-STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, TREND_NAME, "사정률 중앙값", "유효 70%", "유효 90%")
+STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, TREND_NAME, CROWD_NAME, "사정률 중앙값", "유효 70%", "유효 90%")
 _DATE = re.compile(r"(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})")
 
 
@@ -82,6 +82,10 @@ def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train:
     guess = trend_rate(picked)
     if guess is not None:
         out[TREND_NAME] = guess[0] + guess[1]
+    if sum(r.bidder_count >= LARGE_COMPETITION for r in picked) > len(picked) / 2:  # 화면(`recommend`)과 같은 조건
+        crowd = crowd_rate(picked)
+        if crowd is not None:
+            out[CROWD_NAME] = crowd["rate"]
     return out
 
 
@@ -192,6 +196,12 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
         block(f"분야 {name}(공고명 키워드)", [r for r in rows if r["분야"] == name])
     for year in sorted({r["개찰일"][:4] for r in rows}):
         block(f"{year}년", [r for r in rows if r["개찰일"].startswith(year)])
+    # 변동폭 × 연도(대규모 경쟁) — 2026년 ±3% 공고에서 외주 가정이 실제보다 낮아진 것 같은 변화를 바로 보려고(10/29)
+    for width in (2, 3):
+        for year in sorted({r["개찰일"][:4] for r in large}):
+            subset = [r for r in large if r["변동폭"] == width and r["개찰일"].startswith(year)]
+            if len(subset) >= MIN_SAMPLES:
+                block(f"참가 {LARGE_COMPETITION}곳 이상 · 변동폭 ±{width}% · {year}년", subset)
     by = {k: sum(r["하한선"] == k for r in rows) for k in ("A값", "추정", "A=0")}
     lines.append(f"\n※ 하한선: 공고 A값 {by['A값']}건 · 참가업체 금액으로 추정 {by['추정']}건 · A=0 {by['A=0']}건")
     if by["A=0"]:

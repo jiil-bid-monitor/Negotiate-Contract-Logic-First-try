@@ -42,6 +42,13 @@ TOP_N = 5  # 투찰 경향은 1~5위 업체까지 본다(2026-10-28 사용자 �
 PICK_MIN_WIN = 0.10  # 검증 1순위 비율이 이보다 낮으면 방식 간 차이를 운으로 보고 '경향 추천'을 쓴다(10/28 백테스트: 소규모 물품·용역 23~50%, 공사·대규모 0~7%)
 TREND_NAME = f"경향 추천(사정률 중앙 + 1~{TOP_N}위 간격)"
 TRACK_LIMIT = 400  # 검증 성적은 비슷한 공고 중 최근 이만큼만 채점(화면 응답 시간 — 공고마다 그 전 공고로 추천을 다시 만듦)
+MIN_LOWER_RATE = 50.0  # 하한율이 이보다 낮으면(0.01·0.1 — 하한선 없는 입찰에 잘못 들어온 값, 10/29 9월 표본) 하한율 없음으로 본다
+RANGE_SLACK = 0.5  # 실제 사정률이 변동폭 ±이만큼(%p) 밖이면 입력 오류로 보고 뺀다(10/29 사용자 결정: 이상치는 거름)
+CROWD_NAME = "대규모 추천(사정률 분포 ÷ 경쟁 밀집)"
+CROWD_STEP = 0.002  # 대규모 추천 계산 격자(%p)
+CROWD_HALF_LIFE = 730  # 실제 사정률 분포를 만들 때 이 날수만큼 지난 공고는 무게 절반(최근 경향에 무게 — 2026 ±3% 공고 변화)
+CROWD_BW_COMPETITOR = 0.02  # 경쟁업체 가정 사정률 분포를 매끄럽게 하는 폭(%p)
+CROWD_MAX = 600  # 대규모 추천은 비슷한 공고 중 최근 이만큼만 씀(오래된 공고는 무게도 작고, 검증 때 계산 시간)
 
 
 @dataclass
@@ -64,6 +71,7 @@ class PastBid:
     own_rank: int | None = None  # 지일 개찰 순위(하한 미달 등으로 순위가 없으면 None)
     floor_est: float | None = None  # 참가업체 금액으로 가늠한 하한선(A값을 모를 때) — `_estimate_floor`
     top_amounts: list[float] = field(default_factory=list)  # 개찰 1~5위 투찰금액(순위순) — 투찰 경향(`nego.bidtrend`)
+    amounts: list[float] = field(default_factory=list)  # 참가업체 전부의 투찰금액(하한 미달 포함) — 대규모 추천의 경쟁 밀집(`crowd_rate`)
 
     @property
     def field(self) -> str:
@@ -163,20 +171,29 @@ def _clean_bizno(value: str | None) -> str:
     return (value or "").replace("-", "").strip()
 
 
+def _outlier(basis: float, planned: float, width: int | None) -> bool:
+    """실제 사정률이 변동폭(모르면 ±3) ± RANGE_SLACK 밖 — 예정가격·기초금액 입력 오류로 본다."""
+    w = (width or 3) + RANGE_SLACK
+    return abs(planned / basis * 100 - 100) > w
+
+
 def _make(notice_no: str, work: str, basis, planned, lower, bidders: list, prices: list[float], own_bizno: str = "",
           **extra) -> PastBid | None:
     basis, planned, lower = _num(basis), _num(planned), _num(lower)
-    if not (basis and planned and lower and bidders):
+    if not (basis and planned and lower and bidders) or lower < MIN_LOWER_RATE:
         return None
     winner = _winner_rate(bidders, planned)
     if not winner:
         return None
     width = extra.pop("range_width", None) or range_width(prices, basis)
+    if _outlier(basis, planned, width):
+        return None
     rec = PastBid(notice_no=notice_no, work=work or "", basis=basis, planned=planned, lower_rate=lower,
                   winner_rate=winner, bidder_count=len(bidders), range_width=width, **extra)
     rec.floor_est = _estimate_floor(bidders, planned)
     ranked = sorted((b for b in bidders if b.rank is not None and b.amount), key=lambda b: b.rank)
     rec.top_amounts = [b.amount for b in ranked[:TOP_N]]
+    rec.amounts = [b.amount for b in bidders if b.amount]
     own = next((b for b in bidders if own_bizno and _clean_bizno(b.bizno) == own_bizno), None)
     if own is not None:
         rec.own_amount, rec.own_rank = own.amount, own.rank
@@ -228,8 +245,16 @@ def skip_reason(rec: dict) -> str:
         return "참가업체 없음"
     if not (planned and basis):
         return "예정가격·기초금액 없음"
-    if not ((rec.get("notice") or {}).get("lower_rate") or _row_value(prices_rows + bidder_rows, "sucsfbidLwltRate")):
+    lower = _num((rec.get("notice") or {}).get("lower_rate") or _row_value(prices_rows + bidder_rows, "sucsfbidLwltRate"))
+    if not lower:
         return "하한율 없음"
+    if lower < MIN_LOWER_RATE:
+        return "하한율 이상값(하한선 없는 입찰)"
+    info = rec.get("notice") or {}
+    width = _width_from_rates(info.get("range_lo"), info.get("range_hi")) or range_width(
+        [p for r in prices_rows if (p := _num(r.get("bsisPlnprc")))], basis)
+    if _outlier(basis, planned, width):
+        return "사정률 이상치(변동폭 밖)"
     return "1순위 없음"
 
 
@@ -424,18 +449,104 @@ def trend_rate(records: list[PastBid], k: int = TOP_N) -> tuple[float, float] | 
     return statistics.median(r.assessment for r in records), statistics.median(gaps)
 
 
+def _competitor_rates(rec: PastBid):
+    """이 공고 참가업체 금액 → 가정 사정률 배열(공고마다 한 번만 계산해 둠)."""
+    import numpy as np
+
+    cached = getattr(rec, "_crowd_rates", None)
+    if cached is None:
+        amounts = np.asarray(rec.amounts, dtype=float)
+        cached = (rec.planned + (amounts - rec.floor) / (rec.lower_rate / 100)) / rec.basis * 100
+        rec._crowd_rates = cached
+    return cached
+
+
+def _smooth(values, weights, edges, bandwidth: float):
+    """가중 히스토그램을 가우스 곡선으로 매끄럽게 — 넓이 1인 밀도(격자 칸마다)."""
+    import numpy as np
+
+    step = edges[1] - edges[0]
+    idx = np.floor((values - edges[0]) / step).astype(np.int64)
+    keep = (idx >= 0) & (idx < len(edges) - 1)
+    hist = np.bincount(idx[keep], weights=weights[keep], minlength=len(edges) - 1)  # 고른 칸이라 np.histogram(정렬)보다 빠름
+    half = max(1, int(round(4 * bandwidth / step)))
+    x = np.arange(-half, half + 1) * step
+    kernel = np.exp(-0.5 * (x / bandwidth) ** 2)
+    dens = np.convolve(hist, kernel / kernel.sum(), mode="same")
+    total = dens.sum() * step
+    return dens / total if total > 0 else dens
+
+
+def crowd_rate(records: list[PastBid], today: str | None = None) -> dict | None:
+    """대규모 경쟁용 추천 — "이 사정률 r로 썼으면 1순위였을 확률"이 가장 높은 r.
+
+    1순위 ⇔ 실제 사정률 s ≤ r 이고 [s, r) 사이에 다른 업체가 없음. 과거 비슷한 공고에서
+      f(s) = 실제 사정률 분포(최근 공고에 무게 — 반감기 CROWD_HALF_LIFE일),
+      g(c) = 경쟁업체 가정 사정률 분포(공고마다 무게 같게), N = 참가 업체 수 중앙
+    를 구하고 P(r) = ∫_{s≤r} f(s)·exp(−N·∫_s^r g) ds 를 격자 위에서 계산한다(업체들이 g를 따라 서로 따로 낸다고 봄).
+    결과 {rate, win_p(모형 1순위 확률), valid_p(유효 확률 = s ≤ r), bidders, samples}. 자료가 MIN_SAMPLES건 미만이면 None."""
+    import numpy as np
+    from .bidbacktest import date_of
+
+    recs = [r for r in records if r.amounts]
+    if len(recs) < MIN_SAMPLES:
+        return None
+    dated = sorted(((date_of(r) or "", r) for r in recs), key=lambda x: x[0])[-CROWD_MAX:]
+    recs = [r for _, r in dated]
+    dates = [d or None for d, _ in dated]
+    s = np.array([r.assessment for r in recs])
+    ref = today or max((d for d in dates if d), default=None)
+
+    def age(d: str | None) -> float:
+        if not (ref and d):
+            return CROWD_HALF_LIFE * 2.0  # 날짜 모르면 오래된 공고로 침
+        from datetime import date
+
+        return max(0, (date.fromisoformat(ref) - date.fromisoformat(d)).days)
+
+    w = np.array([0.5 ** (age(d) / CROWD_HALF_LIFE) for d in dates])
+    lo, hi = max(GRID_LO, float(s.min()) - 0.5), min(GRID_HI, float(s.max()) + 0.5)
+    edges = np.arange(lo, hi + CROWD_STEP, CROWD_STEP)
+    grid = (edges[:-1] + edges[1:]) / 2
+    q75, q25 = np.percentile(s, [75, 25])
+    spread = min(float(s.std()), float(q75 - q25) / 1.349) or float(s.std()) or 0.1
+    bw = max(0.03, 0.9 * spread * len(s) ** -0.2)
+    f = _smooth(s, w, edges, bw)
+    comp = [_competitor_rates(r) for r in recs]
+    cw = np.concatenate([np.full(len(c), wi / len(c)) for c, wi in zip(comp, w)])
+    g = _smooth(np.concatenate(comp), cw, edges, CROWD_BW_COMPETITOR)
+    n = float(statistics.median(r.bidder_count for r in recs))
+    decay = np.exp(-n * g * CROWD_STEP)
+    win = np.empty_like(f)
+    p = 0.0
+    for k in range(len(f)):
+        p = p * decay[k] + f[k] * CROWD_STEP
+        win[k] = p
+    k = int(win.argmax())
+    valid = np.cumsum(f) * CROWD_STEP
+    return {"rate": round(float(grid[k]), 3), "win_p": float(win[k]), "valid_p": float(min(1.0, valid[k])),
+            "bidders": n, "samples": len(recs)}
+
+
 def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | None:
     """화면 맨 위 '추천 투찰금액'으로 쓸 방식 하나 — 검증(개찰 전 자료로 정했다면) 1순위 비율이 가장 높은 방식,
     같으면 5위 안 비율, 그다음 유효 비율이 높은 쪽. 그런데 검증 건수가 MIN_PICK_TRIED 미만이거나 가장 좋은 방식도 1순위 비율이
-    PICK_MIN_WIN 미만이면(대규모 경쟁·공사 — 어떤 방식이든 운) 경향 추천(`trend_rate`)을 쓴다(mode="trend")."""
+    PICK_MIN_WIN 미만이면(대규모 경쟁·공사 — 어떤 방식이든 운) 경향 추천(`trend_rate`)을 쓴다(mode="trend").
+    단 대규모 추천(`crowd_rate`, 대규모 경쟁 묶음에만 있음)의 검증 성적(1순위, 같으면 5위 안)이 경향 추천 이상이면 그쪽(mode="crowd")."""
     if not options:
         return None
-    ok = [o for o in options if (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED and o["name"] != TREND_NAME]
+    ok = [o for o in options if (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED and o["name"] not in (TREND_NAME, CROWD_NAME)]
     best = max(ok, key=lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid"))) if ok else None
     trend = next((o for o in options if o["name"] == TREND_NAME), None)
     weak = best is None
+    crowd = next((o for o in options if o["name"] == CROWD_NAME), None)
+    crowd_ok = crowd is not None and (crowd.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED
     if best is not None and _ratio(best["track"]) >= PICK_MIN_WIN:
         chosen, mode = best, "track"
+    elif crowd_ok and (trend is None or (_ratio(crowd["track"]), _ratio(crowd["track"], "top"))
+                       >= (_ratio(trend.get("track")), _ratio(trend.get("track"), "top"))):
+        # 대규모 경쟁(모든 방식 1순위가 운의 영역) — 검증 성적이 경향 추천 이상일 때만 대규모 추천
+        chosen, mode = crowd, "crowd"
     elif trend is not None:
         chosen, mode = trend, "trend"
     else:
@@ -546,6 +657,11 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     guess = trend_rate(picked)
     if guess is not None:
         options.append({**row(TREND_NAME, guess[0] + guess[1]), "base": round(guess[0], 3), "gap": round(guess[1], 3)})
+    if out["bidders"]["large"] > len(picked) / 2:
+        crowd = crowd_rate(picked)
+        if crowd is not None:
+            options.append({**row(CROWD_NAME, crowd["rate"]), "win_p": crowd["win_p"], "valid_p": crowd["valid_p"],
+                            "crowd_bidders": crowd["bidders"]})
     track = _track(history, picked, scale)
     for o in options:
         o["track"] = track.get(o["name"])

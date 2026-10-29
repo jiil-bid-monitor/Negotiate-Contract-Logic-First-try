@@ -87,6 +87,20 @@ class BacktestTest(unittest.TestCase):
         self.assertIn("고정 100.55%", rows[0]["results"])
         self.assertIn("추천 없음", bt.summarize(rows))
 
+    def test_large_competition_gets_crowd_strategy(self):
+        import random
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_bidrecommend import _large
+
+        rnd = random.Random(5)
+        recs = [_large(f"L{i:03d}", f"2025-{1 + i // 28:02d}-{1 + i % 28:02d}", rnd.gauss(100, 0.5),
+                       [rnd.gauss(100.2, 0.05) for _ in range(120)]) for i in range(40)]
+        rows, _ = bt.backtest(recs, start="2025-02-01")
+        self.assertTrue(rows and all(br.CROWD_NAME in r["results"] for r in rows))
+        self.assertIn("변동폭 ±3% · 2025년", bt.summarize(rows))
+        self.assertNotIn(br.CROWD_NAME, bt.backtest(self.train + [self.hit], start="2025-01-01")[0][0]["results"])  # 소규모엔 없음
+
     def test_summary_and_csv(self):
         rows, _ = bt.backtest(self.train + [self.hit, self.miss], start="2025-01-01")
         text = bt.summarize(rows)

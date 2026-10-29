@@ -367,7 +367,12 @@
       const top = ranked.length ? [gap(ranked[0].gap), gap(ranked[ranked.length - 1].gap)] : [];
       const lastRank = ranked.length ? ranked[ranked.length - 1].rank : 5;
       const sign = (v) => `${v >= 0 ? "+" : ""}${Number(v).toFixed(3)}%p`;
-      const why = p.mode === "trend"
+      const share = (v) => (v == null ? "-" : `${(v * 100).toFixed(v < 0.01 ? 2 : 1)}%`);
+      const why = p.mode === "crowd"
+        // 대규모 경쟁 — 실제 사정률이 자주 나온 곳과 경쟁업체가 몰린 곳을 함께 봐서 1순위 가능성이 가장 높은 사정률
+        ? `대규모 경쟁 추천: 비슷한 과거 공고의 실제 사정률 분포와 경쟁업체(약 ${p.crowd_bidders}곳) 밀집을 함께 봐서 1순위 가능성이 가장 높은 사정률`
+          + ` · 모형 추정 1순위 ${share(p.win_p)} · 유효 ${share(p.valid_p)} · 검증 1순위 ${ratio(p.track)}`
+        : p.mode === "trend"
         // 검증 성적으로 고를 만한 차이가 없을 때(대규모 경쟁·공사 등) — 단순 경향: 실제 사정률 중앙 + 상위 업체 간격
         ? `과거 경향으로 추천: 비슷한 공고 실제 사정률 중앙 ${pct(p.base)} + 1~5위 업체가 쓴 간격 중앙 ${sign(p.gap)}`
         : p.mode === "fixed"

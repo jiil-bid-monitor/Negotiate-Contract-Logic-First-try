@@ -55,7 +55,7 @@ def gap_of(rec) -> float:
     """그 공고의 1순위 구간 폭(%p) = 1순위 업체를 이겼을 사정률 상한 − 실제 사정률."""
     lo, hi = GAP_CLIP
     try:
-        return min(hi, max(lo, rec.win_ceiling - rec.assessment))
+        return min(hi, max(lo, rec.win_ceiling - rec.need_rate))
     except (TypeError, ZeroDivisionError):
         return lo
 
@@ -197,7 +197,7 @@ def knn_rate(records, target: dict, ref: str | None = None) -> dict | None:
     if not recs or sum(ws) <= 0:
         return None
     ok = [(r, w) for r, w in zip(recs, ws) if r.window_ok] or list(zip(recs, ws))  # 하한선이 틀린 공고의 구간 폭은 빼고
-    got = best_window([r.assessment for r in recs], ws, [gap_of(r) for r, _ in ok], [w for _, w in ok])
+    got = best_window([r.need_rate for r in recs], ws, [gap_of(r) for r, _ in ok], [w for _, w in ok])
     if got is None:
         return None
     return {"rate": got[0], "win_p": got[1], "valid_p": got[2], "neighbors": len(recs)}
@@ -273,7 +273,7 @@ def gap_rate(similar_records, model, target: dict) -> dict | None:
     g = predict_gap(model, target)
     if g is None:
         return None
-    got = best_window([r.assessment for r in similar_records], None, [g], None)
+    got = best_window([r.need_rate for r in similar_records], None, [g], None)
     if got is None:
         return None
     return {"rate": got[0], "win_p": got[1], "valid_p": got[2], "gap": round(g, 4)}

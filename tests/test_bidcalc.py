@@ -216,5 +216,20 @@ class BidCalcJsTest(unittest.TestCase):
         self.assertEqual(res.returncode, 0, res.stderr or res.stdout)
 
 
+
+class NetCostRuleTest(unittest.TestCase):
+    def test_reads_rate_and_limit(self):
+        text = ("⑥ 정부 입찰·계약 집행기준 제2조의5 및 한국농어촌공사 「시설공사적격심사세부기준」 제5조의2에 따라\n"
+                "예정가격이 100억원 미만인 공사인 경우, 입찰가격을 예정가격 중 재료비·노무비·경비 및 이에 대한\n"
+                "부가가치세를 합산한 금액(순공사원가)의 100분의 98 미만으로 입찰한 자는 심사대상에서 제외되며\n낙찰자로 결정하지 않습니다.")
+        rule = bidcalc.net_cost_rule(text)
+        self.assertEqual((rule["rate"], rule["limit"]), (98, 10_000_000_000))
+        self.assertEqual(bidcalc.parse_notice_text(text)["net_rule"]["rate"], 98)
+
+    def test_other_rate_and_none(self):
+        self.assertEqual(bidcalc.net_cost_rule("입찰금액이 순공사원가의 97% 미만인 경우 낙찰자에서 제외")["rate"], 97)
+        self.assertIsNone(bidcalc.net_cost_rule("순공사원가는 기초금액 공개 시 함께 공개합니다."))
+        self.assertIsNone(bidcalc.net_cost_rule("낙찰하한율 87.745% 미만은 제외"))
+
 if __name__ == "__main__":
     unittest.main()

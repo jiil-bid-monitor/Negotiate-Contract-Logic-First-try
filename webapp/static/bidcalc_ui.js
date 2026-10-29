@@ -192,30 +192,36 @@
     // floor = 모의 예정가격의 하한선에 붙인 금액(21라인과 같은 계산) — 10/29 사용자 결정: 이건 '하한선 조건'으로만 보고,
     // 투찰금액은 아래 추천 칸(투찰 경향)이 고른 금액으로. 추천이 없을 때만 예전처럼 하한선 금액을 투찰금액으로 씀
     const floor = planned ? C.bidAmount({ planned: plannedWon, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
+    const average = done ? nos.reduce((sum, no) => sum + SLOTS[no - 1], 0) / nos.length : null;  // 끝자리 처리 전 평균
+    const netBid = planned ? C.netCostBid({ average, basis, netCost: numIn("#cNet"), rate: NET_RULE ? NET_RULE.rate : 98 }) : null;
+    // 공고문에 순공사원가 조건이 있고(예정가격 상한이 있으면 모의 예정가격이 그 아래일 때) 그 선이 하한선보다 높으면 그 선이 조건
+    const netApplies = netBid != null && NET_RULE && !(NET_RULE.limit && planned >= NET_RULE.limit);
+    const gate = floor != null && netApplies ? Math.max(floor, netBid) : floor;
+    const gateName = netApplies && netBid > floor ? `순공사원가 ${NET_RULE.rate}% 선` : "하한선";
     // 하한선 조건(10/29 사용자 결정): 추천 순서(REC_PICK.order — 고른 방식 → 통과 조건을 만족하는 나머지 → 그 밖)대로 보며
     // 모의 예정가격 하한선 이상인 첫 방식의 금액을 투찰금액으로. 모두 아래면 고른 방식 그대로 두고 미달로 표시
     let used = REC_PICK, fallback = false, allBelow = false;
-    if (REC_PICK && floor != null && recBid(REC_PICK.rate) != null) {
+    if (REC_PICK && gate != null && recBid(REC_PICK.rate) != null) {
       const byName = Object.fromEntries(REC_OPTIONS.map((o) => [o.name, o]));
-      const first = (REC_PICK.order || [REC_PICK.name]).map((n) => byName[n]).find((o) => o && recBid(o.rate) != null && recBid(o.rate) >= floor);
+      const first = (REC_PICK.order || [REC_PICK.name]).map((n) => byName[n]).find((o) => o && recBid(o.rate) != null && recBid(o.rate) >= gate);
       if (!first) { used = null; allBelow = true; }  // 모든 방식이 하한선 아래 — 하한선 금액을 씀
       else if (first.name !== REC_PICK.name) { used = first; fallback = true; }
     }
     const rec = used ? recBid(used.rate) : null;
-    const bid = rec != null ? rec : floor;
-    const average = done ? nos.reduce((sum, no) => sum + SLOTS[no - 1], 0) / nos.length : null;  // 끝자리 처리 전 평균
-    const netBid = planned ? C.netCostBid({ average, basis, netCost: numIn("#cNet") }) : null;
+    const bid = rec != null ? rec : gate;
     const higher = bid != null && netBid != null && netBid > bid;
     $("#cPlanned").textContent = planned ? won(planned) : "-";
     const recNote = rec != null
       ? `<div class="calc-sub">아래 추천 칸의 '${esc(label(used.name))}' 금액 · 기준 사정률 ${pct(used.rate)}${used.track && used.track.tried
         ? ` · 비슷한 과거 공고에서 하한선 통과 ${Math.round((used.track.valid / used.track.tried) * 100)}%` : ""}</div>`
-        + (fallback ? `<div class="calc-sub">'${esc(label(REC_PICK.name))}' 금액은 이번 모의 추첨 하한선보다 낮아, 다음 순위 방식 금액으로 바꿨어요</div>` : "")
-      : allBelow ? `<div class="calc-sub ng">추천 방식 금액이 모두 이번 모의 추첨 하한선보다 낮아, 모의 하한선 금액을 썼어요</div>`
+        + (fallback ? `<div class="calc-sub">'${esc(label(REC_PICK.name))}' 금액은 이번 모의 추첨 ${gateName}보다 낮아, 다음 순위 방식 금액으로 바꿨어요</div>` : "")
+      : allBelow ? `<div class="calc-sub ng">추천 방식 금액이 모두 이번 모의 추첨 ${gateName}보다 낮아, 그 선의 금액을 썼어요</div>`
       : `<div class="calc-sub">추천이 없어 모의 추첨 하한선 금액을 썼어요</div>`;
-    const floorCheck = rec != null && floor != null
-      ? `<div class="calc-sub ${rec >= floor ? "ok" : "ng"}">이번 모의 추첨 하한선 ${won(floor)} 대비 ${rec >= floor ? `✓ ${won(rec - floor)}원 위` : `✗ ${won(floor - rec)}원 아래`}
-        ${tip("위 표에서 고른 번호로 계산한 <b>모의</b> 예정가격의 하한선이에요. 실제 예정가격은 개찰 때 업체들이 고른 번호로 정해져 이 값과 달라요. 실제로 통과할 가능성은 아래 추천 칸의 '하한선 통과' 비율을 보세요.")}</div>`
+    const floorCheck = rec != null && gate != null
+      ? `<div class="calc-sub ${rec >= gate ? "ok" : "ng"}">이번 모의 추첨 ${gateName} ${won(gate)} 대비 ${rec >= gate ? `✓ ${won(rec - gate)}원 위` : `✗ ${won(gate - rec)}원 아래`}
+        ${tip(`위 표에서 고른 번호로 계산한 <b>모의</b> 예정가격 기준이에요. 실제 예정가격은 개찰 때 업체들이 고른 번호로 정해져 이 값과 달라요. 실제로 통과할 가능성은 아래 추천 칸의 '하한선 통과' 비율을 보세요.${NET_RULE
+          ? `<br><br>공고문 순공사원가 조건: ${NET_RULE.limit ? `예정가격 ${NET_RULE.limit / 1e8}억 원 미만이면 ` : ""}순공사원가의 ${NET_RULE.rate}% 미만 투찰은 제외 — 하한선과 이 선 중 높은 쪽을 넘어야 해요.<br><span class="calc-sub">${esc(NET_RULE.quote || "")}</span>`
+          : ""}`)}</div>`
       : "";
     if (REC_LOADING) {
       $("#cBid").innerHTML = `<span class="calc-sub">추천 계산 중…</span>`;
@@ -230,9 +236,10 @@
       ["기초금액", basis, basis ? "100.0000" : "-"],
       ["예정가격 (모의 추첨 1회)", planned, basis && planned ? p4((planned / basis) * 100) : "-"],
       ["하한선 (모의 추첨 기준)", floor, ""],
+      ...(netApplies ? [[`순공사원가 ${NET_RULE.rate}% 선 (모의 추첨 기준, 공고문 조건)`, netBid, ""]] : []),
       [rec != null ? "투찰금액 (추천)" : "투찰금액", REC_LOADING ? null : bid, rec != null ? `${p4(used.rate)} (기준 사정률)` : ""],
     ].filter(([, v]) => v != null);
-    if (netBid != null) rows.push(["순공사원가 투찰가격", netBid, ""]);
+    if (netBid != null && !netApplies) rows.push(["순공사원가 투찰가격", netBid, ""]);
     $("#cSummary").innerHTML = rows.map(([k, v, rate]) => `<tr><td>${esc(k)}</td><td class="num">${won(v)}</td><td class="num">${rate}</td></tr>`).join("");
   }
 
@@ -269,7 +276,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
-    WORK = ""; REC_METHOD = ""; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
+    WORK = ""; REC_METHOD = ""; NET_RULE = null; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
     render();
   };
   async function lookup() {
@@ -302,6 +309,7 @@
       setNum("#cA", d.a_value || null);
       $("#cAOn").checked = !!d.a_applies && (d.a_value || 0) > 0;
       setNum("#cNet", d.net_cost || null);
+      NET_RULE = d.net_rule || null;
       if (d.price_count === 10 || d.price_count === 15) {
         document.querySelector(`input[name="cN"][value="${d.price_count}"]`).checked = true;
         fillRange(defaultDown());
@@ -353,6 +361,8 @@
   // 추천 사정률(2026-10-28) — 위 입력칸(기초금액·하한율·변동폭·A값)과 불러온 공고의 업무로 서버에 묻는다.
   // 투찰금액은 계산기와 같은 기타설정(절상·절사·단위)으로 자름: 원 단위 예정가격(기초금액 × 사정률) → 하한율 → 끝자리
   let WORK = "";
+  // 공고문의 순공사원가 조건({rate, limit, quote, file}) — 있을 때만 투찰금액 조건으로 씀(10/29 사용자 결정: 98% 고정 조건 아님)
+  let NET_RULE = null;
   let REC_METHOD = "";  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
   let REC_PICK = null;  // 추천 칸이 고른 방식(rate·name·track·order) — 위 계산기 '투찰금액'이 이걸로 정해짐(10/29)
   let REC_OPTIONS = [];  // 추천 칸 방식들 — 고른 방식이 모의 예정가격 하한선 아래면 order 순으로 다음 방식

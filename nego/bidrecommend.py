@@ -74,6 +74,8 @@ class PastBid:
     own_amount: float | None = None  # 지일 투찰금액(참가했을 때) — 검증(`nego.bidbacktest`)에서 외주 추천과 비교
     own_rank: int | None = None  # 지일 개찰 순위(하한 미달 등으로 순위가 없으면 None)
     floor_est: float | None = None  # 참가업체 금액으로 가늠한 하한선(A값을 모를 때) — `_estimate_floor`
+    odd_remarks: Counter = field(default_factory=Counter)  # 하한선 위인데 순위가 없는 업체의 비고 — 아직 반영 안 한 무효 조건 찾기용
+    net_line: float | None = None  # 순공사원가 기준선(금액) — 개찰 결과에서 '순공사원가'로 무효된 업체로 정함. `_net_line`
     top_amounts: list[float] = field(default_factory=list)  # 개찰 1~5위 투찰금액(순위순) — 투찰 경향(`nego.bidtrend`)
     amounts: list[float] = field(default_factory=list)  # 참가업체 전부의 투찰금액(하한 미달 포함) — 대규모 추천의 경쟁 밀집(`crowd_rate`)
     draws: list[tuple[int, float, int]] = field(default_factory=list)  # 예비가격 (번호, 기초금액 대비 %, 선택 횟수) — 추첨 모형(`bidmodels`)
@@ -91,7 +93,21 @@ class PastBid:
 
     @property
     def assessment(self) -> float:
+        """실제 사정률(예정가격 ÷ 기초금액). 통과 판정에는 `need_rate`를 쓴다(순공사원가 선이 더 높을 수 있음)."""
         return self.planned / self.basis * 100
+
+    @property
+    def valid_floor(self) -> float:
+        """유효 투찰의 최저 금액 = 하한선과 순공사원가 기준선(개찰 결과로 정함) 중 높은 쪽."""
+        return max(self.floor, self.net_line or 0.0)
+
+    @property
+    def need_rate(self) -> float:
+        """통과하려면 필요했던 기준 사정률 — 보통 실제 사정률과 같고, 순공사원가 기준선(개찰 결과의 무효 업체로 정함)이 하한선보다 높은 공고는 그 선에 해당하는 값
+        (10/29 제보: 공사 대규모 공고에서 하한선만 넘고 '순공사원가 98%미만'으로 무효된 금액을 1순위로 셌음)."""
+        if self.net_line and self.net_line > self.floor:
+            return max(self.assessment, self.rate_for(self.net_line))
+        return self.assessment
 
     @property
     def floor_source(self) -> str:
@@ -124,7 +140,7 @@ class PastBid:
         if self.bidder_count < LARGE_COMPETITION:
             return True
         try:
-            return self.win_ceiling - self.assessment <= LARGE_MAX_WINDOW
+            return self.win_ceiling - self.need_rate <= LARGE_MAX_WINDOW
         except (TypeError, ZeroDivisionError):
             return False
 
@@ -189,6 +205,19 @@ def _estimate_floor(bidders: list, planned: float) -> float | None:
     return (max(b.amount for b in below) + low_ok) / 2
 
 
+def _net_line(bidders: list, rec: PastBid) -> float | None:
+    """순공사원가 기준선(금액) — 개찰 결과 비고에 '순공사원가'가 적힌 무효 업체 중 가장 높은 금액과, 그보다 높은 순위 있는 업체 중
+    가장 낮은 금액의 가운데. 비율(98% 등)을 정해 두지 않고 그 공고 실제 개찰 결과로만 정한다(10/29 사용자 결정 — 고정 조건 아님).
+    그런 업체가 없거나 선이 하한선보다 낮으면 None."""
+    bad = [b.amount for b in bidders if b.rank is None and b.amount and "순공사" in (b.remark or "")]
+    if not bad:
+        return None
+    hi_bad = max(bad)
+    above = [b.amount for b in bidders if b.rank is not None and b.amount and b.amount > hi_bad]
+    line = (hi_bad + min(above)) / 2 if above else hi_bad + 1
+    return line if line > rec.floor else None
+
+
 def _clean_bizno(value: str | None) -> str:
     return (value or "").replace("-", "").strip()
 
@@ -213,6 +242,9 @@ def _make(notice_no: str, work: str, basis, planned, lower, bidders: list, price
     rec = PastBid(notice_no=notice_no, work=work or "", basis=basis, planned=planned, lower_rate=lower,
                   winner_rate=winner, bidder_count=len(bidders), range_width=width, **extra)
     rec.floor_est = _estimate_floor(bidders, planned)
+    rec.net_line = _net_line(bidders, rec)
+    rec.odd_remarks = Counter((b.remark or "비고 없음").strip() for b in bidders
+                              if b.rank is None and b.amount and b.amount >= rec.valid_floor)
     ranked = sorted((b for b in bidders if b.rank is not None and b.amount), key=lambda b: b.rank)
     rec.top_amounts = [b.amount for b in ranked[:TOP_N]]
     rec.amounts = [b.amount for b in bidders if b.amount]
@@ -433,7 +465,7 @@ def coverage(records: list[PastBid], ceiling=None) -> tuple[list[int], list[int]
     size = _index(GRID_HI) + 1
     win_d, valid_d = [0] * (size + 1), [0] * (size + 1)
     for rec in records:
-        start = max(0, min(size, _index(rec.assessment) + (1 if _rate(_index(rec.assessment)) < rec.assessment else 0)))
+        start = max(0, min(size, _index(rec.need_rate) + (1 if _rate(_index(rec.need_rate)) < rec.need_rate else 0)))
         valid_d[start] += 1
         if not rec.window_ok:  # 하한선이 틀린 공고 — 유효는 세고 1순위·순위 구간은 안 셈
             continue
@@ -480,10 +512,10 @@ def trend_rate(records: list[PastBid], k: int = TOP_N) -> tuple[float, float] | 
     (예상 사정률, 간격). 투찰은 운이 커서 검증 성적으로 고를 차이가 없을 때 쓰는 '합리적 추론'(2026-10-28 사용자 결정)."""
     if not records:
         return None
-    gaps = [r.rate_for(a) - r.assessment for r in records if r.window_ok for a in r.top_amounts[:k]]
+    gaps = [r.rate_for(a) - r.need_rate for r in records if r.window_ok for a in r.top_amounts[:k]]
     if not gaps:
         return None
-    return statistics.median(r.assessment for r in records), statistics.median(gaps)
+    return statistics.median(r.need_rate for r in records), statistics.median(gaps)
 
 
 def _competitor_rates(rec: PastBid):
@@ -532,7 +564,7 @@ def crowd_rate(records: list[PastBid], today: str | None = None, half_life: floa
     dated = sorted(((date_of(r) or "", r) for r in recs), key=lambda x: x[0])[-CROWD_MAX:]
     recs = [r for _, r in dated]
     dates = [d or None for d, _ in dated]
-    s = np.array([r.assessment for r in recs])
+    s = np.array([r.need_rate for r in recs])
     ref = today or max((d for d in dates if d), default=None)
 
     def age(d: str | None) -> float:
@@ -698,7 +730,7 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     if not picked:
         return out
 
-    rates = [r.assessment for r in picked]
+    rates = [r.need_rate for r in picked]
     gaps = [r.winner_rate - r.lower_rate for r in picked]
     counts = [r.bidder_count for r in picked]
     out["assessment"] = {"p10": _pct(rates, 0.1), "p50": statistics.median(rates), "p90": _pct(rates, 0.9),

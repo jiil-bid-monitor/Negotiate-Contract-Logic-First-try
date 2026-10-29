@@ -148,6 +148,33 @@ _RATE_TEXT_RE = re.compile(r"낙찰\s*하한율[^\d\n]{0,15}(\d{2}(?:\.\d+)?)\s*
 # "기초금액의 ±3%" · "기초금액 대비 ±2%" · "기초금액의 ±3퍼센트"
 _RANGE_TEXT_RE = re.compile(r"기초\s*금액(?:의|\s*대비)?\s*[±+\-]\s*(\d(?:\.\d+)?)\s*(?:%|퍼센트)")
 
+# 순공사원가 조건 — 공고문 문장 그대로 읽음(10/29 사용자 결정: 98%를 고정 조건으로 두지 않음). 예) "예정가격이 100억원 미만인
+# 공사인 경우, 입찰가격을 … 순공사원가의 100분의 98 미만으로 입찰한 자는 심사대상에서 제외"
+_NET_RATE_RE = re.compile(r"100\s*분의\s*(\d{2}(?:\.\d+)?)|(\d{2}(?:\.\d+)?)\s*(?:%|퍼센트)")
+_NET_LIMIT_RE = re.compile(r"예정\s*가격이\s*([\d,]+(?:\.\d+)?)\s*억\s*원?\s*미만")
+
+
+def net_cost_rule(text: str) -> dict | None:
+    """공고문의 순공사원가 조건 → {rate(%), limit(예정가격 상한 원, 없으면 None), quote}. '순공사원가'와 '미만'이 든 문장에서
+    '100분의 N'(또는 N%)을 찾는다. 못 찾으면 None — 그 공고엔 조건을 걸지 않음."""
+    flat = re.sub(r"\s+", " ", text)
+    for m in re.finditer(r"순\s*공\s*사\s*원\s*가", flat):
+        start = max(flat.rfind(".", 0, m.start()) + 1, m.start() - 250)
+        end = flat.find(".", m.end())
+        end = min(end if end > 0 else len(flat), m.end() + 250)
+        window = flat[start:end]
+        if "미만" not in window:
+            continue
+        got = _NET_RATE_RE.search(flat, m.end(), end) or _NET_RATE_RE.search(window)
+        rate = _num(got.group(1) or got.group(2)) if got else None
+        if not rate or not 50 <= rate <= 100:
+            continue
+        lim = _NET_LIMIT_RE.search(window)
+        limit = _num(lim.group(1)) * 100_000_000 if lim else None
+        return {"rate": rate, "limit": limit, "quote": window.strip()[:300]}
+    return None
+
+
 # 공고문이 인용한 적용 법령·기준 — 지방계약/국가계약을 정하는 가장 직접적인 근거(2026-10-23 사용자 결정: 기관 이름보다 먼저)
 _LOCAL_LAW_RE = re.compile(
     r"지방\s*자치\s*단체\s*(?:입찰\s*및\s*계약\s*집행\s*기준|를\s*당사자로\s*하는\s*계약에\s*관한\s*법률|입찰\s*시\s*낙찰자\s*결정\s*기준)"
@@ -201,10 +228,12 @@ def parse_notice_text(text: str) -> dict:
     kind, quote = law_kind(text)
     if kind:
         out["law_kind"], out["law_quote"] = kind, quote
+    if rule := net_cost_rule(text):
+        out["net_rule"] = rule
     return out
 
 
-_DOC_KEYS = ("basis", "lower_rate", "range_lo", "range_hi", "law_kind", "law_quote")
+_DOC_KEYS = ("basis", "lower_rate", "range_lo", "range_hi", "law_kind", "law_quote", "net_rule")
 
 
 def _read_notice_docs(notice: dict, out: dict, fetch: Callable) -> None:
@@ -230,6 +259,8 @@ def _read_notice_docs(notice: dict, out: dict, fetch: Callable) -> None:
     if "law_kind" in doc:
         out["law_kind"], out["law_quote"] = doc["law_kind"][0], doc["law_quote"][0]
         out["law_file"] = doc["law_kind"][1]
+    if "net_rule" in doc:
+        out["net_rule"] = {**doc["net_rule"][0], "file": doc["net_rule"][1]}
     filled, differ = [], []
     for k in ("basis", "lower_rate", "range_lo"):
         if k not in doc:
@@ -361,6 +392,11 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
         out["notes"].append("낙찰하한율을 나라장터·첨부 공고문에서 찾지 못함 — 협상·최저가 등 하한율 방식이 아닐 수 있음")
     if notice and out.get("range_lo") is None:
         out["notes"].append("변동폭을 나라장터·첨부 공고문에서 찾지 못함 — 공고문 확인 후 직접 입력하세요")
+    if rule := out.get("net_rule"):
+        limit = f"예정가격 {rule['limit'] / 100_000_000:g}억 원 미만이면 · " if rule.get("limit") else ""
+        out["notes"].append(f"순공사원가 조건: {limit}순공사원가의 {rule['rate']:g}% 미만 투찰은 제외 (첨부 '{rule['file']}')")
+    elif out.get("net_cost") and out.get("doc_read"):
+        out["notes"].append("순공사원가 금액은 있으나 공고문에서 순공사원가 조건 문장을 찾지 못함 — 조건 없이 계산, 공고문 확인")
 
     j = judge(out.get("standard", ""), (out.get("law_kind"), out.get("law_quote", "")),
               out.get("demand_institution", ""), out.get("notice_institution", ""), out.get("range_lo"), out.get("range_hi"))

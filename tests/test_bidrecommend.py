@@ -6,6 +6,7 @@ import json
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -358,6 +359,44 @@ class CrowdRateTest(unittest.TestCase):
         self.assertEqual(br.pick_option(opts[:2])["name"], br.TREND_NAME)  # 대규모 추천 줄이 없어도 같은 규칙
         opts[0]["track"] = track(15, 0.4, 20)  # 1순위 15% — 1순위로 가려짐
         self.assertEqual((br.pick_option(opts)["name"], br.pick_option(opts)["mode"]), ("추천(과거 1순위 최다)", "track"))
+
+class NetCostLineTest(unittest.TestCase):
+    """순공사원가 기준선 — 개찰 결과에서 '순공사원가'로 무효된 업체로 정함(비율을 고정하지 않음, 10/29 제보 R25BK00645409)."""
+
+    def _rec(self):
+        from nego.bidprice import Bidder
+
+        basis, s, lower = 100_000_000, 100.0, 87.745
+        planned = basis * s / 100
+        floor = planned * lower / 100  # A=0
+        amounts = [floor - 50_000, floor + 100_000, floor + 200_000, floor + 400_000, floor + 500_000]
+        bidders = [Bidder(None, "미달", "1", amounts[0], None, "낙찰하한선 미달"),
+                   Bidder(None, "가", "2", amounts[1], None, "순공사원가 98%미만"),
+                   Bidder(None, "나", "3", amounts[2], None, "순공사원가 98%미만"),
+                   Bidder(1, "다", "4", amounts[3], None, ""),
+                   Bidder(2, "라", "5", amounts[4], None, "")]
+        return br._make("N1", "공사", basis, planned, lower, bidders, [], range_width=3, a_value=0.0), floor
+
+    def test_line_from_remarks(self):
+        rec, floor = self._rec()
+        self.assertAlmostEqual(rec.net_line, floor + 300_000)
+        self.assertGreater(rec.need_rate, rec.assessment)
+        # 하한선만 넘고 기준선 아래인 사정률은 유효·1순위가 아님
+        from nego import bidbacktest as bb
+
+        between = rec.rate_for(floor + 150_000)
+        self.assertEqual(bb.score(between, rec), (False, False))
+        self.assertIsNone(bb.rank_of(rec, floor + 150_000))
+        ok = rec.rate_for(floor + 350_000)
+        self.assertEqual(bb.score(ok, rec), (True, True))
+        self.assertEqual(bb.rank_of(rec, floor + 350_000), 1)
+        self.assertEqual(rec.odd_remarks, Counter())
+
+    def test_no_rule_without_remarks(self):
+        rec = _large("N2", "2026-01-01", 100.0, [100.1, 100.2])
+        self.assertIsNone(rec.net_line)
+        self.assertEqual(rec.need_rate, rec.assessment)
+
 
 class WindowOkTest(unittest.TestCase):
     def test_wide_window_in_large_competition_not_counted(self):

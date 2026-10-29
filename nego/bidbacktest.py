@@ -54,13 +54,13 @@ def date_of(rec: PastBid) -> str | None:
 
 def score(rate: float, rec: PastBid) -> tuple[bool, bool]:
     """(유효, 1순위) — `bidrecommend`과 같은 식: 유효 ⇔ r ≥ s, 1순위 ⇔ s ≤ r < 1순위 상한."""
-    valid = rate >= rec.assessment - 1e-9
+    valid = rate >= rec.need_rate - 1e-9
     return valid, valid and rate < rec.win_ceiling
 
 
 def in_top(rate: float, rec: PastBid, k: int = TOP_N) -> bool:
     """이 사정률로 썼으면 금액 기준 개찰 k위 안이었나(하한선 이상 + k위 업체보다 쌈)."""
-    return rate >= rec.assessment - 1e-9 and rate < rec.rank_ceiling(k)
+    return rate >= rec.need_rate - 1e-9 and rate < rec.rank_ceiling(k)
 
 
 def amount_for(rec: PastBid, rate: float) -> float:
@@ -69,8 +69,8 @@ def amount_for(rec: PastBid, rate: float) -> float:
 
 
 def rank_of(rec: PastBid, amount: float, skip_own: bool = True) -> int | None:
-    """그 금액의 개찰 순위(하한선 아래면 None). 지일 금액은 지일이 그 금액 대신 냈다고 보고 경쟁에서 뺀다."""
-    floor = rec.floor
+    """그 금액의 개찰 순위(하한선·순공사원가 기준선 아래면 None). 지일 금액은 지일이 그 금액 대신 냈다고 보고 경쟁에서 뺀다."""
+    floor = rec.valid_floor
     if amount < floor - 0.5:
         return None
     others = list(rec.amounts)
@@ -89,7 +89,7 @@ def rank_share(rate: float, rec: PastBid) -> float | None:
     통과해 순위가 매겨지고, 낮게 쓰는 방식은 실제 사정률이 낮아 1위와 멀리 떨어진 공고에서만 통과해 순위가 나빠 보임(가짜 자료로 확인)."""
     if not rec.amounts or not rec.window_ok:
         return None
-    if rate < rec.assessment - 1e-9:
+    if rate < rec.need_rate - 1e-9:
         return 1.0
     rank = rank_of(rec, amount_for(rec, rate))
     return 1.0 if rank is None else min(1.0, rank / max(len(rec.amounts), 1))
@@ -109,7 +109,7 @@ def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train:
     picked, _ = similar(train, target.work, target.range_width, scale, target.field)
     if len(picked) < min_train:
         return {}
-    rates = [r.assessment for r in picked]
+    rates = [r.need_rate for r in picked]
     out = {"사정률 중앙값": statistics.median(rates), "유효 70%": _pct(rates, 0.7), "유효 90%": _pct(rates, 0.9)}
     best = _best(coverage(picked)[0])
     if best is not None:
@@ -436,6 +436,15 @@ def main(argv: list[str] | None = None) -> int:
     head = [f"과거 개찰 {len(history.records)}건 (못 쓴 공고 {history.skipped}건) — {', '.join(history.files)}"]
     if history.skip_reasons:
         head.append("  못 쓴 이유: " + " · ".join(f"{k} {n}건" for k, n in history.skip_reasons.most_common()))
+    net = sum(1 for r in history.records if r.net_line)
+    if net:
+        head.append(f"  순공사원가 기준선(개찰 결과의 '순공사원가' 무효 업체로 정함)이 하한선보다 높은 공고 {net}건 — 통과·순위를 그 선으로 셈")
+    odd = Counter()
+    for r in history.records:
+        odd.update(r.odd_remarks)
+    if odd:  # 아직 반영 안 한 무효 조건이 있는지 보려고 — 하한선·순공사원가 선 위인데 순위가 없는 업체의 비고
+        head.append("  유효 선 위인데 순위 없는 업체 비고(반영 안 한 조건 확인용): "
+                    + " · ".join(f"{k} {n}" for k, n in odd.most_common(8)))
     head.append(f"  설정: --from {args.start or '(처음부터)'} · --to {args.end or '(끝까지)'} · --scale {args.scale}"
                 + (f" · --fixed {', '.join(f'{f:g}' for f in args.fixed)}" if args.fixed else ""))
     if args.pick:

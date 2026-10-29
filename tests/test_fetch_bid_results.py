@@ -119,6 +119,23 @@ class FillNoticeTest(unittest.TestCase):
             # 다시 실행하면 찾아본 줄은 건너뜀
             self.assertEqual(fb.fill_notices(self._client(), path, sleep=0)[1], 0)
 
+    def test_fill_a_only_missing_a(self):
+        """--fill-a(10/29): A값이 빈 줄만 다시 찾아보고, 한 번 찾아본 줄은 건너뜀."""
+        responses = self._client().responses
+        responses[F.BASIS_AMOUNT_OPERATIONS["공사"]] = [{"bidNtceNo": "D", "bidNtceOrd": "000", "bssamt": "100000000",
+                                                         "npnInsrprm": "1000000", "bidPrceCalclAYn": "Y"}]
+        responses[F.BID_NOTICE_OPERATIONS["공사"]] = [{"bidNtceNo": "D", "bidNtceOrd": "000", "sucsfbidLwltRate": "87.745"}]
+        lines = [self.LINES[3], {**self.LINES[3], "no": "E", "notice": {"lower_rate": "87.745", "a_value": 0}}]
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "bid_results.jsonl"
+            path.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in lines), encoding="utf-8")
+            filled, tried, _ = fb.fill_notices(FakeClient(responses), path, sleep=0, only_a=True)
+            self.assertEqual((filled, tried), (1, 1))
+            recs = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(recs[0]["notice"]["a_value"], 1_000_000.0)
+            self.assertEqual(recs[1], lines[1])
+            self.assertEqual(fb.fill_notices(FakeClient(responses), path, sleep=0, only_a=True)[1], 0)
+
     def test_quota_stops_and_saves(self):
         class Quota(FakeClient):
             def fetch_all_pages(self, base_url, operation, params, label):

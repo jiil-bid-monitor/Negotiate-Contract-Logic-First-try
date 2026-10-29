@@ -388,10 +388,25 @@ class NetCostLineTest(unittest.TestCase):
         self.assertAlmostEqual(rec.rate_for(rec.amount_at(s + 0.1)), s + 0.1)
         self.assertEqual(bb.score(s - 0.01, rec), (False, False))
         self.assertIsNone(bb.rank_of(rec, floor + 150_000))
-        self.assertEqual(bb.score(s + 0.01, rec), (True, True))
-        self.assertEqual(bb.rank_of(rec, bb.amount_for(rec, s + 0.01)), 1)
+        # 기준선을 개찰 결과로 가늠했으면 1위 금액이 곧 가늠 구간의 끝 — 통과는 맞지만 1순위는 확정 못 함(보수적)
+        self.assertEqual(bb.score(s + 0.01, rec), (True, False))
+        self.assertEqual(rec.net_err, 100_000)
         self.assertLess(rec.win_ceiling - s, 0.5)
         self.assertEqual(rec.odd_remarks, Counter())
+
+    def test_estimated_floor_cannot_claim_first(self):
+        """A값을 모르는 공고(10/29 R25BK00715689): 가늠한 하한선이 실제보다 낮으면 1위보다 비싼 금액도 1순위로 보였음."""
+        from nego import bidbacktest as bb
+        from nego.bidprice import Bidder
+
+        basis, planned, lower = 157_000_000, 157_861_575, 87.745
+        bidders = [Bidder(None, "미달", "1", 139_866_000, None, "낙찰하한선 미달"),
+                   Bidder(1, "1위", "2", 139_869_400, None, ""), Bidder(2, "2위", "3", 139_870_450, None, "")]
+        rec = br._make("R25BK00715689", "공사", basis, planned, lower, bidders, [], range_width=2)
+        self.assertEqual(rec.floor_source, "추정")
+        self.assertGreater(rec.win_ceiling, 100.55)  # 가늠값으로는 100.55%가 1순위처럼 보이지만
+        self.assertEqual(bb.score(100.55, rec), (True, False))  # 오차를 감안하면 1순위 아님
+        self.assertGreaterEqual(bb.rank_of(rec, bb.amount_for(rec, 100.55)), 2)  # 실제 2위 — 오차 안 업체는 앞으로 세서 보수적
 
     def test_target_bid_uses_net_rule(self):
         # 10/29 제보 공고 값: 기초 563,530,000 · 하한율 87.745 · A 25,053,044 · 순공사원가 519,482,258(공고문 98%)

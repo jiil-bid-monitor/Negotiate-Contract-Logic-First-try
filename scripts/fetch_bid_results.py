@@ -144,6 +144,14 @@ def needs_notice(rec: dict) -> bool:
     return info is None or (not info.get("checked") and not info.get("lower_rate"))
 
 
+def needs_a_value(rec: dict) -> bool:
+    """A값(기초금액 API)이 빈 줄 — 하한선을 참가업체 금액으로 가늠하면 1순위를 확정할 수 없어(10/29) 다시 찾아볼 줄. 한 번 찾아보면 건너뜀."""
+    if rec.get("error") or not (rec.get("prices") or rec.get("bidders")):
+        return False
+    info = rec.get("notice") or {}
+    return info.get("a_value") is None and not info.get("a_checked")
+
+
 def notice_info_any(client: DataGoKrClient, no: str, work: str) -> dict:
     """업무를 모르면(목록에 비어 있던 줄) 공사·용역·물품 순으로 공고를 찾아본다."""
     info: dict = {}
@@ -161,7 +169,8 @@ def _write_lines(path: Path, lines: list[str]) -> None:
     os.replace(tmp, path)  # 쓰다가 끊겨도 원래 파일은 그대로
 
 
-def fill_notices(client: DataGoKrClient, path: Path, limit: int = 0, sleep: float = 0.3) -> tuple[int, int, bool]:
+def fill_notices(client: DataGoKrClient, path: Path, limit: int = 0, sleep: float = 0.3,
+                 only_a: bool = False) -> tuple[int, int, bool]:
     """이미 받은 결과 파일에 공고 정보(하한율·공고명·변동폭·A값·개찰일)만 채운다 — 개찰 결과는 다시 받지 않음.
     처음 한 번 원본을 `<이름>_채우기전.jsonl`로 남기고, 100건마다 파일에 저장한다. (채운 수, 찾아본 수, 한도에 걸려 멈췄나)"""
     raw = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -169,7 +178,7 @@ def fill_notices(client: DataGoKrClient, path: Path, limit: int = 0, sleep: floa
     if not backup.exists():
         backup.write_text("".join(line + "\n" for line in raw), encoding="utf-8")
     recs = [json.loads(line) for line in raw]
-    todo = [i for i, rec in enumerate(recs) if needs_notice(rec)]
+    todo = [i for i, rec in enumerate(recs) if (needs_a_value(rec) if only_a else needs_notice(rec))]
     if limit:
         todo = todo[:limit]
     print(f"결과 {len(recs)}줄 중 공고 정보를 채울 줄 {len(todo)}건 (원본 사본: {backup.name})")
@@ -190,15 +199,17 @@ def fill_notices(client: DataGoKrClient, path: Path, limit: int = 0, sleep: floa
             rec["work"] = info["work"]
         info.pop("work", None)
         info["checked"] = datetime.now().isoformat(timespec="seconds")
+        if only_a:
+            info["a_checked"] = info["checked"]
         rec["notice"] = {**(rec.get("notice") or {}), **{k: v for k, v in info.items() if v not in (None, "")}}
         raw[i] = json.dumps(rec, ensure_ascii=False)
         tried += 1
-        filled += bool(info.get("lower_rate"))
+        filled += info.get("a_value") is not None if only_a else bool(info.get("lower_rate"))
         if n % 100 == 0:
             _write_lines(path, raw)
         if n % 20 == 0 or n == len(todo):
             left = (time.time() - started) / n * (len(todo) - n)
-            print(f"  {n}/{len(todo)} · 하한율 찾음 {filled} · 남은 시간 약 {left / 60:.0f}분")
+            print(f"  {n}/{len(todo)} · {'A값' if only_a else '하한율'} 찾음 {filled} · 남은 시간 약 {left / 60:.0f}분")
         time.sleep(sleep)
     _write_lines(path, raw)
     return filled, tried, stopped
@@ -212,7 +223,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sleep", type=float, default=0.3, help="공고 사이 쉬는 초(기본 0.3)")
     parser.add_argument("--fill-notice", action="store_true",
                         help="이미 받은 결과 파일에 공고 정보(하한율·변동폭·A값·개찰일)만 채움 — 개찰 결과는 다시 안 받음")
+    parser.add_argument("--fill-a", action="store_true",
+                        help="이미 받은 결과 파일에서 A값이 빈 줄만 기초금액 정보를 다시 찾아봄(하한선을 가늠하지 않고 정확히 계산하려고)")
     args = parser.parse_args(argv)
+    if args.fill_a:
+        args.fill_notice = True
     if not args.fill_notice and not args.targets:
         parser.error("공고번호 목록 CSV를 주거나 --fill-notice를 쓰세요")
 
@@ -227,8 +242,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         client = DataGoKrClient(ApiConfig(service_key=key, timeout_sec=30.0, max_retries=3))
         client.config.num_of_rows = 999
-        filled, tried, stopped = fill_notices(client, out_path, args.limit, args.sleep)
-        print(f"끝 — 찾아본 {tried}건 중 하한율 찾음 {filled}건. 결과 파일: {out_path}")
+        filled, tried, stopped = fill_notices(client, out_path, args.limit, args.sleep, only_a=args.fill_a)
+        print(f"끝 — 찾아본 {tried}건 중 {'A값' if args.fill_a else '하한율'} 찾음 {filled}건. 결과 파일: {out_path}")
         if not stopped and tried > filled:
             print("하한율을 못 찾은 공고는 다시 실행해도 건너뜁니다(이미 찾아봄 표시).")
         return 0

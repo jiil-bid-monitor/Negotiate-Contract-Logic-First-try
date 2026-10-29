@@ -53,14 +53,14 @@ def date_of(rec: PastBid) -> str | None:
 
 
 def score(rate: float, rec: PastBid) -> tuple[bool, bool]:
-    """(유효, 1순위) — `bidrecommend`과 같은 식: 유효 ⇔ r ≥ s, 1순위 ⇔ s ≤ r < 1순위 상한."""
+    """(유효, 1순위) — 유효 ⇔ r ≥ s, 1순위 ⇔ s ≤ r < 1순위 상한(기준선을 가늠한 공고는 그 오차만큼 보수적으로, `sure_ceiling`)."""
     valid = rate >= rec.assessment - 1e-9
-    return valid, valid and rate < rec.win_ceiling
+    return valid, valid and rate < rec.sure_ceiling()
 
 
 def in_top(rate: float, rec: PastBid, k: int = TOP_N) -> bool:
     """이 사정률로 썼으면 금액 기준 개찰 k위 안이었나(하한선 이상 + k위 업체보다 쌈)."""
-    return rate >= rec.assessment - 1e-9 and rate < rec.rank_ceiling(k)
+    return rate >= rec.assessment - 1e-9 and rate < rec.sure_ceiling(k)
 
 
 def amount_for(rec: PastBid, rate: float) -> float:
@@ -79,7 +79,8 @@ def rank_of(rec: PastBid, amount: float, skip_own: bool = True) -> int | None:
             others.remove(rec.own_amount)
         except ValueError:
             pass
-    return 1 + sum(1 for a in others if floor - 0.5 <= a < amount)
+    err = rec.judge_err  # 기준선을 가늠한 공고 — 우리 금액도 그만큼 틀릴 수 있어 그 안의 업체는 앞으로 셈(보수적)
+    return 1 + sum(1 for a in others if floor - 0.5 <= a < amount + err)
 
 
 def rank_share(rate: float, rec: PastBid) -> float | None:

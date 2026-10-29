@@ -75,6 +75,8 @@ class PastBid:
     own_rank: int | None = None  # 지일 개찰 순위(하한 미달 등으로 순위가 없으면 None)
     floor_est: float | None = None  # 참가업체 금액으로 가늠한 하한선(A값을 모를 때) — `_estimate_floor`
     odd_remarks: Counter = field(default_factory=Counter)  # 하한선 위인데 순위가 없는 업체의 비고 — 아직 반영 안 한 무효 조건 찾기용
+    floor_err: float = 0.0  # 가늠한 하한선의 오차(금액, 가늠 구간의 절반) — A값을 모를 때만. 1순위·순위 판정에서 이만큼 보수적으로(`judge_err`)
+    net_err: float = 0.0  # 순공사원가 기준선의 오차(금액, 가늠 구간의 절반)
     net_line: float | None = None  # 순공사원가 기준선(금액) — 개찰 결과에서 '순공사원가'로 무효된 업체로 정함. `_net_line`
     top_amounts: list[float] = field(default_factory=list)  # 개찰 1~5위 투찰금액(순위순) — 투찰 경향(`nego.bidtrend`)
     amounts: list[float] = field(default_factory=list)  # 참가업체 전부의 투찰금액(하한 미달 포함) — 대규모 추천의 경쟁 밀집(`crowd_rate`)
@@ -149,6 +151,24 @@ class PastBid:
         except (TypeError, ZeroDivisionError):
             return False
 
+    @property
+    def judge_err(self) -> float:
+        """판정 기준선(하한선 또는 순공사원가 선) 금액의 오차. A값을 아는 공고는 0.
+        (10/29 제보 R25BK00645409·R25BK00715689: A값을 모르는 835곳 공고에서 가늠한 하한선이 실제보다 640원 낮아, 1위보다 635원 비싼 금액을 1순위로 셈 —
+        A값을 모르면 1위 금액이 곧 가늠 구간의 위 끝이라 1순위는 확정할 수 없음)"""
+        if self.net_line and self.net_line > self.floor:
+            return self.net_err
+        return self.floor_err if (self.a_value is None and self.floor_est) else 0.0
+
+    def sure_ceiling(self, k: int | None = None) -> float:
+        """판정용 상한 — 기준선 오차만큼 보수적으로 낮춘 1순위 상한(k를 주면 k위 안 상한). 이 r 미만이면 오차를 감안해도 1순위(k위 안)."""
+        top = self.win_ceiling if k is None else self.rank_ceiling(k)
+        err = self.judge_err
+        if not err or top == float("inf"):
+            return top
+        amount = self.amount_at(top)
+        return top - (self.rate_for(amount) - self.rate_for(amount - err))
+
     def rank_ceiling(self, k: int = TOP_N) -> float:
         """이 r 미만이면 k위 안(그 공고 k위 업체보다 싸게 씀). 순위 있는 업체가 k곳이 안 되면 하한선만 넘으면 k위 안."""
         if len(self.top_amounts) < k:
@@ -194,7 +214,7 @@ def _winner_rate(bidders: list, planned: float) -> float | None:
     return first.rate
 
 
-def _estimate_floor(bidders: list, planned: float) -> float | None:
+def _estimate_floor(bidders: list, planned: float) -> tuple[float, float] | None:
     """A값을 모를 때 하한선 가늠: 순위가 있는(하한선 이상) 가장 낮은 금액과, 그보다 낮은데 순위가 없는(하한 미달) 가장 높은 금액의
     가운데. 참가업체가 많으면 둘 사이가 아주 좁다. 비고에 '미달'이 적힌 업체가 있으면 그 업체들만 하한 미달로 본다
     (서류 미비 등 다른 사유로 빠진 업체를 섞지 않게)."""
@@ -207,10 +227,11 @@ def _estimate_floor(bidders: list, planned: float) -> float | None:
     below = marked or below
     if not below:
         return None
-    return (max(b.amount for b in below) + low_ok) / 2
+    hi = max(b.amount for b in below)
+    return (hi + low_ok) / 2, (low_ok - hi) / 2  # (가늠값, 오차 = 구간의 절반)
 
 
-def _net_line(bidders: list, rec: PastBid) -> float | None:
+def _net_line(bidders: list, rec: PastBid) -> tuple[float, float] | None:
     """순공사원가 기준선(금액) — 개찰 결과 비고에 '순공사원가'가 적힌 무효 업체 중 가장 높은 금액과, 그보다 높은 순위 있는 업체 중
     가장 낮은 금액의 가운데. 비율(98% 등)을 정해 두지 않고 그 공고 실제 개찰 결과로만 정한다(10/29 사용자 결정 — 고정 조건 아님).
     그런 업체가 없거나 선이 하한선보다 낮으면 None."""
@@ -219,8 +240,10 @@ def _net_line(bidders: list, rec: PastBid) -> float | None:
         return None
     hi_bad = max(bad)
     above = [b.amount for b in bidders if b.rank is not None and b.amount and b.amount > hi_bad]
-    line = (hi_bad + min(above)) / 2 if above else hi_bad + 1
-    return line if line > rec.floor else None
+    if not above:
+        return None
+    line, err = (hi_bad + min(above)) / 2, (min(above) - hi_bad) / 2
+    return (line, err) if line > rec.floor else None
 
 
 def _clean_bizno(value: str | None) -> str:
@@ -246,8 +269,12 @@ def _make(notice_no: str, work: str, basis, planned, lower, bidders: list, price
         return None
     rec = PastBid(notice_no=notice_no, work=work or "", basis=basis, planned=planned, lower_rate=lower,
                   winner_rate=winner, bidder_count=len(bidders), range_width=width, **extra)
-    rec.floor_est = _estimate_floor(bidders, planned)
-    rec.net_line = _net_line(bidders, rec)
+    est = _estimate_floor(bidders, planned)
+    if est:
+        rec.floor_est, rec.floor_err = est
+    net = _net_line(bidders, rec)
+    if net:
+        rec.net_line, rec.net_err = net
     rec.odd_remarks = Counter((b.remark or "비고 없음").strip() for b in bidders
                               if b.rank is None and b.amount and b.amount >= rec.valid_floor)
     ranked = sorted((b for b in bidders if b.rank is not None and b.amount), key=lambda b: b.rank)

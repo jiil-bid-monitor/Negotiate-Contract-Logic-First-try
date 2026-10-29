@@ -570,54 +570,52 @@ def crowd_rate(records: list[PastBid], today: str | None = None, half_life: floa
             "bidders": n, "samples": len(recs)}
 
 
-def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | None:
-    """화면 맨 위 '추천 투찰금액'(= 투찰 계산기 '투찰금액')으로 쓸 방식 하나.
+def _rank_of(o: dict) -> float:
+    """통과했을 때 평균 상위 몇 %(작을수록 좋음) — 모르면 맨 뒤."""
+    r = (o.get("track") or {}).get("rank")
+    return r if r is not None else 2.0
 
-    **조건: 검증(개찰 전 자료로 정했다면) 하한선 통과 비율 PICK_MIN_VALID 이상**(10/29 사용자 결정 — 하한율 만족은 조건, 금액은 경향으로.
-    계기: 통과 31%인 '과거 5위 안 최다'(98.4%)가 1순위 비율만으로 뽑혀 하한선 근처·아래 금액이 추천됨). 검증 MIN_PICK_TRIED건 미만 방식은 안 봄.
-    조건을 만족하는 방식 중에서:
-      - 대규모 경쟁 묶음(대규모 추천 줄이 있을 때) — 1순위 비율 → 5위 안 → 하한선 통과 순으로 가장 높은 방식(경향·대규모 추천 포함)
-      - 그 밖 — 경향·대규모 추천을 뺀 방식 중 1순위 비율 최고가 PICK_MIN_WIN 이상이면 그 방식, 아니면 경향 추천(조건 만족 시)
-    조건을 만족하는 방식이 하나도 없으면 하한선 통과 비율이 가장 높은 방식(mode="valid"). mode: crowd / trend / track / valid / fixed."""
+
+def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | None:
+    """화면 맨 위 '추천 투찰금액'(= 투찰 계산기 '투찰금액')으로 쓸 방식 하나 — 경쟁 규모와 관계없이 같은 규칙(10/29 사용자 결정 2안).
+
+    **조건: 검증(개찰 전 자료로 정했다면) 하한선 통과 비율 PICK_MIN_VALID 이상**(하한율 만족은 조건, 금액은 경향으로).
+    검증 MIN_PICK_TRIED건 미만 방식은 안 봄. 조건을 만족하는 방식 중에서:
+      - 1순위 비율 최고가 PICK_MIN_WIN 이상(1순위로 방식이 가려짐 — 주로 소규모) → 1순위 → 5위 안 → 통과 비율 순(mode="track")
+      - 아니면(1순위가 거의 0 — 주로 대규모) → **통과했을 때 평균 순위(상위 몇 %)가 가장 좋은 방식**(mode="rank")
+        (10/29 R 공고 63건: 대규모 공사는 모든 방식이 1순위 0~2건이라 1순위 비율로는 통과율 높은(비싼) 방식만 뽑혔음)
+    조건을 만족하는 방식이 하나도 없으면 하한선 통과 비율이 가장 높은 방식(mode="valid"), 검증이 전혀 없으면 고정값(mode="fixed")."""
     if not options:
         return None
-    rank = lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid"))  # noqa: E731
+    by_win = lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid"))  # noqa: E731
+    by_rank = lambda o: (-_rank_of(o), _ratio(o["track"], "valid"))  # noqa: E731 — 큰 값이 좋게(정렬·max 같이 씀)
     tried = lambda o: (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED  # noqa: E731
     passes = lambda o: tried(o) and _ratio(o["track"], "valid") >= PICK_MIN_VALID  # noqa: E731
     every = [o for o in options if passes(o)]
-    ok = [o for o in every if o["name"] not in (TREND_NAME, CROWD_NAME)]
-    best = max(ok, key=rank) if ok else None
-    trend = next((o for o in options if o["name"] == TREND_NAME), None)
-    trend_ok = trend is not None and (passes(trend) or not tried(trend))
-    crowd = next((o for o in options if o["name"] == CROWD_NAME), None)
     measured = [o for o in options if tried(o)]
-    weak = not every
-    if crowd is not None and every:
-        chosen = max(every, key=rank)  # 같은 성적이면 표 위쪽 방식
-        mode = {CROWD_NAME: "crowd", TREND_NAME: "trend"}.get(chosen["name"], "track")
-    elif best is not None and _ratio(best["track"]) >= PICK_MIN_WIN:
-        chosen, mode = best, "track"
-    elif trend_ok:
-        chosen, mode = trend, "trend"
-    elif every:
-        chosen = max(every, key=rank)
-        mode = "track"
+    key = by_win
+    if every:
+        best = max(every, key=by_win)  # 같은 성적이면 표 위쪽 방식
+        if _ratio(best["track"]) >= PICK_MIN_WIN:
+            chosen, mode = best, "track"
+        else:
+            key = by_rank
+            chosen, mode = max(every, key=by_rank), "rank"
     elif measured:
         chosen, mode = max(measured, key=lambda o: (_ratio(o["track"], "valid"), _ratio(o["track"]))), "valid"
     else:
         chosen = next((o for o in options if o["name"].startswith("고정")), options[0])
         mode = "fixed"
-    # 우선순위 목록(10/29 사용자 결정) — 화면 계산기가 이 순서대로 보며 '모의 예정가격 하한선'을 넘는 첫 방식을 투찰금액으로 씀:
-    # 고른 방식 → 조건(통과 PICK_MIN_VALID 이상)을 만족하는 나머지(성적순) → 조건 미달(통과 비율순)
-    rest = [o for o in every if o is not chosen]
-    rest.sort(key=rank, reverse=True)
+    # 우선순위 목록 — 화면 계산기가 이 순서대로 보며 '모의 예정가격 하한선'을 넘는 첫 방식을 투찰금액으로 씀:
+    # 고른 방식 → 조건(통과 PICK_MIN_VALID 이상)을 만족하는 나머지(같은 기준 순) → 조건 미달(통과 비율순)
+    rest = sorted((o for o in every if o is not chosen), key=key, reverse=True)
     others = [o for o in measured if o not in every and o is not chosen]
     others.sort(key=lambda o: (_ratio(o["track"], "valid"), _ratio(o["track"])), reverse=True)
     order = [o["name"] for o in [chosen, *rest, *others]]
     own = (outsourced or {}).get("track")
-    pick = {**chosen, "weak": weak, "mode": mode, "own_track": own, "min_valid": PICK_MIN_VALID, "order": order,
+    return {**chosen, "weak": not every, "mode": mode, "own_track": own, "min_valid": PICK_MIN_VALID,
+            "min_win": PICK_MIN_WIN, "order": order,
             "beats_outsourced": bool(own and own.get("tried") and _ratio(chosen.get("track")) > _ratio(own))}
-    return pick
 
 
 def _model_options(history: History, picked: list[PastBid], scale: str, row, target: dict) -> list[dict]:

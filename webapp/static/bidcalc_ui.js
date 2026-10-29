@@ -420,6 +420,8 @@
     ? "늘 같은 사정률로 쓰는 기준값이에요(과거 지일 소규모 공고로 고른 값)." : "");
   const rate = (t, key) => (t && t.tried ? t[key] / t.tried : null);
   const pctOf = (v) => (v == null ? "-" : `${Math.round(v * 100)}%`);
+  // 통과했을 때 평균 순위(상위 몇 %) — 1순위가 거의 안 나오는 공고에서 방식을 고르는 기준(10/29 사용자 결정 2안)
+  const rankOf = (t) => (t && t.rank != null ? `${(t.rank * 100).toFixed(t.rank < 0.1 ? 1 : 0)}%` : "-");
   const cnt = (t, key) => (t && t.tried ? `${t[key]}/${t.tried}건` : "");
 
   function renderRecommend(d) {
@@ -448,7 +450,10 @@
             ? `비슷한 과거 공고가 적어 기준값(${esc(p.name)})으로 두었어요.`
             : p.mode === "valid"
               ? `${about(p.name)}<br><br>하한선 통과 ${pctOf(p.min_valid)} 이상인 방식이 없어, 통과 비율이 가장 높은 방식으로 골랐어요.`
-              : `${about(p.name)}<br><br>비슷한 과거 공고에 적용해 봤을 때 1순위가 가장 많았던 방식이에요.`;
+              : p.mode === "rank"
+                ? `${about(p.name)}<br><br>과거 비슷한 공고에서 어느 방식도 1순위가 ${pctOf(p.min_win)}를 넘지 못해(1순위는 운의 비중이 큼),
+                   <b>하한선을 넘었을 때 순위가 가장 앞섰던</b> 방식으로 골랐어요(평균 상위 ${rankOf(p.track)}).`
+                : `${about(p.name)}<br><br>비슷한 과거 공고에 적용해 봤을 때 1순위가 가장 많았던 방식이에요.`;
       // 하한선 통과는 조건(10/29 사용자 결정) — 조건을 만족하는 방식 중에서 고름
       const rule = p.min_valid != null && p.mode !== "valid" && p.mode !== "fixed"
         ? `<br><br>조건: 과거 비슷한 공고에서 하한선 통과 ${pctOf(p.min_valid)} 이상인 방식 중에서 골랐어요.` : "";
@@ -458,6 +463,7 @@
           ${stat(`하한선 통과`, pctOf(rate(t, "valid")), cnt(t, "valid"), "과거 비슷한 공고에 이 방법을 그대로 썼다면 하한선을 넘었을(탈락하지 않았을) 비율이에요. 그 공고 개찰 전 자료만으로 계산했어요.")}
           ${stat("5위 안", pctOf(rate(t, "top")), cnt(t, "top"), "같은 방법으로 금액 기준 5위 안에 들었을 비율이에요.")}
           ${stat("1순위", pctOf(rate(t, "win")), cnt(t, "win"), "같은 방법으로 금액 기준 1순위였을 비율이에요(적격심사 서류 심사 전 순위).")}
+          ${stat("통과 시 순위", rankOf(t), t.ranked ? `${t.ranked}건 평균` : "-", "하한선을 넘었던 공고에서 참가 업체 중 평균 몇 % 안에 들었는지예요(작을수록 앞). 1순위가 거의 안 나오는 공고에서 방식을 고르는 기준이에요.")}
         </div>` : "";
       const luck = large ? `<div class="rec-flag">참가 업체가 많은 공고(약 ${Math.round(b.median)}곳) — 1순위는 운의 비중이 커요 ${tip(
         "업체가 수백 곳이면 1순위는 하한선 바로 위(금액으로 몇천~몇만 원 차이)에서 갈려서, 어떤 방법도 1순위 비율이 1~2% 안팎이에요. 하한선 통과와 5위 안을 함께 보세요.")}</div>` : "";
@@ -489,14 +495,16 @@
       return `<tr class="${chosen ? "chosen" : ""}${own ? " own" : ""}${below ? " below" : ""}">
         <td>${esc(label(o.name))}${chosen ? '<span class="rec-tag">추천</span>' : ""}${below ? `<span class="rec-tag off">통과 ${pctOf(p.min_valid)} 미만</span>` : ""} ${tip(about(o.name))}</td>
         <td>${own ? "-" : bid != null ? won(bid) : "-"}</td><td>${pct(o.rate)}${own ? "<small>과거 가운데</small>" : ""}</td>
-        <td>${cell(o.track, "valid")}</td><td>${cell(o.track, "top")}</td><td>${cell(o.track, "win")}</td></tr>`;
+        <td>${cell(o.track, "valid")}</td><td>${cell(o.track, "top")}</td><td>${cell(o.track, "win")}</td>
+        <td>${o.track && o.track.ranked ? `<b>${rankOf(o.track)}</b><small>${o.track.ranked}건</small>` : "-"}</td></tr>`;
     };
     const tried = opts.map((o) => o.track && o.track.tried).find(Boolean);
     const table = `<details class="rec-more" open><summary>방식별 비교${tried ? ` — 과거 비슷한 공고 ${tried}건에 적용해 봤다면` : ""}
         ${tip(`<h4>방식별 비교 읽는 법</h4>과거 비슷한 공고마다 <b>그 공고 개찰 전 자료만으로</b> 이 방법대로 금액을 정했다면 어땠을지 센 결과예요.
-        <ul><li>하한선 통과: 탈락하지 않았을 비율</li><li>5위 안·1순위: 금액 기준 개찰 순위(적격심사 서류 심사 전)</li></ul>
+        <ul><li>하한선 통과: 탈락하지 않았을 비율</li><li>5위 안·1순위: 금액 기준 개찰 순위(적격심사 서류 심사 전)</li>
+        <li>통과 시 순위: 하한선을 넘었던 공고에서 참가 업체 중 평균 상위 몇 %</li></ul>
         <p>건수가 수십 건 이하면 우연일 수 있어요. 투찰금액 끝자리는 위 기타설정대로 잘라요.</p>`, true)}</summary>
-      <div class="rec-scroll"><table class="rec-table"><thead><tr><th>방식</th><th>투찰금액</th><th>가정 사정률</th><th>하한선 통과</th><th>5위 안</th><th>1순위</th></tr></thead>
+      <div class="rec-scroll"><table class="rec-table"><thead><tr><th>방식</th><th>투찰금액</th><th>가정 사정률</th><th>하한선 통과</th><th>5위 안</th><th>1순위</th><th>통과 시 순위</th></tr></thead>
       <tbody>${opts.map((o) => row(o)).join("")}${d.outsourced ? row(d.outsourced, true) : ""}</tbody></table></div></details>`;
     const warn = notes.filter((n) => !/대규모 경쟁이 많습니다/.test(n)).map((n) => `<div class="rec-warn">${esc(n)}</div>`).join("");
     $("#cRec").innerHTML = `${card}${basis}${table}${trendHtml(d)}${warn}`;

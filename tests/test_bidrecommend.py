@@ -125,13 +125,13 @@ class CoverageTest(unittest.TestCase):
         self.assertFalse(pick["beats_outsourced"])
         self.assertIsNone(br.pick_option([]))
 
-    def test_pick_uses_trend_when_no_method_wins_often(self):
-        # 대규모 경쟁처럼 어느 방식도 1순위 비율이 PICK_MIN_WIN(10%) 미만이면 경향 추천
-        options = [{"name": "고정 100.55%", "rate": 100.55, "track": {"tried": 300, "valid": 250, "win": 6, "top": 10}},
+    def test_pick_uses_rank_when_no_method_wins_often(self):
+        # 10/29 사용자 결정(2안): 어느 방식도 1순위 비율이 PICK_MIN_WIN(10%) 미만이면 통과했을 때 평균 순위가 가장 좋은 방식
+        options = [{"name": "고정 100.55%", "rate": 100.55, "track": {"tried": 300, "valid": 250, "win": 6, "top": 10, "rank": 0.45}},
                    {"name": br.TREND_NAME, "rate": 100.1, "base": 100.0, "gap": 0.1,
-                    "track": {"tried": 300, "valid": 200, "win": 3, "top": 8}}]
+                    "track": {"tried": 300, "valid": 200, "win": 3, "top": 8, "rank": 0.25}}]
         pick = br.pick_option(options)
-        self.assertEqual((pick["mode"], pick["name"]), ("trend", br.TREND_NAME))
+        self.assertEqual((pick["mode"], pick["name"]), ("rank", br.TREND_NAME))
         options[0]["track"]["win"] = 60  # 20% — 검증 성적이 확실하면 그 방식
         self.assertEqual(br.pick_option(options)["mode"], "track")
 
@@ -154,8 +154,11 @@ class CoverageTest(unittest.TestCase):
                    {"name": "B", "rate": 100.3, "track": {"tried": 400, "valid": 290, "win": 20, "top": 40}},
                    {"name": "C", "rate": 100.7, "track": {"tried": 400, "valid": 360, "win": 4, "top": 18}},
                    {"name": br.CROWD_NAME, "rate": 100.2, "track": {"tried": 400, "valid": 250, "win": 9, "top": 37}}]
-        pick = br.pick_option(options)
-        self.assertEqual(pick["order"], ["B", br.CROWD_NAME, "C", "A"])  # 고른 것 → 통과 조건 만족(성적순) → 미달
+        for o, rank in zip(options, (0.05, 0.2, 0.4, 0.1)):
+            o["track"]["rank"] = rank
+        pick = br.pick_option(options)  # 1순위 최고가 B 5%(10% 미만) → 통과했을 때 순위로
+        self.assertEqual(pick["mode"], "rank")
+        self.assertEqual(pick["order"], [br.CROWD_NAME, "B", "C", "A"])  # 고른 것 → 통과 조건 만족(같은 기준 순) → 미달
 
     def test_trend_rate_is_median_rate_plus_top_gap(self):
         recs = []
@@ -345,25 +348,16 @@ class CrowdRateTest(unittest.TestCase):
         small = br.recommend(br.History(records=[_past(f"S{i}", 100 + i / 100, count=10) for i in range(20)]), scale="small")
         self.assertNotIn(br.CROWD_NAME, [o["name"] for o in small["options"]])
 
-    def test_large_competition_picks_highest_first_place_ratio(self):
-        # 대규모 경쟁(대규모 추천 줄이 있음)은 모든 방식 중 표의 1순위 비율이 가장 높은 것 — 같으면 5위 안
-        track = lambda win, top=0: {"tried": 100, "win": win, "valid": 70, "top": top}  # noqa: E731
-        opts = [{"name": "추천(과거 1순위 최다)", "rate": 100.3, "track": track(3, 1)},
-                {"name": br.TREND_NAME, "rate": 100.1, "track": track(2, 3)},
-                {"name": br.CROWD_NAME, "rate": 100.05, "track": track(2, 4)}]
+    def test_same_rule_regardless_of_scale(self):
+        # 10/29 사용자 결정(2안): 규모와 관계없이 — 1순위가 가려지면 1순위, 아니면 통과했을 때 순위(대규모 추천 줄 유무와 무관)
+        track = lambda win, rank, top=0: {"tried": 100, "win": win, "valid": 70, "top": top, "rank": rank}  # noqa: E731
+        opts = [{"name": "추천(과거 1순위 최다)", "rate": 100.3, "track": track(3, 0.4, 1)},
+                {"name": br.TREND_NAME, "rate": 100.1, "track": track(2, 0.3, 3)},
+                {"name": br.CROWD_NAME, "rate": 100.05, "track": track(2, 0.2, 4)}]
+        self.assertEqual((br.pick_option(opts)["name"], br.pick_option(opts)["mode"]), (br.CROWD_NAME, "rank"))
+        self.assertEqual(br.pick_option(opts[:2])["name"], br.TREND_NAME)  # 대규모 추천 줄이 없어도 같은 규칙
+        opts[0]["track"] = track(15, 0.4, 20)  # 1순위 15% — 1순위로 가려짐
         self.assertEqual((br.pick_option(opts)["name"], br.pick_option(opts)["mode"]), ("추천(과거 1순위 최다)", "track"))
-        opts[2]["track"] = track(3, 4)  # 1순위 같으면 5위 안이 많은 쪽
-        self.assertEqual(br.pick_option(opts)["mode"], "crowd")
-        opts[2]["track"] = track(1, 9)
-        opts[1]["track"] = track(4, 0)
-        self.assertEqual(br.pick_option(opts)["mode"], "trend")
-        # 대규모 추천 줄이 없으면(소규모) 예전 규칙: 1순위 비율이 10% 미만이면 경향 추천
-        self.assertEqual(br.pick_option(opts[:2])["mode"], "trend")
-
-
-if __name__ == "__main__":
-    unittest.main()
-
 
 class WindowOkTest(unittest.TestCase):
     def test_wide_window_in_large_competition_not_counted(self):
@@ -376,3 +370,7 @@ class WindowOkTest(unittest.TestCase):
         self.assertEqual(wins[br._index(99.0)], 0)  # 넓은 구간은 1순위로 안 셈
         self.assertEqual(valid[br._index(99.0)], 1)  # 유효(실제 사정률)는 그대로 셈
         self.assertEqual(wins[br._index(100.001)], 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

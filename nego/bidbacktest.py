@@ -62,6 +62,34 @@ def in_top(rate: float, rec: PastBid, k: int = TOP_N) -> bool:
     return rate >= rec.assessment - 1e-9 and rate < rec.rank_ceiling(k)
 
 
+def amount_for(rec: PastBid, rate: float) -> float:
+    """이 공고에 가정 사정률 rate로 냈을 투찰금액 — `PastBid.rate_for`를 거꾸로(하한선 기준이라 A값이 따로 필요 없음)."""
+    return rec.floor + (rate / 100 * rec.basis - rec.planned) * rec.lower_rate / 100
+
+
+def rank_of(rec: PastBid, amount: float, skip_own: bool = True) -> int | None:
+    """그 금액의 개찰 순위(하한선 아래면 None). 지일 금액은 지일이 그 금액 대신 냈다고 보고 경쟁에서 뺀다."""
+    floor = rec.floor
+    if amount < floor - 0.5:
+        return None
+    others = list(rec.amounts)
+    if skip_own and rec.own_amount:
+        try:
+            others.remove(rec.own_amount)
+        except ValueError:
+            pass
+    return 1 + sum(1 for a in others if floor - 0.5 <= a < amount)
+
+
+def rank_share(rate: float, rec: PastBid) -> float | None:
+    """하한선을 넘었을 때 참가업체 중 상위 몇 %(1위 = 1/참가 수). 미달·하한선이 틀린 공고·참가업체 금액이 없으면 None
+    — '통과했을 때 순위'(10/29 사용자 결정: 1순위 비율로 방식이 안 가려질 때 고르는 기준)."""
+    if not rec.amounts or not rec.window_ok or rate < rec.assessment - 1e-9:
+        return None
+    rank = rank_of(rec, amount_for(rec, rate))
+    return None if rank is None else rank / max(len(rec.amounts), 1)
+
+
 def own_rate(rec: PastBid) -> float | None:
     """지일 투찰금액에서 거꾸로 구한 가정 사정률(하한선 기준 — `PastBid.rate_for`)."""
     if not rec.own_amount:
@@ -163,11 +191,15 @@ def backtest(records: list[PastBid], start: str | None = None, scale: str = "all
         row = {"공고번호": rec.notice_no, "개찰일": d, "분야": rec.field, "업무": rec.work, "변동폭": rec.range_width, "참가": rec.bidder_count,
                "학습 공고": len(train), "실제 사정률": round(rec.assessment, 4), "1순위 상한": round(rec.win_ceiling, 4),
                "하한선": rec.floor_source, "rates": rates, "results": {}}
+        row["ranks"] = {}
         for name, rate in rates.items():
             row["results"][name] = (rate, *score(rate, rec), in_top(rate, rec))
+            row["ranks"][name] = rank_share(rate, rec)
         if rec.own_amount:
             row["results"][OWN] = (own_rate(rec), rec.own_rank is not None, rec.own_rank == 1,
                                    rec.own_rank is not None and rec.own_rank <= TOP_N)
+            if rec.own_rank is not None and rec.amounts and rec.window_ok:
+                row["ranks"][OWN] = rec.own_rank / len(rec.amounts)
         rows.append(row)
     return rows, len(records) - len(dated)
 
@@ -202,17 +234,25 @@ def tune_summary(result: dict) -> str:
 
 
 def track_records(rows: list[dict]) -> dict[str, dict]:
-    """방식별 검증 성적 {이름: {tried, valid, win, top}} — 웹앱 추천 칸에 그대로 싣는다(top = 5위 안)."""
+    """방식별 검증 성적 {이름: {tried, valid, win, top, ranked, rank}} — 웹앱 추천 칸에 그대로 싣는다(top = 5위 안,
+    rank = 통과한 공고에서 평균 상위 몇 %(0~1), ranked = 그 순위를 센 공고 수)."""
     out: dict[str, dict] = {}
     for row in rows:
+        ranks = row.get("ranks") or {}
         for name, (rate, valid, win, top) in row["results"].items():
             if rate is None:
                 continue
-            t = out.setdefault(name, {"tried": 0, "valid": 0, "win": 0, "top": 0})
+            t = out.setdefault(name, {"tried": 0, "valid": 0, "win": 0, "top": 0, "ranked": 0, "rank_sum": 0.0})
             t["tried"] += 1
             t["valid"] += bool(valid)
             t["win"] += bool(win)
             t["top"] += bool(top)
+            if ranks.get(name) is not None:
+                t["ranked"] += 1
+                t["rank_sum"] += ranks[name]
+    for t in out.values():
+        total = t.pop("rank_sum")
+        t["rank"] = total / t["ranked"] if t["ranked"] else None
     return out
 
 

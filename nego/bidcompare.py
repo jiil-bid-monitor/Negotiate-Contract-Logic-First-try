@@ -24,7 +24,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from .bidbacktest import date_of
+from .bidbacktest import amount_for, date_of, rank_of
 from .bidrecommend import (
     History,
     PastBid,
@@ -50,25 +50,6 @@ def read_numbers(path: Path) -> list[str]:
                 if no not in out:
                     out.append(no)
     return out
-
-
-def amount_for(rec: PastBid, rate: float) -> float:
-    """이 공고에 가정 사정률 rate로 냈을 투찰금액 — `PastBid.rate_for`를 거꾸로(하한선 기준이라 A값이 따로 필요 없음)."""
-    return rec.floor + (rate / 100 * rec.basis - rec.planned) * rec.lower_rate / 100
-
-
-def rank_of(rec: PastBid, amount: float, skip_own: bool = True) -> int | None:
-    """그 금액의 개찰 순위(하한선 아래면 None). 지일 금액은 지일이 그 금액 대신 냈다고 보고 경쟁에서 뺀다."""
-    floor = rec.floor
-    if amount < floor - 0.5:
-        return None
-    others = list(rec.amounts)
-    if skip_own and rec.own_amount:
-        try:
-            others.remove(rec.own_amount)
-        except ValueError:
-            pass
-    return 1 + sum(1 for a in others if floor - 0.5 <= a < amount)
 
 
 def _rank_text(rank: int | None) -> str:

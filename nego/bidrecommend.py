@@ -40,6 +40,7 @@ HISTORY_PATTERNS = ("bid_history_*.json", "bid_results*.jsonl")
 FIXED_RATE = 100.55  # 고정 사정률 비교값 — 2020~24 지일 이력 중 참가 100곳 미만 ±3% 공고로 고른 값(10/23 분석, 10/28 검증에서 소규모 1순위 최다)
 OWN_NAME = "지일 실제 투찰(외주)"  # bidbacktest.OWN과 같은 이름
 TOP_N = 5  # 투찰 경향은 1~5위 업체까지 본다(2026-10-28 사용자 결정)
+PICK_MIN_VALID = 0.60  # 추천 투찰금액의 조건 — 검증 하한선 통과 비율이 이보다 낮은 방식은 고르지 않음(10/29 사용자 결정, 값은 첨삭 대기)
 PICK_MIN_WIN = 0.10  # 검증 1순위 비율이 이보다 낮으면 방식 간 차이를 운으로 보고 '경향 추천'을 쓴다(10/28 백테스트: 소규모 물품·용역 23~50%, 공사·대규모 0~7%)
 TREND_NAME = f"경향 추천(사정률 중앙 + 1~{TOP_N}위 간격)"
 TRACK_LIMIT = 400  # 검증 성적은 비슷한 공고 중 최근 이만큼만 채점(화면 응답 시간 — 공고마다 그 전 공고로 추천을 다시 만듦)
@@ -551,34 +552,44 @@ def crowd_rate(records: list[PastBid], today: str | None = None, half_life: floa
 
 
 def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | None:
-    """화면 맨 위 '추천 투찰금액'으로 쓸 방식 하나 — 검증(개찰 전 자료로 정했다면) 1순위 비율이 가장 높은 방식,
-    같으면 5위 안 비율, 그다음 유효 비율이 높은 쪽. 그런데 검증 건수가 MIN_PICK_TRIED 미만이거나 가장 좋은 방식도 1순위 비율이
-    PICK_MIN_WIN 미만이면(대규모 경쟁·공사 — 어떤 방식이든 운) 경향 추천(`trend_rate`)을 쓴다(mode="trend").
-    대규모 경쟁 묶음(대규모 추천 `crowd_rate` 줄이 있을 때)은 경향·대규모 추천까지 모든 방식 중 표의 1순위 비율이 가장 높은 방식
-    (같으면 5위 안, 그다음 하한선 통과)을 고른다(10/29 사용자 결정 — 표에서 1순위가 더 높은 방식이 있는데 다른 방식이 추천되면 헷갈림).
-    mode는 고른 방식에 따라 crowd / trend / track."""
+    """화면 맨 위 '추천 투찰금액'(= 투찰 계산기 '투찰금액')으로 쓸 방식 하나.
+
+    **조건: 검증(개찰 전 자료로 정했다면) 하한선 통과 비율 PICK_MIN_VALID 이상**(10/29 사용자 결정 — 하한율 만족은 조건, 금액은 경향으로.
+    계기: 통과 31%인 '과거 5위 안 최다'(98.4%)가 1순위 비율만으로 뽑혀 하한선 근처·아래 금액이 추천됨). 검증 MIN_PICK_TRIED건 미만 방식은 안 봄.
+    조건을 만족하는 방식 중에서:
+      - 대규모 경쟁 묶음(대규모 추천 줄이 있을 때) — 1순위 비율 → 5위 안 → 하한선 통과 순으로 가장 높은 방식(경향·대규모 추천 포함)
+      - 그 밖 — 경향·대규모 추천을 뺀 방식 중 1순위 비율 최고가 PICK_MIN_WIN 이상이면 그 방식, 아니면 경향 추천(조건 만족 시)
+    조건을 만족하는 방식이 하나도 없으면 하한선 통과 비율이 가장 높은 방식(mode="valid"). mode: crowd / trend / track / valid / fixed."""
     if not options:
         return None
     rank = lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid"))  # noqa: E731
     tried = lambda o: (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED  # noqa: E731
-    ok = [o for o in options if tried(o) and o["name"] not in (TREND_NAME, CROWD_NAME)]
+    passes = lambda o: tried(o) and _ratio(o["track"], "valid") >= PICK_MIN_VALID  # noqa: E731
+    every = [o for o in options if passes(o)]
+    ok = [o for o in every if o["name"] not in (TREND_NAME, CROWD_NAME)]
     best = max(ok, key=rank) if ok else None
     trend = next((o for o in options if o["name"] == TREND_NAME), None)
-    weak = best is None
+    trend_ok = trend is not None and (passes(trend) or not tried(trend))
     crowd = next((o for o in options if o["name"] == CROWD_NAME), None)
-    every = [o for o in options if tried(o)]
+    measured = [o for o in options if tried(o)]
+    weak = not every
     if crowd is not None and every:
         chosen = max(every, key=rank)  # 같은 성적이면 표 위쪽 방식
         mode = {CROWD_NAME: "crowd", TREND_NAME: "trend"}.get(chosen["name"], "track")
     elif best is not None and _ratio(best["track"]) >= PICK_MIN_WIN:
         chosen, mode = best, "track"
-    elif trend is not None:
+    elif trend_ok:
         chosen, mode = trend, "trend"
+    elif every:
+        chosen = max(every, key=rank)
+        mode = "track"
+    elif measured:
+        chosen, mode = max(measured, key=lambda o: (_ratio(o["track"], "valid"), _ratio(o["track"]))), "valid"
     else:
-        chosen = best or next((o for o in options if o["name"].startswith("고정")), options[0])
-        mode = "track" if best is not None else "fixed"
+        chosen = next((o for o in options if o["name"].startswith("고정")), options[0])
+        mode = "fixed"
     own = (outsourced or {}).get("track")
-    pick = {**chosen, "weak": weak, "mode": mode, "own_track": own,
+    pick = {**chosen, "weak": weak, "mode": mode, "own_track": own, "min_valid": PICK_MIN_VALID,
             "beats_outsourced": bool(own and own.get("tried") and _ratio(chosen.get("track")) > _ratio(own))}
     return pick
 

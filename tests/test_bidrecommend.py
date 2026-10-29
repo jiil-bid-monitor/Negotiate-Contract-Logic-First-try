@@ -129,11 +129,25 @@ class CoverageTest(unittest.TestCase):
         # 대규모 경쟁처럼 어느 방식도 1순위 비율이 PICK_MIN_WIN(10%) 미만이면 경향 추천
         options = [{"name": "고정 100.55%", "rate": 100.55, "track": {"tried": 300, "valid": 250, "win": 6, "top": 10}},
                    {"name": br.TREND_NAME, "rate": 100.1, "base": 100.0, "gap": 0.1,
-                    "track": {"tried": 300, "valid": 150, "win": 3, "top": 8}}]
+                    "track": {"tried": 300, "valid": 200, "win": 3, "top": 8}}]
         pick = br.pick_option(options)
         self.assertEqual((pick["mode"], pick["name"]), ("trend", br.TREND_NAME))
         options[0]["track"]["win"] = 60  # 20% — 검증 성적이 확실하면 그 방식
         self.assertEqual(br.pick_option(options)["mode"], "track")
+
+    def test_pick_requires_floor_pass_ratio(self):
+        # 10/29 제보: 하한선 통과 31%인 '과거 5위 안 최다'가 1순위 비율만으로 뽑혀 하한선 근처 금액이 추천됨 → 통과 60% 이상만 고름
+        options = [{"name": "추천(과거 5위 안 최다)", "rate": 98.413, "track": {"tried": 400, "valid": 124, "win": 60, "top": 90}},
+                   {"name": "유효 70%", "rate": 100.3, "track": {"tried": 400, "valid": 290, "win": 20, "top": 40}},
+                   {"name": br.TREND_NAME, "rate": 100.1, "track": {"tried": 400, "valid": 210, "win": 8, "top": 20}}]
+        pick = br.pick_option(options)
+        self.assertNotEqual(pick["name"], "추천(과거 5위 안 최다)")
+        self.assertGreaterEqual(pick["track"]["valid"] / pick["track"]["tried"], br.PICK_MIN_VALID)
+        # 조건을 만족하는 방식이 없으면 하한선 통과 비율이 가장 높은 방식
+        for o in options:
+            o["track"]["valid"] = 100
+        options[1]["track"]["valid"] = 180
+        self.assertEqual((br.pick_option(options)["name"], br.pick_option(options)["mode"]), ("유효 70%", "valid"))
 
     def test_trend_rate_is_median_rate_plus_top_gap(self):
         recs = []
@@ -319,7 +333,7 @@ class CrowdRateTest(unittest.TestCase):
 
     def test_large_competition_picks_highest_first_place_ratio(self):
         # 대규모 경쟁(대규모 추천 줄이 있음)은 모든 방식 중 표의 1순위 비율이 가장 높은 것 — 같으면 5위 안
-        track = lambda win, top=0: {"tried": 100, "win": win, "valid": 50, "top": top}  # noqa: E731
+        track = lambda win, top=0: {"tried": 100, "win": win, "valid": 70, "top": top}  # noqa: E731
         opts = [{"name": "추천(과거 1순위 최다)", "rate": 100.3, "track": track(3, 1)},
                 {"name": br.TREND_NAME, "rate": 100.1, "track": track(2, 3)},
                 {"name": br.CROWD_NAME, "rate": 100.05, "track": track(2, 4)}]

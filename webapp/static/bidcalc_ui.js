@@ -419,11 +419,16 @@
           ? `과거 예정가격 가운데 값 ${pct(p.base)}에, 1~5위 업체들이 실제보다 위에 쓴 정도(가운데 값) ${p.gap >= 0 ? "+" : ""}${Number(p.gap).toFixed(3)}%p를 더했어요.<br><br>방식별 성적에 뚜렷한 차이가 없을 때 쓰는 기본 추천이에요.`
           : p.mode === "fixed"
             ? `비슷한 과거 공고가 적어 기준값(${esc(p.name)})으로 두었어요.`
-            : `${about(p.name)}<br><br>비슷한 과거 공고에 적용해 봤을 때 1순위가 가장 많았던 방식이에요.`;
+            : p.mode === "valid"
+              ? `${about(p.name)}<br><br>하한선 통과 ${pctOf(p.min_valid)} 이상인 방식이 없어, 통과 비율이 가장 높은 방식으로 골랐어요.`
+              : `${about(p.name)}<br><br>비슷한 과거 공고에 적용해 봤을 때 1순위가 가장 많았던 방식이에요.`;
+      // 하한선 통과는 조건(10/29 사용자 결정) — 조건을 만족하는 방식 중에서 고름
+      const rule = p.min_valid != null && p.mode !== "valid" && p.mode !== "fixed"
+        ? `<br><br>조건: 과거 비슷한 공고에서 하한선 통과 ${pctOf(p.min_valid)} 이상인 방식 중에서 골랐어요.` : "";
       const stat = (name, value, sub, help) => `<div class="rec-stat"><div class="rec-stat-k">${name} ${tip(help)}</div>
         <div class="rec-stat-v">${value}</div><div class="rec-stat-s">${sub}</div></div>`;
       const stats = t && t.tried ? `<div class="rec-stats">
-          ${stat("하한선 통과", pctOf(rate(t, "valid")), cnt(t, "valid"), "과거 비슷한 공고에 이 방법을 그대로 썼다면 하한선을 넘었을(탈락하지 않았을) 비율이에요. 그 공고 개찰 전 자료만으로 계산했어요.")}
+          ${stat(`하한선 통과`, pctOf(rate(t, "valid")), cnt(t, "valid"), "과거 비슷한 공고에 이 방법을 그대로 썼다면 하한선을 넘었을(탈락하지 않았을) 비율이에요. 그 공고 개찰 전 자료만으로 계산했어요.")}
           ${stat("5위 안", pctOf(rate(t, "top")), cnt(t, "top"), "같은 방법으로 금액 기준 5위 안에 들었을 비율이에요.")}
           ${stat("1순위", pctOf(rate(t, "win")), cnt(t, "win"), "같은 방법으로 금액 기준 1순위였을 비율이에요(적격심사 서류 심사 전 순위).")}
         </div>` : "";
@@ -434,7 +439,7 @@
           <div><div class="rec-pick-label">추천 투찰금액</div>
             <div class="rec-pick-amt">${bid != null ? `${won(bid)}<span class="rec-unit">원</span>` : "기초금액·하한율을 넣어 주세요"}</div>
             <div class="rec-pick-sub">가정 사정률 ${pct(p.rate)}</div></div>
-          <div class="rec-method">${esc(label(p.name))} ${tip(`<h4>어떻게 골랐나</h4>${how}`, true)}</div>
+          <div class="rec-method">${esc(label(p.name))} ${tip(`<h4>어떻게 골랐나</h4>${how}${rule}`, true)}</div>
         </div>
         ${stats}${luck}
       </div>`;
@@ -452,8 +457,10 @@
     const row = (o, own = false) => {
       const bid = own ? null : recBid(o.rate);
       const chosen = p && !own && o.name === p.name;
-      return `<tr class="${chosen ? "chosen" : ""}${own ? " own" : ""}">
-        <td>${esc(label(o.name))}${chosen ? '<span class="rec-tag">추천</span>' : ""} ${tip(about(o.name))}</td>
+      // 하한선 통과 조건에 못 미치는 방식은 흐리게 — 추천 후보에서 빠짐
+      const below = !own && p && p.min_valid != null && o.track && o.track.tried && o.track.valid / o.track.tried < p.min_valid;
+      return `<tr class="${chosen ? "chosen" : ""}${own ? " own" : ""}${below ? " below" : ""}">
+        <td>${esc(label(o.name))}${chosen ? '<span class="rec-tag">추천</span>' : ""}${below ? `<span class="rec-tag off">통과 ${pctOf(p.min_valid)} 미만</span>` : ""} ${tip(about(o.name))}</td>
         <td>${own ? "-" : bid != null ? won(bid) : "-"}</td><td>${pct(o.rate)}${own ? "<small>과거 가운데</small>" : ""}</td>
         <td>${cell(o.track, "valid")}</td><td>${cell(o.track, "top")}</td><td>${cell(o.track, "win")}</td></tr>`;
     };

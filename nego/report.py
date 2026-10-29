@@ -245,7 +245,7 @@ def _qualification_cell_html(c: Candidate, esc) -> str:
 
 def _deadline_cell_html(c: Candidate, esc) -> str:
     """표의 '입찰마감일' 칸. 잔여일수를 'D-N' 배지로 먼저 보여주고, 그 아래
-    실제 마감 시각과 어떤 마감(자격등록/공동수급협정/입찰/첨부파일 제출기한)
+    실제 마감 시각과 어떤 마감(자격등록/공동수급협정/입찰/서류 제출기한)
     인지를 작게 붙인다."""
     earliest = c.schedule.earliest
     if earliest is None:

@@ -52,7 +52,7 @@ _REGISTRATION_LABEL_RE = re.compile(
     r"|입찰\s*등록\s*(?:및\s*(?:서류|제안서)\s*(?:접수|제출))?\s*(?:일시|기간|기한|마감)?"
 )
 REGISTRATION = "첨부 참가등록 마감"
-SUBMISSION = "첨부파일 제출기한"
+SUBMISSION = "서류 제출기한"
 
 
 def extract_deadline(text: str) -> datetime | None:
@@ -86,7 +86,7 @@ def _first_deadline(text: str, label_re: re.Pattern) -> datetime | None:
         found, end = parsed
         # 날짜가 바뀌는 기간("2026.10.16.(금) 00:00 ~ 2026.10.20.(화) 10:00")이면 끝 일시가 마감 —
         # 시작 일시를 마감으로 잡던 것(2026-10-19 실측: 구미시 스타트업 필드 공용공간 리모델링 공사 설계용역,
-        # 나라장터 입찰서제출 10/16 00:00 ~ 10/20 10:00인데 "첨부파일 제출기한 10/16 00:00 · 지남"으로 보였음)
+        # 나라장터 입찰서제출 10/16 00:00 ~ 10/20 10:00인데 "서류 제출기한 10/16 00:00 · 지남"으로 보였음)
         range_match = _RANGE_TO_DATE_RE.match(text, end)
         if range_match:
             end_date = _DATE_RE.match(text, range_match.end()) or _MONTH_DAY_RE.match(text, range_match.end())

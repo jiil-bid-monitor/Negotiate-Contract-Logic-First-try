@@ -189,23 +189,57 @@
     // 투찰금액은 화면 단위(백원·천원…)로 자른 예정가격이 아니라 **원 단위 예정가격**(같은 절상·절사)에 하한율을 곱한 뒤 단위 처리 —
     // 21라인 캡처(10/22): 절사·천원 123,853,000 → 투찰 108,675,000, 절상·백원 123,853,700 → 108,675,400 (자른 값이면 108,674,000·108,675,500)
     const plannedWon = done ? C.plannedPrice(picks, r.planned, 1) : null;
-    const bid = planned ? C.bidAmount({ planned: plannedWon, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
+    // floor = 모의 예정가격의 하한선에 붙인 금액(21라인과 같은 계산) — 10/29 사용자 결정: 이건 '하한선 조건'으로만 보고,
+    // 투찰금액은 아래 추천 칸(투찰 경향)이 고른 금액으로. 추천이 없을 때만 예전처럼 하한선 금액을 투찰금액으로 씀
+    const floor = planned ? C.bidAmount({ planned: plannedWon, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
     const average = done ? nos.reduce((sum, no) => sum + SLOTS[no - 1], 0) / nos.length : null;  // 끝자리 처리 전 평균
-    const netBid = planned ? C.netCostBid({ average, basis, netCost: numIn("#cNet") }) : null;
+    const netBid = planned ? C.netCostBid({ average, basis, netCost: numIn("#cNet"), rate: NET_RULE ? NET_RULE.rate : 98 }) : null;
+    // 공고문에 순공사원가 조건이 있고(예정가격 상한이 있으면 모의 예정가격이 그 아래일 때) 그 선이 하한선보다 높으면 그 선이 조건
+    const netApplies = netBid != null && NET_RULE && !(NET_RULE.limit && planned >= NET_RULE.limit);
+    const gate = floor != null && netApplies ? Math.max(floor, netBid) : floor;
+    const gateName = netApplies && netBid > floor ? `순공사원가 ${NET_RULE.rate}% 선` : "하한선";
+    // 하한선 조건(10/29 사용자 결정): 추천 순서(REC_PICK.order — 고른 방식 → 통과 조건을 만족하는 나머지 → 그 밖)대로 보며
+    // 모의 예정가격 하한선 이상인 첫 방식의 금액을 투찰금액으로. 모두 아래면 고른 방식 그대로 두고 미달로 표시
+    let used = REC_PICK, fallback = false, allBelow = false;
+    if (REC_PICK && gate != null && recBid(REC_PICK.rate) != null) {
+      const byName = Object.fromEntries(REC_OPTIONS.map((o) => [o.name, o]));
+      const first = (REC_PICK.order || [REC_PICK.name]).map((n) => byName[n]).find((o) => o && recBid(o.rate) != null && recBid(o.rate) >= gate);
+      if (!first) { used = null; allBelow = true; }  // 모든 방식이 하한선 아래 — 하한선 금액을 씀
+      else if (first.name !== REC_PICK.name) { used = first; fallback = true; }
+    }
+    const rec = used ? recBid(used.rate) : null;
+    const bid = rec != null ? rec : gate;
     const higher = bid != null && netBid != null && netBid > bid;
     $("#cPlanned").textContent = planned ? won(planned) : "-";
-    $("#cBid").innerHTML = bid != null ? `<span${higher ? "" : ' class="calc-final"'}>${won(bid)}</span>` : (planned ? "하한율 필요" : "-");
+    const recNote = rec != null
+      ? `<div class="calc-sub">아래 추천 칸의 '${esc(label(used.name))}' 금액 · 기준 사정률 ${pct(used.rate)}${used.track && used.track.tried
+        ? ` · 비슷한 과거 공고에서 하한선 통과 ${Math.round((used.track.valid / used.track.tried) * 100)}%` : ""}</div>`
+        + (fallback ? `<div class="calc-sub">'${esc(label(REC_PICK.name))}' 금액은 이번 모의 추첨 ${gateName}보다 낮아, 다음 순위 방식 금액으로 바꿨어요</div>` : "")
+      : allBelow ? `<div class="calc-sub ng">추천 방식 금액이 모두 이번 모의 추첨 ${gateName}보다 낮아, 그 선의 금액을 썼어요</div>`
+      : `<div class="calc-sub">추천이 없어 모의 추첨 하한선 금액을 썼어요</div>`;
+    const floorCheck = rec != null && gate != null
+      ? `<div class="calc-sub ${rec >= gate ? "ok" : "ng"}">이번 모의 추첨 ${gateName} ${won(gate)} 대비 ${rec >= gate ? `✓ ${won(rec - gate)}원 위` : `✗ ${won(gate - rec)}원 아래`}
+        ${tip(`위 표에서 고른 번호로 계산한 <b>모의</b> 예정가격 기준이에요. 실제 예정가격은 개찰 때 업체들이 고른 번호로 정해져 이 값과 달라요. 실제로 통과할 가능성은 아래 추천 칸의 '하한선 통과' 비율을 보세요.${NET_RULE
+          ? `<br><br>공고문 순공사원가 조건: ${NET_RULE.limit ? `예정가격 ${NET_RULE.limit / 1e8}억 원 미만이면 ` : ""}순공사원가의 ${NET_RULE.rate}% 미만 투찰은 제외 — 하한선과 이 선 중 높은 쪽을 넘어야 해요.<br><span class="calc-sub">${esc(NET_RULE.quote || "")}</span>`
+          : ""}`)}</div>`
+      : "";
+    if (REC_LOADING) {
+      $("#cBid").innerHTML = `<span class="calc-sub">추천 계산 중…</span>`;
+    } else $("#cBid").innerHTML = bid != null ? `<span${higher ? "" : ' class="calc-final"'}>${won(bid)}</span>${recNote}${floorCheck}`
+      : (REC_PICK && !(numIn("#cBasis") > 0) ? "기초금액 필요" : planned ? "하한율 필요" : "-");
     $("#cNetBid").innerHTML = netBid != null ? `<span${higher ? ' class="calc-final"' : ""}>${won(netBid)}</span>` : "-";
-    if (!planned) {
+    if (!planned && rec == null) {
       $("#cSummary").innerHTML = `<tr><td colspan="3" class="why">${SLOTS.length ? `번호를 ${take}개 고르세요 (${nos.length}/${take})` : "예비가격을 만들고 번호를 고르면 나옵니다."}</td></tr>`;
       return;
     }
     const rows = [
       ["기초금액", basis, basis ? "100.0000" : "-"],
-      ["예정가격", planned, basis ? p4((planned / basis) * 100) : "-"],
-      ["투찰금액", bid, ""],
-    ];
-    if (netBid != null) rows.push(["순공사원가 투찰가격", netBid, ""]);
+      ["예정가격 (모의 추첨 1회)", planned, basis && planned ? p4((planned / basis) * 100) : "-"],
+      ["하한선 (모의 추첨 기준)", floor, ""],
+      ...(netApplies ? [[`순공사원가 ${NET_RULE.rate}% 선 (모의 추첨 기준, 공고문 조건)`, netBid, ""]] : []),
+      [rec != null ? "투찰금액 (추천)" : "투찰금액", REC_LOADING ? null : bid, rec != null ? `${p4(used.rate)} (기준 사정률)` : ""],
+    ].filter(([, v]) => v != null);
+    if (netBid != null && !netApplies) rows.push(["순공사원가 투찰가격", netBid, ""]);
     $("#cSummary").innerHTML = rows.map(([k, v, rate]) => `<tr><td>${esc(k)}</td><td class="num">${won(v)}</td><td class="num">${rate}</td></tr>`).join("");
   }
 
@@ -242,6 +276,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
+    WORK = ""; REC_METHOD = ""; NET_RULE = null; REGION_LIMITED = null; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
     render();
   };
   async function lookup() {
@@ -274,6 +309,8 @@
       setNum("#cA", d.a_value || null);
       $("#cAOn").checked = !!d.a_applies && (d.a_value || 0) > 0;
       setNum("#cNet", d.net_cost || null);
+      NET_RULE = d.net_rule || null;
+      REGION_LIMITED = typeof d.region_limited === "boolean" ? d.region_limited : null;
       if (d.price_count === 10 || d.price_count === 15) {
         document.querySelector(`input[name="cN"][value="${d.price_count}"]`).checked = true;
         fillRange(defaultDown());
@@ -286,6 +323,7 @@
       // 발주기관 최종 판단(서버 judge — 낙찰자 결정기준 문구 → 공고문 인용 법령 → 기관 이름). 예비가격 방식·자동 계산이 이걸 따른다
       if (d.agency_note) notes.push(`발주기관: ${d.agency_note}`);
       if (d.basis != null) notes.push(`기초금액 출처: ${d.basis_source || "나라장터"}${d.basis_open_at ? ` (공개 ${d.basis_open_at})` : ""}`);
+      REC_METHOD = d.method === "mois" ? "행자부" : d.method ? "조달청" : "";
       if (d.method) {
         const why = d.method_reason ? ` (${d.method_reason})` : "";
         notes.push(`예비가격 방식: ${d.method === "mois" ? `지방계약${why} — 행자부난수추출` : `국가계약${why} — 조달청난수추출`} 권장`);
@@ -299,6 +337,8 @@
       render();
       const auto = autoRun(d.method);
       if (auto) $("#cNotes").insertAdjacentHTML("beforeend", `<div class="calc-auto">${esc(auto)}</div>`);
+      WORK = d.work_type || "";
+      if (d.basis != null && d.lower_rate != null) recommend();
     } catch (err) {
       lookupMsg(`실패: ${err.message}`, true);
     } finally {
@@ -318,6 +358,203 @@
     return `자동 계산: ${plan.name}(${plan.why}) → 무작위 번호 ${AUTO.join("·")}번 — 모의 추첨 1회라 실제 예정가격과 다름. `
       + "다시 뽑으려면 자동선택 '시작 → 적용'";
   }
+
+  // 추천 사정률(2026-10-28) — 위 입력칸(기초금액·하한율·변동폭·A값)과 불러온 공고의 업무로 서버에 묻는다.
+  // 투찰금액은 계산기와 같은 기타설정(절상·절사·단위)으로 자름: 원 단위 예정가격(기초금액 × 사정률) → 하한율 → 끝자리
+  let WORK = "";
+  // 공고문의 순공사원가 조건({rate, limit, quote, file}) — 있을 때만 투찰금액 조건으로 씀(10/29 사용자 결정: 98% 고정 조건 아님)
+  let NET_RULE = null;
+  let REGION_LIMITED = null;  // 지역제한 입찰인가(불러온 공고) — 추천 칸 경쟁 규모 가늠에 넘김(10/29)
+  let REC_METHOD = "";  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
+  let REC_PICK = null;  // 추천 칸이 고른 방식(rate·name·track·order) — 위 계산기 '투찰금액'이 이걸로 정해짐(10/29)
+  let REC_OPTIONS = [];  // 추천 칸 방식들 — 고른 방식이 모의 예정가격 하한선 아래면 order 순으로 다음 방식
+  let REC_TICKET = 0;  // 추천 요청 번호 — 늦게 도착한 예전 요청 결과가 새 화면을 덮지 않게
+  let REC_LOADING = false;  // 추천 계산 중 — 계산기 투찰금액 칸도 비워 둠
+  const pct = (v, d = 3) => (v == null ? "-" : `${Number(v).toFixed(d)}%`);
+  async function recommend() {
+    const title = $("#cTitle").textContent.trim();
+    const inst = $("#cInst").textContent.trim();
+    const qs = new URLSearchParams({ scale: $("#cRecScale").value, work: WORK, title: title === "-" ? "" : title,
+      inst: inst === "-" ? "" : inst, method: REC_METHOD });
+    [["basis", "#cBasis"], ["lower", "#cRate"], ["lo", "#cLo"], ["hi", "#cHi"]].forEach(([k, id]) => {
+      const v = numIn(id); if (v != null) qs.set(k, v);
+    });
+    if (NET_RULE && numIn("#cNet") > 0) { qs.set("net", numIn("#cNet")); qs.set("netrate", NET_RULE.rate); }
+    if (REGION_LIMITED !== null) qs.set("rl", REGION_LIMITED ? "1" : "0");
+    qs.set("a", aValue());
+    // 계산 중엔 이전 추천을 지운 화면으로(10/29 사용자 요청 — 예전 공고의 추천 금액이 남아 헷갈림). 계산기 투찰금액도 추천 없이
+    const ticket = ++REC_TICKET;
+    REC_PICK = null; REC_OPTIONS = []; REC_LOADING = true;
+    renderResult();
+    $("#cRec").innerHTML = `<div class="why">비슷한 과거 공고로 추천을 계산하고 있어요… 처음 한 번은 수십 초 걸릴 수 있어요.</div>`;
+    $("#cRecMsg").textContent = "계산 중…";
+    $("#cRecBtn").disabled = true;
+    try {
+      const d = await api(`/api/bidrecommend?${qs}`);
+      if (ticket !== REC_TICKET) return;  // 그 사이 새로 요청했으면 늦게 온 이 결과는 버림
+      REC_LOADING = false;
+      renderRecommend(d);
+      $("#cRecMsg").textContent = "";
+    } catch (err) {
+      if (ticket !== REC_TICKET) return;
+      REC_PICK = null; REC_LOADING = false;
+      renderResult();
+      $("#cRec").innerHTML = "";
+      $("#cRecMsg").textContent = `실패: ${err.message}`;
+    } finally {
+      if (ticket === REC_TICKET) $("#cRecBtn").disabled = false;
+    }
+  }
+  function recBid(rate) {
+    const basis = numIn("#cBasis"), lower = numIn("#cRate");
+    if (!(basis > 0) || !(lower > 0)) return null;
+    const r = rounding();
+    const plannedWon = C.roundAmount((basis * rate) / 100, r.planned, 1);
+    const bid = C.bidAmount({ planned: plannedWon, lowerRate: lower, a: aValue(), how: r.bid, unit: r.unit });
+    // 공고문에 순공사원가 조건이 있으면 그 사정률의 순공사원가 선과 높은 쪽(10/29 — 하한선만 넘고 순공사원가 미달로 무효되는 금액을 추천하지 않게)
+    const net = NET_RULE ? C.netCostBid({ average: (basis * rate) / 100, basis, netCost: numIn("#cNet"), rate: NET_RULE.rate }) : null;
+    return net != null && net > bid && !(NET_RULE.limit && (basis * rate) / 100 >= NET_RULE.limit) ? net : bid;
+  }
+  // ── 추천 칸 화면(10/29 사용자 요청: 보기 쉽게 — 긴 설명은 ? 팝업으로) ──
+  // 팝업은 공고 카드와 같은 .qual/.qtip(마우스를 대거나 누르면 열림, index.html placeTip이 위·아래 자리를 잡음)
+  const tip = (html, right = false) =>
+    `<span class="qual rec-i" tabindex="0" aria-label="설명"><span class="ico">?</span><span class="qtip${right ? " right" : ""}">${html}</span></span>`;
+  // 서버 방식 이름 → 화면 이름·설명(다른 부서 사람도 읽게 쉬운 말로)
+  const METHOD = {
+    "추천(과거 1순위 최다)": ["과거 1순위 최다", "비슷한 과거 공고마다 '이 사정률이었으면 1순위'인 구간을 겹쳐 보고, 가장 많이 겹친 값이에요."],
+    "추천(과거 5위 안 최다)": ["과거 5위 안 최다", "비슷한 과거 공고에서 5위 안에 가장 많이 들었을 값 중 가장 싼 값이에요."],
+    "사정률 중앙값": ["과거 사정률 가운데값", "비슷한 과거 공고의 실제 사정률(예정가격 ÷ 기초금액)을 줄 세웠을 때 한가운데 값이에요. 그래서 하한선 통과는 절반쯤이에요."],
+    "유효 70%": ["하한선 통과 70% 선", "과거 비슷한 공고 10건 중 7건에서 하한선을 넘었을 값이에요."],
+    "유효 90%": ["하한선 통과 90% 선", "과거 비슷한 공고 10건 중 9건에서 하한선을 넘었을 값이에요. 대신 금액이 높아 순위는 밀려요."],
+    "경향 추천(사정률 중앙 + 1~5위 간격)": ["경향 추천", "과거 사정률 가운데값에, 1~5위 업체들이 실제 사정률보다 얼마나 위로 썼는지(가운데 값)를 더한 값이에요."],
+    "대규모 추천(사정률 분포 ÷ 경쟁 밀집)": ["대규모 경쟁 추천", "참가 업체가 많은 공고용이에요. 과거에 예정가격이 자주 나온 범위 안에서, 다른 업체들이 덜 몰린 금액을 골랐어요."],
+    "추첨 모형 추천(번호 선택 경향 → 모의 추첨)": ["추첨 모형 추천", "과거 공고에서 업체들이 어느 번호를 많이 골랐는지 배워, 예정가격이 정해지는 추첨(업체마다 번호 2개 → 많이 뽑힌 4개 평균)을 여러 번 흉내 내고, 1순위가 될 가능성이 가장 높은 금액을 골랐어요."],
+    "가중 KNN 추천(닮은 공고에 무게)": ["닮은 공고 가중 추천", "과거 공고를 넣고 빼는 대신, 이 공고와 닮은 정도(분야·업무·변동폭·하한율·발주 방식·지역·금액 규모·최근일수록)만큼 무게를 주고 1순위가 될 가능성이 가장 높은 금액을 골랐어요."],
+    "간격 예측 추천(1순위 간격 부스팅)": ["1순위 간격 예측 추천", "공고 특성으로 '1순위 업체가 하한선보다 얼마나 위에 쓸지'를 학습 모델로 예측하고, 하한선과 1순위 사이에 들 가능성이 가장 높은 금액을 골랐어요."],
+    "지일 실제 투찰(외주)": ["지일 실제 투찰(참고)", "비슷한 과거 공고에 지일이 실제로 낸 금액의 나라장터 결과예요(외주 추천값). 기준 사정률 칸은 그 공고들의 가운데 값이에요. 비교용 참고 줄이에요."],
+  };
+  // 기준 사정률 — 이 금액을 정할 때 "예정가격 = 기초금액 × 이 값"으로 본 값(10/29: '가정 사정률'이 무슨 뜻인지 헷갈려 이름·설명을 바꿈)
+  const RATE_HELP = "이 금액을 정할 때 '예정가격이 기초금액의 몇 %로 나올지'를 이 값으로 보고 계산했어요. 실제 사정률이 이 값보다 낮게 나오면 하한선을 넘고(통과), 높게 나오면 미달이에요. 높게 잡을수록 통과는 쉬워지지만 금액이 올라가 순위는 밀려요.";
+  const label = (name) => (METHOD[name] ? METHOD[name][0] : name.startsWith("고정") ? name : name);
+  const about = (name) => (METHOD[name] ? METHOD[name][1] : name.startsWith("고정")
+    ? "공고와 상관없이 늘 같은 사정률로 쓰는 값이에요. 2020~24년 지일 이력으로 고른 값이고, 2025~26년 개찰 514건 검증에서 다른 방식들과 비슷하거나 조금 나은 성적이었어요." : "");
+  const rate = (t, key) => (t && t.tried ? t[key] / t.tried : null);
+  const pctOf = (v) => (v == null ? "-" : `${Math.round(v * 100)}%`);
+  // 평균 순위(상위 몇 %, 하한선 미달은 꼴찌로 셈) — 1순위가 거의 안 나오는 공고에서 방식을 고르는 기준(10/29 사용자 결정 2안)
+  const rankOf = (t) => (t && t.rank != null ? `${(t.rank * 100).toFixed(t.rank < 0.1 ? 1 : 0)}%` : "-");
+  const cnt = (t, key) => (t && t.tried ? `${t[key]}/${t.tried}건` : "");
+
+  function renderRecommend(d) {
+    const notes = (d.notes || []);
+    if (!d.samples) {
+      REC_PICK = null;
+      renderResult();
+      $("#cRec").innerHTML = notes.length ? notes.map((n) => `<div class="rec-warn">${esc(n)}</div>`).join("") : "비슷한 과거 공고가 없습니다.";
+      return;
+    }
+    const p = d.pick, a = d.assessment, b = d.bidders;
+    REC_PICK = p || null;
+    REC_OPTIONS = d.options || [];
+    renderResult();  // 위 계산기의 투찰금액을 추천 금액으로
+    const large = b && b.median >= 100;
+    // ① 추천 투찰금액 카드 — 금액 · 방식 · 핵심 숫자 3개(하한선 통과 / 5위 안 / 1순위), 설명은 ? 팝업
+    let card = "";
+    if (p) {
+      const bid = recBid(p.rate), t = p.track;
+      const how = p.mode === "crowd"
+        ? `${about(p.name)}<br><br>· 하한선을 넘을 가능성(계산): 약 ${pctOf(p.valid_p)}<br>· 1순위가 될 가능성(계산): 약 ${(p.win_p * 100).toFixed(2)}%`
+          + (p.crowd_bidders ? ` — 아무 금액이나 썼을 때의 평균(1 ÷ ${Math.round(p.crowd_bidders)}곳)은 ${(100 / p.crowd_bidders).toFixed(2)}%` : "")
+        : p.mode === "trend"
+          ? `과거 예정가격 가운데 값 ${pct(p.base)}에, 1~5위 업체들이 실제보다 위에 쓴 정도(가운데 값) ${p.gap >= 0 ? "+" : ""}${Number(p.gap).toFixed(3)}%p를 더했어요.<br><br>방식별 성적에 뚜렷한 차이가 없을 때 쓰는 기본 추천이에요.`
+          : p.mode === "fixed"
+            ? `비슷한 과거 공고가 적어 기준값(${esc(p.name)})으로 두었어요.`
+            : p.mode === "valid"
+              ? `${about(p.name)}<br><br>하한선 통과 ${pctOf(p.min_valid)} 이상인 방식이 없어, 통과 비율이 가장 높은 방식으로 골랐어요.`
+              : p.mode === "rank"
+                ? `${about(p.name)}<br><br>과거 비슷한 공고에서 어느 방식도 1순위가 ${pctOf(p.min_win)}를 넘지 못해(1순위는 운의 비중이 큼),
+                   <b>평균 순위가 가장 앞섰던</b> 방식으로 골랐어요(상위 ${rankOf(p.track)}, 하한선 미달은 꼴찌로 셈).`
+                : `${about(p.name)}<br><br>비슷한 과거 공고에 적용해 봤을 때 1순위가 가장 많았던 방식이에요.`;
+      // 하한선 통과는 조건(10/29 사용자 결정) — 조건을 만족하는 방식 중에서 고름
+      const rule = p.min_valid != null && p.mode !== "valid" && p.mode !== "fixed"
+        ? `<br><br>조건: 과거 비슷한 공고에서 하한선 통과 ${pctOf(p.min_valid)} 이상인 방식 중에서 골랐어요.` : "";
+      const stat = (name, value, sub, help) => `<div class="rec-stat"><div class="rec-stat-k">${name} ${tip(help)}</div>
+        <div class="rec-stat-v">${value}</div><div class="rec-stat-s">${sub}</div></div>`;
+      const stats = t && t.tried ? `<div class="rec-stats">
+          ${stat(`하한선 통과`, pctOf(rate(t, "valid")), cnt(t, "valid"), "과거 비슷한 공고에 이 방법을 그대로 썼다면 하한선을 넘었을(탈락하지 않았을) 비율이에요. 그 공고 개찰 전 자료만으로 계산했어요.")}
+          ${stat("5위 안", pctOf(rate(t, "top")), cnt(t, "top"), "같은 방법으로 금액 기준 5위 안에 들었을 비율이에요.")}
+          ${stat("1순위", pctOf(rate(t, "win")), cnt(t, "win"), "같은 방법으로 금액 기준 1순위였을 비율이에요(적격심사 서류 심사 전 순위).")}
+          ${stat("평균 순위", rankOf(t), t.ranked ? `상위 · ${t.ranked}건` : "-", "과거 비슷한 공고에서 참가 업체 중 평균 몇 % 안에 들었는지예요(작을수록 앞). 하한선 미달은 꼴찌(100%)로 쳐요. 1순위가 거의 안 나오는 공고에서 방식을 고르는 기준이에요.")}
+        </div>` : "";
+      const luck = large ? `<div class="rec-flag">참가 업체가 많은 공고(약 ${Math.round(b.median)}곳) — 1순위는 운의 비중이 커요 ${tip(
+        "업체가 수백 곳이면 1순위는 하한선 바로 위(금액으로 몇천~몇만 원 차이)에서 갈려서, 어떤 방법도 1순위 비율이 1~2% 안팎이에요. 하한선 통과와 5위 안을 함께 보세요.")}</div>` : "";
+      // 순공사원가 조건(공고문에서 읽음) — 적용 여부를 카드에 바로 보임
+      const netOn = NET_RULE && numIn("#cNet") > 0;
+      const netFlag = netOn
+        ? `<div class="rec-flag">순공사원가 조건 반영 — 공고문: ${NET_RULE.limit ? `예정가격 ${NET_RULE.limit / 1e8}억 원 미만이면 ` : ""}순공사원가의 ${NET_RULE.rate}% 미만 투찰은 제외.
+            금액 = 이 사정률의 하한선과 순공사원가 선 중 높은 쪽 ${tip(esc(NET_RULE.quote || ""))}</div>`
+        : numIn("#cNet") > 0 ? `<div class="rec-flag">순공사원가 금액은 있는데 공고문에서 순공사원가 조건 문장을 못 찾아 금액에 반영하지 않았어요 — 공고문을 확인하세요</div>` : "";
+      card = `<div class="rec-pick${p.mode === "fixed" ? " weak" : ""}">
+        <div class="rec-pick-top">
+          <div><div class="rec-pick-label">추천 투찰금액</div>
+            <div class="rec-pick-amt">${bid != null ? `${won(bid)}<span class="rec-unit">원</span>` : "기초금액·하한율을 넣어 주세요"}</div>
+            <div class="rec-pick-sub">기준 사정률 ${pct(p.rate)} ${tip(RATE_HELP)}</div></div>
+          <div class="rec-method">${esc(label(p.name))} ${tip(`<h4>어떻게 골랐나</h4>${how}${rule}`, true)}</div>
+        </div>
+        ${stats}${luck}${netFlag}
+      </div>`;
+    }
+    // ② 비슷한 과거 공고 한 줄 + ? 팝업(범위·조건)
+    const cond = (d.conditions || []).map((c) => `<span class="rec-chip">${esc(c)}</span>`).join("");
+    const basis = `<div class="rec-basis">비슷한 과거 공고 <b>${d.samples}건</b> 기준 ${cond} ${tip(`<h4>비슷한 과거 공고</h4>
+      과거 개찰 자료 ${d.total}건 중 분야·업무·변동폭·경쟁 규모가 같은 공고예요. 모자라면 조건을 하나씩 풀어요.
+      <ul><li>실제 사정률(예정가격 ÷ 기초금액): 10% ${pct(a.p10)} · 가운데 ${pct(a.p50)} · 90% ${pct(a.p90)}</li>
+      <li>1순위 업체 투찰률 − 하한율: 가운데 ${d.winner_gap >= 0 ? "+" : ""}${Number(d.winner_gap).toFixed(3)}%p</li>
+      <li>참가 업체: 가운데 ${b.median}곳 · 최대 ${b.max}곳</li></ul>${d.auto_scale ? `<p>${esc(d.auto_scale)}</p>` : ""}`, true)}</div>`;
+    // ③ 방식별 비교 — 퍼센트를 크게, 건수는 작게. 추천으로 고른 줄 표시
+    const opts = d.options || [];
+    const cell = (t, key) => (t && t.tried ? `<b>${pctOf(rate(t, key))}</b><small>${t[key]}건</small>` : "-");
+    const row = (o, own = false) => {
+      const bid = own ? null : recBid(o.rate);
+      const chosen = p && !own && o.name === p.name;
+      // 하한선 통과 조건에 못 미치는 방식은 흐리게 — 추천 후보에서 빠짐
+      const below = !own && p && p.min_valid != null && o.track && o.track.tried && o.track.valid / o.track.tried < p.min_valid;
+      return `<tr class="${chosen ? "chosen" : ""}${own ? " own" : ""}${below ? " below" : ""}">
+        <td>${esc(label(o.name))}${chosen ? '<span class="rec-tag">추천</span>' : ""}${below ? `<span class="rec-tag off">통과 ${pctOf(p.min_valid)} 미만</span>` : ""} ${tip(about(o.name))}</td>
+        <td>${own ? "-" : bid != null ? won(bid) : "-"}</td><td>${pct(o.rate)}${own ? "<small>과거 가운데값</small>" : ""}</td>
+        <td>${cell(o.track, "valid")}</td><td>${cell(o.track, "top")}</td><td>${cell(o.track, "win")}</td>
+        <td>${o.track && o.track.ranked ? `<b>${rankOf(o.track)}</b><small>${o.track.ranked}건</small>` : "-"}</td></tr>`;
+    };
+    const tried = opts.map((o) => o.track && o.track.tried).find(Boolean);
+    const table = `<details class="rec-more" open><summary>방식별 비교${tried ? ` — 과거 비슷한 공고 ${tried}건에 적용해 봤다면` : ""}
+        ${tip(`<h4>방식별 비교 읽는 법</h4>과거 비슷한 공고마다 <b>그 공고 개찰 전 자료만으로</b> 이 방법대로 금액을 정했다면 어땠을지 센 결과예요.
+        <ul><li>하한선 통과: 탈락하지 않았을 비율</li><li>5위 안·1순위: 금액 기준 개찰 순위(적격심사 서류 심사 전)</li>
+        <li>평균 순위: 참가 업체 중 평균 상위 몇 %(하한선 미달은 꼴찌 100%로 셈)</li></ul>
+        <p>건수가 수십 건 이하면 우연일 수 있어요. 투찰금액 끝자리는 위 기타설정대로 잘라요.</p>`, true)}</summary>
+      <div class="rec-scroll"><table class="rec-table"><thead><tr><th>방식</th><th>투찰금액</th><th>기준 사정률 ${tip(RATE_HELP)}</th><th>하한선 통과</th><th>5위 안</th><th>1순위</th><th>평균 순위</th></tr></thead>
+      <tbody>${opts.map((o) => row(o)).join("")}${d.outsourced ? row(d.outsourced, true) : ""}</tbody></table></div></details>`;
+    const warn = notes.filter((n) => !/대규모 경쟁이 많습니다/.test(n)).map((n) => `<div class="rec-warn">${esc(n)}</div>`).join("");
+    $("#cRec").innerHTML = `${card}${basis}${table}${trendHtml(d)}${warn}`;
+  }
+  // 투찰 경향(같은 분야 과거 1~5위 업체·지일) — 접어 두고 한 줄 요약만
+  function trendHtml(d) {
+    const t = d.trend;
+    if (!t || !t.n) return "";
+    const g = (s, k = "p50") => (s && s.n ? `${s[k] >= 0 ? "+" : ""}${Number(s[k]).toFixed(3)}%p` : "-");
+    const range = (s) => (s && s.n ? `${g(s, "p25")} ~ ${g(s, "p75")}` : "-");
+    const ranked = t.ranks.filter((r) => r.gap && r.gap.n);
+    const sum = ranked.length ? `1~${ranked[ranked.length - 1].rank}위 업체는 실제 사정률보다 ${g(ranked[0].gap)} ~ ${g(ranked[ranked.length - 1].gap)} 위에 썼어요` : "";
+    const rows = t.ranks.map((r) => `<tr><td>${r.rank}위 업체</td><td>${g(r.gap)}</td><td>${range(r.gap)}</td><td>${r.gap.n || 0}건</td></tr>`).join("");
+    const o = t.own;
+    const ownRow = o ? `<tr class="own"><td>지일(참고)</td><td>${g(o.gap)}</td><td>${range(o.gap)}</td><td>${o.tried}건</td></tr>` : "";
+    return `<details class="rec-more"><summary>투찰 경향 — ${esc(d.field || "비슷한 공고")} ${t.n}건${sum ? ` · ${sum}` : ""}
+        ${tip(`<h4>투찰 경향 읽는 법</h4>각 순위 업체가 쓴 금액을 사정률로 바꿨을 때, 실제 사정률보다 얼마나 위였는지예요.
+        <ul><li>0에 가까울수록 하한선에 바짝 붙은 금액</li><li>음수면 하한선 아래(탈락)</li></ul>
+        <p>새 공고에선 "예상 사정률 + 이 값"이 그 순위대 금액이에요. 분야는 공고명 키워드로 나눠요.</p>`, true)}</summary>
+      <div class="rec-scroll"><table class="rec-table"><thead><tr><th>구분</th><th>실제보다 위(가운데)</th><th>가운데 절반 범위</th><th>건수</th></tr></thead>
+      <tbody>${rows}${ownRow}</tbody></table></div></details>`;
+  }
+  $("#cRecBtn").addEventListener("click", recommend);
+  $("#cRecScale").addEventListener("change", recommend);
 
   $("#cLookup").addEventListener("click", lookup);
   $("#cNo").addEventListener("keydown", (e) => { if (e.key === "Enter") lookup(); });

@@ -1020,7 +1020,57 @@ footer b { color: var(--muted); }
 .calc-sorted li span:not(:first-child) { text-align: right; }
 .calc-h { margin: 0 0 6px; font-size: 13px; }
 .calc-final { color: var(--accent); font-weight: 700; font-size: 15px; }
+.calc-sub { font-size: 11.5px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.calc-sub.ok { color: var(--brand); }
+.calc-sub.ng { color: var(--urgent); }
 .calc-summary th { text-align: center; }
+.calc-rec { background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; margin-top: 14px; }
+.calc-rec-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+.calc-rec-bar select { color: var(--ink); font-size: 13px; padding: 4px 8px; }
+/* 추천 칸(10/29 사용자 요청: 보기 쉽게) — 숫자는 크게, 설명은 ? 팝업(.qual/.qtip 재사용) */
+.calc-rec .rec-scroll { overflow-x: auto; }
+.calc-rec .rec-i { vertical-align: middle; margin-left: 2px; }
+.calc-rec .rec-i .ico { width: 16px; height: 16px; font-size: 10px; background: var(--muted); }
+.calc-rec .rec-i:hover .ico, .calc-rec .rec-i:focus .ico { background: var(--accent); }
+.calc-rec .rec-i .qtip { width: min(340px, calc(100vw - 48px)); font-weight: 400; text-align: left; color: var(--ink); }
+.calc-rec .rec-i .qtip ul { margin-top: 6px; }
+.calc-rec .rec-i .qtip li { padding: 4px 0; }
+.calc-rec .rec-pick { border: 2px solid var(--accent); border-radius: var(--radius); padding: 14px 16px; margin: 4px 0 12px; }
+.calc-rec .rec-pick.weak { border-color: var(--line); }
+.calc-rec .rec-pick-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 16px; }
+.calc-rec .rec-pick-label { font-size: 12px; color: var(--muted); }
+.calc-rec .rec-pick-amt { font-size: 28px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
+.calc-rec .rec-unit { font-size: 15px; font-weight: 600; margin-left: 2px; }
+.calc-rec .rec-pick-sub { font-size: 13px; color: var(--muted); }
+.calc-rec .rec-method { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px;
+  background: var(--brand-tint, var(--chip)); color: var(--accent); font-size: 13px; font-weight: 600; }
+.calc-rec .rec-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.calc-rec .rec-stat { background: var(--chip); border-radius: var(--radius); padding: 8px 10px; }
+.calc-rec .rec-stat-k { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 2px; }
+.calc-rec .rec-stat-v { font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.calc-rec .rec-stat-s { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.calc-rec .rec-flag { margin-top: 10px; font-size: 12.5px; color: #b45309; display: flex; align-items: center; gap: 2px; }
+.calc-rec .rec-basis { font-size: 13px; color: var(--ink); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; }
+.calc-rec .rec-chip { background: var(--chip); border-radius: 999px; padding: 1px 8px; font-size: 12px; color: var(--muted); }
+.calc-rec details.rec-more { border-top: 1px solid var(--line); padding: 8px 0 2px; }
+.calc-rec details.rec-more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink); list-style-position: inside; }
+.calc-rec table.rec-table { min-width: 520px; }
+.calc-rec .rec-table td small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+.calc-rec .rec-table td b { font-weight: 600; }
+.calc-rec .rec-table tr.chosen td { background: var(--brand-tint, var(--chip)); color: var(--accent); }
+.calc-rec .rec-table tr.chosen td b { font-weight: 700; }
+.calc-rec .rec-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; }
+.calc-rec tr.own td { color: var(--muted); border-top: 2px solid var(--line); }
+.calc-rec tr.below td { color: var(--faint, var(--muted)); }
+.calc-rec .rec-tag.off { background: var(--chip); color: var(--muted); border: 1px solid var(--line); }
+.calc-rec .rec-warn { color: #b45309; font-size: 12px; margin-top: 6px; }
+@media (max-width: 760px) {
+  .calc-rec .rec-stats { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .calc-rec .rec-stat-v { font-size: 17px; }
+  .calc-rec .rec-stat { padding: 8px; }
+  .calc-rec .rec-stat-k { font-size: 11px; white-space: nowrap; }
+  .calc-rec .rec-pick-amt { font-size: 24px; }
+}
 @media (max-width: 760px) {
   .calc-form, .calc-form tbody, .calc-form tr { display: block; }
   .calc-form tr { display: grid; grid-template-columns: 96px 1fr; }
@@ -1225,7 +1275,7 @@ footer b { color: var(--muted); }
         <td><span class="calc-pair calc-nos"><input id="cA1" inputmode="numeric" maxlength="2"><input id="cA2" inputmode="numeric" maxlength="2"><input id="cA3" inputmode="numeric" maxlength="2"><input id="cA4" inputmode="numeric" maxlength="2"> <button type="button" id="cAnalyze">적용</button></span></td>
       </tr>
       <tr>
-        <th>예정가격</th><td id="cPlanned">-</td>
+        <th>예정가격<br><small>(모의)</small></th><td id="cPlanned">-</td>
         <th>투찰금액</th><td id="cBid">-</td>
         <th>순공사원가<br>투찰가격</th><td id="cNetBid">-</td>
       </tr>
@@ -1244,7 +1294,18 @@ footer b { color: var(--muted); }
       <tr><th>구 분</th><th>금 액</th><th>사정률 = (예정가격 / 기초금액) × 100</th></tr>
       <tbody id="cSummary"><tr><td colspan="3" class="why">예비가격을 만들고 번호를 고르면 나옵니다.</td></tr></tbody>
     </table>
-    <p class="why">예비가격은 모의로 만든 값입니다 — 실제 예비가격은 나라장터가 무작위로 만들고 4개는 입찰자 선택으로 정해집니다.</p>
+    <p class="why">예비가격·예정가격·하한선은 이 화면에서 <b>모의로 만든 값</b>입니다 — 실제 예비가격 15개는 나라장터가 무작위로 만들고, 예정가격은 개찰 때 업체들이 많이 고른 번호 4개의 평균으로 정해집니다. 투찰금액은 모의 값이 아니라 아래 추천 칸(비슷한 과거 공고의 개찰 결과)으로 정합니다.</p>
+
+    <!-- 추천 사정률(2026-10-28 사용자 결정 — 과거 개찰 통계 기반). 서버 output/의 개찰 결과로 계산, 위 입력칸 값을 씀 -->
+    <div class="calc-rec">
+      <h4 class="calc-h">추천 투찰금액 — 비슷한 과거 공고의 개찰 결과 기준</h4>
+      <div class="calc-rec-bar">
+        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="auto" selected>자동(닮은 공고로 가늠)</option><option value="all">전체(규모 구분 없이)</option><option value="small">소규모(100곳 미만)</option><option value="large">대규모(100곳 이상)</option></select></label> <span class="qual rec-i" tabindex="0" aria-label="설명"><span class="ico">?</span><span class="qtip"><b>자동</b> — 이번 공고와 닮은 과거 공고(분야·업무·금액·발주 방식·지역제한, 같은 발주기관은 더 크게 반영)의 참가 수로 이번 공고의 참가 수를 가늠합니다. 100곳 미만이면 소규모 공고끼리, 이상이면 대규모 공고끼리 비교합니다.<br>참가가 적을 공고(지역·업종 제한이 좁은 공고 등)라는 걸 알면 직접 <b>소규모</b>를 고르세요 — 자동 판정은 소규모를 대규모로 잡는 경우가 아직 있습니다.</span></span>
+        <button type="button" id="cRecBtn">추천 보기</button>
+        <span id="cRecMsg" class="job"></span>
+      </div>
+      <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고의 개찰 결과로 <b>추천 투찰금액</b>과 방식별 성적을 보여 줍니다.</div>
+    </div>
   </section>
 
   <footer>

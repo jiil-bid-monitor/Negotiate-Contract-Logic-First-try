@@ -54,6 +54,14 @@ class BidPriceTest(unittest.TestCase):
         assert "사정률" in text and "+0.105%p" in text and "지일 참가 1건" in text and "1위" in text
 
 
+    def test_basis_info_range_and_a_value(self):
+        rows = [{"bidNtceNo": "R26BK00000001", "bidNtceOrd": "000", "rsrvtnPrceRngBgnRate": "-3", "rsrvtnPrceRngEndRate": "3",
+                 "npnInsrprm": "2000000", "sftyMngcst": "1000000", "bidPrceCalclAYn": "N"}]
+        self.assertEqual(bidprice.basis_info(rows, "R26BK00000001"), (-3.0, 3.0, 0.0))  # A값 미적용 공고면 0
+        rows[0]["bidPrceCalclAYn"] = "Y"
+        self.assertEqual(bidprice.basis_info(rows, "R26BK00000001"), (-3.0, 3.0, 3_000_000.0))
+        self.assertEqual(bidprice.basis_info([], "R26BK00000001"), (None, None, None))
+
     def test_opened_only_past(self):
         now = datetime(2026, 10, 12, 9, 0)
         assert bidprice._opened(_notice(opening_at="2026-10-01 10:00:00"), now)

@@ -76,12 +76,20 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(out["agency"], "local")
         self.assertEqual(out["est_price"], 167746809)
         self.assertEqual(out["contract_method"], "제한경쟁")
+        self.assertFalse(out["region_limited"])  # 지역제한 판단기준 칸이 없으면 제한 없음
         self.assertEqual(out["licenses"], ["전기공사업"])
         self.assertEqual(out["notes"], [])
         self.assertEqual(client.calls[0][1], {"inqryDiv": "2", "bidNtceNo": "R26BK01752065"})
         # 면허제한은 공고번호 조회가 안 돼 등록일 하루치로 받음(실측 resultCode=08)
         lic = [c for c in client.calls if c[0] == F.LICENSE_LIMIT_OPERATION]
         self.assertEqual(lic[0][1], {"inqryDiv": "1", "inqryBgnDt": "202610010000", "inqryEndDt": "202610012359"})
+
+    def test_lookup_region_limited(self):
+        notice = {"bidNtceNo": "R26BK01700001", "bidNtceOrd": "000", "bidNtceNm": "정선군 ○○ 공사", "sucsfbidLwltRate": "87.745",
+                  "rgnLmtBidLocplcJdgmBssNm": "법인등기부상 본점소재지"}
+        out = bidcalc.lookup(FakeClient({F.BID_NOTICE_OPERATIONS["공사"]: [notice]}), "R26BK01700001",
+                             fetch=lambda *a, **k: None)
+        self.assertTrue(out["region_limited"])
 
     def test_lookup_not_found_keeps_going(self):
         client = FakeClient({}, fail={F.BID_NOTICE_OPERATIONS["물품"]})
@@ -215,6 +223,21 @@ class BidCalcJsTest(unittest.TestCase):
         res = subprocess.run(["node", str(ROOT / "tests" / "js" / "bidcalc_test.js")], capture_output=True, text=True, timeout=120)
         self.assertEqual(res.returncode, 0, res.stderr or res.stdout)
 
+
+
+class NetCostRuleTest(unittest.TestCase):
+    def test_reads_rate_and_limit(self):
+        text = ("⑥ 정부 입찰·계약 집행기준 제2조의5 및 한국농어촌공사 「시설공사적격심사세부기준」 제5조의2에 따라\n"
+                "예정가격이 100억원 미만인 공사인 경우, 입찰가격을 예정가격 중 재료비·노무비·경비 및 이에 대한\n"
+                "부가가치세를 합산한 금액(순공사원가)의 100분의 98 미만으로 입찰한 자는 심사대상에서 제외되며\n낙찰자로 결정하지 않습니다.")
+        rule = bidcalc.net_cost_rule(text)
+        self.assertEqual((rule["rate"], rule["limit"]), (98, 10_000_000_000))
+        self.assertEqual(bidcalc.parse_notice_text(text)["net_rule"]["rate"], 98)
+
+    def test_other_rate_and_none(self):
+        self.assertEqual(bidcalc.net_cost_rule("입찰금액이 순공사원가의 97% 미만인 경우 낙찰자에서 제외")["rate"], 97)
+        self.assertIsNone(bidcalc.net_cost_rule("순공사원가는 기초금액 공개 시 함께 공개합니다."))
+        self.assertIsNone(bidcalc.net_cost_rule("낙찰하한율 87.745% 미만은 제외"))
 
 if __name__ == "__main__":
     unittest.main()

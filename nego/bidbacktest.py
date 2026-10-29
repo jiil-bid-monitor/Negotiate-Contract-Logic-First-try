@@ -345,7 +345,7 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
         lines.append(f"  그중 {no_rec}건은 개찰일 전 비슷한 공고가 {MIN_SAMPLES}건 미만이라 추천 없음(추천 줄에서 빠짐)")
 
     def block(title: str, subset: list[dict]) -> None:
-        src = {k: sum(r["하한선"] == k for r in subset) for k in ("A값", "추정", "A=0")}
+        src = {k: sum(r["하한선"].startswith(k) for r in subset) for k in ("A값", "추정", "A=0")}
         lines.append(f"\n[{title}] {len(subset)}건 (하한선: A값 {src['A값']} · 추정 {src['추정']} · A=0 {src['A=0']})")
         for name in names:
             t = Tally()
@@ -381,8 +381,10 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
             subset = [r for r in large if r["변동폭"] == width and r["개찰일"].startswith(year)]
             if len(subset) >= MIN_SAMPLES:
                 block(f"참가 {LARGE_COMPETITION}곳 이상 · 변동폭 ±{width}% · {year}년", subset)
-    by = {k: sum(r["하한선"] == k for r in rows) for k in ("A값", "추정", "A=0")}
-    lines.append(f"\n※ 하한선: 공고 A값 {by['A값']}건 · 참가업체 금액으로 추정 {by['추정']}건 · A=0 {by['A=0']}건")
+    by = {k: sum(r["하한선"].startswith(k) for r in rows) for k in ("A값", "추정", "A=0")}
+    mismatch = sum(r["하한선"] == "추정(A값 불일치)" for r in rows)
+    lines.append(f"\n※ 하한선: 공고 A값 {by['A값']}건 · 참가업체 금액으로 추정 {by['추정']}건(그중 A값이 개찰 결과와 어긋난 공고 {mismatch}건)"
+                 f" · A=0 {by['A=0']}건")
     if by["A=0"]:
         lines.append(f"  A=0으로 채점한 {by['A=0']}건은 1순위 판정이 실제보다 후할 수 있음"
                      "(지일 실제 투찰의 유효·1순위는 나라장터 순위 그대로라 해당 없음)")
@@ -437,6 +439,9 @@ def main(argv: list[str] | None = None) -> int:
     head = [f"과거 개찰 {len(history.records)}건 (못 쓴 공고 {history.skipped}건) — {', '.join(history.files)}"]
     if history.skip_reasons:
         head.append("  못 쓴 이유: " + " · ".join(f"{k} {n}건" for k, n in history.skip_reasons.most_common()))
+    bad_a = sum(1 for r in history.records if r.a_value is not None and not r.formula_ok)
+    if bad_a:
+        head.append(f"  A값으로 계산한 하한선이 개찰 결과(미달·순위 업체 금액)와 어긋난 공고 {bad_a}건 — 참가업체 금액으로 가늠한 하한선을 씀(1순위는 확정 안 함)")
     net = sum(1 for r in history.records if r.net_line)
     if net:
         head.append(f"  순공사원가 기준선(개찰 결과의 '순공사원가' 무효 업체로 정함)이 하한선보다 높은 공고 {net}건 — 통과·순위를 그 선으로 셈")

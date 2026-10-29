@@ -104,19 +104,34 @@ class PastBid:
         return max(self.floor, self.net_line or 0.0)
 
     @property
+    def formula_floor(self) -> float:
+        """공식 하한선 = A + (예정가격 − A) × 하한율(A를 모르면 0)."""
+        a = self.a_value or 0.0
+        return a + (self.planned - a) * self.lower_rate / 100
+
+    @property
+    def formula_ok(self) -> bool:
+        """공식 하한선이 개찰 결과와 맞나 — '미달' 업체 최고 금액과 순위 있는 업체 최저 금액 사이(1원 여유)에 있어야 함.
+        (10/29: A값을 채운 뒤 '낙찰하한선 미달' 업체가 공식 하한선 위에 8,515곳 — 공고 A값이 실제 계산과 어긋난 공고가 있음)"""
+        if not self.floor_est:
+            return True
+        return abs(self.formula_floor - self.floor_est) <= self.floor_err + 1
+
+    @property
     def floor_source(self) -> str:
-        """하한선을 무엇으로 정했나: A값(공고 값) / 추정(참가업체 금액) / A=0(둘 다 없음)."""
-        if self.a_value is not None:
-            return "A값"
-        return "추정" if self.floor_est else "A=0"
+        """하한선을 무엇으로 정했나: A값(공고 값, 개찰 결과와 맞음) / A=0 / 추정(참가업체 금액 — A값을 모르거나 공식이 개찰 결과와 어긋남)."""
+        if self.a_value is None:
+            return "추정" if self.floor_est else "A=0"
+        return "A값" if self.formula_ok else "추정(A값 불일치)"
 
     @property
     def floor(self) -> float:
-        """하한선 금액 = A + (예정가격 − A) × 하한율. A를 모르면 참가업체 금액으로 가늠한 값, 그것도 없으면 A=0."""
+        """하한선 금액 — 공식 값이 개찰 결과와 맞으면 공식, 아니면(A값 모름·어긋남) 참가업체 금액으로 가늠한 값."""
         if self.a_value is None and self.floor_est:
             return self.floor_est
-        a = self.a_value or 0.0
-        return a + (self.planned - a) * self.lower_rate / 100
+        if not self.formula_ok:
+            return self.floor_est
+        return self.formula_floor
 
     def amount_at(self, rate: float) -> float:
         """기준 사정률 rate(예정가격 = 기초 × rate로 봄)로 낼 투찰금액 = 그 예정가격의 하한선과 순공사원가 기준선 중 높은 쪽.
@@ -158,7 +173,7 @@ class PastBid:
         A값을 모르면 1위 금액이 곧 가늠 구간의 위 끝이라 1순위는 확정할 수 없음)"""
         if self.net_line and self.net_line > self.floor:
             return self.net_err
-        return self.floor_err if (self.a_value is None and self.floor_est) else 0.0
+        return self.floor_err if (self.floor_est and (self.a_value is None or not self.formula_ok)) else 0.0
 
     def sure_ceiling(self, k: int | None = None) -> float:
         """판정용 상한 — 기준선 오차만큼 보수적으로 낮춘 1순위 상한(k를 주면 k위 안 상한). 이 r 미만이면 오차를 감안해도 1순위(k위 안)."""

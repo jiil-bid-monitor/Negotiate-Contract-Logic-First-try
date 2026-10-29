@@ -408,6 +408,21 @@ class NetCostLineTest(unittest.TestCase):
         self.assertEqual(bb.score(100.55, rec), (True, False))  # 오차를 감안하면 1순위 아님
         self.assertGreaterEqual(bb.rank_of(rec, bb.amount_for(rec, 100.55)), 2)  # 실제 2위 — 오차 안 업체는 앞으로 세서 보수적
 
+    def test_a_value_checked_against_bidders(self):
+        """A값으로 계산한 하한선이 개찰 결과와 어긋나면(미달 업체가 그 위) 참가업체로 가늠한 하한선을 씀(10/29 '낙찰하한선 미달' 8,515곳)."""
+        from nego.bidprice import Bidder
+
+        basis, planned, lower = 157_000_000, 157_861_575, 87.745
+        bidders = [Bidder(None, "미달", "1", 139_866_000, None, "낙찰하한선 미달"),
+                   Bidder(1, "1위", "2", 139_869_400, None, ""), Bidder(2, "2위", "3", 139_870_450, None, "")]
+        ok = br._make("N1", "공사", basis, planned, lower, bidders, [], range_width=2, a_value=11_038_000.0)
+        self.assertEqual(ok.floor_source, "A값")
+        self.assertAlmostEqual(ok.floor, 139_868_345.88375, places=3)
+        bad = br._make("N2", "공사", basis, planned, lower, bidders, [], range_width=2, a_value=1_000_000.0)
+        self.assertEqual(bad.floor_source, "추정(A값 불일치)")
+        self.assertEqual(bad.floor, bad.floor_est)
+        self.assertGreater(bad.judge_err, 0)
+
     def test_target_bid_uses_net_rule(self):
         # 10/29 제보 공고 값: 기초 563,530,000 · 하한율 87.745 · A 25,053,044 · 순공사원가 519,482,258(공고문 98%)
         plain = br.bid_amount(563_530_000, 101.173, 87.745, 25_053_044)

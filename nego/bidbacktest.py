@@ -31,7 +31,9 @@ from .bidrecommend import (CROWD_NAME, LARGE_COMPETITION, MIN_SAMPLES, TOP_N, TR
 
 OWN = "지일 실제 투찰(외주)"
 TOP_NAME = f"추천(과거 {TOP_N}위 안 최다)"
-STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, TREND_NAME, CROWD_NAME, "사정률 중앙값", "유효 70%", "유효 90%")
+BASELINE = "기준선: 100%로 찍기"  # 논문 검토(10/29) — 어떤 방식이 '아무렇게나 찍기'보다 나은지 늘 함께 보려고
+STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, TREND_NAME, CROWD_NAME, "사정률 중앙값", "유효 70%", "유효 90%", BASELINE)
+HALF_LIVES = (365, 730, 1095, None)  # --tune: 대규모 추천 반감기 후보(일, None = 무게 없음) — 날짜 순서 백테스트로 고름(그리드 서치)
 _DATE = re.compile(r"(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})")
 
 
@@ -82,6 +84,7 @@ def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train:
     guess = trend_rate(picked)
     if guess is not None:
         out[TREND_NAME] = guess[0] + guess[1]
+    out[BASELINE] = 100.0
     if sum(r.bidder_count >= LARGE_COMPETITION for r in picked) > len(picked) / 2:  # 화면(`recommend`)과 같은 조건
         crowd = crowd_rate(picked)
         if crowd is not None:
@@ -109,8 +112,9 @@ class Tally:
             return f"  {name:<22} 대상 없음"
         pct = lambda n: f"{n:>4}건 ({n / self.tried:5.1%})"  # noqa: E731
         gap = statistics.median(self.gaps)
+        miss = statistics.median(abs(g) for g in self.gaps)
         return (f"  {name:<22} {self.tried:>5}건 · 유효 {pct(self.valid)} · 1순위 {pct(self.win)} · {TOP_N}위 안 {pct(self.top)}"
-                f" · 실제보다 {gap:+.3f}%p(중앙)")
+                f" · 실제보다 {gap:+.3f}%p(중앙) · 오차 {miss:.3f}%p(중앙 |·|)")
 
 
 def backtest(records: list[PastBid], start: str | None = None, scale: str = "all", fixed: tuple[float, ...] = (),
@@ -135,6 +139,35 @@ def backtest(records: list[PastBid], start: str | None = None, scale: str = "all
                                    rec.own_rank is not None and rec.own_rank <= TOP_N)
         rows.append(row)
     return rows, len(records) - len(dated)
+
+
+def tune_crowd(records: list[PastBid], start: str | None = None, end: str | None = None, scale: str = "all",
+               half_lives: tuple = HALF_LIVES, min_train: int = MIN_SAMPLES) -> dict:
+    """대규모 추천의 반감기 후보마다 같은 공고들을 채점(공고마다 개찰일 전 자료만) — {반감기: Tally}.
+    비슷한 공고 절반 넘게 100곳 이상인 공고만(화면에 대규모 추천이 나오는 조건과 같음)."""
+    dated = sorted(((date_of(r), r) for r in records if date_of(r)), key=lambda x: (x[0], x[1].notice_no))
+    dates = [d for d, _ in dated]
+    out = {hl: Tally() for hl in half_lives}
+    for d, rec in dated:
+        if (start and d < start) or (end and d > end):
+            continue
+        sc = ("large" if rec.bidder_count >= LARGE_COMPETITION else "small") if scale == "actual" else scale
+        picked, _ = similar([r for _, r in dated[:bisect.bisect_left(dates, d)]], rec.work, rec.range_width, sc, rec.field)
+        if len(picked) < min_train or sum(r.bidder_count >= LARGE_COMPETITION for r in picked) <= len(picked) / 2:
+            continue
+        for hl in half_lives:
+            got = crowd_rate(picked, today=d, half_life=hl)
+            if got is not None:
+                valid, win = score(got["rate"], rec)
+                out[hl].add(got["rate"], rec.assessment, valid, win, in_top(got["rate"], rec))
+    return out
+
+
+def tune_summary(result: dict) -> str:
+    lines = ["대규모 추천 반감기 비교(그리드 서치 — 같은 공고, 개찰일 전 자료만):"]
+    for hl, tally in result.items():
+        lines.append(tally.line(f"반감기 {hl}일" if hl else "무게 없음"))
+    return "\n".join(lines)
 
 
 def track_records(rows: list[dict]) -> dict[str, dict]:
@@ -235,6 +268,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scale", choices=("all", "actual"), default="all",
                         help="비슷한 공고 고를 때 경쟁 규모: all=구분 안 함, actual=그 공고의 실제 규모(100곳 미만/이상)")
     parser.add_argument("--fixed", type=float, action="append", default=[], help="같이 비교할 고정 사정률(%%), 여러 번 가능")
+    parser.add_argument("--tune", action="store_true",
+                        help="대규모 추천 반감기(1년·2년·3년·무게 없음)를 같은 공고로 비교 — 결과는 요약 끝에 붙음(오래 걸릴 수 있음)")
     parser.add_argument("--min-train", type=int, default=MIN_SAMPLES, help=f"추천에 필요한 비슷한 과거 공고 수(기본 {MIN_SAMPLES})")
     parser.add_argument("--csv", default="", help="공고별 결과 CSV 경로(기본 <dir>/bid_backtest_<오늘>.csv)")
     args = parser.parse_args(argv)
@@ -256,6 +291,9 @@ def main(argv: list[str] | None = None) -> int:
     rows, undated = backtest(history.records, args.start or None, args.scale, tuple(args.fixed), args.min_train,
                              end=args.end or None)
     text = "\n".join(head) + "\n" + summarize(rows, undated)
+    if args.tune:
+        text += "\n\n" + tune_summary(tune_crowd(history.records, args.start or None, args.end or None, args.scale,
+                                                    min_train=args.min_train))
     print(text)
     stamp = f"{datetime.now():%Y%m%d}"
     summary_path = directory / f"bid_backtest_{stamp}.txt"

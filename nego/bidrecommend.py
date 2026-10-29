@@ -478,11 +478,11 @@ def _smooth(values, weights, edges, bandwidth: float):
     return dens / total if total > 0 else dens
 
 
-def crowd_rate(records: list[PastBid], today: str | None = None) -> dict | None:
+def crowd_rate(records: list[PastBid], today: str | None = None, half_life: float | None = CROWD_HALF_LIFE) -> dict | None:
     """대규모 경쟁용 추천 — "이 사정률 r로 썼으면 1순위였을 확률"이 가장 높은 r.
 
     1순위 ⇔ 실제 사정률 s ≤ r 이고 [s, r) 사이에 다른 업체가 없음. 과거 비슷한 공고에서
-      f(s) = 실제 사정률 분포(최근 공고에 무게 — 반감기 CROWD_HALF_LIFE일),
+      f(s) = 실제 사정률 분포(최근 공고에 무게 — 반감기 half_life일, None이면 무게 없이 같게),
       g(c) = 경쟁업체 가정 사정률 분포(공고마다 무게 같게), N = 참가 업체 수 중앙
     를 구하고 P(r) = ∫_{s≤r} f(s)·exp(−N·∫_s^r g) ds 를 격자 위에서 계산한다(업체들이 g를 따라 서로 따로 낸다고 봄).
     결과 {rate, win_p(모형 1순위 확률), valid_p(유효 확률 = s ≤ r), bidders, samples}. 자료가 MIN_SAMPLES건 미만이면 None."""
@@ -500,12 +500,12 @@ def crowd_rate(records: list[PastBid], today: str | None = None) -> dict | None:
 
     def age(d: str | None) -> float:
         if not (ref and d):
-            return CROWD_HALF_LIFE * 2.0  # 날짜 모르면 오래된 공고로 침
+            return (half_life or CROWD_HALF_LIFE) * 2.0  # 날짜 모르면 오래된 공고로 침
         from datetime import date
 
         return max(0, (date.fromisoformat(ref) - date.fromisoformat(d)).days)
 
-    w = np.array([0.5 ** (age(d) / CROWD_HALF_LIFE) for d in dates])
+    w = np.array([0.5 ** (age(d) / half_life) if half_life else 1.0 for d in dates])
     lo, hi = max(GRID_LO, float(s.min()) - 0.5), min(GRID_HI, float(s.max()) + 0.5)
     edges = np.arange(lo, hi + CROWD_STEP, CROWD_STEP)
     grid = (edges[:-1] + edges[1:]) / 2

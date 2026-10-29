@@ -101,6 +101,28 @@ class BacktestTest(unittest.TestCase):
         self.assertIn("변동폭 ±3% · 2025년", bt.summarize(rows))
         self.assertNotIn(br.CROWD_NAME, bt.backtest(self.train + [self.hit], start="2025-01-01")[0][0]["results"])  # 소규모엔 없음
 
+    def test_baseline_line_and_error_column(self):
+        rows, _ = bt.backtest(self.train + [self.hit], start="2025-01-01")
+        self.assertEqual(rows[0]["results"][bt.BASELINE][0], 100.0)
+        text = bt.summarize(rows)
+        self.assertIn(bt.BASELINE, text)
+        self.assertIn("오차", text)
+
+    def test_tune_half_life(self):
+        import random
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_bidrecommend import _large
+
+        rnd = random.Random(9)
+        recs = [_large(f"L{i:03d}", f"2025-{1 + i // 28:02d}-{1 + i % 28:02d}", rnd.gauss(100, 0.5),
+                       [rnd.gauss(100.2, 0.05) for _ in range(120)]) for i in range(40)]
+        result = bt.tune_crowd(recs, start="2025-02-01")
+        self.assertEqual(set(result), set(bt.HALF_LIVES))
+        self.assertTrue(all(t.tried for t in result.values()))
+        self.assertEqual(len({t.tried for t in result.values()}), 1)  # 같은 공고로 비교
+        self.assertIn("무게 없음", bt.tune_summary(result))
+
     def test_summary_and_csv(self):
         rows, _ = bt.backtest(self.train + [self.hit, self.miss], start="2025-01-01")
         text = bt.summarize(rows)

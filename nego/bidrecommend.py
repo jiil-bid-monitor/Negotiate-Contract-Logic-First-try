@@ -472,7 +472,8 @@ def _smooth(values, weights, edges, bandwidth: float):
     half = max(1, int(round(4 * bandwidth / step)))
     x = np.arange(-half, half + 1) * step
     kernel = np.exp(-0.5 * (x / bandwidth) ** 2)
-    dens = np.convolve(hist, kernel / kernel.sum(), mode="same")
+    # 곡선이 칸 수보다 길면 mode="same"이 곡선 길이로 돌려줘 격자와 어긋난다(10/29 서버 오류 — 공고가 적고 사정률이 넓게 퍼질 때)
+    dens = np.convolve(hist, kernel / kernel.sum(), mode="full")[half: half + len(hist)]
     total = dens.sum() * step
     return dens / total if total > 0 else dens
 

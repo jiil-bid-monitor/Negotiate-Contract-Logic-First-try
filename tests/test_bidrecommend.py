@@ -295,6 +295,18 @@ class CrowdRateTest(unittest.TestCase):
         b = br.crowd_rate(self._records(99.70))["rate"]
         self.assertNotAlmostEqual(a, b, places=2)
 
+    def test_few_widely_spread_records(self):
+        # 10/29 서버 오류 재현: 공고가 적고 사정률이 넓게 퍼지면 매끄럽게 하는 곡선이 격자보다 길어져 IndexError가 났다
+        import random
+
+        rnd = random.Random(2)
+        for n, spread in ((10, 2.9), (12, 2.5), (10, 1.5)):  # ±3% 공고처럼 넓게 — 곡선이 격자보다 길어지는 경우
+            recs = [_large(f"N{i}", f"2026-01-{1 + i % 28:02d}", 100 + rnd.uniform(-spread, spread),
+                           [rnd.gauss(100, 0.5) for _ in range(150)]) for i in range(n)]
+            got = br.crowd_rate(recs)
+            self.assertIsNotNone(got)
+            self.assertLessEqual(got["valid_p"], 1.0)
+
     def test_too_few_records(self):
         self.assertIsNone(br.crowd_rate(self._records(100.0, n=5)))
 

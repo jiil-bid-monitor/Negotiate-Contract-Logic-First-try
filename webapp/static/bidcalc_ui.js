@@ -216,7 +216,9 @@
     const floorCheck = rec != null && floor != null
       ? `<div class="calc-sub ${rec >= floor ? "ok" : "ng"}">모의 예정가격 하한선 ${won(floor)} — ${rec >= floor ? `✓ 통과(+${won(rec - floor)})` : `✗ 미달(${won(rec - floor)})`}</div>`
       : "";
-    $("#cBid").innerHTML = bid != null ? `<span${higher ? "" : ' class="calc-final"'}>${won(bid)}</span>${recNote}${floorCheck}`
+    if (REC_LOADING) {
+      $("#cBid").innerHTML = `<span class="calc-sub">추천 계산 중…</span>`;
+    } else $("#cBid").innerHTML = bid != null ? `<span${higher ? "" : ' class="calc-final"'}>${won(bid)}</span>${recNote}${floorCheck}`
       : (REC_PICK && !(numIn("#cBasis") > 0) ? "기초금액 필요" : planned ? "하한율 필요" : "-");
     $("#cNetBid").innerHTML = netBid != null ? `<span${higher ? ' class="calc-final"' : ""}>${won(netBid)}</span>` : "-";
     if (!planned && rec == null) {
@@ -227,7 +229,7 @@
       ["기초금액", basis, basis ? "100.0000" : "-"],
       ["예정가격(모의 추첨)", planned, basis && planned ? p4((planned / basis) * 100) : "-"],
       ["모의 예정가격 하한선", floor, ""],
-      [rec != null ? "투찰금액(추천)" : "투찰금액", bid, rec != null ? `${p4(used.rate)} (가정)` : ""],
+      [rec != null ? "투찰금액(추천)" : "투찰금액", REC_LOADING ? null : bid, rec != null ? `${p4(used.rate)} (가정)` : ""],
     ].filter(([, v]) => v != null);
     if (netBid != null) rows.push(["순공사원가 투찰가격", netBid, ""]);
     $("#cSummary").innerHTML = rows.map(([k, v, rate]) => `<tr><td>${esc(k)}</td><td class="num">${won(v)}</td><td class="num">${rate}</td></tr>`).join("");
@@ -266,7 +268,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
-    WORK = ""; REC_METHOD = ""; REC_PICK = null; $("#cRec").textContent = "";
+    WORK = ""; REC_METHOD = ""; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
     render();
   };
   async function lookup() {
@@ -353,6 +355,8 @@
   let REC_METHOD = "";  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
   let REC_PICK = null;  // 추천 칸이 고른 방식(rate·name·track·order) — 위 계산기 '투찰금액'이 이걸로 정해짐(10/29)
   let REC_OPTIONS = [];  // 추천 칸 방식들 — 고른 방식이 모의 예정가격 하한선 아래면 order 순으로 다음 방식
+  let REC_TICKET = 0;  // 추천 요청 번호 — 늦게 도착한 예전 요청 결과가 새 화면을 덮지 않게
+  let REC_LOADING = false;  // 추천 계산 중 — 계산기 투찰금액 칸도 비워 둠
   const pct = (v, d = 3) => (v == null ? "-" : `${Number(v).toFixed(d)}%`);
   async function recommend() {
     const title = $("#cTitle").textContent.trim();
@@ -363,17 +367,27 @@
       const v = numIn(id); if (v != null) qs.set(k, v);
     });
     qs.set("a", aValue());
+    // 계산 중엔 이전 추천을 지운 화면으로(10/29 사용자 요청 — 예전 공고의 추천 금액이 남아 헷갈림). 계산기 투찰금액도 추천 없이
+    const ticket = ++REC_TICKET;
+    REC_PICK = null; REC_OPTIONS = []; REC_LOADING = true;
+    renderResult();
+    $("#cRec").innerHTML = `<div class="why">비슷한 과거 공고로 추천을 계산하고 있어요… 처음 한 번은 수십 초 걸릴 수 있어요.</div>`;
     $("#cRecMsg").textContent = "계산 중…";
     $("#cRecBtn").disabled = true;
     try {
-      renderRecommend(await api(`/api/bidrecommend?${qs}`));
+      const d = await api(`/api/bidrecommend?${qs}`);
+      if (ticket !== REC_TICKET) return;  // 그 사이 새로 요청했으면 늦게 온 이 결과는 버림
+      REC_LOADING = false;
+      renderRecommend(d);
       $("#cRecMsg").textContent = "";
     } catch (err) {
-      REC_PICK = null;
+      if (ticket !== REC_TICKET) return;
+      REC_PICK = null; REC_LOADING = false;
       renderResult();
+      $("#cRec").innerHTML = "";
       $("#cRecMsg").textContent = `실패: ${err.message}`;
     } finally {
-      $("#cRecBtn").disabled = false;
+      if (ticket === REC_TICKET) $("#cRecBtn").disabled = false;
     }
   }
   function recBid(rate) {

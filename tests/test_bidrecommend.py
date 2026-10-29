@@ -149,6 +149,14 @@ class CoverageTest(unittest.TestCase):
         options[1]["track"]["valid"] = 180
         self.assertEqual((br.pick_option(options)["name"], br.pick_option(options)["mode"]), ("유효 70%", "valid"))
 
+    def test_pick_order_lists_chosen_then_passing_then_rest(self):
+        options = [{"name": "A", "rate": 98.4, "track": {"tried": 400, "valid": 124, "win": 60, "top": 90}},
+                   {"name": "B", "rate": 100.3, "track": {"tried": 400, "valid": 290, "win": 20, "top": 40}},
+                   {"name": "C", "rate": 100.7, "track": {"tried": 400, "valid": 360, "win": 4, "top": 18}},
+                   {"name": br.CROWD_NAME, "rate": 100.2, "track": {"tried": 400, "valid": 250, "win": 9, "top": 37}}]
+        pick = br.pick_option(options)
+        self.assertEqual(pick["order"], ["B", br.CROWD_NAME, "C", "A"])  # 고른 것 → 통과 조건 만족(성적순) → 미달
+
     def test_trend_rate_is_median_rate_plus_top_gap(self):
         recs = []
         for i, s in enumerate((99.0, 100.0, 101.0)):

@@ -588,8 +588,15 @@ def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | N
     else:
         chosen = next((o for o in options if o["name"].startswith("고정")), options[0])
         mode = "fixed"
+    # 우선순위 목록(10/29 사용자 결정) — 화면 계산기가 이 순서대로 보며 '모의 예정가격 하한선'을 넘는 첫 방식을 투찰금액으로 씀:
+    # 고른 방식 → 조건(통과 PICK_MIN_VALID 이상)을 만족하는 나머지(성적순) → 조건 미달(통과 비율순)
+    rest = [o for o in every if o is not chosen]
+    rest.sort(key=rank, reverse=True)
+    others = [o for o in measured if o not in every and o is not chosen]
+    others.sort(key=lambda o: (_ratio(o["track"], "valid"), _ratio(o["track"])), reverse=True)
+    order = [o["name"] for o in [chosen, *rest, *others]]
     own = (outsourced or {}).get("track")
-    pick = {**chosen, "weak": weak, "mode": mode, "own_track": own, "min_valid": PICK_MIN_VALID,
+    pick = {**chosen, "weak": weak, "mode": mode, "own_track": own, "min_valid": PICK_MIN_VALID, "order": order,
             "beats_outsourced": bool(own and own.get("tried") and _ratio(chosen.get("track")) > _ratio(own))}
     return pick
 

@@ -192,15 +192,26 @@
     // floor = 모의 예정가격의 하한선에 붙인 금액(21라인과 같은 계산) — 10/29 사용자 결정: 이건 '하한선 조건'으로만 보고,
     // 투찰금액은 아래 추천 칸(투찰 경향)이 고른 금액으로. 추천이 없을 때만 예전처럼 하한선 금액을 투찰금액으로 씀
     const floor = planned ? C.bidAmount({ planned: plannedWon, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
-    const rec = REC_PICK ? recBid(REC_PICK.rate) : null;
+    // 하한선 조건(10/29 사용자 결정): 추천 순서(REC_PICK.order — 고른 방식 → 통과 조건을 만족하는 나머지 → 그 밖)대로 보며
+    // 모의 예정가격 하한선 이상인 첫 방식의 금액을 투찰금액으로. 모두 아래면 고른 방식 그대로 두고 미달로 표시
+    let used = REC_PICK, fallback = false, allBelow = false;
+    if (REC_PICK && floor != null && recBid(REC_PICK.rate) != null) {
+      const byName = Object.fromEntries(REC_OPTIONS.map((o) => [o.name, o]));
+      const first = (REC_PICK.order || [REC_PICK.name]).map((n) => byName[n]).find((o) => o && recBid(o.rate) != null && recBid(o.rate) >= floor);
+      if (!first) { used = null; allBelow = true; }  // 모든 방식이 하한선 아래 — 하한선 금액을 씀
+      else if (first.name !== REC_PICK.name) { used = first; fallback = true; }
+    }
+    const rec = used ? recBid(used.rate) : null;
     const bid = rec != null ? rec : floor;
     const average = done ? nos.reduce((sum, no) => sum + SLOTS[no - 1], 0) / nos.length : null;  // 끝자리 처리 전 평균
     const netBid = planned ? C.netCostBid({ average, basis, netCost: numIn("#cNet") }) : null;
     const higher = bid != null && netBid != null && netBid > bid;
     $("#cPlanned").textContent = planned ? won(planned) : "-";
     const recNote = rec != null
-      ? `<div class="calc-sub">추천: ${esc(label(REC_PICK.name))} · 가정 사정률 ${pct(REC_PICK.rate)}${REC_PICK.track && REC_PICK.track.tried
-        ? ` · 과거 비슷한 공고 하한선 통과 ${Math.round((REC_PICK.track.valid / REC_PICK.track.tried) * 100)}%` : ""}</div>`
+      ? `<div class="calc-sub">추천: ${esc(label(used.name))} · 가정 사정률 ${pct(used.rate)}${used.track && used.track.tried
+        ? ` · 과거 비슷한 공고 하한선 통과 ${Math.round((used.track.valid / used.track.tried) * 100)}%` : ""}</div>`
+        + (fallback ? `<div class="calc-sub">'${esc(label(REC_PICK.name))}' 금액이 모의 예정가격 하한선 아래라 다음 순위 방식으로 바꿈</div>` : "")
+      : allBelow ? `<div class="calc-sub ng">모든 추천 방식의 금액이 모의 예정가격 하한선 아래 — 하한선 금액을 씀</div>`
       : `<div class="calc-sub">추천 없음 — 모의 예정가격 하한선 금액</div>`;
     const floorCheck = rec != null && floor != null
       ? `<div class="calc-sub ${rec >= floor ? "ok" : "ng"}">모의 예정가격 하한선 ${won(floor)} — ${rec >= floor ? `✓ 통과(+${won(rec - floor)})` : `✗ 미달(${won(rec - floor)})`}</div>`
@@ -216,7 +227,7 @@
       ["기초금액", basis, basis ? "100.0000" : "-"],
       ["예정가격(모의 추첨)", planned, basis && planned ? p4((planned / basis) * 100) : "-"],
       ["모의 예정가격 하한선", floor, ""],
-      [rec != null ? "투찰금액(추천)" : "투찰금액", bid, rec != null ? `${p4(REC_PICK.rate)} (가정)` : ""],
+      [rec != null ? "투찰금액(추천)" : "투찰금액", bid, rec != null ? `${p4(used.rate)} (가정)` : ""],
     ].filter(([, v]) => v != null);
     if (netBid != null) rows.push(["순공사원가 투찰가격", netBid, ""]);
     $("#cSummary").innerHTML = rows.map(([k, v, rate]) => `<tr><td>${esc(k)}</td><td class="num">${won(v)}</td><td class="num">${rate}</td></tr>`).join("");
@@ -339,8 +350,9 @@
   // 추천 사정률(2026-10-28) — 위 입력칸(기초금액·하한율·변동폭·A값)과 불러온 공고의 업무로 서버에 묻는다.
   // 투찰금액은 계산기와 같은 기타설정(절상·절사·단위)으로 자름: 원 단위 예정가격(기초금액 × 사정률) → 하한율 → 끝자리
   let WORK = "";
-  let REC_METHOD = "";
-  let REC_PICK = null;  // 추천 칸이 고른 방식(rate·name·track) — 위 계산기 '투찰금액'이 이걸로 정해짐(10/29)  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
+  let REC_METHOD = "";  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
+  let REC_PICK = null;  // 추천 칸이 고른 방식(rate·name·track·order) — 위 계산기 '투찰금액'이 이걸로 정해짐(10/29)
+  let REC_OPTIONS = [];  // 추천 칸 방식들 — 고른 방식이 모의 예정가격 하한선 아래면 order 순으로 다음 방식
   const pct = (v, d = 3) => (v == null ? "-" : `${Number(v).toFixed(d)}%`);
   async function recommend() {
     const title = $("#cTitle").textContent.trim();
@@ -406,6 +418,7 @@
     }
     const p = d.pick, a = d.assessment, b = d.bidders;
     REC_PICK = p || null;
+    REC_OPTIONS = d.options || [];
     renderResult();  // 위 계산기의 투찰금액을 추천 금액으로
     const large = b && b.median >= 100;
     // ① 추천 투찰금액 카드 — 금액 · 방식 · 핵심 숫자 3개(하한선 통과 / 5위 안 / 1순위), 설명은 ? 팝업

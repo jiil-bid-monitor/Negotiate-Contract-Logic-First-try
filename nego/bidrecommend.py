@@ -571,7 +571,7 @@ def crowd_rate(records: list[PastBid], today: str | None = None, half_life: floa
 
 
 def _rank_of(o: dict) -> float:
-    """통과했을 때 평균 상위 몇 %(작을수록 좋음) — 모르면 맨 뒤."""
+    """평균 순위(참가업체 중 상위 몇 %, 미달은 꼴찌 — 작을수록 좋음). 모르면 맨 뒤."""
     r = (o.get("track") or {}).get("rank")
     return r if r is not None else 2.0
 
@@ -582,7 +582,7 @@ def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | N
     **조건: 검증(개찰 전 자료로 정했다면) 하한선 통과 비율 PICK_MIN_VALID 이상**(하한율 만족은 조건, 금액은 경향으로).
     검증 MIN_PICK_TRIED건 미만 방식은 안 봄. 조건을 만족하는 방식 중에서:
       - 1순위 비율 최고가 PICK_MIN_WIN 이상(1순위로 방식이 가려짐 — 주로 소규모) → 1순위 → 5위 안 → 통과 비율 순(mode="track")
-      - 아니면(1순위가 거의 0 — 주로 대규모) → **통과했을 때 평균 순위(상위 몇 %)가 가장 좋은 방식**(mode="rank")
+      - 아니면(1순위가 거의 0 — 주로 대규모) → **평균 순위(상위 몇 %, 하한선 미달은 꼴찌로 셈)가 가장 좋은 방식**(mode="rank")
         (10/29 R 공고 63건: 대규모 공사는 모든 방식이 1순위 0~2건이라 1순위 비율로는 통과율 높은(비싼) 방식만 뽑혔음)
     조건을 만족하는 방식이 하나도 없으면 하한선 통과 비율이 가장 높은 방식(mode="valid"), 검증이 전혀 없으면 고정값(mode="fixed")."""
     if not options:

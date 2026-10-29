@@ -123,6 +123,34 @@ class BacktestTest(unittest.TestCase):
         self.assertEqual(len({t.tried for t in result.values()}), 1)  # 같은 공고로 비교
         self.assertIn("무게 없음", bt.tune_summary(result))
 
+    def test_rank_share_counts_fail_as_last(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_bidrecommend import _large
+
+        rec = _large("R1", "2025-03-01", 100.0, [100.1, 100.2, 100.3, 99.5])
+        self.assertEqual(bt.rank_share(99.9, rec), 1.0)  # 미달 = 꼴찌
+        self.assertAlmostEqual(bt.rank_share(100.0, rec), 1 / 4)
+        self.assertAlmostEqual(bt.rank_share(100.25, rec), 3 / 4)
+
+    def test_pick_simulation_lines(self):
+        import random
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_bidrecommend import _large
+
+        rnd = random.Random(4)
+        recs = [_large(f"L{i:03d}", f"2025-{1 + i // 28:02d}-{1 + i % 28:02d}", rnd.gauss(100, 0.5),
+                       [rnd.gauss(100.2, 0.3) for _ in range(120)]) for i in range(80)]
+        rows, _ = bt.backtest(recs, fixed=(100.55,))
+        bt.add_picks(rows, recs)
+        late = [r for r in rows if r["개찰일"] >= "2025-03-01"]
+        self.assertTrue(late and all(bt.PICK in r["results"] and bt.LEGACY in r["results"] for r in late))
+        self.assertTrue(all(r["results"][bt.PICK] == r["results"][r["picked"][bt.PICK]] for r in late))
+        text = bt.summarize(late)
+        self.assertIn(bt.PICK, text)
+        self.assertIn("두 규칙이 다른 방식을 고른 공고", text)
+        self.assertIn("미달=꼴찌", text)
+
     def test_summary_and_csv(self):
         rows, _ = bt.backtest(self.train + [self.hit, self.miss], start="2025-01-01")
         text = bt.summarize(rows)

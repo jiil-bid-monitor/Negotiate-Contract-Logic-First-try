@@ -189,22 +189,35 @@
     // 투찰금액은 화면 단위(백원·천원…)로 자른 예정가격이 아니라 **원 단위 예정가격**(같은 절상·절사)에 하한율을 곱한 뒤 단위 처리 —
     // 21라인 캡처(10/22): 절사·천원 123,853,000 → 투찰 108,675,000, 절상·백원 123,853,700 → 108,675,400 (자른 값이면 108,674,000·108,675,500)
     const plannedWon = done ? C.plannedPrice(picks, r.planned, 1) : null;
-    const bid = planned ? C.bidAmount({ planned: plannedWon, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
+    // floor = 모의 예정가격의 하한선에 붙인 금액(21라인과 같은 계산) — 10/29 사용자 결정: 이건 '하한선 조건'으로만 보고,
+    // 투찰금액은 아래 추천 칸(투찰 경향)이 고른 금액으로. 추천이 없을 때만 예전처럼 하한선 금액을 투찰금액으로 씀
+    const floor = planned ? C.bidAmount({ planned: plannedWon, lowerRate: numIn("#cRate"), a: aValue(), how: r.bid, unit: r.unit }) : null;
+    const rec = REC_PICK ? recBid(REC_PICK.rate) : null;
+    const bid = rec != null ? rec : floor;
     const average = done ? nos.reduce((sum, no) => sum + SLOTS[no - 1], 0) / nos.length : null;  // 끝자리 처리 전 평균
     const netBid = planned ? C.netCostBid({ average, basis, netCost: numIn("#cNet") }) : null;
     const higher = bid != null && netBid != null && netBid > bid;
     $("#cPlanned").textContent = planned ? won(planned) : "-";
-    $("#cBid").innerHTML = bid != null ? `<span${higher ? "" : ' class="calc-final"'}>${won(bid)}</span>` : (planned ? "하한율 필요" : "-");
+    const recNote = rec != null
+      ? `<div class="calc-sub">추천: ${esc(label(REC_PICK.name))} · 가정 사정률 ${pct(REC_PICK.rate)}${REC_PICK.track && REC_PICK.track.tried
+        ? ` · 과거 비슷한 공고 하한선 통과 ${Math.round((REC_PICK.track.valid / REC_PICK.track.tried) * 100)}%` : ""}</div>`
+      : `<div class="calc-sub">추천 없음 — 모의 예정가격 하한선 금액</div>`;
+    const floorCheck = rec != null && floor != null
+      ? `<div class="calc-sub ${rec >= floor ? "ok" : "ng"}">모의 예정가격 하한선 ${won(floor)} — ${rec >= floor ? `✓ 통과(+${won(rec - floor)})` : `✗ 미달(${won(rec - floor)})`}</div>`
+      : "";
+    $("#cBid").innerHTML = bid != null ? `<span${higher ? "" : ' class="calc-final"'}>${won(bid)}</span>${recNote}${floorCheck}`
+      : (REC_PICK && !(numIn("#cBasis") > 0) ? "기초금액 필요" : planned ? "하한율 필요" : "-");
     $("#cNetBid").innerHTML = netBid != null ? `<span${higher ? ' class="calc-final"' : ""}>${won(netBid)}</span>` : "-";
-    if (!planned) {
+    if (!planned && rec == null) {
       $("#cSummary").innerHTML = `<tr><td colspan="3" class="why">${SLOTS.length ? `번호를 ${take}개 고르세요 (${nos.length}/${take})` : "예비가격을 만들고 번호를 고르면 나옵니다."}</td></tr>`;
       return;
     }
     const rows = [
       ["기초금액", basis, basis ? "100.0000" : "-"],
-      ["예정가격", planned, basis ? p4((planned / basis) * 100) : "-"],
-      ["투찰금액", bid, ""],
-    ];
+      ["예정가격(모의 추첨)", planned, basis && planned ? p4((planned / basis) * 100) : "-"],
+      ["모의 예정가격 하한선", floor, ""],
+      [rec != null ? "투찰금액(추천)" : "투찰금액", bid, rec != null ? `${p4(REC_PICK.rate)} (가정)` : ""],
+    ].filter(([, v]) => v != null);
     if (netBid != null) rows.push(["순공사원가 투찰가격", netBid, ""]);
     $("#cSummary").innerHTML = rows.map(([k, v, rate]) => `<tr><td>${esc(k)}</td><td class="num">${won(v)}</td><td class="num">${rate}</td></tr>`).join("");
   }
@@ -242,7 +255,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
-    WORK = ""; REC_METHOD = ""; $("#cRec").textContent = "";
+    WORK = ""; REC_METHOD = ""; REC_PICK = null; $("#cRec").textContent = "";
     render();
   };
   async function lookup() {
@@ -326,7 +339,8 @@
   // 추천 사정률(2026-10-28) — 위 입력칸(기초금액·하한율·변동폭·A값)과 불러온 공고의 업무로 서버에 묻는다.
   // 투찰금액은 계산기와 같은 기타설정(절상·절사·단위)으로 자름: 원 단위 예정가격(기초금액 × 사정률) → 하한율 → 끝자리
   let WORK = "";
-  let REC_METHOD = "";  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
+  let REC_METHOD = "";
+  let REC_PICK = null;  // 추천 칸이 고른 방식(rate·name·track) — 위 계산기 '투찰금액'이 이걸로 정해짐(10/29)  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
   const pct = (v, d = 3) => (v == null ? "-" : `${Number(v).toFixed(d)}%`);
   async function recommend() {
     const title = $("#cTitle").textContent.trim();
@@ -343,6 +357,8 @@
       renderRecommend(await api(`/api/bidrecommend?${qs}`));
       $("#cRecMsg").textContent = "";
     } catch (err) {
+      REC_PICK = null;
+      renderResult();
       $("#cRecMsg").textContent = `실패: ${err.message}`;
     } finally {
       $("#cRecBtn").disabled = false;
@@ -383,10 +399,14 @@
   function renderRecommend(d) {
     const notes = (d.notes || []);
     if (!d.samples) {
+      REC_PICK = null;
+      renderResult();
       $("#cRec").innerHTML = notes.length ? notes.map((n) => `<div class="rec-warn">${esc(n)}</div>`).join("") : "비슷한 과거 공고가 없습니다.";
       return;
     }
     const p = d.pick, a = d.assessment, b = d.bidders;
+    REC_PICK = p || null;
+    renderResult();  // 위 계산기의 투찰금액을 추천 금액으로
     const large = b && b.median >= 100;
     // ① 추천 투찰금액 카드 — 금액 · 방식 · 핵심 숫자 3개(하한선 통과 / 5위 안 / 1순위), 설명은 ? 팝업
     let card = "";

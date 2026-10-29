@@ -146,6 +146,7 @@ class BacktestTest(unittest.TestCase):
         late = [r for r in rows if r["개찰일"] >= "2025-03-01"]
         self.assertTrue(late and all(bt.PICK in r["results"] and bt.LEGACY in r["results"] for r in late))
         self.assertTrue(all(r["results"][bt.PICK] == r["results"][r["picked"][bt.PICK]] for r in late))
+        self.assertFalse(any(r["picked"][label] in (bt.BASELINE, bt.OWN) for r in late for label in (bt.PICK, bt.LEGACY)))
         text = bt.summarize(late)
         self.assertIn(bt.PICK, text)
         self.assertIn("두 규칙이 다른 방식을 고른 공고", text)

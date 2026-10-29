@@ -208,7 +208,8 @@ def add_picks(rows: list[dict], records: list[PastBid]) -> None:
         picked, _ = similar(train, rec.work, rec.range_width, scale, rec.field)
         tracked = sorted((by_no[p.notice_no] for p in picked if p.notice_no in by_no), key=lambda r: r["개찰일"])[-TRACK_LIMIT:]
         track = track_records(tracked)
-        options = [{"name": n, "rate": rate, "track": track.get(n)} for n, rate in row["rates"].items()]
+        # 비교용 기준선은 웹앱 추천 칸에 없는 줄이라 후보에서 뺌(10/29: '늘 100%'가 선정된 공고 2건)
+        options = [{"name": n, "rate": rate, "track": track.get(n)} for n, rate in row["rates"].items() if n not in (BASELINE, OWN)]
         for label, chosen in ((PICK, pick_option(options)), (LEGACY, legacy_pick(options))):
             if chosen is None:
                 continue

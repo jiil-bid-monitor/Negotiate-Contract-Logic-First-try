@@ -368,10 +368,19 @@
       const lastRank = ranked.length ? ranked[ranked.length - 1].rank : 5;
       const sign = (v) => `${v >= 0 ? "+" : ""}${Number(v).toFixed(3)}%p`;
       const share = (v) => (v == null ? "-" : `${(v * 100).toFixed(v < 0.01 ? 2 : 1)}%`);
+      // 대규모 경쟁 설명은 다른 부서 사람도 읽게 쉬운 말로(10/29 사용자 요청) — 사정률·모형 같은 말 대신 '가능성', 비교는 '아무 금액이나 썼을 때 평균'(1 ÷ 참가 수)만
+      const crowdWhy = () => {
+        const n = Math.round(p.crowd_bidders || 0), base = n ? 1 / n : null, t = p.track || {};
+        const tenths = p.valid_p != null ? Math.round(p.valid_p * 10) : null;
+        const times = base && p.win_p ? p.win_p / base : null;
+        return [`<b>참가 업체가 많은 공고(약 ${n}곳)용 추천</b> — 과거 비슷한 공고에서 예정가격이 자주 나온 범위 안에서, 다른 업체들이 덜 몰린 금액을 골랐어요.`,
+          `· 하한선을 넘을 가능성: 약 ${share(p.valid_p)}${tenths != null ? ` (10번 중 ${tenths}번 정도)` : ""}`,
+          `· 1순위가 될 가능성: 약 ${share(p.win_p)}${times ? ` (아무 금액이나 썼을 때의 평균 ${share(base)}의 ${times.toFixed(1)}배)` : ""}`,
+          t.tried ? `· 과거 비슷한 공고 ${t.tried}건에 이 방법을 썼다면: 1순위 ${t.win}번 · 5위 안 ${t.top}번 · 하한선 통과 ${t.valid}번` : ""]
+          .filter(Boolean).join("<br>");
+      };
       const why = p.mode === "crowd"
-        // 대규모 경쟁 — 실제 사정률이 자주 나온 곳과 경쟁업체가 몰린 곳을 함께 봐서 1순위 가능성이 가장 높은 사정률
-        ? `대규모 경쟁 추천: 비슷한 과거 공고의 실제 사정률 분포와 경쟁업체(약 ${p.crowd_bidders}곳) 밀집을 함께 봐서 1순위 가능성이 가장 높은 사정률`
-          + ` · 모형 추정 1순위 ${share(p.win_p)} · 유효 ${share(p.valid_p)} · 검증 1순위 ${ratio(p.track)}`
+        ? crowdWhy()
         : p.mode === "trend"
         // 검증 성적으로 고를 만한 차이가 없을 때(대규모 경쟁·공사 등) — 단순 경향: 실제 사정률 중앙 + 상위 업체 간격
         ? `과거 경향으로 추천: 비슷한 공고 실제 사정률 중앙 ${pct(p.base)} + 1~5위 업체가 쓴 간격 중앙 ${sign(p.gap)}`

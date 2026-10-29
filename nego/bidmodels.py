@@ -141,7 +141,7 @@ def draw_rate(records) -> dict | None:
     sims = simulate_assessments(records)
     if sims is None:
         return None
-    got = best_window(sims, None, [gap_of(r) for r in records], None)
+    got = best_window(sims, None, [gap_of(r) for r in records if r.window_ok] or [gap_of(r) for r in records], None)
     if got is None:
         return None
     return {"rate": got[0], "win_p": got[1], "valid_p": got[2], "sims": len(sims)}
@@ -196,7 +196,8 @@ def knn_rate(records, target: dict, ref: str | None = None) -> dict | None:
     recs, ws = [r for r, _ in pairs], [w for _, w in pairs]
     if not recs or sum(ws) <= 0:
         return None
-    got = best_window([r.assessment for r in recs], ws, [gap_of(r) for r in recs], ws)
+    ok = [(r, w) for r, w in zip(recs, ws) if r.window_ok] or list(zip(recs, ws))  # 하한선이 틀린 공고의 구간 폭은 빼고
+    got = best_window([r.assessment for r in recs], ws, [gap_of(r) for r, _ in ok], [w for _, w in ok])
     if got is None:
         return None
     return {"rate": got[0], "win_p": got[1], "valid_p": got[2], "neighbors": len(recs)}
@@ -230,7 +231,7 @@ def gap_model(records: Iterable, key: tuple | None = None):
     scikit-learn이 없으면 None. key를 주면 같은 key는 다시 학습하지 않는다(백테스트에서 달마다 한 번)."""
     if key is not None and key in _GAP_CACHE:
         return _GAP_CACHE[key]
-    records = list(records)
+    records = [r for r in records if getattr(r, "window_ok", True)]  # 하한선이 틀린 공고(구간이 비정상으로 넓음)는 학습에서 뺌
     model = None
     if len(records) >= GAP_MIN_TRAIN:
         try:

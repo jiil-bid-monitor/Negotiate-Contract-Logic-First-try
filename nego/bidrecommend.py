@@ -51,6 +51,8 @@ CROWD_STEP = 0.002  # 대규모 추천 계산 격자(%p)
 CROWD_HALF_LIFE = 730  # 실제 사정률 분포를 만들 때 이 날수만큼 지난 공고는 무게 절반(최근 경향에 무게 — 2026 ±3% 공고 변화)
 CROWD_BW_COMPETITOR = 0.02  # 경쟁업체 가정 사정률 분포를 매끄럽게 하는 폭(%p)
 CROWD_MAX = 600  # 대규모 추천은 비슷한 공고 중 최근 이만큼만 씀(오래된 공고는 무게도 작고, 검증 때 계산 시간)
+LARGE_MAX_WINDOW = 0.1  # 참가 100곳 이상인데 1순위 구간이 이보다 넓으면(%p, 정상 중앙 0.004) 하한선이 틀린 공고로 보고 1순위·순위 세기에서 뺀다
+# (10/29 R 공고 63건 비교: '과거 1순위 최다'가 통신·전기 20건 내내 98.595% — 하한선이 틀려 구간이 넓게 잡힌 몇 건이 겹쳐 최다가 됨)
 
 
 @dataclass
@@ -114,6 +116,17 @@ class PastBid:
     def win_ceiling(self) -> float:
         """이 r 미만이면 1순위(이상이면 1순위보다 비쌈)."""
         return self.rate_for(self.winner_rate / 100 * self.planned)
+
+    @property
+    def window_ok(self) -> bool:
+        """1순위·순위 구간을 믿을 만한가 — 대규모 경쟁인데 구간이 `LARGE_MAX_WINDOW`보다 넓으면 하한선(A값·추정)이 틀린 것으로 본다.
+        실제 사정률(유효 판정)은 하한선과 무관해 그대로 쓴다."""
+        if self.bidder_count < LARGE_COMPETITION:
+            return True
+        try:
+            return self.win_ceiling - self.assessment <= LARGE_MAX_WINDOW
+        except (TypeError, ZeroDivisionError):
+            return False
 
     def rank_ceiling(self, k: int = TOP_N) -> float:
         """이 r 미만이면 k위 안(그 공고 k위 업체보다 싸게 씀). 순위 있는 업체가 k곳이 안 되면 하한선만 넘으면 k위 안."""
@@ -422,6 +435,8 @@ def coverage(records: list[PastBid], ceiling=None) -> tuple[list[int], list[int]
     for rec in records:
         start = max(0, min(size, _index(rec.assessment) + (1 if _rate(_index(rec.assessment)) < rec.assessment else 0)))
         valid_d[start] += 1
+        if not rec.window_ok:  # 하한선이 틀린 공고 — 유효는 세고 1순위·순위 구간은 안 셈
+            continue
         top = min(ceiling(rec), GRID_HI + GRID_STEP)
         end = max(0, min(size, _index(top) + (1 if _rate(_index(top)) < top else 0)))
         if end > start:  # [start, end) — win_ceiling 미만까지
@@ -465,7 +480,7 @@ def trend_rate(records: list[PastBid], k: int = TOP_N) -> tuple[float, float] | 
     (예상 사정률, 간격). 투찰은 운이 커서 검증 성적으로 고를 차이가 없을 때 쓰는 '합리적 추론'(2026-10-28 사용자 결정)."""
     if not records:
         return None
-    gaps = [r.rate_for(a) - r.assessment for r in records for a in r.top_amounts[:k]]
+    gaps = [r.rate_for(a) - r.assessment for r in records if r.window_ok for a in r.top_amounts[:k]]
     if not gaps:
         return None
     return statistics.median(r.assessment for r in records), statistics.median(gaps)
@@ -535,8 +550,9 @@ def crowd_rate(records: list[PastBid], today: str | None = None, half_life: floa
     spread = min(float(s.std()), float(q75 - q25) / 1.349) or float(s.std()) or 0.1
     bw = max(0.03, 0.9 * spread * len(s) ** -0.2)
     f = _smooth(s, w, edges, bw)
-    comp = [_competitor_rates(r) for r in recs]
-    cw = np.concatenate([np.full(len(c), wi / len(c)) for c, wi in zip(comp, w)])
+    trusted = [(r, wi) for r, wi in zip(recs, w) if r.window_ok] or list(zip(recs, w))
+    comp = [_competitor_rates(r) for r, _ in trusted]
+    cw = np.concatenate([np.full(len(c), wi / len(c)) for c, (_, wi) in zip(comp, trusted)])
     g = _smooth(np.concatenate(comp), cw, edges, CROWD_BW_COMPETITOR)
     n = float(statistics.median(r.bidder_count for r in recs))
     decay = np.exp(-n * g * CROWD_STEP)
@@ -545,8 +561,11 @@ def crowd_rate(records: list[PastBid], today: str | None = None, half_life: floa
     for k in range(len(f)):
         p = p * decay[k] + f[k] * CROWD_STEP
         win[k] = p
-    k = int(win.argmax())
     valid = np.cumsum(f) * CROWD_STEP
+    # 하한선 통과 확률이 PICK_MIN_VALID 이상인 r 중에서만 고름(10/29 R 공고 63건: 제약 없이는 경쟁업체가 없는 낮은 쪽 끝을 골라
+    # 실제보다 중앙 −1.09%p, ±3% 공고 29건 중 통과 3건 — 1순위 확률은 그 끝에서 아주 조금 높을 뿐이었음)
+    allowed = valid >= PICK_MIN_VALID
+    k = int(np.where(allowed, win, -1.0).argmax()) if allowed.any() else int(win.argmax())
     return {"rate": round(float(grid[k]), 3), "win_p": float(win[k]), "valid_p": float(min(1.0, valid[k])),
             "bidders": n, "samples": len(recs)}
 

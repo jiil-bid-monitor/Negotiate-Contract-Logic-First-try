@@ -303,18 +303,24 @@ class CrowdRateTest(unittest.TestCase):
         self.assertAlmostEqual(float(br._competitor_rates(rec)[0]), 99.5, places=6)
 
     def test_avoids_crowded_spot(self):
-        # 경쟁업체 대부분이 100.30%에 몰려 있으면 그 바로 아래(아직 덜 붐비는 쪽)를 고른다 — 몰린 곳 위는 늘 그 업체들에 진다
-        got = br.crowd_rate(self._records(100.30))
+        # 경쟁업체 대부분이 100.60%에 몰려 있으면 그 바로 아래(아직 덜 붐비는 쪽)를 고른다 — 몰린 곳 위는 늘 그 업체들에 진다
+        got = br.crowd_rate(self._records(100.60))
         self.assertIsNotNone(got)
-        self.assertLess(got["rate"], 100.30)
+        self.assertLess(got["rate"], 100.60)
         self.assertGreater(got["rate"], 99.5)
         self.assertGreater(got["win_p"], 0)
         self.assertLess(got["win_p"], got["valid_p"])  # 1순위면 늘 유효
 
+    def test_keeps_floor_pass_chance(self):
+        # 10/29 R 공고 63건: 제약 없이 경쟁업체가 없는 낮은 끝을 골라 대부분 미달 — 이제 통과 확률 PICK_MIN_VALID 이상에서만
+        for at in (99.70, 100.30, 100.60):
+            got = br.crowd_rate(self._records(at))
+            self.assertGreaterEqual(got["valid_p"], br.PICK_MIN_VALID - 0.01)
+
     def test_follows_where_actual_rates_fall(self):
         # 몰린 곳을 옮기면 추천도 따라 움직인다(고정값이 아님)
-        a = br.crowd_rate(self._records(100.30))["rate"]
-        b = br.crowd_rate(self._records(99.70))["rate"]
+        a = br.crowd_rate(self._records(100.60))["rate"]
+        b = br.crowd_rate(self._records(100.30))["rate"]
         self.assertNotAlmostEqual(a, b, places=2)
 
     def test_few_widely_spread_records(self):
@@ -357,3 +363,16 @@ class CrowdRateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WindowOkTest(unittest.TestCase):
+    def test_wide_window_in_large_competition_not_counted(self):
+        # 10/29 R 공고 63건: 하한선이 틀려 1순위 구간이 넓게 잡힌 대규모 공고 몇 건이 겹쳐 '과거 1순위 최다'를 98.595%에 묶어 둠
+        good = _large("G", "2026-01-01", 100.0, [100.002] + [99.0] * 120)  # 구간 0.002%p
+        bad = _large("B", "2026-01-02", 98.5, [99.5] + [98.0] * 120)  # 구간 약 1%p — 하한선 틀린 공고처럼
+        self.assertTrue(good.window_ok)
+        self.assertFalse(bad.window_ok)
+        wins, valid = br.coverage([good, bad])
+        self.assertEqual(wins[br._index(99.0)], 0)  # 넓은 구간은 1순위로 안 셈
+        self.assertEqual(valid[br._index(99.0)], 1)  # 유효(실제 사정률)는 그대로 셈
+        self.assertEqual(wins[br._index(100.001)], 1)

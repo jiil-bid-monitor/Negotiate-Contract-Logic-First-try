@@ -380,22 +380,31 @@ class NetCostLineTest(unittest.TestCase):
     def test_line_from_remarks(self):
         rec, floor = self._rec()
         self.assertAlmostEqual(rec.net_line, floor + 300_000)
-        self.assertGreater(rec.need_rate, rec.assessment)
-        # 하한선만 넘고 기준선 아래인 사정률은 유효·1순위가 아님
         from nego import bidbacktest as bb
 
-        between = rec.rate_for(floor + 150_000)
-        self.assertEqual(bb.score(between, rec), (False, False))
+        # 실제 사정률로 낸 금액 = 기준선(하한선이 아니라) — 그보다 낮은 사정률은 미달, 하한선만 넘는 금액은 순위 없음
+        s = rec.assessment
+        self.assertAlmostEqual(rec.amount_at(s), floor + 300_000)
+        self.assertAlmostEqual(rec.rate_for(rec.amount_at(s + 0.1)), s + 0.1)
+        self.assertEqual(bb.score(s - 0.01, rec), (False, False))
         self.assertIsNone(bb.rank_of(rec, floor + 150_000))
-        ok = rec.rate_for(floor + 350_000)
-        self.assertEqual(bb.score(ok, rec), (True, True))
-        self.assertEqual(bb.rank_of(rec, floor + 350_000), 1)
+        self.assertEqual(bb.score(s + 0.01, rec), (True, True))
+        self.assertEqual(bb.rank_of(rec, bb.amount_for(rec, s + 0.01)), 1)
+        self.assertLess(rec.win_ceiling - s, 0.5)
         self.assertEqual(rec.odd_remarks, Counter())
+
+    def test_target_bid_uses_net_rule(self):
+        # 10/29 제보 공고 값: 기초 563,530,000 · 하한율 87.745 · A 25,053,044 · 순공사원가 519,482,258(공고문 98%)
+        plain = br.bid_amount(563_530_000, 101.173, 87.745, 25_053_044)
+        with_net = br.bid_amount(563_530_000, 101.173, 87.745, 25_053_044, 519_482_258, 98)
+        self.assertAlmostEqual(with_net, 519_482_258 * 1.01173 * 0.98)
+        self.assertGreater(with_net, plain)
+        self.assertEqual(br.bid_amount(563_530_000, 101.173, 87.745, 25_053_044, 519_482_258, None), plain)
 
     def test_no_rule_without_remarks(self):
         rec = _large("N2", "2026-01-01", 100.0, [100.1, 100.2])
         self.assertIsNone(rec.net_line)
-        self.assertEqual(rec.need_rate, rec.assessment)
+        self.assertAlmostEqual(rec.amount_at(100.0), rec.floor)
 
 
 class WindowOkTest(unittest.TestCase):

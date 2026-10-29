@@ -54,18 +54,18 @@ def date_of(rec: PastBid) -> str | None:
 
 def score(rate: float, rec: PastBid) -> tuple[bool, bool]:
     """(유효, 1순위) — `bidrecommend`과 같은 식: 유효 ⇔ r ≥ s, 1순위 ⇔ s ≤ r < 1순위 상한."""
-    valid = rate >= rec.need_rate - 1e-9
+    valid = rate >= rec.assessment - 1e-9
     return valid, valid and rate < rec.win_ceiling
 
 
 def in_top(rate: float, rec: PastBid, k: int = TOP_N) -> bool:
     """이 사정률로 썼으면 금액 기준 개찰 k위 안이었나(하한선 이상 + k위 업체보다 쌈)."""
-    return rate >= rec.need_rate - 1e-9 and rate < rec.rank_ceiling(k)
+    return rate >= rec.assessment - 1e-9 and rate < rec.rank_ceiling(k)
 
 
 def amount_for(rec: PastBid, rate: float) -> float:
-    """이 공고에 가정 사정률 rate로 냈을 투찰금액 — `PastBid.rate_for`를 거꾸로(하한선 기준이라 A값이 따로 필요 없음)."""
-    return rec.floor + (rate / 100 * rec.basis - rec.planned) * rec.lower_rate / 100
+    """이 공고에 가정 사정률 rate로 냈을 투찰금액 — `PastBid.amount_at`(하한선·순공사원가 선 중 높은 쪽)."""
+    return rec.amount_at(rate)
 
 
 def rank_of(rec: PastBid, amount: float, skip_own: bool = True) -> int | None:
@@ -89,7 +89,7 @@ def rank_share(rate: float, rec: PastBid) -> float | None:
     통과해 순위가 매겨지고, 낮게 쓰는 방식은 실제 사정률이 낮아 1위와 멀리 떨어진 공고에서만 통과해 순위가 나빠 보임(가짜 자료로 확인)."""
     if not rec.amounts or not rec.window_ok:
         return None
-    if rate < rec.need_rate - 1e-9:
+    if rate < rec.assessment - 1e-9:
         return 1.0
     rank = rank_of(rec, amount_for(rec, rate))
     return 1.0 if rank is None else min(1.0, rank / max(len(rec.amounts), 1))
@@ -109,7 +109,7 @@ def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train:
     picked, _ = similar(train, target.work, target.range_width, scale, target.field)
     if len(picked) < min_train:
         return {}
-    rates = [r.need_rate for r in picked]
+    rates = [r.assessment for r in picked]
     out = {"사정률 중앙값": statistics.median(rates), "유효 70%": _pct(rates, 0.7), "유효 90%": _pct(rates, 0.9)}
     best = _best(coverage(picked)[0])
     if best is not None:

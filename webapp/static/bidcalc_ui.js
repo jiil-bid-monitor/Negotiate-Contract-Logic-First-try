@@ -377,6 +377,7 @@
     [["basis", "#cBasis"], ["lower", "#cRate"], ["lo", "#cLo"], ["hi", "#cHi"]].forEach(([k, id]) => {
       const v = numIn(id); if (v != null) qs.set(k, v);
     });
+    if (NET_RULE && numIn("#cNet") > 0) { qs.set("net", numIn("#cNet")); qs.set("netrate", NET_RULE.rate); }
     qs.set("a", aValue());
     // 계산 중엔 이전 추천을 지운 화면으로(10/29 사용자 요청 — 예전 공고의 추천 금액이 남아 헷갈림). 계산기 투찰금액도 추천 없이
     const ticket = ++REC_TICKET;
@@ -406,7 +407,10 @@
     if (!(basis > 0) || !(lower > 0)) return null;
     const r = rounding();
     const plannedWon = C.roundAmount((basis * rate) / 100, r.planned, 1);
-    return C.bidAmount({ planned: plannedWon, lowerRate: lower, a: aValue(), how: r.bid, unit: r.unit });
+    const bid = C.bidAmount({ planned: plannedWon, lowerRate: lower, a: aValue(), how: r.bid, unit: r.unit });
+    // 공고문에 순공사원가 조건이 있으면 그 사정률의 순공사원가 선과 높은 쪽(10/29 — 하한선만 넘고 순공사원가 미달로 무효되는 금액을 추천하지 않게)
+    const net = NET_RULE ? C.netCostBid({ average: (basis * rate) / 100, basis, netCost: numIn("#cNet"), rate: NET_RULE.rate }) : null;
+    return net != null && net > bid && !(NET_RULE.limit && (basis * rate) / 100 >= NET_RULE.limit) ? net : bid;
   }
   // ── 추천 칸 화면(10/29 사용자 요청: 보기 쉽게 — 긴 설명은 ? 팝업으로) ──
   // 팝업은 공고 카드와 같은 .qual/.qtip(마우스를 대거나 누르면 열림, index.html placeTip이 위·아래 자리를 잡음)
@@ -480,6 +484,12 @@
         </div>` : "";
       const luck = large ? `<div class="rec-flag">참가 업체가 많은 공고(약 ${Math.round(b.median)}곳) — 1순위는 운의 비중이 커요 ${tip(
         "업체가 수백 곳이면 1순위는 하한선 바로 위(금액으로 몇천~몇만 원 차이)에서 갈려서, 어떤 방법도 1순위 비율이 1~2% 안팎이에요. 하한선 통과와 5위 안을 함께 보세요.")}</div>` : "";
+      // 순공사원가 조건(공고문에서 읽음) — 적용 여부를 카드에 바로 보임
+      const netOn = NET_RULE && numIn("#cNet") > 0;
+      const netFlag = netOn
+        ? `<div class="rec-flag">순공사원가 조건 반영 — 공고문: ${NET_RULE.limit ? `예정가격 ${NET_RULE.limit / 1e8}억 원 미만이면 ` : ""}순공사원가의 ${NET_RULE.rate}% 미만 투찰은 제외.
+            금액 = 이 사정률의 하한선과 순공사원가 선 중 높은 쪽 ${tip(esc(NET_RULE.quote || ""))}</div>`
+        : numIn("#cNet") > 0 ? `<div class="rec-flag">순공사원가 금액은 있는데 공고문에서 순공사원가 조건 문장을 못 찾아 금액에 반영하지 않았어요 — 공고문을 확인하세요</div>` : "";
       card = `<div class="rec-pick${p.mode === "fixed" ? " weak" : ""}">
         <div class="rec-pick-top">
           <div><div class="rec-pick-label">추천 투찰금액</div>
@@ -487,7 +497,7 @@
             <div class="rec-pick-sub">기준 사정률 ${pct(p.rate)} ${tip(RATE_HELP)}</div></div>
           <div class="rec-method">${esc(label(p.name))} ${tip(`<h4>어떻게 골랐나</h4>${how}${rule}`, true)}</div>
         </div>
-        ${stats}${luck}
+        ${stats}${luck}${netFlag}
       </div>`;
     }
     // ② 비슷한 과거 공고 한 줄 + ? 팝업(범위·조건)

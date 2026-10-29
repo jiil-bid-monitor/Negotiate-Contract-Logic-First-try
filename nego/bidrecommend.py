@@ -93,21 +93,13 @@ class PastBid:
 
     @property
     def assessment(self) -> float:
-        """실제 사정률(예정가격 ÷ 기초금액). 통과 판정에는 `need_rate`를 쓴다(순공사원가 선이 더 높을 수 있음)."""
+        """실제 사정률(예정가격 ÷ 기초금액). 기준 사정률 r로 낸 금액(`amount_at`)은 r ≥ 이 값이면 통과."""
         return self.planned / self.basis * 100
 
     @property
     def valid_floor(self) -> float:
         """유효 투찰의 최저 금액 = 하한선과 순공사원가 기준선(개찰 결과로 정함) 중 높은 쪽."""
         return max(self.floor, self.net_line or 0.0)
-
-    @property
-    def need_rate(self) -> float:
-        """통과하려면 필요했던 기준 사정률 — 보통 실제 사정률과 같고, 순공사원가 기준선(개찰 결과의 무효 업체로 정함)이 하한선보다 높은 공고는 그 선에 해당하는 값
-        (10/29 제보: 공사 대규모 공고에서 하한선만 넘고 '순공사원가 98%미만'으로 무효된 금액을 1순위로 셌음)."""
-        if self.net_line and self.net_line > self.floor:
-            return max(self.assessment, self.rate_for(self.net_line))
-        return self.assessment
 
     @property
     def floor_source(self) -> str:
@@ -124,9 +116,22 @@ class PastBid:
         a = self.a_value or 0.0
         return a + (self.planned - a) * self.lower_rate / 100
 
+    def amount_at(self, rate: float) -> float:
+        """기준 사정률 rate(예정가격 = 기초 × rate로 봄)로 낼 투찰금액 = 그 예정가격의 하한선과 순공사원가 기준선 중 높은 쪽.
+        순공사원가 선은 예정가격에 비례(순공사원가 × 예정가격/기초금액 × 비율)하므로 실제 선 × rate ÷ 실제 사정률 — 비율을 따로 가정하지 않음.
+        그래서 순공사원가 조건이 있는 공고도 '실제 사정률 ≤ rate ⇔ 통과'가 그대로 성립(10/29 제보 R25BK00645409)."""
+        amount = self.floor + (rate / 100 * self.basis - self.planned) * self.lower_rate / 100
+        if self.net_line:
+            amount = max(amount, self.net_line * rate / self.assessment)
+        return amount
+
     def rate_for(self, amount: float) -> float:
-        """이 공고에 이 금액을 냈을 때의 가정 사정률. 금액 − 하한선 = 하한율 × (기초 × r − 예정가격)이라 A값이 따로 필요 없다."""
-        return (self.planned + (amount - self.floor) / (self.lower_rate / 100)) / self.basis * 100
+        """이 공고에 이 금액을 냈을 때의 가정 사정률(`amount_at`의 거꾸로). 금액 − 하한선 = 하한율 × (기초 × r − 예정가격)이라
+        A값이 따로 필요 없고, 순공사원가 선이 있으면 그 선 기준 값과 작은 쪽."""
+        rate = (self.planned + (amount - self.floor) / (self.lower_rate / 100)) / self.basis * 100
+        if self.net_line:
+            rate = min(rate, amount / self.net_line * self.assessment)
+        return rate
 
     @property
     def win_ceiling(self) -> float:
@@ -140,7 +145,7 @@ class PastBid:
         if self.bidder_count < LARGE_COMPETITION:
             return True
         try:
-            return self.win_ceiling - self.need_rate <= LARGE_MAX_WINDOW
+            return self.win_ceiling - self.assessment <= LARGE_MAX_WINDOW
         except (TypeError, ZeroDivisionError):
             return False
 
@@ -465,7 +470,7 @@ def coverage(records: list[PastBid], ceiling=None) -> tuple[list[int], list[int]
     size = _index(GRID_HI) + 1
     win_d, valid_d = [0] * (size + 1), [0] * (size + 1)
     for rec in records:
-        start = max(0, min(size, _index(rec.need_rate) + (1 if _rate(_index(rec.need_rate)) < rec.need_rate else 0)))
+        start = max(0, min(size, _index(rec.assessment) + (1 if _rate(_index(rec.assessment)) < rec.assessment else 0)))
         valid_d[start] += 1
         if not rec.window_ok:  # 하한선이 틀린 공고 — 유효는 세고 1순위·순위 구간은 안 셈
             continue
@@ -512,10 +517,10 @@ def trend_rate(records: list[PastBid], k: int = TOP_N) -> tuple[float, float] | 
     (예상 사정률, 간격). 투찰은 운이 커서 검증 성적으로 고를 차이가 없을 때 쓰는 '합리적 추론'(2026-10-28 사용자 결정)."""
     if not records:
         return None
-    gaps = [r.rate_for(a) - r.need_rate for r in records if r.window_ok for a in r.top_amounts[:k]]
+    gaps = [r.rate_for(a) - r.assessment for r in records if r.window_ok for a in r.top_amounts[:k]]
     if not gaps:
         return None
-    return statistics.median(r.need_rate for r in records), statistics.median(gaps)
+    return statistics.median(r.assessment for r in records), statistics.median(gaps)
 
 
 def _competitor_rates(rec: PastBid):
@@ -526,6 +531,8 @@ def _competitor_rates(rec: PastBid):
     if cached is None:
         amounts = np.asarray(rec.amounts, dtype=float)
         cached = (rec.planned + (amounts - rec.floor) / (rec.lower_rate / 100)) / rec.basis * 100
+        if rec.net_line:  # `rate_for`와 같게 — 순공사원가 선 기준 값과 작은 쪽
+            cached = np.minimum(cached, amounts / rec.net_line * rec.assessment)
         rec._crowd_rates = cached
     return cached
 
@@ -564,7 +571,7 @@ def crowd_rate(records: list[PastBid], today: str | None = None, half_life: floa
     dated = sorted(((date_of(r) or "", r) for r in recs), key=lambda x: x[0])[-CROWD_MAX:]
     recs = [r for _, r in dated]
     dates = [d or None for d, _ in dated]
-    s = np.array([r.need_rate for r in recs])
+    s = np.array([r.assessment for r in recs])
     ref = today or max((d for d in dates if d), default=None)
 
     def age(d: str | None) -> float:
@@ -690,15 +697,21 @@ def _track(history: History, picked: list[PastBid], scale: str) -> dict[str, dic
     return _TRACK_CACHE[key]
 
 
-def bid_amount(basis: float, rate: float, lower_rate: float, a: float = 0.0) -> float:
-    """투찰금액 = A + (기초금액 × 사정률 − A) × 하한율 (끝자리 처리 전 — 화면이 기타설정대로 자른다)."""
+def bid_amount(basis: float, rate: float, lower_rate: float, a: float = 0.0, net_cost: float | None = None,
+               net_rate: float | None = None) -> float:
+    """투찰금액 = A + (기초금액 × 사정률 − A) × 하한율 (끝자리 처리 전 — 화면이 기타설정대로 자른다).
+    공고문에 순공사원가 조건(net_rate %, `bidcalc.net_cost_rule`)이 있으면 순공사원가 × 사정률 × net_rate와 높은 쪽."""
     planned = basis * rate / 100
-    return a + (planned - a) * lower_rate / 100
+    amount = a + (planned - a) * lower_rate / 100
+    if net_cost and net_rate:
+        amount = max(amount, net_cost * rate / 100 * net_rate / 100)
+    return amount
 
 
 def recommend(history: History, work: str | None = None, lo: float | None = None, hi: float | None = None,
               scale: str = "all", basis: float | None = None, lower_rate: float | None = None, a: float = 0.0,
-              title: str = "", institution: str = "", method: str = "") -> dict:
+              title: str = "", institution: str = "", method: str = "", net_cost: float | None = None,
+              net_rate: float | None = None) -> dict:
     """화면 '추천 사정률' 칸 자료. 금액(basis·lower_rate)을 주면 추천 사정률로 계산한 투찰금액도 넣는다.
     title(공고명)을 주면 같은 분야(공고명 키워드, `nego.bidfield`) 과거 공고를 먼저 고르고, 그 묶음의 1~5위·지일 경향을 함께 싣는다.
     scale="auto"(화면 기본)면 비슷한 과거 공고의 참가 업체 수 중앙값으로 경쟁 규모를 고른다(투찰 전엔 참가 수를 모르므로)."""
@@ -730,7 +743,7 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     if not picked:
         return out
 
-    rates = [r.need_rate for r in picked]
+    rates = [r.assessment for r in picked]
     gaps = [r.winner_rate - r.lower_rate for r in picked]
     counts = [r.bidder_count for r in picked]
     out["assessment"] = {"p10": _pct(rates, 0.1), "p50": statistics.median(rates), "p90": _pct(rates, 0.9),
@@ -754,7 +767,7 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
         item = {"name": name, "rate": round(rate, 3), "wins": wins[i], "valid": valid[i],
                 "win_ratio": wins[i] / n, "valid_ratio": valid[i] / n}
         if basis and lower_rate:
-            item["bid"] = bid_amount(basis, rate, lower_rate, a)
+            item["bid"] = bid_amount(basis, rate, lower_rate, a, net_cost, net_rate)
         return item
 
     best = _best(wins)

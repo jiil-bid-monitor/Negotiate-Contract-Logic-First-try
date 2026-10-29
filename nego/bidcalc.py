@@ -358,6 +358,8 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
             "contract_method": str(notice.get("cntrctCnclsMthdNm") or ""),
             "est_price": _num(notice.get("presmptPrce")),
             "price_count": _num(notice.get("totPrdprcNum")),
+            # 지역제한 입찰 소재지 판단기준 — 차 있으면 지역제한 입찰(추천 칸 경쟁 규모 가늠에 씀, 10/29)
+            "region_limited": bool(str(notice.get("rgnLmtBidLocplcJdgmBssNm") or "").strip()),
         })
     else:
         out["notes"].append("공고를 찾지 못함 — 공고번호를 확인하거나 값을 직접 입력하세요")

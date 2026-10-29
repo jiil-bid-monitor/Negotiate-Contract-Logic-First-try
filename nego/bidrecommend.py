@@ -77,6 +77,7 @@ class PastBid:
     odd_remarks: Counter = field(default_factory=Counter)  # 하한선 위인데 순위가 없는 업체의 비고 — 아직 반영 안 한 무효 조건 찾기용
     floor_err: float = 0.0  # 가늠한 하한선의 오차(금액, 가늠 구간의 절반) — A값을 모를 때만. 1순위·순위 판정에서 이만큼 보수적으로(`judge_err`)
     net_err: float = 0.0  # 순공사원가 기준선의 오차(금액, 가늠 구간의 절반)
+    region_limited: bool | None = None  # 지역제한 입찰인가(공고 행 rgnLmtBidLocplcJdgmBssNm, 모르면 None) — 경쟁 규모 가늠
     net_line: float | None = None  # 순공사원가 기준선(금액) — 개찰 결과에서 '순공사원가'로 무효된 업체로 정함. `_net_line`
     top_amounts: list[float] = field(default_factory=list)  # 개찰 1~5위 투찰금액(순위순) — 투찰 경향(`nego.bidtrend`)
     amounts: list[float] = field(default_factory=list)  # 참가업체 전부의 투찰금액(하한 미달 포함) — 대규모 추천의 경쟁 밀집(`crowd_rate`)
@@ -385,7 +386,8 @@ def from_result_record(rec: dict, source: str = "", own_bizno: str = "") -> Past
                  title=info.get("title", ""), opened_at=_opened_at(rec, bidder_rows + prices_rows), source=source,
                  own_bizno=own_bizno, draws=parse_draws(prices_rows, basis),
                  method=str(_row_value(prices_rows, "bidwinrSlctnAplBssCntnts") or ""),
-                 institution=str(info.get("institution") or ""))
+                 institution=str(info.get("institution") or ""),
+                 region_limited=info.get("region_limited") if "region_limited" in info else None)
 
 
 @dataclass
@@ -752,18 +754,19 @@ def bid_amount(basis: float, rate: float, lower_rate: float, a: float = 0.0, net
 
 def auto_scale(records: list[PastBid], work: str | None, width: int | None, field_name: str | None,
                lower_rate: float | None, basis: float | None, institution: str, method: str,
-               ref: str | None = None) -> tuple[str, str]:
+               ref: str | None = None, region_limited: bool | None = None) -> tuple[str, str]:
     """경쟁 규모 자동 — 닮은 과거 공고로 가늠한 참가 수(`bidmodels.estimate_bidders`)가 100곳 미만이면 소규모.
     가늠이 안 되면 예전 방식(분야·업무·변동폭이 같은 공고의 참가 가운데값)."""
     from . import bidmodels
 
     target = {"field": field_name if field_name not in (None, "", "공고명 없음") else None, "work": work, "width": width,
               "lower_rate": lower_rate, "method": method, "region": bidmodels.region_of(institution), "basis": basis,
-              "institution": institution}
+              "institution": institution, "region_limited": region_limited}
     est = bidmodels.estimate_bidders(records, target, ref)
     if est is not None:
         scale = "small" if est < LARGE_COMPETITION else "large"
-        return scale, f"경쟁 규모 자동: 닮은 과거 공고(기관·분야·금액 등)로 가늠한 참가 약 {est:.0f}곳 → {SCALES[scale]}"
+        what = "지역제한·기관·분야·금액 등" if region_limited is not None else "기관·분야·금액 등"
+        return scale, f"경쟁 규모 자동: 닮은 과거 공고({what})로 가늠한 참가 약 {est:.0f}곳 → {SCALES[scale]}"
     base, _ = similar(records, work, width, "all", field_name)
     if not base:
         return "all", ""
@@ -775,7 +778,7 @@ def auto_scale(records: list[PastBid], work: str | None, width: int | None, fiel
 def recommend(history: History, work: str | None = None, lo: float | None = None, hi: float | None = None,
               scale: str = "all", basis: float | None = None, lower_rate: float | None = None, a: float = 0.0,
               title: str = "", institution: str = "", method: str = "", net_cost: float | None = None,
-              net_rate: float | None = None) -> dict:
+              net_rate: float | None = None, region_limited: bool | None = None) -> dict:
     """화면 '추천 사정률' 칸 자료. 금액(basis·lower_rate)을 주면 추천 사정률로 계산한 투찰금액도 넣는다.
     title(공고명)을 주면 같은 분야(공고명 키워드, `nego.bidfield`) 과거 공고를 먼저 고르고, 그 묶음의 1~5위·지일 경향을 함께 싣는다.
     scale="auto"(화면 기본)면 비슷한 과거 공고의 참가 업체 수 중앙값으로 경쟁 규모를 고른다(투찰 전엔 참가 수를 모르므로)."""
@@ -783,7 +786,8 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     field_name = classify(title) if title else None
     auto_note = ""
     if scale == "auto":
-        scale, auto_note = auto_scale(history.records, work, width, field_name, lower_rate, basis, institution, method)
+        scale, auto_note = auto_scale(history.records, work, width, field_name, lower_rate, basis, institution, method,
+                                      region_limited=region_limited)
     scale = scale if scale in SCALES else "all"
     picked, labels = similar(history.records, work, width, scale, field_name)
     out: dict[str, Any] = {"field": field_name,

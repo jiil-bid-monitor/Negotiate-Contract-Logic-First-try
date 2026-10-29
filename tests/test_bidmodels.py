@@ -126,6 +126,22 @@ class GapModelTest(unittest.TestCase):
         self.assertEqual(scale, "small")
         self.assertIn("가늠한 참가", note)
 
+    def test_estimate_bidders_by_region_limit(self):
+        """지역제한 여부가 다른 공고는 무게를 크게 낮춤 — 같은 기관이어도 지역제한 공고는 소규모로 가늠(10/29)."""
+        recs = []
+        for i in range(60):
+            r = _rec(f"B{i}", _day(i), 100.0, work="공사", count=400, inst="강원특별자치도 정선군")
+            r.region_limited = False
+            recs.append(r)
+        for i in range(15):
+            r = _rec(f"S{i}", _day(i), 100.0, work="공사", count=19, inst="강원특별자치도 정선군")
+            r.region_limited = True
+            recs.append(r)
+        base = {**bm._as_target(recs[0]), "institution": "강원특별자치도 정선군"}
+        self.assertLess(bm.estimate_bidders(recs, {**base, "region_limited": True}), 100)
+        self.assertGreater(bm.estimate_bidders(recs, {**base, "region_limited": False}), 100)
+        self.assertGreater(bm.estimate_bidders(recs, base), 100)  # 모르면 예전처럼
+
     def test_too_few_records(self):
         self.assertIsNone(bm.gap_model([_rec(f"G{i}", _day(i), 100.0) for i in range(10)]))
 

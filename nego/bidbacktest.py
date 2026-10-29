@@ -206,7 +206,7 @@ def add_picks(rows: list[dict], records: list[PastBid]) -> None:
         if base:  # 예전 방식(분야·업무·변동폭이 같은 공고의 참가 가운데값) — 맞힌 비율을 새 방식과 나란히 보려고
             old_scale = "small" if statistics.median(r.bidder_count for r in base) < LARGE_COMPETITION else "large"
         scale, _ = auto_scale(train, rec.work, rec.range_width, rec.field, rec.lower_rate, rec.basis,
-                              rec.institution, rec.method, ref=row["개찰일"])
+                              rec.institution, rec.method, ref=row["개찰일"], region_limited=rec.region_limited)
         actual = "small" if rec.bidder_count < LARGE_COMPETITION else "large"
         row["규모"] = {"actual": actual, "new": scale, "old": old_scale}
         picked, _ = similar(train, rec.work, rec.range_width, scale, rec.field)
@@ -454,6 +454,15 @@ def main(argv: list[str] | None = None) -> int:
     bad_a = sum(1 for r in history.records if r.a_value is not None and not r.formula_ok)
     if bad_a:
         head.append(f"  A값으로 계산한 하한선이 개찰 결과(미달·순위 업체 금액)와 어긋난 공고 {bad_a}건 — 참가업체 금액으로 가늠한 하한선을 씀(1순위는 확정 안 함)")
+    known = [r for r in history.records if r.region_limited is not None]
+    if known:  # 지역제한 칸이 참가 수와 실제로 관계있는지 보려고 — 지역제한 공고의 참가 수 가운데값이 훨씬 작아야 함
+        lim = [r.bidder_count for r in known if r.region_limited]
+        free = [r.bidder_count for r in known if not r.region_limited]
+        mid = lambda xs: f"{statistics.median(xs):g}곳" if xs else "-"  # noqa: E731
+        head.append(f"  지역제한 여부 아는 공고 {len(known)}건 — 지역제한 {len(lim)}건(참가 가운데 {mid(lim)}) · "
+                    f"제한 없음 {len(free)}건(참가 가운데 {mid(free)})")
+    else:
+        head.append("  지역제한 여부를 아는 공고 없음 — `fetch_bid_results.py --fill-region`으로 채우면 경쟁 규모 가늠에 씀")
     net = sum(1 for r in history.records if r.net_line)
     if net:
         head.append(f"  순공사원가 기준선(개찰 결과의 '순공사원가' 무효 업체로 정함)이 하한선보다 높은 공고 {net}건 — 통과·순위를 그 선으로 셈")

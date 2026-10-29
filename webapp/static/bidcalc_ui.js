@@ -276,7 +276,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
-    WORK = ""; REC_METHOD = ""; NET_RULE = null; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
+    WORK = ""; REC_METHOD = ""; NET_RULE = null; REGION_LIMITED = null; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
     render();
   };
   async function lookup() {
@@ -310,6 +310,7 @@
       $("#cAOn").checked = !!d.a_applies && (d.a_value || 0) > 0;
       setNum("#cNet", d.net_cost || null);
       NET_RULE = d.net_rule || null;
+      REGION_LIMITED = typeof d.region_limited === "boolean" ? d.region_limited : null;
       if (d.price_count === 10 || d.price_count === 15) {
         document.querySelector(`input[name="cN"][value="${d.price_count}"]`).checked = true;
         fillRange(defaultDown());
@@ -363,6 +364,7 @@
   let WORK = "";
   // 공고문의 순공사원가 조건({rate, limit, quote, file}) — 있을 때만 투찰금액 조건으로 씀(10/29 사용자 결정: 98% 고정 조건 아님)
   let NET_RULE = null;
+  let REGION_LIMITED = null;  // 지역제한 입찰인가(불러온 공고) — 추천 칸 경쟁 규모 가늠에 넘김(10/29)
   let REC_METHOD = "";  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
   let REC_PICK = null;  // 추천 칸이 고른 방식(rate·name·track·order) — 위 계산기 '투찰금액'이 이걸로 정해짐(10/29)
   let REC_OPTIONS = [];  // 추천 칸 방식들 — 고른 방식이 모의 예정가격 하한선 아래면 order 순으로 다음 방식
@@ -378,6 +380,7 @@
       const v = numIn(id); if (v != null) qs.set(k, v);
     });
     if (NET_RULE && numIn("#cNet") > 0) { qs.set("net", numIn("#cNet")); qs.set("netrate", NET_RULE.rate); }
+    if (REGION_LIMITED !== null) qs.set("rl", REGION_LIMITED ? "1" : "0");
     qs.set("a", aValue());
     // 계산 중엔 이전 추천을 지운 화면으로(10/29 사용자 요청 — 예전 공고의 추천 금액이 남아 헷갈림). 계산기 투찰금액도 추천 없이
     const ticket = ++REC_TICKET;

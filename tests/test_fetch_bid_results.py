@@ -136,6 +136,24 @@ class FillNoticeTest(unittest.TestCase):
             self.assertEqual(recs[1], lines[1])
             self.assertEqual(fb.fill_notices(FakeClient(responses), path, sleep=0, only_a=True)[1], 0)
 
+    def test_fill_region_only_notice_row(self):
+        """--fill-region(10/29): 공고 행 하나만 조회해 지역제한 여부를 채움, 빈 칸이면 제한 없음(False)."""
+        responses = self._client().responses
+        responses[F.BID_NOTICE_OPERATIONS["공사"]] = [
+            {"bidNtceNo": "D", "bidNtceOrd": "000", "sucsfbidLwltRate": "87.745", "rgnLmtBidLocplcJdgmBssNm": "법인등기부상 본점소재지"},
+            {"bidNtceNo": "E", "bidNtceOrd": "000", "sucsfbidLwltRate": "87.745", "rgnLmtBidLocplcJdgmBssNm": ""}]
+        lines = [self.LINES[3], {**self.LINES[3], "no": "E"}]
+        client = FakeClient(responses)
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "bid_results.jsonl"
+            path.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in lines), encoding="utf-8")
+            filled, tried, _ = fb.fill_notices(client, path, sleep=0, only_region=True)
+            self.assertEqual((filled, tried), (2, 2))
+            recs = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([r["notice"]["region_limited"] for r in recs], [True, False])
+            self.assertEqual(fb.fill_notices(FakeClient(responses), path, sleep=0, only_region=True)[1], 0)
+        self.assertNotIn(F.BASIS_AMOUNT_OPERATIONS["공사"], client.calls)  # 기초금액은 안 부름
+
     def test_quota_stops_and_saves(self):
         class Quota(FakeClient):
             def fetch_all_pages(self, base_url, operation, params, label):

@@ -188,6 +188,7 @@ def knn_weights(records, target: dict, ref: str | None = None) -> list[tuple[obj
     return out[:KNN_KEEP]
 
 
+REGION_MISMATCH = 0.1  # 지역제한 여부가 다른 과거 공고는 무게를 이만큼으로 — 지역제한 입찰은 참가 업체가 크게 줄어듦(10/29)
 SAME_INSTITUTION = 5.0  # 참가 수 가늠 때 같은 발주기관 공고에 더 줄 무게 — 지역제한·업종이 기관마다 비슷해 참가 규모도 비슷함
 
 
@@ -201,8 +202,16 @@ def estimate_bidders(records, target: dict, ref: str | None = None) -> float | N
     if ref is None:
         ref = max((d for d in (_date(r) for r in records) if d), default=None)
     inst = target.get("institution") or ""
-    pairs = [(r, w * (SAME_INSTITUTION if inst and getattr(r, "institution", "") == inst else 1.0))
-             for r, w in knn_weights(records, target, ref)]
+    limited = target.get("region_limited")
+
+    def factor(r) -> float:
+        f = SAME_INSTITUTION if inst and getattr(r, "institution", "") == inst else 1.0
+        mine = getattr(r, "region_limited", None)
+        if limited is not None and mine is not None and mine != limited:
+            f *= REGION_MISMATCH
+        return f
+
+    pairs = [(r, w * factor(r)) for r, w in knn_weights(records, target, ref)]
     pairs = [(math.log10(r.bidder_count), w) for r, w in pairs if w > 0]
     total = sum(w for _, w in pairs)
     if not pairs or total <= 0:

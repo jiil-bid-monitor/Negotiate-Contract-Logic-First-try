@@ -107,6 +107,13 @@ class GapModelTest(unittest.TestCase):
         got = bm.gap_rate(recs[:60], model, {**bm._as_target(recs[0]), "bidders": 4})
         self.assertIsNotNone(got)
 
+    def test_many_regions(self):
+        """지역이 255개를 넘어도 학습됨(10/29 서버 PC 오류 'cardinality <= 255') — 드문 값은 '기타'로."""
+        recs = [_rec(f"G{i}", _day(i % 300), 100.0, inst=f"지역{i} 군청") for i in range(400)]
+        model = bm.gap_model(recs)
+        self.assertIsNotNone(model)
+        self.assertIsNotNone(bm.predict_gap(model, {**bm._as_target(recs[0]), "region": "처음 보는 곳"}))
+
     def test_too_few_records(self):
         self.assertIsNone(bm.gap_model([_rec(f"G{i}", _day(i), 100.0) for i in range(10)]))
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from collections import Counter
 from datetime import date
 from typing import Iterable
 
@@ -208,8 +209,21 @@ def knn_rate(records, target: dict, ref: str | None = None) -> dict | None:
 _GAP_CACHE: dict[tuple, object] = {}
 
 
+MAX_CATEGORIES = 200  # 범주 칸마다 자주 나온 값만 번호를 주고 나머지는 '기타' 하나로 — HistGradientBoosting은 범주 255개까지만 받음
+# (10/29 서버 PC: A값을 채워 학습 공고가 늘자 지역(기관 첫 낱말)이 256개가 되어 "cardinality <= 255" 오류로 백테스트가 멈춤)
+OTHER = "\0기타"
+
+
 def _cat(value: str, vocab: dict) -> int:
-    return vocab.setdefault(value or "", len(vocab))
+    """자주 나온 값의 번호, 없으면 '기타' 번호(학습에 없던 값도 같음)."""
+    return vocab.get(value or "", vocab[OTHER])
+
+
+def _vocab(values: Iterable[str]) -> dict:
+    counts = Counter(v or "" for v in values)
+    vocab = {v: i for i, (v, _) in enumerate(counts.most_common(MAX_CATEGORIES))}
+    vocab[OTHER] = len(vocab)
+    return vocab
 
 
 def _features(rec_like: dict, vocabs: dict) -> list[float]:
@@ -240,8 +254,9 @@ def gap_model(records: Iterable, key: tuple | None = None):
             HistGradientBoostingRegressor = None
         if HistGradientBoostingRegressor is not None:
             np = _np()
-            vocabs = {k: {} for k in ("work", "field", "method", "region")}
-            X = np.array([_features(_as_target(r), vocabs) for r in records])
+            targets = [_as_target(r) for r in records]
+            vocabs = {k: _vocab(t[k] for t in targets) for k in ("work", "field", "method", "region")}
+            X = np.array([_features(t, vocabs) for t in targets])
             y = np.log10([gap_of(r) for r in records])
             reg = HistGradientBoostingRegressor(max_depth=3, max_iter=60, learning_rate=0.1, loss="absolute_error",
                                                 categorical_features=[0, 1, 2, 3], random_state=0)
@@ -258,7 +273,6 @@ def predict_gap(model, target: dict) -> float | None:
     if model is None:
         return None
     reg, vocabs = model
-    vocabs = {k: dict(v) for k, v in vocabs.items()}  # 모르는 값은 새 번호(학습에 없던 범주)
     x = _features(target, vocabs)
     return float(min(GAP_CLIP[1], max(GAP_CLIP[0], 10 ** reg.predict([x])[0])))
 

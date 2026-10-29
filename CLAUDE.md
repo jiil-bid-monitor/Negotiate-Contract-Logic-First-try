@@ -77,6 +77,8 @@
   채점(`score`·`in_top`)은 `sure_ceiling`(오차만큼 낮춘 상한), `rank_of`는 오차 안의 업체를 앞으로 셈 — A값을 모르면 1위 금액이 곧 가늠 구간의 끝이라 **그런 공고는 1순위를 확정하지 않음**
   (유효는 그대로). 학습용 상한(`win_ceiling`)은 가늠값 그대로. **`py scripts/fetch_bid_results.py --fill-a --out output/<파일>.jsonl`**: A값이 빈 줄만 기초금액 정보를
   다시 찾아봄(`a_checked`로 한 번만, 2,644건 중 하한선 '추정' 373건) — 채운 뒤 백테스트 재실행.
+  (채운 뒤 서버 PC 백테스트가 "Categorical feature … cardinality <= 255" 오류로 멈춤 — 간격 예측 학습의 지역(기관 첫 낱말)이 256종) `bidmodels._vocab`: 범주 칸마다
+  자주 나온 값 200개(`MAX_CATEGORIES`)만 번호, 나머지·처음 보는 값은 '기타'.
 
 ## 2026-10-28 — 추천 사정률 (브랜치 `claude/bid-recommend`, 사용자 결정: 과거 개찰 통계 기반)
 

@@ -26,13 +26,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from . import bidmodels
 from .bidrecommend import (CROWD_NAME, LARGE_COMPETITION, MIN_SAMPLES, TOP_N, TREND_NAME, PastBid, _best, _pct, _rate,
-                           coverage, crowd_rate, default_own_bizno, history_paths, load_history, similar, trend_rate)
+                           _scale_ok, coverage, crowd_rate, default_own_bizno, history_paths, load_history, similar,
+                           trend_rate)
 
 OWN = "지일 실제 투찰(외주)"
 TOP_NAME = f"추천(과거 {TOP_N}위 안 최다)"
 BASELINE = "기준선: 100%로 찍기"  # 논문 검토(10/29) — 어떤 방식이 '아무렇게나 찍기'보다 나은지 늘 함께 보려고
-STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, TREND_NAME, CROWD_NAME, "사정률 중앙값", "유효 70%", "유효 90%", BASELINE)
+STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, TREND_NAME, CROWD_NAME, *bidmodels.MODEL_NAMES, "사정률 중앙값", "유효 70%",
+              "유효 90%", BASELINE)
 HALF_LIVES = (365, 730, 1095, None)  # --tune: 대규모 추천 반감기 후보(일, None = 무게 없음) — 날짜 순서 백테스트로 고름(그리드 서치)
 _DATE = re.compile(r"(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})")
 
@@ -85,10 +88,38 @@ def strategy_rates(train: list[PastBid], target: PastBid, scale: str, min_train:
     if guess is not None:
         out[TREND_NAME] = guess[0] + guess[1]
     out[BASELINE] = 100.0
+    out.update(model_rates(train, picked, target, scale))
     if sum(r.bidder_count >= LARGE_COMPETITION for r in picked) > len(picked) / 2:  # 화면(`recommend`)과 같은 조건
         crowd = crowd_rate(picked)
         if crowd is not None:
             out[CROWD_NAME] = crowd["rate"]
+    return out
+
+
+def target_info(rec: PastBid) -> dict:
+    """투찰 전에 아는 그 공고 특성(참가 수는 모름) — 가중 KNN·간격 예측에 씀."""
+    return {"field": rec.field, "work": rec.work, "width": rec.range_width, "lower_rate": rec.lower_rate,
+            "method": rec.method, "region": bidmodels.region_of(rec.institution), "basis": rec.basis}
+
+
+def model_rates(train: list[PastBid], picked: list[PastBid], target: PastBid, scale: str) -> dict[str, float]:
+    """논문 차용 세 방식(`bidmodels`)의 사정률 — 모두 개찰일 전 자료(train)만. 간격 예측 모델은 달마다 한 번 학습(그 달 1일 전 자료)."""
+    out: dict[str, float] = {}
+    day = date_of(target) or ""
+    info = target_info(target)
+    got = bidmodels.draw_rate(picked)
+    if got:
+        out[bidmodels.DRAW_NAME] = got["rate"]
+    pool = [r for r in train if _scale_ok(r, scale)]
+    got = bidmodels.knn_rate(pool, info, ref=day or None)
+    if got:
+        out[bidmodels.KNN_NAME] = got["rate"]
+    month = day[:7]
+    before = [r for r in train if (bidmodels._date(r) or "") < f"{month}-01"] if month else train
+    model = bidmodels.gap_model(before, key=("bt", month, len(before), id(train[0]) if train else 0))
+    got = bidmodels.gap_rate(picked, model, info)
+    if got:
+        out[bidmodels.GAP_NAME] = got["rate"]
     return out
 
 

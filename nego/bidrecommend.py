@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .bidfield import classify
+from .bidmodels import region_of
 from .bidprice import parse_bidders, parse_prepare_prices
 
 log = logging.getLogger(__name__)
@@ -72,11 +73,18 @@ class PastBid:
     floor_est: float | None = None  # 참가업체 금액으로 가늠한 하한선(A값을 모를 때) — `_estimate_floor`
     top_amounts: list[float] = field(default_factory=list)  # 개찰 1~5위 투찰금액(순위순) — 투찰 경향(`nego.bidtrend`)
     amounts: list[float] = field(default_factory=list)  # 참가업체 전부의 투찰금액(하한 미달 포함) — 대규모 추천의 경쟁 밀집(`crowd_rate`)
+    draws: list[tuple[int, float, int]] = field(default_factory=list)  # 예비가격 (번호, 기초금액 대비 %, 선택 횟수) — 추첨 모형(`bidmodels`)
+    method: str = ""  # 낙찰자 결정 기준 '조달청'·'행자부' 등(예비가격 행 bidwinrSlctnAplBssCntnts) — 가중 KNN·간격 예측
+    institution: str = ""  # 발주(수요)기관 — 가중 KNN·간격 예측의 지역(첫 낱말)
 
     @property
     def field(self) -> str:
-        """공고명 키워드로 나눈 분야(`nego.bidfield`)."""
-        return classify(self.title)
+        """공고명 키워드로 나눈 분야(`nego.bidfield`). 공고마다 한 번만 계산해 둠 — 검증이 같은 공고의 분야를 수십만 번 묻는다(10/29 웹 응답 50초)."""
+        cached = self.__dict__.get("_field_cache")
+        if cached is None or cached[0] != self.title:
+            cached = (self.title, classify(self.title))
+            self.__dict__["_field_cache"] = cached
+        return cached[1]
 
     @property
     def assessment(self) -> float:
@@ -210,7 +218,18 @@ def from_bid_history(item: dict, source: str = "", own_bizno: str = "") -> PastB
                  item.get("lower_limit_rate"), bidders, prices,
                  range_width=_width_from_rates(item.get("range_lo"), item.get("range_hi")),
                  a_value=_num(item.get("a_value")), title=item.get("title", ""), opened_at=item.get("opened_at") or "",
-                 source=source, own_bizno=own_bizno)
+                 source=source, own_bizno=own_bizno, institution=str(item.get("institution") or ""))
+
+
+def parse_draws(rows: list[dict], basis: float | None) -> list[tuple[int, float, int]]:
+    """예비가격 상세 행 → (번호, 기초금액 대비 %, 선택 횟수) 번호순. 같은 번호가 여러 줄이면(재입찰) 마지막 줄."""
+    basis = _num(basis)
+    found: dict[int, tuple[int, float, int]] = {}
+    for row in rows:
+        no, price, count = _num(row.get("compnoRsrvtnPrceSno")), _num(row.get("bsisPlnprc")), _num(row.get("drwtNum"))
+        if basis and no and price and count is not None and 1 <= no <= 15:
+            found[int(no)] = (int(no), price / basis * 100, int(count))
+    return [found[k] for k in sorted(found)]
 
 
 def _row_value(rows: list[dict], key: str) -> Any:
@@ -271,7 +290,9 @@ def from_result_record(rec: dict, source: str = "", own_bizno: str = "") -> Past
                  range_width=_width_from_rates(info.get("range_lo"), info.get("range_hi")),
                  a_value=_num(info.get("a_value")) if info.get("a_applies", True) else 0.0,
                  title=info.get("title", ""), opened_at=_opened_at(rec, bidder_rows + prices_rows), source=source,
-                 own_bizno=own_bizno)
+                 own_bizno=own_bizno, draws=parse_draws(prices_rows, basis),
+                 method=str(_row_value(prices_rows, "bidwinrSlctnAplBssCntnts") or ""),
+                 institution=str(info.get("institution") or ""))
 
 
 @dataclass
@@ -562,6 +583,27 @@ def pick_option(options: list[dict], outsourced: dict | None = None) -> dict | N
     return pick
 
 
+def _model_options(history: History, picked: list[PastBid], scale: str, row, target: dict) -> list[dict]:
+    """논문 차용 세 방식(`bidmodels` — 추첨 모형·가중 KNN·간격 예측)의 표 줄. 자료가 모자라면 그 줄은 빠짐."""
+    from . import bidmodels
+
+    out = []
+    got = bidmodels.draw_rate(picked)
+    if got:
+        out.append({**row(bidmodels.DRAW_NAME, got["rate"]), "win_p": got["win_p"], "valid_p": got["valid_p"]})
+    pool = [r for r in history.records if _scale_ok(r, scale)]
+    got = bidmodels.knn_rate(pool, target)
+    if got:
+        out.append({**row(bidmodels.KNN_NAME, got["rate"]), "win_p": got["win_p"], "valid_p": got["valid_p"]})
+    first = history.records[0] if history.records else None
+    model = bidmodels.gap_model(history.records, key=("now", len(history.records), id(first)))
+    got = bidmodels.gap_rate(picked, model, target)
+    if got:
+        out.append({**row(bidmodels.GAP_NAME, got["rate"]), "win_p": got["win_p"], "valid_p": got["valid_p"],
+                    "gap": got["gap"]})
+    return out
+
+
 _TRACK_CACHE: dict[tuple, dict] = {}
 
 
@@ -589,7 +631,7 @@ def bid_amount(basis: float, rate: float, lower_rate: float, a: float = 0.0) -> 
 
 def recommend(history: History, work: str | None = None, lo: float | None = None, hi: float | None = None,
               scale: str = "all", basis: float | None = None, lower_rate: float | None = None, a: float = 0.0,
-              title: str = "") -> dict:
+              title: str = "", institution: str = "", method: str = "") -> dict:
     """화면 '추천 사정률' 칸 자료. 금액(basis·lower_rate)을 주면 추천 사정률로 계산한 투찰금액도 넣는다.
     title(공고명)을 주면 같은 분야(공고명 키워드, `nego.bidfield`) 과거 공고를 먼저 고르고, 그 묶음의 1~5위·지일 경향을 함께 싣는다.
     scale="auto"(화면 기본)면 비슷한 과거 공고의 참가 업체 수 중앙값으로 경쟁 규모를 고른다(투찰 전엔 참가 수를 모르므로)."""
@@ -666,6 +708,10 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
         if crowd is not None:
             options.append({**row(CROWD_NAME, crowd["rate"]), "win_p": crowd["win_p"], "valid_p": crowd["valid_p"],
                             "crowd_bidders": crowd["bidders"]})
+    options += _model_options(history, picked, scale, row, {
+        "field": field_name if field_name not in (None, "", "공고명 없음") else None, "work": work, "width": width,
+        "lower_rate": lower_rate, "method": method, "basis": basis,
+        "region": region_of(institution)})
     track = _track(history, picked, scale)
     for o in options:
         o["track"] = track.get(o["name"])

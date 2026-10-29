@@ -242,7 +242,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
-    WORK = ""; $("#cRec").textContent = "";
+    WORK = ""; REC_METHOD = ""; $("#cRec").textContent = "";
     render();
   };
   async function lookup() {
@@ -287,6 +287,7 @@
       // 발주기관 최종 판단(서버 judge — 낙찰자 결정기준 문구 → 공고문 인용 법령 → 기관 이름). 예비가격 방식·자동 계산이 이걸 따른다
       if (d.agency_note) notes.push(`발주기관: ${d.agency_note}`);
       if (d.basis != null) notes.push(`기초금액 출처: ${d.basis_source || "나라장터"}${d.basis_open_at ? ` (공개 ${d.basis_open_at})` : ""}`);
+      REC_METHOD = d.method === "mois" ? "행자부" : d.method ? "조달청" : "";
       if (d.method) {
         const why = d.method_reason ? ` (${d.method_reason})` : "";
         notes.push(`예비가격 방식: ${d.method === "mois" ? `지방계약${why} — 행자부난수추출` : `국가계약${why} — 조달청난수추출`} 권장`);
@@ -325,10 +326,13 @@
   // 추천 사정률(2026-10-28) — 위 입력칸(기초금액·하한율·변동폭·A값)과 불러온 공고의 업무로 서버에 묻는다.
   // 투찰금액은 계산기와 같은 기타설정(절상·절사·단위)으로 자름: 원 단위 예정가격(기초금액 × 사정률) → 하한율 → 끝자리
   let WORK = "";
+  let REC_METHOD = "";  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
   const pct = (v, d = 3) => (v == null ? "-" : `${Number(v).toFixed(d)}%`);
   async function recommend() {
     const title = $("#cTitle").textContent.trim();
-    const qs = new URLSearchParams({ scale: $("#cRecScale").value, work: WORK, title: title === "-" ? "" : title });
+    const inst = $("#cInst").textContent.trim();
+    const qs = new URLSearchParams({ scale: $("#cRecScale").value, work: WORK, title: title === "-" ? "" : title,
+      inst: inst === "-" ? "" : inst, method: REC_METHOD });
     [["basis", "#cBasis"], ["lower", "#cRate"], ["lo", "#cLo"], ["hi", "#cHi"]].forEach(([k, id]) => {
       const v = numIn(id); if (v != null) qs.set(k, v);
     });
@@ -364,6 +368,9 @@
     "유효 90%": ["하한선 통과 90% 선", "과거 비슷한 공고 10건 중 9건에서 하한선을 넘었을 값이에요. 대신 금액이 높아 순위는 밀려요."],
     "경향 추천(사정률 중앙 + 1~5위 간격)": ["경향 추천", "과거 예정가격 가운데 값에, 1~5위 업체들이 실제보다 얼마나 위에 썼는지(가운데 값)를 더한 값이에요."],
     "대규모 추천(사정률 분포 ÷ 경쟁 밀집)": ["대규모 경쟁 추천", "참가 업체가 많은 공고용이에요. 과거에 예정가격이 자주 나온 범위 안에서, 다른 업체들이 덜 몰린 금액을 골랐어요."],
+    "추첨 모형 추천(번호 선택 경향 → 모의 추첨)": ["추첨 모형 추천", "과거 공고에서 업체들이 어느 번호를 많이 골랐는지 배워, 예정가격이 정해지는 추첨(업체마다 번호 2개 → 많이 뽑힌 4개 평균)을 여러 번 흉내 내고, 1순위가 될 가능성이 가장 높은 금액을 골랐어요."],
+    "가중 KNN 추천(닮은 공고에 무게)": ["닮은 공고 가중 추천", "과거 공고를 넣고 빼는 대신 닮은 정도(분야·업무·변동폭·하한율·발주 방식·지역·금액 규모·최근)만큼 무게를 주고, 1순위가 될 가능성이 가장 높은 금액을 골랐어요."],
+    "간격 예측 추천(1순위 간격 부스팅)": ["1순위 간격 예측 추천", "공고 특성으로 '1순위가 예정가격 기준선보다 얼마나 위에 있을지'를 학습 모델로 예측하고, 그 폭 안에 들 가능성이 가장 높은 금액을 골랐어요."],
     "지일 실제 투찰(외주)": ["지일 실제 투찰(참고)", "같은 과거 공고에 지일이 실제로 낸 금액의 나라장터 결과예요. 비교용 참고 줄이에요."],
   };
   const label = (name) => (METHOD[name] ? METHOD[name][0] : name.startsWith("고정") ? name : name);

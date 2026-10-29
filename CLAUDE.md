@@ -42,6 +42,13 @@
   ① **찍기 기준선**: 백테스트에 `BASELINE` "기준선: 100%로 찍기" 줄 + 방식별 "오차 x%p(중앙 |·|)" 칸 ② **그리드 서치** `--tune`: 대규모 추천 반감기
   365·730·1095일·무게 없음(`HALF_LIVES`, `crowd_rate(half_life=)`)을 같은 공고로 비교(`tune_crowd`) — 가짜 600건 기준 26초. 다음 후보: 추첨 구조 반영(`drwtNum`),
   가중 KNN(비슷한 공고에 무게), 1순위 업체 간격 예측(서버 PC 개찰 자료 필요). 딥러닝·회귀로 예정가격 한 값 맞히기는 안 함.
+  (같은 날, 사용자 요청 "차용 후보 모두 적용, 첨삭은 이후에") **`nego/bidmodels.py` 세 방식** — 공통: P(r) = Σ w·1[s ≤ r < s + g]
+  (s 실제 사정률, g 1순위 구간 폭 = `win_ceiling − s`, `best_window`): ① 추첨 모형 `DRAW_NAME`(예비가격 행 `compnoRsrvtnPrceSno`·`drwtNum` →
+  `PastBid.draws`, 번호별 선택 비율 학습 → 비슷한 공고 예비가격 15개로 모의 추첨 3,000번 — `bid_results*.jsonl`에만 있음, bidprice json엔 없음)
+  ② 가중 KNN `KNN_NAME`(분야·업무·변동폭 각 1, 발주 방식(`PastBid.method` ← bidwinrSlctnAplBssCntnts)·지역(기관 첫 낱말) 각 0.5, 하한율·금액 규모
+  최대 1, 무게 exp(−2·거리)×최근 반감기 2년, 상위 300건) ③ 간격 예측 `GAP_NAME`(HistGradientBoosting, log10 폭, 업무·분야·방식·지역·변동폭·하한율·
+  금액·참가 수 — 예측 땐 비슷한 공고 참가 중앙값, 백테스트는 달마다 그 달 전 자료로 학습). 화면 이름 "추첨 모형 추천·닮은 공고 가중 추천·1순위 간격
+  예측 추천", 화면이 발주기관(`inst`)·방식(`method` 행자부/조달청)을 넘김. `PastBid.field`·개찰일은 공고마다 한 번만 계산(웹 첫 응답 가짜 600건 53초 → 15초).
 
 ## 2026-10-28 — 추천 사정률 (브랜치 `claude/bid-recommend`, 사용자 결정: 과거 개찰 통계 기반)
 

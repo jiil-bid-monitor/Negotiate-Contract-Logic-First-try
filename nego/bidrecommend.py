@@ -694,7 +694,7 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
                             "`scripts/fetch_bid_results.py`로 output/에 받아 두세요")
         return out
     if len(picked) < MIN_SAMPLES:
-        out["notes"].append(f"비슷한 과거 공고가 {len(picked)}건뿐이라 추천을 믿기 어렵습니다 — 참고만 하세요")
+        out["notes"].append(f"비슷한 과거 공고가 {len(picked)}건뿐이라 추천 근거가 약해요 — 참고만 하세요")
     if not picked:
         return out
 
@@ -708,8 +708,8 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
                       "large": sum(c >= LARGE_COMPETITION for c in counts)}
     no_a = sum(r.floor_source == "A=0" for r in picked)
     if no_a:
-        out["notes"].append(f"하한선을 정하지 못한 과거 공고 {no_a}건(A값·하한 미달 업체 없음)은 A=0으로 계산 — "
-                            "1순위 구간이 실제보다 넓게 잡힐 수 있음")
+        out["notes"].append(f"비슷한 과거 공고 중 {no_a}건은 하한선을 정확히 알 수 없어(A값 정보·미달 업체 없음) A값 0으로 계산했어요 — "
+                            "이 공고들은 1순위 성적이 실제보다 좋게 나올 수 있어요")
     if out["bidders"]["large"] > len(picked) / 2:
         out["notes"].append(f"참가 {LARGE_COMPETITION}곳 이상 대규모 경쟁이 많습니다 — 1순위가 하한선 바로 위라 "
                             "어떤 사정률도 몇 건밖에 못 이깁니다(운의 영역)")

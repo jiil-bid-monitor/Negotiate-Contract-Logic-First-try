@@ -34,7 +34,7 @@ from .bidrecommend import (CROWD_NAME, FIXED_RATE, LARGE_COMPETITION, MIN_PICK_T
 
 OWN = "지일 실제 투찰(외주)"
 TOP_NAME = f"추천(과거 {TOP_N}위 안 최다)"
-BASELINE = "기준선: 100%로 찍기"  # 논문 검토(10/29) — 어떤 방식이 '아무렇게나 찍기'보다 나은지 늘 함께 보려고
+BASELINE = "기준선(비교용): 늘 100%"  # 논문 검토(10/29) — 어떤 방식이 '아무렇게나 찍기'보다 나은지 늘 함께 보려고
 STRATEGIES = ("추천(과거 1순위 최다)", TOP_NAME, TREND_NAME, CROWD_NAME, *bidmodels.MODEL_NAMES, "사정률 중앙값", "유효 70%",
               "유효 90%", BASELINE)
 HALF_LIVES = (365, 730, 1095, None)  # --tune: 대규모 추천 반감기 후보(일, None = 무게 없음) — 날짜 순서 백테스트로 고름(그리드 서치)

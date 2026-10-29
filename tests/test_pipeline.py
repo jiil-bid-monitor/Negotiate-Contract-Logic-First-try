@@ -812,8 +812,8 @@ class TestSchedule(unittest.TestCase):
         self.assertEqual(s.earliest[0], "입찰 마감")
         s = screen.Schedule(qualification_deadline=None, joint_agreement_deadline=datetime(2026, 9, 18, 18), bid_deadline=None)
         self.assertIsNone(s.earliest, "공동수급협정 마감만 있으면 기준 마감 없음")
-        s.attachment_deadline_kind, s.attachment_deadline = "첨부파일 제출기한", datetime(2026, 9, 20, 17)
-        self.assertEqual(s.earliest, ("첨부파일 제출기한", datetime(2026, 9, 20, 17)))
+        s.attachment_deadline_kind, s.attachment_deadline = "서류 제출기한", datetime(2026, 9, 20, 17)
+        self.assertEqual(s.earliest, ("서류 제출기한", datetime(2026, 9, 20, 17)))
 
     def test_card_deadline_is_earliest_of_api_deadlines(self):
         """입찰 마감이 자격등록 마감보다 이르면 입찰 마감이 기준(예전엔 자격등록이 늘 먼저)."""
@@ -837,7 +837,7 @@ class TestSchedule(unittest.TestCase):
             bid_deadline=None,
             attachment_deadline=datetime(2026, 9, 14, 18, 0),
         )
-        self.assertEqual(sched.earliest, ("첨부파일 제출기한", datetime(2026, 9, 14, 18, 0)))
+        self.assertEqual(sched.earliest, ("서류 제출기한", datetime(2026, 9, 14, 18, 0)))
 
     def test_attachment_deadline_ignored_when_an_api_field_exists(self):
         """API 값이 하나라도 있으면 첨부파일 추정치보다 우선한다."""
@@ -906,7 +906,7 @@ class TestScheduleTextExtraction(unittest.TestCase):
 
     def test_multi_day_range_uses_end(self):
         """2026-10-19 실측: 구미시 스타트업 필드 공용공간 리모델링 공사 설계용역 — 입찰서제출 10/16 00:00 ~ 10/20 10:00인데
-        시작 일시를 마감으로 잡아 "첨부파일 제출기한 10/16 00:00 · 지남"으로 보였다."""
+        시작 일시를 마감으로 잡아 "서류 제출기한 10/16 00:00 · 지남"으로 보였다."""
         cases = {
             "입찰서 제출일시 : 2026. 10. 16.(금) 00:00 ~ 2026. 10. 20.(화) 10:00": datetime(2026, 10, 20, 10, 0),
             "제출기간: 2026.10.16 ~ 2026.10.20 10:00": datetime(2026, 10, 20, 10, 0),

@@ -161,6 +161,25 @@ PICK = "추천 칸 선정(지금 규칙)"  # --pick: 그 공고 개찰 전 자�
 LEGACY = "추천 칸 선정(이전 규칙)"  # 10/29 2안 전 규칙 — 같은 공고로 나란히 비교하려고 남김
 # 10/30 사용자 질문: 고정 100.55%가 '통과'에 치우쳐 대규모가 아니면 필요 없지 않나 — 같은 규칙에서 고정만 후보에서 뺀 선정
 NO_FIXED = "추천 칸 선정(고정 뺌)"
+# 10/30 사용자 의견 "하한선보다 1순위 비율을 조금이나마 우선" — 선정 규칙 후보를 같은 공고로 나란히(추천 칸 동작은 그대로)
+WIN_FIRST = "규칙 후보 B: 1순위 우선(통과 50%↑)"
+WIN_ONLY = "규칙 후보 C: 1순위만(통과 조건 없음)"
+SMALL_WIN = "규칙 후보 D: 30곳 미만만 1순위 우선"
+WIN_FIRST_MIN_VALID = 0.5
+SMALL_BIDDERS = 30  # 9월 3,907건: 30곳 미만 1순위 17% vs 30~99곳 2% — 1순위가 갈리는 경계
+
+
+def win_first(options: list[dict], min_valid: float | None = WIN_FIRST_MIN_VALID) -> dict | None:
+    """1순위 비율이 가장 높은 방식(같으면 5위 안 → 통과). min_valid가 있으면 검증 통과가 그 이상인 방식 중에서, 없으면 통과 비율 최고로.
+    검증 MIN_PICK_TRIED건 미만 방식은 안 봄 — 하나도 없으면 `pick_option`처럼 고정값."""
+    tried = [o for o in options if (o.get("track") or {}).get("tried", 0) >= MIN_PICK_TRIED]
+    key = lambda o: (_ratio(o["track"]), _ratio(o["track"], "top"), _ratio(o["track"], "valid"))  # noqa: E731
+    ok = [o for o in tried if min_valid is None or _ratio(o["track"], "valid") >= min_valid]
+    if ok:
+        return max(ok, key=key)
+    if tried:
+        return max(tried, key=lambda o: (_ratio(o["track"], "valid"), _ratio(o["track"])))
+    return next((o for o in options if o["name"].startswith("고정")), options[0]) if options else None
 
 
 def legacy_pick(options: list[dict]) -> dict | None:
@@ -217,7 +236,16 @@ def add_picks(rows: list[dict], records: list[PastBid]) -> None:
         # 비교용 기준선은 웹앱 추천 칸에 없는 줄이라 후보에서 뺌(10/29: '늘 100%'가 선정된 공고 2건)
         options = [{"name": n, "rate": rate, "track": track.get(n)} for n, rate in row["rates"].items() if n not in (BASELINE, OWN)]
         no_fixed = [o for o in options if not o["name"].startswith("고정")]
-        for label, chosen in ((PICK, pick_option(options)), (LEGACY, legacy_pick(options)), (NO_FIXED, pick_option(no_fixed))):
+        est = bidmodels.estimate_bidders(train, {
+            "field": rec.field if rec.field not in ("", "공고명 없음") else None, "work": rec.work, "width": rec.range_width,
+            "lower_rate": rec.lower_rate, "method": rec.method, "region": bidmodels.region_of(rec.institution), "basis": rec.basis,
+            "institution": rec.institution, "region_limited": rec.region_limited}, row["개찰일"])
+        small = est is not None and est < SMALL_BIDDERS
+        row["규모"]["est"] = est
+        current = pick_option(options)
+        for label, chosen in ((PICK, current), (LEGACY, legacy_pick(options)), (NO_FIXED, pick_option(no_fixed)),
+                              (WIN_FIRST, win_first(options)), (WIN_ONLY, win_first(options, None)),
+                              (SMALL_WIN, win_first(options) if small else current)):
             if chosen is None:
                 continue
             row["results"][label] = row["results"][chosen["name"]]
@@ -336,7 +364,7 @@ def track_records(rows: list[dict]) -> dict[str, dict]:
 
 
 def _names(rows: list[dict]) -> list[str]:
-    names = [PICK, NO_FIXED, LEGACY, *STRATEGIES]
+    names = [PICK, WIN_FIRST, WIN_ONLY, SMALL_WIN, NO_FIXED, LEGACY, *STRATEGIES]
     for row in rows:
         names += [n for n in row["results"] if n not in names]
     return [n for n in names if any(n in r["results"] for r in rows)]
@@ -367,7 +395,7 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
 
     picks = [r["picked"] for r in rows if r.get("picked")]
     if picks:
-        for label in (PICK, NO_FIXED, LEGACY):
+        for label in (PICK, WIN_FIRST, WIN_ONLY, SMALL_WIN, NO_FIXED, LEGACY):
             lines.append(f"  {label}: " + " · ".join(f"{n} {c}" for n, c in Counter(p[label] for p in picks if label in p).most_common()))
         lines.append(f"  두 규칙이 다른 방식을 고른 공고 {sum(p.get(PICK) != p.get(LEGACY) for p in picks)}건")
         lines.append(f"  고정을 빼서 다른 방식을 고른 공고 {sum(p.get(PICK) != p.get(NO_FIXED) for p in picks)}건"
@@ -420,7 +448,7 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
 def write_csv(rows: list[dict], path: Path) -> None:
     names = _names(rows)
     base = ["공고번호", "개찰일", "분야", "업무", "변동폭", "참가", "학습 공고", "실제 사정률", "1순위 상한", "하한선"]
-    picks = [PICK, NO_FIXED, LEGACY] if any(r.get("picked") for r in rows) else []
+    picks = [PICK, WIN_FIRST, WIN_ONLY, SMALL_WIN, NO_FIXED, LEGACY] if any(r.get("picked") for r in rows) else []
     head = base + [f"{p} 방식" for p in picks] + [f"{n} {k}" for n in names for k in ("사정률", "유효", "1순위", f"{TOP_N}위 안", "순위 상위%(미달=100%)")]
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)

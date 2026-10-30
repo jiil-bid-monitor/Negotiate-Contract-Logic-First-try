@@ -149,6 +149,12 @@ class BacktestTest(unittest.TestCase):
         self.assertFalse(any(r["picked"][label] in (bt.BASELINE, bt.OWN) for r in late for label in (bt.PICK, bt.LEGACY)))
         # 고정 뺀 선정(10/30) — 같은 규칙이지만 고정 100.55%는 절대 안 고름
         self.assertTrue(all(bt.NO_FIXED in r["results"] and not r["picked"][bt.NO_FIXED].startswith("고정") for r in late))
+        # 규칙 후보 B·C·D(10/30) — 같은 공고로 나란히, 1순위만(C)은 검증 1순위 비율이 가장 높은 방식
+        self.assertTrue(all(label in r["results"] for r in late for label in (bt.WIN_FIRST, bt.WIN_ONLY, bt.SMALL_WIN)))
+        opts = [{"name": "가", "track": {"tried": 30, "win": 6, "top": 9, "valid": 12}},
+                {"name": "나", "track": {"tried": 30, "win": 3, "top": 9, "valid": 27}}]
+        self.assertEqual(bt.win_first(opts, None)["name"], "가")  # 통과 40%라도 1순위가 많으면
+        self.assertEqual(bt.win_first(opts)["name"], "나")  # 통과 50% 조건이면 '가'는 빠짐
         text = bt.summarize(late)
         self.assertIn(bt.PICK, text)
         self.assertIn("두 규칙이 다른 방식을 고른 공고", text)

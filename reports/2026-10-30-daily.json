@@ -1,0 +1,46 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-10-30",
+ "reportedAt": "2026-10-29T23:58:02+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01798709",
+   "title": "양산시 서부건강생활지원센터 어린이건강체험관 전시 및 환경조성공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "경상남도 양산시 양산시보건소",
+    "budgetAmount": 272570000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "체험관"
+    ],
+    "products": [],
+    "score": 50,
+    "deadline": "2026-11-03T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01798709&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01797819",
+   "title": "대형 강의실 사이니지 모니터 및 AV 장비 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "숙명여자대학교",
+    "budgetAmount": 38216364.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "영상정보디스플레이장치"
+    ],
+    "score": 61,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01797819&bidPbancOrd=000"
+   }
+  }
+ ]
+}

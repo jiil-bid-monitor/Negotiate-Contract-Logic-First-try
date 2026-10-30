@@ -159,6 +159,8 @@ def model_rates(train: list[PastBid], picked: list[PastBid], target: PastBid, sc
 
 PICK = "추천 칸 선정(지금 규칙)"  # --pick: 그 공고 개찰 전 자료로 추천 칸이 골랐을 방식(`pick_option`)
 LEGACY = "추천 칸 선정(이전 규칙)"  # 10/29 2안 전 규칙 — 같은 공고로 나란히 비교하려고 남김
+# 10/30 사용자 질문: 고정 100.55%가 '통과'에 치우쳐 대규모가 아니면 필요 없지 않나 — 같은 규칙에서 고정만 후보에서 뺀 선정
+NO_FIXED = "추천 칸 선정(고정 뺌)"
 
 
 def legacy_pick(options: list[dict]) -> dict | None:
@@ -214,7 +216,8 @@ def add_picks(rows: list[dict], records: list[PastBid]) -> None:
         track = track_records(tracked)
         # 비교용 기준선은 웹앱 추천 칸에 없는 줄이라 후보에서 뺌(10/29: '늘 100%'가 선정된 공고 2건)
         options = [{"name": n, "rate": rate, "track": track.get(n)} for n, rate in row["rates"].items() if n not in (BASELINE, OWN)]
-        for label, chosen in ((PICK, pick_option(options)), (LEGACY, legacy_pick(options))):
+        no_fixed = [o for o in options if not o["name"].startswith("고정")]
+        for label, chosen in ((PICK, pick_option(options)), (LEGACY, legacy_pick(options)), (NO_FIXED, pick_option(no_fixed))):
             if chosen is None:
                 continue
             row["results"][label] = row["results"][chosen["name"]]
@@ -332,7 +335,7 @@ def track_records(rows: list[dict]) -> dict[str, dict]:
 
 
 def _names(rows: list[dict]) -> list[str]:
-    names = [PICK, LEGACY, *STRATEGIES]
+    names = [PICK, NO_FIXED, LEGACY, *STRATEGIES]
     for row in rows:
         names += [n for n in row["results"] if n not in names]
     return [n for n in names if any(n in r["results"] for r in rows)]
@@ -363,9 +366,11 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
 
     picks = [r["picked"] for r in rows if r.get("picked")]
     if picks:
-        for label in (PICK, LEGACY):
+        for label in (PICK, NO_FIXED, LEGACY):
             lines.append(f"  {label}: " + " · ".join(f"{n} {c}" for n, c in Counter(p[label] for p in picks if label in p).most_common()))
         lines.append(f"  두 규칙이 다른 방식을 고른 공고 {sum(p.get(PICK) != p.get(LEGACY) for p in picks)}건")
+        lines.append(f"  고정을 빼서 다른 방식을 고른 공고 {sum(p.get(PICK) != p.get(NO_FIXED) for p in picks)}건"
+                     f"(지금 규칙이 고정을 고른 공고 {sum(str(p.get(PICK, '')).startswith('고정') for p in picks)}건)")
     judged = [r["규모"] for r in rows if r.get("규모")]
     if judged:  # 경쟁 규모 자동 판정을 실제 참가 수(100곳 기준)와 대조 — 새 방식(닮은 공고·기관) vs 예전 방식(분야·업무·변동폭 가운데값)
         def hits(key: str, kind: str) -> str:
@@ -407,7 +412,7 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
 def write_csv(rows: list[dict], path: Path) -> None:
     names = _names(rows)
     base = ["공고번호", "개찰일", "분야", "업무", "변동폭", "참가", "학습 공고", "실제 사정률", "1순위 상한", "하한선"]
-    picks = [PICK, LEGACY] if any(r.get("picked") for r in rows) else []
+    picks = [PICK, NO_FIXED, LEGACY] if any(r.get("picked") for r in rows) else []
     head = base + [f"{p} 방식" for p in picks] + [f"{n} {k}" for n in names for k in ("사정률", "유효", "1순위", f"{TOP_N}위 안", "순위 상위%(미달=100%)")]
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)

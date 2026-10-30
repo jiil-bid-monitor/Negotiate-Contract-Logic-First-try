@@ -35,6 +35,14 @@ CSV_COLUMNS = [
 ]
 
 
+# 싱크로율 배지 색 (배경, 글자) — nego/sync.level 등급별
+_SYNC_COLORS = {
+    "높음": ("#fff3b0", "#7a4b00"),
+    "경계선": ("#e3f0ff", "#1a4f8a"),
+    "낮음": ("#eceff1", "#546e7a"),
+}
+
+
 def _fmt_money(value: float | None) -> str:
     if not value:
         return ""
@@ -652,9 +660,14 @@ def _table_html(candidates: list[Candidate], esc) -> list[str]:
             sync = getattr(c, "sync", None) or {}
             if sync.get("score") is not None:
                 best = (sync.get("top") or [{}])[0]
-                similar = f' · 유사: {esc(best.get("year") or "")} {esc(best.get("title") or "")}' if best.get("title") else ""
-                kwtags += (f'<div class="dim" style="font-size:0.68rem;margin-top:4px;">'
-                           f'싱크로율 {round(sync["score"] * 100)}% ({esc(sync.get("level"))}){similar}</div>')
+                # 싱크로율은 한눈에 보이게 등급 색 배지로, 유사 실적은 다음 줄에 (2026-10-30 사용자 요청)
+                bg, fg = _SYNC_COLORS.get(sync.get("level"), ("#eceff1", "#455a64"))
+                kwtags += (f'<div style="margin-top:4px;"><span style="display:inline-block;padding:1px 7px;border-radius:4px;'
+                           f'background:{bg};color:{fg};font-weight:700;font-size:0.74rem;">'
+                           f'싱크로율 {round(sync["score"] * 100)}% · {esc(sync.get("level"))}</span></div>')
+                if best.get("title"):
+                    kwtags += (f'<div class="dim" style="font-size:0.68rem;margin-top:2px;">'
+                               f'유사: {esc(best.get("year") or "")} {esc(best.get("title") or "")}</div>')
             if c.screen_result.matched_keywords:
                 tags = "".join(f'<span class="kwtag">키워드:{esc(k)}</span>' for k in c.screen_result.matched_keywords)
                 kwtags += f'<div class="kwtags">{tags}</div>'

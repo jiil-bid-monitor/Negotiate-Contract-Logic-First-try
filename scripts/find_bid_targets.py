@@ -206,15 +206,20 @@ def main(argv: list[str] | None = None) -> int:
     print(f"개찰 결과 목록 {begin} ~ {end} · {', '.join(works)} · 참가 {args.max_bidders}곳 이하 · 분야 {', '.join(sorted(fields)) if fields else '기타 빼고 전부'}")
     found, stopped, seen = collect(client, base_url, works, begin, end, args.days, args.max_bidders, fields)
     dropped: Counter = Counter()
-    if not args.all_methods and found and not stopped:
+    if stopped and not args.all_methods:  # 개찰 목록도 다 못 받음 — 거르지 않은 반쪽 목록은 안 만듦
+        print("\n오늘 호출 한도에 걸려 개찰 결과 목록을 다 못 받았습니다 — 목록을 만들지 않았습니다. 내일 같은 명령을 다시 실행하세요.")
+        return 0
+    if not args.all_methods and found:
         print(f"\n입찰만 남기기 — 입찰공고 목록(등록일 {begin - timedelta(days=NOTICE_LOOKBACK_DAYS)} ~ {end})에서 낙찰방법·하한율 확인")
         notices, stopped = notice_rows(client, sorted({r["업무"] for r in found.values()}), begin, end)
-        if not stopped:
-            for no in list(found):
-                why = bid_only_reason(notices.get(no))
-                if why:
-                    dropped[why] += 1
-                    del found[no]
+        if stopped:  # 거르지 못한 목록을 쓰면 협상까지 받게 됨 — 목록을 안 만들고 멈춤
+            print("\n오늘 호출 한도에 걸려 입찰만 거르기를 못 했습니다 — 목록을 만들지 않았습니다. 내일 같은 명령을 다시 실행하세요.")
+            return 0
+        for no in list(found):
+            why = bid_only_reason(notices.get(no))
+            if why:
+                dropped[why] += 1
+                del found[no]
 
     done = already_fetched(directory)
     rows = sorted((r for no, r in found.items() if no not in done), key=lambda r: r["개찰일"])

@@ -162,6 +162,11 @@ class BacktestTest(unittest.TestCase):
         self.assertIn("채점 공고 2건", text)
         self.assertIn("지일이 실제로 투찰한 공고", text)
         self.assertIn("2025년", text)
+        self.assertIn("지일이 투찰하지 않은 공고", text)  # miss는 지일 투찰 없음
+        # 계약방법을 알면 소규모를 수의 견적·일반 입찰로 나눠 봄(10/30)
+        self.hit.contract = "제한(총액)소액수의"
+        rows, _ = bt.backtest(self.train + [self.hit, self.miss], start="2025-01-01")
+        self.assertIn("수의 견적", bt.summarize(rows))
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "out.csv"
             bt.write_csv(rows, path)

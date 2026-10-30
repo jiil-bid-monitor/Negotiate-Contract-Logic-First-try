@@ -46,7 +46,8 @@ class FetchBidResultsTest(unittest.TestCase):
             F.SCSBID_OPERATIONS["예비가격/용역"]: [{"bidNtceOrd": "000", "bsisPlnprc": "100"}],
             F.OPENING_BIDDERS_OPERATION: [{"bidNtceOrd": "000", "opengRank": "1"}],
             F.BID_NOTICE_OPERATIONS["용역"]: [{"bidNtceNo": "R26BK00000001", "bidNtceOrd": "000", "bidNtceNm": "가",
-                                               "sucsfbidLwltRate": "87.745"}],
+                                               "sucsfbidLwltRate": "87.745", "cntrctCnclsMthdNm": "제한(총액)소액수의",
+                                               "sucsfbidMthdNm": "최저가"}],
             F.BASIS_AMOUNT_OPERATIONS["용역"]: [{"bidNtceNo": "R26BK00000001", "bidNtceOrd": "000", "bssamt": "100000000",
                                                  "rsrvtnPrceRngBgnRate": "-2", "rsrvtnPrceRngEndRate": "+2",
                                                  "npnInsrprm": "1000000", "bidPrceCalclAYn": "Y"}],
@@ -55,6 +56,10 @@ class FetchBidResultsTest(unittest.TestCase):
         self.assertEqual(rec["notice"]["lower_rate"], "87.745")
         self.assertEqual((rec["notice"]["range_lo"], rec["notice"]["range_hi"]), (-2.0, 2.0))
         self.assertEqual((rec["notice"]["a_value"], rec["notice"]["a_applies"]), (1_000_000.0, True))
+        # 계약방법 — 수의 견적 구분용(10/30)
+        self.assertEqual(rec["notice"]["contract_method"], "제한(총액)소액수의")
+        self.assertTrue(fb.needs_method({"bidders": [1], "notice": {}}))
+        self.assertFalse(fb.needs_method({"bidders": [1], "notice": {"method_checked": "x"}}))
 
     def test_notice_info_quota_stops(self):
         class Quota(FakeClient):

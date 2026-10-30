@@ -268,7 +268,8 @@ def backtest(records: list[PastBid], start: str | None = None, scale: str = "all
         rates.update({f"고정 {f:g}%": f for f in fixed})
         row = {"공고번호": rec.notice_no, "개찰일": d, "분야": rec.field, "업무": rec.work, "변동폭": rec.range_width, "참가": rec.bidder_count,
                "학습 공고": len(train), "실제 사정률": round(rec.assessment, 4), "1순위 상한": round(rec.win_ceiling, 4),
-               "하한선": rec.floor_source, "rates": rates, "results": {}}
+               "하한선": rec.floor_source, "rates": rates, "results": {},
+               "계약": "수의" if "수의" in rec.contract else ("일반" if rec.contract else "모름")}
         row["ranks"] = {}
         for name, rate in rates.items():
             row["results"][name] = (rate, *score(rate, rec), in_top(rate, rec))
@@ -382,8 +383,15 @@ def summarize(rows: list[dict], undated: int = 0) -> str:
     own = [r for r in rows if OWN in r["results"]]
     if own:
         block("지일이 실제로 투찰한 공고 — 외주 추천과 같은 공고끼리 비교", own)
+    others = [r for r in rows if OWN not in r["results"]]
+    if others:  # 10/30 대표님 질문 — 지일이 투찰하지 않은 공고(경쟁업체끼리)에서도 같은 경향인지
+        block("지일이 투찰하지 않은 공고", others)
     small = [r for r in rows if r["참가"] < LARGE_COMPETITION]
     large = [r for r in rows if r["참가"] >= LARGE_COMPETITION]
+    for kind in ("수의", "일반"):  # 계약방법을 아는 공고만 — 수의 견적과 일반 입찰을 나눌 필요가 있는지(10/30)
+        subset = [r for r in small if r.get("계약") == kind]
+        if subset:
+            block(f"참가 {LARGE_COMPETITION}곳 미만 · {'수의 견적' if kind == '수의' else '수의 아님(일반 입찰)'}", subset)
     if small and large:
         block(f"참가 {LARGE_COMPETITION}곳 미만", small)
         block(f"참가 {LARGE_COMPETITION}곳 이상(운의 영역)", large)

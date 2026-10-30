@@ -84,6 +84,7 @@ class PastBid:
     draws: list[tuple[int, float, int]] = field(default_factory=list)  # 예비가격 (번호, 기초금액 대비 %, 선택 횟수) — 추첨 모형(`bidmodels`)
     method: str = ""  # 낙찰자 결정 기준 '조달청'·'행자부' 등(예비가격 행 bidwinrSlctnAplBssCntnts) — 가중 KNN·간격 예측
     institution: str = ""  # 발주(수요)기관 — 가중 KNN·간격 예측의 지역(첫 낱말)
+    contract: str = ""  # 계약체결방법(공고 행 cntrctCnclsMthdNm) — 수의 견적 구분용, 모르면 빈 값(10/30)
 
     @property
     def field(self) -> str:
@@ -387,7 +388,8 @@ def from_result_record(rec: dict, source: str = "", own_bizno: str = "") -> Past
                  own_bizno=own_bizno, draws=parse_draws(prices_rows, basis),
                  method=str(_row_value(prices_rows, "bidwinrSlctnAplBssCntnts") or ""),
                  institution=str(info.get("institution") or ""),
-                 region_limited=info.get("region_limited") if "region_limited" in info else None)
+                 region_limited=info.get("region_limited") if "region_limited" in info else None,
+                 contract=str(info.get("contract_method") or ""))
 
 
 @dataclass

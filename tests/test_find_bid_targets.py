@@ -57,12 +57,44 @@ class MainTest(unittest.TestCase):
             (d / "bid_results.jsonl").write_text(json.dumps({"no": "B", "prices": []}) + "\n", encoding="utf-8")
             with mock.patch.object(ft, "service_key", return_value="k"), \
                     mock.patch.object(ft.DataGoKrClient, "fetch_all_pages", fake_fetch), redirect_stdout(io.StringIO()):
-                code = ft.main(["--from", "2025-05-01", "--to", "2025-05-03", "--dir", str(d)])
+                code = ft.main(["--from", "2025-05-01", "--to", "2025-05-03", "--dir", str(d), "--all-methods"])
             self.assertEqual(code, 0)
             table = list(csv.reader((d / "bid_targets_others.csv").open(encoding="utf-8-sig")))
         self.assertEqual(table[0], ft.HEAD)
         self.assertEqual([r[0] for r in table[1:]], ["A-000"])  # B는 이미 받음
         self.assertEqual(len(calls), 3)  # 공사·용역·물품 × 1주
+
+    def test_bid_only_drops_negotiated_and_no_floor(self):
+        # 기본(입찰만) — 입찰공고 목록으로 협상·하한율 없음·복수예가 아님·공고 못 찾음을 뺌(10/30)
+        notices = [
+            {"bidNtceNo": "A", "bidNtceOrd": "000", "sucsfbidMthdNm": "적격심사", "sucsfbidLwltRate": "87.745", "prearngPrceDcsnMthdNm": "복수예가"},
+            {"bidNtceNo": "B", "bidNtceOrd": "000", "sucsfbidMthdNm": "협상에의한계약", "sucsfbidLwltRate": ""},
+            {"bidNtceNo": "C", "bidNtceOrd": "000", "sucsfbidMthdNm": "최저가", "sucsfbidLwltRate": ""},
+            {"bidNtceNo": "D", "bidNtceOrd": "000", "sucsfbidMthdNm": "적격심사", "sucsfbidLwltRate": "88", "prearngPrceDcsnMthdNm": "단일예가"},
+        ]
+
+        def fake_fetch(self, base_url, op, params, label):
+            if op == ft.LIST_OPS["물품"]:
+                return [_row(n, "전시물 제작", 5) for n in "ABCDE"]
+            if op == ft.F.BID_NOTICE_OPERATIONS["물품"]:
+                return notices
+            return []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            with mock.patch.object(ft, "service_key", return_value="k"), \
+                    mock.patch.object(ft.DataGoKrClient, "fetch_all_pages", fake_fetch), redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(ft.main(["--from", "2025-05-01", "--to", "2025-05-03", "--dir", str(d), "--works", "물품"]), 0)
+            table = list(csv.reader((d / "bid_targets_others.csv").open(encoding="utf-8-sig")))
+        self.assertEqual([r[0] for r in table[1:]], ["A-000"])
+        self.assertIn("협상 1", out.getvalue())
+        self.assertIn("입찰공고 못 찾음 1", out.getvalue())
+
+    def test_bid_only_reason(self):
+        self.assertIsNone(ft.bid_only_reason({"sucsfbidMthdNm": "적격심사", "sucsfbidLwltRate": "89.745"}))
+        self.assertEqual(ft.bid_only_reason({"sucsfbidMthdNm": "규격가격동시입찰", "sucsfbidLwltRate": "88"}), "규격가격동시입찰")
+        self.assertEqual(ft.bid_only_reason({"sucsfbidMthdNm": "적격심사", "sucsfbidLwltRate": "0.1"}), "하한율 없음")
+        self.assertEqual(ft.bid_only_reason(None), "입찰공고 못 찾음")
 
     def test_stops_on_quota(self):
         def quota(self, *a, **k):

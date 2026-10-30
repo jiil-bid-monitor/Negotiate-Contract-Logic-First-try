@@ -18,6 +18,7 @@ import requests
 
 from . import attachments
 from . import fields as F
+from .business_scope import extract_scope_items
 from .http_client import ApiError, DataGoKrClient
 
 log = logging.getLogger(__name__)
@@ -229,8 +230,12 @@ def parse_notice_text(text: str) -> dict:
         width = _num(m.group(1))
         if width and width <= 5:
             out["range_lo"], out["range_hi"] = -width, width
-    if m := _SUMMARY_RE.search(text):
-        out["summary"] = m.group(1).strip()
+    # 사업 내용 — 사업개요 줄 + "사업 범위·과업 내용" 목록(`business_scope`). 분야 키워드는 여기서만 센다(10/30 — 공고문 전체로 세면
+    # 전기공사업법·정보통신공사업법·보험료 같은 공통 문구 때문에 통신·전기가 실내건축보다 많이 잡혔음)
+    parts = [m.group(1).strip()] if (m := _SUMMARY_RE.search(text)) else []
+    parts += [item for item in extract_scope_items(text) if item not in parts]
+    if parts:
+        out["summary"] = "\n".join(parts)
     kind, quote = law_kind(text)
     if kind:
         out["law_kind"], out["law_quote"] = kind, quote
@@ -258,6 +263,8 @@ def _read_notice_docs(notice: dict, out: dict, fetch: Callable) -> None:
             continue
         name = att.get("file_name") or "공고문"
         for k, v in parse_notice_text(result.text).items():
+            if k == "summary" and "summary" in doc:  # 사업 내용은 읽은 문서 것을 모두 이어 붙임(공고문 사업개요 + 제안요청서 사업 범위)
+                doc[k] = (f"{doc[k][0]}\n{v}", doc[k][1])
             doc.setdefault(k, (v, name))
         if all(k in doc for k in ("basis", "lower_rate", "range_lo", "law_kind")):
             break

@@ -46,10 +46,14 @@ class FieldTest(unittest.TestCase):
         self.assertEqual(bidfield.classify(title), bidfield.OTHER)
         field, note = bidfield.classify_notice(title, "라운지 조성(실내 리모델링) 공사 1식", ["실내건축공사업"])
         self.assertEqual(field, "실내건축·인테리어")
-        self.assertIn("사업개요", note)
+        self.assertIn("사업 내용", note)
         field, note = bidfield.classify_notice(title, "", ["실내건축공사업"])
         self.assertEqual((field, "면허제한 업종" in note), ("실내건축·인테리어", True))
         self.assertEqual(bidfield.classify_notice(title, "1식", ["토목공사업"]), (bidfield.OTHER, ""))
+        # 사업 내용은 키워드 횟수로 — 공고문 전체의 법령 이름(전기공사업법 등)이 아니라 사업 범위 목록만 넘어옴
+        scope = "실내 인테리어 공사 일체\n전기 배선 이설\n라운지 리모델링 및 가구 배치"
+        self.assertEqual(bidfield.classify_text(scope)[0], "실내건축·인테리어")
+        self.assertEqual(bidfield.classify_text("청소 용역"), (bidfield.OTHER, {}))
         # 공고명으로 정해지면 공고문·업종은 안 봄
         self.assertEqual(bidfield.classify_notice("○○박물관 전시물 제작", "실내 리모델링", ["실내건축공사업"]), ("전시·체험", ""))
 

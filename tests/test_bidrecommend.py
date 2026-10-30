@@ -188,7 +188,7 @@ class CoverageTest(unittest.TestCase):
         out = br.recommend(br.History(records), work="공사", title="삼탄아트마인 본관 라운지 조성사업",
                            summary="라운지 조성(실내 리모델링) 공사 1식", licenses=["실내건축공사업"])
         self.assertEqual(out["field"], "실내건축·인테리어")
-        self.assertIn("사업개요", out["field_note"])
+        self.assertIn("사업 내용", out["field_note"])
         self.assertIn("분야 실내건축·인테리어", out["conditions"])
         plain = br.recommend(br.History(records), work="공사", title="삼탄아트마인 본관 라운지 조성사업")
         self.assertEqual(plain["field"], "기타")

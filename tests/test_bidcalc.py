@@ -140,6 +140,8 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(bidcalc.parse_notice_text("다. 사업개요: 라운지 조성(실내 리모델링) 공사 1식\n라. 추정금액")["summary"],
                          "라운지 조성(실내 리모델링) 공사 1식")
         self.assertEqual(bidcalc.parse_notice_text("공 사 개 요 : 전시관 내부 인테리어")["summary"], "전시관 내부 인테리어")
+        scope = "가. 사업 범위\n  1) 라운지 실내 인테리어 설계 및 시공\n  2) 가구 제작 및 설치\n나. 사업기간 : 45일"
+        self.assertEqual(bidcalc.parse_notice_text(scope)["summary"], "라운지 실내 인테리어 설계 및 시공\n가구 제작 및 설치")
 
     def test_guess_method(self):
         self.assertEqual(bidcalc.guess_method("", -2, 2), "pps")

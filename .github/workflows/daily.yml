@@ -12,7 +12,7 @@ run-name: >-
 #    1~3시간 늦게 시작해서). 부르는 입력값은 docs/telegram.md 9절. 아래 schedule은 12:00 KST 백업 — 그날 같은 모드의
 #    수동 실행이 이미 있으면(진행 중·성공) 수집 없이 끝난다.
 #      평일 09:00 KST — 어제 게시된 "입찰" → 텔레그램   (2026-10-14 사용자 요청으로 08:00 → 09:00,
-#        2026-10-20 팀원 레포 10/19 결정 이식: 평일만 — 월요일은 3일치 조회라 금~일 게시분이 함께 들어간다)
+#        2026-10-20 팀원 레포 10/19 결정 이식: 평일만 — 월요일만 3일치(금~일), 화~금은 어제 하루(2026-10-30))
 #      매주 월 09:10 KST — 지난 7일 "협상·규격가격동시입찰" + 사전규격 → 텔레그램
 #    ※ GitHub 예약 실행은 붐비면 몇 시간씩 늦게 시작한다(실측 10/13 08:00 예약 → 12:21 시작, 10/14 → 10:35 시작).
 #    조회 기간을 날짜 단위로 딱 잘라(--complete-days) 주기끼리 겹치지 않으므로
@@ -154,8 +154,7 @@ jobs:
             if [ "$SCHEDULE" = "10 3 * * 1" ]; then
               CATEGORIES="협상,규격가격동시입찰"; COMPLETE_DAYS="7"; PRESPEC="true"
             else
-              # 3일치를 보되 보낸 공고 기록으로 새 공고만 보낸다(2026-10-19 통합 결정 14번) — 예약 실행이 밀리거나
-              # 늦게 등록된 공고도 빠지지 않게
+              # "3"은 Run 이름용 — 실제 조회는 아래에서 월요일만 3일, 화~금은 1일(2026-10-30). 보낸 공고 기록으로 새 공고만 보낸다
               CATEGORIES="입찰"; COMPLETE_DAYS="3"; PRESPEC="false"
             fi
             DAYS="1"; TELEGRAM="true"; NO_SUPABASE="true"; LLM="false"; ATTEMPT="1"
@@ -207,6 +206,12 @@ jobs:
             fi
           fi
           echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
+          # 매일 입찰 보고: 화~금은 어제 하루, 월요일만 3일(금~일) — 2026-10-30 사용자 결정(예전엔 평일 내내 3일).
+          # 외부 예약 본문·Run 이름·재시도 입력은 "3" 그대로 두고 실제 조회 기간만 여기서 바꾼다(백업 skip 비교가 이름으로 하므로).
+          if [ "$SENT_STATE" = "true" ] && [ "$COMPLETE_DAYS" = "3" ] && [ "$(TZ=Asia/Seoul date +%u)" != "1" ]; then
+            COMPLETE_DAYS="1"
+          fi
+          echo "collect_days=$COMPLETE_DAYS" >> "$GITHUB_OUTPUT"
           if [ -n "$COMPLETE_DAYS" ]; then PERIOD="오늘 뺀 직전 ${COMPLETE_DAYS}일"; else PERIOD="최근 ${DAYS}일"; fi
           echo "유형=${CATEGORIES:-전체} / 기간=${PERIOD} / 사전규격=$PRESPEC / 텔레그램=$TELEGRAM / 보낸공고기록=$SENT_STATE / 보고기록=${REPORT_LOG:-없음} / 메일=$EMAIL / 시도 ${ATTEMPT}회차"
 
@@ -280,7 +285,7 @@ jobs:
           REPORT_LOG: ${{ steps.mode.outputs.report_log }}
           EMAIL: ${{ steps.mode.outputs.email }}
           CATEGORIES: ${{ steps.mode.outputs.categories }}
-          COMPLETE_DAYS: ${{ steps.mode.outputs.complete_days }}
+          COMPLETE_DAYS: ${{ steps.mode.outputs.collect_days }}
           TELEGRAM: ${{ steps.mode.outputs.telegram }}
           PRESPEC: ${{ steps.mode.outputs.prespec }}
           NO_SUPABASE: ${{ steps.mode.outputs.no_supabase }}

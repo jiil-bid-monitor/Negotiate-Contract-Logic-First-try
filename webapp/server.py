@@ -196,7 +196,8 @@ def make_handler(app: App):
                     scale=q.get("scale", ["auto"])[0], basis=num("basis"), lower_rate=num("lower"), a=num("a") or 0.0,
                     title=q.get("title", [""])[0], institution=q.get("inst", [""])[0], method=q.get("method", [""])[0],
                     net_cost=num("net"), net_rate=num("netrate"),
-                    region_limited={"1": True, "0": False}.get(q.get("rl", [""])[0])))
+                    region_limited={"1": True, "0": False}.get(q.get("rl", [""])[0]),
+                    summary=q.get("summary", [""])[0], licenses=[x for x in q.get("lic", [""])[0].split("|") if x.strip()]))
             if url.path == "/api/results":
                 # ?run=번호 — 그 브라우저가 보고 있는(직접 불러온) 결과. 없거나 지워진 번호면 최신 결과(missing=True)
                 wanted = q.get("run", [""])[0]

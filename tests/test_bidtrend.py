@@ -40,6 +40,19 @@ class FieldTest(unittest.TestCase):
         self.assertEqual(bidfield.classify("청사 청소 용역"), bidfield.OTHER)
         self.assertEqual(bidfield.classify(""), bidfield.NO_TITLE)
 
+    def test_classify_notice_fallback(self):
+        # 2026-10-30 삼탄아트마인 본관 라운지 조성사업 — 공고명엔 분야 낱말이 없고 공고문 사업개요·면허제한 업종이 실내건축
+        title = "[수의]삼탄아트마인 본관 라운지 조성사업"
+        self.assertEqual(bidfield.classify(title), bidfield.OTHER)
+        field, note = bidfield.classify_notice(title, "라운지 조성(실내 리모델링) 공사 1식", ["실내건축공사업"])
+        self.assertEqual(field, "실내건축·인테리어")
+        self.assertIn("사업개요", note)
+        field, note = bidfield.classify_notice(title, "", ["실내건축공사업"])
+        self.assertEqual((field, "면허제한 업종" in note), ("실내건축·인테리어", True))
+        self.assertEqual(bidfield.classify_notice(title, "1식", ["토목공사업"]), (bidfield.OTHER, ""))
+        # 공고명으로 정해지면 공고문·업종은 안 봄
+        self.assertEqual(bidfield.classify_notice("○○박물관 전시물 제작", "실내 리모델링", ["실내건축공사업"]), ("전시·체험", ""))
+
     def test_exceptions_and_trade_mark(self):
         # 수집 로직의 제외 키워드 예외와 같은 방식 — '안전시설' 속 '전시', '추가 구축' 속 '가구'는 안 침
         self.assertEqual(bidfield.classify("국도38호선 도로안전시설물 보수공사"), "도로·안전시설")

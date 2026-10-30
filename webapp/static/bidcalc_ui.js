@@ -276,7 +276,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
-    WORK = ""; REC_METHOD = ""; NET_RULE = null; REGION_LIMITED = null; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
+    WORK = ""; REC_METHOD = ""; NET_RULE = null; REGION_LIMITED = null; NOTICE_SUMMARY = ""; LICENSES = []; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
     render();
   };
   async function lookup() {
@@ -311,6 +311,8 @@
       setNum("#cNet", d.net_cost || null);
       NET_RULE = d.net_rule || null;
       REGION_LIMITED = typeof d.region_limited === "boolean" ? d.region_limited : null;
+      NOTICE_SUMMARY = d.summary || "";
+      LICENSES = d.licenses || [];
       if (d.price_count === 10 || d.price_count === 15) {
         document.querySelector(`input[name="cN"][value="${d.price_count}"]`).checked = true;
         fillRange(defaultDown());
@@ -365,6 +367,9 @@
   // 공고문의 순공사원가 조건({rate, limit, quote, file}) — 있을 때만 투찰금액 조건으로 씀(10/29 사용자 결정: 98% 고정 조건 아님)
   let NET_RULE = null;
   let REGION_LIMITED = null;  // 지역제한 입찰인가(불러온 공고) — 추천 칸 경쟁 규모 가늠에 넘김(10/29)
+  // 공고문 사업개요 한 줄·면허제한 업종 — 공고명으로 분야가 '기타'일 때 서버가 분야를 정하는 데 씀(10/30)
+  let NOTICE_SUMMARY = "";
+  let LICENSES = [];
   let REC_METHOD = "";  // 낙찰자 결정 기준(행자부/조달청) — 추천의 가중 KNN·간격 예측이 비슷한 공고 무게에 씀
   let REC_PICK = null;  // 추천 칸이 고른 방식(rate·name·track·order) — 위 계산기 '투찰금액'이 이걸로 정해짐(10/29)
   let REC_OPTIONS = [];  // 추천 칸 방식들 — 고른 방식이 모의 예정가격 하한선 아래면 order 순으로 다음 방식
@@ -381,6 +386,8 @@
     });
     if (NET_RULE && numIn("#cNet") > 0) { qs.set("net", numIn("#cNet")); qs.set("netrate", NET_RULE.rate); }
     if (REGION_LIMITED !== null) qs.set("rl", REGION_LIMITED ? "1" : "0");
+    if (NOTICE_SUMMARY) qs.set("summary", NOTICE_SUMMARY);
+    if (LICENSES.length) qs.set("lic", LICENSES.join("|"));
     qs.set("a", aValue());
     // 계산 중엔 이전 추천을 지운 화면으로(10/29 사용자 요청 — 예전 공고의 추천 금액이 남아 헷갈림). 계산기 투찰금액도 추천 없이
     const ticket = ++REC_TICKET;
@@ -509,7 +516,7 @@
       과거 개찰 자료 ${d.total}건 중 분야·업무·변동폭·경쟁 규모가 같은 공고예요. 모자라면 조건을 하나씩 풀어요.
       <ul><li>실제 사정률(예정가격 ÷ 기초금액): 10% ${pct(a.p10)} · 가운데 ${pct(a.p50)} · 90% ${pct(a.p90)}</li>
       <li>1순위 업체 투찰률 − 하한율: 가운데 ${d.winner_gap >= 0 ? "+" : ""}${Number(d.winner_gap).toFixed(3)}%p</li>
-      <li>참가 업체: 가운데 ${b.median}곳 · 최대 ${b.max}곳</li></ul>${d.auto_scale ? `<p>${esc(d.auto_scale)}</p>` : ""}`, true)}</div>`;
+      <li>참가 업체: 가운데 ${b.median}곳 · 최대 ${b.max}곳</li></ul>${d.field_note ? `<p>분야: ${esc(d.field)} — ${esc(d.field_note)}</p>` : ""}${d.auto_scale ? `<p>${esc(d.auto_scale)}</p>` : ""}`, true)}</div>`;
     // ③ 방식별 비교 — 퍼센트를 크게, 건수는 작게. 추천으로 고른 줄 표시
     const opts = d.options || [];
     const cell = (t, key) => (t && t.tried ? `<b>${pctOf(rate(t, key))}</b><small>${t[key]}건</small>` : "-");

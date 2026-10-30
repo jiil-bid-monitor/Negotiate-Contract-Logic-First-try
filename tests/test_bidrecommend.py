@@ -180,6 +180,20 @@ class CoverageTest(unittest.TestCase):
         large = [_past(f"l{i}", 100.0 + i * 0.01, count=300) for i in range(12)]
         self.assertEqual(br.recommend(br.History(large), work="용역", scale="auto")["scale"], br.SCALES["large"])
 
+    def test_field_from_notice_when_title_has_none(self):
+        # 공고명 '기타'면 공고문 사업개요로 분야를 정하고 근거를 남김(10/30) — 과거 공고는 공고명으로 나눔
+        records = [_past(f"i{i}", 100.0 + i * 0.01, work="공사") for i in range(12)]
+        for rec in records:
+            rec.title = "○○센터 실내 리모델링 공사"
+        out = br.recommend(br.History(records), work="공사", title="삼탄아트마인 본관 라운지 조성사업",
+                           summary="라운지 조성(실내 리모델링) 공사 1식", licenses=["실내건축공사업"])
+        self.assertEqual(out["field"], "실내건축·인테리어")
+        self.assertIn("사업개요", out["field_note"])
+        self.assertIn("분야 실내건축·인테리어", out["conditions"])
+        plain = br.recommend(br.History(records), work="공사", title="삼탄아트마인 본관 라운지 조성사업")
+        self.assertEqual(plain["field"], "기타")
+        self.assertNotIn("field_note", plain)
+
     def test_large_competition_note_and_no_win(self):
         # 1순위가 하한선 바로 위(대규모 경쟁) — 서로 겹치지 않는 아주 좁은 구간뿐
         records = [_past(str(i), 99.0 + i * 0.1, winner_gap=0.004, count=300) for i in range(12)]

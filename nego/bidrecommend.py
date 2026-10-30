@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from .bidfield import classify
+from .bidfield import classify, classify_notice
 from .bidmodels import region_of
 from .bidprice import parse_bidders, parse_prepare_prices
 
@@ -778,12 +778,14 @@ def auto_scale(records: list[PastBid], work: str | None, width: int | None, fiel
 def recommend(history: History, work: str | None = None, lo: float | None = None, hi: float | None = None,
               scale: str = "all", basis: float | None = None, lower_rate: float | None = None, a: float = 0.0,
               title: str = "", institution: str = "", method: str = "", net_cost: float | None = None,
-              net_rate: float | None = None, region_limited: bool | None = None) -> dict:
+              net_rate: float | None = None, region_limited: bool | None = None, summary: str = "",
+              licenses: list[str] | tuple[str, ...] = ()) -> dict:
     """화면 '추천 사정률' 칸 자료. 금액(basis·lower_rate)을 주면 추천 사정률로 계산한 투찰금액도 넣는다.
     title(공고명)을 주면 같은 분야(공고명 키워드, `nego.bidfield`) 과거 공고를 먼저 고르고, 그 묶음의 1~5위·지일 경향을 함께 싣는다.
-    scale="auto"(화면 기본)면 비슷한 과거 공고의 참가 업체 수 중앙값으로 경쟁 규모를 고른다(투찰 전엔 참가 수를 모르므로)."""
+    scale="auto"(화면 기본)면 비슷한 과거 공고의 참가 업체 수 중앙값으로 경쟁 규모를 고른다(투찰 전엔 참가 수를 모르므로).
+    공고명으로 분야가 '기타'면 공고문 사업개요(summary) → 면허제한 업종(licenses)으로 보완한다(10/30, `bidfield.classify_notice`)."""
     width = _width_from_rates(lo, hi)
-    field_name = classify(title) if title else None
+    field_name, field_note = classify_notice(title, summary, licenses) if title else (None, "")
     auto_note = ""
     if scale == "auto":
         scale, auto_note = auto_scale(history.records, work, width, field_name, lower_rate, basis, institution, method,
@@ -796,6 +798,8 @@ def recommend(history: History, work: str | None = None, lo: float | None = None
     }
     if auto_note:
         out["auto_scale"] = auto_note
+    if field_note:
+        out["field_note"] = field_note
     if not history.records:
         out["notes"].append("과거 개찰 자료가 없습니다 — 서버 PC에서 `python -m nego.bidprice` 또는 "
                             "`scripts/fetch_bid_results.py`로 output/에 받아 두세요")

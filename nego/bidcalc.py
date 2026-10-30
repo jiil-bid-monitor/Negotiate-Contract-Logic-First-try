@@ -148,6 +148,10 @@ _RATE_TEXT_RE = re.compile(r"낙찰\s*하한율[^\d\n]{0,15}(\d{2}(?:\.\d+)?)\s*
 # "기초금액의 ±3%" · "기초금액 대비 ±2%" · "기초금액의 ±3퍼센트"
 _RANGE_TEXT_RE = re.compile(r"기초\s*금액(?:의|\s*대비)?\s*[±+\-]\s*(\d(?:\.\d+)?)\s*(?:%|퍼센트)")
 
+# 사업개요 한 줄 — 공고명으로 분야를 못 정할 때 추천 칸이 씀(2026-10-30 사용자 결정, `bidfield.classify_notice`).
+# 예) "다. 사업개요: 라운지 조성(실내 리모델링) 공사 1식", "공사개요 : …", 띄어 쓴 머리글 "사 업 개 요"
+_SUMMARY_RE = re.compile(r"(?:사\s*업|공\s*사|과\s*업)\s*(?:개\s*요|내\s*용)\s*[:：]\s*([^\n]{2,120})")
+
 # 순공사원가 조건 — 공고문 문장 그대로 읽음(10/29 사용자 결정: 98%를 고정 조건으로 두지 않음). 예) "예정가격이 100억원 미만인
 # 공사인 경우, 입찰가격을 … 순공사원가의 100분의 98 미만으로 입찰한 자는 심사대상에서 제외"
 _NET_RATE_RE = re.compile(r"100\s*분의\s*(\d{2}(?:\.\d+)?)|(\d{2}(?:\.\d+)?)\s*(?:%|퍼센트)")
@@ -210,7 +214,7 @@ def law_kind(text: str) -> tuple[str | None, str]:
 
 
 def parse_notice_text(text: str) -> dict:
-    """공고문 원문 → {basis, lower_rate, range_lo, range_hi, law_kind, law_quote} 중 찾은 것만."""
+    """공고문 원문 → {basis, lower_rate, range_lo, range_hi, summary, law_kind, law_quote, net_rule} 중 찾은 것만."""
     out: dict = {}
     for m in _BASIS_TEXT_RE.finditer(text):
         amount = _num(m.group(1))
@@ -225,6 +229,8 @@ def parse_notice_text(text: str) -> dict:
         width = _num(m.group(1))
         if width and width <= 5:
             out["range_lo"], out["range_hi"] = -width, width
+    if m := _SUMMARY_RE.search(text):
+        out["summary"] = m.group(1).strip()
     kind, quote = law_kind(text)
     if kind:
         out["law_kind"], out["law_quote"] = kind, quote
@@ -233,7 +239,7 @@ def parse_notice_text(text: str) -> dict:
     return out
 
 
-_DOC_KEYS = ("basis", "lower_rate", "range_lo", "range_hi", "law_kind", "law_quote", "net_rule")
+_DOC_KEYS = ("basis", "lower_rate", "range_lo", "range_hi", "summary", "law_kind", "law_quote", "net_rule")
 
 
 def _read_notice_docs(notice: dict, out: dict, fetch: Callable) -> None:
@@ -261,6 +267,8 @@ def _read_notice_docs(notice: dict, out: dict, fetch: Callable) -> None:
         out["law_file"] = doc["law_kind"][1]
     if "net_rule" in doc:
         out["net_rule"] = {**doc["net_rule"][0], "file": doc["net_rule"][1]}
+    if "summary" in doc:
+        out["summary"] = doc["summary"][0]
     filled, differ = [], []
     for k in ("basis", "lower_rate", "range_lo"):
         if k not in doc:

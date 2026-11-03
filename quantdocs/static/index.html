@@ -55,7 +55,7 @@
     <div id="notes"></div>
     <div class="card">
       <h2>2. 필요 서식</h2>
-      <p class="muted"><span class="q">●</span> 정량적 평가서 묶음 · <b>자동</b> = 회사 정보·연혁·실적을 채워 드림 · 나머지는 잘라 두기만 함</p>
+      <p class="muted"><span class="q">●</span> 정량적 평가서 묶음 · <b>자동</b> = 회사 정보·연혁·실적을 채워 드림 · <span class="warn">직접 기입</span> = 담당 PM·투입 인력 등 공고마다 정하는 값 — 제안요청서 양식 그대로 넣어 드림(내려받은 뒤 직접 작성) · 나머지는 잘라 두기만 함</p>
       <div class="scroll"><table id="forms"></table></div>
     </div>
 
@@ -182,7 +182,7 @@ function render(j) {
     `<div class="card"><ul>${s.notes.concat(n.skipped).map(x => `<li class="warn">${esc(x)}</li>`).join("")}</ul></div>` : "";
   $("#forms").innerHTML = "<tr><th>서식</th><th>이름</th><th></th><th>서류 종류</th><th>자동</th></tr>" +
     (s.forms.length ? s.forms.map(f => `<tr><td>서식${f.no}</td><td>${esc(f.name)}</td><td>${f.quant ? '<span class="q">●</span>' : ""}</td>
-      <td class="muted">${esc(f.kind)}</td><td>${f.auto ? "<b>자동</b>" : ""}</td></tr>`).join("")
+      <td class="muted">${esc(f.kind)}</td><td>${f.auto ? "<b>자동</b>" : f.manual ? '<span class="warn">직접 기입</span>' : ""}</td></tr>`).join("")
       : `<tr><td colspan="5" class="muted">공고 자료에서 서식 목록을 찾지 못했습니다</td></tr>`);
   $("#submit").innerHTML = s.submit.map(x => `<li>${esc(x.text)}${x.kind ? ` <span class="chip">${esc(x.kind)}</span>` : ""}</li>`).join("")
     || '<li class="muted">못 찾음 — 공고문 확인</li>';

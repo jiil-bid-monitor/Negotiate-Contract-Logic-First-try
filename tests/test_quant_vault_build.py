@@ -82,9 +82,13 @@ def test_build_package(tmp_path: Path):
     names = z.namelist()
     assert "공고별_준비표.xlsx" in names and "통합본.pdf" in names and "첨부/실적/실적1.pdf" in names
     assert any(n.startswith("첨부/통합본_순서/") and n.endswith("실내건축공사업등록증.pdf") for n in names)
-    assert sum(n.startswith("서식/") for n in names) == 31
+    assert sum(n.startswith(("서식/", "서식_직접기입/")) for n in names) == 31
     sec = zipfile.ZipFile(io.BytesIO(z.read("서식/서식14_일반현황_및_연혁.hwpx"))).read("Contents/section0.xml").decode()
     assert "(가상)시험회사" in sec and "(가상) 법인 설립" in sec
+    manual = [n for n in names if n.startswith("서식_직접기입/")]
+    filled = {n.split("/", 1)[1] for n in names if n.startswith("서식/")}
+    assert manual and not filled & {n.split("/", 1)[1] for n in manual}  # 직접 기입 서식은 채운 서식 폴더에 없음
+    assert any("인력" in n or "이력" in n or "조직" in n for n in manual)
     sec16 = zipfile.ZipFile(io.BytesIO(z.read("서식/서식16_사업수행_실적집계표.hwpx"))).read("Contents/section0.xml").decode()
     assert "(가상) 전시관" in sec16 and "250,000,000" in sec16
     wb = load_workbook(io.BytesIO(z.read("공고별_준비표.xlsx")))
@@ -202,3 +206,13 @@ def test_bundle_pick_by_file_name_and_merge(tmp_path: Path):
     toc_pages = 0 if any("목차" in x for x in skipped) else 1  # 목차 장은 한글 글꼴이 있을 때만
     assert len(PdfReader(str(out)).pages) == 8 + toc_pages  # 원본 8쪽
     assert len(PdfReader(str(out)).outline) == 5
+
+
+def test_manual_forms():
+    from quantdocs.build import is_manual
+
+    for n in ("참여인력 자격사항(총괄)", "참여인력 개인별 이력사항", "수행조직 및 인원현황", "사업책임자(PM) 경력",
+              "재직증명서", "사업수행능력평가 자기평가표", "실적증명서"):
+        assert is_manual(n), n
+    for n in ("입찰참가신청서", "일반현황 및 연혁", "사업수행실적 집계표", "위임장", "청렴계약이행서약서"):
+        assert not is_manual(n), n

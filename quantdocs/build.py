@@ -140,7 +140,9 @@ def summary(a: Analysis) -> dict:
         "kind": {"id": a.kind, "name": g["name"], "when": g["when"], "source": g["source"],
                  "docs": [{"name": by_id[i].name, "auto": i in SCOPE_DOCS} for i in g["docs"] if i in by_id]},
         "forms": [{"no": f.no, "name": f.name, "quant": f.in_quant, "kind": f.doc.name if f.doc else "공고 서식(직접 작성)",
-                   "auto": bool(f.doc and f.doc.id in SCOPE_DOCS) or _is_basic(f.name)} for f in sh.forms],
+                   "manual": is_manual(f.name),
+                   "auto": not is_manual(f.name) and (bool(f.doc and f.doc.id in SCOPE_DOCS) or _is_basic(f.name))}
+                  for f in sh.forms],
         "submit": [{"text": it.text, "kind": it.doc.name if it.doc else ""} for it in sh.submit_items],
         "quals": a.quals,
         "tracks": [{"text": t.text, "kind": t.kind, "years": t.years, "min": t.min_amount, "per": t.per_project}
@@ -152,6 +154,15 @@ def summary(a: Analysis) -> dict:
         "bundle": [{"section": p.section, "file": Path(p.path).name, "note": p.note} for p in a.picks],
         "bundle_missing": a.pick_missing,
     }
+
+
+# 공고마다 사람이 정하는 값(담당 PM·투입 인력·조직·경력·자기평가 점수)을 적는 서식 — 회사 자료로 채우지 않고 제안요청서 양식 그대로 넣음
+# (11/03 사용자 요청: 통합본 받은 뒤 직접 기입). 이 서식의 '주소·전화' 같은 칸은 사람 것이라 회사 값을 넣으면 틀림.
+_MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참여자|조직|재직|자격\s*사항|자기\s*평가|실적\s*증명")
+
+
+def is_manual(name: str) -> bool:
+    return bool(_MANUAL_FORM.search(name or ""))
 
 
 def _is_basic(name: str) -> bool:
@@ -171,12 +182,19 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         a = analyze(files, vault, notice_date, work, award_method, contract_method)
         forms_dir, filled_dir = work / "cut", work / "서식"
         reports: list[FillReport] = []
+        manual: list[str] = []  # 양식 그대로 넣은 서식 파일
+        manual_dir = work / "서식_직접기입"
         cut_names = {str(f.no): f.name for f in a.sheet.forms}
         for f in files:
             src = Path(a.converted.get(f.name, f))
             if src.suffix.lower() != ".hwpx":
                 continue
             for c in cut(src, forms_dir, cut_names):
+                if is_manual(c.title):  # 양식 그대로 — 내려받은 뒤 직접 기입
+                    manual_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
+                    manual.append(c.file)
+                    continue
                 is_track = bool(re.search(r"실적.*(집계|현황)|수행실적", c.title))
                 rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, a.candidates if is_track else None)
                 reports.append(rep)
@@ -229,6 +247,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                    ["안내", "공고문·세부기준이 우선 — 위는 공고에서 못 찾을 때의 출발점"]], [16, 90])
             todo = [[d.name, d.human or "-", "이번 단계 범위 밖 — 직접 준비"] for d in load_catalog()
                     if d.id not in SCOPE_DOCS and d.id in g["docs"] + ["reissue"]]
+            todo += [[f"서식_직접기입/{m}", "제안요청서 양식 그대로 — 담당 PM·투입 인력 등 직접 기입", "직접 기입"] for m in manual]
             todo += [[m, "", "묶음 확인"] for m in missing] + [[n, "", "참고"] for n in a.notes]
             table(wb.create_sheet("준비 필요"), ["서류", "할 일", "비고"], todo, [40, 40, 30])
 
@@ -241,23 +260,26 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 z.write(merged, "통합본.pdf")
             for p in sorted(filled_dir.glob("*.hwpx")) if filled_dir.exists() else []:
                 z.write(p, f"서식/{p.name}")
+            for p in sorted(manual_dir.glob("*.hwpx")) if manual_dir.exists() else []:
+                z.write(p, f"서식_직접기입/{p.name}")
             for folder, name, data in attach:
                 z.writestr(f"{folder}/{name}", data)
             for f in files:
                 z.write(f, f"공고문/{f.name}")
-            z.writestr("읽어보기.txt", _readme(f"{notice_title} [{guide(a.kind)['name']}]", reports, attach, missing, a.notes))
+            z.writestr("읽어보기.txt", _readme(f"{notice_title} [{guide(a.kind)['name']}]", reports, attach, missing, a.notes, manual))
         return out_zip
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _readme(title: str, reports, attach, missing, notes) -> str:
+def _readme(title: str, reports, attach, missing, notes, manual=()) -> str:
     lines = [f"정량평가서 준비 묶음 — {title}".strip(), "",
              "· 서식/ : 공고 첨부 서식을 서식별로 자르고 회사 정보·연혁·실적 후보를 채운 것 — 채운 칸은 준비표 '자동입력' 시트에서 확인",
+             "· 서식_직접기입/ : 담당 PM·투입 인력·조직·경력·자기평가처럼 공고마다 정하는 값을 적는 서식 — 제안요청서 양식 그대로(채우지 않음), 내려받은 뒤 직접 기입",
              "· 통합본.pdf : 공고 제출서류·요구 자격에 맞는 회사 서류를 파일 이름 키워드로 골라 원본 그대로 이어 붙인 것(목차·책갈피) — 순서는 준비표 '통합본 순서'",
              "· 첨부/ : 통합본에 넣은 원본(순서 번호) + 연혁·실적 증빙 — 제출 전 유효기간 확인",
              "· 공고별_준비표.xlsx : 서식 목록·제출서류·자격요건·실적요건·실적후보·준비 필요 서류",
              "· 실적후보는 후보일 뿐 — 제출할 실적은 담당자가 확정", "· 이 묶음엔 회사 서류가 들어 있으니 사내에서만 보관",
-             "", f"채운 서식 {len(reports)}개, 첨부 서류 {len(attach)}개"]
+             "", f"채운 서식 {len(reports)}개, 직접 기입 서식 {len(manual)}개, 첨부 서류 {len(attach)}개"]
     lines += [f"! {m}" for m in missing] + [f"※ {n}" for n in notes]
     return "\r\n".join(lines)

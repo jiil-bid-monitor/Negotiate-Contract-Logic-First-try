@@ -40,7 +40,12 @@ class TestSentState(unittest.TestCase):
 
 class TestEmail(unittest.TestCase):
     def test_recipients_and_message(self):
-        self.assertEqual(email_report.load_recipients(), ["dl4360@hanyang.ac.kr", "hjmun4178@gmail.com"])
+        # 실제 받는 사람 목록은 바뀌므로(10/30 한 명 추가 → 이 테스트가 수집을 막았음) 임시 파일로 읽기만 확인한다
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "recipients.json"
+            path.write_text('{"recipients": ["a@x", " ", "b@x "]}', encoding="utf-8")
+            self.assertEqual(email_report.load_recipients(path), ["a@x", "b@x"])
+        self.assertTrue(all("@" in r for r in email_report.load_recipients()))
         subject = email_report.subject_for("2026-10-19", 7)
         self.assertEqual(subject, "[나라장터 입찰 모니터링] 2026-10-19 주간 리포트 - 매칭 7건")
         msg = email_report.build_message(subject, "<p>본문</p>", "bot@x", ["a@x", "b@x"])

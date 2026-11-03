@@ -1,0 +1,29 @@
+{
+  "_comment": "공고 유형별 안내(11/03 사용자 결정: 협상뿐 아니라 정량 서류를 내는 공고 전반으로 넓힘). when=제출 시점, source=서식이 어디 있나, docs=기본으로 준비할 서류(config/documents.json의 id). 실제 요구는 공고문·세부기준이 우선 — 이 목록은 공고에서 못 찾을 때의 출발점.",
+  "kinds": [
+    {"id": "negotiation", "name": "협상에 의한 계약",
+     "when": "제안서와 함께 제출(입찰 마감 전) — 평가 점수로 우선협상대상자 결정",
+     "source": "제안요청서의 '제출도서'·'첨부 서식'(사업수행능력 평가자료·정량적 지표)",
+     "docs": ["history", "qualification", "track_record", "staff", "credit_rating", "certification", "direct_production"]},
+    {"id": "qualified", "name": "적격심사",
+     "when": "개찰 뒤 심사 대상(1순위 등)이 정해진 기한 안에 제출 — 보통 며칠 안이라 미리 준비",
+     "source": "공고문의 '적격심사 서류'·'제출서류' 항목 또는 발주기관 적격심사 세부기준(조달청·행안부 기준) — 첨부에 서식이 없을 수 있음",
+     "docs": ["track_record", "credit_rating", "staff", "certification", "qualification", "direct_production"]},
+    {"id": "pq", "name": "사업수행능력평가(PQ)",
+     "when": "입찰 전 — 수행능력 평가를 통과한 업체만 가격 경쟁",
+     "source": "공고문·과업지시서의 사업수행능력 평가기준과 서식(건설기술용역 평가 기준)",
+     "docs": ["track_record", "staff", "credit_rating", "certification", "history", "qualification"]},
+    {"id": "comprehensive", "name": "종합심사낙찰제",
+     "when": "개찰 뒤 심사 대상자가 제출",
+     "source": "공고문·종합심사 세부기준",
+     "docs": ["track_record", "staff", "credit_rating", "certification"]},
+    {"id": "spec_price", "name": "규격·가격 동시입찰",
+     "when": "입찰 때 규격서(기술 제안)와 함께",
+     "source": "공고문·규격서의 제출서류 목록",
+     "docs": ["qualification", "track_record", "direct_production", "history"]},
+    {"id": "other", "name": "그 밖의 입찰",
+     "when": "공고문 확인",
+     "source": "공고문의 제출서류 항목",
+     "docs": ["qualification", "track_record", "direct_production"]}
+  ]
+}

@@ -12,3 +12,16 @@ venv/
 
 # 예외 낱말 후보 보고서(공고 원문 줄 포함) — nego/exclusion_report.py
 exclusion/
+
+# 정량평가서 준비(quantdocs, 11/03 합침) — 회사 원본 서류는 절대 올리지 않음. 올리는 건 잠금 묶음 vault/company.enc 하나
+/회사자료/
+/회사서류_원본/
+/*.xlsx
+/*.xls
+/*.zip
+/*.pdf
+/*.hwp
+/*.hwpx
+tools/hwp2hwpx/build/
+# 회사 자료 잠금 묶음은 비공개 레포 jiil-quant-docs에 둠(공개 레포라 올리지 않음 — quantdocs.vault.sealed_path가 옆 폴더에서 읽음)
+vault/

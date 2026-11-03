@@ -149,11 +149,16 @@ def make_handler(app: App):
         # ── GET ───────────────────────────────────────────
         def do_GET(self) -> None:
             url = urlparse(self.path)
+            if url.path in ("/quant", "/quant/"):  # 정량평가서 탭 화면(iframe) — 기능은 quantdocs 패키지(11/03 합침)
+                page = Path(__file__).resolve().parent.parent / "quantdocs" / "static" / "index.html"
+                return self._send(200, page.read_bytes(), "text/html; charset=utf-8")
             if not url.path.startswith("/api/"):
                 return self._static(url.path)
             if not self._authorized():
                 return self._json({"error": "접속 토큰이 필요합니다 — 담당자에게 받은 주소(?t=… 포함)로 다시 여세요.",
                                    "unauthorized": True}, HTTPStatus.UNAUTHORIZED)
+            if url.path.startswith("/api/quant/"):
+                return self._quant("GET", url.path[len("/api/quant"):], None)
             q = parse_qs(url.query)
             if url.path == "/api/meta":
                 years: dict[str, int] = {}
@@ -268,6 +273,24 @@ def make_handler(app: App):
                                   "text/csv; charset=utf-8")
             return self._error(HTTPStatus.NOT_FOUND, "없는 주소")
 
+        def _quant(self, method: str, sub: str, body: dict[str, Any] | None) -> None:
+            """정량평가서 준비(quantdocs) — 같은 저장소의 패키지를 그대로 부름. 회사 자료 잠금 묶음은 vault/company.enc."""
+            try:
+                from quantdocs.web import api as quant_api
+            except ImportError as err:
+                return self._error(HTTPStatus.SERVICE_UNAVAILABLE,
+                                   f"정량평가서 기능을 불러오지 못했습니다 — pip install -r requirements.txt ({err})")
+            code, ctype, data, extra = quant_api(method, sub, body, base="/api/quant")
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            for k, v in extra.items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(data)
+
         def _static(self, path: str) -> None:
             name = "index.html" if path in ("", "/") else path.lstrip("/")
             target = (STATIC / name).resolve()
@@ -291,6 +314,8 @@ def make_handler(app: App):
                 return self._error(HTTPStatus.UNAUTHORIZED, "접속 토큰이 필요합니다")
             try:
                 data = self._body()
+                if url.path.startswith("/api/quant/"):
+                    return self._quant("POST", url.path[len("/api/quant"):], data)
                 if url.path == "/api/collect":
                     cats = data.get("categories") or None
                     job = app.collector.start(

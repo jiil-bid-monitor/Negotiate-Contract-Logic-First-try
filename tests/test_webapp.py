@@ -518,6 +518,19 @@ class TestServer(unittest.TestCase):
             self.assertIn("나라장터 공고 수집", res.read().decode())
         self.assertEqual(self.call("/../server.py")[0], 404)
 
+    def test_quant_tab_routes(self):
+        """정량평가서 탭(11/03 합침): /quant/ 화면은 토큰 없이, /api/quant/…는 이 웹앱 토큰으로 quantdocs를 부름."""
+        with urllib.request.urlopen(self.base + "/quant/") as res:
+            self.assertIn("정량평가서", res.read().decode())
+        with urllib.request.urlopen(self.base + "/") as res:
+            self.assertIn('data-tab="quant"', res.read().decode())
+        self.assertEqual(self.call("/api/quant/meta", token="wrong")[0], 401)
+        status, meta = self.call("/api/quant/meta")
+        self.assertEqual(status, 200)
+        self.assertIn("vault", meta)
+        self.assertEqual(self.call("/api/quant/analyze", {"no": "잘못된 번호!"})[0], 400)
+        self.assertEqual(self.call("/api/quant/job/nojob")[0], 404)
+
     def test_collect_then_state_and_comments(self):
         status, _ = self.call("/api/collect", {"days": 7, "attachments": False, "categories": ["협상"]})
         self.assertEqual(status, 202)

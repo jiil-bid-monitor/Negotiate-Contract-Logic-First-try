@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from dataclasses import dataclass, field
@@ -37,6 +38,16 @@ class TestExclusionReport(unittest.TestCase):
         self.assertIn("공고 30건 · 후보 2개 · 순위 학습", text)
         self.assertIn("1. 농식품부 ← '식품' (식품·영양) · 공고 2", text)
         self.assertIn("VRAM&lt;x&gt;", text)  # 텔레그램 HTML이라 꺾쇠는 바꿔 쓴다
+
+    def test_review_form(self):
+        cands = [FakeCandidate("농식품부", "식품", "시설·주제/식품·영양"), FakeCandidate("a</script>b", "VR", "콘텐츠·매체/VR")]
+        page = er.add_review_form("<table><tr><th>#</th></tr></table>", cands, "예외 낱말 후보 (주간)", "20261103")
+        self.assertIn('id="rvsubmit"', page)
+        data = page.split('id="rvdata">', 1)[1].split("</script>", 1)[0]
+        self.assertNotIn("</", data)  # 낱말 속 </script>가 자료 칸을 끝내지 않게
+        items = json.loads(data.replace("<\/", "</"))["items"]
+        self.assertEqual([(x["n"], x["word"], x["keyword"]) for x in items],
+                         [(1, "농식품부", "식품"), (2, "a</script>b", "VR")])
 
     def test_skips_without_jiil_repo(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(er, "default_jiil_repo", return_value=Path(tmp)):

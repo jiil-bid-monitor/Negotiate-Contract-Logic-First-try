@@ -1,0 +1,106 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-04",
+ "reportedAt": "2026-11-03T23:57:48+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01807936",
+   "title": "지역농특산물 조형물설치(조합추천)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "경상북도 봉화군 농업기술센터",
+    "budgetAmount": 99645455.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "조형물"
+    ],
+    "score": 50,
+    "deadline": "2026-11-08T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01807936&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01804442",
+   "title": "한글놀이터 장수관 전시물 제작 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "전북특별자치도 장수군",
+    "budgetAmount": 841084546.0,
+    "confidence": "강력추천",
+    "bidMethod": "입찰",
+    "keywords": [
+     "전시물",
+     "놀이터"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "score": 64,
+    "deadline": "2026-11-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01804442&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01801515",
+   "title": "2026년 부천시 송내지하차도 방재시설 설치공사 실시설계용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경기도 부천시 소사구",
+    "budgetAmount": 179490099.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": 43,
+    "deadline": "2026-11-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01801515&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01807003",
+   "title": "2027~2028년도 서울공예박물관 안내 용역(장기계속)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "서울특별시 서울공예박물관",
+    "budgetAmount": 1088990909.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 36,
+    "deadline": "2026-11-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01807003&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01807024",
+   "title": "시설안전팀 명교생활관 관리동 운동공간 냉방기 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "계명대학교",
+    "budgetAmount": 34863636.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 41,
+    "deadline": "2026-11-11T11:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01807024&bidPbancOrd=000"
+   }
+  }
+ ]
+}

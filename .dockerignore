@@ -1,3 +1,3 @@
-# 이미지엔 requirements.txt만 들어간다 — 코드·data(수백 MB)는 실행할 때 NAS 폴더를 붙여 쓴다(compose.yaml).
+# 이미지엔 requirements.txt만 들어간다 — 코드·data(수백 MB)는 실행할 때 NAS 폴더를 붙여 쓴다(docker-compose.yml).
 *
 !requirements.txt

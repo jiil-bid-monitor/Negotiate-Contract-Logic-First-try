@@ -1,5 +1,5 @@
 # NAS(리눅스)에서 읽는 파일은 윈도우에서 받아도 줄바꿈을 LF로
 Dockerfile text eol=lf
-compose.yaml text eol=lf
+docker-compose.yml text eol=lf
 .dockerignore text eol=lf
 *.sh text eol=lf

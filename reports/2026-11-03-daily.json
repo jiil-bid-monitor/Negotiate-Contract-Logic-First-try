@@ -1,0 +1,84 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-03",
+ "reportedAt": "2026-11-03T10:30:36+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01804860",
+   "title": "Adobe CC 학생용 라이센스",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "광주과학기술원",
+    "budgetAmount": 29260000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "패키지소프트웨어개발및도입서비스"
+    ],
+    "score": null,
+    "deadline": "2026-11-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01804860&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01803882",
+   "title": "국도1호선 전주 용복지구 개선공사 실시설계용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "국토교통부 익산지방국토관리청",
+    "budgetAmount": 487000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": 28,
+    "deadline": "2026-11-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01803882&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01804165",
+   "title": "국립새만금간척박물관 외부 보수·보강 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "국립새만금간척박물관",
+    "budgetAmount": 143760000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 55,
+    "deadline": "2026-11-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01804165&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01805141",
+   "title": "녹동신항 투기장 호안 축조공사 기본 및 실시설계용역([P.Q.후 지명경쟁)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "전남광주통합특별시 무안청사",
+    "budgetAmount": 1970000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": 28,
+    "deadline": "2026-11-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01805141&bidPbancOrd=000"
+   }
+  }
+ ]
+}

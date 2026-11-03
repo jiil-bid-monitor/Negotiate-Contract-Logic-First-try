@@ -1,0 +1,24 @@
+# Synology Container Manager → 프로젝트 → 생성 → 경로를 이 폴더로 고르면 이 파일을 그대로 쓴다.
+# NAS 폴더 배치 (이 레포 옆에 jiil-past-contracts — 싱크로율 과거 실적):
+#   <공유폴더>/jiil-webapp/Negotiate-Contract-Logic-First-try/   ← 이 파일, .env, data/, output/
+#   <공유폴더>/jiil-webapp/jiil-past-contracts/
+services:
+  webapp:
+    build: .
+    image: jiil-webapp:latest
+    container_name: jiil-webapp
+    # host: 웹앱이 NAS의 8765에서 바로 접속을 받아 DSM 방화벽 규칙이 그대로 적용된다(포트 매핑 없음).
+    network_mode: host
+    restart: unless-stopped
+    # 서비스키·접속 토큰 등 — 서버 PC의 .env를 NAS 폴더로 복사해 쓴다(깃에 안 올라감).
+    env_file: .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8765"
+      # 서버 PC의 구글 드라이브 백업 폴더(Windows 경로)는 NAS에 없어 끈다.
+      BACKUP_DIR: ""
+    volumes:
+      # 위 jiil-webapp 폴더 전체를 /work로 — 코드·data·output·과거 실적을 NAS 파일 그대로 읽고 쓴다.
+      - ..:/work
+    # NAS 메모리 4GB — 웹앱이 다른 NAS 기능을 밀어내지 않게 상한.
+    mem_limit: 2g

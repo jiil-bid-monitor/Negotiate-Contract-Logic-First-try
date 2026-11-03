@@ -196,3 +196,59 @@ def _drop_sections(hpf: str, drop: list[str]) -> str:
         hpf = hpf.replace(m.group(), "")
         hpf = re.sub(rf'<(?:[\w.-]+:)?itemref\b[^>]*idref="{re.escape(item_id)}"[^>]*/>', "", hpf)
     return hpf
+
+
+def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
+    """잘라 낸(채웠거나 양식 그대로인) 서식 파일들을 서식 순서대로 다시 한 HWPX로 — 담당자가 한글 파일 하나에서 직접 기입(11/03 사용자 요청).
+
+    parts: (cut()이 돌려준 서식, 그 서식의 최종 파일). 원본(path)의 머리·쪽 설정·글꼴을 그대로 쓰고, 서식 본문만 각 파일에서 가져온다.
+    서식마다 새 쪽에서 시작. 서식이 없는 구역은 뺌."""
+    path, out = Path(path), Path(out)
+    zin = zipfile.ZipFile(path)
+    entries = zin.namelist()
+    sec_names = sorted((n for n in entries if re.fullmatch(r"Contents/section\d+\.xml", n)),
+                       key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[1]).group()))
+    sections = {n: zin.read(n).decode("utf-8") for n in sec_names}
+    bodies: dict[str, list[tuple[CutForm, str]]] = {}
+    for f, file in parts:
+        xml = zipfile.ZipFile(file).read(f.section).decode("utf-8")
+        paras = _top_paragraphs(xml)
+        body_paras = paras[-len(f.paras):]  # 채우기는 문단 안만 바꾸므로 문단 수는 그대로 — 앞의 쪽 설정 문단은 뺌
+        body = xml[body_paras[0].start:body_paras[-1].end]
+        bodies.setdefault(f.section, []).append((f, body))
+    kept = [s for s in sec_names if s in bodies]
+    if not kept:
+        raise ValueError("이어 붙일 서식이 없습니다")
+    new_sections: dict[str, str] = {}
+    preview = []
+    for sec in kept:
+        xml = sections[sec]
+        all_paras = _top_paragraphs(xml)
+        first = all_paras[0]
+        chunks = []
+        for i, (f, body) in enumerate(bodies[sec]):
+            if i or sec != kept[0]:
+                body = re.sub(r'^(<(?:[\w.-]+:)?p\b[^>]*?)\bpageBreak="0"', r'\1pageBreak="1"', body, count=1)
+            chunks.append(body)
+            preview.append(_text(body))
+        starts_at_first = bodies[sec][0][0].paras[0].start == first.start
+        prefix = "" if starts_at_first else _sec_pr_para(xml, first)
+        new_sections[sec] = xml[:first.start] + prefix + "".join(chunks) + xml[all_paras[-1].end:]
+    hpf = zin.read("Contents/content.hpf").decode("utf-8") if "Contents/content.hpf" in entries else None
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(out, "w") as zout:
+        for info in zin.infolist():
+            n = info.filename
+            if n in sections and n not in new_sections:
+                continue
+            if n in new_sections:
+                data = new_sections[n].encode("utf-8")
+            elif n == "Contents/content.hpf" and hpf is not None:
+                data = _drop_sections(hpf, [s for s in sec_names if s not in new_sections]).encode("utf-8")
+            elif n == "Preview/PrvText.txt":
+                data = " ".join(preview)[:1000].encode("utf-8")
+            else:
+                data = zin.read(n)
+            ctype = zipfile.ZIP_STORED if n == "mimetype" else zipfile.ZIP_DEFLATED
+            zout.writestr(zipfile.ZipInfo(n, date_time=info.date_time), data, compress_type=ctype)
+    return out

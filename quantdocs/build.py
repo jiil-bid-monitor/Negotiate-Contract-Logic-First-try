@@ -26,7 +26,7 @@ from pathlib import Path
 from .bundle import merge, pick
 from .catalog import load_catalog
 from .fill import FillReport, fill_hwpx
-from .forms_cut import cut
+from .forms_cut import cut, merge as merge_forms
 from .g2b import qualification_rows
 from .kinds import detect, guide
 from .notice import read_notice, track_candidates, write_sheet
@@ -184,20 +184,30 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         reports: list[FillReport] = []
         manual: list[str] = []  # 양식 그대로 넣은 서식 파일
         manual_dir = work / "서식_직접기입"
+        merged_forms: list[Path] = []  # 공고 문서마다 서식 전체를 이은 한글 파일
         cut_names = {str(f.no): f.name for f in a.sheet.forms}
         for f in files:
             src = Path(a.converted.get(f.name, f))
             if src.suffix.lower() != ".hwpx":
                 continue
+            parts = []
             for c in cut(src, forms_dir, cut_names):
                 if is_manual(c.title):  # 양식 그대로 — 내려받은 뒤 직접 기입
                     manual_dir.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
                     manual.append(c.file)
+                    parts.append((c, manual_dir / c.file))
                     continue
                 is_track = bool(re.search(r"실적.*(집계|현황)|수행실적", c.title))
                 rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, a.candidates if is_track else None)
                 reports.append(rep)
+                parts.append((c, filled_dir / c.file))
+            if parts:  # 서식 전체(채운 것 + 직접 기입)를 한글 파일 하나로 — 담당자가 이 파일 하나에서 기입(11/03 사용자 요청)
+                parts.sort(key=lambda x: [int(n) for n in re.findall(r"\d+", x[0].no)])
+                try:
+                    merged_forms.append(merge_forms(src, parts, work / "통합서식" / f"통합서식_{_safe(Path(f.name).stem)[:40]}.hwpx"))
+                except (ValueError, zipfile.BadZipFile, KeyError) as err:
+                    a.notes.append(f"{f.name}: 서식을 한 파일로 잇지 못함({err}) — 서식별 파일을 쓰세요")
         # 첨부할 회사 서류: 파일 이름 키워드로 고른 것(통합본 순서대로 번호) + 연혁·실적 증빙(양식에 적힌 파일 이름)
         attach: list[tuple[str, str, bytes]] = []  # (폴더, 이름, 내용)
         missing: list[str] = list(a.pick_missing)
@@ -258,6 +268,8 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             z.write(sheet_path, "공고별_준비표.xlsx")
             if merged:
                 z.write(merged, "통합본.pdf")
+            for p in merged_forms:  # 문서가 하나면 '통합서식.hwpx'
+                z.write(p, "통합서식.hwpx" if len(merged_forms) == 1 else p.name)
             for p in sorted(filled_dir.glob("*.hwpx")) if filled_dir.exists() else []:
                 z.write(p, f"서식/{p.name}")
             for p in sorted(manual_dir.glob("*.hwpx")) if manual_dir.exists() else []:
@@ -275,8 +287,9 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
 def _readme(title: str, reports, attach, missing, notes, manual=()) -> str:
     lines = [f"정량평가서 준비 묶음 — {title}".strip(), "",
              "· 서식/ : 공고 첨부 서식을 서식별로 자르고 회사 정보·연혁·실적 후보를 채운 것 — 채운 칸은 준비표 '자동입력' 시트에서 확인",
+             "· 통합서식.hwpx : 아래 서식 전체(회사 정보를 채운 것 + 직접 기입할 양식)를 공고 서식 순서대로 이은 한글 파일 하나 — 이 파일에서 바로 기입",
              "· 서식_직접기입/ : 담당 PM·투입 인력·조직·경력·자기평가처럼 공고마다 정하는 값을 적는 서식 — 제안요청서 양식 그대로(채우지 않음), 내려받은 뒤 직접 기입",
-             "· 통합본.pdf : 공고 제출서류·요구 자격에 맞는 회사 서류를 파일 이름 키워드로 골라 원본 그대로 이어 붙인 것(목차·책갈피) — 순서는 준비표 '통합본 순서'",
+             "· 통합본.pdf : (회사 서류 스캔본) 공고 제출서류·요구 자격에 맞는 회사 서류를 파일 이름 키워드로 골라 원본 그대로 이어 붙인 것(목차·책갈피) — 순서는 준비표 '통합본 순서'",
              "· 첨부/ : 통합본에 넣은 원본(순서 번호) + 연혁·실적 증빙 — 제출 전 유효기간 확인",
              "· 공고별_준비표.xlsx : 서식 목록·제출서류·자격요건·실적요건·실적후보·준비 필요 서류",
              "· 실적후보는 후보일 뿐 — 제출할 실적은 담당자가 확정", "· 이 묶음엔 회사 서류가 들어 있으니 사내에서만 보관",

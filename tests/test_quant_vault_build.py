@@ -89,6 +89,12 @@ def test_build_package(tmp_path: Path):
     filled = {n.split("/", 1)[1] for n in names if n.startswith("서식/")}
     assert manual and not filled & {n.split("/", 1)[1] for n in manual}  # 직접 기입 서식은 채운 서식 폴더에 없음
     assert any("인력" in n or "이력" in n or "조직" in n for n in manual)
+    # 통합서식.hwpx: 서식 31개가 한 한글 파일에 순서대로(채운 값 포함) — 다시 잘라도 31개
+    merged = tmp_path / "m.hwpx"
+    merged.write_bytes(z.read("통합서식.hwpx"))
+    from quantdocs.forms_cut import cut as recut
+    assert len(recut(merged, tmp_path / "recut")) == 31
+    assert "(가상)시험회사" in zipfile.ZipFile(merged).read("Contents/section0.xml").decode()
     sec16 = zipfile.ZipFile(io.BytesIO(z.read("서식/서식16_사업수행_실적집계표.hwpx"))).read("Contents/section0.xml").decode()
     assert "(가상) 전시관" in sec16 and "250,000,000" in sec16
     wb = load_workbook(io.BytesIO(z.read("공고별_준비표.xlsx")))

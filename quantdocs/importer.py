@@ -295,6 +295,53 @@ def _bytes_pdf_text(data: bytes) -> str:
         return ""
 
 
+def _ocr_pdf(data: bytes) -> str | None:
+    """글 없는 스캔 PDF → 글(Tesseract kor+eng, 300dpi). 도구가 없으면 None.
+    서버 PC: Tesseract(한국어 데이터 포함) 설치 + `pip install pytesseract pypdfium2`, 실행 파일이 PATH에 없으면 .env TESSERACT_CMD."""
+    try:
+        import pytesseract
+    except ImportError:
+        return None
+    from .vault import read_env
+
+    cmd = read_env("TESSERACT_CMD")
+    if cmd:
+        pytesseract.pytesseract.tesseract_cmd = cmd
+    try:
+        import pypdfium2 as pdfium
+
+        pdf = pdfium.PdfDocument(data)
+        images = [pdf[i].render(scale=300 / 72).to_pil() for i in range(min(len(pdf), 10))]
+    except ImportError:
+        import shutil as _sh
+        import subprocess
+        from PIL import Image
+
+        exe = _sh.which("pdftoppm")
+        if not exe:
+            return None
+        with tempfile.TemporaryDirectory(prefix="quant_ocr_") as d:
+            (Path(d) / "in.pdf").write_bytes(data)
+            subprocess.run([exe, "-r", "300", "-l", "10", "-png", str(Path(d) / "in.pdf"), str(Path(d) / "p")],
+                           check=True, capture_output=True, timeout=300)
+            images = [Image.open(f).copy() for f in sorted(Path(d).glob("p*.png"))]
+    except Exception:  # noqa: BLE001 — 깨진 PDF
+        return ""
+    try:
+        return "\n".join(pytesseract.image_to_string(im, lang="kor+eng") for im in images)
+    except Exception:  # noqa: BLE001 — tesseract 없음·한국어 데이터 없음
+        return None
+
+
+# 대표자 주민등록번호 — 뒷자리는 절대 남기지 않음(앞 6자리 + '-*******', 11/04 사용자 요청 '뒷자리 암호화된 것')
+_RRN_NEAR_CEO = re.compile(r"대\s*표[^\n]{0,40}(?:\n[^\n]{0,40}){0,2}?[(\s:]*(\d{6})\s*-\s*[\d*Xx]{7}")
+
+
+def masked_rrn(text: str) -> str:
+    m = _RRN_NEAR_CEO.search(text or "")
+    return f"{m.group(1)}-*******" if m else ""
+
+
 def enrich_vault(vault) -> list[str]:
     """묶음 안 연혁·경쟁입찰참가자격등록증·사업자등록증 PDF를 읽어 회사정보의 빈 칸과 연혁을 채움(메모리에서만, 11/04 사용자 요청:
     '연혁 pdf·입찰참가등록증 pdf 확인해서 기입 가능한 건 바로 작성'). 회사정보 시트에 적힌 값이 늘 먼저. 돌려줌: 알림 줄."""
@@ -302,20 +349,30 @@ def enrich_vault(vault) -> list[str]:
     found_info: dict[str, tuple[str, str]] = {}  # 항목 → (값, 파일)
     hist: list[dict] = []
     hist_src = ""
-    scanned = []
+    scanned, ocr = [], []
     for path, data in sorted(vault.files.items()):
         name = path.rsplit("/", 1)[-1]
         if not name.lower().endswith(".pdf"):
             continue
         sq = re.sub(r"\s+", "", name)
-        kinds = [k for k, words in (("연혁", ("연혁",)), ("등록증", ("참가자격", "입찰참가")), ("사업자", ("사업자등록",)))
+        kinds = [k for k, words in (("연혁", ("연혁",)), ("등록증", ("참가자격", "입찰참가")), ("사업자", ("사업자등록",)),
+                                    ("인감", ("인감증명", "등기")))
                  if any(w in sq for w in words)]
         if not kinds:
             continue
         text = _bytes_pdf_text(data)
-        if len(re.sub(r"\s", "", text)) < 20:
-            scanned.append(name)
-            continue
+        if len(re.sub(r"\s", "", text)) < 20:  # 스캔본 — 글자 인식(OCR)
+            text = _ocr_pdf(data)
+            if text is None:
+                scanned.append(name)
+                continue
+            ocr.append(name)
+        if "인감" in kinds or "사업자" in kinds:
+            rrn = masked_rrn(text)
+            if rrn:
+                found_info.setdefault("대표자 주민등록번호", (rrn, name))
+            if "인감" in kinds:
+                continue
         if "연혁" in kinds and not hist:
             hist, hist_src = read_history(text), name
         if "등록증" in kinds:
@@ -333,8 +390,11 @@ def enrich_vault(vault) -> list[str]:
     if hist and len(hist) > len(vault.history):  # 시트 연혁(보통 법인 설립 한 줄)보다 많으면 PDF 연혁을 씀
         vault.history = hist
         notes.append(f"연혁 {len(hist)}줄을 '{hist_src}'에서 읽어 넣음 — 줄 확인")
+    if ocr:
+        notes.append("스캔본이라 글자 인식(OCR)으로 읽은 서류: " + ", ".join(ocr[:5]) + " — 채운 값(특히 숫자·연혁) 원본과 대조")
     if scanned:
-        notes.append("글이 없는 스캔본이라 읽지 못한 서류: " + ", ".join(scanned[:5]) + " — 회사자료 양식에 직접 적어 주세요")
+        notes.append("글이 없는 스캔본인데 글자 인식 도구(Tesseract)가 없어 읽지 못한 서류: " + ", ".join(scanned[:5])
+                     + " — 서버 PC에 Tesseract 설치(docs/quantdocs.md) 또는 회사자료 양식에 직접 적기")
     return notes
 
 

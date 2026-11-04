@@ -95,3 +95,17 @@ cd "<jiil-quant-docs 폴더>" && bash start_web.sh
 설치: 자바 JDK(`winget install EclipseAdoptium.Temurin.17.JDK`) → `bash tools/install_hwp2hwpx.sh [시험할.hwp]`
 (공개 라이브러리 hwp2hwpx·hwplib·hwpxlib, Apache-2.0 — 받아서 `tools/hwp2hwpx/build/hwp2hwpx-cli.jar`로 빌드하고 `.env`에 적음).
 작업 파일은 서버 `data/jobs/`에 2시간 두고 지운다. **내려받은 zip엔 회사 서류가 들어 있으니 사내에서만.**
+
+## 스캔본 회사 서류 글자 인식(OCR) — 서버 PC 설치 (11/04)
+
+연혁·경쟁입찰참가자격등록증·인감증명서가 스캔 이미지 PDF면 Tesseract로 글자를 읽어 회사정보 빈 칸(전화·팩스·대표자 주민등록번호 앞자리)과
+연혁을 채운다(`quantdocs.importer.enrich_vault`). 설치가 안 돼 있으면 읽어보기에 "Tesseract가 없어 읽지 못한 서류"로 알리고 넘어간다.
+
+1. Windows용 Tesseract 설치(UB Mannheim 배포판) — 설치 화면 'Additional language data'에서 **Korean** 체크.
+2. `py -m pip install -r requirements.txt` (pytesseract·pypdfium2).
+3. 설치 폴더가 PATH에 없으면 저장소 `.env`에 `TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe`.
+4. NAS(도커)는 `Dockerfile`에 tesseract-ocr-kor가 들어 있음 — 이미지 다시 빌드(부장님).
+
+- 대표자 주민등록번호는 **앞 6자리만** 남기고 뒷자리는 늘 `*******`로 쓴다(원본 번호는 저장하지 않음). 대리인 줄·휴대폰 칸은 비운다.
+- OCR 글은 틀릴 수 있다(예: 숫자 한 자리) — 채운 값은 읽어보기 '스캔본이라 OCR로 읽은 서류'를 보고 원본과 대조.
+- 서식에 '해당 사항이 없을 경우 "해당 없음" 기재'가 있으면 빈 표 첫 칸에 '해당 없음'(자동입력 시트에 확인 알림).

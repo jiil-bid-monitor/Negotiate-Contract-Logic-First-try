@@ -497,3 +497,66 @@ def test_enrich_vault_from_pdfs_and_fill_bracketed_history_label(tmp_path: Path,
     xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     assert "033-123-4567" in xml and "2010.07  실내건축공사업 등록" in xml and "〈 주요연혁(요약) 〉" in xml
     assert any(f.startswith("연혁 → 3줄") for f in rep.filled)
+
+
+def _mini_hwpx(path: Path, body: str) -> Path:
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/section0.xml", f"<hs:sec>{body}</hs:sec>")
+    return path
+
+
+def _c(col, row, text, span=1):
+    return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+            f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/></hp:tc>')
+
+
+def _tbl(rows):
+    return "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+
+
+def test_proxy_form_phone_fax_rrn_and_none_rule(tmp_path: Path):
+    """11/04 제보(위임장·참가신청서·공동수급 대표자 선임계·행정처분내용): 전화·팩스(시트 항목 이름이 달라도), '사무실' 칸,
+    대표자 줄 주민등록번호는 뒷자리 '*', 대리인 줄·휴대폰 칸은 비움, '해당 없음' 안내가 있는 빈 표엔 '해당 없음'."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "대표전화": "033-111-2222", "FAX": "033-111-3333",
+                              "대표자 주민등록번호": "800101-1234567"})
+    proxy = _tbl([
+        [_c(0, 0, "대 표 자"), _c(1, 0, "홍길동"), _c(2, 0, "주민등록번호"), _c(3, 0, "")],
+        [_c(0, 1, "전 화 번 호"), _c(1, 1, "")],
+        [_c(0, 2, "성 명"), _c(1, 2, ""), _c(2, 2, "주민등록번호"), _c(3, 2, "")],
+        [_c(0, 3, "전 화 번 호(휴대폰번호)"), _c(1, 3, "")],
+        [_c(0, 4, "사무실"), _c(1, 4, ""), _c(2, 4, "FAX"), _c(3, 4, "")]])
+    rep = fill_hwpx(_mini_hwpx(tmp_path / "p.hwpx", proxy), tmp_path / "po.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "po.hwpx").read("Contents/section0.xml").decode()
+    assert xml.count("800101-*******") == 1 and "1234567" not in xml  # 대표자 줄만, 뒷자리 없음
+    assert xml.count("033-111-2222") == 2 and xml.count("033-111-3333") == 1  # 신청인 전화·사무실 / FAX, 휴대폰 칸은 비움
+    assert any("주민등록번호" in f for f in rep.filled)
+
+    sanction = ('<hp:p><hp:run charPrIDRef="0"><hp:t>※ 해당사항이 없을 경우에는 “해당 없음”을 기재</hp:t></hp:run></hp:p>'
+                + _tbl([[_c(i, 0, h) for i, h in enumerate(["업 체 명", "용 역 명", "지정기관"])]]
+                       + [[_c(i, r, "") for i in range(3)] for r in (1, 2)]))
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", sanction), tmp_path / "so.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode()
+    assert xml.count("해당 없음") == 2  # 안내 문구 + 첫 칸
+    # 안내가 없는 서식의 빈 표는 그대로
+    fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", sanction.split("</hp:p>", 1)[1]), tmp_path / "no.hwpx", v)
+    assert "해당 없음" not in zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode()
+
+
+def test_enrich_ocr_scanned_and_masked_rrn(monkeypatch):
+    from quantdocs import importer
+
+    monkeypatch.setattr(importer, "_bytes_pdf_text", lambda data: "")  # 모두 스캔본
+    ocr = {b"seal": "법인인감증명서\n상 호 : 주식회사 가상\n대표이사 홍길동\n(800101-1234567)",
+           b"hist": "사업연혁\n2005.03.15 법인 설립\n2012.11 산업디자인전문회사 신고"}
+    monkeypatch.setattr(importer, "_ocr_pdf", lambda data: ocr[data])
+    v = vault.Vault({"files/인감증명서.pdf": b"seal", "files/사업연혁.pdf": b"hist"})
+    notes = importer.enrich_vault(v)
+    assert v.info["대표자 주민등록번호"] == "800101-*******"  # 뒷자리는 남기지 않음
+    assert [h["내용"] for h in v.history] == ["법인 설립", "산업디자인전문회사 신고"]
+    assert any("OCR" in n for n in notes)
+    monkeypatch.setattr(importer, "_ocr_pdf", lambda data: None)  # 도구 없음
+    notes = importer.enrich_vault(vault.Vault({"files/사업연혁.pdf": b"hist"}))
+    assert any("Tesseract" in n for n in notes)

@@ -124,13 +124,21 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("사업분야", "업태"), "사업분야"),
     (("면허/허가/등록증", "면허보유", "등록증보유"), "_licenses"),
 ]
-_SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주")
+_SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
+
+
+def _masked(v: str) -> str:
+    """주민등록번호는 앞 6자리만 — 뒷자리는 늘 '*******'(11/04 사용자 요청)."""
+    m = re.search(r"(\d{6})\s*-?\s*[\d*Xx]{7}", v or "")
+    return f"{m.group(1)}-*******" if m else ""
 
 
 def _label_key(text: str) -> str | None:
     t = _sq(text).strip(":：")
     if not t or len(t) > 16 or _SKIP_LABEL.search(t):
         return None
+    if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
+        return "전화번호"
     for words, key in LABELS:  # 앞머리가 맞는 것 먼저('홈페이지주소'는 주소가 아니라 홈페이지)
         if any(t.startswith(w) for w in words):
             return key
@@ -156,6 +164,10 @@ def _value(key: str, vault) -> str:
     if key == "사업분야":
         return vault.info.get("사업분야") or vault.info.get("종목") or vault.info.get("업태") or ""
     v = vault.info.get(key, "")
+    if not v and key in ("전화번호", "팩스번호"):  # 회사정보 시트 항목 이름이 '대표전화'·'TEL'·'FAX' 등이어도
+        words = ("전화", "TEL", "연락처") if key == "전화번호" else ("팩스", "FAX")
+        v = next((str(x) for k, x in vault.info.items() if x and any(w in k.upper() for w in words)
+                  and not re.search(r"휴대|담당|팩스|FAX" if key == "전화번호" else r"휴대|담당", k.upper())), "")
     if key == "설립일" and v:
         return _fmt_date(v)
     if key == "자본금" and v and re.fullmatch(r"[\d,]+", v):
@@ -500,6 +512,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
                 for i in range(len(_spans(xml, "tbl"))):
                     xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
+            # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
+            none_rule = re.search(r"(?:없을|없는)\s*(?:경우|때).{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
             for tbl in _spans(xml, "tbl"):
                 cells = _cells(xml, tbl)
                 by_pos = {(c.row, c.col): c for c in cells}
@@ -517,6 +531,15 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                             edits.append((c, lines, True))
                         rep.filled.append(f"연혁 → {len(lines)}줄")
                         continue
+                    if not key and "주민등록번호" in _sq(c.text):
+                        # 대표자 줄의 주민등록번호만(위임장 '대 표 자 | 이름 | 주민등록번호 | __') — 대리인 줄은 비움, 뒷자리는 '*'
+                        if any(o.row == c.row and _sq(o.text).startswith("대표자") for o in cells):
+                            rrn = _masked(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
+                            target = by_pos.get((c.row, c.col + c.colspan))
+                            if rrn and target is not None and target.blank:
+                                edits.append((target, [rrn], False))
+                                rep.filled.append(f"대표자 주민등록번호 → {rrn}")
+                        continue
                     if not key:
                         continue
                     target = by_pos.get((c.row, c.col + c.colspan))
@@ -525,6 +548,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                         continue
                     edits.append((target, [value], False))
                     rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
+                if none_rule and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
+                    head = [c for c in cells if c.row == 0]
+                    body = [c for c in cells if c.row > 0]
+                    if head and any(_sq(c.text) for c in head) and body and all(c.blank for c in body):
+                        first = min(body, key=lambda c: (c.row, c.col))
+                        edits.append((first, ["해당 없음"], False))
+                        rep.filled.append("표가 비어 '해당 없음' 기재 — 해당 사항이 있으면 고칠 것")
             for cell, lines, keep in sorted(edits, key=lambda e: e[0].start, reverse=True):
                 seg = xml[cell.start:cell.end]
                 char_id = None

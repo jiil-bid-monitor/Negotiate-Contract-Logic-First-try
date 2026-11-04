@@ -135,7 +135,7 @@ async function api(path, body) {
 }
 api("/api/meta").then(m => {
   $("#meta").innerHTML = `<span class="${m.vault.ok ? "ok" : "err"}">${esc(m.vault.msg)}</span>` +
-    (m.hwp ? " · 옛 한글(.hwp) 변환 켜짐" : ` · <span class="warn">옛 한글(.hwp) 변환기 없음 — HWPX 공고만 서식을 자름</span>`);
+    (m.hwp ? "" : ` · <span class="warn">옛 한글(.hwp) 변환기 없음 — HWPX 공고만 서식을 자름</span>`);
 }).catch(e => $("#meta").textContent = e.message);
 
 $("#no").addEventListener("keydown", e => { if (e.key === "Enter") $("#go").click(); });

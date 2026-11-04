@@ -78,7 +78,23 @@ def _vault_info() -> dict:
         return {"ok": False, "msg": "회사 자료 묶음이 없습니다 — 옆 폴더 jiil-quant-docs(비공개 레포)를 받거나 .env에 QUANT_VAULT_PATH"}
     if not vault_mod.read_passphrase():
         return {"ok": False, "msg": f"서버 PC에 {vault_mod.ENV}가 설정되지 않았습니다"}
-    return {"ok": True, "msg": f"회사 자료 묶음 {datetime.fromtimestamp(p.stat().st_mtime):%Y-%m-%d %H:%M}"}
+    return {"ok": True, "msg": f"회사 자료 최근 갱신 {_sealed_date(p)}", "updated": _sealed_date(p)}
+
+
+def _sealed_date(p) -> str:
+    """묶음을 마지막으로 잠근(갱신한) 날짜. git에 커밋된 그대로면 마지막 커밋 날짜 —
+    pull·clone은 파일 시각을 받은 시각으로 바꿔서 시각만 보면 '갱신일'이 아니라 '받은 날'이 됨.
+    아직 커밋 안 한 새 묶음(seal 직후)이거나 git 폴더가 아니면 파일 시각."""
+    try:
+        run = lambda *a: subprocess.run(["git", "-C", str(p.parent), *a, "--", p.name],
+                                        capture_output=True, text=True, timeout=10)
+        dirty = run("status", "--porcelain")
+        last = run("log", "-1", "--format=%cs")
+        if dirty.returncode == 0 and not dirty.stdout.strip() and last.returncode == 0 and last.stdout.strip():
+            return last.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return f"{datetime.fromtimestamp(p.stat().st_mtime):%Y-%m-%d}"
 
 
 def _offline(no: str, out: Path) -> NoticeFiles | None:

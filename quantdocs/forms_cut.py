@@ -92,7 +92,93 @@ def _sec_pr_para(xml: str, first: Para) -> str:
     return seg[:runs[0][0]] + kept + seg[runs[-1][1]:]
 
 
-def find_forms(sections: dict[str, str]) -> list[CutForm]:
+_INNER_P = re.compile(r"<(?:[\w.-]+:)?p\b[^>]*>(?:(?!<(?:[\w.-]+:)?p\b).)*?</(?:[\w.-]+:)?p>", re.S)
+_RUN = re.compile(r'<(?:[\w.-]+:)?run\b[^>]*?charPrIDRef="(\d+)"[^>]*>(.*?)</(?:[\w.-]+:)?run>', re.S)
+_NOT_TITLE = re.compile(r"\d{4}\s*년|년\s*월\s*일|절\s*취\s*선|^\s*(?:※|주\s*\)|붙\s*임|접\s*수\s*번\s*호)|(?:귀\s*하|귀\s*중)\s*$")
+
+
+def char_heights(zin: zipfile.ZipFile) -> dict[str, int]:
+    """header.xml 글자 모양 id → 글자 크기(height, 1/100pt)."""
+    try:
+        h = zin.read("Contents/header.xml").decode("utf-8")
+    except KeyError:
+        return {}
+    out = {}
+    for m in re.finditer(r"<(?:[\w.-]+:)?charPr\b([^>]*)>", h):
+        a = dict(re.findall(r'(\w+)="([^"]*)"', m.group(1)))
+        if a.get("id") and a.get("height", "").isdigit():
+            out[a["id"]] = int(a["height"])
+    return out
+
+
+def page_title(body_xml: str, heights: dict[str, int], source: str = "") -> str:
+    """서식 페이지 전체(표 안 포함)에서 가장 큰 글씨 = 제목(11/04 사용자 제안 — '다음 줄' 짐작은 날짜·공고명을 잡았음).
+    같은 크기로 바로 이어지는 문단(줄이 넘어간 제목)은 이어 붙임. 서식 머리·날짜('2026년 월 일')·절취선·안내(※·주))·
+    '○○ 귀하'·「공고명」은 빼고, 파일 이름에 있는 공고명 낱말도 뺌('정선군 … 제작설치 제안서' → '제안서').
+    제목이 본문보다 크지 않으면 ''(짐작하지 않음)."""
+    src = re.sub(r"[^가-힣A-Za-z0-9]", "", re.sub(r"\.[A-Za-z]+(?=\s|$)", "", source))
+    keyof = lambda t: re.sub(r"[^가-힣A-Za-z0-9]", "", t)
+    paras = []  # (글자 크기, 글, 제목 후보인지)
+    for m in _INNER_P.finditer(body_xml):
+        parts, h = [], 0
+        for cid, inner in _RUN.findall(m.group()):
+            t = _text(inner)
+            if t.strip():
+                parts.append(t)
+                h = max(h, heights.get(cid, 0))
+        text = re.sub(r"[「『][^」』]*[」』]", " ", " ".join(parts)).strip()
+        if not keyof(text):
+            continue
+        ok = not (_HEAD.match(_squash(text)) or _NOT_TITLE.search(text))
+        paras.append((h, text, ok))
+    if not paras:
+        return ""
+    sizes = [h for h, _, _ in paras]
+    common = min(set(sizes), key=lambda x: (-sizes.count(x), x))  # 본문 크기 = 가장 많이 쓴 크기(같으면 작은 쪽)
+    best = max((h for h, _, ok in paras if ok), default=0)
+    if best <= common:  # 제목이 따로 크지 않은 서식
+        return ""
+    i = next(k for k, (h, _, ok) in enumerate(paras) if ok and h == best)
+    lines = [paras[i][1]]
+    for h, t, ok in paras[i + 1:i + 4]:  # 줄이 넘어간 제목
+        if h != best or not ok:
+            break
+        lines.append(t)
+    words = " ".join(lines).split()
+    if len(src) >= 8:  # 파일 이름에 이어서 나오는 낱말 묶음(공고명)은 뺌
+        span = None
+        for a in range(len(words)):
+            for b in range(len(words), a, -1):
+                run = keyof("".join(words[a:b]))
+                if len(run) >= 8 and run in src:
+                    if span is None or b - a > span[1] - span[0]:
+                        span = (a, b)
+                    break
+        if span:
+            words = words[:span[0]] + words[span[1]:]
+    title = _norm_title(" ".join(words))
+    return title if 2 <= len(keyof(title)) <= 40 else ""
+
+
+def page_titles(path: Path, source: str = "") -> dict[int, str]:
+    """HWPX 공고 문서의 서식마다 페이지 제목(가장 큰 글씨) — 서식 번호 → 제목. 하위 서식(4-1)·제목을 못 고른 서식은 뺌."""
+    zin = zipfile.ZipFile(path)
+    heights = char_heights(zin)
+    if not heights:
+        return {}
+    sections = {n: zin.read(n).decode("utf-8") for n in zin.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n)}
+    out = {}
+    for f in find_forms(sections):
+        if "-" in f.no:
+            continue
+        xml = sections[f.section]
+        t = page_title(xml[f.paras[0].start:f.paras[-1].end], heights, source)
+        if t:
+            out[int(f.no)] = t
+    return out
+
+
+def find_forms(sections: dict[str, str], heights: dict[str, int] | None = None, source: str = "") -> list[CutForm]:
     found: dict[str, CutForm] = {}
     order: list[str] = []
     for name, xml in sections.items():
@@ -109,7 +195,7 @@ def find_forms(sections: dict[str, str]) -> list[CutForm]:
         for k, (idx, no) in enumerate(heads):
             end = heads[k + 1][0] if k + 1 < len(heads) else len(paras)
             body = paras[idx:end]
-            title = _guess_title(body)
+            title = (page_title(xml[body[0].start:body[-1].end], heights, source) if heights else "") or _guess_title(body)
             if no not in found:
                 order.append(no)
             found[no] = CutForm(no, title, name, body)  # 같은 번호는 뒤(본문) 것으로
@@ -152,7 +238,7 @@ def cut(path: Path, out_dir: Path, names: dict[str, str] | None = None) -> list[
     sec_names = sorted((n for n in entries if re.fullmatch(r"Contents/section\d+\.xml", n)),
                        key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[1]).group()))
     sections = {n: zin.read(n).decode("utf-8") for n in sec_names}
-    forms = find_forms(sections)
+    forms = find_forms(sections, char_heights(zin), path.name)
     out_dir.mkdir(parents=True, exist_ok=True)
     hpf = zin.read("Contents/content.hpf").decode("utf-8") if "Contents/content.hpf" in entries else None
     for f in forms:

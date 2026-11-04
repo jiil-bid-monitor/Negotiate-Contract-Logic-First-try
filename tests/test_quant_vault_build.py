@@ -287,3 +287,15 @@ def test_track_rows_keep_largest_when_short():
     rep = FillReport("x")
     names = [l[0] for c, l, _ in _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, rep) if c.col == 1]
     assert names == ["옛 큰 것", "새 큰 것"] and rep.overflow == 1 and rep.overflow_names == ["작은 것"]
+
+
+@needs_sample
+def test_page_titles_by_font_size():
+    """서식 이름 = 페이지에서 가장 큰 글씨(11/04 사용자 결정). 절취선·'정선군수 귀하'·날짜·공고명은 빼고, 줄이 넘어간 제목은 이음."""
+    from quantdocs.forms_cut import page_titles
+
+    t = page_titles(FIXTURES / "jeongseon_culture_center_rfp.hwpx", "공고문(정선군 복합문화센터 공간디자인 및 전시물 제작설치).hwpx")
+    assert t[1] == "입찰참가 신청서" and t[3] == "공동수급체 합의각서" and t[6] == "청렴계약이행 서약서"
+    assert t[13] == "사업수행능력평가자료(표지)" and t[14] == "일반현황 및 연혁"
+    assert t[23] == "보안서약서" and t[25] == "가격제안입찰서" and t[31] == "제안서"
+    assert 4 not in t  # 하위 서식(4-1·4-2)만 있는 번호는 뺌

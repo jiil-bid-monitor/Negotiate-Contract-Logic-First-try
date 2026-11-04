@@ -26,10 +26,10 @@ from pathlib import Path
 from .bundle import merge, pick
 from .catalog import load_catalog
 from .fill import FillReport, fill_hwpx
-from .forms_cut import cut, merge as merge_forms
+from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
 from .kinds import detect, guide
-from .notice import form_tracks, read_notice, track_candidates, write_sheet
+from .notice import Form, classify, form_tracks, read_notice, track_candidates, write_sheet
 
 SCOPE_DOCS = {"history", "track_record", "qualification", "direct_production"}  # 이번 단계에서 채우는 서류 종류
 
@@ -95,6 +95,27 @@ def convert_hwp(src: Path, work: Path) -> tuple[Path | None, str]:
     return None, (lines[0][:200] if lines else f"종료 코드 {r.returncode}")
 
 
+def _use_page_titles(sheet, hwpx_files: list[Path], source: str) -> None:
+    """서식 이름 = 서식 페이지의 제목(가장 큰 글씨) 그대로(11/04 사용자 결정 — 목록·목차·'다음 줄' 짐작보다 우선).
+    공고 목록에 없던 서식도 더함. 한글 파일(HWPX·변환본)이 있을 때만 — 없으면 목록에서 읽은 이름 그대로."""
+    by_no = {f.no: f for f in sheet.forms}
+    for p in hwpx_files:
+        if p.suffix.lower() != ".hwpx" or not p.exists():
+            continue
+        try:
+            titles = page_titles(p, source)
+        except (zipfile.BadZipFile, KeyError, ValueError):
+            continue
+        for no, title in titles.items():
+            doc = classify(title, load_catalog())
+            if no in by_no:
+                f = by_no[no]
+                f.name, f.doc, f.weak = title, doc, False
+            else:
+                by_no[no] = Form(no, title, p.name, False, doc)
+    sheet.forms = sorted(by_no.values(), key=lambda f: f.no)
+
+
 def analyze(files: list[Path], vault, notice_date: date | None = None, work: Path | None = None,
             award_method: str = "", contract_method: str = "") -> Analysis:
     files = [Path(f) for f in files]
@@ -117,6 +138,7 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
                 notes.append(f"{f.name}: HWPX 변환 실패({why}) — 서식을 자르지 못함(목록 읽기는 됨)")
         readable.append(f)
     sheet = read_notice(readable, load_catalog())
+    _use_page_titles(sheet, [Path(converted.get(f.name, f)) for f in files], " ".join(f.name for f in files))
     quals = qualification_rows(readable, vault.held_codes(), vault)
     ref = notice_date or date.today()
     candidates = []

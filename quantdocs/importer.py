@@ -329,6 +329,11 @@ def _ocr_pdf(data: bytes) -> str | None:
     cmd = read_env("TESSERACT_CMD")
     if cmd:
         pytesseract.pytesseract.tesseract_cmd = cmd
+    data_dir = read_env("TESSDATA_PREFIX")  # 한국어 데이터를 사용자 폴더에 둔 경우(관리자 권한 없이 설치, 11/04)
+    if data_dir:
+        import os
+
+        os.environ["TESSDATA_PREFIX"] = data_dir
     try:
         import pypdfium2 as pdfium
 

@@ -625,22 +625,30 @@ def _as_date(v) -> date | None:
         return None
 
 
+def unfinished(tracks: list[dict], ref: date) -> list[str]:
+    """기준일(공고 게시일)까지 끝나지 않은 실적 이름 — 준공일이 없거나 기준일 뒤(사업기간 중). 수행실적은 준공된 것만 인정(11/04 사용자 확인)."""
+    return [str(t.get("사업명") or "") for t in tracks
+            if (d := _as_date(t.get("준공일"))) is None or d > ref]
+
+
+def _since(ref: date, years: int) -> date:
+    try:
+        return ref.replace(year=ref.year - years)
+    except ValueError:  # 2월 29일
+        return ref.replace(year=ref.year - years, day=28)
+
+
 def track_candidates(req: TrackReq, tracks: list[dict], ref: date) -> list[dict]:
-    """기간·금액 요건을 넘는 실적. 금액은 계약금액 × 지분율(비면 100%). 판단이 안 서는 칸은 '확인'으로 둠."""
+    """기간·금액 요건을 넘는 실적. 금액은 계약금액 × 지분율(비면 100%). 판단이 안 서는 칸은 '확인'으로 둠.
+    준공되지 않은 실적(준공일 없음·기준일 뒤)은 기간 요건과 상관없이 뺌 — `unfinished`로 알림."""
     out = []
     for t in tracks:
         notes = []
         done = _as_date(t.get("준공일"))
-        if req.years:
-            if done is None:
-                notes.append("준공일 없음")
-            else:
-                try:
-                    since = ref.replace(year=ref.year - req.years)
-                except ValueError:  # 2월 29일
-                    since = ref.replace(year=ref.year - req.years, day=28)
-                if done < since or done > ref:
-                    continue
+        if done is None or done > ref:
+            continue
+        if req.years and done < _since(ref, req.years):
+            continue
         amount = t.get("계약금액(원)")
         share = t.get("지분율(%)")
         try:
@@ -687,25 +695,25 @@ def form_tracks(title: str, tracks: list[dict], ref: date) -> tuple[list[dict], 
     m = re.search(r"최근\s*(\d+)\s*(?:개\s*)?년", title or "")
     years = int(m.group(1)) if m else None
     fields = next((fs for rx, fs in _FORM_FIELDS if rx.search(title or "")), None)
-    out, no_done, notes = [], [], []
+    out, no_done, ongoing, notes = [], [], [], []
     for t in tracks:
         if fields is not None and (t.get("분야") or track_field(str(t.get("사업명") or ""))) not in fields:
             continue
         done = _as_date(t.get("준공일"))
-        if years:
-            if done is None:
-                no_done.append(str(t.get("사업명") or ""))
-                continue
-            try:
-                since = ref.replace(year=ref.year - years)
-            except ValueError:
-                since = ref.replace(year=ref.year - years, day=28)
-            if done < since or done > ref:
-                continue
+        # 수행실적은 준공된 것만(11/04 사용자 확인) — 기간 요건이 없는 서식이어도 진행 중·준공일 없는 실적은 뺌
+        if done is None:
+            no_done.append(str(t.get("사업명") or ""))
+            continue
+        if done > ref:
+            ongoing.append(str(t.get("사업명") or ""))
+            continue
+        if years and done < _since(ref, years):
+            continue
         out.append(t)
     out.sort(key=lambda t: _as_date(t.get("준공일")) or date.max)
-    if no_done:
-        notes.append(f"준공일이 없어 뺀 실적 {len(no_done)}건: " + ", ".join(no_done[:5]) + (" 외" if len(no_done) > 5 else ""))
+    for label, names in (("준공일이 없어", no_done), (f"기준일({ref:%Y-%m-%d})까지 준공 전이라", ongoing)):
+        if names:
+            notes.append(f"{label} 뺀 실적 {len(names)}건: " + ", ".join(names[:5]) + (" 외" if len(names) > 5 else ""))
     return out, notes
 
 

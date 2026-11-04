@@ -29,7 +29,7 @@ from .fill import FillReport, fill_hwpx
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
 from .kinds import detect, guide
-from .notice import Form, classify, form_tracks, read_notice, track_candidates, write_sheet
+from .notice import Form, classify, form_tracks, read_notice, track_candidates, unfinished, write_sheet
 
 SCOPE_DOCS = {"history", "track_record", "qualification", "direct_production"}  # 이번 단계에서 채우는 서류 종류
 
@@ -145,6 +145,10 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
     if sheet.track_reqs:
         req = next((t for t in sheet.track_reqs if t.kind == "제출 요건"), sheet.track_reqs[0])
         candidates = track_candidates(req, vault.tracks, ref)
+        left = unfinished(vault.tracks, ref)
+        if left:  # 수행실적은 준공된 것만 — 진행 중·준공일 없는 실적은 후보에서 뺐다고 알림
+            notes.append(f"준공 전(준공일이 없거나 {ref:%Y-%m-%d} 뒤)이라 실적 후보에서 뺀 실적 {len(left)}건: "
+                         + ", ".join(left[:5]) + (" 외" if len(left) > 5 else ""))
         candidates.sort(key=lambda t: -(t.get("인정 금액(원)") or 0))
     kind = detect(award_method, contract_method, sheet.texts)
     if kind != "negotiation" and not sheet.forms:

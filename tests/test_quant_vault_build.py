@@ -415,3 +415,20 @@ def test_fit_one_line_when_line_spacing_below_100():
     # 줄 간격 160%인 칸은 예전처럼 두 줄로 넘어가도 됨(높이가 되면 글자 그대로)
     tall = _sz_cell(1, 0, "", 19477, 4500).replace('paraPrIDRef="0"', 'paraPrIDRef="1"')
     assert _fit_char(tall, addr, chars) == (None, "")
+
+
+def test_unfinished_tracks_are_never_counted(monkeypatch):
+    """11/04 사용자 확인: 수행실적은 준공된 것만 — 기간 요건이 없는 서식·공고여도 진행 중(준공일이 기준일 뒤)·준공일 없는 실적은 뺌."""
+    from quantdocs import notice
+    from quantdocs.notice import TrackReq, track_candidates, unfinished
+
+    monkeypatch.setattr(notice, "track_field", lambda n: "전시·체험")
+    ref = dt.date(2026, 11, 4)
+    tracks = [{"사업명": "끝난 것", "준공일": dt.date(2026, 3, 1), "계약금액(원)": 3e8},
+              {"사업명": "진행 중", "준공일": dt.date(2027, 2, 28), "계약금액(원)": 5e8},
+              {"사업명": "날짜 없음", "준공일": None, "계약금액(원)": 2e8}]
+    got, notes = notice.form_tracks("전시분야 사업수행실적", tracks, ref)  # 제목에 기간 없음
+    assert [t["사업명"] for t in got] == ["끝난 것"]
+    assert any("진행 중" in n and "준공 전" in n for n in notes) and any("날짜 없음" in n for n in notes)
+    assert [t["사업명"] for t in track_candidates(TrackReq("", "", None, None, False), tracks, ref)] == ["끝난 것"]
+    assert unfinished(tracks, ref) == ["진행 중", "날짜 없음"]

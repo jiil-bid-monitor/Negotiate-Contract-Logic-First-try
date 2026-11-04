@@ -407,9 +407,18 @@ def load_history(paths: Iterable[Path], own_bizno: str | None = None) -> History
     for path in paths:
         try:
             if path.suffix == ".jsonl":
-                items = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-                parsed = [from_result_record(i, path.name, own_bizno) for i in items]
-                history.skip_reasons.update(skip_reason(i) for i, p in zip(items, parsed) if p is None)
+                # 한 줄씩 읽는다 — 원본 행은 계산 뒤 버려 파일 전체를 메모리에 올리지 않는다(NAS 메모리 4GB)
+                parsed, reasons = [], Counter()
+                with path.open(encoding="utf-8") as lines:
+                    for line in lines:
+                        if not line.strip():
+                            continue
+                        item = json.loads(line)
+                        rec = from_result_record(item, path.name, own_bizno)
+                        parsed.append(rec)
+                        if rec is None:
+                            reasons[skip_reason(item)] += 1
+                history.skip_reasons.update(reasons)
             else:
                 items = json.loads(path.read_text(encoding="utf-8"))
                 parsed = [from_bid_history(i, path.name, own_bizno) for i in items]

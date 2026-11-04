@@ -18,6 +18,7 @@
 - 사용자는 NAS 관리자가 아니고 컨테이너 생성·재시작은 부장님이 해 주심 → 다시 부르지 않게 **한 프로젝트로 두 개를 한 번에**(`docker-compose.yml`): `jiil-webapp`, `jiil-under100m`(대기).
 - **웹앱 재시작**: 공유 폴더 `jiil-webapp/control/restart-webapp` 파일을 넣으면 `scripts/nas/webapp_run.sh`가 지우고 웹앱만 다시 켬(코드 `git pull` 뒤). `requirements.txt`가 바뀌면 이미지를 다시 만들어야 해 부장님 필요.
 - **1억 미만**: `jiil-webapp/under100m/run.sh`가 있으면 `scripts/nas/under100m_run.sh`가 1시간마다 실행, 없으면 대기(프로그램은 회사 정보가 있어 저장소 밖). 공유 폴더 쓰기 권한이 있으면 컨테이너 안에서 실행할 수 있는 구조라 부장님께 알림. 자바·OCR을 공유 폴더에 설치해 쓰는 방식과 메모리 4GB는 미확인.
+- **과거 개찰 읽기 메모리**(`bidrecommend.load_history`): `bid_results*.jsonl`을 통째로 올리던 것을 한 줄씩 읽게 고침 — 웹앱 제한 2GB를 넘던 최고 약 3GB가 약 120MB(추천 6건까지 약 260MB). 실제 NAS 자료 공고 6,550건 전체와 추천 6건의 해시가 고치기 전과 같음. 깨진 줄이 있으면 그 파일을 통째로 안 쓰는 동작은 유지.
 - 가짜 python으로 재시작·대기·실패 후 재실행·종료 신호를 시험함. 실제 NAS 빌드·실행은 미확인.
 
 ## 2026-11-03 — 정량평가서 준비(프로젝트 2)를 이 레포로 합침 (브랜치 `claude/quantdocs-merge`, 사용자 결정)

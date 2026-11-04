@@ -250,3 +250,14 @@ def test_read_notice_prefers_body_titles_from_later_document(tmp_path, monkeypat
     assert got[16] == "최근 5년간 사업수행실적" and got[21] == "가격입찰제안서"
     assert got[26] == "제안응모자의 참가자격을 입증할 수 있는 서류 (7·26·27)"  # 본문 제목이 없으면 목록 이름
     assert got[13] == "사업수행능력평가(정량적 지표) 자료 (11~19)"
+
+
+def test_submit_items_skip_sentences_and_section_titles():
+    """'제출' 제목 아래라도 실격 사유('…경우')·작성 요령('…한다.')·절 제목('저작권', '공통 사항')은 서류가 아님(11/04 제보)."""
+    from quantdocs.catalog import load_catalog
+    from quantdocs.notice import read_submit_items
+
+    text = ("다. 제출도서\n - 사업의 목적 및 제안공모 설계지침을 현저히 충족시키지 못하는 경우\n - 저작권\n - 공통 사항\n"
+            " - 주요 시설물 명칭 및 규모, 면적은 해당 시설물에 직접 기재한다.\n - 조감도 및 패널\n - USB 1점\n\n"
+            "라. 제출서류 무효 및 실격\n ① 기타 평가위원회에서 실격으로 판정한 경우\n")
+    assert [i.text for i in read_submit_items(text, "x", load_catalog())] == ["조감도 및 패널", "USB 1점"]

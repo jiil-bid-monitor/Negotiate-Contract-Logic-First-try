@@ -387,6 +387,22 @@ def submit_quant_forms(text: str) -> set[int]:
     return out
 
 
+# 서류 이름처럼 끝나는지(…서·…증·…본·…표·…도·…목록·…계·…장·…점(USB 1점)·…자료·…파일·영문 약자) — 문장('…경우', '…한다.')이나
+# 절 제목('저작권', '공통 사항')은 서류가 아님(11/04 사용자 제보: 실격 사유·도면 작성 요령이 제출서류로 보였음)
+_SENTENCE_END = re.compile(r"(?:경우|한다|하여야|할\s*것|함|됨|않음|가능|불가|있음|없음|바람|하시기)\s*[.)）]*\s*$")
+_DOC_END = re.compile(r"(?:서|증|본|표|도|록|계|장|점|료|일|면|판|형|널|진|철|부|[A-Za-z])\s*$")
+
+
+def _doc_like(body: str) -> bool:
+    core = body.split(" — ")[0]
+    core = re.split(r"\s*※", core)[0]
+    core = re.sub(r"\s*(?:각\s*)?\d+\s*(?:부|점|매|권|식)\b.*$", "", core)  # '… 1부(원본)', 'USB 1점(…)'
+    core = re.sub(r"\s*[(（][^)）]*[)）]?\s*$", "", core).strip()  # 꼬리 괄호
+    if not core or _SENTENCE_END.search(body.split(" — ")[0]):
+        return False
+    return bool(_DOC_END.search(core)) or bool(re.search(r"\d+\s*(?:부|점)\b", body))
+
+
 def read_submit_items(text: str, source: str, catalog: list[Document]) -> list[Item]:
     """'제출서류'·'구비서류'·'제출도서'·'필요서류' 제목 바로 아래 목록. 첫 항목의 번호 모양(①/1)/-)과 같은 줄만 항목으로,
     그보다 깊은 줄(①·1) 아래 '-' 줄, 괄호 줄)은 앞 항목에 붙임."""
@@ -396,7 +412,7 @@ def read_submit_items(text: str, source: str, catalog: list[Document]) -> list[I
     while i < len(lines):
         ln = lines[i]
         head = _SUBMIT_HEAD.search(ln)
-        if not head or len(_squash(ln)) > 40:
+        if not head or len(_squash(ln)) > 40 or re.search(r"무효|실격|반환|탈락", ln):  # '제출서류 무효·실격' 절은 서류 목록이 아님
             i += 1
             continue
         j = i + 1
@@ -438,6 +454,8 @@ def read_submit_items(text: str, source: str, catalog: list[Document]) -> list[I
             j += 1
         for body in items:
             key = _squash(body)
+            if not _doc_like(body):
+                continue
             if key not in seen:
                 seen.add(key)
                 out.append(Item(body, source, "", classify(body, catalog)))

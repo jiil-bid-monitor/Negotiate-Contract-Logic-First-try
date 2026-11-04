@@ -160,7 +160,7 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
 
 
 # 화면에서 뺀 알림(11/04 사용자 요청) — 읽어보기.txt엔 그대로 남음
-_SCREEN_HIDDEN = re.compile(r"회사정보 빈 칸을 서류 PDF에서 읽어 채움|글이 없는 스캔본인데 글자 인식 도구|준공 전\(")
+_SCREEN_HIDDEN = re.compile(r"회사정보 빈 칸을 서류 PDF에서 읽어 채움|글이 없는 스캔본인데 글자 인식 도구|스캔본이라 글자 인식\(OCR\)으로 읽은 서류|준공 전\(")
 
 
 def summary(a: Analysis) -> dict:

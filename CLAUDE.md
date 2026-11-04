@@ -20,6 +20,22 @@
 - **1억 미만**: `jiil-webapp/under100m/run.sh`가 있으면 `scripts/nas/under100m_run.sh`가 1시간마다 실행, 없으면 대기(프로그램은 회사 정보가 있어 저장소 밖). 공유 폴더 쓰기 권한이 있으면 컨테이너 안에서 실행할 수 있는 구조라 부장님께 알림. 자바·OCR을 공유 폴더에 설치해 쓰는 방식과 메모리 4GB는 미확인.
 - 가짜 python으로 재시작·대기·실패 후 재실행·종료 신호를 시험함. 실제 NAS 빌드·실행은 미확인.
 
+## 2026-11-03 — 정량평가서 준비(프로젝트 2)를 이 레포로 합침 (브랜치 `claude/quantdocs-merge`, 사용자 결정)
+
+- 비공개 레포 `jiil-bid-monitor/jiil-quant-docs`의 `quantdocs` 패키지·설정(`config/documents·notice_kinds·company_import·bundle_keywords.json`)·
+  시험(`tests/test_quant_*.py`)·한글 변환기 설치(`tools/install_hwp2hwpx.sh`)를 옮김(사용자 결정: 레포는 이 레포로, 회사 자료는 암호화 유지).
+  **잠금 묶음 `vault/company.enc`는 이 공개 레포에 올리지 않음** — 올리려던 push가 권한 검사(외부 유출)에 막혀, 묶음은 비공개 레포
+  `jiil-quant-docs`에 그대로 두고 `quantdocs.vault.sealed_path()`가 **옆 폴더 `../jiil-quant-docs/vault/company.enc`**(또는 `.env` `QUANT_VAULT_PATH`)에서 읽음.
+  `vault seal`도 그 자리에 씀 → 커밋·push는 jiil-quant-docs에서. `vault/`·원본 회사 서류·`회사자료/`·루트 xlsx/zip/pdf/hwp는 `.gitignore`.
+  비밀번호 `QUANT_VAULT_PASSPHRASE`는 서버 PC `.env`에만(채팅·저장소에 적지 말 것).
+- 화면: 웹앱 탭 줄 **'투찰 계산기' 옆 '정량평가서'** — `quantdocs/static/index.html`을 `/quant/`로 띄움(iframe, 머리 띠 숨김·부모 테마 따름),
+  API는 `/api/quant/…`(`webapp/server.py` `_quant` → `quantdocs.web.api`, 이 웹앱 토큰으로 확인). 단독 웹앱(`python -m quantdocs.web`, 8766)도 그대로 됨.
+  설정값(`QUANT_VAULT_PASSPHRASE`·`HWP2HWPX_CMD`)은 웹앱이 `.env`를 안 읽어도 `quantdocs.vault.read_env`가 저장소 `.env`에서 직접 읽음. 작업 폴더 `data/quant_jobs`(2시간 뒤 지움).
+- 기능 요약(자세한 것 `docs/quantdocs.md`): 공고번호 → 공고 유형(협상·적격심사·PQ·종합심사·규격가격)·필요 서식·관련 자격·제출서류·실적 요건 →
+  만들기 = 서식별 HWPX로 잘라 회사 정보·연혁·실적 채움 + **통합본.pdf**(제출서류·요구 자격에 맞는 회사 서류를 **파일 이름 키워드로** 골라 원본 그대로 이어 붙임 —
+  내용을 읽어 고르지 않음, 사용자 결정) → zip 내려받기. 평가 점수 계산은 안 함(범위 밖). 회사 자료 넣기: `py -m quantdocs import …` → `py -m quantdocs vault seal --src 회사자료`.
+- `nego`를 고칠 땐 `tests/test_quant_*.py`도 같이 돌 것(공고 글 읽기·자격 판정을 그대로 씀).
+
 ## 2026-10-29 — 9월 표본이 빠진 원인 + 대규모 경쟁 추천 고도화 (브랜치 `claude/bid-backtest`, 사용자 결정)
 
 - **9월 다른 공고 200건이 빠진 원인**(`bid_results_others.jsonl` 205줄, 공개 금지): 예정가격 없음 131 = **협상**(118건 기술평가 점수, 하한율 빈 값)·단일 예가,

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>정량평가서 준비</title>
+<style>
+  :root { --bg:#f6f7f5; --card:#fff; --ink:#1d2321; --mute:#68716d; --line:#dfe3e0; --accent:#1b6e43; --accent-ink:#fff;
+          --good:#1b7a3d; --bad:#b3261e; --warn:#8a5a00; --chip:#eef3ef; }
+  :root[data-theme="dark"] { --bg:#141816; --card:#1c211f; --ink:#e7ece9; --mute:#9aa49f; --line:#2c3430;
+          --accent:#4fae7c; --accent-ink:#0d1f15; --good:#5cc98a; --bad:#ff8a80; --warn:#e7b65c; --chip:#22302a; }
+  .embed header { display:none } .embed main { padding-top:4px } .embed body { background:transparent }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#141816; --card:#1c211f; --ink:#e7ece9; --mute:#9aa49f; --line:#2c3430;
+          --accent:#4fae7c; --accent-ink:#0d1f15; --good:#5cc98a; --bad:#ff8a80; --warn:#e7b65c; --chip:#22302a; } }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 "Pretendard","Malgun Gothic",system-ui,sans-serif }
+  header { background:#17291f; color:#fff; padding:14px 20px; display:flex; gap:12px; align-items:baseline }
+  header b { font-size:18px; letter-spacing:.5px } header span { opacity:.75; font-size:13px }
+  main { max-width:1100px; margin:0 auto; padding:20px 16px 60px }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:16px }
+  h2 { font-size:16px; margin:0 0 12px } h3 { font-size:14px; margin:18px 0 8px; color:var(--mute) }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+  input { font:inherit; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink) }
+  #no { width:220px; text-transform:uppercase }
+  button { font:inherit; padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--accent-ink); cursor:pointer; font-weight:600 }
+  button:disabled { opacity:.5; cursor:default } a.btn { display:inline-block; padding:9px 16px; border-radius:8px; background:var(--accent); color:var(--accent-ink); text-decoration:none; font-weight:600 }
+  .muted { color:var(--mute); font-size:13px } .err { color:var(--bad) } .ok { color:var(--good) } .warn { color:var(--warn) }
+  table { width:100%; border-collapse:collapse; font-size:14px } th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top }
+  th { color:var(--mute); font-weight:600; font-size:12.5px; white-space:nowrap }
+  .chip { display:inline-block; padding:1px 8px; border-radius:99px; background:var(--chip); font-size:12px; margin:1px 2px 1px 0; white-space:nowrap }
+  .q { color:var(--accent); font-weight:700 } .tick { color:var(--good); font-weight:700 } .cross { color:var(--bad); font-weight:700 }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px 18px }
+  .grid div span { display:block; color:var(--mute); font-size:12px }
+  ul { margin:6px 0; padding-left:20px } .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:s 1s linear infinite; vertical-align:-2px }
+  @keyframes s { to { transform:rotate(360deg) } } .hide { display:none }
+  .scroll { overflow-x:auto } .nw { white-space:nowrap }
+</style>
+</head>
+<body>
+<header><b>JIIL</b> 정량평가서 준비 <span>참가하기로 정한 공고 — 협상·적격심사·사업수행능력평가 등</span></header>
+<main>
+  <section class="card">
+    <h2>1. 공고번호 입력</h2>
+    <div class="row">
+      <input id="no" placeholder="공고번호" autocomplete="off">
+      <button id="go">불러오기</button>
+      <span id="status" class="muted"></span>
+    </div>
+    <p id="meta" class="muted"></p>
+  </section>
+
+  <section id="result" class="hide">
+    <h2 style="font-size:18px;margin:4px 2px 4px"><span id="title"></span> <span id="kind2" class="chip" style="font-size:13px;vertical-align:2px"></span></h2>
+    <p id="sub" class="muted" style="margin:0 2px 12px"></p>
+    <div id="notes"></div>
+    <div class="card">
+      <h2>2. 필요 서식</h2>
+      <p class="muted"><span class="q">●</span> 정량적 평가서 묶음 · <b>자동</b> = 회사 정보·연혁·실적을 채워 드림 · <span class="warn">직접 기입</span> = 담당 PM·투입 인력 등 공고마다 정하는 값 — 제안요청서 양식 그대로 넣어 드림(내려받은 뒤 직접 작성) · 나머지는 잘라 두기만 함</p>
+      <div class="scroll"><table id="forms"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>관련 자격 (첨부 공고문 기준)</h2>
+      <div class="scroll"><table id="quals"></table></div>
+      <p id="lic" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>통합본에 넣을 회사 서류 <span class="muted" style="font-size:13px;font-weight:400">— 파일 이름 키워드로 골라 원본 그대로 이어 붙임</span></h2>
+      <div class="scroll"><table id="bundle"></table></div>
+      <ul id="bmiss"></ul>
+    </div>
+
+    <div class="card" id="kindcard">
+      <h2>제출 안내 <span id="kind" class="chip" style="font-size:13px"></span></h2>
+      <div class="grid"><div><span>언제 내나</span><span id="kwhen" style="color:var(--ink);font-size:14px"></span></div>
+        <div><span>서식이 있는 곳</span><span id="ksource" style="color:var(--ink);font-size:14px"></span></div></div>
+      <h3>기본 준비 서류 <span class="muted" style="font-weight:400">— <b>자동</b> = 회사 자료로 채움 · 공고문·세부기준이 우선</span></h3>
+      <div id="kdocs"></div>
+    </div>
+
+    <div class="card">
+      <h2>실적 요건 · 후보</h2>
+      <ul id="tracks"></ul>
+      <div class="scroll"><table id="cands"></table></div>
+      <p class="muted">후보는 기간·금액(지분 반영)만으로 고른 것 — 제출할 실적은 담당자가 확정</p>
+    </div>
+
+    <div class="card">
+      <h2>공고 정보 · 제출서류</h2>
+      <div class="grid" id="info"></div>
+      <h3>제출서류</h3>
+      <ul id="submit"></ul>
+    </div>
+
+    <div class="card">
+      <h2>3. 정량평가서 만들기</h2>
+      <div class="row"><button id="build">만들기</button><span id="bstatus" class="muted"></span></div>
+      <p class="muted">이번 단계는 회사 연혁·실적·보유 자격(직접생산 포함)만 채웁니다. 인력·경영상태·신인도·가점 서류는 준비표의 '준비 필요'에.</p>
+      <div id="dl" class="hide" style="margin-top:12px">
+        <h2>4. 내려받기</h2>
+        <a id="dlink" class="btn" href="#">정량평가서 묶음 내려받기 (.zip)</a>
+        <p class="muted">묶음 안: <b>통합서식.hwpx</b>(서식 전체를 공고 순서대로 이은 한글 파일 — 담당 PM·투입 인력 등은 여기서 직접 기입) ·
+          <b>통합본.pdf</b>(회사 서류 스캔본) · 준비표 · 서식별 파일.</p>
+        <p class="muted">회사 서류가 들어 있습니다 — 사내에서만 보관하세요. 서버의 작업 파일은 2시간 뒤 지워집니다.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const won = n => n == null || n === "" ? "" : Number(n).toLocaleString("ko-KR") + "원";
+let JOB = null, timer = null;
+if (location.search.includes("t=")) history.replaceState(null, "", location.pathname);
+// 프로젝트 1 웹앱의 '정량평가서' 탭(/quant/ — iframe)으로 열리면 API는 /api/quant/…, 머리 띠는 숨기고 부모 화면 테마를 따름(11/03 합침)
+const EMBED = location.pathname.startsWith("/quant");
+const BASE = EMBED ? "/api/quant" : "/api";
+if (EMBED) {
+  document.documentElement.classList.add("embed");
+  const syncTheme = () => { try {
+    const t = parent.document.documentElement.getAttribute("data-theme");
+    t ? document.documentElement.setAttribute("data-theme", t) : document.documentElement.removeAttribute("data-theme");
+  } catch (e) {} };
+  syncTheme();
+  try { new MutationObserver(syncTheme).observe(parent.document.documentElement, {attributes: true, attributeFilter: ["data-theme"]}); } catch (e) {}
+}
+
+async function api(path, body) {
+  path = path.replace(/^\/api/, BASE);
+  const r = await fetch(path, body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {});
+  const j = await r.json().catch(() => ({error:"응답을 읽지 못함"}));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+api("/api/meta").then(m => {
+  $("#meta").innerHTML = `<span class="${m.vault.ok ? "ok" : "err"}">${esc(m.vault.msg)}</span>` +
+    (m.hwp ? "" : ` · <span class="warn">옛 한글(.hwp) 변환기 없음 — HWPX 공고만 서식을 자름</span>`);
+}).catch(e => $("#meta").textContent = e.message);
+
+$("#no").addEventListener("keydown", e => { if (e.key === "Enter") $("#go").click(); });
+$("#go").onclick = async () => {
+  const no = $("#no").value.trim();
+  if (!no) return;
+  $("#go").disabled = true; $("#result").classList.add("hide"); $("#dl").classList.add("hide");
+  try { JOB = (await api("/api/analyze", {no})).id; poll(); }
+  catch (e) { $("#status").innerHTML = `<span class="err">${esc(e.message)}</span>`; $("#go").disabled = false; }
+};
+$("#build").onclick = async () => {
+  $("#build").disabled = true; $("#dl").classList.add("hide");
+  try { await api("/api/build/" + JOB, {}); poll(); }
+  catch (e) { $("#bstatus").innerHTML = `<span class="err">${esc(e.message)}</span>`; $("#build").disabled = false; }
+};
+
+function poll() {
+  clearTimeout(timer);
+  timer = setTimeout(async () => {
+    let j; try { j = await api("/api/job/" + JOB); } catch (e) { $("#status").textContent = e.message; return; }
+    const busy = j.state === "running" || j.state === "building";
+    const where = j.state === "building" ? "#bstatus" : "#status";
+    if (busy) { $(where).innerHTML = `<span class="spin"></span> ${esc(j.step || "진행 중")}`; return poll(); }
+    $("#go").disabled = false; $("#build").disabled = false;
+    if (j.state === "error") { $(where).innerHTML = `<span class="err">${esc(j.error)}</span>`; if (where === "#status") return; }
+    else $(where).innerHTML = j.state === "built" ? `<span class="ok">완료</span>` : "";
+    if (j.summary) render(j);
+    $("#build").disabled = !j.vault_ok;
+    if (j.download) { $("#dlink").href = j.download; $("#dl").classList.remove("hide"); }
+  }, 900);
+}
+
+function render(j) {
+  const n = j.notice, s = j.summary;
+  $("#title").textContent = n.title;
+  $("#kind").textContent = s.kind.name; $("#kind2").textContent = s.kind.name; $("#kwhen").textContent = s.kind.when; $("#ksource").textContent = s.kind.source;
+  $("#kdocs").innerHTML = s.kind.docs.map(d => `<span class="chip">${esc(d.name)}${d.auto ? " · <b>자동</b>" : ""}</span>`).join("");
+  $("#sub").textContent = [`${n.no}${n.ord ? "-" + n.ord : ""}`, n.institution, n.award].filter(Boolean).join(" · ");
+  const info = [["공고번호", `${n.no}${n.ord ? "-" + n.ord : ""}`], ["발주기관", n.institution], ["업무", n.work],
+    ["낙찰방법", n.award], ["계약방법", n.contract], ["게시", n.posted],
+    ["실적 기준일", n.ref_date ? `${n.ref_date} (${n.ref_from})` : ""]];
+  s.deadlines.forEach(([k, w]) => info.push([k, w]));
+  $("#info").innerHTML = info.filter(x => x[1]).map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join("") +
+    `<div><span>받은 첨부</span>${n.files.map(f => `<span class="chip">${esc(f)}</span>`).join("")}</div>`;
+  $("#notes").innerHTML = (s.notes.length || n.skipped.length) ?
+    `<div class="card"><ul>${s.notes.concat(n.skipped).map(x => `<li class="warn">${esc(x)}</li>`).join("")}</ul></div>` : "";
+  $("#forms").innerHTML = "<tr><th>서식</th><th>이름</th><th></th><th>서류 종류</th><th>자동</th></tr>" +
+    (s.forms.length ? s.forms.map(f => `<tr><td>서식${f.no}</td><td>${esc(f.name)}</td><td>${f.quant ? '<span class="q">●</span>' : ""}</td>
+      <td class="muted">${esc(f.kind)}</td><td>${f.auto ? "<b>자동</b>" : f.manual ? '<span class="warn">직접 기입</span>' : ""}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="muted">공고 자료에서 서식 목록을 찾지 못했습니다</td></tr>`);
+  $("#submit").innerHTML = s.submit.map(x => `<li>${esc(x.text)}${x.kind ? ` <span class="chip">${esc(x.kind)}</span>` : ""}</li>`).join("")
+    || '<li class="muted">못 찾음 — 공고문 확인</li>';
+  $("#quals").innerHTML = "<tr><th>조건</th><th>자격</th><th>지일</th><th>첨부할 서류</th></tr>" +
+    (s.quals.length ? s.quals.map(q => q.items.map((it, i) => `<tr><td>${i ? "" : esc(q.kind)}</td>
+      <td>${esc(it.name)}${it.code ? ` <span class="muted">(${esc(it.code)})</span>` : ""}</td>
+      <td class="nw">${!j.vault_ok ? '<span class="muted">회사 자료 없음</span>' : it.held ? '<span class="tick">✓ 보유</span>' : '<span class="cross">✗ 미보유</span>'}</td>
+      <td class="muted">${esc(it.docs.join(", "))}</td></tr>`).join("")).join("")
+      : `<tr><td colspan="4" class="muted">첨부 공고문에서 코드로 적힌 자격을 찾지 못했습니다 — 원문 확인</td></tr>`);
+  const b = s.bundle || [];
+  $("#bundle").innerHTML = !j.vault_ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
+    : b.length ? "<tr><th>순서</th><th>구분</th><th>파일</th><th>확인</th></tr>" +
+      b.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.section)}</td><td>${esc(x.file)}</td><td class="warn">${esc(x.note)}</td></tr>`).join("")
+    : '<tr><td class="muted">파일 이름이 맞는 회사 서류가 없습니다</td></tr>';
+  $("#bmiss").innerHTML = j.vault_ok ? (s.bundle_missing || []).map(x => `<li class="warn">${esc(x)}</li>`).join("") : "";
+  $("#lic").textContent = n.licenses.length ? "나라장터 면허제한: " + n.licenses.join(", ") : "";
+  $("#tracks").innerHTML = s.tracks.map(t => `<li><span class="chip">${esc(t.kind)}</span> ${esc(t.text)}</li>`).join("")
+    || '<li class="muted">실적 요건을 찾지 못함</li>';
+  $("#cands").innerHTML = s.candidates.length ? "<tr><th>사업명</th><th>발주기관</th><th>준공</th><th>인정 금액</th><th>확인</th></tr>" +
+    s.candidates.map(c => `<tr><td>${esc(c.name)}</td><td>${esc(c.org)}</td><td>${esc(c.done)}</td><td>${won(c.amount)}</td>
+      <td class="warn">${esc(c.check)}</td></tr>`).join("") : "";
+  $("#result").classList.remove("hide");
+}
+</script>
+</body>
+</html>

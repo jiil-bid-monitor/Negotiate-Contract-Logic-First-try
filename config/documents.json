@@ -1,0 +1,27 @@
+{
+  "_comment": "정량평가서 서류 목록. per_notice: fixed(고정) / varies(공고마다) / when_required(요구할 때만) / validity(유효기간 안 고정). filename_keywords: check 명령이 폴더에서 파일을 찾을 때 쓰는 낱말(띄어쓰기 무시) — 실제 파일 이름을 보고 고칠 것.",
+  "documents": [
+    {"id": "history", "name": "회사 연혁 + 증빙 서류", "form": "스캔 PDF", "per_notice": "fixed",
+     "automation": "가능", "human": "연혁 변경 시 갱신", "filename_keywords": ["연혁"]},
+    {"id": "qualification", "name": "공고가 요구하는 자격 서류", "form": "스캔 PDF", "per_notice": "varies",
+     "automation": "가능 (공고 요구 자격에 맞는 서류만 선택)", "human": "",
+     "filename_keywords": ["등록증", "면허", "신고증", "등록수첩"]},
+    {"id": "track_record", "name": "실적 증빙 + 실적집계표", "form": "실적 목록 엑셀 / 증빙 스캔 PDF", "per_notice": "varies",
+     "automation": "일부 가능 (실적 요건에 맞는 후보 사업을 골라 양식에 정리)", "human": "후보 중 제출할 실적 확정",
+     "filename_keywords": ["실적"]},
+    {"id": "staff", "name": "인력 정보 (보유 자격증)", "form": "스캔 PDF", "per_notice": "varies",
+     "note": "자격증은 고정이지만 재직 여부와 유효기간은 바뀜, PM 담당 직무는 공고마다 다름",
+     "automation": "일부 가능 (자격증 첨부)", "human": "PM·담당 직무 지정, 재직·유효기간 갱신",
+     "filename_keywords": ["자격증", "경력증", "가입자명부"]},
+    {"id": "direct_production", "name": "직접생산확인증명서", "form": "스캔 PDF", "per_notice": "when_required",
+     "automation": "가능", "human": "", "filename_keywords": ["직접생산"]},
+    {"id": "credit_rating", "name": "경영상태 (신용평가등급확인서)", "form": "스캔 PDF", "per_notice": "validity",
+     "automation": "가능 (유효기간 확인 후 첨부)", "human": "유효기간이 지나면 재발급",
+     "filename_keywords": ["신용평가", "신용등급"]},
+    {"id": "certification", "name": "가점·인증 서류 (여성기업·벤처·중소기업 확인서·ISO 등)", "form": "스캔 PDF",
+     "per_notice": "when_required", "automation": "필요할 때 자동 첨부", "human": "인증 갱신 시 교체",
+     "filename_keywords": ["여성기업", "벤처", "중소기업확인", "ISO", "인증서"]},
+    {"id": "reissue", "name": "재발급 최신화 자료 (실적증명서 등)", "form": "-", "per_notice": "varies",
+     "automation": "재발급 요청 목록까지만", "human": "재발급 (공고마다 담당자에게 요청)", "filename_keywords": []}
+  ]
+}

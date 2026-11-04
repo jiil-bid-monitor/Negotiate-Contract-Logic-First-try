@@ -1,0 +1,31 @@
+{
+  "_comment": "회사 원본 서류 → 회사자료 양식(quantdocs/importer.py). 파일 이름에 keyword가 들어 있으면 그 줄을 씀(위에서부터 처음 맞는 것). kind = config/documents.json id, codes = 나라장터 업종코드(프로젝트 1 held_qualifications.json과 같은 번호). 서류가 늘면 여기에 한 줄 추가.",
+  "corp_docs": [
+    {"keyword": "실내건축공사업", "kind": "qualification", "name": "실내건축공사업 등록증", "codes": ["0006", "4990"]},
+    {"keyword": "실내건축수첩", "kind": "qualification", "name": "실내건축공사업 등록수첩", "codes": []},
+    {"keyword": "정보통신공사업등록증", "kind": "qualification", "name": "정보통신공사업 등록증", "codes": ["0036"]},
+    {"keyword": "정보통신공사업수첩", "kind": "qualification", "name": "정보통신공사업 등록수첩", "codes": []},
+    {"keyword": "산업디자인전문회사", "kind": "qualification", "name": "산업디자인전문회사 신고확인증", "codes": ["4440", "4441", "4442", "4443", "4444", "6867", "6868"]},
+    {"keyword": "공공디자인전문회사", "kind": "qualification", "name": "공공디자인전문회사 신고증", "codes": ["6484"]},
+    {"keyword": "소프트웨어사업자", "kind": "qualification", "name": "소프트웨어사업자 일반현황 관리확인서", "codes": ["1426", "1468", "1469", "1470"]},
+    {"keyword": "비디오물제작업", "kind": "qualification", "name": "비디오물제작업 신고증", "codes": ["3244"]},
+    {"keyword": "음반음악영상물", "kind": "qualification", "name": "음반·음악영상물제작업 신고증", "codes": ["3243"]},
+    {"keyword": "영화제작수입배급", "kind": "qualification", "name": "영화제작·수입·배급업 신고증", "codes": ["3207", "3208", "3209"]},
+    {"keyword": "애니메이션업", "kind": "qualification", "name": "애니메이션업 신고증", "codes": ["6490", "6491"]},
+    {"keyword": "옥외광고업", "kind": "qualification", "name": "옥외광고사업 등록증", "codes": ["2604"]},
+    {"keyword": "출판사신고", "kind": "qualification", "name": "출판사 신고확인증", "codes": ["1517"]},
+    {"keyword": "사업자등록증", "kind": "qualification", "name": "사업자등록증", "codes": []},
+    {"keyword": "인감증명서", "kind": "qualification", "name": "법인 인감증명서", "codes": [], "rule": "3개월 이내"},
+    {"keyword": "중소기업확인서", "kind": "certification", "name": "중소기업 확인서", "codes": []},
+    {"keyword": "여성기업확인서", "kind": "certification", "name": "여성기업 확인서", "codes": []},
+    {"keyword": "벤처기업확인서", "kind": "certification", "name": "벤처기업 확인서", "codes": []},
+    {"keyword": "이노비즈확인서", "kind": "certification", "name": "이노비즈 확인서", "codes": []},
+    {"keyword": "이노비즈인증서", "kind": "certification", "name": "이노비즈 인증서", "codes": []},
+    {"keyword": "강소기업", "kind": "certification", "name": "강소기업 확인서", "codes": []},
+    {"keyword": "성과공유기업", "kind": "certification", "name": "성과공유기업 확인서", "codes": []},
+    {"keyword": "디자인혁신유망기업", "kind": "certification", "name": "디자인혁신유망기업 선정증", "codes": []},
+    {"keyword": "기업부설연구소", "kind": "certification", "name": "기업부설연구소 인정서", "codes": []},
+    {"keyword": "기업부설창작연구소", "kind": "certification", "name": "기업부설창작연구소 인정서", "codes": []},
+    {"keyword": "단체표준", "kind": "certification", "name": "단체표준인증서", "codes": []}
+  ]
+}

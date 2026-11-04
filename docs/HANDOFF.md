@@ -1,4 +1,4 @@
-# 작업 인수인계 (2026-10-29 기준 — 맨 위 "10/29" 절 먼저, 아래는 이전 기록)
+# 작업 인수인계 (2026-11-03 기준 — 맨 위 "11/03" 절 먼저, 아래는 이전 기록)
 
 > **10/19 — 팀원 수집기(iamhiki/narajangter-bid-monitor, TypeScript)와 통합 중.** 브랜치 `claude/collector-integration`
 > (main 미병합). 16개 항목 결정과 단계별 진행은 아래 "7. 수집기 통합"과 `CLAUDE.md` "2026-10-19" 절.
@@ -11,7 +11,23 @@
 
 ---
 
-## 10/29 — 지금 상태와 다음 할 일 (먼저 읽을 것)
+## 11/03 — 지금 상태와 다음 할 일 (먼저 읽을 것)
+
+- 오늘 정리: `docs/worklog/2026-11-03.md`, 결정: `CLAUDE.md` "2026-11-03" 절.
+- **정량평가서 준비(프로젝트 2)를 이 레포로 합침** — 브랜치 `claude/quantdocs-merge`(main 기준, **미병합**). 웹앱 '투찰 계산기' 옆 '정량평가서' 탭.
+  회사 자료 잠금 묶음은 비공개 레포 `jiil-bid-monitor/jiil-quant-docs`에 그대로(공개 레포에 올리는 push가 권한 검사에 막힘) — 서버 PC에서 두 폴더가 나란히 있어야 함
+  (`/c/Users/HJE/나라장터 수집/Negotiate-Contract-Logic-First-try`, `/c/Users/HJE/나라장터 수집/jiil-quant-docs`).
+- 병합 안 한 브랜치: `claude/quantdocs-merge`, `claude/bidfield-notice-fallback`(10/30 추천 칸 분야 보완 등 3커밋), `claude/track1-folders`(보류).
+- **다음에 할 일**
+  1. 서버 PC `.env` 줄바꿈 고친 결과 확인 → 정량평가서 탭에 "회사 자료 묶음 …(날짜)"가 보이는지, 안흥찐빵(20210428591)·영동군(R26BK01805195)으로 만들기·통합본 확인.
+  2. 서버 PC가 쓰는 브랜치 확인 → `claude/quantdocs-merge`와 `claude/bidfield-notice-fallback` 합칠지(사용자 결정 대기), main 병합 PR은 요청 때만.
+  3. 사용자 결정 대기: 준공일 없는 실적 따로 보이기, 실적 부가세 '포함' 채우기. 서버 PC에서 `통합서식.hwpx`(서식 전체를 이은 한글 파일)를 한글로 열어 확인.
+  4. 회사 서류 보충(직접생산증명서 3개·법인등기부·사용인감계·완납증명·신용평가) → `py -m quantdocs import` → `vault seal` → jiil-quant-docs에 커밋.
+  5. 주말 수집 0건 원인 진단(사용자: 다음에).
+- **지킬 것**: 한국어 답변, 요청 전엔 고치지 않기, **회사 서류·잠금 묶음·비밀번호는 이 공개 레포에 올리지 않기**, 지일 투찰 이력·개찰 자료는 저장소에 안 올리기,
+  서버 PC 명령은 `cd "경로"`부터 `&&`로 한 줄, 평가 점수 계산은 범위 밖.
+
+## 10/29 — 지금 상태와 다음 할 일
 
 - **main 마지막 = PR #223**(투찰 계산기 추천 사정률·검증 — `claude/bid-backtest` 병합). 오늘 정리: `docs/worklog/2026-10-29.md`, 결정 전문: `CLAUDE.md` "2026-10-29" 절.
 - 서버 PC 반영 **미확인**: `git checkout main && git pull` → `bash webapp/start.sh` → F5 (그동안 서버 PC는 `claude/bid-backtest`를 받아 썼음).

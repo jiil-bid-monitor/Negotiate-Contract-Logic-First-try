@@ -616,3 +616,19 @@ def test_signature_lines_inside_body_cell_and_rrn_not_corporate(tmp_path: Path):
     out = zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode()
     assert re.search(r"대표자 : 홍길동 +\(인\)", out)
     assert out.count("(주)가상") == 1  # 이름표 칸 '업체명 :'은 그대로, 옆 칸에만
+
+
+def test_enrich_warns_when_phone_or_rrn_missing(monkeypatch):
+    """11/04 제보: 서버에서 전화번호·주민번호 칸이 계속 비어도 이유가 안 보임 → 못 찾으면 이유·할 일을 알림, 점검 보고(report)도 줌."""
+    from quantdocs import importer
+
+    monkeypatch.setattr(importer, "_TEXT_CACHE", {})
+    monkeypatch.setattr(importer, "_bytes_pdf_text", lambda data: "" if data == b"scan" else "견적서 — 전시물 제작 설치 비용 내역 합계 금액 확인")
+    v = vault.Vault({"files/스캔1.pdf": b"scan", "files/견적.pdf": b"etc"}, info={"회사명": "(주)가상"})
+    rows: list = []
+    notes = importer.enrich_vault(v, rows)
+    assert any("전화번호를 찾지 못해" in n and "등록증으로 알아본 PDF가 없음" in n and "스캔본 1개" in n for n in notes)
+    assert any("주민등록번호" in n for n in notes)
+    assert ("스캔1.pdf", "스캔본(이름으로 종류를 몰라 안 읽음)", "") in rows
+    v2 = vault.Vault({}, info={"대표전화": "02-1", "대표자 주민등록번호": "800101-*******"})
+    assert not any("⚠" in n for n in importer.enrich_vault(v2))

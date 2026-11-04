@@ -364,14 +364,14 @@ def _cached_text(path: str, data: bytes) -> str:
     return _TEXT_CACHE[key]
 
 
-def enrich_vault(vault) -> list[str]:
+def enrich_vault(vault, report: list | None = None) -> list[str]:
     """묶음 안 연혁·경쟁입찰참가자격등록증·사업자등록증 PDF를 읽어 회사정보의 빈 칸과 연혁을 채움(메모리에서만, 11/04 사용자 요청:
     '연혁 pdf·입찰참가등록증 pdf 확인해서 기입 가능한 건 바로 작성'). 회사정보 시트에 적힌 값이 늘 먼저. 돌려줌: 알림 줄."""
     notes: list[str] = []
     found_info: dict[str, tuple[str, str]] = {}  # 항목 → (값, 파일)
     hist: list[dict] = []
     hist_src = ""
-    scanned, ocr = [], []
+    scanned, ocr, skipped_scans, regs = [], [], [], []
     for path, data in sorted(vault.files.items()):
         name = path.rsplit("/", 1)[-1]
         if not name.lower().endswith(".pdf"):
@@ -381,14 +381,21 @@ def enrich_vault(vault) -> list[str]:
                                       ("인감", ("인감증명", "등기")))
                    if any(w in sq for w in words)]
         text = _cached_text(path, data)
+        how = "글"
         if len(re.sub(r"\s", "", text)) < 20:  # 스캔본 — 이름으로 짐작되는 서류만 글자 인식(OCR, 느려서)
             if not by_name:
+                skipped_scans.append(name)
+                if report is not None:
+                    report.append((name, "스캔본(이름으로 종류를 몰라 안 읽음)", ""))
                 continue
             text = _ocr_pdf(data)
             if text is None:
                 scanned.append(name)
+                if report is not None:
+                    report.append((name, "스캔본(OCR 도구 없음)", "·".join(by_name)))
                 continue
             ocr.append(name)
+            how = "OCR"
         # 파일 이름이 제각각이라 글 내용으로도 서류 종류를 알아봄(11/04 제보: 등록증이 있는데 전화·팩스를 못 읽음)
         head = re.sub(r"\s+", "", text[:400])
         kinds = set(by_name)
@@ -400,8 +407,12 @@ def enrich_vault(vault) -> list[str]:
             kinds.add("인감")
         if re.search(r"(회사|사업|주요)?연혁", head):
             kinds.add("연혁")
+        if report is not None:
+            report.append((name, how, "·".join(sorted(kinds))))
         if not kinds:
             continue
+        if "등록증" in kinds:
+            regs.append(name)
         if kinds & {"인감", "사업자", "등록증"}:
             rrn = masked_rrn(text)
             if rrn:
@@ -431,6 +442,19 @@ def enrich_vault(vault) -> list[str]:
     if scanned:
         notes.append("글이 없는 스캔본인데 글자 인식 도구(Tesseract)가 없어 읽지 못한 서류: " + ", ".join(scanned[:5])
                      + " — 서버 PC에 Tesseract 설치(docs/quantdocs.md) 또는 회사자료 양식에 직접 적기")
+    # 서식에 꼭 들어가야 하는 값을 못 찾았으면 이유와 할 일을 분명히(11/04 제보: 같은 빈칸이 되풀이)
+    def has(words, bad=()):
+        return any(v and any(w in k.upper() for w in words) and not any(b in k.upper() for b in bad)
+                   for k, v in vault.info.items())
+    why = (f"등록증으로 알아본 PDF({', '.join(regs[:3])})에 그 줄이 없음" if regs
+           else "묶음 안에 경쟁입찰참가자격등록증으로 알아본 PDF가 없음")
+    if skipped_scans:
+        why += f" · 종류를 모르는 스캔본 {len(skipped_scans)}개는 안 읽음(파일 이름에 '참가자격등록증'을 넣으면 OCR로 읽음)"
+    fix = "회사자료 양식 '회사정보' 시트에 적거나 나라장터 등록증 PDF를 files/에 넣고 다시 잠그세요"
+    if not has(("전화", "TEL"), ("휴대", "담당", "팩스", "FAX")):
+        notes.append(f"⚠ 회사 전화번호를 찾지 못해 서식의 전화번호 칸이 비어 있음 — {why}. {fix}")
+    if not has(("주민",)):
+        notes.append(f"⚠ 대표자 주민등록번호(앞자리)를 찾지 못해 비어 있음 — 등록증·인감증명서에서 못 읽음. {fix}")
     return notes
 
 

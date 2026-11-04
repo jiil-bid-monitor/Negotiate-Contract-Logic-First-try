@@ -731,3 +731,28 @@ def test_seal_cell_name_centered(tmp_path: Path):
     assert pid == "6" and 'paraProperties itemCnt="3"' in head
     block = re.search(r'<hh:paraPr id="6".*?</hh:paraPr>', head, re.S).group(0)
     assert 'horizontal="CENTER"' in block and '<hh:margin left="1"/>' in block  # 여백 등은 원래 모양 그대로
+
+
+def test_other_party_zone_and_placeholder_signature(tmp_path: Path):
+    """11/04 사용자 요청: 서식 28 발행자(제조사·공식 수입원) 칸·발행자 서명 줄은 비우고 '제안업체(공급받는 자)'에 회사명,
+    서식 19 '○○○업체 대표자 : ○○○ (인)' 자리표시는 회사명·대표자로. 봉투 예시('대표이사 ○○○ (인)', 쌍점 없음)는 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선", "전화번호": "033-111-2222"})
+
+    def para(t):
+        return f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    two = ('<hp:tc><hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>상호 :</hp:t></hp:run></hp:p>'
+           '<hp:p><hp:run charPrIDRef="0"><hp:t>전화 :</hp:t></hp:run></hp:p></hp:subList>'
+           '<hp:cellAddr colAddr="1" rowAddr="1"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    tbl = ("<hp:p><hp:run><hp:tbl><hp:tr>" + _c(0, 0, "제안업체(공급받는 자)") + _c(1, 0, "") + "</hp:tr><hp:tr>"
+           + _c(0, 1, "발 행 자 (제조사 / 공식 수입원)") + two + "</hp:tr></hp:tbl></hp:run></hp:p>")
+    body = (tbl + para("발행자   상호 :") + para("대표자 :            (인)") + para("본문")
+            + para("   ○○○업체 대표자 :      ○○○ (인)") + para("대표이사 ○○○     (인)"))
+    fill_hwpx(_mini_hwpx(tmp_path / "o.hwpx", body), tmp_path / "oo.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "oo.hwpx").read("Contents/section0.xml").decode()
+    assert "<hp:t>상호 :</hp:t>" in out and "<hp:t>전화 :</hp:t>" in out  # 발행자 칸은 그대로
+    assert "<hp:t>발행자   상호 :</hp:t>" in out and "<hp:t>대표자 :            (인)</hp:t>" in out
+    assert re.search(r"\(주\)가상 대표자 : +홍길동 \(인\)", out)
+    assert "대표이사 ○○○     (인)" in out
+    assert out.count("(주)가상") == 2  # 제안업체 칸 + 서식 19 줄

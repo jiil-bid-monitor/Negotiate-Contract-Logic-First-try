@@ -115,7 +115,7 @@ def _set_cell(cell_xml: str, lines: list[str], keep_first: bool = False, char_id
 LABELS: list[tuple[tuple[str, ...], str]] = [
     (("사업자등록번호", "사업자번호"), "사업자등록번호"),
     (("법인등록번호",), "법인등록번호"),
-    (("회사명", "업체명", "상호", "법인명", "제안사명"), "회사명"),
+    (("회사명", "업체명", "상호", "법인명", "제안사명", "제안업체", "공급받는"), "회사명"),
     (("대표자", "대표이사"), "대표자"),
     (("주소", "소재지"), "주소"),
     (("전화",), "전화번호"),
@@ -340,6 +340,20 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
     return edits
 
 
+# 지일이 아닌 쪽이 적는 칸 — 장비 공급확약서의 발행자(제조사·공식 수입원) 등(11/04 서식 28: 지일 정보가 들어가 '스스로 확약'이 됨)
+_OTHER_PARTY = re.compile(r"발행자|제조사|수입원|공급자|총판")
+
+
+def _other_party_cells(xml: str) -> list[tuple[int, int]]:
+    """줄 머리(첫 칸) 이름표가 발행자·제조사 등인 표 줄의 칸들 — 채우지 않음."""
+    out = []
+    for tbl in _spans(xml, "tbl"):
+        cells = _cells(xml, tbl)
+        rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
+        out += [(c.start, c.end) for c in cells if c.row in rows]
+    return out
+
+
 _SEAL_TAIL = r"[(（](?:인|서명)[^()（）]{0,8}[)）]"  # '(인)'·'(인 또는 서명)'
 # 쌍점 없이 이름표만 있는 줄 — 이런 줄이 둘 이상 잇달아 있을 때만(서식 21 '주  소 / 상  호 / 대표자')
 _BARE_LABELS = {"주소": "주소", "소재지": "주소", "상호": "회사명", "업체명": "회사명", "회사명": "회사명",
@@ -384,11 +398,27 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
             stack.append(m.start())
         elif stack:
             paras.append((stack.pop(), m.end()))
+    other = _other_party_cells(xml)
     cands = []  # (s, e, 이름표, 서명 줄?, 쌍점 없는 이름표?, 문단 순번)
+    other_at: set[int] = set()  # '발행자   상호 :' 줄과 바로 이어지는 서명 줄('대표자 :   (인)')
     for n, (s, e) in enumerate(sorted(paras)):
-        if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single):
+        if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single + other):
             continue
         text = _text(xml[s:e])
+        if _OTHER_PARTY.search(_sq(text)) or (n - 1 in other_at and re.search(r"[:：]", text) and len(_sq(text)) <= 24):
+            other_at.add(n)
+            continue
+        # 서식에 '○○○업체 대표자 :   ○○○ (인)'처럼 자리표시가 미리 적힌 서명 줄(11/04 서식 19)
+        ph = re.fullmatch(rf"\s*○{{2,}}\s*(?:업체|회사)\s*(대\s*표\s*(?:자|이\s*사))\s*[:：]\s*○{{2,}}\s*({_SEAL_TAIL})?\s*", text)
+        if ph:
+            company, name = _value("회사명", vault), _value("대표자", vault)
+            if company and name:
+                seg = re.sub(r"○{2,}(\s*)(?=업체|회사)(?:업체|회사)", lambda mm: escape(company) + mm.group(1), xml[s:e], count=1)
+                seg = re.sub(r"([:：]\s*)○{2,}", lambda mm: f"{mm.group(1)}{escape(name)}", seg, count=1)
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 자리표시 → {company} 대표자 {name}")
+            continue
         # '업 체 명 :' 또는 서명 줄 '대표자 :          (인)'(11/04 서식 8·9) · '신청인(대표자) :      (인 또는 서명)'(서식 1)
         m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL})?\s*", text)
         if m:
@@ -651,6 +681,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             for tbl in _spans(xml, "tbl"):
                 cells = _cells(xml, tbl)
                 by_pos = {(c.row, c.col): c for c in cells}
+                other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
+                cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
                 if tracks:
                     edits += _fill_tracks(xml, cells, tracks, rep)
                 for c in cells:

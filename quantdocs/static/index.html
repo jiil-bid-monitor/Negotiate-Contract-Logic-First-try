@@ -102,7 +102,7 @@
         <h2>4. 내려받기</h2>
         <a id="dlink" class="btn" href="#">정량평가서 묶음 내려받기 (.zip)</a>
         <p class="muted">묶음 안: <b>통합서식.hwpx</b>(서식 전체를 공고 순서대로 이은 한글 파일 — 담당 PM·투입 인력 등은 여기서 직접 기입) ·
-          <b>통합본.pdf</b>(회사 서류 스캔본) · 준비표 · 서식별 파일.</p>
+          <b>통합본.pdf</b>(회사 서류 스캔본) · 준비표 · 첨부 원본·공고문.</p>
         <p class="muted">회사 서류가 들어 있습니다 — 사내에서만 보관하세요. 서버의 작업 파일은 2시간 뒤 지워집니다.</p>
       </div>
     </div>
@@ -112,7 +112,7 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const won = n => n == null || n === "" ? "" : Number(n).toLocaleString("ko-KR") + "원";
-let JOB = null, timer = null;
+let JOB = null, timer = null, PHASE = "#status";  // PHASE: 지금 진행 상태를 보일 자리(불러오기 #status · 만들기 #bstatus)
 if (location.search.includes("t=")) history.replaceState(null, "", location.pathname);
 // 프로젝트 1 웹앱의 '정량평가서' 탭(/quant/ — iframe)으로 열리면 API는 /api/quant/…, 머리 띠는 숨기고 부모 화면 테마를 따름(11/03 합침)
 const EMBED = location.pathname.startsWith("/quant");
@@ -144,11 +144,13 @@ $("#go").onclick = async () => {
   const no = $("#no").value.trim();
   if (!no) return;
   $("#go").disabled = true; $("#result").classList.add("hide"); $("#dl").classList.add("hide");
+  PHASE = "#status"; $("#bstatus").innerHTML = "";
   try { JOB = (await api("/api/analyze", {no})).id; poll(); }
   catch (e) { $("#status").innerHTML = `<span class="err">${esc(e.message)}</span>`; $("#go").disabled = false; }
 };
 $("#build").onclick = async () => {
   $("#build").disabled = true; $("#dl").classList.add("hide");
+  PHASE = "#bstatus";
   try { await api("/api/build/" + JOB, {}); poll(); }
   catch (e) { $("#bstatus").innerHTML = `<span class="err">${esc(e.message)}</span>`; $("#build").disabled = false; }
 };
@@ -158,7 +160,8 @@ function poll() {
   timer = setTimeout(async () => {
     let j; try { j = await api("/api/job/" + JOB); } catch (e) { $("#status").textContent = e.message; return; }
     const busy = j.state === "running" || j.state === "building";
-    const where = j.state === "building" ? "#bstatus" : "#status";
+    // 상태 글은 누른 단계(불러오기/만들기) 자리에 — 만들기가 끝나면(built) 만들기 옆 돌던 표시를 '완료'로 바꿈(11/04)
+    const where = PHASE;
     if (busy) { $(where).innerHTML = `<span class="spin"></span> ${esc(j.step || "진행 중")}`; return poll(); }
     $("#go").disabled = false; $("#build").disabled = false;
     if (j.state === "error") { $(where).innerHTML = `<span class="err">${esc(j.error)}</span>`; if (where === "#status") return; }

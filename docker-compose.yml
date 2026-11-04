@@ -14,8 +14,7 @@ services:
     # host: 웹앱이 NAS의 8765에서 바로 접속을 받아 DSM 방화벽 규칙이 그대로 적용된다(포트 매핑 없음).
     network_mode: host
     restart: unless-stopped
-    # 서비스키·접속 토큰 등 — 서버 PC의 .env를 NAS 폴더로 복사해 쓴다(깃에 안 올라감).
-    env_file: .env
+    # 서비스키·접속 토큰 등 .env는 실행 스크립트가 켤 때마다 읽는다(scripts/nas/run_with_env.py, 깃에 안 올라감).
     environment:
       HOST: "0.0.0.0"
       PORT: "8765"
@@ -36,7 +35,6 @@ services:
     command: ["sh", "scripts/nas/under100m_run.sh"]
     network_mode: host
     restart: unless-stopped
-    env_file: .env
     environment:
       UNDER100M_OUT: /out
     volumes:

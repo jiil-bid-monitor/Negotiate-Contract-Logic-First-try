@@ -3,4 +3,4 @@
 #   sh /work/Negotiate-Contract-Logic-First-try/scripts/nas/under100m_job.sh
 # 처리 기록은 컨테이너를 다시 만들어도 남게 공유 폴더에 둔다.
 cd /work/Negotiate-Contract-Logic-First-try || exit 1
-exec python -m under100m --state /work/under100m/state.json
+exec python scripts/nas/run_with_env.py python -m under100m --state /work/under100m/state.json

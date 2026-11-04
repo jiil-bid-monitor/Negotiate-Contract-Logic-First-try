@@ -378,3 +378,18 @@ def test_qualification_rows_merge_docs_and_name_only(tmp_path: Path, monkeypatch
     picks, _ = pick(list(v.files), [], rows, dt.date(2026, 11, 4))
     got = [p.path for p in picks]
     assert "files/직접생산_실물.pdf" in got and "files/중소기업확인서(~27.3.31).pdf" in got and "files/정보통신공사업등록증.pdf" in got
+
+
+def test_bundle_pick_one_of_group():
+    """'이 중 하나' 묶음은 서류가 있는 첫 자격 하나만 통합본에(11/04)."""
+    from quantdocs.bundle import pick
+
+    files = ["files/환경디자인.pdf", "files/종합디자인.pdf", "files/공공디자인.pdf"]
+    quals = [{"kind": "이 중 하나", "items": [
+        {"name": "산업디자인전문회사(환경디자인분야)", "code": "4442", "held": True, "paths": []},
+        {"name": "산업디자인전문회사(종합디자인분야)", "code": "4444", "held": True, "paths": ["files/종합디자인.pdf"]},
+        {"name": "공공디자인 전문회사", "code": "6484", "held": True, "paths": ["files/공공디자인.pdf"]}]}]
+    picks, missing = pick(files, [], quals, dt.date(2026, 11, 4))
+    assert [p.path for p in picks] == ["files/종합디자인.pdf"] and not missing
+    picks, missing = pick([], [], quals, dt.date(2026, 11, 4))
+    assert not picks and len(missing) == 1 and " 또는 " in missing[0]

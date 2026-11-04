@@ -92,6 +92,7 @@ def pick(files, submit_texts: list[str], quals: list[dict], today: date | None =
     names = _code_names()
     qual_hits: list[tuple[str, list[str], bool]] = []  # (자격 이름, 파일들, 직접생산 품목인가)
     for q in quals:
+        found: list[tuple[str, list[str], bool]] = []
         for it in q.get("items", []):
             if not it.get("held"):
                 continue
@@ -106,9 +107,19 @@ def pick(files, submit_texts: list[str], quals: list[dict], today: date | None =
             if not hits and not it.get("keys"):
                 hits = [f for f in pool if any(c in _sq(Path(f).name) or (len(_stem(f)) >= 2 and _stem(f) in c) for c in cands)]
             title = f"{label}({it['code']})" if it.get("code") and it["code"] not in label else label
-            qual_hits.append((title, hits, len(str(it.get("code") or "")) >= 8 or label == "직접생산확인증명서"))
-            if not hits:
-                missing.append(f"자격 {title}: 파일 이름이 맞는 서류 없음")
+            found.append((title, hits, len(str(it.get("code") or "")) >= 8 or label == "직접생산확인증명서"))
+        if len(q.get("items", [])) > 1:
+            # '이 중 하나' — 서류가 있는 첫 자격 하나만 통합본에(11/04 사용자 요청)
+            one = next((h for h in found if h[1]), None)
+            if one:
+                qual_hits.append(one)
+            elif found:
+                missing.append(f"자격 {' 또는 '.join(h[0] for h in found)}: 파일 이름이 맞는 서류 없음")
+            continue
+        for h in found:
+            qual_hits.append(h)
+            if not h[1]:
+                missing.append(f"자격 {h[0]}: 파일 이름이 맞는 서류 없음")
 
     # 1) 제출서류 항목 순서대로
     for text in submit_texts:

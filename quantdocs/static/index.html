@@ -32,6 +32,12 @@
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px 18px }
   .grid div span { display:block; color:var(--mute); font-size:12px }
   .grid > div { min-width:0; overflow-wrap:anywhere } .grid > .wide { grid-column:1 / -1 }
+  /* 서식 진행 체크(11/04 사용자 요청) — 담당자가 서식을 끝낼 때마다 체크, 이 브라우저에 공고번호별로 남음 */
+  .fprog { font-size:13px; font-weight:600; color:var(--mute); margin-left:8px; white-space:nowrap }
+  .fprog .bar { display:inline-block; width:120px; height:8px; border-radius:99px; background:var(--line); vertical-align:1px; margin-left:6px; overflow:hidden }
+  .fprog .bar i { display:block; height:100%; background:var(--accent) }
+  #forms td.chk, #forms th.chk { text-align:center; width:48px } #forms input.fchk { width:18px; height:18px; cursor:pointer; accent-color:var(--accent) }
+  #forms tr.fdone td:not(.chk) { color:var(--mute); text-decoration:line-through }
   ul { margin:6px 0; padding-left:20px } .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:s 1s linear infinite; vertical-align:-2px }
   @keyframes s { to { transform:rotate(360deg) } } .hide { display:none }
   .scroll { overflow-x:auto } .nw { white-space:nowrap }
@@ -55,7 +61,7 @@
     <p id="sub" class="muted" style="margin:0 2px 12px"></p>
     <div id="notes"></div>
     <div class="card">
-      <h2>2. 필요 서식</h2>
+      <h2>2. 필요 서식 <span id="fprog" class="fprog"></span></h2>
       <p class="muted"><b>자동</b> = 회사 정보·연혁·실적을 채워 드림 · <span class="warn">직접 기입</span> = 양식만 넣어 드림(가격·인력·확약 등 공고마다 정하는 값) — 둘 다 통합서식.hwpx 안에 있음</p>
       <div class="scroll"><table id="forms"></table></div>
     </div>
@@ -172,6 +178,21 @@ function poll() {
   }, 900);
 }
 
+// 서식 완료 체크 — 브라우저 저장소에 공고번호별로(다른 PC·브라우저와는 공유 안 됨). 저장소를 못 쓰면 이번 화면에서만.
+const DONE_MEM = {};
+function loadDone(no) {
+  try { return new Set(JSON.parse(localStorage.getItem("quant-done:" + no) || "[]")); }
+  catch (e) { return new Set(DONE_MEM[no] || []); }
+}
+function saveDone(no, set) {
+  DONE_MEM[no] = [...set];
+  try { localStorage.setItem("quant-done:" + no, JSON.stringify([...set])); } catch (e) {}
+}
+function showProgress(total, set) {
+  const n = Math.min(set.size, total), pct = total ? Math.round(n * 100 / total) : 0;
+  $("#fprog").innerHTML = total ? `완료 ${n} / ${total} (${pct}%)<span class="bar"><i style="width:${pct}%"></i></span>` : "";
+}
+
 function render(j) {
   const n = j.notice, s = j.summary;
   $("#title").textContent = n.title;
@@ -186,10 +207,22 @@ function render(j) {
     `<div class="wide"><span>받은 첨부</span>${n.files.map(f => `<span class="chip">${esc(f)}</span>`).join("")}</div>`;
   $("#notes").innerHTML = (s.notes.length || n.skipped.length) ?
     `<div class="card"><ul>${s.notes.concat(n.skipped).map(x => `<li class="warn">${esc(x)}</li>`).join("")}</ul></div>` : "";
-  $("#forms").innerHTML = "<tr><th>서식</th><th>이름</th><th>서류 종류</th><th>작성</th></tr>" +
-    (s.forms.length ? s.forms.map(f => `<tr><td>서식${f.no}</td><td>${esc(f.name)}</td>
-      <td class="muted">${esc(f.kind)}</td><td>${f.auto ? "<b>자동</b>" : '<span class="warn">직접 기입</span>'}</td></tr>`).join("")
-      : `<tr><td colspan="4" class="muted">공고 자료에서 서식 목록을 찾지 못했습니다</td></tr>`);
+  const done = loadDone(n.no);
+  $("#forms").innerHTML = "<tr><th>서식</th><th>이름</th><th>서류 종류</th><th>작성</th><th class=\"chk\">완료</th></tr>" +
+    (s.forms.length ? s.forms.map(f => `<tr class="${done.has(String(f.no)) ? "fdone" : ""}"><td>서식${f.no}</td><td>${esc(f.name)}</td>
+      <td class="muted">${esc(f.kind)}</td><td>${f.auto ? "<b>자동</b>" : '<span class="warn">직접 기입</span>'}</td>
+      <td class="chk"><input type="checkbox" class="fchk" data-no="${esc(String(f.no))}" ${done.has(String(f.no)) ? "checked" : ""} title="이 서식을 다 작성했으면 체크"></td></tr>`).join("")
+      : `<tr><td colspan="5" class="muted">공고 자료에서 서식 목록을 찾지 못했습니다</td></tr>`);
+  $("#forms").onchange = e => {
+    const c = e.target.closest("input.fchk");
+    if (!c) return;
+    const d = loadDone(n.no);
+    c.checked ? d.add(c.dataset.no) : d.delete(c.dataset.no);
+    saveDone(n.no, d);
+    c.closest("tr").classList.toggle("fdone", c.checked);
+    showProgress(s.forms.length, d);
+  };
+  showProgress(s.forms.length, done);
   $("#submit").innerHTML = s.submit.map(x => `<li>${esc(x.text)}${x.kind ? ` <span class="chip">${esc(x.kind)}</span>` : ""}</li>`).join("")
     || '<li class="muted">못 찾음 — 공고문 확인</li>';
   $("#quals").innerHTML = "<tr><th>조건</th><th>자격</th><th>지일</th><th>첨부할 서류</th></tr>" +

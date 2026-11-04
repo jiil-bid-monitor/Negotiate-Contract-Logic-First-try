@@ -396,3 +396,22 @@ def test_bundle_pick_one_of_group():
     assert [p.path for p in picks] == ["files/종합디자인.pdf"] and not missing
     picks, missing = pick([], [], quals, dt.date(2026, 11, 4))
     assert not picks and len(missing) == 1 and " 또는 " in missing[0]
+
+
+def test_fit_one_line_when_line_spacing_below_100():
+    """11/04 필암서원 주소 칸 — 줄 간격 50% 문단에 12pt 주소가 두 줄로 넘어가 글이 겹쳤음 → 한 줄에 들어가게 글자를 줄임."""
+    from quantdocs.fill import _Chars, _fit_char, _text_width
+
+    addr = "강원특별자치도 정선군 남면 무릉2로 64(공장1층)"
+    header = ('<hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr>'
+              '<hh:charPr id="1" height="1200"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties>'
+              '<hh:paraProperties itemCnt="2"><hh:paraPr id="0"><hh:lineSpacing type="PERCENT" value="50" unit="HWPUNIT"/></hh:paraPr>'
+              '<hh:paraPr id="1"><hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hh:paraPr></hh:paraProperties>')
+    chars = _Chars(header)
+    cid, note = _fit_char(_sz_cell(1, 0, "", 19477, 2397), addr, chars)  # 실제 칸 크기
+    assert cid and "줄여" in note
+    h = int(re.search(rf'<hh:charPr id="{cid}" height="(\d+)"', chars.finish()).group(1))
+    assert _text_width(addr, h, 1.0) <= (19477 - 282) * 0.95  # 한 줄에 들어감
+    # 줄 간격 160%인 칸은 예전처럼 두 줄로 넘어가도 됨(높이가 되면 글자 그대로)
+    tall = _sz_cell(1, 0, "", 19477, 4500).replace('paraPrIDRef="0"', 'paraPrIDRef="1"')
+    assert _fit_char(tall, addr, chars) == (None, "")

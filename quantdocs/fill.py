@@ -343,9 +343,13 @@ class _Chars:
         m = re.search(r'<(?:[\w.-]+:)?ratio\b[^>]*\bhangul="(\d+)"', self.blocks.get(cid, ""))
         return int(m.group(1)) / 100 if m else 1.0
 
-    def spacing(self, pid: str) -> float:
-        m = re.search(r'<(?:[\w.-]+:)?lineSpacing\b[^>]*type="PERCENT"[^>]*value="(\d+)"', self.paras.get(pid, ""))
-        return int(m.group(1)) / 100 if m else 1.6
+    def spacing(self, pid: str) -> float | None:
+        """줄 간격 비율(160% → 1.6). 비율이 아닌 줄 간격(고정값 등)·문단 모양을 모르면 None."""
+        block = self.paras.get(pid, "")
+        if not block:
+            return 1.6
+        m = re.search(r'<(?:[\w.-]+:)?lineSpacing\b[^>]*type="PERCENT"[^>]*value="(\d+)"', block)
+        return int(m.group(1)) / 100 if m else None
 
     def smaller(self, cid: str, height: int) -> str:
         key = (cid, height)
@@ -396,7 +400,8 @@ def _fit_char(cell_xml: str, line: str, chars: "_Chars") -> tuple[str | None, st
     if width <= 0:
         return None, ""
     def fits(size: int) -> bool:  # 이 크기에서 칸 높이에 들어가는 줄 수 × 칸 너비 안에 글이 들어가나
-        lines_fit = max(1, int(room // max(1.0, size * spacing)))
+        # 줄 간격이 100%보다 작거나 고정값이면 두 줄로 넘어갈 때 글이 겹침(11/04 필암서원 주소 칸 50%) — 한 줄에 들어가야 함
+        lines_fit = 1 if spacing is None or spacing < 1.0 else max(1, int(room // max(1.0, size * spacing)))
         return _text_width(line, size, ratio) <= width * 0.95 * lines_fit
 
     if fits(h):

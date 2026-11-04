@@ -82,21 +82,20 @@ def test_build_package(tmp_path: Path):
     names = z.namelist()
     assert "공고별_준비표.xlsx" in names and "통합본.pdf" in names and "첨부/실적/실적1.pdf" in names
     assert any(n.startswith("첨부/통합본_순서/") and n.endswith("실내건축공사업등록증.pdf") for n in names)
-    assert sum(n.startswith(("서식/", "서식_직접기입/")) for n in names) == 31
-    sec = zipfile.ZipFile(io.BytesIO(z.read("서식/서식14_일반현황_및_연혁.hwpx"))).read("Contents/section0.xml").decode()
-    assert "(가상)시험회사" in sec and "(가상) 법인 설립" in sec
-    manual = [n for n in names if n.startswith("서식_직접기입/")]
-    filled = {n.split("/", 1)[1] for n in names if n.startswith("서식/")}
-    assert manual and not filled & {n.split("/", 1)[1] for n in manual}  # 직접 기입 서식은 채운 서식 폴더에 없음
-    assert any("인력" in n or "이력" in n or "조직" in n for n in manual)
+    # 11/04 사용자 결정: 한글은 통합서식.hwpx 하나만 — 서식별 파일은 통합서식을 못 만들 때만
+    assert not any(n.startswith(("서식/", "서식_직접기입/")) for n in names)
     # 통합서식.hwpx: 서식 31개가 한 한글 파일에 순서대로(채운 값 포함) — 다시 잘라도 31개
     merged = tmp_path / "m.hwpx"
     merged.write_bytes(z.read("통합서식.hwpx"))
     from quantdocs.forms_cut import cut as recut
-    assert len(recut(merged, tmp_path / "recut")) == 31
-    assert "(가상)시험회사" in zipfile.ZipFile(merged).read("Contents/section0.xml").decode()
-    sec16 = zipfile.ZipFile(io.BytesIO(z.read("서식/서식16_사업수행_실적집계표.hwpx"))).read("Contents/section0.xml").decode()
-    assert "(가상) 전시관" in sec16 and "250,000,000" in sec16
+    parts = recut(merged, tmp_path / "recut")
+    assert len(parts) == 31
+    sec = "".join(zipfile.ZipFile(merged).read(n).decode() for n in zipfile.ZipFile(merged).namelist()
+                  if n.startswith("Contents/section"))
+    assert "(가상)시험회사" in sec and "(가상) 법인 설립" in sec  # 서식14 일반현황·연혁
+    assert "(가상) 전시관" in sec and "250,000,000" in sec  # 서식16 실적집계표
+    readme = z.read("읽어보기.txt").decode()
+    assert "통합서식.hwpx" in readme and "서식_직접기입/" not in readme
     wb = load_workbook(io.BytesIO(z.read("공고별_준비표.xlsx")))
     assert {"자격요건", "통합본 순서", "자동입력", "준비 필요"} <= set(wb.sheetnames)
 

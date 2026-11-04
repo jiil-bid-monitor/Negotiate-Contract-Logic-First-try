@@ -688,3 +688,25 @@ def test_fill_tagged_labels_bare_lines_title_and_biz_kind(tmp_path: Path):
     assert re.search(r"대표이사 : 홍길동 +\(인\)", out) and re.search(r"신청인\(대표자\) : 홍길동 +\(인 또는 서명\)", out)
     assert "주  소   강원 정선" in out and "대표자   홍길동" in out
     assert "<hp:t>주소</hp:t>" in out  # 혼자 있는 '주소' 줄(제목일 수 있음)은 그대로
+
+
+def test_number_cells_follow_centered_sibling(tmp_path: Path):
+    """11/04 사용자 요청(서식 1): 같은 열 번호 칸 중 FAX만 가운데 정렬 → 법인등록번호·전화도 가운데로. 주소(글)는 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties>'
+              '<hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/></hh:paraPr>'
+              '<hh:paraPr id="7"><hh:align horizontal="CENTER"/></hh:paraPr></hh:head>')
+    fax = ('<hp:tc><hp:subList><hp:p paraPrIDRef="7"><hp:run charPrIDRef="0"><hp:t></hp:t></hp:run></hp:p></hp:subList>'
+           '<hp:cellAddr colAddr="1" rowAddr="3"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    body = _tbl([[_c(0, 0, "법인등록번호"), _c(1, 0, "")], [_c(0, 1, "주소"), _c(1, 1, "")],
+                 [_c(0, 2, "전 화"), _c(1, 2, "")], [_c(0, 3, "FAX"), fax]])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"법인등록번호": "110111-1234567", "주소": "강원 정선", "전화번호": "033-111-2222", "팩스번호": "033-111-3333"})
+    fill_hwpx(src, tmp_path / "ao.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
+    para = {t: re.search(rf'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?{re.escape(t)}', out, re.S).group(1)
+            for t in ("110111-1234567", "강원 정선", "033-111-2222", "033-111-3333")}
+    assert para == {"110111-1234567": "7", "강원 정선": "0", "033-111-2222": "7", "033-111-3333": "7"}

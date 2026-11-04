@@ -441,6 +441,10 @@ class _Chars:
         m = re.search(r'<(?:[\w.-]+:)?ratio\b[^>]*\bhangul="(\d+)"', self.blocks.get(cid, ""))
         return int(m.group(1)) / 100 if m else 1.0
 
+    def align(self, pid: str) -> str:
+        m = re.search(r'<(?:[\w.-]+:)?align\b[^>]*\bhorizontal="(\w+)"', self.paras.get(pid, ""))
+        return m.group(1) if m else ""
+
     def spacing(self, pid: str) -> float | None:
         """줄 간격 비율(160% → 1.6). 비율이 아닌 줄 간격(고정값 등)·문단 모양을 모르면 None."""
         block = self.paras.get(pid, "")
@@ -581,6 +585,28 @@ def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int) -> str:
     return xml
 
 
+_NUMBER = re.compile(r"[\d*][\d\-*~.() ]{5,}")
+
+
+def _align_numbers(xml: str, edits: list, chars: "_Chars", override: dict[int, str]) -> None:
+    """같은 표·같은 열에 넣은 번호(전화·FAX·등록번호) 칸 중 하나가 가운데 정렬이면 나머지 번호 칸도 가운데로
+    (11/04 사용자 요청: 서식 1에서 FAX만 가운데, 법인등록번호·전화는 왼쪽이라 어긋나 보임)."""
+    by_col: dict[int, list[tuple[Cell, str]]] = {}
+    for cell, lines, _keep in edits:
+        if not lines or len(lines) != 1 or not _NUMBER.fullmatch(lines[0].strip()):
+            continue
+        m = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[cell.start:cell.end])
+        if m:
+            by_col.setdefault(cell.col, []).append((cell, m.group(1)))
+    for group in by_col.values():
+        center = next((pid for _c, pid in group if chars.align(pid) == "CENTER"), None)
+        if center is None or len(group) < 2:
+            continue
+        for cell, pid in group:
+            if chars.align(pid) != "CENTER":
+                override[cell.start] = center
+
+
 def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "") -> FillReport:
     """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸)."""
     rep = FillReport(Path(dst).name)
@@ -594,6 +620,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
         if re.fullmatch(r"Contents/section\d+\.xml", name):
             xml = data.decode("utf-8")
             edits: list[tuple[Cell, list[str], bool]] = []
+            para_override: dict[int, str] = {}  # 칸 시작 위치 → 쓸 문단 모양(번호 칸 가운데 정렬 맞춤)
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
                 for i in range(len(_spans(xml, "tbl"))):
                     xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
@@ -659,6 +686,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if done:
                         edits.append((c, None, new_seg))
                         rep.filled += done
+                if chars is not None:
+                    _align_numbers(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override)
                 if none_rule and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
                     head = [c for c in cells if c.row == 0]
                     body = [c for c in cells if c.row > 0]
@@ -671,6 +700,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if lines is None:  # 칸 안 빈자리 채우기 — 바꾼 칸 그대로
                     xml = xml[:cell.start] + keep + xml[cell.end:]
                     continue
+                if cell.start in para_override:
+                    seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")\d+(")', rf"\g<1>{para_override[cell.start]}\2", seg, count=1)
                 char_id = None
                 if chars is not None and len(lines) == 1 and not keep:
                     char_id, note = _fit_char(seg, lines[0], chars)

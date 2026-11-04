@@ -45,6 +45,8 @@ def main(argv: list[str]) -> int:
         env = merged_env(read_env(ENV_FILE), env)
     else:
         print(f"{ENV_FILE}이 없습니다 — 서비스키 없이 실행합니다", file=sys.stderr)
+    # 웹앱이 수집 뒤 스스로 다시 켜게 — webapp_run.sh가 보는 요청 파일(webapp/autorestart.py). 이 스크립트는 NAS에서만 쓴다.
+    env.setdefault("WEBAPP_RESTART_FILE", str(ENV_FILE.parents[1] / "control" / "restart-webapp"))
     os.execvpe(argv[0], argv, env)
     return 1
 

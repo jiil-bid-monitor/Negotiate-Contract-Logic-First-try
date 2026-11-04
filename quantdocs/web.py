@@ -53,6 +53,12 @@ _lock = threading.Lock()
 _build_lock = threading.Lock()
 
 
+def busy() -> bool:
+    """공고 분석·서류 만들기가 도는 중이면 True (웹앱이 다시 켜기 전에 본다)."""
+    with _lock:
+        return any(job.get("state") in ("running", "building") for job in _jobs.values())
+
+
 def _cleanup() -> None:
     now = time.time()
     if JOBS.exists():

@@ -138,9 +138,10 @@ _HEAD_LINE = re.compile(r"^\s*(?:[가-하]\.|\d+\.|[ⅠⅡⅢⅣⅤⅥⅦ]|□|�
 # ⑤ 서식 본문 머리 "〔서식 3호〕" 다음 줄 제목 — 목록이 범위("2~10호")로만 적었거나 없을 때 이름을 채움
 # 번호 표기: "서식 3", "서식 3호", "서식 제3호", "서식2~10호", "서식5호, 6호", "서식7, 8호", "서식4-1"(4번의 하위 서식)
 _NO = r"서식\s*(?:제\s*)?\d+\s*호?(?:\s*-\s*\d+)?(?:\s*[~∼,]\s*(?:서식\s*)?(?:제\s*)?\d+\s*호?)*"
-_FORM_CELL = re.compile(rf"^\s*[\[〔<【〈《＜(]?\s*(?P<nos>{_NO})\s*[\]〕>】〉》＞)]?\s*$")
-_FORM_INLINE = re.compile(rf"[(<〔\[【〈《＜]\s*(?P<nos>{_NO})\s*[)>〕\]】〉》＞]")
-_FORM_HEAD = re.compile(r"^\s*[\[〔<【〈《＜]\s*서식\s*(?:제\s*)?(\d+)\s*호?\s*[\]〕>】〉》＞]\s*(?P<rest>.*)$")
+_SYM = r"[^\w\s|]"  # 서식 번호를 감싸는 특수기호 하나 — 괄호 모양을 가리지 않음(11/04 사용자 요청: 〈서식 11〉 등)
+_FORM_CELL = re.compile(rf"^\s*(?:{_SYM}\s*)?(?P<nos>{_NO})\s*(?:{_SYM})?\s*$")
+_FORM_INLINE = re.compile(rf"{_SYM}\s*(?P<nos>{_NO})\s*{_SYM}")
+_FORM_HEAD = re.compile(rf"^\s*{_SYM}\s*서식\s*(?:제\s*)?(\d+)\s*호?(?P<sub>\s*-\s*\d+)?\s*{_SYM}\s*(?P<rest>.*)$")
 _LIST_MARK = re.compile(rf"^\s*(?:\d+\s*[).]|[{_CIRCLED}]|[-·∙•▪]|[가-하]\.)\s*")
 
 
@@ -257,7 +258,7 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
         return all([add_one(n, label, i, True, q) for n in span])
 
     for i, ln in enumerate(lines):  # ④ 서식 목차 표 "[서식 N] | 이름" — 이름이 가장 정확해서 먼저
-        m = re.match(r"^\s*(?:[\[〔<【〈《＜]\s*)?서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:-\s*\d+)?\s*(?:[\]〕>】〉》＞]\s*)?\|\s*([^|]+)", ln)
+        m = re.match(rf"^\s*(?:{_SYM}\s*)?서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:-\s*\d+)?\s*(?:{_SYM}\s*)?\|\s*([^|]+)", ln)
         if m:  # "[서식 4-1] | 공동수급표준협정서(공동이행)" → 서식4 = 공동수급표준협정서, "서식 1호 | 표지 |"(11/03 영동군)
             name = re.sub(r"\s*\([^)]*\)\s*$", "", m.group(2)) if "-" in ln.split("|")[0] else m.group(2)
             name = re.split(r"\s※", name)[0]  # "… 서약서 ※ 서식 16호 이행 서약서는 …" 꼬리 설명
@@ -307,7 +308,7 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
     heads: dict[int, tuple[int, str]] = {}
     for i, ln in enumerate(lines):
         m = _FORM_HEAD.match(ln)
-        if m and "|" not in ln:
+        if m and "|" not in ln and not m.group("sub"):  # '〔서식 4-1〕' 하위 서식은 4번 이름으로 안 씀
             heads[int(m.group(1))] = (i, m.group("rest"))
     for n, (i, rest) in sorted(heads.items()):
         if n in found and n not in weak:

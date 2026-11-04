@@ -206,3 +206,14 @@ def test_forms_angle_bracket_heads_and_broken_names():
     assert got[13] == "사업수행능력평가(정량적 지표) 자료 (11~19)"  # 본문 머리가 없는 번호는 범위 이름 그대로
     assert got[20] == "기술제안서(정성적 지표)"
     assert got[26] == "위임장"
+
+
+def test_form_heads_any_symbol():
+    """서식 머리는 괄호 모양을 가리지 않음 — 특수기호 + 서식 N + 특수기호(11/04 사용자 요청). 문장 속 '※서식 7호는'은 아님."""
+    from quantdocs.catalog import load_catalog
+    from quantdocs.notice import read_forms
+
+    text = "\n".join(["◈서식 3◈", "제안회사 일반현황", "｢서식 4｣", "수행실적", "◆서식5호◆ 투입인력",
+                      "〔서식 6-1〕", "하위서식", "〔서식 6〕", "공동수급협정서", "※서식 7호는 계약 시 제출"])
+    got = [(f.no, f.name) for f in read_forms(text, "x.hwp", load_catalog())]
+    assert got == [(3, "제안회사 일반현황"), (4, "수행실적"), (5, "투입인력"), (6, "공동수급협정서")]

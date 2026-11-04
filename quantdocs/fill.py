@@ -15,6 +15,7 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from xml.sax.saxutils import escape
 
 
@@ -46,7 +47,9 @@ def _spans(xml: str, tag: str, start: int = 0, end: int | None = None) -> list[t
 
 
 def _text(seg: str) -> str:
-    return "".join(re.findall(r"<(?:[\w.-]+:)?t\b[^>]*>(.*?)</(?:[\w.-]+:)?t>", seg, flags=re.S))
+    """칸·문단의 글. 글 안 태그(<hp:fwSpace/>·<hp:tab/> 등)는 빈칸으로(11/04: '상호<fwSpace/>또는 법인명' 이름표를 못 알아봄)."""
+    raw = "".join(re.findall(r"<(?:[\w.-]+:)?t\b[^>]*>(.*?)</(?:[\w.-]+:)?t>", seg, flags=re.S))
+    return re.sub(r"<[^>]*>", " ", raw)
 
 
 def _sq(s: str) -> str:
@@ -113,7 +116,7 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("사업자등록번호", "사업자번호"), "사업자등록번호"),
     (("법인등록번호",), "법인등록번호"),
     (("회사명", "업체명", "상호", "법인명", "제안사명"), "회사명"),
-    (("대표자",), "대표자"),
+    (("대표자", "대표이사"), "대표자"),
     (("주소", "소재지"), "주소"),
     (("전화",), "전화번호"),
     (("팩스", "FAX"), "팩스번호"),
@@ -123,15 +126,17 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("자본금",), "자본금"),
     (("사업분야", "업태"), "사업분야"),
     (("면허/허가/등록증", "면허보유", "등록증보유"), "_licenses"),
+    (("입찰명", "입찰건명"), "_title"),  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
 ]
 _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
 
 
 _SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|직인|날인)[)）]?$")
 _INLINE_LABELS = {"TEL": "전화번호", "Tel": "전화번호", "전화": "전화번호", "전화번호": "전화번호",
-                  "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일"}
-_INLINE_RE = re.compile(r"(?P<lab>TEL|Tel|FAX|Fax|E-?mail|전화번호|전화|팩스|이메일)(?P<colon>\s*[:：])(?P<sp>[ \u00a0\u3000]*)"
-                        r"(?=(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일)|$)")
+                  "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일",
+                  "업태": "업태", "종목": "종목"}
+_INLINE_RE = re.compile(r"(?P<lab>TEL|Tel|FAX|Fax|E-?mail|전화번호|전화|팩스|이메일|업태|종목)(?P<colon>\s*[:：])(?P<sp>[ \u00a0\u3000]*)"
+                        r"(?=(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|$)")
 
 
 def _fill_inline(seg: str, vault) -> tuple[str, list[str]]:
@@ -172,6 +177,8 @@ def _label_key(text: str) -> str | None:
     for words, key in LABELS:  # 앞머리가 맞는 것 먼저('홈페이지주소'는 주소가 아니라 홈페이지)
         if any(t.startswith(w) for w in words):
             return key
+    if "사업자등록번호" in t:  # '생년월일(사업자등록번호)' — 법인은 사업자등록번호(서식 24)
+        return "사업자등록번호"
     for words, key in LABELS:
         if len(t) <= 8 and any(w in t for w in words):
             return key
@@ -333,11 +340,41 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
     return edits
 
 
+_SEAL_TAIL = r"[(（](?:인|서명)[^()（）]{0,8}[)）]"  # '(인)'·'(인 또는 서명)'
+# 쌍점 없이 이름표만 있는 줄 — 이런 줄이 둘 이상 잇달아 있을 때만(서식 21 '주  소 / 상  호 / 대표자')
+_BARE_LABELS = {"주소": "주소", "소재지": "주소", "상호": "회사명", "업체명": "회사명", "회사명": "회사명",
+                "상호또는법인명": "회사명", "대표자": "대표자", "대표이사": "대표자"}
+
+
+def _after_colon(seg: str, value: str, seal: bool) -> str | None:
+    """문단(또는 한 문단짜리 칸) 글 속 첫 쌍점 뒤에 값. 쌍점이 없으면 맨 끝 글 뒤에 ' : 값'. 못 넣으면 None."""
+    ts = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", seg, re.S))
+    hit = next((t for t in ts if re.search(r"[:：]", re.sub(r"<[^>]*>", "", t.group(2)))), None)
+    if hit is None:
+        if not ts:
+            return None
+        last = ts[-1]
+        body = last.group(2).rstrip(" ") + f" : {escape(value)}"
+    else:
+        used = []
+
+        def put(mm):  # 글 속 첫 쌍점에만 — 태그 이름의 쌍점(<hp:tab/>)은 건드리지 않음
+            if mm.group(1) or used:
+                return mm.group(0)
+            used.append(1)
+            return f"{mm.group(2)} {escape(value)}" + " " * max(2 if seal else 0, len(mm.group(3)) - len(value) - 1)
+        last = hit
+        body = re.sub(r"(<[^>]*>)|([:：])( *)", put, hit.group(2))
+    seg = seg[:last.start(2)] + body + seg[last.end(2):]
+    return re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+
+
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
     # 표 안이어도 여러 줄짜리 칸(서식 본문 칸)의 줄은 채움 — 한 줄짜리 칸은 이름표 칸이라 표 채우기가 옆 칸에 씀(11/04 서식 8·9 서명 줄)
-    single = [(cs, ce) for cs, ce in _spans(xml, "tc") if len(_spans(xml, "p", cs, ce)) <= 1]
+    cells = _spans(xml, "tc")
+    single = [(cs, ce) for cs, ce in cells if len(_spans(xml, "p", cs, ce)) <= 1]
     edits = []
     paras, stack = [], []  # 모든 문단(표 칸 안 문단 포함) — _spans는 맨 바깥만 줌
     for m in re.finditer(r"<(/?)(?:[\w.-]+:)?p\b[^>]*?(/?)>", xml):
@@ -347,35 +384,32 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
             stack.append(m.start())
         elif stack:
             paras.append((stack.pop(), m.end()))
-    for s, e in sorted(paras):
+    cands = []  # (s, e, 이름표, 서명 줄?, 쌍점 없는 이름표?, 문단 순번)
+    for n, (s, e) in enumerate(sorted(paras)):
         if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single):
             continue
-        text = re.sub(r"<[^>]+>", " ", _text(xml[s:e]))  # 글 안 탭(<hp:tab/>) 등은 빈칸으로
-        # '업 체 명 :' 또는 서명 줄 '대표자 :          (인)'(11/04 서식 8·9)
-        m = re.fullmatch(r"\s*(.{2,16}?)\s*[:：]\s*([(（](?:인|서명)[)）])?\s*", text)
-        if not m:
-            continue
-        key = _label_key(m.group(1))
+        text = _text(xml[s:e])
+        # '업 체 명 :' 또는 서명 줄 '대표자 :          (인)'(11/04 서식 8·9) · '신청인(대표자) :      (인 또는 서명)'(서식 1)
+        m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL})?\s*", text)
+        if m:
+            cands.append((s, e, m.group(1), bool(m.group(2)), False, n))
+        elif _sq(text) in _BARE_LABELS and not any(cs <= s and e <= ce for cs, ce in cells):  # 표 칸 안 줄은 머리글일 수 있음
+            cands.append((s, e, _sq(text), False, True, n))
+    bare_at = {c[5] for c in cands if c[4]}
+    for s, e, label, seal, bare, n in cands:
+        if bare and not ({n - 1, n + 1} & bare_at):
+            continue  # 혼자 있는 '주소' 같은 줄은 제목일 수 있음
+        key = _BARE_LABELS[label] if bare else _label_key(label)
         value = _value(key, vault) if key else ""
         if not value:
             continue
-        seg = xml[s:e]
-        ts = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", seg, re.S))
-        hit = next((t for t in ts if re.search(r"[:：]", t.group(2))), None)
-        if hit is None:
+        seg = _after_colon(xml[s:e], value, seal)
+        if seg is None:
             continue
-        used = []
-
-        def put(mm):  # 글 속 첫 쌍점에만 — 태그 이름의 쌍점(<hp:tab/>)은 건드리지 않음
-            if mm.group(1) or used:
-                return mm.group(0)
-            used.append(1)
-            return f"{mm.group(2)} {escape(value)}" + " " * max(2 if m.group(2) else 0, len(mm.group(3)) - len(value) - 1)
-        body = re.sub(r"(<[^>]*>)|([:：])( *)", put, hit.group(2))
-        seg = seg[:hit.start(2)] + body + seg[hit.end(2):]
-        seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+        if bare:  # 쌍점 없는 서식은 쌍점 없이 — ' : 값'을 '   값'으로
+            seg = seg.replace(f" : {escape(value)}", f"   {escape(value)}", 1)
         edits.append((s, e, seg))
-        rep.filled.append(f"{_sq(m.group(1))} → {value[:40]}")
+        rep.filled.append(f"{_sq(label)} → {value[:40]}")
     for s, e, seg in reversed(edits):
         xml = xml[:s] + seg + xml[e:]
     return xml
@@ -547,9 +581,11 @@ def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int) -> str:
     return xml
 
 
-def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> FillReport:
-    """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로)."""
+def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "") -> FillReport:
+    """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸)."""
     rep = FillReport(Path(dst).name)
+    if title:  # 묶음은 그대로 두고 이번 서식에만 공고 이름을 더함
+        vault = SimpleNamespace(info={**vault.info, "_title": title}, docs=vault.docs, history=vault.history)
     zin = zipfile.ZipFile(src)
     out_entries = {}
     chars = _Chars(zin.read("Contents/header.xml").decode("utf-8")) if "Contents/header.xml" in zin.namelist() else None
@@ -593,9 +629,20 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                         continue
                     target = by_pos.get((c.row, c.col + c.colspan))
                     value = _value(key, vault)
-                    if key == "회사명" and "대표" in _sq(c.text) and _value("대표자", vault):
+                    if key == "회사명" and "대표" in _sq(c.text) and not _sq(c.text).startswith("대표사") and _value("대표자", vault):
                         value = f"{value} {_value('대표자', vault)}".strip()  # '상호·법인명(대표성명)'
-                    if target is None or not value:
+                    if not value:
+                        continue
+                    if target is None and not any(o.row == c.row and o.col > c.col for o in cells) \
+                            and len(_spans(xml, "p", c.start, c.end)) == 1 \
+                            and re.fullmatch(r"[^:：]{1,20}[:：]?", c.text.strip()):  # 이름표 하나뿐('TEL : FAX :'는 칸 안 채우기가 함)
+                        # 줄 전체를 차지하는 '◦대표자 :'·'제안업체명' 칸(서식 11 표지) — 그 칸 안 이름표 뒤에
+                        seg = _after_colon(xml[c.start:c.end], value, False)
+                        if seg is not None:
+                            edits.append((c, None, seg))
+                            rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
+                        continue
+                    if target is None:
                         continue
                     seal = _sq(target.text)
                     if not target.blank:

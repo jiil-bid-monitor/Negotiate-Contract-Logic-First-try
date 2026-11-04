@@ -186,7 +186,8 @@ def summary(a: Analysis) -> dict:
 
 # 공고마다 사람이 정하는 값(담당 PM·투입 인력·조직·경력·자기평가 점수)을 적는 서식 — 회사 자료로 채우지 않고 제안요청서 양식 그대로 넣음
 # (11/03 사용자 요청: 통합본 받은 뒤 직접 기입). 이 서식의 '주소·전화' 같은 칸은 사람 것이라 회사 값을 넣으면 틀림.
-_MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참여자|조직|재직|자격\s*사항|자기\s*평가|실적\s*증명")
+# 자기평가 심사표는 회사 정보 칸만 채움(점수 칸은 비워 둠 — 점수 계산은 하지 않음, 11/04 서식 24)
+_MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참여자|조직|재직|자격\s*사항|실적\s*증명")
 
 
 def is_manual(name: str) -> bool:
@@ -232,7 +233,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 if is_track and not rows:  # 공고에 실적 요건이 없으면 서식 제목(분야·최근 N년)으로 고름(11/04 사용자 결정)
                     rows, why = form_tracks(c.title, vault.tracks, notice_date or date.today())
                     a.notes += [f"{c.file}: {w}" for w in why]
-                rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None)
+                rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title)
                 reports.append(rep)
                 parts.append((c, filled_dir / c.file))
             if parts:  # 서식 전체(채운 것 + 직접 기입)를 한글 파일 하나로 — 담당자가 이 파일 하나에서 기입(11/03 사용자 요청)

@@ -221,9 +221,10 @@ def test_manual_forms():
     from quantdocs.build import is_manual
 
     for n in ("참여인력 자격사항(총괄)", "참여인력 개인별 이력사항", "수행조직 및 인원현황", "사업책임자(PM) 경력",
-              "재직증명서", "사업수행능력평가 자기평가표", "실적증명서"):
+              "재직증명서", "실적증명서"):
         assert is_manual(n), n
-    for n in ("입찰참가신청서", "일반현황 및 연혁", "사업수행실적 집계표", "위임장", "청렴계약이행서약서"):
+    # 자기평가 심사표는 회사 정보 칸만 채움(점수 칸은 비움, 11/04 서식 24)
+    for n in ("입찰참가신청서", "일반현황 및 연혁", "사업수행실적 집계표", "위임장", "청렴계약이행서약서", "사업수행능력평가 자기평가표"):
         assert not is_manual(n), n
 
 
@@ -655,3 +656,35 @@ def test_loose_pdf_in_quant_docs_folder(tmp_path: Path, monkeypatch):
     assert v.info["전화번호"] == "031-000-1111" and any("묶음 밖 PDF" in n for n in notes)
     picks, _ = pick(list(v.files), ["입찰참가자격 등록증"], [], dt.date(2026, 11, 4))
     assert "files/경쟁입찰참가등록증.pdf" in [p.path for p in picks]
+
+
+def test_fill_tagged_labels_bare_lines_title_and_biz_kind(tmp_path: Path):
+    """11/04 필암서원 비교: '상호<fwSpace/>또는 법인명' 이름표, '대표사 업체명'·'생년월일(사업자등록번호)', 줄 전체 칸 '◦대표자 :',
+    '대표이사 :  (인)'·'신청인(대표자) :  (인 또는 서명)', 쌍점 없는 '주  소 / 상  호 / 대표자' 줄, 입찰명, 업태·종목."""
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.importer import read_bizreg
+
+    biz = read_bizreg("사 업 의 종 류 :\n:\n업태 사업시설 관리, 사업지원 및 임대 서\n비스업\n제조\n"
+                      "종목 전시, 컨벤션 및 행사 대행업\n실물모형제작\n(별지 출력)발 급 사 유 : 정정")
+    assert biz["업태"] == "사업시설 관리, 사업지원 및 임대 서비스업" and biz["종목"] == "전시, 컨벤션 및 행사 대행업"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선", "사업자등록번호": "123-45-67890",
+                              "업태": "서비스업", "종목": "행사대행"})
+
+    def para(t):
+        return f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    tbl = ("<hp:p><hp:run><hp:tbl><hp:tr>" + _c(0, 0, "상호<hp:fwSpace/>또는<hp:fwSpace/>법인명") + _c(1, 0, "")
+           + _c(2, 0, "대표사 업체명") + _c(3, 0, "") + "</hp:tr><hp:tr>" + _c(0, 1, "생년월일(사업자등록번호)") + _c(1, 1, "")
+           + _c(2, 1, "사업분야") + _c(3, 1, " 업태 :          종목 : ") + "</hp:tr><hp:tr>" + _c(0, 2, "입 찰 건 명") + _c(1, 2, "")
+           + "</hp:tr></hp:tbl></hp:run></hp:p>")
+    cover = "<hp:p><hp:run><hp:tbl><hp:tr>" + _c(0, 0, "◦대표자 : ") + "</hp:tr></hp:tbl></hp:run></hp:p>"
+    body = (tbl + cover + para("대표이사 :            (인)") + para("신청인(대표자) :          (인 또는 서명)")
+            + para("   주  소   ") + para("   상  호   ") + para("   대표자 ") + para("귀하") + para("주소"))
+    fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "to.hwpx", v, title="가상 전시 제작")
+    out = zipfile.ZipFile(tmp_path / "to.hwpx").read("Contents/section0.xml").decode()
+    assert out.count("(주)가상") == 3  # 상호 칸 · 대표사 업체명 칸 · 상  호 줄
+    assert "123-45-67890" in out and "가상 전시 제작" in out
+    assert "업태 : 서비스업" in out and "종목 : 행사대행" in out
+    assert "◦대표자 : 홍길동" in out
+    assert re.search(r"대표이사 : 홍길동 +\(인\)", out) and re.search(r"신청인\(대표자\) : 홍길동 +\(인 또는 서명\)", out)
+    assert "주  소   강원 정선" in out and "대표자   홍길동" in out
+    assert "<hp:t>주소</hp:t>" in out  # 혼자 있는 '주소' 줄(제목일 수 있음)은 그대로

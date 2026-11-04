@@ -214,7 +214,29 @@ def read_bizreg(text: str) -> dict[str, str]:
         name = m.group(1) if m else ""
     if name:
         info["대표자"] = name
+    info.update(_biz_kind(t))
     return info
+
+
+def _biz_kind(t: str) -> dict[str, str]:
+    """사업자등록증 첫 쪽 '사업의 종류'의 첫 업태·종목(주업종) — 서식 12 '업태 : 종목 :' 칸(11/04 사용자 요청).
+    홈택스 출력본은 업태·종목이 세로 칸이라 긴 글이 줄바뀜('…임대 서' + '비스업') — 짧은 끝 조각은 앞 줄에 이음."""
+    m = re.search(r"(?:^|\n)\s*업\s*태\s*[:：]?\s*([^\n]*)\n(.*?)(?:^|\n)\s*종\s*목\s*[:：]?\s*([^\n]*)\n(.*?)"
+                  r"(?=\n[^\n]*(?:별지|발\s*급\s*사\s*유|사업자\s*단위|전자세금)|\Z)", t, re.S)
+    if not m:  # 한 줄에 '업태 X 종목 Y'
+        m1 = re.search(r"업\s*태\s*[:：]?\s*(\S[^\n]*?)\s+종\s*목\s*[:：]?\s*(\S[^\n]*)", t)
+        return {"업태": m1.group(1).strip(), "종목": m1.group(2).strip()} if m1 else {}
+
+    def first(head: str, rest: str) -> str:
+        lines = [x.strip() for x in [head, *rest.split("\n")] if x.strip() and x.strip() not in (":", "：")]
+        if not lines:
+            return ""
+        out = lines[0]
+        if len(lines) > 1 and len(out) >= 10 and len(lines[1]) <= 3 and not out.endswith("업"):
+            out += lines[1]  # 긴 글이 칸 너비에서 끊긴 끝 조각만 한 번
+        return out
+    out = {"업태": first(m.group(1), m.group(2)), "종목": first(m.group(3), m.group(4))}
+    return {k: v for k, v in out.items() if v}
 
 
 # ── 경쟁입찰참가자격등록증(나라장터 출력본) ───────────────────

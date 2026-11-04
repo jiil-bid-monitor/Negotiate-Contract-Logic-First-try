@@ -40,6 +40,9 @@
   #forms tr.fdone td:not(.chk) { color:var(--mute); text-decoration:line-through }
   ul { margin:6px 0; padding-left:20px } .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:s 1s linear infinite; vertical-align:-2px }
   @keyframes s { to { transform:rotate(360deg) } } .hide { display:none }
+  details.cands > summary { cursor:pointer; color:var(--accent, #1b6e43); font-weight:600; margin:6px 0 }
+  details.cands[open] > summary { margin-bottom:8px }
+  details.cands .cl, details.cands[open] .op { display:none } details.cands[open] .cl { display:inline }
   .scroll { overflow-x:auto } .nw { white-space:nowrap }
 </style>
 </head>
@@ -89,15 +92,16 @@
     <div class="card">
       <h2>실적 요건 · 후보</h2>
       <ul id="tracks"></ul>
-      <div class="scroll"><table id="cands"></table></div>
-      <p class="muted">후보는 기간·금액(지분 반영)만으로 고른 것 — 제출할 실적은 담당자가 확정</p>
+      <details id="candBox" class="cands">
+        <summary>실적 후보 <span id="candN"></span> <span class="op">펼치기</span><span class="cl">접기</span></summary>
+        <div class="scroll"><table id="cands"></table></div>
+        <p class="muted">후보는 기간·금액(지분 반영)만으로 고른 것 — 제출할 실적은 담당자가 확정</p>
+      </details>
     </div>
 
     <div class="card">
-      <h2>공고 정보 · 제출서류</h2>
+      <h2>공고 정보</h2>
       <div class="grid" id="info"></div>
-      <h3>제출서류</h3>
-      <ul id="submit"></ul>
     </div>
 
     <div class="card">
@@ -223,8 +227,6 @@ function render(j) {
     showProgress(s.forms.length, d);
   };
   showProgress(s.forms.length, done);
-  $("#submit").innerHTML = s.submit.map(x => `<li>${esc(x.text)}${x.kind ? ` <span class="chip">${esc(x.kind)}</span>` : ""}</li>`).join("")
-    || '<li class="muted">못 찾음 — 공고문 확인</li>';
   $("#quals").innerHTML = "<tr><th>조건</th><th>자격</th><th>지일</th><th>첨부할 서류</th></tr>" +
     (s.quals.length ? s.quals.map(q => q.items.map((it, i) => `<tr><td>${i ? "" : esc(q.kind)}</td>
       <td>${esc(it.name)}${it.code ? ` <span class="muted">(${esc(it.code)})</span>` : ""}${it.need ? ` <span class="chip">${esc(it.need)}</span>` : ""}</td>
@@ -243,6 +245,10 @@ function render(j) {
   $("#cands").innerHTML = s.candidates.length ? "<tr><th>사업명</th><th>발주기관</th><th>준공</th><th>인정 금액</th><th>확인</th></tr>" +
     s.candidates.map(c => `<tr><td>${esc(c.name)}</td><td>${esc(c.org)}</td><td>${esc(c.done)}</td><td>${won(c.amount)}</td>
       <td class="warn">${esc(c.check)}</td></tr>`).join("") : "";
+  // 실적 후보는 길어서 접어 둠 — '펼치기'를 눌러야 보임(11/04 사용자 요청)
+  $("#candBox").open = false;
+  $("#candBox").classList.toggle("hide", !s.candidates.length);
+  $("#candN").textContent = s.candidates.length ? `${s.candidates.length}건` : "";
   $("#result").classList.remove("hide");
 }
 </script>

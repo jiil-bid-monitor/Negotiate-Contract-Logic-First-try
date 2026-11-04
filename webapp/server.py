@@ -17,6 +17,7 @@ import logging
 import mimetypes
 import os
 import secrets
+import sys
 import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,6 +30,7 @@ from nego.config import ConfigError, load_config, redact
 from nego.http_client import ApiError
 
 from . import mview
+from .autorestart import RestartAfterCollect
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .docscan import DocScan
 from .mstore import TeamStore
@@ -401,6 +403,12 @@ def decisions_csv(rows: list[dict[str, Any]]) -> str:
     return buf.getvalue()
 
 
+def busy_now(app: App) -> bool:
+    """수집·세부품명 확인·정량평가서 작업 중이면 True — 다시 켜면 끊기는 일들."""
+    quant = sys.modules.get("quantdocs.web")  # 정량평가서 탭을 안 썼으면 불러오지 않는다
+    return bool(app.collector.job.running or app.docscan.state["running"] or (quant is not None and quant.busy()))
+
+
 def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, collector: Collector | None = None,
               backup_dir: Path | None = None) -> App:
     store = Store(db_path)
@@ -444,6 +452,11 @@ def main(argv: list[str] | None = None) -> int:
         logging.warning("피드백 시트: %s", err)
     if sheet_cfg is not None:
         SheetSync(app.team.snapshot).start()
+    # NAS에서만 — 수집이 끝나면 다시 켜 메모리를 비운다 (webapp/autorestart.py)
+    restart_file = os.environ.get("WEBAPP_RESTART_FILE", "").strip()
+    if restart_file:
+        RestartAfterCollect(Path(restart_file), lambda: app.collector.job.finished_at is not None,
+                            lambda: busy_now(app)).start()
     if app.past.error:
         logging.warning(app.past.error)
     else:

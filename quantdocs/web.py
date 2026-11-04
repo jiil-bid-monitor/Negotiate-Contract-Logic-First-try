@@ -172,7 +172,7 @@ def _run_build(job: dict) -> None:
             out = JOBS / job["id"] / "out" / f"정량평가서_{job['no']}.zip"
             n = job.get("notice", {})
             build([Path(f) for f in job["files"]], v, out, n.get("title", ""), job.get("date"),
-                  n.get("award", ""), n.get("contract", ""), n.get("licenses") or [])
+                  n.get("award", ""), n.get("contract", ""), n.get("licenses") or [], n.get("no") or job["no"])
             job["zip"] = str(out)
             job["state"] = "built"
         except Exception as err:

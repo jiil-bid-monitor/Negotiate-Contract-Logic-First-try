@@ -756,3 +756,22 @@ def test_other_party_zone_and_placeholder_signature(tmp_path: Path):
     assert re.search(r"\(주\)가상 대표자 : +홍길동 \(인\)", out)
     assert "대표이사 ○○○     (인)" in out
     assert out.count("(주)가상") == 2  # 제안업체 칸 + 서식 19 줄
+
+
+def test_notice_number_autofill(tmp_path: Path):
+    """11/04 사용자 요청: 공고번호는 공고마다 자동 — 공고문 '장성군 공고 제2026 - 1129 호' → 서식 2 '제 2026 - 호' 칸에 번호,
+    빈 '입찰공고번호' 칸엔 '제2026-1129호'. 공고문에 없으면 나라장터 번호(빈 칸만), 공고명 칸 = 공고 이름."""
+    from quantdocs.fill import agency_notice_no, fill_hwpx
+
+    assert agency_notice_no({"제안요청서.hwpx": "…", "공고문.hwpx": "장성군 공고 제2026 - 1129 호\n…"}) == ("2026", "1129")
+    assert agency_notice_no({"공고문.pdf": "공고 없음"}) is None
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    body = _tbl([[_c(0, 0, "입  찰   공  고 (지 명)  번  호"), _c(1, 0, "제 2026 -     호")],
+                 [_c(0, 1, "입찰공고번호"), _c(1, 1, "")], [_c(0, 2, "공 고 명"), _c(1, 2, "")]])
+    fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", body), tmp_path / "no.hwpx", v, title="가상 전시", notice_no=("2026", "1129"),
+              g2b_no="R26BK00000001")
+    out = zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode()
+    assert "제 2026 - 1129 호" in out and "제2026-1129호" in out and "가상 전시" in out and "R26BK" not in out
+    fill_hwpx(_mini_hwpx(tmp_path / "m.hwpx", body), tmp_path / "mo.hwpx", v, g2b_no="R26BK00000001")
+    out = zipfile.ZipFile(tmp_path / "mo.hwpx").read("Contents/section0.xml").decode()
+    assert "제 2026 -     호" in out and out.count("R26BK00000001") == 1  # 자리표시 칸은 그대로, 빈 칸에만 나라장터 번호

@@ -126,7 +126,7 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("자본금",), "자본금"),
     (("사업분야", "업태"), "사업분야"),
     (("면허/허가/등록증", "면허보유", "등록증보유"), "_licenses"),
-    (("입찰명", "입찰건명"), "_title"),  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
+    (("입찰명", "입찰건명", "공고명"), "_title"),  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
 ]
 _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
 
@@ -172,6 +172,8 @@ def _label_key(text: str) -> str | None:
     t = _sq(text).strip(":：")
     if not t or len(t) > 16 or _SKIP_LABEL.search(t):
         return None
+    if re.fullmatch(r"(?:입찰)?공고(?:\(지명\))?번호", t):  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)
+        return "_notice_no"
     if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
         return "전화번호"
     for words, key in LABELS:  # 앞머리가 맞는 것 먼저('홈페이지주소'는 주소가 아니라 홈페이지)
@@ -659,11 +661,27 @@ def _align_numbers(xml: str, edits: list, chars: "_Chars", override: dict[int, s
                 override[cell.start] = center
 
 
-def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "") -> FillReport:
+_NO_SLOT = re.compile(r"\s*제\s*\d{4}\s*[-–]\s*호\s*")  # 서식에 미리 적힌 '제 2026 - 호'
+
+
+def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:
+    """공고문의 기관 공고번호('장성군 공고 제2026 - 1129 호') → ('2026', '1129'). 이름에 '공고'가 든 문서 먼저."""
+    for name in sorted(texts, key=lambda n: "공고" not in n):
+        m = re.search(r"공\s*고\s*제\s*(\d{4})\s*[-–]\s*(\d{1,6})\s*호", texts[name] or "")
+        if m:
+            return m.group(1), m.group(2)
+    return None
+
+
+def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "",
+              notice_no: tuple[str, str] | None = None, g2b_no: str = "") -> FillReport:
     """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸)."""
     rep = FillReport(Path(dst).name)
-    if title:  # 묶음은 그대로 두고 이번 서식에만 공고 이름을 더함
-        vault = SimpleNamespace(info={**vault.info, "_title": title}, docs=vault.docs, history=vault.history)
+    # 묶음은 그대로 두고 이번 서식에만 공고 이름·공고번호를 더함(11/04 사용자 요청 — 공고마다 자동)
+    # 공고번호 = 공고문의 기관 공고번호('제2026-1129호'), 못 찾으면 나라장터 공고번호
+    no_text = f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else g2b_no
+    if title or no_text:
+        vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text}, docs=vault.docs, history=vault.history)
     zin = zipfile.ZipFile(src)
     out_entries = {}
     chars = _Chars(zin.read("Contents/header.xml").decode("utf-8")) if "Contents/header.xml" in zin.namelist() else None
@@ -726,6 +744,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if target is None:
                         continue
                     seal = _sq(target.text)
+                    if key == "_notice_no" and _NO_SLOT.fullmatch(target.text) and notice_no:
+                        edits.append((target, [f"제 {notice_no[0]} - {notice_no[1]} 호"], False))  # 서식 모양 그대로 번호만
+                        rep.filled.append(f"{_sq(c.text)} → 제{notice_no[0]}-{notice_no[1]}호")
+                        continue
                     if not target.blank:
                         if not _SEAL_ONLY.match(seal):
                             continue

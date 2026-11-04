@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .bundle import merge, pick
 from .catalog import load_catalog
-from .fill import FillReport, fill_hwpx
+from .fill import FillReport, agency_notice_no, fill_hwpx
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
 from .kinds import detect, guide
@@ -204,7 +204,8 @@ def _safe(name: str) -> str:
 
 
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
-          award_method: str = "", contract_method: str = "", licenses: list[str] | None = None) -> Path:
+          award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
+          notice_no: str = "") -> Path:
     files = [Path(f) for f in files]
     work = Path(tempfile.mkdtemp(prefix="quantdocs_build_"))
     try:
@@ -216,6 +217,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         merged_forms: list[Path] = []  # 공고 문서마다 서식 전체를 이은 한글 파일
         merge_failed = False  # 잇지 못한 문서가 있으면 서식별 파일도 묶음에 넣음
         cut_names = {str(f.no): f.name for f in a.sheet.forms}
+        agency_no = agency_notice_no(a.sheet.texts)  # 공고문의 기관 공고번호 — 서식 공고번호 칸에(11/04 사용자 요청)
         for f in files:
             src = Path(a.converted.get(f.name, f))
             if src.suffix.lower() != ".hwpx":
@@ -233,7 +235,8 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 if is_track and not rows:  # 공고에 실적 요건이 없으면 서식 제목(분야·최근 N년)으로 고름(11/04 사용자 결정)
                     rows, why = form_tracks(c.title, vault.tracks, notice_date or date.today())
                     a.notes += [f"{c.file}: {w}" for w in why]
-                rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title)
+                rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title,
+                                agency_no, notice_no)
                 reports.append(rep)
                 parts.append((c, filled_dir / c.file))
             if parts:  # 서식 전체(채운 것 + 직접 기입)를 한글 파일 하나로 — 담당자가 이 파일 하나에서 기입(11/03 사용자 요청)

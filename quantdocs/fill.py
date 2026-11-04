@@ -230,8 +230,10 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
     return edits
 
 
-def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> FillReport:
-    """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로)."""
+def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, keys=None, history: bool = True,
+              extras: list | None = None) -> FillReport:
+    """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로).
+    keys를 주면 그 회사정보 항목만, history=False면 연혁을 안 채운다. extras: [(이름표들, 값)] — 공고 정보처럼 회사 자료 밖의 값."""
     rep = FillReport(Path(dst).name)
     zin = zipfile.ZipFile(src)
     out_entries = {}
@@ -246,8 +248,17 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                 if tracks:
                     edits += _fill_tracks(xml, cells, tracks, rep)
                 for c in cells:
+                    extra = next((v for words, v in extras or () if _sq(c.text).strip(":：") in words), None)
+                    if extra:
+                        target = by_pos.get((c.row, c.col + c.colspan))
+                        if target is not None and target.blank:
+                            edits.append((target, [extra], False))
+                            rep.filled.append(f"{_sq(c.text)} → {extra[:40]}")
+                        continue
                     key = _label_key(c.text)
-                    if "연혁" in _sq(c.text) and len(_sq(c.text)) <= 8 and vault.history:
+                    if keys is not None and key not in keys:
+                        key = None
+                    if history and "연혁" in _sq(c.text) and len(_sq(c.text)) <= 8 and vault.history:
                         lines = [f"{_fmt_ymd(h.get('연월일'))}  {h.get('내용') or ''}".strip() for h in vault.history]
                         right = by_pos.get((c.row, c.col + c.colspan))
                         if right is not None and right.blank:

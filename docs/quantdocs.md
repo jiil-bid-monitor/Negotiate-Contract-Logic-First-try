@@ -103,12 +103,12 @@ cd "<jiil-quant-docs 폴더>" && bash start_web.sh
 
 1. Windows용 Tesseract 설치(UB Mannheim 배포판) — 설치 화면 'Additional language data'에서 **Korean** 체크.
    한 줄로(Git Bash를 **관리자 권한으로** 열고 — winget 자동 설치엔 한국어가 빠져 kor 데이터를 따로 받음):
-   `cd "C:\Users\HJE\나라장터 수집\Negotiate-Contract-Logic-First-try" && winget install -e --id UB-Mannheim.TesseractOCR && curl -L -o "/c/Program Files/Tesseract-OCR/tessdata/kor.traineddata" https://github.com/tesseract-ocr/tessdata/raw/main/kor.traineddata && py -m pip install pytesseract pypdfium2 && echo >> .env && echo 'TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe' >> .env && "/c/Program Files/Tesseract-OCR/tesseract.exe" --list-langs`
+   `cd "C:\Users\HJE\나라장터 수집\Negotiate-Contract-Logic-First-try" && winget install -e --id UB-Mannheim.TesseractOCR && curl -L -o "/c/Program Files/Tesseract-OCR/tessdata/kor.traineddata" https://github.com/tesseract-ocr/tessdata/raw/main/kor.traineddata && py -m pip install pytesseract pypdfium2 && echo >> .env && echo "TESSERACT_CMD='C:\Program Files\Tesseract-OCR\tesseract.exe'" >> .env && "/c/Program Files/Tesseract-OCR/tesseract.exe" --list-langs`
    — 마지막 줄 목록에 `kor`가 보이면 됨. 확인: `py -m quantdocs vault check`에서 스캔본이 'OCR'로 읽힘.
    관리자 권한이 안 되면(kor 받기에서 Permission denied) 한국어 데이터를 사용자 폴더에 두고 `.env` `TESSDATA_PREFIX`로 알림:
-   `cd "C:\Users\HJE\나라장터 수집\Negotiate-Contract-Logic-First-try" && git pull origin claude/quantdocs-merge && mkdir -p "$HOME/tessdata" && cp "/c/Program Files/Tesseract-OCR/tessdata/eng.traineddata" "/c/Program Files/Tesseract-OCR/tessdata/osd.traineddata" "$HOME/tessdata/" && curl -L -o "$HOME/tessdata/kor.traineddata" https://github.com/tesseract-ocr/tessdata/raw/main/kor.traineddata && py -m pip install pytesseract pypdfium2 && echo >> .env && echo 'TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe' >> .env && echo "TESSDATA_PREFIX=$(cygpath -w "$HOME/tessdata")" >> .env && "/c/Program Files/Tesseract-OCR/tesseract.exe" --tessdata-dir "$HOME/tessdata" --list-langs`
+   `cd "C:\Users\HJE\나라장터 수집\Negotiate-Contract-Logic-First-try" && git pull origin claude/quantdocs-merge && mkdir -p "$HOME/tessdata" && cp "/c/Program Files/Tesseract-OCR/tessdata/eng.traineddata" "/c/Program Files/Tesseract-OCR/tessdata/osd.traineddata" "$HOME/tessdata/" && curl -L -o "$HOME/tessdata/kor.traineddata" https://github.com/tesseract-ocr/tessdata/raw/main/kor.traineddata && py -m pip install pytesseract pypdfium2 && echo >> .env && echo "TESSERACT_CMD='C:\Program Files\Tesseract-OCR\tesseract.exe'" >> .env && echo "TESSDATA_PREFIX='$(cygpath -w "$HOME/tessdata")'" >> .env && "/c/Program Files/Tesseract-OCR/tesseract.exe" --tessdata-dir "$HOME/tessdata" --list-langs`
 2. `py -m pip install -r requirements.txt` (pytesseract·pypdfium2).
-3. 설치 폴더가 PATH에 없으면 저장소 `.env`에 `TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe`.
+3. 설치 폴더가 PATH에 없으면 저장소 `.env`에 `TESSERACT_CMD='C:\Program Files\Tesseract-OCR\tesseract.exe'`(**작은따옴표 필수** — `webapp/start.sh`가 .env를 bash로 읽어 빈칸에서 끊김).
 4. NAS(도커)는 `Dockerfile`에 tesseract-ocr-kor가 들어 있음 — 이미지 다시 빌드(부장님).
 
 - 대표자 주민등록번호는 **앞 6자리만** 남기고 뒷자리는 늘 `*******`로 쓴다(원본 번호는 저장하지 않음). 대리인 줄·휴대폰 칸은 비운다.

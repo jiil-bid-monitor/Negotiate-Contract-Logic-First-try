@@ -27,10 +27,11 @@
   .muted { color:var(--mute); font-size:13px } .err { color:var(--bad) } .ok { color:var(--good) } .warn { color:var(--warn) }
   table { width:100%; border-collapse:collapse; font-size:14px } th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top }
   th { color:var(--mute); font-weight:600; font-size:12.5px; white-space:nowrap }
-  .chip { display:inline-block; padding:1px 8px; border-radius:99px; background:var(--chip); font-size:12px; margin:1px 2px 1px 0; white-space:nowrap }
+  .chip { display:inline-block; padding:1px 8px; border-radius:99px; background:var(--chip); font-size:12px; margin:1px 2px 1px 0; max-width:100%; box-sizing:border-box; overflow-wrap:anywhere }  /* 긴 파일 이름은 칸 안에서 줄바꿈 */
   .q { color:var(--accent); font-weight:700 } .tick { color:var(--good); font-weight:700 } .cross { color:var(--bad); font-weight:700 }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px 18px }
   .grid div span { display:block; color:var(--mute); font-size:12px }
+  .grid > div { min-width:0; overflow-wrap:anywhere } .grid > .wide { grid-column:1 / -1 }
   ul { margin:6px 0; padding-left:20px } .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:s 1s linear infinite; vertical-align:-2px }
   @keyframes s { to { transform:rotate(360deg) } } .hide { display:none }
   .scroll { overflow-x:auto } .nw { white-space:nowrap }
@@ -179,7 +180,7 @@ function render(j) {
     ["실적 기준일", n.ref_date ? `${n.ref_date} (${n.ref_from})` : ""]];
   s.deadlines.forEach(([k, w]) => info.push([k, w]));
   $("#info").innerHTML = info.filter(x => x[1]).map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join("") +
-    `<div><span>받은 첨부</span>${n.files.map(f => `<span class="chip">${esc(f)}</span>`).join("")}</div>`;
+    `<div class="wide"><span>받은 첨부</span>${n.files.map(f => `<span class="chip">${esc(f)}</span>`).join("")}</div>`;
   $("#notes").innerHTML = (s.notes.length || n.skipped.length) ?
     `<div class="card"><ul>${s.notes.concat(n.skipped).map(x => `<li class="warn">${esc(x)}</li>`).join("")}</ul></div>` : "";
   $("#forms").innerHTML = "<tr><th>서식</th><th>이름</th><th></th><th>서류 종류</th><th>자동</th></tr>" +

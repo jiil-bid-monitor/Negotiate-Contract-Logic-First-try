@@ -796,3 +796,14 @@ def test_g2b_notice_number_with_order():
     assert _g2b_no({"no": "R26BK01806620", "ord": "000"}, "x") == "R26BK01806620-000"
     assert _g2b_no({"no": "R26BK01806620", "ord": "1"}, "x") == "R26BK01806620-001"
     assert _g2b_no({}, "R26BK01806620") == "R26BK01806620"
+
+
+def test_applicant_line_with_corp_and_name_blanks(tmp_path: Path):
+    """11/04 사용자 요청(서식 2 하단): '신청인 : 대표자 (주)     대표자 성명 :     (인)' → (주)회사 · 성명 대표자."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    body = '<hp:p><hp:run charPrIDRef="0"><hp:t>신청인 : 대표자 (주)             대표자<hp:fwSpace/> 성명 :           (인)</hp:t></hp:run></hp:p>'
+    fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", body), tmp_path / "ao.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
+    assert re.search(r"대표자 \(주\)가상 +대표자<hp:fwSpace/> 성명 : 홍길동 +\(인\)", out) and out.count("(주)") == 1

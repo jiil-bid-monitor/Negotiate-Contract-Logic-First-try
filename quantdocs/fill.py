@@ -410,6 +410,23 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
         if _OTHER_PARTY.search(_sq(text)) or (n - 1 in other_at and re.search(r"[:：]", text) and len(_sq(text)) <= 24):
             other_at.add(n)
             continue
+        # '신청인 : 대표자 (주)        대표자 성명 :        (인)' — '(주)' 뒤·'성명 :' 뒤가 빈 서명 줄(11/04 서식 2)
+        if re.search(r"\(주\)\s{3,}", text) and re.search(rf"성\s*명\s*[:：]\s{{3,}}(?:{_SEAL_TAIL})?\s*$", text) \
+                and re.match(r"\s*(?:신청인|제안자|입찰자|신청자|대표자)", text):
+            company, name = _value("회사명", vault), _value("대표자", vault)
+            if company and name:
+                corp = company if company.startswith("(주)") else f"(주){re.sub(r'^주식회사\s*', '', company)}"
+
+                def fill_t(mm):
+                    body = mm.group(2)
+                    body = re.sub(r"\(주\)( {3,})", lambda m2: escape(corp) + " " * max(3, len(m2.group(1)) - len(corp) + 3), body, count=1)
+                    body = re.sub(r"(성\s*명\s*[:：])( {3,})", lambda m2: f"{m2.group(1)} {escape(name)}" + " " * max(3, len(m2.group(2)) - len(name) - 1), body, count=1)
+                    return mm.group(1) + body + mm.group(3)
+                seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, xml[s:e], flags=re.S)
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 → {corp} 대표자 성명 {name}")
+            continue
         # 서식에 '○○○업체 대표자 :   ○○○ (인)'처럼 자리표시가 미리 적힌 서명 줄(11/04 서식 19)
         ph = re.fullmatch(rf"\s*○{{2,}}\s*(?:업체|회사)\s*(대\s*표\s*(?:자|이\s*사))\s*[:：]\s*○{{2,}}\s*({_SEAL_TAIL})?\s*", text)
         if ph:

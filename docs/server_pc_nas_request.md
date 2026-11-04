@@ -9,10 +9,10 @@
 ## 넣을 곳
 
 ```
-\jiilserver\jiil-webapp\Negotiate-Contract-Logic-First-try
+\\jiilserver\jiil-webapp\Negotiate-Contract-Logic-First-try
 ```
 
-탐색기 주소창에 입력해 여세요. 로그인 창이 뜨면 본인 NAS 계정을 입력하시면 됩니다.
+탐색기 주소창에 입력해 여세요(맨 앞 `\\` 두 개까지 그대로). 로그인 창이 뜨면 본인 NAS 계정을 입력하시면 됩니다.
 
 ## 복사할 것
 
@@ -53,15 +53,29 @@
 
 메모장을 닫을 때 저장하지 말아 주세요.
 
+### 5. `jiil-quant-docs` 폴더 전체 (정량평가서 탭용)
+
+정량평가서 탭이 쓰는 **회사 자료 잠금 묶음**(`vault\company.enc`)과 옛 한글 변환기가 들어 있는 폴더입니다.
+
+- 서버 PC에서 웹앱 폴더와 **나란히** 있습니다: `C:\Users\HJE\나라장터 수집\jiil-quant-docs`
+- 폴더째로 복사해, 웹앱 폴더 **안이 아니라 옆**에 붙여넣습니다:
+  `\\jiilserver\jiil-webapp\jiil-quant-docs`
+- 묶음 비밀번호(`QUANT_VAULT_PASSPHRASE`)는 1번 `.env`에 들어 있어 따로 할 일은 없습니다.
+- `.env`의 옛 한글 변환기 설정(`HWP2HWPX_CMD`)은 윈도우 경로라 NAS에선 그대로 안 됩니다 — 이쪽에서 고칩니다.
+  그 전까지 NAS 정량평가서 탭은 HWPX 공고만 서식을 자릅니다(옛 한글 .hwp 공고는 경고만).
+
 ### 복사 후 모습
 
 ```
-\jiilserver\jiil-webapp\Negotiate-Contract-Logic-First-try
+\\jiilserver\jiil-webapp\Negotiate-Contract-Logic-First-try
   ├ .env
   ├ data\                (구글 키 파일이 있으면 이 안에)
   ├ output\
   ├ webapp\              (이미 있음)
   └ docker-compose.yml   (이미 있음)
+
+\\jiilserver\jiil-webapp\jiil-quant-docs      (5번 — 웹앱 폴더 옆)
+  └ vault\company.enc
 ```
 
 같은 이름의 파일을 덮어쓸지 묻는 창이 뜨면 진행하지 말고 알려 주세요.
@@ -75,14 +89,15 @@
 3. 윈도우 환경변수에만 있는 설정이 있는지. Git Bash에서 아래를 실행하면 이름만 나옵니다. 그중 `.env`에 없는 이름을 알려 주세요.
 
 ```
-env | cut -d= -f1 | grep -E "NARA|APP_TOKEN|GOOGLE|FEEDBACK|BACKUP|JIIL|TELEGRAM|SMTP|ANTHROPIC|BID_|OUTPUT"
+env | cut -d= -f1 | grep -E "NARA|APP_TOKEN|GOOGLE|FEEDBACK|BACKUP|JIIL|TELEGRAM|SMTP|ANTHROPIC|BID_|OUTPUT|QUANT|HWP2HWPX"
 ```
 
 4. 웹앱이 어떤 명령이나 방법으로 켜져 있는지 (예: `bash webapp/start.sh`)
+5. NAS에 `jiil-quant-docs\vault\company.enc`가 들어갔는지
 
 ## 보안 주의
 
-`.env`와 구글 키 파일에는 인증 정보가 들어 있습니다. `data`와 `output`에는 내부 자료가 들어 있습니다.
+`.env`와 구글 키 파일에는 인증 정보가 들어 있습니다. `data`와 `output`에는 내부 자료, `jiil-quant-docs`에는 회사 서류(잠금 묶음)가 들어 있습니다.
 
 - 카톡·메일로 보내지 말고 탐색기로 직접 복사해 주세요.
 - GitHub에 올리지 말아 주세요.

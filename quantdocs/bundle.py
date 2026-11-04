@@ -131,6 +131,7 @@ def pick(files, submit_texts: list[str], quals: list[dict], today: date | None =
 
 # ── 이어 붙이기 ───────────────────────────────────────────────
 _FONTS = ["C:/Windows/Fonts/malgun.ttf", "C:/Windows/Fonts/gulim.ttc",
+          str(ROOT.parent / "tools" / "fonts" / "NanumGothic.ttf"),  # NAS 공유 폴더 — 슬림 이미지엔 글꼴이 없음
           "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
           "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
           "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"]

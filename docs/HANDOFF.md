@@ -1,4 +1,4 @@
-# 작업 인수인계 (2026-11-03 기준 — 맨 위 "11/03" 절 먼저, 아래는 이전 기록)
+# 작업 인수인계 (2026-11-04 기준 — 맨 위 "11/04" 절 먼저, 아래는 이전 기록)
 
 > **10/19 — 팀원 수집기(iamhiki/narajangter-bid-monitor, TypeScript)와 통합 중.** 브랜치 `claude/collector-integration`
 > (main 미병합). 16개 항목 결정과 단계별 진행은 아래 "7. 수집기 통합"과 `CLAUDE.md` "2026-10-19" 절.
@@ -11,7 +11,21 @@
 
 ---
 
-## 11/03 — 지금 상태와 다음 할 일 (먼저 읽을 것)
+## 11/04 — 지금 상태와 다음 할 일 (먼저 읽을 것)
+
+- 오늘 정리: `docs/worklog/2026-11-04.md`, 결정: `CLAUDE.md` "2026-11-04" 절(정량평가서 쪽은 `claude/quantdocs-merge`의 `CLAUDE.md`에).
+- **main 마지막 = PR #241**(수집 뒤 NAS 웹앱 자동 재시작). 웹앱 NAS 컨테이너 2개·1억 미만 최소판·정량평가서 탭(#235)이 main에 있음.
+- 병합 안 한 브랜치: `claude/quantdocs-merge`(#235 뒤 정량평가서 고침 40커밋), `claude/bidfield-notice-fallback`(추천 칸 분야 보완 등), `claude/track1-folders`(보류).
+- 서버 PC는 11/04 확인 때 `claude/quantdocs-merge`로 돌아감. NAS에 어느 코드까지 반영됐는지는 미확인.
+- **다음에 할 일**
+  1. 사용자 결정 대기: 공개 저장소의 `docs/quantdocs_meeting_2026-10-30.md`·`docs/server_pc_nas_request.md`를 비공개 레포 `jiil-quant-docs`로 옮길지, 기록까지 지울지. `docs/quantdocs.md`의 합치기 전 안내도 고칠 것.
+  2. `claude/quantdocs-merge` main 병합(요청 때만) — `Dockerfile`·`requirements.txt`가 바뀌어 NAS는 부장님이 이미지를 다시 빌드해야 함.
+  3. 서버 PC: Tesseract OCR 결과, `통합서식.hwpx`를 한글로 열어 확인.
+  4. NAS: 옛 한글 변환기 경로(`HWP2HWPX_CMD`), 1억 미만 실행 확인.
+  5. 11/03에서 이어짐: 실적 부가세 '포함' 채우기(사용자 결정 대기), 회사 서류 보충, `claude/bidfield-notice-fallback` 합칠지(사용자 결정 대기), 주말 수집 0건 원인 진단.
+- **지킬 것**: 한국어 답변, 요청 전엔 고치지 않기, 회사 서류·잠금 묶음·비밀번호는 공개 레포에 올리지 않기, 평가 점수 계산은 범위 밖, 통합본 PDF는 원본 그대로(서류를 그림으로 붙인 한글 하나로 되돌리지 않기), NAS 관리 작업은 부장님 경유.
+
+## 11/03 — 지금 상태와 다음 할 일
 
 - 오늘 정리: `docs/worklog/2026-11-03.md`, 결정: `CLAUDE.md` "2026-11-03" 절.
 - **정량평가서 준비(프로젝트 2)를 이 레포로 합침** — 브랜치 `claude/quantdocs-merge`(main 기준, **미병합**). 웹앱 '투찰 계산기' 옆 '정량평가서' 탭.

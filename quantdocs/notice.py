@@ -217,6 +217,9 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
         name = _clean_name(name)
         if not name or len(name) > 60 or re.search(r"서식\s*\d", name):
             return False
+        # 배점·숫자만 있는 칸("0.3점", "10%", "3부")은 이름이 아님 — 평가표 칸이 서식 칸 앞에 풀려 나올 때(11/04)
+        if len(re.sub(r"[^가-힣A-Za-z]", "", re.sub(r"\d[\d.,]*\s*(?:점|%|원|억원?|천만원|백만원|만원|개|건|년|부|매|쪽|명|인)", "", name))) < 2:
+            return False
         f = found.get(n)
         if f is None:
             found[n] = Form(n, name, source, i in quant or in_quant, classify(name, catalog))

@@ -171,3 +171,12 @@ def test_forms_with_ho_ranges_unrolled_toc_and_body_heads():
     assert got[10][0] == "행정처분확인서" and got[11][0] == "청렴서약서" and got[12][0] == "서약서"
     assert all(got[n][1] for n in range(2, 11))  # '사업수행능력 평가서 [서식2~10호]' = 정량 묶음
     assert not got[11][1] and not got[12][1]
+
+
+def test_score_cell_is_not_form_name():
+    """평가표 배점 칸('- 0.3점')이 서식 칸 바로 앞에 풀려 나와도 이름으로 안 씀 — 본문 머리 제목으로(11/04)."""
+    from quantdocs.catalog import load_catalog
+    from quantdocs.notice import read_forms
+
+    text = "- 사업수행실적\n- 0.3점\n[서식5호]\n〔서식 5호〕\n전시분야 최근 3년간 사업수행실적\n"
+    assert [(f.no, f.name) for f in read_forms(text, "x.hwp", load_catalog())] == [(5, "전시분야 최근 3년간 사업수행실적")]

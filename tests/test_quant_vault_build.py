@@ -336,3 +336,45 @@ def test_tall_track_row_is_split_and_text_fits():
     out = chars.finish()
     assert 'itemCnt="3"' in out and re.search(r'<hh:charPr id="2" height="(\d+)"', out)
     assert int(re.search(r'<hh:charPr id="2" height="(\d+)"', out).group(1)) < 1300
+
+
+def test_qualification_rows_merge_docs_and_name_only(tmp_path: Path, monkeypatch):
+    """11/04 필암서원: 공고문·제안요청서의 '또는' 묶음을 하나로, 이름만 적힌 중소기업확인서도 한 줄, 통합본에 코드 서류 그대로."""
+    from nego import attachments
+    from quantdocs import g2b
+    from quantdocs.bundle import pick
+
+    texts = {
+        "공고문.hwpx": "3. 입찰참가자격\n가. 아래의 자격을 모두 갖춘 자\n"
+                      "1) 정보통신공사업(업종코드 0036) 입찰참가자격으로 등록한 업체\n"
+                      "2) 산업디자인전문회사(환경디자인 : 업종코드 4442 또는 종합디자인 : 업종코드 4444) 입찰참가자격으로 등록한 업체\n"
+                      "3) 실물모형및전시물(6010989901)을 등록하고 직접생산확인증명서(세부품명번호 6010989901)를 소지한 업체\n"
+                      "4) 「중소기업기본법」에 따른 중소기업자로서 중소기업·소상공인확인서를 소지한 업체\n"
+                      "4. 입찰방법\n가. 전자입찰",
+        "제안요청서.hwpx": "1. 입찰참가자격\n가. 아래의 자격을 모두 갖춘 자\n"
+                         "1) 산업디자인전문회사(환경디자인 : 업종코드 4442 또는 종합디자인 : 업종코드 4444) 또는 "
+                         "공공디자인전문회사 (업종코드 6484) 입찰참가자격으로 등록한 업체\n2. 과업 내용\n가. 기획",
+    }
+    paths = []
+    for name in texts:
+        (tmp_path / name).write_bytes(name.encode())
+        paths.append(tmp_path / name)
+    monkeypatch.setattr(attachments, "extract_text", lambda data, ext: texts[data.decode()])
+    v = vault.Vault({"files/정보통신공사업등록증.pdf": b"", "files/중소기업확인서(~27.3.31).pdf": b"", "files/직접생산_실물.pdf": b""},
+                    docs=[{"서류 이름": "직접생산확인증명서", "파일 이름": "직접생산_실물.pdf", "업종코드·세부품명번호": "6010989901"},
+                          {"서류 이름": "정보통신공사업 등록증", "파일 이름": "정보통신공사업등록증.pdf", "업종코드·세부품명번호": "0036"}])
+    rows = g2b.qualification_rows(paths, v.held_codes(), v, ["정보통신공사업", "엔지니어링사업"])
+    kinds = [(r["kind"], [i["code"] or i["name"] for i in r["items"]]) for r in rows]
+    assert ("이 중 하나", ["4442", "4444", "6484"]) in kinds
+    assert sum(1 for k in kinds if "4442" in k[1]) == 1  # 문서별로 두 줄 나오지 않음
+    assert ("필수", ["0036"]) in kinds and ("필수", ["6010989901"]) in kinds
+    assert ("필수 서류", ["중소기업·소상공인 확인서"]) in kinds
+    assert ("나라장터 면허제한", ["엔지니어링사업"]) in [(k, [n.split("(")[0] for n in c]) for k, c in kinds]
+    assert not any(k == "나라장터 면허제한" and "0036" in c for k, c in kinds)  # 첨부에 있는 업종은 다시 안 넣음
+    prod = next(i for r in rows for i in r["items"] if i["code"] == "6010989901")
+    assert prod["need"] == "직접생산확인증명서" and prod["paths"] == ["files/직접생산_실물.pdf"]
+    sme = next(i for r in rows for i in r["items"] if i["name"].startswith("중소기업"))
+    assert sme["held"] and sme["paths"] == ["files/중소기업확인서(~27.3.31).pdf"]
+    picks, _ = pick(list(v.files), [], rows, dt.date(2026, 11, 4))
+    got = [p.path for p in picks]
+    assert "files/직접생산_실물.pdf" in got and "files/중소기업확인서(~27.3.31).pdf" in got and "files/정보통신공사업등록증.pdf" in got

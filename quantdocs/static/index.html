@@ -227,10 +227,10 @@ function render(j) {
     || '<li class="muted">못 찾음 — 공고문 확인</li>';
   $("#quals").innerHTML = "<tr><th>조건</th><th>자격</th><th>지일</th><th>첨부할 서류</th></tr>" +
     (s.quals.length ? s.quals.map(q => q.items.map((it, i) => `<tr><td>${i ? "" : esc(q.kind)}</td>
-      <td>${esc(it.name)}${it.code ? ` <span class="muted">(${esc(it.code)})</span>` : ""}</td>
+      <td>${esc(it.name)}${it.code ? ` <span class="muted">(${esc(it.code)})</span>` : ""}${it.need ? ` <span class="chip">${esc(it.need)}</span>` : ""}</td>
       <td class="nw">${!j.vault_ok ? '<span class="muted">회사 자료 없음</span>' : it.held ? '<span class="tick">✓ 보유</span>' : '<span class="cross">✗ 미보유</span>'}</td>
       <td class="muted">${esc(it.docs.join(", "))}</td></tr>`).join("")).join("")
-      : `<tr><td colspan="4" class="muted">첨부 공고문에서 코드로 적힌 자격을 찾지 못했습니다 — 원문 확인</td></tr>`);
+      : `<tr><td colspan="4" class="muted">첨부 공고문에서 자격 요건을 찾지 못했습니다 — 원문 확인</td></tr>`);
   const b = s.bundle || [];
   $("#bundle").innerHTML = !j.vault_ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
     : b.length ? "<tr><th>순서</th><th>구분</th><th>파일</th><th>확인</th></tr>" +

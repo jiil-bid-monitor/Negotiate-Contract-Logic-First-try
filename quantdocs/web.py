@@ -147,7 +147,7 @@ def _run_analyze(job: dict) -> None:
         job["notice"]["ref_date"] = f"{job['date'] or date.today():%Y-%m-%d}"
         job["notice"]["ref_from"] = "공고 게시일" if job["date"] else "오늘(게시일을 못 읽음)"
         job["step"] = "서식·자격·실적 요건 읽는 중"
-        a = analyze(nf.files, v, job.get("date"), JOBS / job["id"] / "work", nf.award_method, nf.contract_method)
+        a = analyze(nf.files, v, job.get("date"), JOBS / job["id"] / "work", nf.award_method, nf.contract_method, nf.licenses)
         s = summary(a)
         if note:
             s["notes"].insert(0, note)
@@ -172,7 +172,7 @@ def _run_build(job: dict) -> None:
             out = JOBS / job["id"] / "out" / f"정량평가서_{job['no']}.zip"
             n = job.get("notice", {})
             build([Path(f) for f in job["files"]], v, out, n.get("title", ""), job.get("date"),
-                  n.get("award", ""), n.get("contract", ""))
+                  n.get("award", ""), n.get("contract", ""), n.get("licenses") or [])
             job["zip"] = str(out)
             job["state"] = "built"
         except Exception as err:

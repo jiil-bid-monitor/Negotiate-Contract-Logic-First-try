@@ -141,15 +141,98 @@ def fetch_notice(notice_no: str, out_dir: Path) -> NoticeFiles:
 
 # ── 요구 자격 ↔ 회사 자료 ─────────────────────────────────────
 _CODE = re.compile(r"\((\d{4}|\d{8}|\d{10})\)\s*$")
+_ANY_CODE = re.compile(r"(?<!\d)(\d{4}|\d{8}|\d{10})(?!\d)")
+
+# 코드 없이 서류 이름으로만 적힌 참가자격 증빙(11/04 사용자 요청 B — 필암서원 7) "중소기업·소상공인확인서를 소지한 업체").
+# (보일 이름, 참가자격 문장에서 찾을 글, 회사 자료 파일·서류 이름에서 찾을 낱말). 띄어쓰기 무시.
+NAME_REQS: list[tuple[str, str, tuple[str, ...]]] = [
+    ("중소기업·소상공인 확인서", r"(?:중소기업|소상공인)[·ㆍ\s()/]*(?:소상공인)?\)?\s*확인서",
+     ("중소기업확인서", "소상공인확인서", "중소기업(소상공인)확인서", "중소기업·소상공인확인서")),
+    ("여성기업 확인서", r"여성기업\s*(?:확인서|증명)", ("여성기업",)),
+    ("장애인기업 확인서", r"장애인기업\s*(?:확인서|증명)", ("장애인기업",)),
+    ("사회적기업 인증서", r"사회적기업\s*인증", ("사회적기업",)),
+    ("직접생산확인증명서", r"직접\s*생산\s*확인", ("직접생산",)),
+]
 
 
-def qualification_rows(paths: list[Path], held_codes: set[str], vault=None) -> list[dict]:
-    """첨부 참가자격 절의 코드 요건 → [{kind, items:[{name, code, held, docs}]}]. kind: 필수 / 이 중 하나."""
+def _nego_config() -> Path | None:
+    """프로젝트 1의 config 폴더(등록증·이름 사전) — 웹앱 수집과 같은 이름 자료를 쓰려고."""
+    repo = nego_repo()
+    return repo / "config" if repo and (repo / "config").is_dir() else None
+
+
+def _names() -> tuple[dict[str, str], dict[str, str]]:
+    """(등록증 이름, 코드 이름 사전) — 웹앱 수집(`nego.config.load_config`)과 같은 방식."""
+    import json
+
+    from nego import qualify
+
+    cfg = _nego_config()
+    if not cfg:
+        return {}, {}
+
+    def read(name: str) -> dict:
+        try:
+            return json.loads((cfg / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    held, codes = read("held_qualifications.json"), read("codes.json")
+    return (qualify.load_held_code_names(held),
+            qualify.load_code_names({**codes, "productCodes": held.get("heldProducts", [])}, read("code_names.json")))
+
+
+def _sq(s: str) -> str:
+    return re.sub(r"\s+", "", str(s or ""))
+
+
+def _vault_paths(vault, docs: list[dict]) -> list[str]:
+    """서류상태 줄의 '파일 이름' → 묶음 안 경로(files/…)."""
+    out = []
+    for d in docs:
+        name = str(d.get("파일 이름") or "").strip().replace("\\", "/")
+        if not name:
+            continue
+        for k in (name, f"files/{name}"):
+            if k in vault.files:
+                out.append(k)
+                break
+        else:
+            tail = [k for k in vault.files if k.rsplit("/", 1)[-1] == name.rsplit("/", 1)[-1]]
+            out += tail[:1]
+    return list(dict.fromkeys(out))
+
+
+def _merge_or(groups: list[list[str]]) -> list[list[str]]:
+    """문서끼리 다르게 적은 '또는' 묶음(공고문 4442|4444, 제안요청서 4442|4444|6484)이 코드가 겹치면 하나로."""
+    out: list[list[str]] = []
+    for g in groups:
+        codes = {_code(n) for n in g} - {""}
+        for o in out:
+            if codes & ({_code(n) for n in o} - {""}):
+                o += [n for n in g if _code(n) not in {_code(x) for x in o}]
+                break
+        else:
+            out.append(list(g))
+    return out
+
+
+def _code(name: str) -> str:
+    m = _CODE.search(name)
+    return m.group(1) if m else ""
+
+
+def qualification_rows(paths: list[Path], held_codes: set[str], vault=None, licenses: list[str] | None = None) -> list[dict]:
+    """첨부 참가자격 → [{kind, items:[{name, code, held, docs, paths, need}], source}].
+
+    웹앱 수집(`nego.attachments.save_attachment_texts`)과 같은 판정: 모든 첨부의 참가자격 항목을 모아 한 번에
+    `evaluate_attachment_text`(등록증 이름·코드 이름 사전 포함)로 본다(11/04 사용자 요청 A). 문서끼리 겹치는 '또는' 묶음은 합치고,
+    나라장터 면허제한(API) 업종 중 첨부에 없는 것은 따로 한 줄. 코드 없이 이름만 적힌 증빙(중소기업확인서 등)도 한 줄씩(요청 B).
+    kind: 필수 / 이 중 하나 / 나라장터 면허제한 / 필수 서류."""
     _import_nego()
     from nego import attachments, qualification_text, qualify
 
-    rows: list[dict] = []
-    seen: set[tuple] = set()
+    per_doc: list[tuple[str, list[str]]] = []
     for p in paths:
         ext = p.suffix.lstrip(".").lower()
         if ext not in ("hwp", "hwpx", "pdf", "docx"):
@@ -159,27 +242,73 @@ def qualification_rows(paths: list[Path], held_codes: set[str], vault=None) -> l
         except Exception:  # 못 읽는 문서는 건너뜀
             continue
         sec = qualification_text.find_qualification_section(text)
-        if not sec:
-            continue
-        res = qualify.evaluate_attachment_text(qualification_text.split_items(sec.body), held_codes)
-        groups = [g for g in list(res.missing_groups) + list(res.satisfied_groups) if g.group_no != "held"]
-        covered = {c for g in groups for n in g.allowed_names if (c := (_CODE.search(n) or [None, None])[1])}
+        if sec and sec.items:
+            per_doc.append((p.name, list(sec.items)))
+    all_items = [i for _, items in per_doc for i in items]
+    held_names, code_names = _names()
+
+    def sources(codes: set[str], words: tuple[str, ...] = ()) -> str:
+        hit = [n for n, items in per_doc if any(
+            codes & set(_ANY_CODE.findall(i)) or any(_sq(w) in _sq(i) for w in words) for i in items)]
+        return ", ".join(hit)
+
+    def item(name: str) -> dict:
+        code = _code(name)
+        label = name[:_CODE.search(name).start()].strip(" :") if code else name
+        docs = vault.docs_for_code(code) if vault and code else []
+        return {"name": label or code, "code": code, "held": code in held_codes,
+                "docs": [str(d.get("서류 이름") or d.get("파일 이름") or "") for d in docs],
+                "paths": _vault_paths(vault, docs) if vault else []}
+
+    rows: list[dict] = []
+    if all_items:
+        res = qualify.evaluate_attachment_text(all_items, held_codes, held_names, code_names, {})
+        groups = [list(g.allowed_names) for g in list(res.missing_groups) + list(res.satisfied_groups) if g.group_no != "held"]
+        groups = _merge_or(groups)
+        covered = {_code(n) for g in groups for n in g}
         # '보유 확인'(held) 묶음은 이미 충족한 단독 요건들 — 다른 묶음에 없는 코드만 한 줄씩 '필수'로
         for g in res.satisfied_groups:
             if g.group_no == "held":
-                groups += [type(g)("held", [n]) for n in g.allowed_names
-                           if (m := _CODE.search(n)) and m.group(1) not in covered]
+                groups += [[n] for n in g.allowed_names if _code(n) and _code(n) not in covered]
+        lines = [ln for i in all_items for ln in i.splitlines()]
         for g in groups:
-            items = []
-            for name in g.allowed_names:
-                m = _CODE.search(name)
-                code = m.group(1) if m else ""
-                label = name[:m.start()].strip(" :") if m else name
-                docs = [str(d.get("서류 이름") or d.get("파일 이름") or "") for d in vault.docs_for_code(code)] if vault and code else []
-                items.append({"name": label or code, "code": code, "held": code in held_codes, "docs": docs})
-            key = tuple(sorted(i["code"] or i["name"] for i in items))
-            if not items or key in seen:
-                continue
-            seen.add(key)
-            rows.append({"kind": "이 중 하나" if len(items) > 1 else "필수", "items": items, "source": p.name})
+            items = [item(n) for n in g]
+            for it in items:
+                # 세부품명(직접생산) — 문장에 직접생산확인증명서가 함께 적혔으면 표시
+                if len(it["code"]) >= 8 and any(it["code"] in ln and re.search(r"직접\s*생산", ln) for ln in lines):
+                    it["need"] = "직접생산확인증명서"
+            rows.append({"kind": "이 중 하나" if len(items) > 1 else "필수", "items": items,
+                         "source": sources({i["code"] for i in items})})
+
+    # 나라장터 면허제한(API) — 첨부에 이미 있는 업종은 빼고(이름 대조)
+    known = {_sq(re.sub(r"\(.*$", "", it["name"])) for r in rows for it in r["items"]}
+    known |= {_sq(re.sub(r"\(.*$", "", (held_names.get(it["code"]) or code_names.get(it["code"]) or "")))
+              for r in rows for it in r["items"]}
+    by_name = {_sq(n): c for c, n in {**code_names, **held_names}.items()}
+    for lic in licenses or []:
+        if _sq(lic) in known or not lic.strip():
+            continue
+        code = by_name.get(_sq(lic), "")
+        it = item(f"{lic}({code})" if code else lic)
+        rows.append({"kind": "나라장터 면허제한", "items": [it], "source": "나라장터 면허제한정보"})
+        known.add(_sq(lic))
+
+    # 코드 없이 이름만 적힌 증빙 서류
+    for label, pat, words in NAME_REQS:
+        found = [n for n, items in per_doc if any(
+            re.search(pat, ln) and not (label == "직접생산확인증명서" and _ANY_CODE.search(ln))  # 코드가 있으면 위 품목 줄에 표시
+            for i in items for ln in i.splitlines())]
+        if not found:
+            continue
+        keys = [_sq(w) for w in words]
+        docs = [d for d in (vault.docs if vault else [])
+                if any(k in _sq(f"{d.get('서류 이름') or ''} {d.get('파일 이름') or ''}") for k in keys)
+                and str(d.get("상태") or "").strip() != "재발급"]
+        files = _vault_paths(vault, docs) if vault else []
+        files += [f for f in (vault.files if vault else {}) if f.startswith("files/")
+                  and any(k in _sq(f.rsplit("/", 1)[-1]) for k in keys) and f not in files]
+        rows.append({"kind": "필수 서류", "source": ", ".join(found),
+                     "items": [{"name": label, "code": "", "held": bool(files or docs), "keys": keys,
+                                "docs": [str(d.get("서류 이름") or d.get("파일 이름") or "") for d in docs]
+                                or [f.rsplit("/", 1)[-1] for f in files], "paths": files}]})
     return rows

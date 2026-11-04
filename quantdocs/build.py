@@ -117,7 +117,7 @@ def _use_page_titles(sheet, hwpx_files: list[Path], source: str) -> None:
 
 
 def analyze(files: list[Path], vault, notice_date: date | None = None, work: Path | None = None,
-            award_method: str = "", contract_method: str = "") -> Analysis:
+            award_method: str = "", contract_method: str = "", licenses: list[str] | None = None) -> Analysis:
     files = [Path(f) for f in files]
     work = Path(work or tempfile.mkdtemp(prefix="quantdocs_"))
     work.mkdir(parents=True, exist_ok=True)  # 웹앱이 넘기는 작업 폴더(data/jobs/<id>/work)는 아직 없을 수 있음
@@ -139,7 +139,7 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
         readable.append(f)
     sheet = read_notice(readable, load_catalog())
     _use_page_titles(sheet, [Path(converted.get(f.name, f)) for f in files], " ".join(f.name for f in files))
-    quals = qualification_rows(readable, vault.held_codes(), vault)
+    quals = qualification_rows(readable, vault.held_codes(), vault, licenses)
     ref = notice_date or date.today()
     candidates = []
     if sheet.track_reqs:
@@ -197,11 +197,11 @@ def _safe(name: str) -> str:
 
 
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
-          award_method: str = "", contract_method: str = "") -> Path:
+          award_method: str = "", contract_method: str = "", licenses: list[str] | None = None) -> Path:
     files = [Path(f) for f in files]
     work = Path(tempfile.mkdtemp(prefix="quantdocs_build_"))
     try:
-        a = analyze(files, vault, notice_date, work, award_method, contract_method)
+        a = analyze(files, vault, notice_date, work, award_method, contract_method, licenses)
         forms_dir, filled_dir = work / "cut", work / "서식"
         reports: list[FillReport] = []
         manual: list[str] = []  # 양식 그대로 넣은 서식 파일
@@ -268,7 +268,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             q_rows = []
             for i, q in enumerate(a.quals, 1):
                 for it in q["items"]:
-                    q_rows.append([i, q["kind"], f"{it['name']}({it['code']})" if it["code"] else it["name"],
+                    q_rows.append([i, q["kind"], (f"{it['name']}({it['code']})" if it["code"] else it["name"]) + (f" — {it['need']}" if it.get("need") else ""),
                                    "보유" if it["held"] else "미보유", ", ".join(it["docs"]), q["source"]])
             table(wb.create_sheet("자격요건"), ["묶음", "조건", "자격", "지일", "첨부 서류", "출처"],
                   q_rows or [["", "", "첨부 공고문에서 코드로 적힌 자격을 찾지 못함 — 원문 확인", "", "", ""]],

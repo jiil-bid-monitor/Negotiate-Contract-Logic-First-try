@@ -99,9 +99,14 @@ def pick(files, submit_texts: list[str], quals: list[dict], today: date | None =
             if not label or label == it.get("code") or label.startswith("이름 미확인"):
                 label = names.get(it.get("code") or "", label)
             cands = {c for c in (_core(label), _core(names.get(it.get("code") or "", ""))) if len(c) >= 2}
-            hits = [f for f in pool if any(c in _sq(Path(f).name) or (len(_stem(f)) >= 2 and _stem(f) in c) for c in cands)]
+            # 서류상태에 그 코드로 적힌 파일(정확) → 없으면 파일 이름 대조. 이름만 적힌 증빙(중소기업확인서 등)은 keys 낱말로
+            hits = [f for f in it.get("paths") or [] if f in pool]
+            if not hits and it.get("keys"):
+                hits = [f for f in pool if any(k in _sq(Path(f).name) for k in it["keys"])]
+            if not hits and not it.get("keys"):
+                hits = [f for f in pool if any(c in _sq(Path(f).name) or (len(_stem(f)) >= 2 and _stem(f) in c) for c in cands)]
             title = f"{label}({it['code']})" if it.get("code") and it["code"] not in label else label
-            qual_hits.append((title, hits, len(str(it.get("code") or "")) >= 8))
+            qual_hits.append((title, hits, len(str(it.get("code") or "")) >= 8 or label == "직접생산확인증명서"))
             if not hits:
                 missing.append(f"자격 {title}: 파일 이름이 맞는 서류 없음")
 

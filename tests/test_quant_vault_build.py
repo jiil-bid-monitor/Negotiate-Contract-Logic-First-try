@@ -759,8 +759,8 @@ def test_other_party_zone_and_placeholder_signature(tmp_path: Path):
 
 
 def test_notice_number_autofill(tmp_path: Path):
-    """11/04 사용자 요청: 공고번호는 공고마다 자동 — 공고문 '장성군 공고 제2026 - 1129 호' → 서식 2 '제 2026 - 호' 칸에 번호,
-    빈 '입찰공고번호' 칸엔 '제2026-1129호'. 공고문에 없으면 나라장터 번호(빈 칸만), 공고명 칸 = 공고 이름."""
+    """11/04 사용자 요청: 공고번호는 공고마다 자동 — 나라장터 입찰공고번호('R26BK…-000')가 먼저(사용자 정정),
+    모를 때만 공고문 기관 공고번호('제2026-1129호', '제 2026 - 호' 칸은 모양 유지). 공고명 칸 = 공고 이름."""
     from quantdocs.fill import agency_notice_no, fill_hwpx
 
     assert agency_notice_no({"제안요청서.hwpx": "…", "공고문.hwpx": "장성군 공고 제2026 - 1129 호\n…"}) == ("2026", "1129")
@@ -771,10 +771,11 @@ def test_notice_number_autofill(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", body), tmp_path / "no.hwpx", v, title="가상 전시", notice_no=("2026", "1129"),
               g2b_no="R26BK00000001")
     out = zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode()
-    assert "제 2026 - 1129 호" in out and "제2026-1129호" in out and "가상 전시" in out and "R26BK" not in out
-    fill_hwpx(_mini_hwpx(tmp_path / "m.hwpx", body), tmp_path / "mo.hwpx", v, g2b_no="R26BK00000001")
+    # 나라장터 번호가 있으면 그 번호(11/04 사용자 정정) — 자리표시 칸·빈 칸 모두
+    assert out.count("R26BK00000001") == 2 and "1129" not in out and "가상 전시" in out
+    fill_hwpx(_mini_hwpx(tmp_path / "m.hwpx", body), tmp_path / "mo.hwpx", v, notice_no=("2026", "1129"))
     out = zipfile.ZipFile(tmp_path / "mo.hwpx").read("Contents/section0.xml").decode()
-    assert "제 2026 -     호" in out and out.count("R26BK00000001") == 1  # 자리표시 칸은 그대로, 빈 칸에만 나라장터 번호
+    assert "제 2026 - 1129 호" in out and "제2026-1129호" in out  # 나라장터 번호를 모를 때만 기관 공고번호
 
 
 def test_screen_hides_routine_notes():
@@ -787,3 +788,11 @@ def test_screen_hides_routine_notes():
               "스캔본이라 글자 인식(OCR)으로 읽은 서류: 인감증명서.pdf — 채운 값(특히 숫자·연혁) 원본과 대조"):
         assert _SCREEN_HIDDEN.match(n)
     assert not _SCREEN_HIDDEN.match("⚠ 회사 전화번호를 찾지 못해 서식의 전화번호 칸이 비어 있음")
+
+
+def test_g2b_notice_number_with_order():
+    from quantdocs.web import _g2b_no
+
+    assert _g2b_no({"no": "R26BK01806620", "ord": "000"}, "x") == "R26BK01806620-000"
+    assert _g2b_no({"no": "R26BK01806620", "ord": "1"}, "x") == "R26BK01806620-001"
+    assert _g2b_no({}, "R26BK01806620") == "R26BK01806620"

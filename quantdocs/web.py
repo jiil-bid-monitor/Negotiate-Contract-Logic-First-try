@@ -164,6 +164,15 @@ def _run_analyze(job: dict) -> None:
         job["step"] = ""
 
 
+def _g2b_no(n: dict, fallback: str) -> str:
+    """서식 공고번호 칸에 넣을 나라장터 입찰공고번호 — 차수까지('R26BK01806620-000', 나라장터 화면 표기)."""
+    no = str(n.get("no") or fallback or "").strip()
+    ord_ = str(n.get("ord") or "").strip()
+    if no and "-" not in no and ord_:
+        no = f"{no}-{ord_.zfill(3)}"
+    return no
+
+
 def _run_build(job: dict) -> None:
     with _build_lock:
         try:
@@ -172,7 +181,7 @@ def _run_build(job: dict) -> None:
             out = JOBS / job["id"] / "out" / f"정량평가서_{job['no']}.zip"
             n = job.get("notice", {})
             build([Path(f) for f in job["files"]], v, out, n.get("title", ""), job.get("date"),
-                  n.get("award", ""), n.get("contract", ""), n.get("licenses") or [], n.get("no") or job["no"])
+                  n.get("award", ""), n.get("contract", ""), n.get("licenses") or [], _g2b_no(n, job["no"]))
             job["zip"] = str(out)
             job["state"] = "built"
         except Exception as err:

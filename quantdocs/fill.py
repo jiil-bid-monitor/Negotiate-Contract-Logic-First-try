@@ -679,7 +679,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
     rep = FillReport(Path(dst).name)
     # 묶음은 그대로 두고 이번 서식에만 공고 이름·공고번호를 더함(11/04 사용자 요청 — 공고마다 자동)
     # 공고번호 = 공고문의 기관 공고번호('제2026-1129호'), 못 찾으면 나라장터 공고번호
-    no_text = f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else g2b_no
+    # 공고번호 = 나라장터 입찰공고번호('R26BK01806620-000', 11/04 사용자 정정 — 기관 공고번호를 넣었더니 오기입),
+    # 나라장터 번호를 모를 때만 공고문의 기관 공고번호('제2026-1129호')
+    no_text = g2b_no or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")
     if title or no_text:
         vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text}, docs=vault.docs, history=vault.history)
     zin = zipfile.ZipFile(src)
@@ -744,9 +746,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if target is None:
                         continue
                     seal = _sq(target.text)
-                    if key == "_notice_no" and _NO_SLOT.fullmatch(target.text) and notice_no:
-                        edits.append((target, [f"제 {notice_no[0]} - {notice_no[1]} 호"], False))  # 서식 모양 그대로 번호만
-                        rep.filled.append(f"{_sq(c.text)} → 제{notice_no[0]}-{notice_no[1]}호")
+                    if key == "_notice_no" and _NO_SLOT.fullmatch(target.text) and (g2b_no or notice_no):
+                        # 서식에 미리 적힌 '제 2026 - 호' — 나라장터 번호면 칸을 그 번호로, 기관 번호면 모양 그대로 번호만
+                        line = g2b_no or f"제 {notice_no[0]} - {notice_no[1]} 호"
+                        edits.append((target, [line], False))
+                        rep.filled.append(f"{_sq(c.text)} → {line}")
                         continue
                     if not target.blank:
                         if not _SEAL_ONLY.match(seal):

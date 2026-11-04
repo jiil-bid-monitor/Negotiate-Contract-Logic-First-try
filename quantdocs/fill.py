@@ -127,6 +127,35 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
 _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
 
 
+_SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|직인|날인)[)）]?$")
+_INLINE_LABELS = {"TEL": "전화번호", "Tel": "전화번호", "전화": "전화번호", "전화번호": "전화번호",
+                  "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일"}
+_INLINE_RE = re.compile(r"(?P<lab>TEL|Tel|FAX|Fax|E-?mail|전화번호|전화|팩스|이메일)(?P<colon>\s*[:：])(?P<sp>[ \u00a0\u3000]*)"
+                        r"(?=(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일)|$)")
+
+
+def _fill_inline(seg: str, vault) -> tuple[str, list[str]]:
+    """칸 안 'TEL :      FAX :' 같은 빈 자리에 값을 넣음(11/04 제보: 제안 제출서 전화번호 칸) — 빈칸 수는 값 길이만큼 줄여 줄 모양 유지."""
+    done: list[str] = []
+
+    def fill_t(m):
+        body = m.group(2)
+
+        def rep(mm):
+            key = _INLINE_LABELS.get(mm.group("lab").replace("-", "-"), "")
+            value = _value(key, vault) if key else ""
+            if not value:
+                return mm.group(0)
+            done.append(f"{mm.group('lab')} → {value}")
+            pad = max(2, len(mm.group("sp")) - len(value) - 1) if mm.end() < len(body) else 0
+            return f"{mm.group('lab')}{mm.group('colon')} {escape(value)}" + " " * pad
+        return m.group(1) + _INLINE_RE.sub(rep, body) + m.group(3)
+    new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, seg, flags=re.S)
+    if done:
+        new = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", new, flags=re.S)
+    return new, done
+
+
 def _masked(v: str) -> str:
     """주민등록번호는 앞 6자리만 — 뒷자리는 늘 '*******'(11/04 사용자 요청)."""
     m = re.search(r"(\d{6})\s*-?\s*[\d*Xx]{7}", v or "")
@@ -544,10 +573,25 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                         continue
                     target = by_pos.get((c.row, c.col + c.colspan))
                     value = _value(key, vault)
-                    if target is None or not target.blank or not value:
+                    if key == "회사명" and "대표" in _sq(c.text) and _value("대표자", vault):
+                        value = f"{value} {_value('대표자', vault)}".strip()  # '상호·법인명(대표성명)'
+                    if target is None or not value:
                         continue
+                    seal = _sq(target.text)
+                    if not target.blank:
+                        if not _SEAL_ONLY.match(seal):
+                            continue
+                        value = f"{value}   {target.text.strip()}"  # '(인)' 자리 — 이름 뒤에 그대로 남김(11/04 제보)
                     edits.append((target, [value], False))
                     rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
+                targets = {e[0].start for e in edits}
+                for c in cells:  # 'TEL :      FAX :'처럼 칸 안에 이름표와 빈자리가 같이 있는 칸
+                    if c.start in targets or ":" not in c.text and "：" not in c.text:
+                        continue
+                    new_seg, done = _fill_inline(xml[c.start:c.end], vault)
+                    if done:
+                        edits.append((c, None, new_seg))
+                        rep.filled += done
                 if none_rule and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
                     head = [c for c in cells if c.row == 0]
                     body = [c for c in cells if c.row > 0]
@@ -557,6 +601,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                         rep.filled.append("표가 비어 '해당 없음' 기재 — 해당 사항이 있으면 고칠 것")
             for cell, lines, keep in sorted(edits, key=lambda e: e[0].start, reverse=True):
                 seg = xml[cell.start:cell.end]
+                if lines is None:  # 칸 안 빈자리 채우기 — 바꾼 칸 그대로
+                    xml = xml[:cell.start] + keep + xml[cell.end:]
+                    continue
                 char_id = None
                 if chars is not None and len(lines) == 1 and not keep:
                     char_id, note = _fit_char(seg, lines[0], chars)

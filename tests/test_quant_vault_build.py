@@ -578,3 +578,22 @@ def test_enrich_recognizes_registration_by_content(monkeypatch):
     importer.enrich_vault(v)
     assert v.info["전화번호"] == "031-000-1111" and v.info["팩스번호"] == "02-000-2222"
     assert v.info["대표자 주민등록번호"] == "800101-*******"
+
+
+def test_inline_tel_fax_and_seal_placeholders(tmp_path: Path):
+    """11/04 제보(제안 제출서·참가신청서): 값 칸에 'TEL :      FAX :'·'(인)'이 미리 적혀 있어 '빈 칸 아님'으로 건너뜀
+    → 빈자리에 전화·팩스를 넣고, '(인)' 앞에 대표자·회사명(대표성명)을 씀."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222", "팩스번호": "033-111-3333"})
+    body = _tbl([
+        [_c(0, 0, "대 표 자"), _c(1, 0, "                 (인)")],
+        [_c(0, 1, "전화번호"), _c(1, 1, "TEL :              FAX : ")],
+        [_c(0, 2, "상호·법인명(대표성명)"), _c(1, 2, "(인)"), _c(2, 2, "(인)")],
+        [_c(0, 3, "비 고"), _c(1, 3, "기타 : 없음")]])
+    rep = fill_hwpx(_mini_hwpx(tmp_path / "f.hwpx", body), tmp_path / "o.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert re.search(r"TEL : 033-111-2222 +FAX : 033-111-3333", xml)
+    assert "홍길동   (인)" in xml and "(주)가상 홍길동   (인)" in xml
+    assert xml.count("(인)") == 3  # 공동참여자 칸 '(인)'은 그대로
+    assert "기타 : 없음" in xml and any("TEL" in f for f in rep.filled)

@@ -710,3 +710,24 @@ def test_number_cells_follow_centered_sibling(tmp_path: Path):
     para = {t: re.search(rf'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?{re.escape(t)}', out, re.S).group(1)
             for t in ("110111-1234567", "강원 정선", "033-111-2222", "033-111-3333")}
     assert para == {"110111-1234567": "7", "강원 정선": "0", "033-111-2222": "7", "033-111-3333": "7"}
+
+
+def test_seal_cell_name_centered(tmp_path: Path):
+    """11/04 사용자 요청(서식 1): '(인)'이 오른쪽 정렬이던 칸에 '(주)가상 홍길동   (인)'을 넣으면 가운데 정렬 사본 문단 모양으로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="2"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/></hh:paraPr>'
+              '<hh:paraPr id="5"><hh:align horizontal="RIGHT"/><hh:margin left="1"/></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+    seal = ('<hp:tc><hp:subList><hp:p paraPrIDRef="5"><hp:run charPrIDRef="0"><hp:t>(인)</hp:t></hp:run></hp:p></hp:subList>'
+            '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl([[_c(0, 0, "상호·법인명(대표성명)"), seal]]))
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "so.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    zo = zipfile.ZipFile(tmp_path / "so.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    pid = re.search(r'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?\(주\)가상 홍길동', out, re.S).group(1)
+    assert pid == "6" and 'paraProperties itemCnt="3"' in head
+    block = re.search(r'<hh:paraPr id="6".*?</hh:paraPr>', head, re.S).group(0)
+    assert 'horizontal="CENTER"' in block and '<hh:margin left="1"/>' in block  # 여백 등은 원래 모양 그대로

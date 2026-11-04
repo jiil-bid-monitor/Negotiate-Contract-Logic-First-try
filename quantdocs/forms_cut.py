@@ -299,23 +299,28 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
     sections = {n: zin.read(n).decode("utf-8") for n in sec_names}
     bodies: dict[str, list[tuple[CutForm, str]]] = {}
     header = zin.read("Contents/header.xml").decode("utf-8") if "Contents/header.xml" in entries else ""
-    char_rx = re.compile(r'<(?:[\w.-]+:)?charPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?charPr>', re.S)
-    known = {m.group(1) for m in char_rx.finditer(header)}
-    next_id = max([int(x) for x in known] or [0]) + 1
-    extra_chars: list[str] = []
+    # 채울 때 더한 글자 모양(charPr)·문단 모양(paraPr, 가운데 정렬 사본) — 원본 머리에 없는 id는 새 번호로 옮겨 더함
+    kinds = {}
+    for tag, ref, group in (("charPr", "charPrIDRef", "charProperties"), ("paraPr", "paraPrIDRef", "paraProperties")):
+        rx = re.compile(rf'<(?:[\w.-]+:)?{tag}\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?{tag}>', re.S)
+        known_ids = {m.group(1) for m in rx.finditer(header)}
+        kinds[tag] = {"rx": rx, "ref": ref, "group": group, "known": known_ids,
+                      "next": max([int(x) for x in known_ids] or [0]) + 1, "extra": []}
     for f, file in parts:
         pz = zipfile.ZipFile(file)
         xml = pz.read(f.section).decode("utf-8")
         # 채울 때 칸에 맞춰 줄인 글자 모양(원본 머리에 없는 id) — 새 번호로 옮겨 통합 머리에 더함(서식마다 같은 번호를 따로 썼을 수 있어서)
         if header and "Contents/header.xml" in pz.namelist():
-            remap = {}
-            for m in char_rx.finditer(pz.read("Contents/header.xml").decode("utf-8")):
-                if m.group(1) not in known and f'charPrIDRef="{m.group(1)}"' in xml:
-                    remap[m.group(1)] = str(next_id)
-                    extra_chars.append(re.sub(r'\bid="\d+"', f'id="{next_id}"', m.group(0), count=1))
-                    next_id += 1
-            if remap:
-                xml = re.sub(r'charPrIDRef="(\d+)"', lambda m: f'charPrIDRef="{remap.get(m.group(1), m.group(1))}"', xml)
+            part_header = pz.read("Contents/header.xml").decode("utf-8")
+            for k in kinds.values():
+                remap = {}
+                for m in k["rx"].finditer(part_header):
+                    if m.group(1) not in k["known"] and f'{k["ref"]}="{m.group(1)}"' in xml:
+                        remap[m.group(1)] = str(k["next"])
+                        k["extra"].append(re.sub(r'\bid="\d+"', f'id="{k["next"]}"', m.group(0), count=1))
+                        k["next"] += 1
+                if remap:
+                    xml = re.sub(rf'{k["ref"]}="(\d+)"', lambda m, r=remap, a=k["ref"]: f'{a}="{r.get(m.group(1), m.group(1))}"', xml)
         paras = _top_paragraphs(xml)
         body_paras = paras[-len(f.paras):]  # 채우기는 문단 안만 바꾸므로 문단 수는 그대로 — 앞의 쪽 설정 문단은 뺌
         body = xml[body_paras[0].start:body_paras[-1].end]
@@ -351,10 +356,15 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
                 data = new_sections[n].encode("utf-8")
             elif n == "Contents/content.hpf" and hpf is not None:
                 data = _drop_sections(hpf, [s for s in sec_names if s not in new_sections]).encode("utf-8")
-            elif n == "Contents/header.xml" and extra_chars:
-                h = re.sub(r"(</(?:[\w.-]+:)?charProperties>)", lambda m: "".join(extra_chars) + m.group(1), header, count=1)
-                data = re.sub(r'(<(?:[\w.-]+:)?charProperties\b[^>]*\bitemCnt=")(\d+)"',
-                              lambda m: f'{m.group(1)}{int(m.group(2)) + len(extra_chars)}"', h, count=1).encode("utf-8")
+            elif n == "Contents/header.xml" and any(k["extra"] for k in kinds.values()):
+                h = header
+                for k in kinds.values():
+                    if not k["extra"]:
+                        continue
+                    h = re.sub(rf"(</(?:[\w.-]+:)?{k['group']}>)", lambda m, e=k["extra"]: "".join(e) + m.group(1), h, count=1)
+                    h = re.sub(rf'(<(?:[\w.-]+:)?{k["group"]}\b[^>]*\bitemCnt=")(\d+)"',
+                               lambda m, e=k["extra"]: f'{m.group(1)}{int(m.group(2)) + len(e)}"', h, count=1)
+                data = h.encode("utf-8")
             elif n == "Preview/PrvText.txt":
                 data = " ".join(preview)[:1000].encode("utf-8")
             else:

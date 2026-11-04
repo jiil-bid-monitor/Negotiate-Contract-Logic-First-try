@@ -429,6 +429,7 @@ class _Chars:
         self.paras = {m.group(1): m.group(0) for m in
                       re.finditer(r'<(?:[\w.-]+:)?paraPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?paraPr>', header, re.S)}
         self.added: dict[tuple[str, int | None], str] = {}
+        self.added_para: dict[str, str] = {}  # 문단 모양 id → 가운데 정렬로 바꾼 사본 id
         # 언어별 글꼴 목록 {LATIN: {id: 이름}} — 채운 글의 숫자·영문을 한글과 같은 글꼴로(11/04 사용자 제보: 숫자 글꼴이 다름)
         self.faces = {m.group(1).upper(): dict(re.findall(r'<(?:[\w.-]+:)?font\b[^>]*\bid="(\d+)"[^>]*\bface="([^"]*)"', m.group(2)))
                       for m in re.finditer(r'<(?:[\w.-]+:)?fontface\b[^>]*\blang="(\w+)"[^>]*>(.*?)</(?:[\w.-]+:)?fontface>', header, re.S)}
@@ -440,6 +441,15 @@ class _Chars:
     def ratio(self, cid: str) -> float:
         m = re.search(r'<(?:[\w.-]+:)?ratio\b[^>]*\bhangul="(\d+)"', self.blocks.get(cid, ""))
         return int(m.group(1)) / 100 if m else 1.0
+
+    def centered(self, pid: str) -> str:
+        """pid 문단 모양을 가운데 정렬로 바꾼 사본 id(이미 가운데거나 모르면 pid 그대로)."""
+        if pid not in self.paras or self.align(pid) in ("CENTER", ""):
+            return pid
+        if pid not in self.added_para:
+            ids = [int(x) for x in self.paras] + [int(x) for x in self.added_para.values()]
+            self.added_para[pid] = str(max(ids) + 1)
+        return self.added_para[pid]
 
     def align(self, pid: str) -> str:
         m = re.search(r'<(?:[\w.-]+:)?align\b[^>]*\bhorizontal="(\w+)"', self.paras.get(pid, ""))
@@ -485,9 +495,21 @@ class _Chars:
     def smaller(self, cid: str, height: int) -> str:
         return self.variant(cid, height)
 
+    @property
+    def changed(self) -> bool:
+        return bool(self.added or self.added_para)
+
     def finish(self) -> str:
+        header = self.header
+        if self.added_para:
+            extra = "".join(re.sub(r'\bhorizontal="\w+"', 'horizontal="CENTER"',
+                                   re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1), count=1)
+                            for pid, new in self.added_para.items())
+            header = re.sub(r"(</(?:[\w.-]+:)?paraProperties>)", lambda m: extra + m.group(1), header, count=1)
+            header = re.sub(r'(<(?:[\w.-]+:)?paraProperties\b[^>]*\bitemCnt=")(\d+)"',
+                            lambda m: f'{m.group(1)}{int(m.group(2)) + len(self.added_para)}"', header, count=1)
         if not self.added:
-            return self.header
+            return header
 
         def block(cid: str, h: int | None, new: str) -> str:
             b = re.sub(r'\bid="\d+"', f'id="{new}"', self.blocks[cid], count=1)
@@ -496,7 +518,7 @@ class _Chars:
             ref = self._font_ref(cid)
             return b.replace(ref, self._unified_ref(cid), 1) if ref else b
         extra = "".join(block(cid, h, new) for (cid, h), new in self.added.items())
-        h = re.sub(r"(</(?:[\w.-]+:)?charProperties>)", lambda m: extra + m.group(1), self.header, count=1)
+        h = re.sub(r"(</(?:[\w.-]+:)?charProperties>)", lambda m: extra + m.group(1), header, count=1)
         return re.sub(r'(<(?:[\w.-]+:)?charProperties\b[^>]*\bitemCnt=")(\d+)"',
                       lambda m: f'{m.group(1)}{int(m.group(2)) + len(self.added)}"', h, count=1)
 
@@ -676,6 +698,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if not _SEAL_ONLY.match(seal):
                             continue
                         value = f"{value}   {target.text.strip()}"  # '(인)' 자리 — 이름 뒤에 그대로 남김(11/04 제보)
+                        pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[target.start:target.end])
+                        if chars is not None and pm:  # '(인)'이 오른쪽 정렬이던 칸 — 이름까지 넣으면 가운데로(11/04 사용자 요청)
+                            para_override[target.start] = chars.centered(pm.group(1))
                     edits.append((target, [value], False))
                     rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
                 targets = {e[0].start for e in edits}
@@ -715,7 +740,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             xml = _fill_label_paragraphs(xml, vault, rep)
             data = xml.encode("utf-8")
         out_entries[name] = data
-    if chars is not None and chars.added:  # 칸에 맞춰 줄인 글자 모양을 머리 정보에 더함
+    if chars is not None and chars.changed:  # 칸에 맞춰 줄인 글자 모양·가운데 정렬 문단 모양을 머리 정보에 더함
         out_entries["Contents/header.xml"] = chars.finish().encode("utf-8")
     Path(dst).parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(dst, "w") as zout:

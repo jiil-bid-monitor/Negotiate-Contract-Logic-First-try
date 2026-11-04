@@ -128,13 +128,29 @@ _CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 _CIRCLED_LINE = re.compile(rf"^\s*[{_CIRCLED}]\s*(?P<text>.+)$")
 _HEAD_LINE = re.compile(r"^\s*(?:[가-하]\.|\d+\.|[ⅠⅡⅢⅣⅤⅥⅦ]|□|■|※)")
 
-# ── 서식 목록: 세 가지 적는 방식 ─────────────────────────────
+# ── 서식 목록: 적는 방식 ─────────────────────────────
 # ① 표 한 줄: "- 일반현황 및 연혁 | 서식14" (hwpx 표가 한 줄로 읽힘)
-# ② 표 칸이 줄마다 풀림(옛 hwp): "- 제안사 연혁 및 일반현황" 다음 줄 "서식12" (또는 "서식28" / "~31")
-# ③ 목록·목차 줄 안: "3) 참여전문기술자 보유현황(서식 9)", "9. 참여 전문기술자 보유현황(서식9)", "응모신청서 제출 1부 < 서식 1 >"
-_FORM_CELL = re.compile(r"^\s*서식\s*(\d+)\s*(?:[~∼-]\s*(\d+))?\s*$")
-_FORM_INLINE = re.compile(r"[(<〔\[【]\s*서식\s*(\d+)\s*(?:[~∼-]\s*(\d+))?\s*[)>〕\]】]")
+# ② 표 칸이 줄마다 풀림(옛 hwp): "- 제안사 연혁 및 일반현황" 다음 줄 "서식12" (또는 "서식28" / "~31"),
+#    "4. 사업수행실적" 다음 줄 "[서식5호, 6호]"(11/04 당진)
+# ③ 목록·목차 줄 안: "3) 참여전문기술자 보유현황(서식 9)", "응모신청서 제출 1부 < 서식 1 >",
+#    "▪사업수행능력 평가서 3부(A4) [서식2~10호]"(11/04 당진)
+# ④ 서식 목차 표 "[서식 N] | 이름"
+# ⑤ 서식 본문 머리 "〔서식 3호〕" 다음 줄 제목 — 목록이 범위("2~10호")로만 적었거나 없을 때 이름을 채움
+# 번호 표기: "서식 3", "서식 3호", "서식 제3호", "서식2~10호", "서식5호, 6호", "서식7, 8호", "서식4-1"(4번의 하위 서식)
+_NO = r"서식\s*(?:제\s*)?\d+\s*호?(?:\s*-\s*\d+)?(?:\s*[~∼,]\s*(?:서식\s*)?(?:제\s*)?\d+\s*호?)*"
+_FORM_CELL = re.compile(rf"^\s*[\[〔<【(]?\s*(?P<nos>{_NO})\s*[\]〕>】)]?\s*$")
+_FORM_INLINE = re.compile(rf"[(<〔\[【]\s*(?P<nos>{_NO})\s*[)>〕\]】]")
+_FORM_HEAD = re.compile(r"^\s*[\[〔<【]\s*서식\s*(?:제\s*)?(\d+)\s*호?\s*[\]〕>】]\s*(?P<rest>.*)$")
 _LIST_MARK = re.compile(rf"^\s*(?:\d+\s*[).]|[{_CIRCLED}]|[-·∙•▪]|[가-하]\.)\s*")
+
+
+def _span_nos(nos: str) -> list[int]:
+    """'서식2~10호' → 2..10(15개까지), '서식5호, 6호' → [5, 6], '서식4-1' → [4]."""
+    nos = re.sub(r"(\d)\s*-\s*\d+", r"\1", nos)
+    nums = [int(x) for x in re.findall(r"\d+", nos)]
+    if len(nums) == 2 and re.search(r"[~∼]", nos) and nums[1] > nums[0]:
+        return list(range(nums[0], min(nums[1], nums[0] + 15) + 1))
+    return list(dict.fromkeys(nums))
 
 
 def _squash(s: str) -> str:
@@ -143,9 +159,34 @@ def _squash(s: str) -> str:
 
 def _clean_name(name: str) -> str:
     name = _LIST_MARK.sub("", name.strip())
-    name = re.sub(r"\s*(?:각\s*)?\d+\s*부\.?\s*$", "", name)  # "… 1부"
+    name = re.sub(r"\s*(?:각\s*)?\d+\s*부\.?\s*(?:\([^)]*\))?\s*$", "", name)  # "… 1부", "… 10부(A3)"
     name = re.sub(r"\s*(?:제출|작성)\s*$", "", name)
-    return re.sub(r"\s+", " ", name).strip(" -:·")
+    return re.sub(r"\s+", " ", name).strip(" -:·,")
+
+
+def _title_key(s: str) -> str:
+    return re.sub(r"[^가-힣A-Za-z0-9]", "", re.sub(r"\[[^\]]*\]|\.[A-Za-z]+$", "", s))
+
+
+def _head_title(lines: list[str], i: int, rest: str, source: str) -> str:
+    """서식 머리 뒤 제목: 같은 줄 나머지, 없으면 다음 줄들 중 처음 제목다운 줄.
+    '<편집용지>' 같은 안내, 공고명(파일 이름과 같은 줄 — 표지 서식 맨 위에 흔함)은 건너뜀."""
+    src = _title_key(source)
+    cands = [rest] + lines[i + 1:i + 6]
+    for ln in cands:
+        t = ln.split("|")[0].strip(" -·")
+        tokens = t.split()
+        if len(tokens) >= 2 and sum(len(x) == 1 for x in tokens) >= len(tokens) - 1:
+            t = "".join(tokens)  # '청  렴  서  약  서' → '청렴서약서'
+        t = re.split(r"\s{3,}", t)[0].strip()
+        k = _title_key(t)
+        if not k or re.fullmatch(r"<[^>]*>", t) or re.match(r"^(접수번호|공고번호|구\s*분|※|\d+\s*[.)])", t):
+            continue
+        if len(k) >= 8 and k in src:
+            continue
+        if 2 <= len(k) <= 30 and not re.search(r"서식\s*\d", t):
+            return t
+    return ""
 
 
 def _quant_range(lines: list[str]) -> range:
@@ -164,80 +205,115 @@ def _quant_range(lines: list[str]) -> range:
 
 
 def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
-    """서식 번호 → 이름. 같은 번호가 여러 번 나오면 처음 이름을 쓰고, 정량 묶음 여부는 하나라도 있으면 참."""
+    """서식 번호 → 이름. 같은 번호가 여러 번 나오면 처음 이름을 쓰고, 정량 묶음 여부는 하나라도 있으면 참.
+    단 '사업수행능력 평가서 (2~10)'처럼 범위로만 적은 이름·칸이 풀린 표에서 짐작한 이름(약한 이름)은
+    뒤에 나오는 더 구체적인 이름(서식 본문 머리의 제목 등)으로 바꿈."""
     lines = text.splitlines()
     quant = _quant_range(lines)
     found: dict[int, Form] = {}
+    weak: set[int] = set()  # 범위 이름·칸 풀린 표 이름 — 본문 제목으로 바꿀 수 있음
 
-    def add_one(n: int, name: str, i: int) -> bool:
+    def add_one(n: int, name: str, i: int, is_weak: bool = False, in_quant: bool = False) -> bool:
         name = _clean_name(name)
         if not name or len(name) > 60 or re.search(r"서식\s*\d", name):
             return False
         f = found.get(n)
         if f is None:
-            found[n] = Form(n, name, source, i in quant, classify(name, catalog))
-        elif i in quant:
-            f.in_quant = True
+            found[n] = Form(n, name, source, i in quant or in_quant, classify(name, catalog))
+            if is_weak:
+                weak.add(n)
+        else:
+            if n in weak and not is_weak:
+                f.name, f.doc = name, classify(name, catalog)
+                weak.discard(n)
+            if i in quant or in_quant:
+                f.in_quant = True
         return True
 
-    def add(nos: tuple[str, str | None], names: list[str], i: int) -> bool:
-        """서식 a(~b)에 이름들을 붙임. 범위 칸 수와 이름 수가 같으면 차례로, 아니면 모두 마지막 이름(범위 표시)."""
-        a = int(nos[0])
-        b = int(nos[1]) if nos[1] else a
-        if b < a:  # "서식4-1"은 범위가 아니라 4번의 하위 서식
-            b = a
-        span = list(range(a, min(b, a + 15) + 1))
+    def add(span: list[int], names: list[str], i: int, is_weak: bool = False) -> bool:
+        """서식 번호들에 이름들을 붙임. 번호 수와 이름 수가 같으면 차례로, 아니면 모두 '이름 (a~b)'(약한 이름).
+        범위 이름이 '사업수행능력 평가서'·'정량'이면 그 번호들은 정량 묶음."""
         names = [x for x in names if _clean_name(x)]
-        if not names:
+        if not names or not span:
             return False
+        if len(span) > 1 and len(names) == 1:  # "청렴서약서, 서약서 [서식11~12호]" — 이름도 쉼표로 나뉘면 차례로
+            parts = [x for x in re.split(r"\s*[,，]\s*|\s+및\s+", _clean_name(names[0])) if x]
+            if len(parts) == len(span):
+                names = parts
         if len(span) > 1 and len(names) == len(span):
-            return all([add_one(n, x, i) for n, x in zip(span, names)])
-        label = names[-1] if len(span) == 1 else f"{_clean_name(names[-1])} ({a}~{b})"
-        return all([add_one(n, label, i) for n in span])
+            return all([add_one(n, x, i, is_weak) for n, x in zip(span, names)])
+        if len(span) == 1:
+            return add_one(span[0], names[-1], i, is_weak)
+        base = _clean_name(names[-1])
+        sep = "~" if span == list(range(span[0], span[-1] + 1)) and len(span) > 2 else "·"
+        label = f"{base} ({span[0]}{sep}{span[-1]})" if sep == "~" else f"{base} ({'·'.join(map(str, span))})"
+        q = bool(re.search(r"정량|사업수행능력(?:평가서|평가자료)", _squash(base)))
+        return all([add_one(n, label, i, True, q) for n in span])
 
     for i, ln in enumerate(lines):  # ④ 서식 목차 표 "[서식 N] | 이름" — 이름이 가장 정확해서 먼저
         m = re.match(r"^\s*(?:[\[〔<【]\s*)?서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:-\s*\d+)?\s*(?:[\]〕>】]\s*)?\|\s*([^|]+)", ln)
         if m:  # "[서식 4-1] | 공동수급표준협정서(공동이행)" → 서식4 = 공동수급표준협정서, "서식 1호 | 표지 |"(11/03 영동군)
             name = re.sub(r"\s*\([^)]*\)\s*$", "", m.group(2)) if "-" in ln.split("|")[0] else m.group(2)
             name = re.split(r"\s※", name)[0]  # "… 서약서 ※ 서식 16호 이행 서약서는 …" 꼬리 설명
-            add((m.group(1), None), [name], i)
+            add([int(m.group(1))], [name], i)
 
     pending: list[str] = []  # 칸이 풀린 표에서 '서식N' 앞에 쌓인 '- 이름' 줄들
     for i, ln in enumerate(lines):
         if "|" in ln:  # ① 표 한 줄 — 마지막 칸이 서식, 그 앞 칸이 이름(여러 개면 ' - '로 나뉨, 너무 길면 한 칸 더 앞)
             cells = [c.strip() for c in ln.split("|")]
             m = _FORM_CELL.match(cells[-1]) if len(cells) >= 2 else None
+            if m and "호" in cells[-1]:  # '구비서류 | 서식 2호' 제출서류 표는 read_submit_items가 읽음(11/03 영동군 — 목록은 목차 표로)
+                pending = []
+                continue
             if m:
+                span = _span_nos(m.group("nos"))
                 parts = [x for x in re.split(r"\s+-\s+|^-\s*", cells[-2]) if x.strip()]
-                if not add(m.groups(), parts, i) and len(cells) >= 3:
-                    add(m.groups(), [cells[-3]], i)
+                if not add(span, parts, i) and len(cells) >= 3:
+                    add(span, [cells[-3]], i)
                 pending = []
                 continue
         m = _FORM_CELL.match(ln)
         if m and pending:  # ② 칸이 풀린 표 — 다음 줄이 "~31"이면 범위
-            nos = m.groups()
+            span = _span_nos(m.group("nos"))
             k = i + 1
             while k < len(lines) and not lines[k].strip():
                 k += 1
             r = re.match(r"^\s*[~∼]\s*(\d+)\s*$", lines[k]) if k < len(lines) else None
-            if r and not nos[1]:
-                nos = (nos[0], r.group(1))
-                add(nos, pending, i)
+            if r and len(span) == 1:
+                add(_span_nos(f"서식{span[0]}~{r.group(1)}"), pending, i)
             else:
-                add(nos, pending[-1:], i)
+                add(span, pending[-1:], i, is_weak=bool(re.match(r"^\s*\d+\s*[.)]", pending[-1])))
             pending = []
             continue
         if re.match(r"^\s*[~∼]\s*\d+\s*$", ln):
             continue
         m = _FORM_INLINE.search(ln)
         if m and _LIST_MARK.match(ln) and len(_squash(ln[m.end():])) <= 6:  # ③ 목록 줄 끝의 (서식 N)
-            add(m.groups(), [ln[:m.start()]], i)
+            add(_span_nos(m.group("nos")), [ln[:m.start()]], i)
             pending = []
             continue
-        if re.match(r"^\s*[-∙•]\s*\S", ln):
+        if re.match(r"^\s*(?:[-∙•▪]\s*\S|\d+\s*[.)]\s*[가-힣])", ln):
             pending.append(ln)
         elif ln.strip() and not re.match(r"^\s*(?:\d+\s*부|[※·(]|구\s*분|부\s*수|항\s*목|작\s*성)", ln):
             pending = []
+
+    # ⑤ 서식 본문 머리 — 같은 번호는 뒤(본문) 것. 목록에 없거나 약한 이름만 채움(목록·목차 표 이름은 그대로)
+    heads: dict[int, tuple[int, str]] = {}
+    for i, ln in enumerate(lines):
+        m = _FORM_HEAD.match(ln)
+        if m and "|" not in ln:
+            heads[int(m.group(1))] = (i, m.group("rest"))
+    for n, (i, rest) in sorted(heads.items()):
+        if n in found and n not in weak:
+            continue
+        title = _head_title(lines, i, rest, source)
+        if title:
+            if n in found:
+                f = found[n]
+                f.name, f.doc = _clean_name(title), classify(title, catalog)
+                weak.discard(n)
+            else:
+                add_one(n, title, i)
     return sorted(found.values(), key=lambda f: f.no)
 
 

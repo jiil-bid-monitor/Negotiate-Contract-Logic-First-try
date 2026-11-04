@@ -32,6 +32,7 @@ from . import mview
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .docscan import DocScan
 from .mstore import TeamStore
+from .exclusionsync import ExclusionSync
 from .reportsync import ReportSync
 from .sheetsync import SheetSync
 from .store import DECISION_REASONS, DECISION_SUMMARY_MIN, STATUSES, Store
@@ -433,6 +434,8 @@ def main(argv: list[str] | None = None) -> int:
         timer.start()
     # 텔레그램 보고에 나간 공고 → 판단 기록 '미판단' (bot-state 브랜치의 보고 기록을 몇 분마다 받아 합친다)
     ReportSync(app.team.merge_report).start()
+    # 예외 낱말 후보 HTML '제출' 파일(다운로드 폴더) → jiil 반영·묶음 다시 잠금·병합 (webapp/exclusionsync.py)
+    ExclusionSync().start()
     # 판단 기록 → 피드백 구글 시트 S~V열 (FEEDBACK_SHEET_ID + 서비스 계정 키가 있을 때만, webapp/sheetsync.py)
     try:
         sheet_cfg = feedback_sheet.settings()

@@ -260,5 +260,14 @@ https://console.cron-job.org 가입 → **Create cronjob**. 두 개 모두 공�
   그 파일·글을 Claude에게 주면 jiil 레포 `EXCLUDE_WORDS`·`evaluation/exclusion_feedback.json`에
   반영하고 싱크로율 묶음을 다시 만든다. 판단 기록이 쌓일수록 순위가 그 판단으로 학습된다. **규칙을 스스로 바꾸지는 않는다.**
 - 법령 이름(소방법·문화재보호법) 속 키워드는 오탐으로 본다(사용자 결정).
+- **자동 반영(2026-11-03 사용자 결정 — 파일을 주고받지 않게, 병합까지 자동)**: 서버 PC(웹앱이 켜진 PC)에서 HTML을 열고 '제출'하면
+  다운로드 폴더(`EXCLUSION_INBOX`, 없으면 ~/Downloads)에 생긴 `예외낱말_판단_*.json`을 웹앱이 1분 안에 찾아(`webapp/exclusionsync.py`)
+  `python -m nego.exclusion_apply 파일`을 돌림 — jiil 판단 기록·`evaluation/exclude_words.json`에 넣고, 과거 프로필 다시 생성,
+  jiil 테스트 통과 시 PR 만들어 병합, 싱크로율 묶음 다시 잠가 PR 병합, 개발자 방에 결과 알림. 실패하면 병합 안 하고 실패만 알림.
+  두 레포 모두 임시 작업 폴더(git worktree)에서 해서 열려 있는 작업 폴더는 안 건드림. 처리한 파일은 `data/exclusion_applied.json`
+  (내용 해시 — 체크를 고쳐 다시 제출하면 새로 반영, 이미 반영한 판단은 건너뜀). 필요한 것: 서버 PC `.env`의 `CORPUS_PASSPHRASE`·
+  `TELEGRAM_BOT_TOKEN`·`TELEGRAM_DEV_CHAT_ID`, gh 로그인, 옆에 클론한 jiil 레포. 휴대폰에서 제출한 파일은 이 PC로 안 오므로
+  '결과 복사' 글을 Claude에게. 영문 낱말 승인은 낱말로 넣고 "규칙으로 처리하는 게 나을 수 있음"으로 알림(규칙은 자동으로 안 바꿈).
+  시험: `python -m nego.exclusion_apply 파일 --dry-run`(올리거나 병합하지 않음).
 - 코드: `nego/exclusion_report.py`(이 레포) + jiil 레포 `evaluation/exclusion_suggest.py`. 손으로 돌리기:
   `python -m nego.exclusion_report output/attachment_text --no-send` → `output/예외낱말_후보.html`.

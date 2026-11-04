@@ -299,10 +299,11 @@ def run(out: Path, orders: Path | None = None, corp: Path | None = None, direct:
         if orders:
             ws = wb["실적목록"]
             for i, t in enumerate(read_orders(Path(orders)), 1):
+                from .notice import track_field
                 _put(ws, [i, t["업무"], t["사업명"], None, t["계약일"], t["준공일"], t["계약금액(원)"], None, None,
-                           None, None, None, t["비고"]])
+                           track_field(t["사업명"]), None, None, t["비고"]])
                 rep.tracks += 1
-            rep.warnings.append("실적목록: 발주기관·부가세·지분율·분야·증빙 파일이 원본에 없어 비움 — 실적증명서와 함께 채울 것")
+            rep.warnings.append("실적목록: 분야는 사업명으로 자동 분류(확인 필요) · 발주기관·부가세·지분율·증빙 파일은 원본에 없어 비움 — 실적증명서와 함께 채울 것")
         if direct:
             for p in _unzip(Path(direct), work):
                 items = read_direct(p) if p.suffix.lower() == ".pdf" else []

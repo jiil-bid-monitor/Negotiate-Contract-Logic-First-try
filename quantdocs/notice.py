@@ -584,6 +584,59 @@ def track_candidates(req: TrackReq, tracks: list[dict], ref: date) -> list[dict]
     return out
 
 
+# ── 실적 분야·서식에 맞는 실적(11/04 사용자 결정) ────────────────
+# 공사수주현황엔 분야 칸이 없어 사업명으로 나눔 — 투찰 계산기와 같은 규칙(nego.bidfield, 공고명 키워드)에
+# 그 규칙이 놓치는 전시 낱말을 더함. 규칙 파일(config/bid_fields.json)은 투찰 계산기도 쓰므로 여기서만 보탬.
+_EXHIBIT_EXTRA = re.compile(r"디오라마|실감\s*콘텐츠|히스토리\s*월|관광\s*콘텐츠")
+EXHIBIT = "전시·체험"
+# 서식 제목 낱말 → 넣을 실적 분야(사용자 결정: 전시분야엔 영상·미디어·조형물도, 유지보수·설계 용역도 넣고 아니면 담당자가 지움)
+_FORM_FIELDS = [
+    (re.compile(r"전시|체험"), {EXHIBIT, "영상·미디어", "조형물·경관"}),
+    (re.compile(r"조형|경관"), {"조형물·경관"}),
+    (re.compile(r"영상|미디어|콘텐츠"), {"영상·미디어", EXHIBIT}),
+    (re.compile(r"놀이|조경"), {"놀이·조경"}),
+]
+
+
+def track_field(name: str) -> str:
+    """사업명 → 분야 이름(투찰 계산기 분야 + 전시 보탬 낱말)."""
+    _import_nego()
+    from nego import bidfield
+    f = bidfield.classify(name or "")
+    if f != EXHIBIT and _EXHIBIT_EXTRA.search(name or ""):
+        return EXHIBIT
+    return f
+
+
+def form_tracks(title: str, tracks: list[dict], ref: date) -> tuple[list[dict], list[str]]:
+    """실적 서식 제목("전시분야 최근 3년간 사업수행실적")으로 넣을 실적 고르기 — 공고에 실적 요건이 없을 때.
+    기간: 제목의 '최근 N년'(준공일 기준, 준공일 없는 실적은 빼고 알림). 분야: 제목 낱말 → 받는 분야(분야 칸이 비면 사업명으로).
+    순서: 준공일 오래된 것부터(서식 주석 '연도순'). 돌려줌: (실적, 알림 줄)."""
+    m = re.search(r"최근\s*(\d+)\s*(?:개\s*)?년", title or "")
+    years = int(m.group(1)) if m else None
+    fields = next((fs for rx, fs in _FORM_FIELDS if rx.search(title or "")), None)
+    out, no_done, notes = [], [], []
+    for t in tracks:
+        if fields is not None and (t.get("분야") or track_field(str(t.get("사업명") or ""))) not in fields:
+            continue
+        done = _as_date(t.get("준공일"))
+        if years:
+            if done is None:
+                no_done.append(str(t.get("사업명") or ""))
+                continue
+            try:
+                since = ref.replace(year=ref.year - years)
+            except ValueError:
+                since = ref.replace(year=ref.year - years, day=28)
+            if done < since or done > ref:
+                continue
+        out.append(t)
+    out.sort(key=lambda t: _as_date(t.get("준공일")) or date.max)
+    if no_done:
+        notes.append(f"준공일이 없어 뺀 실적 {len(no_done)}건: " + ", ".join(no_done[:5]) + (" 외" if len(no_done) > 5 else ""))
+    return out, notes
+
+
 # ── 엑셀로 ───────────────────────────────────────────────────
 def write_sheet(sheet: NoticeSheet, out_dir: Path, company: Path | None = None, ref: date | None = None,
                 name: str = "공고별_준비표.xlsx", tracks: list[dict] | None = None, extra=None) -> Path:

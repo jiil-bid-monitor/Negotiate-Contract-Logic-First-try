@@ -222,3 +222,69 @@ def test_manual_forms():
         assert is_manual(n), n
     for n in ("입찰참가신청서", "일반현황 및 연혁", "사업수행실적 집계표", "위임장", "청렴계약이행서약서"):
         assert not is_manual(n), n
+
+
+def _hp_cell(col, row, text, colspan=1):
+    return (f'<hp:tc><hp:subList><hp:p><hp:run charPrIDRef="1"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+            f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{colspan}" rowSpan="1"/></hp:tc>')
+
+
+def test_track_form_dangjin_shape(tmp_path: Path):
+    """11/04 당진 '전시분야 최근 3년간 사업수행실적' — 연번 '1'만 적힌 첫 줄도 채움, 백만원 단위, 비고(단독/공동),
+    표 밖 '업 체 명 :' 문단, '계 | 총 실적 금액 : 백만원' 줄."""
+    from quantdocs.fill import FillReport, _cells, _fill_label_paragraphs, _fill_tracks, _set_cell, _spans
+
+    head = ["연번", "① 사업명", "사업기간", "② 계약금액 (단위 : 백만원)", "발주처", "③ 구체적 업무수행 내용", "비고 (단독/공동)"]
+    rows = [[_hp_cell(i, 0, h) for i, h in enumerate(head)]]
+    rows.append([_hp_cell(i, 1, "1" if i == 0 else "") for i in range(7)])
+    rows.append([_hp_cell(i, 2, "") for i in range(7)])
+    rows.append([_hp_cell(0, 3, "계"), _hp_cell(1, 3, "총 실적 금액 :          백만원", 6)])
+    tbl = "<hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    xml = ('<hs:sec><hp:p><hp:run charPrIDRef="1"><hp:t>업 체 명 :</hp:t></hp:run><hp:linesegarray/></hp:p>'
+           f'<hp:p><hp:run>{tbl}</hp:run></hp:p></hs:sec>')
+    tracks = [{"사업명": "가상 전시물 제작 설치", "계약일": dt.date(2024, 1, 1), "준공일": dt.date(2024, 6, 30),
+               "계약금액(원)": 123_400_000, "분야": "전시·체험"},
+              {"사업명": "가상 체험관 조성", "준공일": dt.date(2025, 3, 1), "계약금액(원)": 50_000_000, "지분율(%)": 60}]
+    rep = FillReport("x")
+    edits = _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, rep)
+    for cell, lines, keep in sorted(edits, key=lambda e: e[0].start, reverse=True):
+        xml = xml[:cell.start] + _set_cell(xml[cell.start:cell.end], lines, keep) + xml[cell.end:]
+
+    class V:
+        info = {"회사명": "(주)가상회사"}
+    from quantdocs import fill as fill_mod
+    orig = fill_mod._value
+    fill_mod._value = lambda key, vault: vault.info.get(key, "")
+    try:
+        xml = _fill_label_paragraphs(xml, V(), rep)
+    finally:
+        fill_mod._value = orig
+    assert rep.rows == 2
+    for want in ("가상 전시물 제작 설치", "123.4", "2024.01.01~2024.06.30", "단독", "공동(60%)", ">2<",
+                 "총 실적 금액 : 173.4 백만원", "업 체 명 : (주)가상회사"):
+        assert want in xml, want
+    assert "123,400,000" not in xml
+
+
+def test_form_tracks_by_title(monkeypatch):
+    from quantdocs import notice
+    monkeypatch.setattr(notice, "track_field", lambda n: "전시·체험" if "전시" in n else "기타")
+    ref = dt.date(2026, 11, 4)
+    tracks = [{"사업명": "전시 A", "준공일": dt.date(2025, 1, 1)}, {"사업명": "전시 B", "준공일": dt.date(2022, 1, 1)},
+              {"사업명": "창호 C", "준공일": dt.date(2025, 5, 1)}, {"사업명": "전시 D", "준공일": None},
+              {"사업명": "전시 E", "준공일": dt.date(2024, 2, 1)}]
+    got, notes = notice.form_tracks("전시분야 최근 3년간 사업수행실적", tracks, ref)
+    assert [t["사업명"] for t in got] == ["전시 E", "전시 A"]  # 3년 밖·다른 분야 뺌, 오래된 것부터
+    assert notes and "전시 D" in notes[0]
+
+
+def test_track_rows_keep_largest_when_short():
+    from quantdocs.fill import FillReport, _cells, _fill_tracks, _spans
+
+    head = ["연번", "사업명", "계약금액"]
+    rows = [[_hp_cell(i, 0, h) for i, h in enumerate(head)]] + [[_hp_cell(i, r, "") for i in range(3)] for r in (1, 2)]
+    xml = "<hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    tracks = [{"사업명": n, "계약금액(원)": a} for n, a in (("옛 큰 것", 900), ("작은 것", 100), ("새 큰 것", 800))]
+    rep = FillReport("x")
+    names = [l[0] for c, l, _ in _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, rep) if c.col == 1]
+    assert names == ["옛 큰 것", "새 큰 것"] and rep.overflow == 1 and rep.overflow_names == ["작은 것"]

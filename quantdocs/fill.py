@@ -24,6 +24,7 @@ class FillReport:
     filled: list[str] = field(default_factory=list)  # "회사명 → (주)지일" 같은 줄
     rows: int = 0  # 실적집계표에 넣은 실적 수
     overflow: int = 0  # 표 줄이 모자라 못 넣은 실적 수
+    overflow_names: list[str] = field(default_factory=list)  # 그 실적 이름(금액이 작아 빠진 것)
 
 
 def _spans(xml: str, tag: str, start: int = 0, end: int | None = None) -> list[tuple[int, int]]:
@@ -178,14 +179,43 @@ def _period(t: dict) -> str:
     return f"{a}~{b}" if a and b else (a or b)
 
 
-_TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값
-    (("사업명", "용역명", "공사명", "건명"), lambda t: str(t.get("사업명") or "")),
-    (("수행기간", "계약기간", "사업기간", "기간"), _period),
-    (("사업개요", "내용", "분야"), lambda t: str(t.get("분야") or "")),
-    (("계약금액", "금액", "실적액"), lambda t: _money(t.get("인정 금액(원)") or t.get("계약금액(원)"))),
-    (("발주기관", "발주처", "발주자"), lambda t: str(t.get("발주기관") or "")),
-    (("구분", "업무"), lambda t: (str(t.get("업무") or "") + (f" (지분 {t.get('지분율(%)')}%)" if t.get("지분율(%)") not in (None, "", 100, 100.0) else "")).strip()),
-    (("증빙", "비고"), lambda t: str(t.get("증빙 파일 이름") or "")),
+def _amount(t: dict, head: str) -> str:
+    """금액 — 머리글 단위(백만원·천원)에 맞춤(11/04 당진 '계약금액(단위:백만원)')."""
+    v = t.get("인정 금액(원)") or t.get("계약금액(원)")
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return ""
+    return _in_unit(v, head)
+
+
+def _in_unit(v: float, head: str) -> str:
+    if "백만" in head:
+        return f"{v / 1e6:,.1f}".rstrip("0").rstrip(".")
+    if "천원" in head:
+        return f"{round(v / 1000):,}"
+    return f"{int(v):,}"
+
+
+def _alone(t: dict) -> str:
+    share = t.get("지분율(%)")
+    try:
+        share = float(share)
+    except (TypeError, ValueError):
+        return "단독"  # 지분율 칸이 비면 단독으로 봄(공사수주현황엔 공동 표시 없음 — 공동이면 회사 자료에 지분율)
+    return "단독" if share >= 100 else f"공동({share:g}%)"
+
+
+_TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값(t, 머리글)
+    (("연번", "순번"), None),  # 줄 번호 — 따로 채움
+    (("사업명", "용역명", "공사명", "건명"), lambda t, h: str(t.get("사업명") or "")),
+    (("수행기간", "계약기간", "사업기간", "기간"), lambda t, h: _period(t)),
+    (("사업개요", "내용", "분야"), lambda t, h: str(t.get("분야") or "")),
+    (("계약금액", "금액", "실적액"), _amount),
+    (("발주기관", "발주처", "발주자"), lambda t, h: str(t.get("발주기관") or "")),
+    (("단독", "공동"), lambda t, h: _alone(t)),
+    (("구분", "업무"), lambda t, h: (str(t.get("업무") or "") + (f" (지분 {t.get('지분율(%)')}%)" if t.get("지분율(%)") not in (None, "", 100, 100.0) else "")).strip()),
+    (("증빙", "비고"), lambda t, h: str(t.get("증빙 파일 이름") or "")),
 ]
 
 
@@ -198,36 +228,96 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
         heads = [_sq(c.text) for c in rows[r]]
         if not (any("사업명" in h or "용역명" in h or "공사명" in h for h in heads) and any("금액" in h for h in heads)):
             continue
-        colmap = {}
+        colmap, headtext, no_col = {}, {}, None
         for c in rows[r]:
             h = _sq(c.text)
+            headtext[c.col] = h
             for words, fn in _TRACK_COLS:
-                if any(w in h for w in words) and fn not in colmap.values():
-                    colmap[c.col] = fn
+                if any(w in h for w in words):
+                    if fn is None:
+                        no_col = c.col
+                    elif fn not in colmap.values():
+                        colmap[c.col] = fn
                     break
+        amount_head = next((headtext[k] for k, fn in colmap.items() if fn is _amount), "")
+
+        def empty(line):  # 빈 줄 — 연번 칸에 번호만 미리 적힌 줄도 빈 줄(11/04 당진 '1')
+            return all(c.blank or (c.col in (no_col, line[0].col) and re.fullmatch(r"\d+\.?", _sq(c.text))) for c in line)
+
+        def is_total(line):
+            f = _sq(line[0].text)
+            return "누계" in f or "합계" in f or f == "계"
+
+        later = sorted(k for k in rows if k > r)
+        slots = sum(1 for k in later if not is_total(rows[k]) and empty(rows[k]))
         queue = list(tracks)
-        for rr in sorted(k for k in rows if k > r):
+        if 0 < slots < len(queue):  # 줄이 모자라면 금액 큰 것부터 줄 수만큼 고르고 순서는 그대로(연도순)
+            amt = lambda t: float(t.get("인정 금액(원)") or t.get("계약금액(원)") or 0)
+            keep = {id(t) for t in sorted(queue, key=amt, reverse=True)[:slots]}
+            rep.overflow_names = [str(t.get("사업명") or "") for t in queue if id(t) not in keep]
+            rep.overflow += len(queue) - slots
+            queue = [t for t in queue if id(t) in keep]
+        tracks = list(queue)
+        n = 0
+        for rr in later:
             line = rows[rr]
             first = _sq(line[0].text)
-            if "누계" in first or "합계" in first:  # 실적누계 줄: 건수·합계
+            if "누계" in first or "합계" in first or first == "계":  # 실적누계·계 줄: 건수·합계
+                total = sum(float(t.get("인정 금액(원)") or t.get("계약금액(원)") or 0) for t in tracks[:n])
                 for c in line:
-                    h = next((_sq(x.text) for x in rows[r] if x.col == c.col), "")
-                    if "기간" in h and tracks:
-                        edits.append((c, [f"{len(tracks)}건"], False))
-                    elif "금액" in h and tracks:
-                        total = sum(float(t.get("인정 금액(원)") or t.get("계약금액(원)") or 0) for t in tracks)
-                        edits.append((c, [f"{int(total):,}원"], False))
+                    h = headtext.get(c.col, "")
+                    if not n:
+                        break
+                    if _sq(c.text).startswith("총실적금액"):  # '총 실적 금액 :   백만원' 한 칸(11/04 당진)
+                        edits.append((c, [f"총 실적 금액 : {_in_unit(total, amount_head)} {'백만원' if '백만' in amount_head else '천원' if '천원' in amount_head else '원'}"], False))
+                    elif "기간" in h and c.blank:
+                        edits.append((c, [f"{n}건"], False))
+                    elif "금액" in h and c.blank:
+                        edits.append((c, [_in_unit(total, amount_head) + ("" if ("백만" in h or "천원" in h) else "원")], False))
                 continue
-            if not queue or not all(c.blank for c in line):
+            # 빈 줄 — 연번 칸에 번호만 미리 적힌 줄도 빈 줄(11/04 당진 '1')
+            if not queue or not empty(line):
                 continue
             t = queue.pop(0)
+            n += 1
             for c in line:
-                if c.col in colmap and (v := colmap[c.col](t)):
+                if c.col == no_col and c.blank:
+                    edits.append((c, [str(n)], False))
+                elif c.col in colmap and (v := colmap[c.col](t, headtext.get(c.col, ""))):
                     edits.append((c, [v], False))
             rep.rows += 1
         rep.overflow += len(queue)
         break  # 표 하나에 한 번
     return edits
+
+
+def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
+    """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
+    tbls = _spans(xml, "tbl")
+    edits = []
+    for s, e in _spans(xml, "p"):
+        if any(ts >= s and te <= e for ts, te in tbls) or any(ts <= s and e <= te for ts, te in tbls):
+            continue
+        text = _text(xml[s:e])
+        m = re.fullmatch(r"\s*(.{2,16}?)\s*[:：]\s*", text)
+        if not m:
+            continue
+        key = _label_key(m.group(1))
+        value = _value(key, vault) if key else ""
+        if not value:
+            continue
+        seg = xml[s:e]
+        last = list(re.finditer(r"</(?:[\w.-]+:)?t>", seg))
+        if not last:
+            continue
+        k = last[-1].start()
+        seg = seg[:k] + escape(" " + value) + seg[k:]
+        seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+        edits.append((s, e, seg))
+        rep.filled.append(f"{_sq(m.group(1))} → {value[:40]}")
+    for s, e, seg in reversed(edits):
+        xml = xml[:s] + seg + xml[e:]
+    return xml
 
 
 def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> FillReport:
@@ -266,6 +356,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                     rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
             for cell, lines, keep in sorted(edits, key=lambda e: e[0].start, reverse=True):
                 xml = xml[:cell.start] + _set_cell(xml[cell.start:cell.end], lines, keep) + xml[cell.end:]
+            xml = _fill_label_paragraphs(xml, vault, rep)
             data = xml.encode("utf-8")
         out_entries[name] = data
     Path(dst).parent.mkdir(parents=True, exist_ok=True)

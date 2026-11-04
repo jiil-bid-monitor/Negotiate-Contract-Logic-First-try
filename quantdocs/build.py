@@ -29,7 +29,7 @@ from .fill import FillReport, fill_hwpx
 from .forms_cut import cut, merge as merge_forms
 from .g2b import qualification_rows
 from .kinds import detect, guide
-from .notice import read_notice, track_candidates, write_sheet
+from .notice import form_tracks, read_notice, track_candidates, write_sheet
 
 SCOPE_DOCS = {"history", "track_record", "qualification", "direct_production"}  # 이번 단계에서 채우는 서류 종류
 
@@ -199,7 +199,11 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                     parts.append((c, manual_dir / c.file))
                     continue
                 is_track = bool(re.search(r"실적.*(집계|현황)|수행실적", c.title))
-                rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, a.candidates if is_track else None)
+                rows = a.candidates
+                if is_track and not rows:  # 공고에 실적 요건이 없으면 서식 제목(분야·최근 N년)으로 고름(11/04 사용자 결정)
+                    rows, why = form_tracks(c.title, vault.tracks, notice_date or date.today())
+                    a.notes += [f"{c.file}: {w}" for w in why]
+                rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None)
                 reports.append(rep)
                 parts.append((c, filled_dir / c.file))
             if parts:  # 서식 전체(채운 것 + 직접 기입)를 한글 파일 하나로 — 담당자가 이 파일 하나에서 기입(11/03 사용자 요청)
@@ -244,7 +248,9 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             table(wb.create_sheet("자격요건"), ["묶음", "조건", "자격", "지일", "첨부 서류", "출처"],
                   q_rows or [["", "", "첨부 공고문에서 코드로 적힌 자격을 찾지 못함 — 원문 확인", "", "", ""]],
                   [6, 10, 40, 8, 40, 30])
-            f_rows = [[r.file, "\n".join(r.filled) or "-", r.rows or "", r.overflow or ""] for r in reports]
+            f_rows = [[r.file, "\n".join(r.filled) or "-", r.rows or "",
+                       (f"{r.overflow}건 (금액이 작은 것): " + ", ".join(r.overflow_names[:10])) if r.overflow_names
+                       else (r.overflow or "")] for r in reports]
             table(wb.create_sheet("통합본 순서"), ["순서", "구분", "파일", "확인"],
                   [[i, p.section, Path(p.path).name, p.note] for i, p in enumerate(a.picks, 1)]
                   or [["", "파일 이름이 맞는 회사 서류가 없음", "", ""]], [6, 40, 40, 36])

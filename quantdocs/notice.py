@@ -348,16 +348,54 @@ def _form_nos(cell: str) -> list[int]:
         return []
     out = []
     for part in re.split(r"\s*[,·]\s*", m.group(1)):
-        a, _, b = re.split(r"\s*([~∼])\s*", part) + ["", ""] if re.search(r"[~∼]", part) else (part, "", "")
+        a, _, b = (re.split(r"\s*([~∼])\s*", part) + ["", ""])[:3] if re.search(r"[~∼]", part) else (part, "", "")
         a, b = int(a), int(b) if b else int(a)
         out += list(range(a, min(b, a + 30) + 1))
     return out
 
 
-def _submit_table(lines: list[str], j: int) -> tuple[list[tuple[str, str]], int]:
-    """'구비서류 | 서식번호' 표(11/03 영동군): 머리줄 다음 '• 묶음 | 서식' / ' - 서류 | 서식 N호' 줄들. (서류 글, 서식 번호 글), 끝난 줄."""
-    if not re.search(r"서식|비고|구분|서류", lines[j]):
+def _split_docs(cell: str) -> list[str]:
+    """한 칸에 여러 서류: '참가자격을 입증할 서류 ① 사업자등록증 사본, 법인등기부등본, …, 사용인감계 각 1부, 직접생산확인증명서(실물모형)
+    ② 공동수급인 경우 : …' → ①의 서류들(공동수급·조건부 ②부터는 뺌)(11/04 필암서원)."""
+    if not re.search(rf"[{_CIRCLED}]", cell):
+        return [cell]
+    first = re.split(rf"\s*[{_CIRCLED}]\s*", cell)
+    part = first[1] if len(first) > 1 else cell
+    out = []
+    for x in re.split(r"\s*[,，]\s*(?![^()]*\))", part):
+        x = re.sub(r"\s*각\s*\d+\s*부\s*$", "", x).strip(" .")
+        if x:
+            out.append(x)
+    return out
+
+
+def _grid_table(lines: list[str], j: int) -> tuple[list[tuple[str, str]], int]:
+    """'구 분 | 연번 | 제 출 서 류 | 비 고' 같은 표 — 머리줄에서 '서류' 칸을 찾아 아래 줄마다 그 칸(오른쪽 기준, 앞 칸이 합쳐진 줄도)을
+    서류로, 마지막 칸의 '서식 N'을 서식 번호로(11/04 필암서원 공고문)."""
+    head = [_squash(c) for c in lines[j].split("|")]
+    idx = next((i for i, c in enumerate(head) if re.search(r"서류|서류명|제출물", c)), None)
+    if idx is None or len(head) < 2:
         return [], j
+    from_right = len(head) - idx
+    k, items = j + 1, []
+    while k < len(lines) and "|" in lines[k]:
+        cells = [c.strip() for c in lines[k].split("|")]
+        if len(cells) >= from_right:
+            body = cells[len(cells) - from_right]
+            nos = ",".join(str(n) for n in _form_nos(cells[-1])) if from_right > 1 else ""
+            for doc in _split_docs(body):
+                items.append((doc, nos))
+        k += 1
+    return items, k
+
+
+def _submit_table(lines: list[str], j: int) -> tuple[list[tuple[str, str]], int]:
+    """'구비서류 | 서식번호' 표(11/03 영동군): 머리줄 다음 '• 묶음 | 서식' / ' - 서류 | 서식 N호' 줄들. (서류 글, 서식 번호 글), 끝난 줄.
+    그 모양이 아니면 '구 분 | 연번 | 제 출 서 류 | 비 고' 칸 표(_grid_table)."""
+    if not re.search(r"서식|비고|구분|서류", _squash(lines[j])):
+        return [], j
+    if j + 1 < len(lines) and "|" in lines[j + 1] and not re.match(r"^\s*[-•·∙▪○●]", lines[j + 1]):
+        return _grid_table(lines, j)
     k, items = j + 1, []
     while k < len(lines) and "|" in lines[k] and re.match(r"^\s*[-•·∙▪○●]", lines[k]):
         cells = [c.strip() for c in lines[k].split("|")]
@@ -390,7 +428,7 @@ def submit_quant_forms(text: str) -> set[int]:
 # 서류 이름처럼 끝나는지(…서·…증·…본·…표·…도·…목록·…계·…장·…점(USB 1점)·…자료·…파일·영문 약자) — 문장('…경우', '…한다.')이나
 # 절 제목('저작권', '공통 사항')은 서류가 아님(11/04 사용자 제보: 실격 사유·도면 작성 요령이 제출서류로 보였음)
 _SENTENCE_END = re.compile(r"(?:경우|한다|하여야|할\s*것|함|됨|않음|가능|불가|있음|없음|바람|하시기)\s*[.)）]*\s*$")
-_DOC_END = re.compile(r"(?:서|증|본|표|도|록|계|장|점|료|일|면|판|형|널|진|철|부|[A-Za-z])\s*$")
+_NOT_DOC = re.compile(r"^(?:저작권|지식재산권|공통\s*사항|기타\s*사항|유의\s*사항|일반\s*사항|참고\s*사항|주의\s*사항|기타)$")
 
 
 def _doc_like(body: str) -> bool:
@@ -398,9 +436,9 @@ def _doc_like(body: str) -> bool:
     core = re.split(r"\s*※", core)[0]
     core = re.sub(r"\s*(?:각\s*)?\d+\s*(?:부|점|매|권|식)\b.*$", "", core)  # '… 1부(원본)', 'USB 1점(…)'
     core = re.sub(r"\s*[(（][^)）]*[)）]?\s*$", "", core).strip()  # 꼬리 괄호
-    if not core or _SENTENCE_END.search(body.split(" — ")[0]):
+    if not core or _SENTENCE_END.search(core):  # '위임장 및 재직증명서(대리인이 등록할 경우에 한함)'은 괄호를 뗀 뒤 봄
         return False
-    return bool(_DOC_END.search(core)) or bool(re.search(r"\d+\s*(?:부|점)\b", body))
+    return not _NOT_DOC.match(core)  # 서류 이름 끝말로 고르면 '일반현황 및 연혁' 같은 서식이 빠져서 — 문장·절 제목만 뺌
 
 
 def read_submit_items(text: str, source: str, catalog: list[Document]) -> list[Item]:
@@ -423,6 +461,8 @@ def read_submit_items(text: str, source: str, catalog: list[Document]) -> list[I
             table_items, j = _submit_table(lines, j)
             if table_items:
                 for body, no in table_items:
+                    if not _doc_like(body):
+                        continue
                     if _squash(body) not in seen:
                         seen.add(_squash(body))
                         out.append(Item(body, source, no, classify(body, catalog)))

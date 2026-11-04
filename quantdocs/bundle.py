@@ -155,23 +155,42 @@ def _toc_page(title: str, rows: list[tuple[str, str, int]]) -> bytes | None:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
+
+    def wrap(text: str, size: float, width: float) -> list[str]:
+        """쪽 너비 안에서 줄바꿈(글자 단위) — 긴 공고명이 오른쪽으로 잘리던 것(11/04)."""
+        out, cur = [], ""
+        for ch in text:
+            if pdfmetrics.stringWidth(cur + ch, "KR", size) > width and cur:
+                out.append(cur)
+                cur = ch.lstrip()
+            else:
+                cur += ch
+        return out + ([cur] if cur else [])
+
     y = h - 60
     c.setFont("KR", 15)
-    c.drawString(50, y, title[:60])
-    y -= 30
+    for line in wrap(title, 15, w - 100):
+        c.drawString(50, y, line)
+        y -= 20
+    y -= 10
     c.setFont("KR", 10)
     for i, (sec, name, page) in enumerate(rows, 1):
-        if y < 50:
+        lines = wrap(f"{i}. {sec}", 10, w - 140)
+        names = wrap(name, 10, w - 116)
+        if y - 13 * len(lines) - 13 * len(names) < 40:
             c.showPage()
             c.setFont("KR", 10)
             y = h - 50
-        c.drawString(50, y, f"{i}. {sec}"[:70])
         c.drawRightString(w - 50, y, f"{page}쪽")
-        y -= 13
+        for line in lines:
+            c.drawString(50, y, line)
+            y -= 13
         c.setFillGray(0.45)
-        c.drawString(66, y, name[:80])
+        for line in names:
+            c.drawString(66, y, line)
+            y -= 13
         c.setFillGray(0)
-        y -= 18
+        y -= 5
     c.save()
     return buf.getvalue()
 

@@ -247,6 +247,7 @@ def cut(path: Path, out_dir: Path, names: dict[str, str] | None = None) -> list[
         head = xml[:all_paras[0].start]
         tail = xml[all_paras[-1].end:]
         body = "".join(xml[p.start:p.end] for p in f.paras)
+        body = re.sub(r'^(<(?:[\w.-]+:)?p\b[^>]*?)\bpageBreak="1"', r'\1pageBreak="0"', body, count=1)  # 빈 첫 쪽 방지
         first = all_paras[0]
         prefix = "" if f.paras[0].start == first.start else _sec_pr_para(xml, first)
         new_xml = head + prefix + body + tail
@@ -297,8 +298,24 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
                        key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[1]).group()))
     sections = {n: zin.read(n).decode("utf-8") for n in sec_names}
     bodies: dict[str, list[tuple[CutForm, str]]] = {}
+    header = zin.read("Contents/header.xml").decode("utf-8") if "Contents/header.xml" in entries else ""
+    char_rx = re.compile(r'<(?:[\w.-]+:)?charPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?charPr>', re.S)
+    known = {m.group(1) for m in char_rx.finditer(header)}
+    next_id = max([int(x) for x in known] or [0]) + 1
+    extra_chars: list[str] = []
     for f, file in parts:
-        xml = zipfile.ZipFile(file).read(f.section).decode("utf-8")
+        pz = zipfile.ZipFile(file)
+        xml = pz.read(f.section).decode("utf-8")
+        # 채울 때 칸에 맞춰 줄인 글자 모양(원본 머리에 없는 id) — 새 번호로 옮겨 통합 머리에 더함(서식마다 같은 번호를 따로 썼을 수 있어서)
+        if header and "Contents/header.xml" in pz.namelist():
+            remap = {}
+            for m in char_rx.finditer(pz.read("Contents/header.xml").decode("utf-8")):
+                if m.group(1) not in known and f'charPrIDRef="{m.group(1)}"' in xml:
+                    remap[m.group(1)] = str(next_id)
+                    extra_chars.append(re.sub(r'\bid="\d+"', f'id="{next_id}"', m.group(0), count=1))
+                    next_id += 1
+            if remap:
+                xml = re.sub(r'charPrIDRef="(\d+)"', lambda m: f'charPrIDRef="{remap.get(m.group(1), m.group(1))}"', xml)
         paras = _top_paragraphs(xml)
         body_paras = paras[-len(f.paras):]  # 채우기는 문단 안만 바꾸므로 문단 수는 그대로 — 앞의 쪽 설정 문단은 뺌
         body = xml[body_paras[0].start:body_paras[-1].end]
@@ -316,6 +333,8 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
         for i, (f, body) in enumerate(bodies[sec]):
             if i or sec != kept[0]:
                 body = re.sub(r'^(<(?:[\w.-]+:)?p\b[^>]*?)\bpageBreak="0"', r'\1pageBreak="1"', body, count=1)
+            else:  # 맨 앞 서식은 쪽 나눔 없이 — 쪽 설정 문단 뒤 '새 쪽'이면 첫 장이 빈 쪽이 됐음(11/04 필암서원)
+                body = re.sub(r'^(<(?:[\w.-]+:)?p\b[^>]*?)\bpageBreak="1"', r'\1pageBreak="0"', body, count=1)
             chunks.append(body)
             preview.append(_text(body))
         starts_at_first = bodies[sec][0][0].paras[0].start == first.start
@@ -332,6 +351,10 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
                 data = new_sections[n].encode("utf-8")
             elif n == "Contents/content.hpf" and hpf is not None:
                 data = _drop_sections(hpf, [s for s in sec_names if s not in new_sections]).encode("utf-8")
+            elif n == "Contents/header.xml" and extra_chars:
+                h = re.sub(r"(</(?:[\w.-]+:)?charProperties>)", lambda m: "".join(extra_chars) + m.group(1), header, count=1)
+                data = re.sub(r'(<(?:[\w.-]+:)?charProperties\b[^>]*\bitemCnt=")(\d+)"',
+                              lambda m: f'{m.group(1)}{int(m.group(2)) + len(extra_chars)}"', h, count=1).encode("utf-8")
             elif n == "Preview/PrvText.txt":
                 data = " ".join(preview)[:1000].encode("utf-8")
             else:

@@ -83,16 +83,16 @@ def _cells(xml: str, tbl: tuple[int, int]) -> list[Cell]:
     return cells
 
 
-def _paragraph(template: str, line: str) -> str:
-    """문단 틀(첫 문단)에서 글·줄 배치를 지우고 line 한 줄을 넣은 새 문단."""
+def _paragraph(template: str, line: str, char_id: str | None = None) -> str:
+    """문단 틀(첫 문단)에서 글·줄 배치를 지우고 line 한 줄을 넣은 새 문단. char_id: 글자 모양을 바꿔 쓸 때(칸에 맞춰 줄인 크기)."""
     open_tag = re.match(r"<(?:[\w.-]+:)?p\b[^>]*>", template).group()
     prefix = re.match(r"<([\w.-]+:)?p\b", template).group(1) or ""
     char = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', template)
-    run = f'<{prefix}run charPrIDRef="{char.group(1) if char else "0"}"><{prefix}t>{escape(line)}</{prefix}t></{prefix}run>'
+    run = f'<{prefix}run charPrIDRef="{char_id or (char.group(1) if char else "0")}"><{prefix}t>{escape(line)}</{prefix}t></{prefix}run>'
     return f"{open_tag}{run}</{prefix}p>"
 
 
-def _set_cell(cell_xml: str, lines: list[str], keep_first: bool = False) -> str:
+def _set_cell(cell_xml: str, lines: list[str], keep_first: bool = False, char_id: str | None = None) -> str:
     """칸의 문단을 lines로 바꿈. keep_first면 첫 문단(이름표)은 두고 그 뒤에 붙임."""
     sub = _spans(cell_xml, "subList")
     if not sub:
@@ -102,7 +102,7 @@ def _set_cell(cell_xml: str, lines: list[str], keep_first: bool = False) -> str:
     if not paras:
         return cell_xml
     first = cell_xml[paras[0][0]:paras[0][1]]
-    new = "".join(_paragraph(first, ln) for ln in lines)
+    new = "".join(_paragraph(first, ln, char_id) for ln in lines)
     if keep_first:
         return cell_xml[:paras[0][1]] + new + cell_xml[paras[-1][1]:]
     return cell_xml[:paras[0][0]] + new + cell_xml[paras[-1][1]:]
@@ -259,23 +259,12 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
             queue = [t for t in queue if id(t) in keep]
         tracks = list(queue)
         n = 0
+        totals = []
         for rr in later:
             line = rows[rr]
-            first = _sq(line[0].text)
-            if "누계" in first or "합계" in first or first == "계":  # 실적누계·계 줄: 건수·합계
-                total = sum(float(t.get("인정 금액(원)") or t.get("계약금액(원)") or 0) for t in tracks[:n])
-                for c in line:
-                    h = headtext.get(c.col, "")
-                    if not n:
-                        break
-                    if _sq(c.text).startswith("총실적금액"):  # '총 실적 금액 :   백만원' 한 칸(11/04 당진)
-                        edits.append((c, [f"총 실적 금액 : {_in_unit(total, amount_head)} {'백만원' if '백만' in amount_head else '천원' if '천원' in amount_head else '원'}"], False))
-                    elif "기간" in h and c.blank:
-                        edits.append((c, [f"{n}건"], False))
-                    elif "금액" in h and c.blank:
-                        edits.append((c, [_in_unit(total, amount_head) + ("" if ("백만" in h or "천원" in h) else "원")], False))
+            if is_total(line):  # 실적누계·계 줄 — 실적을 다 넣은 뒤 채움(표 위쪽에 있어도)
+                totals.append(line)
                 continue
-            # 빈 줄 — 연번 칸에 번호만 미리 적힌 줄도 빈 줄(11/04 당진 '1')
             if not queue or not empty(line):
                 continue
             t = queue.pop(0)
@@ -286,6 +275,17 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                 elif c.col in colmap and (v := colmap[c.col](t, headtext.get(c.col, ""))):
                     edits.append((c, [v], False))
             rep.rows += 1
+        total = sum(float(t.get("인정 금액(원)") or t.get("계약금액(원)") or 0) for t in tracks[:n])
+        unit = "백만원" if "백만" in amount_head else "천원" if "천원" in amount_head else "원"
+        for line in totals if n else []:
+            for c in line:
+                h = headtext.get(c.col, "")
+                if _sq(c.text).startswith("총실적금액"):  # '총 실적 금액 :   백만원' 한 칸(11/04 당진)
+                    edits.append((c, [f"총 실적 금액 : {_in_unit(total, amount_head)} {unit}"], False))
+                elif "기간" in h and c.blank:
+                    edits.append((c, [f"{n}건"], False))
+                elif "금액" in h and c.blank:
+                    edits.append((c, [_in_unit(total, amount_head) + ("" if ("백만" in h or "천원" in h) else "원")], False))
         rep.overflow += len(queue)
         break  # 표 하나에 한 번
     return edits
@@ -320,16 +320,147 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
     return xml
 
 
+# ── 칸에 맞추기(11/04 사용자 요청: 공고문 글꼴 그대로, 칸 안팎으로 넘치거나 겹치지 않게) ─────────────
+# 넣은 글이 칸 너비(여백 뺌)를 넘고 칸 높이에 줄을 더 넣을 자리가 없으면, 같은 글꼴에서 크기만 줄인 글자 모양을
+# header.xml에 하나 더 만들어 씀(최소 7pt). 글꼴·장평·색은 칸의 원래 글자 모양 그대로.
+MIN_HEIGHT = 700  # 7pt
+
+
+class _Chars:
+    def __init__(self, header: str):
+        self.header = header
+        self.blocks = {m.group(1): m.group(0) for m in
+                       re.finditer(r'<(?:[\w.-]+:)?charPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?charPr>', header, re.S)}
+        self.paras = {m.group(1): m.group(0) for m in
+                      re.finditer(r'<(?:[\w.-]+:)?paraPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?paraPr>', header, re.S)}
+        self.added: dict[tuple[str, int], str] = {}
+
+    def height(self, cid: str) -> int:
+        m = re.search(r'\bheight="(\d+)"', self.blocks.get(cid, ""))
+        return int(m.group(1)) if m else 1000
+
+    def ratio(self, cid: str) -> float:
+        m = re.search(r'<(?:[\w.-]+:)?ratio\b[^>]*\bhangul="(\d+)"', self.blocks.get(cid, ""))
+        return int(m.group(1)) / 100 if m else 1.0
+
+    def spacing(self, pid: str) -> float:
+        m = re.search(r'<(?:[\w.-]+:)?lineSpacing\b[^>]*type="PERCENT"[^>]*value="(\d+)"', self.paras.get(pid, ""))
+        return int(m.group(1)) / 100 if m else 1.6
+
+    def smaller(self, cid: str, height: int) -> str:
+        key = (cid, height)
+        if key not in self.added and cid in self.blocks:
+            ids = [int(x) for x in self.blocks] + [int(x) for x in self.added.values()]
+            self.added[key] = str(max(ids) + 1)
+        return self.added.get(key, cid)
+
+    def finish(self) -> str:
+        if not self.added:
+            return self.header
+        extra = "".join(re.sub(r'\bheight="\d+"', f'height="{h}"', re.sub(r'\bid="\d+"', f'id="{new}"', self.blocks[cid], count=1), count=1)
+                        for (cid, h), new in self.added.items())
+        h = re.sub(r"(</(?:[\w.-]+:)?charProperties>)", lambda m: extra + m.group(1), self.header, count=1)
+        return re.sub(r'(<(?:[\w.-]+:)?charProperties\b[^>]*\bitemCnt=")(\d+)"',
+                      lambda m: f'{m.group(1)}{int(m.group(2)) + len(self.added)}"', h, count=1)
+
+
+def _text_width(text: str, height: int, ratio: float) -> float:
+    """글 너비 어림(HWPUNIT): 한글·한자·전각 = 글자 크기 × 장평, 숫자·영문 0.55, 공백 0.3, 문장부호 0.4."""
+    w = 0.0
+    for ch in text:
+        if "가" <= ch <= "힣" or "一" <= ch <= "鿿" or "　" <= ch <= "ヿ" or "＀" <= ch <= "￯":
+            w += 1.0 * ratio
+        elif ch == " ":
+            w += 0.3
+        elif ch.isalnum():
+            w += 0.55
+        else:
+            w += 0.4
+    return w * height
+
+
+def _fit_char(cell_xml: str, line: str, chars: "_Chars") -> tuple[str | None, str]:
+    """(바꿔 쓸 글자 모양 id 또는 None, 알림). 칸 너비·높이·여백·줄 간격으로 한 칸 안에 들어가는지 봄."""
+    size = re.search(r'<(?:[\w.-]+:)?cellSz\b[^>]*width="(\d+)"[^>]*height="(\d+)"', cell_xml)
+    if not size:
+        return None, ""
+    tag = re.search(r'<(?:[\w.-]+:)?cellMargin\b[^>]*>', cell_xml)
+    mg = dict(re.findall(r'\b(left|right|top|bottom)="(\d+)"', tag.group(0) if tag else ""))
+    width = int(size.group(1)) - int(mg.get("left", 141)) - int(mg.get("right", 141))
+    room = int(size.group(2)) - int(mg.get("top", 141)) - int(mg.get("bottom", 141))
+    first_p = re.search(r'<(?:[\w.-]+:)?p\b[^>]*paraPrIDRef="(\d+)"', cell_xml)
+    run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', cell_xml)
+    cid = run.group(1) if run else "0"
+    h, ratio = chars.height(cid), chars.ratio(cid)
+    spacing = chars.spacing(first_p.group(1)) if first_p else 1.6
+    if width <= 0:
+        return None, ""
+    def fits(size: int) -> bool:  # 이 크기에서 칸 높이에 들어가는 줄 수 × 칸 너비 안에 글이 들어가나
+        lines_fit = max(1, int(room // max(1.0, size * spacing)))
+        return _text_width(line, size, ratio) <= width * 0.95 * lines_fit
+
+    if fits(h):
+        return None, ""
+    new_h = next((size for size in range(h - 10, MIN_HEIGHT - 1, -10) if fits(size)), MIN_HEIGHT)
+    note = f"글자 {h / 100:g}→{new_h / 100:g}pt로 줄여 칸에 맞춤"
+    if not fits(new_h):
+        note += "(7pt로도 넘쳐 칸이 늘어날 수 있음 — 확인)"
+    return chars.smaller(cid, new_h), note
+
+
+def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int) -> str:
+    """실적표 아래가 세로로 긴 빈 칸 한 줄뿐이면(11/04 필암서원 서식16 — 17.8cm 한 줄) 그 줄을 실적 수만큼(칸 높이가 허락하는 만큼)
+    같은 높이의 줄로 나눔 — 표 전체 높이는 그대로, 줄마다 실적 하나. 세로로 합친 칸이 있는 표는 건드리지 않음."""
+    seg = xml[tbl[0]:tbl[1]]
+    if re.search(r'rowSpan="([2-9]|\d\d+)"', seg):
+        return xml
+    trs = _spans(seg, "tr")
+    cells = _cells(xml, tbl)
+    rows: dict[int, list[Cell]] = {}
+    for c in cells:
+        rows.setdefault(c.row, []).append(c)
+    head = next((r for r in sorted(rows) if any("사업명" in _sq(c.text) or "용역명" in _sq(c.text) or "공사명" in _sq(c.text) for c in rows[r])
+                 and any("금액" in _sq(c.text) for c in rows[r])), None)
+    if head is None or len(trs) != len(rows):
+        return xml
+    head_h = max(int(m) for m in re.findall(r'cellSz\b[^>]*height="(\d+)"', seg[trs[head][0]:trs[head][1]]) or [0])
+    empty = [r for r in sorted(rows) if r > head and all(c.blank for c in rows[r])]
+    for r in empty:
+        tr = seg[trs[r][0]:trs[r][1]]
+        hs = [int(x) for x in re.findall(r'cellSz\b[^>]*height="(\d+)"', tr)]
+        if not hs or not head_h:
+            continue
+        k = min(need - (len(empty) - 1), max(hs) // max(head_h, 2000))  # 한 줄 높이 = 머리줄 높이(최소 약 7mm)
+        if k < 2:
+            continue
+        new_h = max(hs) // k
+        copies = []
+        for i in range(k):
+            t = re.sub(r'(cellSz\b[^>]*height=")\d+"', lambda m: f'{m.group(1)}{new_h}"', tr)
+            t = re.sub(r'(cellAddr\b[^>]*rowAddr=")(\d+)"', lambda m: f'{m.group(1)}{int(m.group(2)) + i}"', t)
+            copies.append(t)
+        after = seg[trs[r][1]:]
+        after = re.sub(r'(cellAddr\b[^>]*rowAddr=")(\d+)"', lambda m: f'{m.group(1)}{int(m.group(2)) + k - 1}"', after)
+        seg = seg[:trs[r][0]] + "".join(copies) + after
+        seg = re.sub(r'(<(?:[\w.-]+:)?tbl\b[^>]*\browCnt=")(\d+)"', lambda m: f'{m.group(1)}{int(m.group(2)) + k - 1}"', seg, count=1)
+        return xml[:tbl[0]] + seg + xml[tbl[1]:]  # 한 번에 한 줄만(나눈 뒤 위치가 바뀜)
+    return xml
+
+
 def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> FillReport:
     """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로)."""
     rep = FillReport(Path(dst).name)
     zin = zipfile.ZipFile(src)
     out_entries = {}
+    chars = _Chars(zin.read("Contents/header.xml").decode("utf-8")) if "Contents/header.xml" in zin.namelist() else None
     for name in zin.namelist():
         data = zin.read(name)
         if re.fullmatch(r"Contents/section\d+\.xml", name):
             xml = data.decode("utf-8")
             edits: list[tuple[Cell, list[str], bool]] = []
+            if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
+                for i in range(len(_spans(xml, "tbl"))):
+                    xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
             for tbl in _spans(xml, "tbl"):
                 cells = _cells(xml, tbl)
                 by_pos = {(c.row, c.col): c for c in cells}
@@ -355,10 +486,18 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                     edits.append((target, [value], False))
                     rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
             for cell, lines, keep in sorted(edits, key=lambda e: e[0].start, reverse=True):
-                xml = xml[:cell.start] + _set_cell(xml[cell.start:cell.end], lines, keep) + xml[cell.end:]
+                seg = xml[cell.start:cell.end]
+                char_id = None
+                if chars is not None and len(lines) == 1 and not keep:
+                    char_id, note = _fit_char(seg, lines[0], chars)
+                    if note:
+                        rep.filled.append(f"  ↳ '{lines[0][:20]}' {note}")
+                xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
             xml = _fill_label_paragraphs(xml, vault, rep)
             data = xml.encode("utf-8")
         out_entries[name] = data
+    if chars is not None and chars.added:  # 칸에 맞춰 줄인 글자 모양을 머리 정보에 더함
+        out_entries["Contents/header.xml"] = chars.finish().encode("utf-8")
     Path(dst).parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(dst, "w") as zout:
         for info in zin.infolist():

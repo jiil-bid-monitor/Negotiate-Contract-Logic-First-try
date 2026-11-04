@@ -1,3 +1,4 @@
+import re
 import datetime as dt
 import io
 import json
@@ -299,3 +300,39 @@ def test_page_titles_by_font_size():
     assert t[13] == "사업수행능력평가자료(표지)" and t[14] == "일반현황 및 연혁"
     assert t[23] == "보안서약서" and t[25] == "가격제안입찰서" and t[31] == "제안서"
     assert 4 not in t  # 하위 서식(4-1·4-2)만 있는 번호는 뺌
+
+
+def _sz_cell(col, row, text, w, h, run='<hp:run charPrIDRef="1">'):
+    body = f"{run}<hp:t>{text}</hp:t></hp:run>" if text else run + "</hp:run>"
+    return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0">{body}</hp:p></hp:subList>'
+            f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+            f'<hp:cellSz width="{w}" height="{h}"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+
+
+def test_tall_track_row_is_split_and_text_fits():
+    """11/04 필암서원 서식16 — 머리줄 아래 '계' 줄 + 세로로 긴 빈 칸 한 줄: 그 줄을 실적 수만큼 나눠 채우고(표 높이 그대로),
+    '계' 줄은 넣은 뒤 합계. 칸보다 긴 글은 같은 글꼴에서 크기만 줄인 글자 모양을 머리 정보에 더해 씀."""
+    from quantdocs.fill import FillReport, _Chars, _fit_char, _split_tall_rows, _cells, _fill_tracks, _spans
+
+    rows = [[_sz_cell(0, 0, "연번", 2000, 3000), _sz_cell(1, 0, "사업명", 9000, 3000), _sz_cell(2, 0, "계약금액(천원)", 6000, 3000)],
+            [_sz_cell(0, 1, "계", 2000, 3000), _sz_cell(1, 1, "", 9000, 3000), _sz_cell(2, 1, "", 6000, 3000)],
+            [_sz_cell(0, 2, "", 2000, 30000), _sz_cell(1, 2, "", 9000, 30000), _sz_cell(2, 2, "", 6000, 30000)]]
+    xml = '<hp:tbl rowCnt="3" colCnt="3">' + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    tracks = [{"사업명": f"가상 사업 {i}", "계약금액(원)": 10_000_000 * (i + 1)} for i in range(3)]
+    xml = _split_tall_rows(xml, _spans(xml, "tbl")[0], len(tracks))
+    assert 'rowCnt="5"' in xml
+    cells = _cells(xml, _spans(xml, "tbl")[0])
+    assert sum(int(re.search(r'height="(\d+)"', xml[c.start:c.end][xml[c.start:c.end].find("cellSz"):]).group(1))
+               for c in cells if c.col == 0) == 3000 + 3000 + 30000  # 표 높이 그대로
+    rep = FillReport("x")
+    vals = {(c.row, c.col): l[0] for c, l, _ in _fill_tracks(xml, cells, tracks, rep)}
+    assert rep.rows == 3 and vals[(2, 1)] == "가상 사업 0" and vals[(4, 2)] == "30,000" and vals[(1, 2)] == "60,000"
+
+    header = ('<hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr>'
+              '<hh:charPr id="1" height="1300"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties>')
+    chars = _Chars(header)
+    cid, note = _fit_char(_sz_cell(1, 0, "", 6000, 1600), "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", chars)
+    assert cid == "2" and "줄여" in note
+    out = chars.finish()
+    assert 'itemCnt="3"' in out and re.search(r'<hh:charPr id="2" height="(\d+)"', out)
+    assert int(re.search(r'<hh:charPr id="2" height="(\d+)"', out).group(1)) < 1300

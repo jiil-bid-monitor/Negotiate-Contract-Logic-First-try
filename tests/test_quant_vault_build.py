@@ -474,6 +474,7 @@ def test_enrich_vault_from_pdfs_and_fill_bracketed_history_label(tmp_path: Path,
     texts = {b"hist": "2005.03.15 법인 설립\n2010.07 실내건축공사업 등록\n2019.05 본사 이전",
              b"reg": "경쟁입찰참가자격등록증\n상호 (주)가상\n전 화 번 호 033-123-4567\n팩 스 번 호 033-123-4568",
              b"scan": ""}
+    monkeypatch.setattr(importer, "_TEXT_CACHE", {})
     monkeypatch.setattr(importer, "_bytes_pdf_text", lambda data: texts[data])
     v = vault.Vault({"files/회사연혁.pdf": b"hist", "files/경쟁입찰참가자격등록증.pdf": b"reg", "files/입찰참가 스캔.pdf": b"scan",
                      "files/책상.pdf": b"scan"},
@@ -548,6 +549,7 @@ def test_proxy_form_phone_fax_rrn_and_none_rule(tmp_path: Path):
 def test_enrich_ocr_scanned_and_masked_rrn(monkeypatch):
     from quantdocs import importer
 
+    monkeypatch.setattr(importer, "_TEXT_CACHE", {})
     monkeypatch.setattr(importer, "_bytes_pdf_text", lambda data: "")  # 모두 스캔본
     ocr = {b"seal": "법인인감증명서\n상 호 : 주식회사 가상\n대표이사 홍길동\n(800101-1234567)",
            b"hist": "사업연혁\n2005.03.15 법인 설립\n2012.11 산업디자인전문회사 신고"}
@@ -560,3 +562,19 @@ def test_enrich_ocr_scanned_and_masked_rrn(monkeypatch):
     monkeypatch.setattr(importer, "_ocr_pdf", lambda data: None)  # 도구 없음
     notes = importer.enrich_vault(vault.Vault({"files/사업연혁.pdf": b"hist"}))
     assert any("Tesseract" in n for n in notes)
+
+
+def test_enrich_recognizes_registration_by_content(monkeypatch):
+    """11/04 제보: 등록증 PDF에 전화·팩스·대표자 주민번호(뒷자리 가림)가 다 적혀 있는데 못 읽음 — 파일 이름에 '참가자격'이 없어서.
+    글 내용('경쟁입찰참가자격등록증')으로 서류 종류를 알아봄. OCR 필요 없음(글이 있는 PDF)."""
+    from quantdocs import importer
+
+    text = ("1 / 3\n경쟁입찰참가자격등록증\n한글상호 주식회사 가상\n전 화 번 호 031-000-1111 팩 스 번 호 02-000-2222\n"
+            "대표자 정보\n성명 주민등록번호 E - Mail 대표자휴대폰 대표\n대표자여부\n대표자구분\n공동 각자\n홍길동 800101-1******")
+    monkeypatch.setattr(importer, "_TEXT_CACHE", {})
+    monkeypatch.setattr(importer, "_bytes_pdf_text", lambda data: text if data == b"reg" else "견적서 내용")
+    monkeypatch.setattr(importer, "_ocr_pdf", lambda data: (_ for _ in ()).throw(AssertionError("OCR 쓰면 안 됨")))
+    v = vault.Vault({"files/나라장터 출력.pdf": b"reg", "files/견적.pdf": b"etc"})
+    importer.enrich_vault(v)
+    assert v.info["전화번호"] == "031-000-1111" and v.info["팩스번호"] == "02-000-2222"
+    assert v.info["대표자 주민등록번호"] == "800101-*******"

@@ -342,6 +342,17 @@ def masked_rrn(text: str) -> str:
     return f"{m.group(1)}-*******" if m else ""
 
 
+_TEXT_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _cached_text(path: str, data: bytes) -> str:
+    """묶음 안 PDF 글 — 만들기마다 같은 파일을 다시 읽지 않게(경로·크기·내용 해시)."""
+    key = (path, len(data), hash(data[:4096]))
+    if key not in _TEXT_CACHE:
+        _TEXT_CACHE[key] = _bytes_pdf_text(data)
+    return _TEXT_CACHE[key]
+
+
 def enrich_vault(vault) -> list[str]:
     """묶음 안 연혁·경쟁입찰참가자격등록증·사업자등록증 PDF를 읽어 회사정보의 빈 칸과 연혁을 채움(메모리에서만, 11/04 사용자 요청:
     '연혁 pdf·입찰참가등록증 pdf 확인해서 기입 가능한 건 바로 작성'). 회사정보 시트에 적힌 값이 늘 먼저. 돌려줌: 알림 줄."""
@@ -355,31 +366,45 @@ def enrich_vault(vault) -> list[str]:
         if not name.lower().endswith(".pdf"):
             continue
         sq = re.sub(r"\s+", "", name)
-        kinds = [k for k, words in (("연혁", ("연혁",)), ("등록증", ("참가자격", "입찰참가")), ("사업자", ("사업자등록",)),
-                                    ("인감", ("인감증명", "등기")))
-                 if any(w in sq for w in words)]
-        if not kinds:
-            continue
-        text = _bytes_pdf_text(data)
-        if len(re.sub(r"\s", "", text)) < 20:  # 스캔본 — 글자 인식(OCR)
+        by_name = [k for k, words in (("연혁", ("연혁",)), ("등록증", ("참가자격", "입찰참가")), ("사업자", ("사업자등록",)),
+                                      ("인감", ("인감증명", "등기")))
+                   if any(w in sq for w in words)]
+        text = _cached_text(path, data)
+        if len(re.sub(r"\s", "", text)) < 20:  # 스캔본 — 이름으로 짐작되는 서류만 글자 인식(OCR, 느려서)
+            if not by_name:
+                continue
             text = _ocr_pdf(data)
             if text is None:
                 scanned.append(name)
                 continue
             ocr.append(name)
-        if "인감" in kinds or "사업자" in kinds:
+        # 파일 이름이 제각각이라 글 내용으로도 서류 종류를 알아봄(11/04 제보: 등록증이 있는데 전화·팩스를 못 읽음)
+        head = re.sub(r"\s+", "", text[:400])
+        kinds = set(by_name)
+        if "경쟁입찰참가자격등록증" in re.sub(r"\s+", "", text):
+            kinds.add("등록증")
+        if "사업자등록증" in head:
+            kinds.add("사업자")
+        if "인감증명" in head:
+            kinds.add("인감")
+        if re.search(r"(회사|사업|주요)?연혁", head):
+            kinds.add("연혁")
+        if not kinds:
+            continue
+        if kinds & {"인감", "사업자", "등록증"}:
             rrn = masked_rrn(text)
             if rrn:
                 found_info.setdefault("대표자 주민등록번호", (rrn, name))
-            if "인감" in kinds:
-                continue
+        if kinds == {"인감"}:
+            continue
         if "연혁" in kinds and not hist:
             hist, hist_src = read_history(text), name
         if "등록증" in kinds:
             for k, v in read_registration(text)["info"].items():
                 found_info.setdefault(k, (v, name))
-        for k, v in read_bizreg(text).items():
-            found_info.setdefault(k, (v, name))
+        if "사업자" in kinds:
+            for k, v in read_bizreg(text).items():
+                found_info.setdefault(k, (v, name))
     filled = []
     for k, (v, src) in found_info.items():
         if not vault.info.get(k):

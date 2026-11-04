@@ -432,3 +432,24 @@ def test_unfinished_tracks_are_never_counted(monkeypatch):
     assert any("진행 중" in n and "준공 전" in n for n in notes) and any("날짜 없음" in n for n in notes)
     assert [t["사업명"] for t in track_candidates(TrackReq("", "", None, None, False), tracks, ref)] == ["끝난 것"]
     assert unfinished(tracks, ref) == ["진행 중", "날짜 없음"]
+
+
+def test_filled_digits_use_hangul_font():
+    """11/04 제보: 서식 글자 모양이 한글 휴먼명조·영문 HCI Poppy라 채운 사업자번호·주소의 숫자 글꼴이 달라 보임
+    → 채운 글은 숫자·영문도 한글과 같은 글꼴(문서 글꼴 목록에 있는 것만 — 새로 더하지 않음)."""
+    from quantdocs.fill import _Chars
+
+    header = ('<hh:fontfaces><hh:fontface lang="HANGUL" fontCnt="1"><hh:font id="0" face="휴먼명조" type="TTF"/></hh:fontface>'
+              '<hh:fontface lang="LATIN" fontCnt="2"><hh:font id="0" face="HCI Poppy" type="TTF"/><hh:font id="1" face="휴먼명조" type="TTF"/></hh:fontface>'
+              '<hh:fontface lang="SYMBOL" fontCnt="1"><hh:font id="0" face="HCI Poppy" type="TTF"/></hh:fontface></hh:fontfaces>'
+              '<hh:charProperties itemCnt="2"><hh:charPr id="0" height="1300"><hh:fontRef hangul="0" latin="0" hanja="0" symbol="0"/>'
+              '<hh:ratio hangul="90"/></hh:charPr>'
+              '<hh:charPr id="1" height="1000"><hh:fontRef hangul="0" latin="1" symbol="0"/></hh:charPr></hh:charProperties>')
+    chars = _Chars(header)
+    new = chars.variant("0")
+    assert new == "2" and chars.variant("1") == "1"  # 1번은 이미 같은 글꼴(기호 목록엔 휴먼명조가 없어 그대로)
+    small = chars.variant("0", 900)
+    out = chars.finish()
+    assert re.search(r'<hh:charPr id="2" height="1300"><hh:fontRef hangul="0" latin="1" hanja="0" symbol="0"/>', out)
+    assert re.search(rf'<hh:charPr id="{small}" height="900"><hh:fontRef hangul="0" latin="1"', out)
+    assert 'itemCnt="4"' in out and out.count("<hh:font ") == 4  # 글꼴 목록은 그대로

@@ -333,7 +333,10 @@ class _Chars:
                        re.finditer(r'<(?:[\w.-]+:)?charPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?charPr>', header, re.S)}
         self.paras = {m.group(1): m.group(0) for m in
                       re.finditer(r'<(?:[\w.-]+:)?paraPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?paraPr>', header, re.S)}
-        self.added: dict[tuple[str, int], str] = {}
+        self.added: dict[tuple[str, int | None], str] = {}
+        # 언어별 글꼴 목록 {LATIN: {id: 이름}} — 채운 글의 숫자·영문을 한글과 같은 글꼴로(11/04 사용자 제보: 숫자 글꼴이 다름)
+        self.faces = {m.group(1).upper(): dict(re.findall(r'<(?:[\w.-]+:)?font\b[^>]*\bid="(\d+)"[^>]*\bface="([^"]*)"', m.group(2)))
+                      for m in re.finditer(r'<(?:[\w.-]+:)?fontface\b[^>]*\blang="(\w+)"[^>]*>(.*?)</(?:[\w.-]+:)?fontface>', header, re.S)}
 
     def height(self, cid: str) -> int:
         m = re.search(r'\bheight="(\d+)"', self.blocks.get(cid, ""))
@@ -351,18 +354,49 @@ class _Chars:
         m = re.search(r'<(?:[\w.-]+:)?lineSpacing\b[^>]*type="PERCENT"[^>]*value="(\d+)"', block)
         return int(m.group(1)) / 100 if m else None
 
-    def smaller(self, cid: str, height: int) -> str:
+    def _font_ref(self, cid: str) -> str:
+        m = re.search(r"<(?:[\w.-]+:)?fontRef\b[^>]*>", self.blocks.get(cid, ""))
+        return m.group(0) if m else ""
+
+    def _unified_ref(self, cid: str) -> str:
+        """fontRef에서 한글 말고 다른 언어(영문·숫자·기호 등)도 한글과 같은 글꼴을 가리키게 — 문서 글꼴 목록에 그 글꼴이 있는 언어만.
+        (글꼴을 새로 더하지 않음: 통합서식으로 이을 때 원본 머리의 글꼴 목록을 그대로 쓰기 때문)"""
+        ref = self._font_ref(cid)
+        hangul = re.search(r'\bhangul="(\d+)"', ref)
+        face = self.faces.get("HANGUL", {}).get(hangul.group(1)) if hangul else None
+        if not face:
+            return ref
+
+        def swap(m):
+            lang, cur = m.group(1), m.group(2)
+            ids = [i for i, f in self.faces.get(lang.upper(), {}).items() if f == face]
+            return f'{lang}="{ids[0] if ids else cur}"'
+        return re.sub(r'\b(latin|hanja|japanese|other|symbol|user)="(\d+)"', swap, ref)
+
+    def variant(self, cid: str, height: int | None = None) -> str:
+        """채운 글에 쓸 글자 모양: 숫자·영문도 한글 글꼴로, height를 주면 그 크기로. 바꿀 게 없으면 cid 그대로."""
+        if cid not in self.blocks or (height is None and self._unified_ref(cid) == self._font_ref(cid)):
+            return cid
         key = (cid, height)
-        if key not in self.added and cid in self.blocks:
+        if key not in self.added:
             ids = [int(x) for x in self.blocks] + [int(x) for x in self.added.values()]
             self.added[key] = str(max(ids) + 1)
-        return self.added.get(key, cid)
+        return self.added[key]
+
+    def smaller(self, cid: str, height: int) -> str:
+        return self.variant(cid, height)
 
     def finish(self) -> str:
         if not self.added:
             return self.header
-        extra = "".join(re.sub(r'\bheight="\d+"', f'height="{h}"', re.sub(r'\bid="\d+"', f'id="{new}"', self.blocks[cid], count=1), count=1)
-                        for (cid, h), new in self.added.items())
+
+        def block(cid: str, h: int | None, new: str) -> str:
+            b = re.sub(r'\bid="\d+"', f'id="{new}"', self.blocks[cid], count=1)
+            if h is not None:
+                b = re.sub(r'\bheight="\d+"', f'height="{h}"', b, count=1)
+            ref = self._font_ref(cid)
+            return b.replace(ref, self._unified_ref(cid), 1) if ref else b
+        extra = "".join(block(cid, h, new) for (cid, h), new in self.added.items())
         h = re.sub(r"(</(?:[\w.-]+:)?charProperties>)", lambda m: extra + m.group(1), self.header, count=1)
         return re.sub(r'(<(?:[\w.-]+:)?charProperties\b[^>]*\bitemCnt=")(\d+)"',
                       lambda m: f'{m.group(1)}{int(m.group(2)) + len(self.added)}"', h, count=1)
@@ -497,6 +531,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                     char_id, note = _fit_char(seg, lines[0], chars)
                     if note:
                         rep.filled.append(f"  ↳ '{lines[0][:20]}' {note}")
+                if chars is not None and char_id is None:  # 크기는 그대로, 숫자·영문만 한글 글꼴로
+                    run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', seg)
+                    base = chars.variant(run.group(1)) if run else None
+                    char_id = base if run and base != run.group(1) else None
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
             xml = _fill_label_paragraphs(xml, vault, rep)
             data = xml.encode("utf-8")

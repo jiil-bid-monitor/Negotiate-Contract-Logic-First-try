@@ -149,7 +149,8 @@ def _fill_inline(seg: str, vault) -> tuple[str, list[str]]:
             done.append(f"{mm.group('lab')} → {value}")
             pad = max(2, len(mm.group("sp")) - len(value) - 1) if mm.end() < len(body) else 0
             return f"{mm.group('lab')}{mm.group('colon')} {escape(value)}" + " " * pad
-        return m.group(1) + _INLINE_RE.sub(rep, body) + m.group(3)
+        parts = re.split(r"(<[^>]*>)", body)  # 태그(<hp:tab/> 등)는 그대로 두고 글 조각만
+        return m.group(1) + "".join(x if x.startswith("<") else _INLINE_RE.sub(rep, x) for x in parts) + m.group(3)
     new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, seg, flags=re.S)
     if done:
         new = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", new, flags=re.S)
@@ -335,12 +336,23 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
+    # 표 안이어도 여러 줄짜리 칸(서식 본문 칸)의 줄은 채움 — 한 줄짜리 칸은 이름표 칸이라 표 채우기가 옆 칸에 씀(11/04 서식 8·9 서명 줄)
+    single = [(cs, ce) for cs, ce in _spans(xml, "tc") if len(_spans(xml, "p", cs, ce)) <= 1]
     edits = []
-    for s, e in _spans(xml, "p"):
-        if any(ts >= s and te <= e for ts, te in tbls) or any(ts <= s and e <= te for ts, te in tbls):
+    paras, stack = [], []  # 모든 문단(표 칸 안 문단 포함) — _spans는 맨 바깥만 줌
+    for m in re.finditer(r"<(/?)(?:[\w.-]+:)?p\b[^>]*?(/?)>", xml):
+        if m.group(2):
             continue
-        text = _text(xml[s:e])
-        m = re.fullmatch(r"\s*(.{2,16}?)\s*[:：]\s*", text)
+        if not m.group(1):
+            stack.append(m.start())
+        elif stack:
+            paras.append((stack.pop(), m.end()))
+    for s, e in sorted(paras):
+        if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single):
+            continue
+        text = re.sub(r"<[^>]+>", " ", _text(xml[s:e]))  # 글 안 탭(<hp:tab/>) 등은 빈칸으로
+        # '업 체 명 :' 또는 서명 줄 '대표자 :          (인)'(11/04 서식 8·9)
+        m = re.fullmatch(r"\s*(.{2,16}?)\s*[:：]\s*([(（](?:인|서명)[)）])?\s*", text)
         if not m:
             continue
         key = _label_key(m.group(1))
@@ -348,11 +360,19 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
         if not value:
             continue
         seg = xml[s:e]
-        last = list(re.finditer(r"</(?:[\w.-]+:)?t>", seg))
-        if not last:
+        ts = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", seg, re.S))
+        hit = next((t for t in ts if re.search(r"[:：]", t.group(2))), None)
+        if hit is None:
             continue
-        k = last[-1].start()
-        seg = seg[:k] + escape(" " + value) + seg[k:]
+        used = []
+
+        def put(mm):  # 글 속 첫 쌍점에만 — 태그 이름의 쌍점(<hp:tab/>)은 건드리지 않음
+            if mm.group(1) or used:
+                return mm.group(0)
+            used.append(1)
+            return f"{mm.group(2)} {escape(value)}" + " " * max(2 if m.group(2) else 0, len(mm.group(3)) - len(value) - 1)
+        body = re.sub(r"(<[^>]*>)|([:：])( *)", put, hit.group(2))
+        seg = seg[:hit.start(2)] + body + seg[hit.end(2):]
         seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
         edits.append((s, e, seg))
         rep.filled.append(f"{_sq(m.group(1))} → {value[:40]}")

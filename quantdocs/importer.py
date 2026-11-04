@@ -334,12 +334,23 @@ def _ocr_pdf(data: bytes) -> str | None:
 
 
 # 대표자 주민등록번호 — 뒷자리는 절대 남기지 않음(앞 6자리 + '-*******', 11/04 사용자 요청 '뒷자리 암호화된 것')
-_RRN_NEAR_CEO = re.compile(r"대\s*표[^\n]{0,40}(?:\n[^\n]{0,40}){0,2}?[(\s:]*(\d{6})\s*-\s*[\d*Xx]{7}")
+_RRN = re.compile(r"(?<![\d-])(\d{6})\s*-\s*([1-8*Xx][\d*Xx]{6})(?![\d])")
 
 
 def masked_rrn(text: str) -> str:
-    m = _RRN_NEAR_CEO.search(text or "")
-    return f"{m.group(1)}-*******" if m else ""
+    """대표자 주민등록번호 앞 6자리 + '-*******'. 법인등록번호(같은 6-7자리 모양)를 잡지 않게(11/04 제보: '110111-*******'):
+    바로 앞 30자에 '법인'이 있으면(법인등록번호) 빼고, 이미 '*'로 가려진 번호(등록증)를 먼저, 그다음 '대표' 뒤 120자 안의 번호."""
+    text = text or ""
+    best, score = "", 0
+    for m in _RRN.finditer(text):
+        before = re.sub(r"\s+", "", text[max(0, m.start() - 30):m.start()])
+        if "법인" in before or "사업자" in before:
+            continue
+        near_ceo = "대표" in re.sub(r"\s+", "", text[max(0, m.start() - 120):m.start()])
+        sc = (2 if "*" in m.group(2) else 0) + (1 if near_ceo else 0)
+        if near_ceo and sc > score:
+            best, score = m.group(1), sc
+    return f"{best}-*******" if best else ""
 
 
 _TEXT_CACHE: dict[tuple[str, int, int], str] = {}

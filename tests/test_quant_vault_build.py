@@ -597,3 +597,22 @@ def test_inline_tel_fax_and_seal_placeholders(tmp_path: Path):
     assert "홍길동   (인)" in xml and "(주)가상 홍길동   (인)" in xml
     assert xml.count("(인)") == 3  # 공동참여자 칸 '(인)'은 그대로
     assert "기타 : 없음" in xml and any("TEL" in f for f in rep.filled)
+
+
+def test_signature_lines_inside_body_cell_and_rrn_not_corporate(tmp_path: Path):
+    """11/04 제보(서식 2·8): 서식 본문 칸 안 '대표자 :      (인)' 줄(글 안 탭 포함)도 채움, 한 줄짜리 이름표 칸엔 안 씀.
+    대표자 주민번호에 법인등록번호(110111-…)를 잡지 않음."""
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.importer import masked_rrn
+
+    assert masked_rrn("대 표 자 : 홍길동\n법인등록번호 : 110111-4182971") == ""
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    body_cell = ('<hp:tc><hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>위와 같이 위임합니다.</hp:t></hp:run></hp:p>'
+                 '<hp:p><hp:run charPrIDRef="0"><hp:t><hp:tab width="4000"/>대표자 :                (인)</hp:t></hp:run></hp:p></hp:subList>'
+                 '<hp:cellAddr colAddr="0" rowAddr="1"/><hp:cellSpan colSpan="2" rowSpan="1"/></hp:tc>')
+    xml = ("<hp:p><hp:run><hp:tbl><hp:tr>" + _c(0, 0, "업체명 :") + _c(1, 0, "") + "</hp:tr><hp:tr>" + body_cell
+           + "</hp:tr></hp:tbl></hp:run></hp:p>")
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", xml), tmp_path / "so.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode()
+    assert re.search(r"대표자 : 홍길동 +\(인\)", out)
+    assert out.count("(주)가상") == 1  # 이름표 칸 '업체명 :'은 그대로, 옆 칸에만

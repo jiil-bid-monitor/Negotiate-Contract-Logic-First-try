@@ -217,3 +217,36 @@ def test_form_heads_any_symbol():
                       "〔서식 6-1〕", "하위서식", "〔서식 6〕", "공동수급협정서", "※서식 7호는 계약 시 제출"])
     got = [(f.no, f.name) for f in read_forms(text, "x.hwp", load_catalog())]
     assert got == [(3, "제안회사 일반현황"), (4, "수행실적"), (5, "투입인력"), (6, "공동수급협정서")]
+
+
+def test_read_notice_prefers_body_titles_from_later_document(tmp_path, monkeypatch):
+    """11/04 필암서원 실제 진단 줄 — 공고문 표 '사업수행능력평가(정량적 지표) 자료 2부 | 【서식 11~19】'(범위 이름)가 먼저 읽혀도
+    제안요청서 본문 머리 '〈서식 12〉 제안회사 일반현황 및 연혁'이 이름이 됨. 표 칸 '서류 ① 사업자등록증 …'은 ① 앞만."""
+    from nego import attachments
+    from quantdocs.notice import read_notice
+
+    notice = "\n".join([
+        "입찰참가 신청 | 1 | 제안공모 참가신청서 | 【서식 1】",
+        "7 | 제안응모자의 참가자격을 입증할 수 있는 서류 ① 사업자등록증 사본, 법인등기부등본, 입찰참가자격 등록증 | 【서식 7, 26, 27】",
+        "8 | 위임장 및 재직증명서(대리인이 등록할 경우에 한함) | 【서식 8~9】",
+        "10 | 사업수행능력평가(정량적 지표) 자료 2부 | 【서식 11~19】",
+        "13 | 가격제안서 1부(산출내역서 첨부, 밀봉) | 【서식 21~23】",
+    ])
+    rfp = "\n".join([
+        "〈서식 7〉", "사 용 인 감 계", "〈서식 8〉", "위    임    장", "〈서식 11〉", "", "사업수행능력평가자료 (표지)",
+        "접수 번호 |  주) 1. 사업수행능력평가자료(객관적 지표)의 규격은 A4용지", "〈서식 12〉", "제안회사 일반현황 및 연혁",
+        "〈서식 16〉", "최근 5년간 사업수행실적", "〈서식 21〉", "가 격 입 찰 제 안 서", "〔서  식 26〕", "",
+    ])
+    texts = {"공고문.hwpx": notice, "제안요청서.hwpx": rfp}
+    paths = []
+    for name in texts:
+        (tmp_path / name).write_bytes(b"x")
+        paths.append(tmp_path / name)
+    monkeypatch.setattr(attachments, "extract_text", lambda data, ext, _n=iter(texts.values()): next(_n))
+    got = {f.no: f.name for f in read_notice(paths).forms}
+    assert got[1] == "제안공모 참가신청서"
+    assert got[7] == "사용인감계" and got[8] == "위임장"
+    assert got[11] == "사업수행능력평가자료 (표지)" and got[12] == "제안회사 일반현황 및 연혁"
+    assert got[16] == "최근 5년간 사업수행실적" and got[21] == "가격입찰제안서"
+    assert got[26] == "제안응모자의 참가자격을 입증할 수 있는 서류 (7·26·27)"  # 본문 제목이 없으면 목록 이름
+    assert got[13] == "사업수행능력평가(정량적 지표) 자료 (11~19)"

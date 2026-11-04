@@ -108,6 +108,7 @@ class Form:
     in_quant: bool = False
     doc: Document | None = None
     file: str = ""  # 잘라 낸 서식 파일 이름(cut_forms 뒤)
+    weak: bool = False  # 범위·칸 풀린 표·깨진 이름 — 다른 문서의 더 구체적인 이름(서식 본문 제목)으로 바꿀 수 있음
 
 
 @dataclass
@@ -141,7 +142,7 @@ _NO = r"서식\s*(?:제\s*)?\d+\s*호?(?:\s*-\s*\d+)?(?:\s*[~∼,]\s*(?:서식\s
 _SYM = r"[^\w\s|]"  # 서식 번호를 감싸는 특수기호 하나 — 괄호 모양을 가리지 않음(11/04 사용자 요청: 〈서식 11〉 등)
 _FORM_CELL = re.compile(rf"^\s*(?:{_SYM}\s*)?(?P<nos>{_NO})\s*(?:{_SYM})?\s*$")
 _FORM_INLINE = re.compile(rf"{_SYM}\s*(?P<nos>{_NO})\s*{_SYM}")
-_FORM_HEAD = re.compile(rf"^\s*{_SYM}\s*서식\s*(?:제\s*)?(\d+)\s*호?(?P<sub>\s*-\s*\d+)?\s*{_SYM}\s*(?P<rest>.*)$")
+_FORM_HEAD = re.compile(rf"^\s*{_SYM}\s*서\s*식\s*(?:제\s*)?(\d+)\s*호?(?P<sub>\s*-\s*\d+)?\s*{_SYM}\s*(?P<rest>.*)$")
 _LIST_MARK = re.compile(rf"^\s*(?:\d+\s*[).]|[{_CIRCLED}]|[-·∙•▪]|[가-하]\.)\s*")
 
 
@@ -160,6 +161,9 @@ def _squash(s: str) -> str:
 
 def _clean_name(name: str) -> str:
     name = _LIST_MARK.sub("", name.strip())
+    head = re.split(rf"\s*[{_CIRCLED}]", name)[0]  # "참가자격을 입증할 서류 ① 사업자등록증 사본, …" → 앞 이름만(11/04 필암서원)
+    if len(_squash(head)) >= 4:
+        name = head
     name = re.split(r"\s*※", name)[0]  # "… ※ 응모자 표기 1부" 꼬리 설명
     name = re.sub(r"\s+(?:각\s*)?\d+\s*부\b.*$|\s*(?:각\s*)?\d+\s*부\.?\s*(?:\([^)]*\))?\s*$", "", name)  # "… 1부", "… 10부(A3)", "… 10부 (A4 규격 30매 이내)"
     name = re.sub(r"\s*(?:제출|작성)\s*$", "", name)
@@ -182,7 +186,7 @@ def _head_title(lines: list[str], i: int, rest: str, source: str) -> str:
             t = "".join(tokens)  # '청  렴  서  약  서' → '청렴서약서'
         t = re.split(r"\s{3,}", t)[0].strip()
         k = _title_key(t)
-        if not k or re.fullmatch(r"<[^>]*>", t) or re.match(r"^(접수번호|공고번호|구\s*분|※|\d+\s*[.)])", t):
+        if not k or re.fullmatch(r"<[^>]*>", t) or re.match(r"^(접수\s*번호|공고\s*번호|구\s*분|※|주\)|\d+\s*[.)])", t):
             continue
         if len(k) >= 8 and k in src:
             continue
@@ -321,6 +325,8 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
                 weak.discard(n)
             else:
                 add_one(n, title, i)
+    for n in weak:
+        found[n].weak = True
     return sorted(found.values(), key=lambda f: f.no)
 
 
@@ -520,11 +526,15 @@ def read_notice(paths: list[Path], catalog: list[Document] | None = None) -> Not
         if k not in seen:
             seen.add(k)
             uniq.append(t)
-    # 여러 문서에 같은 서식 번호가 있으면 처음 것(정량 묶음 여부는 합침)
+    # 여러 문서에 같은 서식 번호가 있으면 처음 것(정량 묶음 여부는 합침) — 단 처음 것이 약한 이름(범위 '자료 (11~19)' 등)이고
+    # 뒤 문서(제안요청서 서식 본문 머리)에 구체적인 이름이 있으면 그 이름(11/04 필암서원: 공고문 목록이 먼저 읽혀 본문 제목을 덮음)
     merged: dict[int, Form] = {}
     for f in forms:
         if f.no in merged:
-            merged[f.no].in_quant |= f.in_quant
+            m = merged[f.no]
+            m.in_quant |= f.in_quant
+            if m.weak and not f.weak:
+                m.name, m.doc, m.source, m.weak = f.name, f.doc, f.source, False
         else:
             merged[f.no] = f
     return NoticeSheet([Path(p).name for p in paths], sorted(merged.values(), key=lambda f: f.no), submit, uniq,

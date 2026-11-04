@@ -251,6 +251,93 @@ def read_registration(text: str) -> dict:
     return out
 
 
+# ── 연혁 PDF ─────────────────────────────────────────────────
+_HIST_LINE = re.compile(r"^\s*[-·•ㆍ▪◦○●]?\s*((?:19|20)\d{2})\s*[.년/-]\s*(\d{1,2})\s*[.월/-]?\s*(?:(\d{1,2})(?=\s*[.일]|\s)\s*[.일]?)?\s*[.:\-–~]?\s*(\S.*)$")
+_YEAR_ONLY = re.compile(r"^\s*((?:19|20)\d{2})\s*년?\s*$")
+_MONTH_LINE = re.compile(r"^\s*[-·•ㆍ]?\s*(\d{1,2})\s*[.월/]\s*(?:(\d{1,2})\s*[.일]?)?\s*[:\-–]?\s*(\S.*)$")
+
+
+def read_history(text: str) -> list[dict]:
+    """연혁 문서 글 → [{연월일, 내용}]. '2005.03 법인 설립'·'2005년 3월 …' 줄, 또는 '2005' 한 줄 뒤 '03. …' 줄.
+    날짜는 일까지 있으면 date, 월까지면 '2005.03' 글자. 짐작해서 채우지 않음 — 날짜로 시작하지 않는 줄은 앞 줄 내용에 이어 붙이지도 않음."""
+    out, year = [], None
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = _HIST_LINE.match(line)
+        if m:
+            y, mo, d, body = m.groups()
+            year = y
+        elif (my := _YEAR_ONLY.match(line)):
+            year = my.group(1)
+            continue
+        elif year and (mm := _MONTH_LINE.match(line)):
+            y, (mo, d, body) = year, mm.groups()
+        else:
+            continue
+        mo_i = int(mo)
+        if not 1 <= mo_i <= 12 or len(body) < 2:
+            continue
+        when = _ymd(y, mo, d) if d else None
+        out.append({"연월일": when or f"{y}.{mo_i:02d}", "내용": re.sub(r"\s+", " ", body).strip()})
+    return out
+
+
+def _bytes_pdf_text(data: bytes) -> str:
+    try:
+        import io
+
+        from pypdf import PdfReader
+
+        return "\n".join((pg.extract_text() or "") for pg in PdfReader(io.BytesIO(data)).pages)
+    except Exception:  # noqa: BLE001 — 깨진·암호 PDF는 글 없음으로
+        return ""
+
+
+def enrich_vault(vault) -> list[str]:
+    """묶음 안 연혁·경쟁입찰참가자격등록증·사업자등록증 PDF를 읽어 회사정보의 빈 칸과 연혁을 채움(메모리에서만, 11/04 사용자 요청:
+    '연혁 pdf·입찰참가등록증 pdf 확인해서 기입 가능한 건 바로 작성'). 회사정보 시트에 적힌 값이 늘 먼저. 돌려줌: 알림 줄."""
+    notes: list[str] = []
+    found_info: dict[str, tuple[str, str]] = {}  # 항목 → (값, 파일)
+    hist: list[dict] = []
+    hist_src = ""
+    scanned = []
+    for path, data in sorted(vault.files.items()):
+        name = path.rsplit("/", 1)[-1]
+        if not name.lower().endswith(".pdf"):
+            continue
+        sq = re.sub(r"\s+", "", name)
+        kinds = [k for k, words in (("연혁", ("연혁",)), ("등록증", ("참가자격", "입찰참가")), ("사업자", ("사업자등록",)))
+                 if any(w in sq for w in words)]
+        if not kinds:
+            continue
+        text = _bytes_pdf_text(data)
+        if len(re.sub(r"\s", "", text)) < 20:
+            scanned.append(name)
+            continue
+        if "연혁" in kinds and not hist:
+            hist, hist_src = read_history(text), name
+        if "등록증" in kinds:
+            for k, v in read_registration(text)["info"].items():
+                found_info.setdefault(k, (v, name))
+        for k, v in read_bizreg(text).items():
+            found_info.setdefault(k, (v, name))
+    filled = []
+    for k, (v, src) in found_info.items():
+        if not vault.info.get(k):
+            vault.info[k] = v
+            filled.append(f"{k}({src})")
+    if filled:
+        notes.append("회사정보 빈 칸을 서류 PDF에서 읽어 채움: " + ", ".join(filled))
+    if hist and len(hist) > len(vault.history):  # 시트 연혁(보통 법인 설립 한 줄)보다 많으면 PDF 연혁을 씀
+        vault.history = hist
+        notes.append(f"연혁 {len(hist)}줄을 '{hist_src}'에서 읽어 넣음 — 줄 확인")
+    if scanned:
+        notes.append("글이 없는 스캔본이라 읽지 못한 서류: " + ", ".join(scanned[:5]) + " — 회사자료 양식에 직접 적어 주세요")
+    return notes
+
+
 def _fill_info(wb, info: dict, rep) -> None:
     ws = wb["회사정보"]
     for r in range(2, ws.max_row + 1):

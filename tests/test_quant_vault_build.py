@@ -453,3 +453,47 @@ def test_filled_digits_use_hangul_font():
     assert re.search(r'<hh:charPr id="2" height="1300"><hh:fontRef hangul="0" latin="1" hanja="0" symbol="0"/>', out)
     assert re.search(rf'<hh:charPr id="{small}" height="900"><hh:fontRef hangul="0" latin="1"', out)
     assert 'itemCnt="4"' in out and out.count("<hh:font ") == 4  # 글꼴 목록은 그대로
+
+
+def test_read_history_formats():
+    from quantdocs.importer import read_history
+
+    text = ("회사 연혁\n2005. 03. 15 (주)가상 법인 설립\n2010년 7월 실내건축공사업 등록\n- 2012.11 산업디자인전문회사 신고\n"
+            "2018\n03. 직접생산확인 취득\n11월 공장 이전\n주요 실적은 별첨\n2099.13 잘못된 달")
+    got = read_history(text)
+    assert [h["내용"] for h in got] == ["(주)가상 법인 설립", "실내건축공사업 등록", "산업디자인전문회사 신고", "직접생산확인 취득", "공장 이전"]
+    assert got[0]["연월일"] == dt.date(2005, 3, 15) and got[1]["연월일"] == "2010.07" and got[3]["연월일"] == "2018.03"
+
+
+def test_enrich_vault_from_pdfs_and_fill_bracketed_history_label(tmp_path: Path, monkeypatch):
+    """11/04 제보: 연혁 칸 '〈 주요연혁(요약) 〉'이 양식만 보임 — 이름표가 괄호 때문에 8자를 넘어 건너뜀 + 연혁·전화번호를
+    회사 서류 PDF(연혁·경쟁입찰참가자격등록증)에서 읽어 채움. 회사정보 시트 값이 먼저, 스캔본은 알림."""
+    from quantdocs import importer
+    from quantdocs.fill import fill_hwpx
+
+    texts = {b"hist": "2005.03.15 법인 설립\n2010.07 실내건축공사업 등록\n2019.05 본사 이전",
+             b"reg": "경쟁입찰참가자격등록증\n상호 (주)가상\n전 화 번 호 033-123-4567\n팩 스 번 호 033-123-4568",
+             b"scan": ""}
+    monkeypatch.setattr(importer, "_bytes_pdf_text", lambda data: texts[data])
+    v = vault.Vault({"files/회사연혁.pdf": b"hist", "files/경쟁입찰참가자격등록증.pdf": b"reg", "files/입찰참가 스캔.pdf": b"scan",
+                     "files/책상.pdf": b"scan"},
+                    info={"회사명": "(주)가상", "팩스번호": "02-000-0000"},
+                    history=[{"연월일": dt.date(2005, 3, 15), "내용": "법인 설립"}])
+    notes = importer.enrich_vault(v)
+    assert v.info["전화번호"] == "033-123-4567" and v.info["팩스번호"] == "02-000-0000"  # 시트 값이 먼저
+    assert len(v.history) == 3 and any("연혁 3줄" in n for n in notes)
+    assert any("입찰참가 스캔.pdf" in n for n in notes) and not any("책상" in n for n in notes)
+
+    cell = lambda col, row, text, span=1: (
+        f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+        f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/></hp:tc>')
+    tbl = ('<hp:tbl rowCnt="2" colCnt="2"><hp:tr>' + cell(0, 0, "전 화 번 호") + cell(1, 0, "") + "</hp:tr><hp:tr>"
+           + cell(0, 1, "〈 주요연혁(요약) 〉", 2) + "</hp:tr></hp:tbl>")
+    src = tmp_path / "f.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/section0.xml", f'<hs:sec><hp:p><hp:run>{tbl}</hp:run></hp:p></hs:sec>')
+    rep = fill_hwpx(src, tmp_path / "o.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert "033-123-4567" in xml and "2010.07  실내건축공사업 등록" in xml and "〈 주요연혁(요약) 〉" in xml
+    assert any(f.startswith("연혁 → 3줄") for f in rep.filled)

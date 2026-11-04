@@ -121,7 +121,9 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
     files = [Path(f) for f in files]
     work = Path(work or tempfile.mkdtemp(prefix="quantdocs_"))
     work.mkdir(parents=True, exist_ok=True)  # 웹앱이 넘기는 작업 폴더(data/jobs/<id>/work)는 아직 없을 수 있음
-    notes, converted, readable = [], {}, []
+    from .importer import enrich_vault
+
+    notes, converted, readable = enrich_vault(vault), {}, []  # 연혁·등록증 PDF에서 빈 회사정보·연혁 채움
     for f in files:
         if f.suffix.lower() == ".hwp" and _is_hwpx(f):
             # 이름만 .hwp이고 속은 HWPX(zip)인 첨부 — 변환 없이 그대로(11/03 삼척선 동준교 공고)

@@ -507,7 +507,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None) -> 
                     edits += _fill_tracks(xml, cells, tracks, rep)
                 for c in cells:
                     key = _label_key(c.text)
-                    if "연혁" in _sq(c.text) and len(_sq(c.text)) <= 8 and vault.history:
+                    core = re.sub(r"\(.*?\)|[^\w]", "", c.text)  # '〈 주요연혁(요약) 〉' → '주요연혁'
+                    if "연혁" in core and len(core) <= 8 and vault.history:
                         lines = [f"{_fmt_ymd(h.get('연월일'))}  {h.get('내용') or ''}".strip() for h in vault.history]
                         right = by_pos.get((c.row, c.col + c.colspan))
                         if right is not None and right.blank:

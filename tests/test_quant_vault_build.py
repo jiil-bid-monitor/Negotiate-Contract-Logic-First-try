@@ -632,3 +632,26 @@ def test_enrich_warns_when_phone_or_rrn_missing(monkeypatch):
     assert ("스캔1.pdf", "스캔본(이름으로 종류를 몰라 안 읽음)", "") in rows
     v2 = vault.Vault({}, info={"대표전화": "02-1", "대표자 주민등록번호": "800101-*******"})
     assert not any("⚠" in n for n in importer.enrich_vault(v2))
+
+
+def test_loose_pdf_in_quant_docs_folder(tmp_path: Path, monkeypatch):
+    """11/04 사용자 요청: 묶음에 안 넣은 jiil-quant-docs 폴더의 '경쟁입찰참가등록증.pdf'도 읽음 — 서식 채우기·통합본 둘 다.
+    같은 이름이 묶음에 있으면 묶음 것, 하위 폴더는 안 봄."""
+    from quantdocs import importer
+    from quantdocs.bundle import pick
+
+    loose = tmp_path / "jiil-quant-docs"
+    (loose / "vault").mkdir(parents=True)
+    (loose / "경쟁입찰참가등록증.pdf").write_bytes(b"reg")
+    (loose / "사업자등록증.pdf").write_bytes(b"other")
+    (loose / "vault" / "안쪽.pdf").write_bytes(b"x")
+    v = vault.Vault({"files/사업자등록증.pdf": b"inner"})
+    vault.add_loose(v, loose)
+    assert v.loose == ["경쟁입찰참가등록증.pdf"] and v.files["files/사업자등록증.pdf"] == b"inner"
+    monkeypatch.setattr(importer, "_TEXT_CACHE", {})
+    monkeypatch.setattr(importer, "_bytes_pdf_text", lambda data: "경쟁입찰참가자격등록증\n전 화 번 호 031-000-1111 팩 스 번 호 02-000-2222"
+                        if data == b"reg" else "사업자등록증 내용이 들어 있는 문서입니다 확인용")
+    notes = importer.enrich_vault(v)
+    assert v.info["전화번호"] == "031-000-1111" and any("묶음 밖 PDF" in n for n in notes)
+    picks, _ = pick(list(v.files), ["입찰참가자격 등록증"], [], dt.date(2026, 11, 4))
+    assert "files/경쟁입찰참가등록증.pdf" in [p.path for p in picks]

@@ -132,6 +132,7 @@ class Vault:
     history: list[dict] = field(default_factory=list)  # 연혁
     docs: list[dict] = field(default_factory=list)  # 서류상태
     tracks: list[dict] = field(default_factory=list)  # 실적목록
+    loose: list[str] = field(default_factory=list)  # 묶음 밖에서 더 읽은 PDF(파일 이름)
 
     def file(self, name: str | None) -> bytes | None:
         """양식의 '파일 이름' 칸 값으로 파일 찾기 — 'files/' 붙여도·안 붙여도, 경로 없이 이름만 적어도."""
@@ -195,4 +196,30 @@ def load(passphrase: str | None = None, path: Path | None = None) -> Vault:
     for sheet, attr in (("연혁", "history"), ("서류상태", "docs"), ("실적목록", "tracks")):
         if sheet in wb.sheetnames:
             setattr(v, attr, _rows(wb[sheet]))
+    add_loose(v)
     return v
+
+
+def loose_dir() -> Path | None:
+    """묶음 밖 회사 서류 PDF를 둘 수 있는 폴더 — .env QUANT_LOOSE_DIR, 없으면 옆의 비공개 레포 jiil-quant-docs 맨 위
+    (11/04 사용자 요청: 'jiil-quant-docs에 있는 경쟁입찰참가등록증.pdf를 읽어야 해'). 그 폴더 바로 아래 PDF만(하위 폴더는 안 봄)."""
+    given = read_env("QUANT_LOOSE_DIR")
+    d = Path(given) if given else ROOT.parent / "jiil-quant-docs"
+    return d if d.is_dir() else None
+
+
+def add_loose(v: Vault, folder: Path | None = None) -> None:
+    """그 폴더의 PDF를 묶음 files/에 있는 것처럼 메모리에 더함(같은 이름이 묶음에 있으면 묶음 것을 씀) — 서식 채우기·통합본 모두 씀."""
+    folder = folder or loose_dir()
+    if folder is None:
+        return
+    have = {k.rsplit("/", 1)[-1] for k in v.files}
+    for p in sorted(folder.glob("*.pdf")) + sorted(folder.glob("*.PDF")):
+        if p.name in have or not p.is_file():
+            continue
+        try:
+            v.files[f"files/{p.name}"] = p.read_bytes()
+        except OSError:
+            continue
+        v.loose.append(p.name)
+        have.add(p.name)

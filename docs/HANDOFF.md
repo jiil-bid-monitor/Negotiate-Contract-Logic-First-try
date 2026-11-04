@@ -1,4 +1,4 @@
-# 작업 인수인계 (2026-11-03 기준 — 맨 위 "11/03" 절 먼저, 아래는 이전 기록)
+# 작업 인수인계 (2026-11-04 기준 — 맨 위 "11/04" 절 먼저, 아래는 이전 기록)
 
 > **10/19 — 팀원 수집기(iamhiki/narajangter-bid-monitor, TypeScript)와 통합 중.** 브랜치 `claude/collector-integration`
 > (main 미병합). 16개 항목 결정과 단계별 진행은 아래 "7. 수집기 통합"과 `CLAUDE.md` "2026-10-19" 절.
@@ -10,6 +10,20 @@
 > `docs/HANDOFF.md`와 `CLAUDE.md`를 읽고 이어서 작업해 줘.
 
 ---
+
+## 11/04 — 지금 상태와 다음 할 일 (먼저 읽을 것)
+
+- 오늘 정리: `docs/worklog/2026-11-04.md`, 결정: `CLAUDE.md` "2026-11-04" 절. main 마지막 = PR #238.
+- 정량평가서 작업은 전부 브랜치 `claude/quantdocs-merge`(**main 미병합**, push 완료). 시험 공고: 필암서원 R26BK01806620(장성군, 협상).
+  서버 PC는 이 브랜치를 받아 씀: `cd "C:\Users\HJE\나라장터 수집\Negotiate-Contract-Logic-First-try" && git pull origin claude/quantdocs-merge && bash webapp/start.sh`.
+- 서버 PC: Tesseract OCR 설치 완료(한국어 데이터 `C:\Users\HJE\tessdata`, `.env` `TESSERACT_CMD`·`TESSDATA_PREFIX` 작은따옴표로), 등록증 PDF에서 전화·팩스·주민번호 앞자리·업태·종목 읽힘.
+- **다음에 할 일**
+  1. 서버 PC에서 최신 코드로 필암서원 다시 만들어 한글로 확인 — 서식 2 하단 신청인 줄 길이, 서식 28(발행자 칸 비움)·19·6·공고번호(R26BK01806620-000).
+  2. 회사 자료 받기(사용자가 담당자에게 요청 예정): 해당부문 사업기간, 주요연혁, 실적증명서(발주처 확인본), 법인등기부등본, 신용평가등급확인서, 사용인감 → 묶음에 넣고 다시 잠금(jiil-quant-docs).
+  3. `claude/quantdocs-merge` main 병합 — 사용자 요청 때만 PR.
+  4. 브라우저 '주의 요함'(http)은 그대로 두기로 함 — 바꾸려면 사내 인증서(mkcert)·팀원 PC 설치, 사용자 결정 대기.
+- **지킬 것**: 한국어 답변, 요청 전엔 고치지 않기, 회사 서류·잠금 묶음·비밀번호·주민번호 원본은 이 공개 레포에 올리지 않기,
+  서버 PC 명령은 `cd "경로"`부터 `&&`로 한 줄, 평가 점수 계산은 범위 밖, 고친 뒤엔 필암서원 실제 서식으로 다시 만들어 그림 확인.
 
 ## 11/03 — 지금 상태와 다음 할 일 (먼저 읽을 것)
 

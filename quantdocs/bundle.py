@@ -228,8 +228,10 @@ def _as_pdf(name: str, data: bytes) -> bytes | None:
     return None
 
 
-def merge(picks: list[Pick], vault, out_pdf: Path, title: str = "정량평가서 제출 서류") -> tuple[Path | None, list[str]]:
-    """picks 순서대로 이어 붙인 PDF. (결과, 못 넣은 것). 목차는 한글 글꼴이 있으면 맨 앞에 한 장, 책갈피는 늘."""
+def merge(picks: list[Pick], vault, out_pdf: Path, title: str = "정량평가서 제출 서류",
+          done: set | None = None) -> tuple[Path | None, list[str]]:
+    """picks 순서대로 이어 붙인 PDF. (결과, 못 넣은 것). 목차는 한글 글꼴이 있으면 맨 앞에 한 장, 책갈피는 늘.
+    done을 주면 실제로 넣은 파일 경로를 담음(못 넣은 것만 원본으로 따로 두려고)."""
     from pypdf import PdfReader, PdfWriter
 
     skipped: list[str] = []
@@ -272,4 +274,6 @@ def merge(picks: list[Pick], vault, out_pdf: Path, title: str = "정량평가서
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
     with out_pdf.open("wb") as fh:
         w.write(fh)
+    if done is not None:
+        done.update(p.path for p, _ in parts)
     return out_pdf, skipped

@@ -81,24 +81,16 @@ def test_build_package(tmp_path: Path):
     out = build([FIXTURES / "jeongseon_culture_center_rfp.hwpx"], v, tmp_path / "o.zip", "정선", dt.date(2026, 8, 20))
     z = zipfile.ZipFile(out)
     names = z.namelist()
-    assert "공고별_준비표.xlsx" in names and "첨부/실적/실적1.pdf" in names
-    # 11/04 사용자 요청: 서식 + 회사 서류 쪽 그림 = 한글 파일 하나(통합본.hwpx) — PDF 통합본·서류 원본·통합서식 따로 없음
-    assert "통합본.hwpx" in names and "통합본.pdf" not in names and "통합서식.hwpx" not in names
+    assert "공고별_준비표.xlsx" in names and "통합본.pdf" in names and "첨부/실적/실적1.pdf" in names
+    # 11/04 사용자 결정: 제출 파일 둘 — 통합본.pdf(원본 그대로) + 통합서식.hwpx, 서류 원본은 PDF에 못 넣은 것만
     assert not any(n.startswith("첨부/통합본_순서/") for n in names)
+    from pypdf import PdfReader
+    assert len(PdfReader(io.BytesIO(z.read("통합본.pdf"))).outline) >= 1
+    # 11/04 사용자 결정: 한글은 통합서식.hwpx 하나만 — 서식별 파일은 통합서식을 못 만들 때만
     assert not any(n.startswith(("서식/", "서식_직접기입/")) for n in names)
-    # 통합본.hwpx: 서식 31개가 한 한글 파일에 순서대로(채운 값 포함) — 다시 잘라도 31개, 뒤에 서류 구역
+    # 통합서식.hwpx: 서식 31개가 한 한글 파일에 순서대로(채운 값 포함) — 다시 잘라도 31개
     merged = tmp_path / "m.hwpx"
-    merged.write_bytes(z.read("통합본.hwpx"))
-    mz = zipfile.ZipFile(merged)
-    hpf = mz.read("Contents/content.hpf").decode()
-    secs = sorted(n for n in mz.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n))
-    last = mz.read(secs[-1]).decode()
-    pics = re.findall(r'binaryItemIDRef="(qdoc\d+)"', last)
-    assert pics and all(f"BinData/{b}.jpg" in mz.namelist() and f'id="{b}"' in hpf for b in pics)
-    # 한글은 구역을 manifest id 'sectionN'으로 찾음
-    assert all(f'id="{Path(n).stem}" href="{n}"' in hpf for n in secs)
-    assert f'secCnt="{len(secs)}"' in mz.read("Contents/header.xml").decode()
-    assert "첨부 서류" in last and "실내건축공사업등록증.pdf" in last and 'lock="1"' in last
+    merged.write_bytes(z.read("통합서식.hwpx"))
     from quantdocs.forms_cut import cut as recut
     parts = recut(merged, tmp_path / "recut")
     assert len(parts) == 31
@@ -107,7 +99,7 @@ def test_build_package(tmp_path: Path):
     assert "(가상)시험회사" in sec and "(가상) 법인 설립" in sec  # 서식14 일반현황·연혁
     assert "(가상) 전시관" in sec and "250,000,000" in sec  # 서식16 실적집계표
     readme = z.read("읽어보기.txt").decode()
-    assert "통합본.hwpx" in readme and "통합본.pdf" not in readme and "서식_직접기입/" not in readme
+    assert "통합서식.hwpx" in readme and "서식_직접기입/" not in readme
     wb = load_workbook(io.BytesIO(z.read("공고별_준비표.xlsx")))
     assert {"자격요건", "통합본 순서", "자동입력", "준비 필요"} <= set(wb.sheetnames)
 
@@ -169,7 +161,7 @@ def test_web_flow(tmp_path: Path, monkeypatch):
         j = wait(job, "building")
         assert j["state"] == "built" and j["download"], j
         data, headers = call(j["download"])
-        assert "통합본.hwpx" in zipfile.ZipFile(io.BytesIO(data)).namelist()
+        assert "통합본.pdf" in zipfile.ZipFile(io.BytesIO(data)).namelist()
         assert any(b["file"] == "실내건축공사업등록증.pdf" for b in j["summary"]["bundle"])
         assert "filename*=UTF-8''" in headers["Content-Disposition"]
     finally:
@@ -404,15 +396,3 @@ def test_bundle_pick_one_of_group():
     assert [p.path for p in picks] == ["files/종합디자인.pdf"] and not missing
     picks, missing = pick([], [], quals, dt.date(2026, 11, 4))
     assert not picks and len(missing) == 1 and " 또는 " in missing[0]
-
-
-def test_pages_of_rejects_bad_files():
-    """그림으로 못 바꾸는 서류는 예외 — build가 원본을 첨부/통합본_순서에 남김."""
-    from quantdocs.hwpx_pages import pages_of
-
-    with pytest.raises(Exception):
-        pages_of("깨짐.pdf", b"not a pdf")
-    with pytest.raises(ValueError):
-        pages_of("표.xlsx", b"PK")
-    pages = pages_of("빈쪽.pdf", _blank_pdf(2))
-    assert len(pages) == 2 and pages[0][0][:2] == b"\xff\xd8"  # JPEG

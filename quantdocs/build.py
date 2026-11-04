@@ -159,6 +159,10 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
     return Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
 
 
+# 화면에서 뺀 알림(11/04 사용자 요청) — 읽어보기.txt엔 그대로 남음
+_SCREEN_HIDDEN = re.compile(r"회사정보 빈 칸을 서류 PDF에서 읽어 채움|글이 없는 스캔본인데 글자 인식 도구|준공 전\(")
+
+
 def summary(a: Analysis) -> dict:
     """화면용 JSON."""
     sh = a.sheet
@@ -178,7 +182,7 @@ def summary(a: Analysis) -> dict:
         "candidates": [{"name": c.get("사업명"), "org": c.get("발주기관"), "done": str(c.get("준공일") or "")[:10],
                         "amount": c.get("인정 금액(원)"), "check": c.get("확인할 것")} for c in a.candidates[:20]],
         "deadlines": [[k, f"{w:%Y-%m-%d %H:%M}"] for k, w, _ in sh.deadlines],
-        "notes": a.notes,
+        "notes": [n for n in a.notes if not _SCREEN_HIDDEN.match(n)],
         "bundle": [{"section": p.section, "file": Path(p.path).name, "note": p.note} for p in a.picks],
         "bundle_missing": a.pick_missing,
     }

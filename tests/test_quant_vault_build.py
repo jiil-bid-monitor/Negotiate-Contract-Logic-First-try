@@ -775,3 +775,14 @@ def test_notice_number_autofill(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "m.hwpx", body), tmp_path / "mo.hwpx", v, g2b_no="R26BK00000001")
     out = zipfile.ZipFile(tmp_path / "mo.hwpx").read("Contents/section0.xml").decode()
     assert "제 2026 -     호" in out and out.count("R26BK00000001") == 1  # 자리표시 칸은 그대로, 빈 칸에만 나라장터 번호
+
+
+def test_screen_hides_routine_notes():
+    """11/04 사용자 요청: 화면 알림에서 'PDF에서 읽어 채움'·'Tesseract 없음'·'준공 전 실적 뺌' 문구를 뺌(읽어보기엔 남음)."""
+    from quantdocs.build import _SCREEN_HIDDEN
+
+    for n in ("회사정보 빈 칸을 서류 PDF에서 읽어 채움: 전화번호(등록증.pdf)",
+              "글이 없는 스캔본인데 글자 인식 도구(Tesseract)가 없어 읽지 못한 서류: 인감증명서.pdf",
+              "준공 전(준공일이 없거나 2026-11-03 뒤)이라 실적 후보에서 뺀 실적 12건: …"):
+        assert _SCREEN_HIDDEN.match(n)
+    assert not _SCREEN_HIDDEN.match("⚠ 회사 전화번호를 찾지 못해 서식의 전화번호 칸이 비어 있음")

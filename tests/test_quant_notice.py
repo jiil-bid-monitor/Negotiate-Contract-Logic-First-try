@@ -180,3 +180,29 @@ def test_score_cell_is_not_form_name():
 
     text = "- 사업수행실적\n- 0.3점\n[서식5호]\n〔서식 5호〕\n전시분야 최근 3년간 사업수행실적\n"
     assert [(f.no, f.name) for f in read_forms(text, "x.hwp", load_catalog())] == [(5, "전시분야 최근 3년간 사업수행실적")]
+
+
+def test_forms_angle_bracket_heads_and_broken_names():
+    """11/04 필암서원(장성군) 모양 — 본문 머리 '〈서식 12〉', 목록 범위 '사업수행능력평가(정량적 지표) 자료 [서식11~19]',
+    목록 이름 꼬리 '10부 (A4 규격 30매 이내) ※ …', 표 칸이 섞인 이름 '8 위임장 … (대리인이 등록할 경우'."""
+    from quantdocs.catalog import load_catalog
+    from quantdocs.notice import read_forms
+
+    title = "필암서원 집성관 디지털 콘텐츠 보강 기획 및 제작설치"
+    text = "\n".join([
+        "▪사업수행능력평가(정량적 지표) 자료 [서식11~19]",
+        "▪기술제안서(정성적 지표) 10부 (A4 규격 30매 이내) ※ 응모자 표기 1부, 응모자 미표기 [서식 20]",
+        "- 8 위임장 및 재직증명서(대리인이 등록할 경우", "서식26",
+        "〈서식 11〉", "사업수행능력평가자료 (표지)",
+        "〈서식 12〉", "제안회사 일반현황 및 연혁",
+        "〈서식 16〉", "최근 5년간 사업수행실적",
+        "〈서식 19〉", "행정처분내용",
+        "〈서식 20〉", f"「{title}」", "제 안 서",
+        "〈서식 26〉", "위 임 장",
+    ])
+    got = {f.no: f.name for f in read_forms(text, f"[제안요청서]{title}.hwp", load_catalog())}
+    assert got[11] == "사업수행능력평가자료 (표지)" and got[12] == "제안회사 일반현황 및 연혁"
+    assert got[16] == "최근 5년간 사업수행실적" and got[19] == "행정처분내용"
+    assert got[13] == "사업수행능력평가(정량적 지표) 자료 (11~19)"  # 본문 머리가 없는 번호는 범위 이름 그대로
+    assert got[20] == "기술제안서(정성적 지표)"
+    assert got[26] == "위임장"

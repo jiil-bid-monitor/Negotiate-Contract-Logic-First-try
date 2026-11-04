@@ -138,9 +138,9 @@ _HEAD_LINE = re.compile(r"^\s*(?:[가-하]\.|\d+\.|[ⅠⅡⅢⅣⅤⅥⅦ]|□|�
 # ⑤ 서식 본문 머리 "〔서식 3호〕" 다음 줄 제목 — 목록이 범위("2~10호")로만 적었거나 없을 때 이름을 채움
 # 번호 표기: "서식 3", "서식 3호", "서식 제3호", "서식2~10호", "서식5호, 6호", "서식7, 8호", "서식4-1"(4번의 하위 서식)
 _NO = r"서식\s*(?:제\s*)?\d+\s*호?(?:\s*-\s*\d+)?(?:\s*[~∼,]\s*(?:서식\s*)?(?:제\s*)?\d+\s*호?)*"
-_FORM_CELL = re.compile(rf"^\s*[\[〔<【(]?\s*(?P<nos>{_NO})\s*[\]〕>】)]?\s*$")
-_FORM_INLINE = re.compile(rf"[(<〔\[【]\s*(?P<nos>{_NO})\s*[)>〕\]】]")
-_FORM_HEAD = re.compile(r"^\s*[\[〔<【]\s*서식\s*(?:제\s*)?(\d+)\s*호?\s*[\]〕>】]\s*(?P<rest>.*)$")
+_FORM_CELL = re.compile(rf"^\s*[\[〔<【〈《＜(]?\s*(?P<nos>{_NO})\s*[\]〕>】〉》＞)]?\s*$")
+_FORM_INLINE = re.compile(rf"[(<〔\[【〈《＜]\s*(?P<nos>{_NO})\s*[)>〕\]】〉》＞]")
+_FORM_HEAD = re.compile(r"^\s*[\[〔<【〈《＜]\s*서식\s*(?:제\s*)?(\d+)\s*호?\s*[\]〕>】〉》＞]\s*(?P<rest>.*)$")
 _LIST_MARK = re.compile(rf"^\s*(?:\d+\s*[).]|[{_CIRCLED}]|[-·∙•▪]|[가-하]\.)\s*")
 
 
@@ -159,7 +159,8 @@ def _squash(s: str) -> str:
 
 def _clean_name(name: str) -> str:
     name = _LIST_MARK.sub("", name.strip())
-    name = re.sub(r"\s*(?:각\s*)?\d+\s*부\.?\s*(?:\([^)]*\))?\s*$", "", name)  # "… 1부", "… 10부(A3)"
+    name = re.split(r"\s*※", name)[0]  # "… ※ 응모자 표기 1부" 꼬리 설명
+    name = re.sub(r"\s+(?:각\s*)?\d+\s*부\b.*$|\s*(?:각\s*)?\d+\s*부\.?\s*(?:\([^)]*\))?\s*$", "", name)  # "… 1부", "… 10부(A3)", "… 10부 (A4 규격 30매 이내)"
     name = re.sub(r"\s*(?:제출|작성)\s*$", "", name)
     return re.sub(r"\s+", " ", name).strip(" -:·,")
 
@@ -220,6 +221,8 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
         # 배점·숫자만 있는 칸("0.3점", "10%", "3부")은 이름이 아님 — 평가표 칸이 서식 칸 앞에 풀려 나올 때(11/04)
         if len(re.sub(r"[^가-힣A-Za-z]", "", re.sub(r"\d[\d.,]*\s*(?:점|%|원|억원?|천만원|백만원|만원|개|건|년|부|매|쪽|명|인)", "", name))) < 2:
             return False
+        if re.match(r"^\d+\s", name) or name.count("(") > name.count(")"):  # '8 위임장 … (대리인이 등록할 경우' — 표 칸이 섞인 이름
+            is_weak = True
         f = found.get(n)
         if f is None:
             found[n] = Form(n, name, source, i in quant or in_quant, classify(name, catalog))
@@ -254,7 +257,7 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
         return all([add_one(n, label, i, True, q) for n in span])
 
     for i, ln in enumerate(lines):  # ④ 서식 목차 표 "[서식 N] | 이름" — 이름이 가장 정확해서 먼저
-        m = re.match(r"^\s*(?:[\[〔<【]\s*)?서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:-\s*\d+)?\s*(?:[\]〕>】]\s*)?\|\s*([^|]+)", ln)
+        m = re.match(r"^\s*(?:[\[〔<【〈《＜]\s*)?서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:-\s*\d+)?\s*(?:[\]〕>】〉》＞]\s*)?\|\s*([^|]+)", ln)
         if m:  # "[서식 4-1] | 공동수급표준협정서(공동이행)" → 서식4 = 공동수급표준협정서, "서식 1호 | 표지 |"(11/03 영동군)
             name = re.sub(r"\s*\([^)]*\)\s*$", "", m.group(2)) if "-" in ln.split("|")[0] else m.group(2)
             name = re.split(r"\s※", name)[0]  # "… 서약서 ※ 서식 16호 이행 서약서는 …" 꼬리 설명

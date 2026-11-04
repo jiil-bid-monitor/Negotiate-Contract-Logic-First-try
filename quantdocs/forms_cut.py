@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _TAG = re.compile(r"<(/?)((?:[\w.-]+:)?)(p|run|t|secPr)\b([^>]*?)(/?)>")
-_HEAD = re.compile(r"^[\[〔<【(（]\s*서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:[-–]\s*(\d+))?\s*[\]〕>】)）]")
+_HEAD = re.compile(r"^[\[〔<【〈《＜(（]\s*서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:[-–]\s*(\d+))?\s*[\]〕>】〉》＞)）]")
 
 
 @dataclass
@@ -102,7 +102,7 @@ def find_forms(sections: dict[str, str]) -> list[CutForm]:
             m = _HEAD.match(sq)
             if not m:
                 continue
-            if len(re.findall(r"[\[〔<【]서식\d+", sq)) >= 2:  # 서식 목차 표 — 본문 아님
+            if len(re.findall(r"[\[〔<【〈《＜]서식\d+", sq)) >= 2:  # 서식 목차 표 — 본문 아님
                 continue
             heads.append((idx, m.group(1) + (f"-{m.group(2)}" if m.group(2) else "")))
         for k, (idx, no) in enumerate(heads):
@@ -127,7 +127,7 @@ def _norm_title(line: str) -> str:
 
 def _guess_title(body: list[Para]) -> str:
     """제목 문단의 '[서식 N]' 뒤 글, 없으면 다음 줄들 중 처음 2글자 넘는 줄."""
-    rest = re.sub(r"^\s*[\[〔<【(（]\s*서식\s*(?:제\s*)?[\d\s\-–호]+[\]〕>】)）]", "", body[0].text)  # '〔서식 1호〕'도(11/04 당진)
+    rest = re.sub(r"^\s*[\[〔<【〈《＜(（]\s*서식\s*(?:제\s*)?[\d\s\-–호]+[\]〕>】〉》＞)）]", "", body[0].text)  # '〔서식 1호〕'도(11/04 당진)
     lines = [ln for p in [rest] + [p.text for p in body[1:4]] for ln in p.splitlines()]
     for ln in lines:
         t = _norm_title(ln)

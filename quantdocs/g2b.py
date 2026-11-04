@@ -294,7 +294,10 @@ def qualification_rows(paths: list[Path], held_codes: set[str], vault=None, lice
         known.add(_sq(lic))
 
     # 코드 없이 이름만 적힌 증빙 서류
+    has_product = any(len(it["code"]) >= 8 for r in rows for it in r["items"])
     for label, pat, words in NAME_REQS:
+        if label == "직접생산확인증명서" and has_product:
+            continue  # 세부품명 줄에 '직접생산확인증명서'로 표시됨(11/04 필암서원: PDF 공고문 줄바꿈으로 14개 증명서가 다 들어갔음)
         found = [n for n, items in per_doc if any(
             re.search(pat, ln) and not (label == "직접생산확인증명서" and _ANY_CODE.search(ln))  # 코드가 있으면 위 품목 줄에 표시
             for i in items for ln in i.splitlines())]

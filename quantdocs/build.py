@@ -28,6 +28,7 @@ from .catalog import load_catalog
 from .fill import FillReport, fill_hwpx
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
+from .hwpx_pages import Doc, append_docs, pages_of
 from .kinds import detect, guide
 from .notice import Form, classify, form_tracks, read_notice, track_candidates, write_sheet
 
@@ -250,12 +251,32 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             if all(n != name or fo != folder for fo, n, _ in attach):
                 attach.append((folder, name, data))
 
+        # 회사 서류를 쪽 그림으로 통합서식 뒤에 붙여 한글 파일 하나(통합본.hwpx)로 — 담당자는 직접 기입 칸만 채워 바로 제출(11/04 사용자 요청).
+        # 그림으로 못 바꾼 서류만 원본을 첨부/통합본_순서에, 통합서식을 못 만든 공고는 예전처럼 통합본.pdf.
+        bundle_hwpx, in_hwpx = None, set()
+        if merged_forms and a.picks:
+            docs = []
+            for p in a.picks:
+                try:
+                    docs.append(Doc(p.section, Path(p.path).name, pages_of(p.path, vault.files[p.path])))
+                    in_hwpx.add(p.path)
+                except Exception as err:  # noqa: BLE001 — 깨진·암호 PDF 등: 원본으로 남김
+                    missing.append(f"{Path(p.path).name}: 한글 통합본에 못 넣음({err}) — 첨부/통합본_순서에 원본")
+            if docs:
+                try:
+                    bundle_hwpx = append_docs(merged_forms[0], docs, work / "통합본.hwpx",
+                                              f"{notice_title or '정량평가서'} — 첨부 서류")
+                except (ValueError, KeyError, OSError, zipfile.BadZipFile) as err:
+                    a.notes.append(f"회사 서류를 한글 통합본에 붙이지 못함({err}) — 통합본.pdf로 대신")
+                    in_hwpx = set()
         for i, p in enumerate(a.picks, 1):
-            attach.append(("첨부/통합본_순서", f"{i:02d}_{_safe(Path(p.path).name)}", vault.files[p.path]))
             if p.note:
                 missing.append(f"{Path(p.path).name}: {p.note}")
-        merged, skipped = merge(a.picks, vault, work / "통합본.pdf",
-                                f"{notice_title or '정량평가서'} — 제출 서류 통합본") if a.picks else (None, [])
+            if p.path not in in_hwpx:
+                attach.append(("첨부/통합본_순서", f"{i:02d}_{_safe(Path(p.path).name)}", vault.files[p.path]))
+        merged, skipped = (None, [])
+        if a.picks and bundle_hwpx is None:
+            merged, skipped = merge(a.picks, vault, work / "통합본.pdf", f"{notice_title or '정량평가서'} — 제출 서류 통합본")
         missing += skipped
         for h in vault.history:
             if h.get("증빙 파일 이름"):
@@ -300,7 +321,9 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             z.write(sheet_path, "공고별_준비표.xlsx")
             if merged:
                 z.write(merged, "통합본.pdf")
-            for p in merged_forms:  # 문서가 하나면 '통합서식.hwpx'
+            if bundle_hwpx:  # 서식 + 회사 서류 쪽 그림 = 한글 파일 하나
+                z.write(bundle_hwpx, "통합본.hwpx")
+            for p in merged_forms[1 if bundle_hwpx else 0:]:  # 문서가 하나면 '통합서식.hwpx'
                 z.write(p, "통합서식.hwpx" if len(merged_forms) == 1 else p.name)
             if per_form:  # 통합서식을 못 만든 경우만 서식별 파일(11/04 사용자 결정: 한글 통합본만)
                 for p in sorted(filled_dir.glob("*.hwpx")) if filled_dir.exists() else []:
@@ -312,22 +335,30 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             for f in files:
                 z.write(f, f"공고문/{f.name}")
             z.writestr("읽어보기.txt", _readme(f"{notice_title} [{guide(a.kind)['name']}]", reports, attach, missing, a.notes, manual,
-                                              per_form))
+                                              per_form, bool(bundle_hwpx), len(in_hwpx)))
         return out_zip
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _readme(title: str, reports, attach, missing, notes, manual=(), per_form: bool = True) -> str:
-    lines = [f"정량평가서 준비 묶음 — {title}".strip(), "",
-             "· 통합서식.hwpx : 공고 서식 전체를 서식 순서대로 이은 한글 파일 하나 — 회사 정보·연혁·실적을 채운 서식과 "
+def _readme(title: str, reports, attach, missing, notes, manual=(), per_form: bool = True,
+            one_file: bool = False, docs_in_file: int = 0) -> str:
+    lines = [f"정량평가서 준비 묶음 — {title}".strip(), ""]
+    if one_file:
+        lines += ["· 통합본.hwpx : 제출용 한글 파일 하나 — 앞쪽은 공고 서식 전체(회사 정보·연혁·실적을 채운 서식 + 담당 PM·투입 인력 등 "
+                  f"직접 기입할 서식), 뒤쪽은 '첨부 서류 목록' 한 쪽과 회사 서류 {docs_in_file}개의 스캔 쪽(그림 — 고치지 않는 읽기 전용). "
+                  "직접 기입 칸만 채우면 바로 제출 — 자동으로 채운 칸은 준비표 '자동입력' 시트에서 확인"]
+    else:
+        lines += ["· 통합서식.hwpx : 공고 서식 전체를 서식 순서대로 이은 한글 파일 하나 — 회사 정보·연혁·실적을 채운 서식과 "
              "담당 PM·투입 인력·자기평가처럼 공고마다 정하는 값을 적는 서식(제안요청서 양식 그대로)이 함께 있음, 이 파일에서 바로 기입 "
              "— 자동으로 채운 칸은 준비표 '자동입력' 시트에서 확인"]
     if per_form:
         lines += ["· 서식/ : 서식별로 잘라 채운 것(통합서식을 다 잇지 못해 함께 넣음)",
                   "· 서식_직접기입/ : 직접 기입할 서식(제안요청서 양식 그대로)"]
-    lines += ["· 통합본.pdf : (회사 서류 스캔본) 공고 제출서류·요구 자격에 맞는 회사 서류를 파일 이름 키워드로 골라 원본 그대로 이어 붙인 것(목차·책갈피) — 순서는 준비표 '통합본 순서'",
-              "· 첨부/ : 통합본에 넣은 원본(순서 번호) + 연혁·실적 증빙 — 제출 전 유효기간 확인",
+    if not one_file:
+        lines += ["· 통합본.pdf : (회사 서류 스캔본) 공고 제출서류·요구 자격에 맞는 회사 서류를 파일 이름 키워드로 골라 원본 그대로 이어 붙인 것(목차·책갈피) — 순서는 준비표 '통합본 순서'"]
+    lines += ["· 첨부/ : " + ("한글 통합본에 못 넣은 서류 원본 + " if one_file else "통합본에 넣은 원본(순서 번호) + ")
+              + "연혁·실적 증빙 — 제출 전 유효기간 확인",
               "· 공고별_준비표.xlsx : 서식 목록·제출서류·자격요건·실적요건·실적후보·준비 필요 서류",
               "· 실적후보는 후보일 뿐 — 제출할 실적은 담당자가 확정", "· 이 묶음엔 회사 서류가 들어 있으니 사내에서만 보관",
               "", f"채운 서식 {len(reports)}개, 직접 기입 서식 {len(manual)}개, 첨부 서류 {len(attach)}개"]

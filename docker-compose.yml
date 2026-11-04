@@ -4,6 +4,7 @@
 #   <공유폴더>/jiil-webapp/jiil-past-contracts/
 #   <공유폴더>/jiil-webapp/control/     ← restart-webapp 파일을 넣으면 웹앱만 다시 켠다(scripts/nas/webapp_run.sh)
 #   <공유폴더>/jiil-webapp/under100m/   ← run.sh를 넣으면 1억 미만 컨테이너가 실행한다(없으면 대기, 저장소 밖 — 회사 정보)
+#   /volume1/002 진행프로젝트/실습폴더/1억미만_시험/   ← 1억 미만 컨테이너의 시험 결과(공고 폴더). 이 폴더 하나만 연결한다.
 services:
   webapp:
     build: .
@@ -36,6 +37,10 @@ services:
     network_mode: host
     restart: unless-stopped
     env_file: .env
+    environment:
+      UNDER100M_OUT: /out
     volumes:
       - ..:/work
+      # 이 파일 기준 ../.. = 볼륨 최상위. 시험이 끝나면 정식 공유 폴더로 바꾼다(프로젝트 다시 빌드 필요).
+      - "../../002 진행프로젝트/실습폴더/1억미만_시험:/out"
     mem_limit: 1500m

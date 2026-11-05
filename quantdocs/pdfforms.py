@@ -469,6 +469,12 @@ def rebuild(pdf_path: Path, out: Path, max_pages: int = 40,
         found = _pdf_head(texts[i])  # 서식 머리: PDF 글자 정보 먼저(정확), 없으면 OCR 쪽 위 글
         if found is None:
             found = _ocr_top_head(img)
+        if found is None and cur and not re.search(r"서\s*식", texts[i][:200]):
+            from .notice import guess_form_title
+
+            guess = guess_form_title(texts[i])  # OCR도 못 읽으면 쪽 첫 줄이 '…각서' 같은 서식 제목인지 — 앞 서식 다음 번호
+            if guess:
+                found = (str(int(re.match(r"\d+", cur).group(0)) + 1), guess)
         xml, top = page_xml(img, st, content_width, False, i, drop_head=found is not None)
         if found is None:
             m = next((m for m in (_HEAD.match(ln) for ln in top) if m), None)

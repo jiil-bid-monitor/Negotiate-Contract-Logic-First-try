@@ -1540,3 +1540,34 @@ def test_hidden_form_head_read_from_page_top(monkeypatch):
     assert "[서식 1]" not in text.split("- 45 -")[1]
     names = [f.no for f in notice.read_forms(text, "r.pdf", notice.load_catalog())]
     assert 7 in names or "7" in names
+
+
+def test_hidden_form_head_guessed_without_ocr(monkeypatch):
+    """OCR이 없어도 쪽 첫 줄이 '…각서' 제목이면 앞 서식 다음 번호로(11/05 — 서버 PC에서 서식 7이 여전히 안 보임)."""
+    from quantdocs import importer, notice
+
+    pages = ["- 28 -\n목차 서식 서식 [ 1]", "- 42 -\n서식 공동수급표준협정서서식 공동수급표준협정서[ 6] ( )\nㆍ",
+             "- 43 -\nㆍ ㆍ", "- 46 -\n                 입 찰 보 증 금 지 급 각 서입 찰 보 증 금 지 급 각 서  \n  입찰건명 입찰건명 1. :"]
+    monkeypatch.setattr(importer, "ocr_page_tops", lambda *a, **k: None)
+    text = notice._add_hidden_heads(b"", pages, "\n".join(pages), "r.pdf")
+    assert "[서식 7] 입찰보증금지급각서\n- 46 -" in text
+    assert text.count("[서식 7]") == 1
+    assert notice.guess_form_title("- 43 -\nㆍ ㆍ") is None
+
+
+def test_bond_amount_filled_without_won_brackets(tmp_path):
+    """'입찰금액 :      원 * 부가세 포함'·'입찰보증금액 :      원'·'입찰건명 :' — 금액 칸만 빈 모양도(11/05 창업진흥원 서식 7)."""
+    from quantdocs import fill
+
+    rep = fill.FillReport("x")
+    xml = ("<hp:p><hp:run><hp:t>입찰보증금지급각서</hp:t></hp:run></hp:p>"
+           "<hp:p><hp:run><hp:t>1. 입 찰 건명</hp:t></hp:run></hp:p>"
+           "<hp:p><hp:run><hp:t>2. 입찰금액 :          원 * 부가세 포함</hp:t></hp:run></hp:p>"
+           "<hp:p><hp:run><hp:t>3. 입찰보증금율 : 5%</hp:t></hp:run></hp:p>"
+           "<hp:p><hp:run><hp:t>4. 입 찰 보 증 금 액 원</hp:t></hp:run></hp:p>")
+    out = fill._fill_bond(xml, 90_000_000, rep, "스타트업 타운 설계 용역")
+    plain = out.replace(fill._VS, "").replace(fill._VE, "")
+    assert "입찰금액 : 90,000,000 원 * 부가세 포함" in plain
+    assert f"입 찰 보 증 금 액 {int(90_000_000 * fill.BOND_RATE):,} 원" in plain
+    assert "입 찰 건명 : 스타트업 타운 설계 용역" in plain
+    assert "5%" in plain

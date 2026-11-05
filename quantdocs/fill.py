@@ -1083,7 +1083,7 @@ def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:
 # ── 입찰보증금 지급 확약서(11/05 사용자 요청) ─────────────────────────
 # 입찰 금액 = 제안요청서의 기초금액(없으면 사업비·사업예산 — 공고문), 보증금 = 그 금액 × BOND_RATE, '금 420,000,000원(금 사억이천만원)'
 BOND_RATE = 1.05  # 기초금액 × 1.05(11/05 사용자 확인 — 4억이면 4억 2천만원)
-_BASIS = re.compile(r"(?:기초\s*금액|사\s*업\s*비|사업\s*예산|사업\s*금액|소요\s*예산)(?:\([^)]{0,12}\))?[^\d\n]{0,60}?([\d]{1,3}(?:,\d{3}){2,})\s*원")
+_BASIS = re.compile(r"(?:기초\s*금액|사\s*업\s*비|사업\s*예산|사업\s*금액|소요\s*예산|배정\s*예산)(?:\([^)]{0,12}\))?[^\d\n]{0,60}?([\d]{1,3}(?:,\d{3}){2,})\s*원")
 
 
 def basis_amount(texts: dict[str, str]) -> tuple[int, str] | None:
@@ -1121,8 +1121,15 @@ def _won_text(n: int) -> str:
     return f"{n:,}원(금 {kor_money(n)}원)"
 
 
-def _fill_bond(xml: str, basis: int | None, rep: FillReport) -> str:
-    """'입 찰 금 액 : 금     원(금     원)'·'입찰 보증금 : 금     원(금     원)' — 보증금 확약서·각서에서만(가격제안서의 입찰금액은 지일이 정함)."""
+_BOND_AMOUNT = r"입\s*찰\s*보\s*증\s*금\s*액"
+_BID_AMOUNT = r"입\s*찰\s*금\s*액"
+_BID_NAME = r"입\s*찰\s*건\s*명"
+
+
+def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") -> str:
+    """'입 찰 금 액 : 금     원(금     원)'·'입찰 보증금 : 금     원(금     원)' — 보증금 확약서·각서에서만(가격제안서의 입찰금액은 지일이 정함).
+    '입찰금액 :      원 * 부가세 포함'·'입찰보증금액 :      원'(금액 칸만 빈 모양)엔 숫자만, 비어 있는 '입찰건명 :'엔 공고 이름(11/05 창업진흥원 서식 7 —
+    PDF를 OCR로 다시 만든 서식은 쌍점이 빠지고 빈칸이 한 칸뿐이라 쌍점 없이도 봄)."""
     flat = _sq(_text(xml))
     if not basis or "보증금" not in flat or not re.search(r"확약|각서|지급", flat):
         return xml
@@ -1132,17 +1139,29 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport) -> str:
 
     def fill_t(m):
         body = m.group(2)
-        for label, value in ((r"입\s*찰\s*금\s*액", basis), (r"보\s*증\s*금", bond)):
+        for label, value in ((_BID_AMOUNT, basis), (r"보\s*증\s*금", bond)):
             rx = re.compile(rf"({label}\s*[:：]\s*){blank}")
             if rx.search(body):
                 body = rx.sub(lambda mm: f"{mm.group(1)}금 {_mark(_won_text(value))}", body, count=1)
                 done.append(value)
+        for label, value in ((_BID_AMOUNT, basis), (_BOND_AMOUNT, bond)):  # '입찰금액 :      원' — 숫자만
+            rx = re.compile(rf"((?:^|[\s.])({label})\s*[:：]?)\s+(원)(?!\s*\(\s*금)")
+            if value not in done and rx.search(body):
+                body = rx.sub(lambda mm: f"{mm.group(1)} {_mark(f'{value:,}')} {mm.group(3)}", body, count=1)
+                done.append(value)
+        if title and re.search(rf"{_BID_NAME}\s*[:：]?\s*$", body):  # 비어 있는 '입찰건명 :'
+            body = re.sub(rf"({_BID_NAME})\s*([:：]?)\s*$",
+                          lambda mm: f"{mm.group(1)} {mm.group(2) or ':'} {_mark(title)}", body, count=1)
+            done.append(0)
         return m.group(1) + body + m.group(3)
     new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, xml, flags=re.S)
     if done:  # 값을 넣은 문단은 줄 배치를 다시 계산하게
         new = re.sub(r"(<(?:[\w.-]+:)?p\b[^>]*>(?:(?!</(?:[\w.-]+:)?p>).)*?\ue000(?:(?!</(?:[\w.-]+:)?p>).)*?)"
                      r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", r"\1", new, flags=re.S)
-        rep.filled.append(f"입찰 금액 → {basis:,}원(기초금액) · 입찰 보증금 → {bond:,}원(기초금액 × {BOND_RATE:g})")
+        if basis in done or bond in done:
+            rep.filled.append(f"입찰 금액 → {basis:,}원(기초금액) · 입찰 보증금 → {bond:,}원(기초금액 × {BOND_RATE:g})")
+        if 0 in done:
+            rep.filled.append(f"입찰건명 → {title}")
     return new
 
 
@@ -1317,7 +1336,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', seg)
                     char_id = _fill_variant(chars, run.group(1) if run else "0")
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
-            xml = _fill_bond(xml, basis, rep)
+            xml = _fill_bond(xml, basis, rep, title)
             xml = _fill_label_paragraphs(xml, vault, rep, chars, sign_only)
             xml = _apply_marks(xml, chars)
             if chars is not None:

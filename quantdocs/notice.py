@@ -658,6 +658,22 @@ _OCR_HEAD = re.compile(r"[\[［(〔]\s*서\s*[식직]\s*(?:제\s*)?(\d{1,2}(?:\s
 HEAD_SCAN_MAX = 30
 
 
+_FORM_TITLE_END = re.compile(r"(?:각서|확약서|서약서|확인서|신청서|위임장|증명서|협정서|동의서|명세서|제출서|신고서|청구서|보증서|계획서)$")
+
+
+def guess_form_title(page: str) -> str | None:
+    """쪽 첫 줄(쪽 번호 줄 빼고)이 서식 제목('입 찰 보 증 금 지 급 각 서' — 글자 띄움·두 번 찍힘 포함)이면 그 제목."""
+    lines = [ln for ln in page.splitlines() if ln.strip() and not re.fullmatch(r"\s*-\s*\d+\s*-\s*", ln)]
+    if not lines:
+        return None
+    t = re.sub(r"\s+", "", lines[0])
+    if len(t) % 2 == 0 and t[: len(t) // 2] == t[len(t) // 2:]:
+        t = t[: len(t) // 2]
+    if re.fullmatch(r"[가-힣]{3,20}", t) and _FORM_TITLE_END.search(t):
+        return t
+    return None
+
+
 def _add_hidden_heads(data: bytes, pages: list[str], text: str, name: str) -> str:
     """서식 머리 '[서식 N]'이 그림·빠진 글꼴이라 PDF 글 정보에 없는 쪽(11/05 창업진흥원 '[서식 7] 입찰보증금지급각서' — 쪽 글은 제목만 있음).
     첫 서식 머리가 나온 쪽 뒤에서 앞부분에 '서식'이 없는 쪽만 위쪽 15%를 OCR해 '[서식 N]'이 보이면 그 쪽 글 앞에 '[서식 N] 제목' 줄을 붙임.
@@ -668,25 +684,41 @@ def _add_hidden_heads(data: bytes, pages: list[str], text: str, name: str) -> st
     todo = [i for i in range(first + 1, len(pages)) if not re.search(r"서\s*식", pages[i][:200])][:HEAD_SCAN_MAX]
     if not todo:
         return text
-    from .importer import ocr_page_tops
+    from .importer import ocr_page_tops  # noqa: F401 — 시험에서 바꿔 끼움
+    from . import importer as _imp
+    ocr_page_tops = _imp.ocr_page_tops
 
     got = ocr_page_tops(data, todo) or {}
-    for i, top in got.items():
-        m = _OCR_HEAD.search(top)
-        if not m:
+    last = None  # 앞 서식 번호(머리 없는 쪽의 번호 짐작용)
+    for i in range(first, len(pages)):
+        hm = re.search(r"\[\s*(\d{1,2})(?:\s*-\s*\d{1,2})?\s*\]", pages[i][:200]) if re.search(r"서\s*식", pages[i][:200]) else None
+        if hm and i > first:
+            last = int(hm.group(1))
+        if i not in todo:
             continue
-        no = re.sub(r"\s+", "", m.group(1))
-        title = m.group(2).strip()
-        if not re.search(r"[가-힣]{2}", title):  # 제목이 다음 줄에 있으면 그 줄
-            rest = [ln.strip() for ln in top[m.end():].splitlines() if re.search(r"[가-힣]{2}", ln)]
-            title = rest[0] if rest else ""
+        m = _OCR_HEAD.search(got.get(i, ""))
+        if m:
+            top = got[i]
+            no = re.sub(r"\s+", "", m.group(1))
+            title = m.group(2).strip()
+            if not re.search(r"[가-힣]{2}", title):  # 제목이 다음 줄에 있으면 그 줄
+                rest = [ln.strip() for ln in top[m.end():].splitlines() if re.search(r"[가-힣]{2}", ln)]
+                title = rest[0] if rest else ""
+            how = "글자 인식(OCR)으로 읽음"
+        else:  # OCR이 없거나 못 읽음 — 쪽 첫 줄이 '…각서·확약서' 같은 서식 제목이면 앞 서식 다음 번호로
+            title = guess_form_title(pages[i])
+            if not title or last is None:
+                continue
+            no = str(last + 1)
+            how = f"쪽 첫 줄 제목으로 짐작(번호는 앞 서식 {last} 다음) — 원본과 확인"
+        last = int(re.match(r"\d+", no).group(0))
         head = f"[서식 {no}] {title}".strip()
         orig = pages[i]
         if orig and orig in text:
             text = text.replace(orig, head + "\n" + orig, 1)
         else:
             text += "\n" + head + "\n"
-        OCR_USED.append(f"{name}: {i + 1}쪽 서식 머리 '{head}'를 글자 인식(OCR)으로 읽음")
+        OCR_USED.append(f"{name}: {i + 1}쪽 서식 머리 '{head}'를 {how}")
     return text
 
 

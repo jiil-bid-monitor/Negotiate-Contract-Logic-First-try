@@ -62,6 +62,25 @@ def _cleanup() -> None:
                 _jobs.pop(d.name, None)
 
 
+def _code_stamp() -> str:
+    """quantdocs 폴더 .py 파일들의 마지막 고친 시각 — 켤 때와 지금이 다르면 예전 코드로 실행 중(11/05: 서버에서 고친 내용이 안 보임)."""
+    try:
+        return max(f"{p.stat().st_mtime:.0f}" for p in (ROOT / "quantdocs").glob("*.py"))
+    except (OSError, ValueError):
+        return ""
+
+
+_STARTED_STAMP = _code_stamp()
+
+
+def _stale_note() -> str:
+    now = _code_stamp()
+    if _STARTED_STAMP and now and now != _STARTED_STAMP:
+        return ("⚠ 프로그램 코드가 바뀌었는데(git pull) 웹앱을 다시 켜지 않아 예전 코드로 실행 중 — 웹앱을 껐다 켠 뒤 F5 → 다시 불러오기. "
+                "켠 이후 고친 내용(서식 찾기·채우기 등)이 이번 결과엔 없음")
+    return ""
+
+
 def _git_pull() -> str:
     if os.environ.get("QUANT_GIT_PULL") != "1":
         return ""
@@ -166,6 +185,9 @@ def _run_analyze(job: dict) -> None:
                 job["files"] = [str(p) for p in nf.files]
         if note:
             s["notes"].insert(0, note)
+        stale = _stale_note()
+        if stale:
+            s["notes"].insert(0, stale)
         if not s["forms"]:
             s["notes"].append("⚠ 첨부 어디에서도 서식을 찾지 못함 — 서식이 PDF 그림(스캔)이거나 '[서식 N]' 같은 표시가 없을 수 있음, 공고번호를 알려 주면 확인")
         if dropped:

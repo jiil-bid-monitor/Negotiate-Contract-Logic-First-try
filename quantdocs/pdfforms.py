@@ -206,6 +206,29 @@ _LABELS = ["회사명", "업체명", "상호", "대표자", "주소", "소재지
            "이메일", "홈페이지", "총직원수", "서약자", "제출자", "신청인"]
 
 
+# 표 밖·여러 줄 칸의 이름표 줄 — OCR이 쌍점을 빠뜨려 '대표자 (인)'·'주 소'·'Al ok 업체명'처럼 나오면 한글 서식 모양
+# '대표자 :          (인)'·'주 소 :'으로 되돌려 채우기가 알아보게(11/05 사용자 요청: 한글 서식에서 채우는 값은 OCR 서식에서도)
+_SIGN_LABELS = ("상호", "업체명", "회사명", "법인명", "제안업체명", "제안사", "기관명", "대표자", "대표이사", "주소", "소재지",
+                "신청인", "제출자", "서약자", "입찰자", "제안자", "입찰건명", "입찰명", "사업명", "공고명")
+_SEAL_WORDS = r"(?:\(\s*(?:인|서명|인\s*또는\s*서명|직인)\s*\))"
+
+
+def _sign_line(text: str) -> str:
+    raw = text.strip()
+    # 앞에 붙은 OCR 잡음(한글 없는 짧은 조각 'Al ok')은 뗌
+    num = re.match(r"\s*(\d{1,2}[.)]\s*)", raw)  # 항목 번호 '1. 입찰건명'은 살림
+    lead = num.group(1) if num else ""
+    toks = raw[len(lead):].split() if num else raw.split()
+    while len(toks) > 1 and not re.search(r"[가-힣]", toks[0]) and len(toks[0]) <= 3:
+        toks.pop(0)
+    raw = " ".join(toks)
+    m = re.fullmatch(rf"([가-힣 ]{{2,14}}?)\s*[:：]?\s*({_SEAL_WORDS})?", raw)
+    if not m or re.sub(r"\s", "", m.group(1)) not in _SIGN_LABELS:
+        return text
+    label = m.group(1).strip()
+    return lead + (f"{label} :{' ' * 16}{m.group(2)}" if m.group(2) else f"{label} : ")
+
+
 def _fix_label(text: str) -> str:
     import difflib
 
@@ -334,9 +357,12 @@ def _table_xml(st: Styles, t: Table, scale: float, uid: int) -> str:
         lines = _lines(t.words.get((r, c), []))
         cx0, cx1 = t.xs[c], t.xs[c + cs]
         paras = []
-        for _, text, h, center in _paragraphs(lines, cx1 - cx0, cx0):
+        got = _paragraphs(lines, cx1 - cx0, cx0)
+        for _, text, h, center in got:
             if len(lines) <= 2:
                 text = _fix_label(text)
+            if len(got) >= 3:  # 서식 본문 칸(여러 문단) 안 서명 줄 — 한 줄짜리 이름표 칸은 표 채우기가 옆 칸에 씀
+                text = _sign_line(text)
             paras.append(_para(st, text, st.size(h, 11), center))
         body = "".join(paras) or _para(st, "", st.char[10])
         bf = st.border_gray if (r, c) in t.shade else st.border
@@ -411,7 +437,7 @@ def page_xml(img, st: Styles, content_width: int, page_break: bool, uid: int, dr
     for y, text, hgt, center in paras:
         if y <= cut_y or (drop_head and y < h * 0.2 and re.fullmatch(r"\W{0,3}\w?\W{0,3}", text)):
             continue
-        blocks.append((y, _para(st, text, st.size(hgt, 20), center)))
+        blocks.append((y, _para(st, _sign_line(text), st.size(hgt, 20), center)))
     tables = [t for t in tables if t.ys[-1] > cut_y + 10]
     for i, t in enumerate(tables):
         blocks.append((t.top, _table_xml(st, t, scale, uid * 100 + i)))  # (머리 줄 위 표는 위에서 뺌)

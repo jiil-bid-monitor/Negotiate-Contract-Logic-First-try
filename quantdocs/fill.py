@@ -558,6 +558,9 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         if bare and not ({n - 1, n + 1} & bare_at):
             continue  # 혼자 있는 '주소' 같은 줄은 제목일 수 있음
         key = _BARE_LABELS[label] if bare else _label_key(label)
+        if not key and _sq(label) == "기관명" and re.search(r"각\s*서|확\s*약\s*서|서\s*약\s*서", _text(xml)) \
+                and not any(cs <= s and e <= ce for cs, ce in single):
+            key = "회사명"  # 각서·확약서 끝 '기관명 :  / 대표자 : (인)' = 입찰자(11/05 창업진흥원 서식 7) — 증명서 발급기관 칸(한 줄 칸)은 아님
         value = _value(key, vault) if key else ""
         if not value:
             continue

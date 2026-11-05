@@ -1571,3 +1571,28 @@ def test_bond_amount_filled_without_won_brackets(tmp_path):
     assert f"입 찰 보 증 금 액 {int(90_000_000 * fill.BOND_RATE):,} 원" in plain
     assert "입 찰 건명 : 스타트업 타운 설계 용역" in plain
     assert "5%" in plain
+
+
+def test_ocr_sign_lines_restored_for_fill():
+    """OCR이 쌍점을 빠뜨린 서명 줄 '대표자 (인)'·'주 소'·'Al ok 업체명'을 한글 서식 모양으로(11/05 — 한글 서식에서 채우는 값은 OCR 서식에서도)."""
+    from quantdocs.pdfforms import _sign_line
+
+    assert _sign_line("대표자 (인)").startswith("대표자 :") and _sign_line("대표자 (인)").endswith("(인)")
+    assert _sign_line("주 소") == "주 소 : "
+    assert _sign_line("Al ok 업체명") == "업체명 : "
+    assert _sign_line("1. 입 찰 건명") == "1. 입 찰 건명 : "
+    for keep in ("2026 년 월 일", "작성자 (연락처 휴대폰, e-mail)", "2. 제안서 내용 구성", "창업진흥원장 귀하"):
+        assert _sign_line(keep) == keep
+
+
+def test_institution_name_line_in_pledge_is_bidder(tmp_path):
+    """각서 끝 '기관명 : / 대표자 : (인)' = 입찰자 회사(11/05 창업진흥원 서식 7)."""
+    from quantdocs import fill, vault
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    rep = fill.FillReport("x")
+    xml = ("<hp:p><hp:run><hp:t>입찰보증금지급각서</hp:t></hp:run></hp:p>"
+           "<hp:p><hp:run><hp:t>기관명 : </hp:t></hp:run></hp:p>"
+           "<hp:p><hp:run><hp:t>대표자 :                (인)</hp:t></hp:run></hp:p>")
+    out = fill._fill_label_paragraphs(xml, v, rep).replace(fill._VS, "").replace(fill._VE, "")
+    assert "기관명 : (주)가상" in out and "홍길동" in out

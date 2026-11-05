@@ -1,4 +1,4 @@
-"""1억 미만 입찰·협상(전시관·체험관) 공고 폴더 자동 생성 — 최소판 (2026-11-04 사용자 결정, 협상은 11-05 추가).
+"""1억 미만 입찰(전시관·체험관) 공고 폴더 자동 생성 (2026-11-04 사용자 결정. 협상은 11-05 시험 뒤 뺌).
 
 새 공고마다 결과 폴더를 표본(1억미만_사업폴더_취합_20261028)과 같은 구조로 만들고 개발자 방에 알린다:
   <공고>/  최신 공고문·첨부(맨 위) · 공고정보_요약.pdf · 서식자동분리/ · 회사준비서류/ · 이전공고/
@@ -315,19 +315,19 @@ def find_previous(done: dict, notice, now: datetime) -> dict | None:
 
 
 def collect(now: datetime, days: int, out: Path) -> list:
-    """입찰·협상 공고를 받아 대상만 고르고 첨부를 읽는다. 지난 마감·지역 미달은 수집기와 같은 규칙으로 뺀다."""
+    """입찰 공고를 받아 대상만 고르고 첨부를 읽는다. 지난 마감·지역 미달은 수집기와 같은 규칙으로 뺀다."""
     from nego import qualify
     from nego.attachments import save_attachment_texts
     from nego.config import load_config
     from nego.http_client import DataGoKrClient
     from nego.pipeline import drop_expired, drop_region_unmet, run
-    from nego.scope import CATEGORY_BID, CATEGORY_NEGOTIATED
+    from nego.scope import CATEGORY_BID
     from webapp.qualview import build as qual_build, held_lookup
 
     config = load_config()
-    candidates, stats, _ = run(config, now, {CATEGORY_BID, CATEGORY_NEGOTIATED}, period=(now - timedelta(days=days), now))
+    candidates, stats, _ = run(config, now, {CATEGORY_BID}, period=(now - timedelta(days=days), now))
     targets = [c for c in candidates if is_target(c)]
-    log.info("입찰·협상 후보 %d건 중 전시관·체험관 %d건", len(candidates), len(targets))
+    log.info("입찰 후보 %d건 중 전시관·체험관 %d건", len(candidates), len(targets))
     if targets:
         with tempfile.TemporaryDirectory(prefix="under100m_text_") as tmp:
             save_attachment_texts(targets, Path(tmp), held_codes=qualify.load_held_codes(config.held_raw),
@@ -398,7 +398,7 @@ def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="1억 미만 입찰·협상(전시관·체험관) 공고 폴더 만들기")
+    parser = argparse.ArgumentParser(description="1억 미만 입찰(전시관·체험관) 공고 폴더 만들기")
     parser.add_argument("--out", default=os.environ.get("UNDER100M_OUT", ""), help="결과 폴더")
     parser.add_argument("--state", default=os.environ.get("UNDER100M_STATE", ""), help="처리 기록 파일")
     parser.add_argument("--days", type=int, default=3, help="최근 며칠 게시분을 볼지")

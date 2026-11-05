@@ -66,7 +66,7 @@ class CollectTest(unittest.TestCase):
 
         with patch("nego.config.load_config", return_value=SimpleNamespace()), patch("nego.pipeline.run", fake_run):
             self.assertEqual(collect(NOW, 7, Path("out")), [])
-        self.assertEqual(seen["categories"], {"입찰", "협상"})
+        self.assertEqual(seen["categories"], {"입찰"})
         self.assertEqual(seen["period"][0], datetime(2026, 10, 28, 10, 0))
 
     def test_alert_names_the_category(self):

@@ -1002,3 +1002,44 @@ def test_self_score_fills_form_by_rfp(tmp_path: Path):
     got = {c.row: c.text for c in _cells(out, _spans(out, "tbl")[0]) if c.col == 2}
     assert got == {0: "자기평점", 1: "12.5", 2: "6", 3: "", 4: "1", 5: "0", 6: "3.5", 7: "2"}
     assert any("단일최대" in x and "비움" in x for x in rep.filled)
+
+
+def test_package_lists_match_kept_sections(tmp_path: Path):
+    """11/05 제보: 구역이 둘인 제안요청서(국민안전체험관)로 만든 통합서식이 한글에서 '파일이 손상되었습니다' — 서식 없는 구역을
+    content.hpf에서만 지우고 META-INF/container.rdf·머리 정보 secCnt는 그대로였음. 서식이 둘째 구역에만 있어도 section0으로 다시 이름 붙임."""
+    from quantdocs import forms_cut
+
+    def sec(body):
+        return f'<hs:sec><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:secPr/></hp:run></hp:p>{body}</hs:sec>'
+    para = lambda t, brk="0": f'<hp:p paraPrIDRef="0" pageBreak="{brk}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    rdf = ('<rdf:RDF xmlns:rdf="r"><rdf:Description rdf:about=""><ns0:hasPart xmlns:ns0="p" rdf:resource="Contents/header.xml"/></rdf:Description>'
+           + "".join(f'<rdf:Description rdf:about=""><ns0:hasPart xmlns:ns0="p" rdf:resource="Contents/section{i}.xml"/></rdf:Description>'
+                     f'<rdf:Description rdf:about="Contents/section{i}.xml"><rdf:type rdf:resource="p#SectionFile"/></rdf:Description>' for i in (0, 1))
+           + "</rdf:RDF>")
+    hpf = ('<opf:package xmlns:opf="o"><opf:manifest><opf:item id="header" href="Contents/header.xml"/>'
+           '<opf:item id="section0" href="Contents/section0.xml"/><opf:item id="section1" href="Contents/section1.xml"/></opf:manifest>'
+           '<opf:spine><opf:itemref idref="header"/><opf:itemref idref="section0"/><opf:itemref idref="section1"/></opf:spine></opf:package>')
+    src = tmp_path / "rfp.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", '<hh:head xmlns:hh="h" secCnt="2"><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+        z.writestr("Contents/section0.xml", sec(para("본문 — 서식 없음")))
+        z.writestr("Contents/section1.xml", sec(para("〈서식 1〉 참가신청서", "1") + para("내용") + para("〈서식 2〉 서약서", "1") + para("내용")))
+        z.writestr("Contents/content.hpf", hpf)
+        z.writestr("META-INF/container.rdf", rdf)
+    forms = forms_cut.cut(src, tmp_path / "cut")
+    assert [f.no for f in forms] == ["1", "2"]
+    for f in forms:
+        part = zipfile.ZipFile(tmp_path / "cut" / f.file)
+        assert forms_cut.section_names(part.namelist()) == ["Contents/section0.xml"]
+        assert "section1" not in part.read("META-INF/container.rdf").decode() + part.read("Contents/content.hpf").decode()
+        assert 'secCnt="1"' in part.read("Contents/header.xml").decode()
+    out = forms_cut.merge(src, [(f, tmp_path / "cut" / f.file) for f in forms], tmp_path / "merged.hwpx")
+    z = zipfile.ZipFile(out)
+    assert forms_cut.section_names(z.namelist()) == ["Contents/section0.xml"]
+    rdf_out, hpf_out = z.read("META-INF/container.rdf").decode(), z.read("Contents/content.hpf").decode()
+    assert re.findall(r"Contents/section\d\.xml", rdf_out) == ["Contents/section0.xml"] * 2
+    assert re.findall(r"Contents/section\d\.xml", hpf_out) == ["Contents/section0.xml"]
+    assert re.findall(r'idref="([^"]+)"', hpf_out) == ["header", "section0"] and "section1" not in hpf_out
+    assert 'secCnt="1"' in z.read("Contents/header.xml").decode()
+    assert "서식 2" in z.read("Contents/section0.xml").decode()

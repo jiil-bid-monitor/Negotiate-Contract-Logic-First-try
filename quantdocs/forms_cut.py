@@ -240,7 +240,6 @@ def cut(path: Path, out_dir: Path, names: dict[str, str] | None = None) -> list[
     sections = {n: zin.read(n).decode("utf-8") for n in sec_names}
     forms = find_forms(sections, char_heights(zin), path.name)
     out_dir.mkdir(parents=True, exist_ok=True)
-    hpf = zin.read("Contents/content.hpf").decode("utf-8") if "Contents/content.hpf" in entries else None
     for f in forms:
         xml = sections[f.section]
         all_paras = _top_paragraphs(xml)
@@ -255,23 +254,59 @@ def cut(path: Path, out_dir: Path, names: dict[str, str] | None = None) -> list[
             f.title = names[f.no]
         f.file = f"서식{f.no.replace('-', '_')}_{_safe(f.title)}.hwpx"
         target = out_dir / f.file
-        with zipfile.ZipFile(target, "w") as zout:
-            for info in zin.infolist():
-                n = info.filename
-                if n in sections and n != f.section:
-                    continue  # 다른 구역은 뺌
-                if n == f.section:
-                    data = new_xml.encode("utf-8")
-                elif n == "Contents/content.hpf" and hpf is not None:
-                    data = _drop_sections(hpf, [s for s in sec_names if s != f.section]).encode("utf-8")
-                elif n == "Preview/PrvText.txt":
-                    data = _text(body)[:1000].encode("utf-8")  # 미리보기 글(원본도 UTF-8)
-                else:
-                    data = zin.read(n)
-                # mimetype은 압축하지 않고 맨 앞(원본 순서 유지)
-                ctype = zipfile.ZIP_STORED if n == "mimetype" else zipfile.ZIP_DEFLATED
-                zout.writestr(zipfile.ZipInfo(n, date_time=info.date_time), data, compress_type=ctype)
+        # 다른 구역은 뺌 — 남는 구역은 section0으로(목록·구역 수도 맞춤)
+        _write_package(zin, target, {f.section: new_xml}, {"Preview/PrvText.txt": _text(body)[:1000].encode("utf-8")})
     return forms
+
+
+def section_names(names) -> list[str]:
+    return sorted((n for n in names if re.fullmatch(r"Contents/section\d+\.xml", n)),
+                  key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[1]).group()))
+
+
+_SEC_REF = re.compile(r"Contents/section\d+\.xml")
+
+
+def _write_package(zin: zipfile.ZipFile, out: Path, sections_out: dict[str, str], replace: dict[str, bytes] | None = None) -> None:
+    """원본 HWPX(zin)를 바탕으로 out을 씀. sections_out = 남길 구역(원본 이름 → 새 XML), replace = 바꿔 쓸 다른 파일.
+    뺀 구역은 content.hpf(manifest·spine)·META-INF/container.rdf에서도 지우고 머리 정보 구역 수(secCnt)를 맞추며,
+    남는 구역은 section0부터 차례로 다시 이름 붙임(11/05 제보: 구역이 둘인 제안요청서로 만든 통합서식이 '파일이 손상되었습니다' —
+    content.hpf에서만 지우고 container.rdf·secCnt는 그대로였음)."""
+    replace = replace or {}
+    all_secs = section_names(zin.namelist())
+    kept = [n for n in all_secs if n in sections_out]
+    dropped = [n for n in all_secs if n not in sections_out]
+    rename = {old: f"Contents/section{i}.xml" for i, old in enumerate(kept)}
+    renamed = lambda text: _SEC_REF.sub(lambda m: rename.get(m.group(0), m.group(0)), text)
+    with zipfile.ZipFile(out, "w") as zout:
+        for info in zin.infolist():
+            n = name = info.filename
+            if n in dropped:
+                continue
+            if n in sections_out:
+                name, data = rename[n], sections_out[n].encode("utf-8")
+            else:
+                data = replace[n] if n in replace else zin.read(n)
+                if n == "Contents/content.hpf":
+                    text = _drop_sections(data.decode("utf-8"), dropped)
+                    ids = {}  # 남는 구역 항목 이름(id)도 새 번호로 — spine의 idref와 함께
+                    for old, new in rename.items():
+                        m = re.search(rf'<(?:[\w.-]+:)?item\b[^>]*href="{re.escape(old)}"[^>]*/>', text)
+                        got = re.search(r'\bid="([^"]+)"', m.group()) if m else None
+                        if got:
+                            ids[got.group(1)] = new.rsplit("/", 1)[1].rsplit(".", 1)[0]
+                    text = re.sub(r'\b(id|idref)="([^"]+)"', lambda m: f'{m.group(1)}="{ids.get(m.group(2), m.group(2))}"', text)
+                    data = renamed(text).encode("utf-8")
+                elif n == "META-INF/container.rdf":
+                    text = data.decode("utf-8")
+                    for d in dropped:  # 뺀 구역을 가리키는 Description 묶음을 지움
+                        text = re.sub(rf'<((?:[\w.-]+:)?Description)\b(?:(?!</\1>).)*?"{re.escape(d)}"(?:(?!</\1>).)*?</\1>', "", text, flags=re.S)
+                    data = renamed(text).encode("utf-8")
+                elif n == "Contents/header.xml":
+                    data = re.sub(rb'(\bsecCnt=")\d+"', lambda m: m.group(1) + str(len(kept)).encode() + b'"', data, count=1)
+            # mimetype은 압축하지 않고 맨 앞(원본 순서 유지)
+            ctype = zipfile.ZIP_STORED if n == "mimetype" else zipfile.ZIP_DEFLATED
+            zout.writestr(zipfile.ZipInfo(name, date_time=info.date_time), data, compress_type=ctype)
 
 
 def _drop_sections(hpf: str, drop: list[str]) -> str:
@@ -332,7 +367,8 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
                       "next": max([int(x) for x in known_ids] or [0]) + 1, "extra": []}
     for f, file in parts:
         pz = zipfile.ZipFile(file)
-        xml = pz.read(f.section).decode("utf-8")
+        part_secs = section_names(pz.namelist())  # 잘라 낸 서식 파일엔 구역이 하나(section0으로 다시 이름 붙임)
+        xml = pz.read(f.section if f.section in part_secs else part_secs[0]).decode("utf-8")
         # 채울 때 칸에 맞춰 줄인 글자 모양(원본 머리에 없는 id) — 새 번호로 옮겨 통합 머리에 더함(서식마다 같은 번호를 따로 썼을 수 있어서)
         if header and "Contents/header.xml" in pz.namelist():
             part_header = pz.read("Contents/header.xml").decode("utf-8")
@@ -369,30 +405,16 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
         starts_at_first = bodies[sec][0][0].paras[0].start == first.start
         prefix = "" if starts_at_first else _sec_pr_para(xml, first)
         new_sections[sec] = xml[:first.start] + prefix + "".join(chunks) + xml[all_paras[-1].end:]
-    hpf = zin.read("Contents/content.hpf").decode("utf-8") if "Contents/content.hpf" in entries else None
     out.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(out, "w") as zout:
-        for info in zin.infolist():
-            n = info.filename
-            if n in sections and n not in new_sections:
+    replace = {"Preview/PrvText.txt": " ".join(preview)[:1000].encode("utf-8")}
+    if header and any(k["extra"] for k in kinds.values()):
+        h = header
+        for k in kinds.values():
+            if not k["extra"]:
                 continue
-            if n in new_sections:
-                data = new_sections[n].encode("utf-8")
-            elif n == "Contents/content.hpf" and hpf is not None:
-                data = _drop_sections(hpf, [s for s in sec_names if s not in new_sections]).encode("utf-8")
-            elif n == "Contents/header.xml" and any(k["extra"] for k in kinds.values()):
-                h = header
-                for k in kinds.values():
-                    if not k["extra"]:
-                        continue
-                    h = re.sub(rf"(</(?:[\w.-]+:)?{k['group']}>)", lambda m, e=k["extra"]: "".join(e) + m.group(1), h, count=1)
-                    h = re.sub(rf'(<(?:[\w.-]+:)?{k["group"]}\b[^>]*\bitemCnt=")(\d+)"',
-                               lambda m, e=k["extra"]: f'{m.group(1)}{int(m.group(2)) + len(e)}"', h, count=1)
-                data = h.encode("utf-8")
-            elif n == "Preview/PrvText.txt":
-                data = " ".join(preview)[:1000].encode("utf-8")
-            else:
-                data = zin.read(n)
-            ctype = zipfile.ZIP_STORED if n == "mimetype" else zipfile.ZIP_DEFLATED
-            zout.writestr(zipfile.ZipInfo(n, date_time=info.date_time), data, compress_type=ctype)
+            h = re.sub(rf"(</(?:[\w.-]+:)?{k['group']}>)", lambda m, e=k["extra"]: "".join(e) + m.group(1), h, count=1)
+            h = re.sub(rf'(<(?:[\w.-]+:)?{k["group"]}\b[^>]*\bitemCnt=")(\d+)"',
+                       lambda m, e=k["extra"]: f'{m.group(1)}{int(m.group(2)) + len(e)}"', h, count=1)
+        replace["Contents/header.xml"] = h.encode("utf-8")
+    _write_package(zin, out, new_sections, replace)
     return out

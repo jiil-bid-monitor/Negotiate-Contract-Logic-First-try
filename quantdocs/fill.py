@@ -920,7 +920,8 @@ def _keep_table_heights(before: str, after: str, chars: "_Chars", rep: FillRepor
         extra += 300  # 글자 너비는 어림이라 1mm 더 줄여 둠
         # 여유 = 칸 높이 − 글 높이 − 0.5mm 남김(어림 오차) — 여유가 큰 줄부터 필요한 만큼 줄임
         rows = _spans(new, "tr")
-        free = sorted(((h - n - 500, i) for i, (h, n) in enumerate(r_new) if grow[i] <= 0), reverse=True)
+        # 1cm 넘게 비는 줄만(11/05 국민안전체험관 서식 4: 면허 칸이 길어 주소·전화 같은 보통 줄까지 빠듯하게 줄였음)
+        free = sorted(((h - n - 500, i) for i, (h, n) in enumerate(r_new) if grow[i] <= 0 and h - n >= 2835), reverse=True)
         cuts: dict[int, int] = {}
         for room, i in free:
             if extra <= 0 or room <= 0:

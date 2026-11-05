@@ -713,7 +713,8 @@ def test_number_cells_follow_centered_sibling(tmp_path: Path):
     out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
     para = {t: re.search(rf'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?{re.escape(t)}', out, re.S).group(1)
             for t in ("110111-1234567", "강원 정선", "033-111-2222", "033-111-3333")}
-    assert para == {"110111-1234567": "7", "강원 정선": "0", "033-111-2222": "7", "033-111-3333": "7"}
+    # 주소(글)는 가운데로 안 바꿈 — 원래 양쪽 정렬이라 왼쪽 정렬 사본(11/05: 넘친 줄 글자 사이 벌어짐 방지)
+    assert para == {"110111-1234567": "7", "강원 정선": "8", "033-111-2222": "7", "033-111-3333": "7"}
 
 
 def test_seal_cell_name_centered(tmp_path: Path):
@@ -1197,3 +1198,25 @@ def test_hangul_history_table_date_line_then_content(tmp_path: Path, monkeypatch
     monkeypatch.setattr(importer, "_cached_text", lambda path, data: text)
     importer.enrich_vault(v)
     assert len(v.history) == 3 and v.info["회사명"] == "(가상)시트 값" and v.info["대표자"] == "(가상)대표"
+
+
+def test_justified_value_cell_gets_left_aligned_copy(tmp_path: Path):
+    """11/05 제보: 양쪽 정렬 칸에 넣은 '법인등록번호 (사업자등록번호)'가 두 줄로 넘어가 첫 줄 숫자 사이가 벌어짐 → 그 칸은 왼쪽 정렬 사본."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head xmlns:hh="h"><hh:refList><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/>'
+              '</hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/>'
+              '</hh:paraPr></hh:paraProperties></hh:refList></hh:head>')
+    src = _mini_hwpx(tmp_path / "j.hwpx", _tbl([[_c(0, 0, "법인등록번호(사업자등록번호)"), _c(1, 0, "")]]))
+    with zipfile.ZipFile(src) as z:
+        items = {n: z.read(n) for n in z.namelist()}
+    items["Contents/header.xml"] = header.encode()
+    with zipfile.ZipFile(src, "w") as z:
+        for n, d in items.items():
+            z.writestr(n, d)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"법인등록번호": "000000-0000000", "사업자등록번호": "000-00-00000"}))
+    out = zipfile.ZipFile(tmp_path / "o.hwpx")
+    sec, head = out.read("Contents/section0.xml").decode(), out.read("Contents/header.xml").decode()
+    cell = re.findall(r"<hp:tc.*?</hp:tc>", sec, re.S)[1]
+    pid = re.search(r'paraPrIDRef="(\d+)"', cell).group(1)
+    assert pid != "0" and re.search(rf'<hh:paraPr id="{pid}"><hh:align horizontal="LEFT"/>', head) and 'itemCnt="2"' in head

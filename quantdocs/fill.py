@@ -563,6 +563,7 @@ class _Chars:
                       re.finditer(r'<(?:[\w.-]+:)?paraPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?paraPr>', header, re.S)}
         self.added: dict[tuple[str, int | None], str] = {}
         self.added_para: dict[str, str] = {}  # 문단 모양 id → 가운데 정렬로 바꾼 사본 id
+        self.added_left: dict[str, str] = {}  # 문단 모양 id → 왼쪽 정렬로 바꾼 사본 id(양쪽·배분 정렬 칸)
         self.added_hang: dict[tuple[str, int], str] = {}  # (문단 모양 id, 내어쓰기 너비) → 사본 id
         # 언어별 글꼴 목록 {LATIN: {id: 이름}} — 채운 글의 숫자·영문을 한글과 같은 글꼴로(11/04 사용자 제보: 숫자 글꼴이 다름)
         self.faces = {m.group(1).upper(): dict(re.findall(r'<(?:[\w.-]+:)?font\b[^>]*\bid="(\d+)"[^>]*\bface="([^"]*)"', m.group(2)))
@@ -587,7 +588,8 @@ class _Chars:
         return int(m.group(1)) / 100 if m else 1.0
 
     def _next_para_id(self) -> str:
-        ids = [int(x) for x in self.paras] + [int(x) for x in self.added_para.values()] + [int(x) for x in self.added_hang.values()]
+        ids = [int(x) for x in self.paras] + [int(x) for x in self.added_para.values()] + [int(x) for x in self.added_hang.values()] \
+            + [int(x) for x in self.added_left.values()]
         return str(max(ids) + 1)
 
     def centered(self, pid: str) -> str:
@@ -597,6 +599,15 @@ class _Chars:
         if pid not in self.added_para:
             self.added_para[pid] = self._next_para_id()
         return self.added_para[pid]
+
+    def left(self, pid: str) -> str:
+        """양쪽·배분 정렬 문단 모양의 왼쪽 정렬 사본 id — 채운 값이 줄을 넘기면 첫 줄 글자 사이가 벌어져서(11/05 제보: 법인등록번호
+        '1 1 0 1 1 1 - …'). 다른 정렬이면 pid 그대로."""
+        if pid not in self.paras or self.align(pid) not in ("JUSTIFY", "DISTRIBUTE", "DISTRIBUTE_SPACE"):
+            return pid
+        if pid not in self.added_left:
+            self.added_left[pid] = self._next_para_id()
+        return self.added_left[pid]
 
     def margins(self, pid: str) -> tuple[int, int]:
         """(들여쓰기 intent, 왼쪽 여백) HWPUNIT — 문단 모양의 첫 margin 묶음(hp:case가 있으면 그것)."""
@@ -651,7 +662,7 @@ class _Chars:
         """문단 모양 정의 — 채우면서 더한 사본(가운데 정렬·내어쓰기)이면 원래 모양(줄 간격 등은 같음)."""
         if pid in self.paras:
             return self.paras[pid]
-        for orig, new in self.added_para.items():
+        for orig, new in list(self.added_para.items()) + list(self.added_left.items()):
             if new == pid:
                 return self.paras.get(orig, "")
         for (orig, _w), new in self.added_hang.items():
@@ -701,16 +712,17 @@ class _Chars:
 
     @property
     def changed(self) -> bool:
-        return bool(self.added or self.added_para or self.added_hang)
+        return bool(self.added or self.added_para or self.added_hang or self.added_left)
 
     def finish(self) -> str:
         header = self.header
-        if self.added_para or self.added_hang:
-            extra = "".join(re.sub(r'\bhorizontal="\w+"', 'horizontal="CENTER"',
-                                   re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1), count=1)
-                            for pid, new in self.added_para.items())
+        if self.added_para or self.added_hang or self.added_left:
+            def aligned(pid, new, how):
+                return re.sub(r'\bhorizontal="\w+"', f'horizontal="{how}"', re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1))
+            extra = "".join(aligned(pid, new, "CENTER") for pid, new in self.added_para.items())
+            extra += "".join(aligned(pid, new, "LEFT") for pid, new in self.added_left.items())
             extra += "".join(self._hang_block(pid, w, new) for (pid, w), new in self.added_hang.items())
-            n = len(self.added_para) + len(self.added_hang)
+            n = len(self.added_para) + len(self.added_hang) + len(self.added_left)
             header = re.sub(r"(</(?:[\w.-]+:)?paraProperties>)", lambda m: extra + m.group(1), header, count=1)
             header = re.sub(r'(<(?:[\w.-]+:)?paraProperties\b[^>]*\bitemCnt=")(\d+)"',
                             lambda m: f'{m.group(1)}{int(m.group(2)) + n}"', header, count=1)
@@ -1224,6 +1236,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     continue
                 if cell.start in para_override:
                     seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")\d+(")', rf"\g<1>{para_override[cell.start]}\2", seg, count=1)
+                elif chars is not None:  # 양쪽·배분 정렬 칸은 왼쪽 정렬 사본으로 — 넘친 줄의 글자 사이가 벌어지지 않게
+                    seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")(\d+)(")', lambda m: m.group(1) + chars.left(m.group(2)) + m.group(3),
+                                 seg, count=1)
                 char_id = None
                 if chars is not None and len(lines) == 1 and not keep:
                     char_id, note = _fit_char(seg, lines[0], chars)

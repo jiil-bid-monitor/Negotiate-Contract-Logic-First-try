@@ -230,7 +230,7 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
 
     def form_nums(cell):
         """서식 칸 글에서 번호들 — '별지2,4, 13' / '서식 1' / '[서식 3-1]'"""
-        m = re.search(KINDS, cell)
+        m = re.search(r'(?:' + KINDS + r')\s*(?:제\s*)?(?=\d)', cell)  # 표시 바로 뒤가 번호일 때만 — "서식(표지) … A4(210㎜)"의 숫자를 번호로 읽었음(2026-11-05)
         return expand(cell[m.end():]) if m else []
 
 

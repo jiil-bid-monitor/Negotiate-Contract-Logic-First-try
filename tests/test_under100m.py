@@ -281,6 +281,18 @@ class FormSampleRuleTest(unittest.TestCase):
         xml = zipfile.ZipFile(self.dir / "q_out.hwpx").read("Contents/section0.xml").decode("utf-8")
         self.assertRegex(xml, r"가나회사\s+대표자: 다라\s+\(인\)")
 
+    def test_all_forms_even_with_misleading_table(self):
+        table = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl><hp:tr>'
+                 '<hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/><hp:p><hp:run><hp:t>제출 자료</hp:t></hp:run></hp:p></hp:tc>'
+                 '<hp:tc><hp:cellAddr colAddr="1" rowAddr="0"/><hp:p><hp:run><hp:t>규격 및 양식</hp:t></hp:run></hp:p></hp:tc></hp:tr><hp:tr>'
+                 '<hp:tc><hp:cellAddr colAddr="0" rowAddr="1"/><hp:p><hp:run><hp:t>제안서</hp:t></hp:run></hp:p></hp:tc>'
+                 '<hp:tc><hp:cellAddr colAddr="1" rowAddr="1"/><hp:p><hp:run><hp:t>제공된 서식(표지) 사용, A4(210mm)</hp:t></hp:run></hp:p></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+        make_hwpx(self.dir / "t.hwpx", [table, para("【서식 제1호】 표지"), para("내용"), para("【서식 제2호】 위임장"), para("내용")])
+        out = self.dir / "t"
+        out.mkdir()
+        names, _ = split_forms(self.dir / "t.hwpx", out, all_forms=True)
+        self.assertEqual(sorted(names), ["서식01_표지.hwpx", "서식02_위임장.hwpx"])
+
     def test_real_form_document(self):
         if not FIXTURE.exists():
             self.skipTest("표본 없음")

@@ -140,22 +140,22 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
         cut_dir = work / "cut" / str(number)
         try:
             cut_dir.mkdir(parents=True)
-            names, lines = split_forms(src, cut_dir)
+            names, _ = split_forms(src, cut_dir, all_forms=True)  # 표로 거르지 않음 — 표의 번호가 실제 서식과 어긋나는 공고가 있어 서식이 빠짐(2026-11-05)
         except Exception as err:  # noqa: BLE001 — 문서 하나를 못 잘라도 나머지 자료는 만든다
             log.warning("서식 자르기 실패 %s: %s", f.name, err)
             notes.append(f"{f.name}: 서식을 자르지 못함({err})")
             continue
         if names:
-            cuts.append((f, cut_dir, names, lines))
+            cuts.append((f, cut_dir, names))
     out.mkdir(parents=True, exist_ok=True)
-    checklist: list[str] = []
+    checklist = ["제출서류 체크리스트 — 공고 문서 안의 서식을 모두 만들었습니다 (자동 생성)", "공고문의 제출서류 목록과 대조해 필요 없는 서식은 빼 주세요.", ""]
     # 서식이 가장 많은 문서가 본 문서 — 다른 문서의 서식은 앞에 문서 이름을 붙임(표본의 과업지시서_서식01)
-    for rank, (f, cut_dir, names, lines) in enumerate(sorted(cuts, key=lambda row: -len(row[2]))):
+    for rank, (f, cut_dir, names) in enumerate(sorted(cuts, key=lambda row: -len(row[2]))):
         label = next((word for word in ("과업지시서", "제안요청서", "공고문") if word[:2] in f.stem), f.stem[:10])
         prefix = f"{label}_" if rank else ""
-        checklist += ([""] if checklist else []) + (lines if not rank else [f"{label}의 서식"] + [f"[ ] {prefix}{name}" for name in names])
         for name in names:
             target = _unique(out / f"{prefix}{name}")
+            checklist.append(f"[ ] {target.name}")
             filled = fill_form(cut_dir / name, target, company, bid_date, n.title, notice_key(n))
             notes.append(f"{target.name}: " + (", ".join(filled) if filled else "채운 칸 없음"))
     return checklist, notes, converted
@@ -253,10 +253,10 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
             notes.append("한글 글꼴이 없어 요약 PDF를 만들지 못함")
         if keep_prep:
             notes.append(f"재공고: {PREP_DIR}는 그대로 둠 — 바뀐 제출서류가 있는지 공고문과 대조하세요.")
-        if not checklist:
+        if not form_names:
             notes.insert(0, "공고 문서에서 서식을 찾지 못함 — 공고문을 확인하세요.")
         (tmp / FORMS_DIR / FORMS_LIST).write_text(
-            "\n".join((checklist or ["제출서류 체크리스트 (자동 생성)"]) + ["", f"공고 유형: {candidate.category}", "", "자동으로 채운 칸과 안내 — 제출 전 원문과 대조하세요."] + notes) + "\n",
+            "\n".join(checklist + ["", f"공고 유형: {candidate.category}", "", "자동으로 채운 칸과 안내 — 제출 전 원문과 대조하세요."] + notes) + "\n",
             encoding="utf-8")
         if old:
             merge_into(old, tmp, final, previous)

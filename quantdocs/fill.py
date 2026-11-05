@@ -461,7 +461,7 @@ def _hang(seg: str, chars: "_Chars | None") -> str:
     return seg[:pm.start(2)] + new + seg[pm.end(2):] if new != pm.group(2) else seg
 
 
-def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None) -> str:
+def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None, sign_only: bool = False) -> str:
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
     # 표 안이어도 여러 줄짜리 칸(서식 본문 칸)의 줄은 채움 — 한 줄짜리 칸은 이름표 칸이라 표 채우기가 옆 칸에 씀(11/04 서식 8·9 서명 줄)
@@ -478,13 +478,39 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             paras.append((stack.pop(), m.end()))
     other = _other_party_cells(xml)
     cands = []  # (s, e, 이름표, 서명 줄?, 쌍점 없는 이름표?, 문단 순번)
-    other_at: set[int] = set()  # '발행자   상호 :' 줄과 바로 이어지는 서명 줄('대표자 :   (인)')
+    # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
+    # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
     for n, (s, e) in enumerate(sorted(paras)):
         if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single + other):
             continue
+        if sign_only and any(cs <= s and e <= ce for cs, ce in cells):
+            continue  # 직접 기입 서식은 표 안(사람별 칸)은 건드리지 않음
         text = _text(xml[s:e])
-        if _OTHER_PARTY.search(_sq(text)) or (n - 1 in other_at and re.search(r"[:：]", text) and len(_sq(text)) <= 24):
-            other_at.add(n)
+        if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|주\s*소", text):
+            continue
+        # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름
+        bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)))(\s{{3,}})({_SEAL_TAIL}.*)", text)
+        if bare and _value("대표자", vault):
+            name = _value("대표자", vault)
+            gap = bare.group(2)
+
+            def put_name(mm, done=[]):
+                body = mm.group(2)
+                if done:
+                    return mm.group(0)
+                m2 = re.search(r"((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)))( {3,})", body)
+                if not m2:
+                    return mm.group(0)
+                done.append(1)
+                pad = " " * max(3, len(m2.group(2)) - len(name) - 2)
+                body = body[:m2.end(1)] + "  " + _mark(name) + pad + body[m2.end():]
+                return mm.group(1) + body + mm.group(3)
+            seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", put_name, xml[s:e], flags=re.S)
+            if seg != xml[s:e]:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 {_sq(bare.group(1))} → {name}")
+            del gap
             continue
         # '신청인 : 대표자 (주)        대표자 성명 :        (인)' — '(주)' 뒤·'성명 :' 뒤가 빈 서명 줄(11/04 서식 2)
         if re.search(r"\(주\)\s{3,}", text) and re.search(rf"성\s*명\s*[:：]\s{{3,}}(?:{_SEAL_TAIL})?\s*$", text) \
@@ -1150,8 +1176,9 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cel
 
 def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "",
               notice_no: tuple[str, str] | None = None, g2b_no: str = "", self_scores=None,
-              basis: int | None = None) -> FillReport:
-    """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸)."""
+              basis: int | None = None, sign_only: bool = False) -> FillReport:
+    """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸).
+    sign_only: 직접 기입 서식(재직증명서 등) — 표는 건드리지 않고 표 밖 서명 줄('업 체 명 :'·'주 소 :'·'대 표 자 : (인)')만(11/05)."""
     rep = FillReport(Path(dst).name)
     # 묶음은 그대로 두고 이번 서식에만 공고 이름·공고번호를 더함(11/04 사용자 요청 — 공고마다 자동)
     # 공고번호 = 공고문의 기관 공고번호('제2026-1129호'), 못 찾으면 나라장터 공고번호
@@ -1175,7 +1202,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             none_rule = re.search(r"(?:없을|없는)\s*(?:경우|때).{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
-            for tbl in _spans(xml, "tbl"):
+            for tbl in ([] if sign_only else _spans(xml, "tbl")):
                 cells = _cells(xml, tbl)
                 by_pos = {(c.row, c.col): c for c in cells}
                 other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
@@ -1291,7 +1318,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     char_id = _fill_variant(chars, run.group(1) if run else "0")
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
             xml = _fill_bond(xml, basis, rep)
-            xml = _fill_label_paragraphs(xml, vault, rep, chars)
+            xml = _fill_label_paragraphs(xml, vault, rep, chars, sign_only)
             xml = _apply_marks(xml, chars)
             if chars is not None:
                 if vault.history:

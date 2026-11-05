@@ -739,7 +739,7 @@ def test_seal_cell_name_centered(tmp_path: Path):
 
 
 def test_other_party_zone_and_placeholder_signature(tmp_path: Path):
-    """11/04 사용자 요청: 서식 28 발행자(제조사·공식 수입원) 칸·발행자 서명 줄은 비우고 '제안업체(공급받는 자)'에 회사명,
+    """11/04 사용자 요청: 서식 28 발행자(제조사·공식 수입원) 칸은 비우고(서명 줄은 11/05부터 채움) '제안업체(공급받는 자)'에 회사명,
     서식 19 '○○○업체 대표자 : ○○○ (인)' 자리표시는 회사명·대표자로. 봉투 예시('대표이사 ○○○ (인)', 쌍점 없음)는 그대로."""
     from quantdocs.fill import fill_hwpx
 
@@ -757,10 +757,11 @@ def test_other_party_zone_and_placeholder_signature(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "o.hwpx", body), tmp_path / "oo.hwpx", v)
     out = zipfile.ZipFile(tmp_path / "oo.hwpx").read("Contents/section0.xml").decode()
     assert "<hp:t>상호 :</hp:t>" in out and "<hp:t>전화 :</hp:t>" in out  # 발행자 칸은 그대로
-    assert "<hp:t>발행자   상호 :</hp:t>" in out and "<hp:t>대표자 :            (인)</hp:t>" in out
+    # 11/05 사용자 요청: 표 밖 서명 줄은 서식 28 '발행자 상호 :'·'대표자 : (인)'도 채움(표 안 발행자 칸은 그대로 비움)
+    assert "<hp:t>발행자   상호 : (주)가상</hp:t>" in out and re.search(r"<hp:t>대표자 : 홍길동 +\(인\)</hp:t>", out)
     assert re.search(r"\(주\)가상 대표자 : +홍길동 \(인\)", out)
     assert "대표이사 ○○○     (인)" in out
-    assert out.count("(주)가상") == 2  # 제안업체 칸 + 서식 19 줄
+    assert out.count("(주)가상") == 3  # 제안업체 칸 + 서식 28 서명 줄 + 서식 19 줄
 
 
 def test_notice_number_autofill(tmp_path: Path):
@@ -1278,3 +1279,22 @@ def test_staff_excel_in_folder_and_pick(tmp_path: Path):
     assert score([c], v, dt.date(2026, 11, 5))[0].score == 1.5
     v.staff = [r for r in v.staff if r["이름"] in {"(가)갑"}]  # 화면에서 갑만 고름 — build(staff_pick=)가 하는 일
     assert score([c], v, dt.date(2026, 11, 5))[0].score == 1.0
+
+
+def test_signature_lines_without_colon_and_manual_form(tmp_path: Path):
+    """11/05 사용자 요청: 대표자 서명이 있는 서식엔 자동 기재 — 쌍점 없는 '서 약 자      (인) (사용인감)'(보안서약서),
+    직접 기입 서식(재직증명서)은 표는 그대로 두고 표 밖 서명 줄만(sign_only)."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"})
+
+    def para(t):
+        return f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", para("서 약 자                 (인) (사용인감)")), tmp_path / "ao.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
+    assert re.search(r"서 약 자  홍길동 +\(인\) \(사용인감\)", out)
+    body = (_tbl([[_c(0, 0, "주     소"), _c(1, 0, "")]]) + para("업 체 명 :") + para("주    소 :") + para("대 표 자 :                (인)"))
+    fill_hwpx(_mini_hwpx(tmp_path / "b.hwpx", body), tmp_path / "bo.hwpx", v, sign_only=True)
+    out = zipfile.ZipFile(tmp_path / "bo.hwpx").read("Contents/section0.xml").decode()
+    assert "업 체 명 : (주)가상" in out and "주    소 : 강원 정선" in out and re.search(r"대 표 자 : 홍길동 +\(인\)", out)
+    assert out.count("강원 정선") == 1  # 표 안 '주소' 칸(직원 주소)은 그대로

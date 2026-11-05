@@ -295,7 +295,10 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             for c in cut(src, forms_dir, cut_names):
                 if is_manual(c.title):  # 양식 그대로 — 내려받은 뒤 직접 기입
                     manual_dir.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
+                    if _BLANK_FORM.search(c.title):  # 질의서·공동수급 서식은 공란(11/05)
+                        shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
+                    else:  # 재직증명서 등도 표 밖 서명 줄(업체명·주소·대표자 (인))은 채움(11/05 사용자 요청)
+                        reports.append(fill_hwpx(forms_dir / c.file, manual_dir / c.file, vault, title=notice_title, sign_only=True))
                     manual.append(c.file)
                     parts.append((c, manual_dir / c.file))
                     continue

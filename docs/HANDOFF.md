@@ -11,7 +11,12 @@
 
 ---
 
-## 11/04 — 지금 상태와 다음 할 일 (먼저 읽을 것)
+## 11/05 — 서버 PC 수집 결과를 NAS로 (먼저 읽을 것)
+
+- 브랜치 `claude/nas-result-sync`: NAS `.env` `WEBAPP_ROLE=viewer` + 서버 PC `.env` `RESULT_PUSH_URL`. 설정법 `webapp/README.md`, 결정 `CLAUDE.md` "2026-11-05" 절.
+- 켜기 전에: 서버 PC·NAS 코드 갱신, 서버 PC `data/` 판단 기록을 NAS로 한 번 옮기기, 팀원 접속 주소를 NAS로. 사용자 결정 대기: NAS 판단 기록 백업.
+
+## 11/04 — 지금 상태와 다음 할 일
 
 - 오늘 정리: `docs/worklog/2026-11-04.md`, 결정: `CLAUDE.md` "2026-11-04" 절(정량평가서 쪽은 `claude/quantdocs-merge`의 `CLAUDE.md`에).
 - **main 마지막 = PR #241**(수집 뒤 NAS 웹앱 자동 재시작). 웹앱 NAS 컨테이너 2개·1억 미만 최소판·정량평가서 탭(#235)이 main에 있음.

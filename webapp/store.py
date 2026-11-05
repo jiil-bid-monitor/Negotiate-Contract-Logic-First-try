@@ -100,14 +100,23 @@ class Store:
     # 최근 KEEP_RUNS회분을 남긴다 — 내가 불러온 결과를 다른 팀원이 새로 불러오기 해도 내 화면에서 계속 보도록(2026-10-01 요청).
     KEEP_RUNS = 30
 
-    def save_run(self, started_at: str, params: dict[str, Any], payload: dict[str, Any]) -> int:
+    def save_run(self, started_at: str, params: dict[str, Any], payload: dict[str, Any],
+                 finished_at: str | None = None) -> int:
         cur = self._exec(
             "INSERT INTO runs(started_at, finished_at, params, payload) VALUES (?,?,?,?)",
-            (started_at, _now(), json.dumps(params, ensure_ascii=False), json.dumps(payload, ensure_ascii=False)),
+            (started_at, finished_at or _now(), json.dumps(params, ensure_ascii=False), json.dumps(payload, ensure_ascii=False)),
         )
         run_id = int(cur.lastrowid)
         self._exec("DELETE FROM runs WHERE id <= ?", (run_id - self.KEEP_RUNS,))
         return run_id
+
+    def import_run(self, started_at: str, finished_at: str, params: dict[str, Any], payload: dict[str, Any]) -> int | None:
+        """서버 PC가 보낸 수집 결과를 넣는다(webapp/resultpush.py). 지금 최신 결과보다 나중에 끝난 수집일 때만 — 다시 보내도 겹치지 않게.
+        넣었으면 결과 번호, 건너뛰었으면 None."""
+        rows = self._query("SELECT finished_at FROM runs WHERE payload IS NOT NULL ORDER BY id DESC LIMIT 1")
+        if rows and (rows[0]["finished_at"] or "") >= finished_at:
+            return None
+        return self.save_run(started_at, params, payload, finished_at=finished_at)
 
     def _run_row(self, row: sqlite3.Row) -> dict[str, Any]:
         return {

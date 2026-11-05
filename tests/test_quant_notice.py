@@ -262,3 +262,11 @@ def test_submit_items_skip_sentences_and_section_titles():
             " - 주요 시설물 명칭 및 규모, 면적은 해당 시설물에 직접 기재한다.\n - 조감도 및 패널\n - USB 1점\n\n"
             "라. 제출서류 무효 및 실격\n ① 기타 평가위원회에서 실격으로 판정한 경우\n")
     assert [i.text for i in read_submit_items(text, "x", load_catalog())] == ["조감도 및 패널", "USB 1점"]
+
+
+def test_as_date_accepts_dotted_text():
+    """11/05 받은 기술인력표 입사일이 '2011.09.01' 글자 — 재직 개월 계산에서 '입사일 없음'으로 빠지지 않게."""
+    from quantdocs.notice import _as_date
+    assert _as_date("2011.09.01") == dt.date(2011, 9, 1) and _as_date("2020/2/17") == dt.date(2020, 2, 17)
+    assert _as_date("2023년 6월 5일") == dt.date(2023, 6, 5) and _as_date("2026-04-27") == dt.date(2026, 4, 27)
+    assert _as_date("모름") is None and _as_date(None) is None

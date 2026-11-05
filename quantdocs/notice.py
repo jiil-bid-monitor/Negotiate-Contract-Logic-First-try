@@ -622,7 +622,15 @@ def _as_date(v) -> date | None:
     try:
         return datetime.strptime(str(v)[:10], "%Y-%m-%d").date()
     except (TypeError, ValueError):
-        return None
+        pass
+    # '2011.09.01'·'2011/09/01'·'2011년 9월 1일'처럼 글자로 적힌 날짜(11/05 받은 기술인력표)
+    m = re.match(r"\s*((?:19|20)\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})", str(v or ""))
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
+    return None
 
 
 def unfinished(tracks: list[dict], ref: date) -> list[str]:

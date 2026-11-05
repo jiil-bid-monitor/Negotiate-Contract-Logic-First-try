@@ -386,6 +386,45 @@ def _bytes_pdf_text(data: bytes) -> str:
         return ""
 
 
+def _ocr_setup():
+    """pytesseract 모듈(설정 반영) — 없으면 None."""
+    try:
+        import pytesseract
+    except ImportError:
+        return None
+    from .vault import read_env
+
+    cmd = read_env("TESSERACT_CMD")
+    if cmd:
+        pytesseract.pytesseract.tesseract_cmd = cmd
+    data_dir = read_env("TESSDATA_PREFIX")
+    if data_dir:
+        import os
+
+        os.environ["TESSDATA_PREFIX"] = data_dir
+    return pytesseract
+
+
+def ocr_pages(data: bytes, pages: list[int], dpi: int = 250) -> dict[int, str] | None:
+    """PDF의 몇 쪽만 글자 인식(0부터 센 쪽 번호) → {쪽: 글}. OCR 도구가 없으면 None(11/05 — 글꼴 문제로 글이 빠진 제안요청서)."""
+    tess = _ocr_setup()
+    if tess is None:
+        return None
+    try:
+        import pypdfium2 as pdfium
+    except ImportError:
+        return None
+    out: dict[int, str] = {}
+    try:
+        pdf = pdfium.PdfDocument(data)
+        for i in pages:
+            if 0 <= i < len(pdf):
+                out[i] = tess.image_to_string(pdf[i].render(scale=dpi / 72).to_pil(), lang="kor+eng")
+    except Exception:  # noqa: BLE001 — tesseract·한국어 데이터 없음, 깨진 PDF
+        return None if not out else out
+    return out
+
+
 def _ocr_pdf(data: bytes) -> str | None:
     """글 없는 스캔 PDF → 글(Tesseract kor+eng, 300dpi). 도구가 없으면 None.
     서버 PC: Tesseract(한국어 데이터 포함) 설치 + `pip install pytesseract pypdfium2`, 실행 파일이 PATH에 없으면 .env TESSERACT_CMD."""

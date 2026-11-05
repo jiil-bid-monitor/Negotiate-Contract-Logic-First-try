@@ -282,3 +282,32 @@ def test_pdf_form_heads_name_before_number():
                       "서식 청렴계약이행각서서식 청렴계약이행각서[ 5] "])
     got = [(f.no, f.name) for f in read_forms(text, "제안요청서.pdf", [])]
     assert got == [(1, "제안서 표지"), (2, "일반현황"), (4, "투입인력 현황 · 투입인력 이력사항 (4-1~4-2)"), (5, "청렴계약이행각서")]
+
+
+def test_broken_pdf_pages_read_by_ocr(tmp_path, monkeypatch):
+    """11/05 사용자 요청: 글꼴 문제로 본문 글이 빠진 PDF(제목만 남고 '「 」'·'◦'만 남은 쪽)는 그 쪽들만 OCR로 다시 읽음 —
+    제목 줄은 살리고('2 입찰 참가자격' 겹친 글은 한 번, 번호 뒤 점), OCR의 'ㅇ'은 '○', ○ 아래 '가.·나.'는 하위 목으로."""
+    from reportlab.pdfgen import canvas
+
+    from quantdocs import importer, notice
+
+    p = tmp_path / "rfp.pdf"
+    c = canvas.Canvas(str(p))
+    for page in range(4):
+        y = 800
+        for ln in ["- %d -" % page, "( )", "「 」", "◦", ", ,", "( 4817)", "( 4990)"]:
+            c.drawString(50, y, ln)
+            y -= 20
+        c.showPage()
+    c.save()
+    ocr = "ㅇ 입찰참가등록을 완료하고, 다음 각 목의 업종 중 어느 하나 이상을 등록한 자\n가. 건축사사무소 (업종코드 4817)\n나. 실내건축공사업 (업종코드 4990)"
+    calls = []
+    monkeypatch.setattr(importer, "ocr_pages", lambda data, pages: calls.append(pages) or {i: ocr for i in pages})
+    notice._TEXT_CACHE.clear()
+    notice.OCR_USED.clear()
+    text = notice.doc_text(p)
+    assert calls == [[0, 1, 2, 3]] and "○ 입찰참가등록을 완료하고" in text and "  - 가. 건축사사무소" in text
+    assert any("OCR" in n for n in notice.OCR_USED)
+    notice.doc_text(p)
+    assert len(calls) == 1  # 같은 파일은 한 번만
+    assert notice._undouble("2 입찰 참가자격입찰 참가자격") == "2 입찰 참가자격"

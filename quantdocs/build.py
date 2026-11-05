@@ -153,9 +153,12 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
             else:
                 notes.append(f"{f.name}: HWPX 변환 실패({why}) — 서식을 자르지 못함(목록 읽기는 됨)")
         readable.append(f)
+    from . import notice as _notice
+    _notice.OCR_USED.clear()
     sheet = read_notice(readable, load_catalog())
     _use_page_titles(sheet, [Path(converted.get(f.name, f)) for f in files], " ".join(f.name for f in files))
     quals = qualification_rows(readable, vault.held_codes(), vault, licenses)
+    notes += list(dict.fromkeys(_notice.OCR_USED))
     ref = notice_date or date.today()
     candidates = []
     if sheet.track_reqs:

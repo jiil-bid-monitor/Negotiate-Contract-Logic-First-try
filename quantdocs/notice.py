@@ -340,7 +340,9 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
             if name not in subs.setdefault(n, []):
                 subs[n].append(name)
             continue
-        if n not in found or n in weak:
+        prev = found.get(n)
+        if prev is None or n in weak or (len(_squash(prev.name)) < len(_squash(name)) and _squash(name).startswith(_squash(prev.name))):
+            # OCR이 제목을 잘라 '[서식 2] 일반'으로 읽었으면 PDF 머리의 '일반현황'으로
             if n in found:
                 found[n].name, found[n].doc = _clean_name(name), classify(name, catalog)
                 weak.discard(n)
@@ -357,10 +359,10 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
 def _undouble(s: str) -> str:
     """PDF 굵은 글씨가 두 번 찍혀 '제안서 표지제안서 표지'처럼 겹친 글 → 한 번만. 겹치지 않았으면 그대로."""
     s = re.sub(r"\s+", " ", s or "").strip(" -·")
-    for k in range(len(s) // 2, 1, -1):
-        a, b = s[:k].strip(), s[k:].strip()
-        if a and a == b:
-            return a
+    for k in range(len(s) // 2, 1, -1):  # 끝이 같은 글 두 번 — 앞 번호는 그대로('2 입찰 참가자격입찰 참가자격' → '2 입찰 참가자격')
+        tail = s[-2 * k:]
+        if tail[:k].strip() and tail[:k].strip() == tail[k:].strip() and len(tail[:k].strip()) >= 2:
+            return (s[:-2 * k] + tail[:k]).strip()
     return s
 
 
@@ -590,6 +592,69 @@ def read_track_reqs(text: str, source: str, text_requirements) -> list[TrackReq]
     return out
 
 
+_TEXT_CACHE: dict[tuple, str] = {}
+OCR_MAX_PAGES = 80
+
+
+def doc_text(path: Path) -> str:
+    """공고 첨부 글. PDF인데 글꼴 문제로 본문 글이 빠진 쪽(한글 40자 미만이거나 한글 없이 문장부호만 남은 줄이 40% 이상)이 3쪽 이상·전체의 20% 이상이면
+    그 쪽들만 글자 인식(OCR)으로 다시 읽어 바꿔 넣음(11/05 사용자 요청 — 창업진흥원 제안요청서). OCR 도구가 없으면 원래 글 그대로.
+    같은 파일은 한 번만(공고 읽기·자격 판정이 같은 글을 씀)."""
+    attachments, _, _ = _import_nego()
+    p = Path(path)
+    data = p.read_bytes()
+    key = (str(p), len(data), hash(data[:4096]), hash(data[-4096:]))
+    if key in _TEXT_CACHE:
+        return _TEXT_CACHE[key]
+    ext = p.suffix.lstrip(".").lower()
+    text = attachments.extract_text(data, ext)
+    if ext == "pdf":
+        try:
+            import io
+
+            from pypdf import PdfReader
+
+            pages = [(pg.extract_text() or "") for pg in PdfReader(io.BytesIO(data)).pages]
+        except Exception:  # noqa: BLE001
+            pages = []
+        def is_broken(t: str) -> bool:
+            """한글이 거의 없거나, 한글 없이 '「 」'·'◦'·', '·'( 4817)'만 남은 줄이 많은 쪽(제목만 살고 본문이 빠짐)."""
+            if len(re.findall(r"[가-힣]", t)) < 40:
+                return True
+            lines = [ln for ln in t.splitlines() if ln.strip() and not re.fullmatch(r"\s*-\s*\d+\s*-\s*", ln)]
+            bare = [ln for ln in lines if not re.search(r"[가-힣A-Za-z]{2}", ln)]
+            return len(bare) >= 5 and len(bare) >= 0.4 * len(lines)
+        broken = [i for i, t in enumerate(pages) if is_broken(t)]
+        if pages and len(broken) >= 3 and len(broken) >= 0.2 * len(pages):
+            from .importer import ocr_pages
+
+            got = ocr_pages(data, broken[:OCR_MAX_PAGES])
+            if got:
+                # 원래 글(제목·서식 머리는 남아 있음) 뒤에 OCR 글을 붙임 — 제목 줄과 본문을 둘 다 살림
+                def kept(t: str) -> str:  # 빠진 쪽의 원래 글은 한글 낱말이 있는 줄만, 굵은 글씨로 두 번 찍힌 줄은 한 번만(제목 줄을 살림)
+                    # 제목 번호 '2 입찰 참가자격'(점 없음)은 '2. 입찰 참가자격'으로 — 참가자격 절 찾기가 번호 제목을 알아보게
+                    return "\n".join(re.sub(r"^\s*(\d{1,2})\s+(?=[가-힣])", r"\1. ", _undouble(ln))
+                                     for ln in t.splitlines() if re.search(r"[가-힣]{2}", ln))
+                def ocr_fix(t: str) -> str:
+                    """OCR이 머리표 '◦'를 한글 'ㅇ'으로 읽음 → '○'(항목 나누기가 알아보게). '○' 항목 아래의 '가.·나.'는 하위 목이라
+                    '- 가.'로 — 위 항목의 '다음 각 목의 업종 중 어느 하나 이상'이 그 목들에 걸리게(11/05 창업진흥원 참가자격)."""
+                    t = re.sub(r"(?m)^\s*ㅇ\s+", "○ ", t)
+                    first_bullet = re.search(r"(?m)^○ ", t)
+                    first_letter = re.search(r"(?m)^\s*[가-하]\.\s", t)
+                    if first_bullet and first_letter and first_bullet.start() < first_letter.start():
+                        t = re.sub(r"(?m)^\s*([가-하]\.\s)", r"  - \1", t)
+                    return t
+                text = "\n".join((kept(t) + "\n" + ocr_fix(got[i])) if i in got else t for i, t in enumerate(pages))
+                OCR_USED.append(f"{p.name}: 글꼴 문제로 글이 빠진 {len(got)}쪽을 글자 인식(OCR)으로 읽음 — 자격·배점 등 원문과 대조")
+            else:
+                OCR_USED.append(f"⚠ {p.name}: 본문 글이 {len(broken)}쪽 빠져 있는데 글자 인식 도구(Tesseract)가 없어 못 읽음 — 서버 PC 설치(docs/quantdocs.md)")
+    _TEXT_CACHE[key] = text
+    return text
+
+
+OCR_USED: list[str] = []  # 이번 읽기에서 OCR을 쓴 알림(화면·읽어보기에)
+
+
 def read_notice(paths: list[Path], catalog: list[Document] | None = None) -> NoticeSheet:
     attachments, schedule_text, text_requirements = _import_nego()
     catalog = catalog or load_catalog()
@@ -597,7 +662,7 @@ def read_notice(paths: list[Path], catalog: list[Document] | None = None) -> Not
     texts: dict[str, str] = {}
     for p in paths:
         try:
-            text = attachments.extract_text(Path(p).read_bytes(), Path(p).suffix.lstrip(".").lower())
+            text = doc_text(Path(p))
         except Exception:  # 못 읽는 첨부(옛 엑셀·보안 문서 등)는 건너뜀
             continue
         name = Path(p).name

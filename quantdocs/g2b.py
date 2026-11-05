@@ -238,7 +238,8 @@ def qualification_rows(paths: list[Path], held_codes: set[str], vault=None, lice
         if ext not in ("hwp", "hwpx", "pdf", "docx"):
             continue
         try:
-            text = attachments.extract_text(p.read_bytes(), ext)
+            from .notice import doc_text  # PDF 글이 빠진 쪽은 OCR로(공고 읽기와 같은 글, 한 번만 읽음)
+            text = doc_text(p)
         except Exception:  # 못 읽는 문서는 건너뜀
             continue
         sec = qualification_text.find_qualification_section(text)

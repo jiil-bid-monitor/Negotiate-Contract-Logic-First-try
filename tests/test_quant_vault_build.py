@@ -1168,3 +1168,29 @@ def test_track_form_delivery_amount_and_total_cells(tmp_path: Path):
     vals = {(c.row, c.col): l[0] for c, l, _ in _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, rep)}
     assert vals[(2, 0)] == "2024.07.01" and vals[(2, 1)] == "가상 A" and vals[(2, 3)] == "345,678,912"
     assert vals[(1, 1)] == "2건" and vals[(1, 3)] == "2,445,678,912원"
+
+
+def test_hangul_history_table_date_line_then_content(tmp_path: Path, monkeypatch):
+    """11/05 받은 연혁은 한글(.hwp) '일반현황 및 연혁' 표 — 날짜만 한 줄, 내용은 다음 줄(두 줄로 넘어가기도), 앞쪽 일반현황 표는 이름표/값 줄.
+    jiil-quant-docs 폴더 맨 위의 .hwp도 읽음."""
+    from quantdocs import importer
+    from quantdocs.importer import read_history, read_overview
+
+    text = "\n".join(["(가상)회사 일반현황 및 연혁", "1. 일반현황", "회 사 명", "(가상)회사", "대표자명", "(가상)대표",
+                      "팩스번호", "000-000-0000", "2. 회사연혁", "연 월 일", "내         용", "비  고",
+                      "2009.09", "(가상) 법인설립", "2020.06", "(가상) 플랫폼", "(가상) 과제 선정", "2024.12", "(가상) 인증"])
+    got = read_history(text)
+    assert [(h["연월일"], h["내용"]) for h in got] == [("2009.09", "(가상) 법인설립"), ("2020.06", "(가상) 플랫폼 (가상) 과제 선정"),
+                                                     ("2024.12", "(가상) 인증")]
+    assert read_overview(text) == {"회사명": "(가상)회사", "대표자": "(가상)대표", "팩스번호": "000-000-0000"}
+    # 예전 모양('2005.03 법인 설립' 한 줄)도 그대로
+    assert read_history("2005.03 (가상) 법인 설립")[0]["내용"] == "(가상) 법인 설립"
+
+    (tmp_path / "연혁.hwp").write_bytes(b"x")
+    v = vault.Vault({}, info={"회사명": "(가상)시트 값"})
+    vault.add_loose(v, tmp_path)
+    assert "files/연혁.hwp" in v.files
+    monkeypatch.setattr(vault, "ENV_FILE", tmp_path / "none.env")
+    monkeypatch.setattr(importer, "_cached_text", lambda path, data: text)
+    importer.enrich_vault(v)
+    assert len(v.history) == 3 and v.info["회사명"] == "(가상)시트 값" and v.info["대표자"] == "(가상)대표"

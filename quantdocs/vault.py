@@ -217,7 +217,7 @@ def add_loose(v: Vault, folder: Path | None = None) -> None:
     if folder is None:
         return
     have = {k.rsplit("/", 1)[-1] for k in v.files}
-    for p in sorted(folder.glob("*.pdf")) + sorted(folder.glob("*.PDF")):
+    for p in sorted(x for x in folder.iterdir() if x.suffix.lower() in (".pdf", ".hwp", ".hwpx")):  # 한글 연혁도(11/05)
         if p.name in have or not p.is_file():
             continue
         try:

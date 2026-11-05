@@ -276,6 +276,7 @@ def read_registration(text: str) -> dict:
 # ── 연혁 PDF ─────────────────────────────────────────────────
 _HIST_LINE = re.compile(r"^\s*[-·•ㆍ▪◦○●]?\s*((?:19|20)\d{2})\s*[.년/-]\s*(\d{1,2})\s*[.월/-]?\s*(?:(\d{1,2})(?=\s*[.일]|\s)\s*[.일]?)?\s*[.:\-–~]?\s*(\S.*)$")
 _YEAR_ONLY = re.compile(r"^\s*((?:19|20)\d{2})\s*년?\s*$")
+_DATE_ONLY = re.compile(r"^\s*((?:19|20)\d{2})\s*[.년/-]\s*(\d{1,2})\s*[.월]?\s*(?:(\d{1,2})\s*[.일]?)?\s*$")
 _MONTH_LINE = re.compile(r"^\s*[-·•ㆍ]?\s*(\d{1,2})\s*[.월/]\s*(?:(\d{1,2})\s*[.일]?)?\s*[:\-–]?\s*(\S.*)$")
 
 
@@ -283,10 +284,34 @@ def read_history(text: str) -> list[dict]:
     """연혁 문서 글 → [{연월일, 내용}]. '2005.03 법인 설립'·'2005년 3월 …' 줄, 또는 '2005' 한 줄 뒤 '03. …' 줄.
     날짜는 일까지 있으면 date, 월까지면 '2005.03' 글자. 짐작해서 채우지 않음 — 날짜로 시작하지 않는 줄은 앞 줄 내용에 이어 붙이지도 않음."""
     out, year = [], None
-    for line in (text or "").splitlines():
-        line = line.strip()
+    pending = None  # 표에서 '2009.09' 날짜만 한 줄, 내용은 다음 줄(11/05 받은 한글 연혁) — (연, 월, 일, [내용 줄])
+    lines = [ln.strip() for ln in (text or "").splitlines()]
+
+    def flush():
+        nonlocal pending
+        if pending and pending[3]:
+            y, mo, d, body = pending
+            when = _ymd(y, mo, d) if d else None
+            if 1 <= int(mo) <= 12:
+                out.append({"연월일": when or f"{y}.{int(mo):02d}", "내용": re.sub(r"\s+", " ", " ".join(body)).strip()})
+        pending = None
+    for line in lines:
         if not line:
             continue
+        dm = _DATE_ONLY.match(line)
+        if dm:
+            flush()
+            pending = (dm.group(1), dm.group(2), dm.group(3), [])
+            year = dm.group(1)
+            continue
+        if pending is not None:
+            if _HIST_LINE.match(line) or _YEAR_ONLY.match(line):
+                flush()
+            elif len(pending[3]) < 2:  # 내용이 두 줄로 넘어간 칸까지만(그 뒤 '비고' 칸 등은 안 붙임)
+                pending[3].append(line)
+                continue
+            else:
+                continue
         m = _HIST_LINE.match(line)
         if m:
             y, mo, d, body = m.groups()
@@ -303,6 +328,24 @@ def read_history(text: str) -> list[dict]:
             continue
         when = _ymd(y, mo, d) if d else None
         out.append({"연월일": when or f"{y}.{mo_i:02d}", "내용": re.sub(r"\s+", " ", body).strip()})
+    flush()
+    return out
+
+
+# 회사 '일반현황' 표(한글 연혁 문서 앞쪽) — 이름표 한 줄, 값 다음 줄. 회사정보 시트가 비었을 때만 씀
+_OVERVIEW = {"회사명": "회사명", "상호": "회사명", "대표자명": "대표자", "대표자": "대표자", "주소": "주소",
+             "전화번호": "전화번호", "팩스번호": "팩스번호", "사업자번호": "사업자등록번호", "사업자등록번호": "사업자등록번호",
+             "자본금": "자본금"}
+
+
+def read_overview(text: str) -> dict[str, str]:
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    out: dict[str, str] = {}
+    for i, ln in enumerate(lines[:-1]):
+        key = _OVERVIEW.get(re.sub(r"\s+", "", ln))
+        nxt = lines[i + 1]
+        if key and key not in out and re.sub(r"\s+", "", nxt) not in _OVERVIEW and len(nxt) <= 60:
+            out[key] = nxt
     return out
 
 
@@ -387,7 +430,15 @@ def _cached_text(path: str, data: bytes) -> str:
     """묶음 안 PDF 글 — 만들기마다 같은 파일을 다시 읽지 않게(경로·크기·내용 해시)."""
     key = (path, len(data), hash(data[:4096]))
     if key not in _TEXT_CACHE:
-        _TEXT_CACHE[key] = _bytes_pdf_text(data)
+        ext = path.rsplit(".", 1)[-1].lower()
+        if ext in ("hwp", "hwpx"):  # 한글 연혁·일반현황(11/05 받은 연혁이 .hwp)
+            try:
+                from nego import attachments
+                _TEXT_CACHE[key] = attachments.extract_text(data, ext)
+            except Exception:  # noqa: BLE001 — 못 읽는 한글 파일은 글 없음으로
+                _TEXT_CACHE[key] = ""
+        else:
+            _TEXT_CACHE[key] = _bytes_pdf_text(data)
     return _TEXT_CACHE[key]
 
 
@@ -410,7 +461,8 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     scanned, ocr, skipped_scans, regs = [], [], [], []
     for path, data in sorted(vault.files.items()):
         name = path.rsplit("/", 1)[-1]
-        if not name.lower().endswith(".pdf"):
+        hangul = name.lower().endswith((".hwp", ".hwpx"))
+        if not name.lower().endswith(".pdf") and not hangul:
             continue
         sq = re.sub(r"\s+", "", name)
         by_name = [k for k, words in (("연혁", ("연혁",)), ("등록증", ("참가자격", "입찰참가")), ("사업자", ("사업자등록",)),
@@ -418,6 +470,8 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
                    if any(w in sq for w in words)]
         text = _cached_text(path, data)
         how = "글"
+        if hangul and not re.search(r"연혁|일반\s*현황", re.sub(r"\s+", "", text[:400])):
+            continue  # 한글 파일은 연혁·일반현황 문서만(서식 등 다른 한글 파일은 안 봄)
         if len(re.sub(r"\s", "", text)) < 20:  # 스캔본 — 이름으로 짐작되는 서류만 글자 인식(OCR, 느려서)
             if not by_name:
                 skipped_scans.append(name)
@@ -457,6 +511,9 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
             continue
         if "연혁" in kinds and not hist:
             hist, hist_src = read_history(text), name
+        if "연혁" in kinds and re.search(r"일반\s*현황", head):  # '일반현황 및 연혁' 문서 — 회사명·전화·팩스 등
+            for k, v in read_overview(text).items():
+                found_info.setdefault(k, (v, name))
         if "등록증" in kinds:
             for k, v in read_registration(text)["info"].items():
                 found_info.setdefault(k, (v, name))

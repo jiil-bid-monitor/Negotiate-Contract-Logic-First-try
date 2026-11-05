@@ -51,6 +51,8 @@ class NoticeFiles:
     licenses: list[str] = field(default_factory=list)
     files: list[Path] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)  # 못 받은 첨부(이유)
+    # 면허제한 그룹 구조(웹앱 수집과 같은 판정용): [그룹 = [행 = [이름(코드), 대신 인정 업종…]]] — 그룹끼리 '또는', 행끼리 '모두'
+    license_groups: list[list[list[str]]] = field(default_factory=list)
 
     @property
     def negotiation(self) -> bool:
@@ -124,7 +126,9 @@ def fetch_notice(notice_no: str, out_dir: Path) -> NoticeFiles:
     out.award_method = str(row.get("sucsfbidMthdNm") or "")
     out.contract_method = str(row.get("cntrctCnclsMthdNm") or "")
     out.posted = str(row.get("bidNtceDt") or row.get("rgstDt") or "")[:16]
-    out.licenses = bidcalc._licenses(client, row, no, out.ord)
+    lic_rows = bidcalc.license_rows(client, row, no, out.ord)
+    out.licenses = bidcalc.license_names(lic_rows)
+    out.license_groups = license_groups(lic_rows, no)
     out_dir.mkdir(parents=True, exist_ok=True)
     session = requests.Session()
     for att in F.extract_attachments(row):
@@ -217,12 +221,42 @@ def _merge_or(groups: list[list[str]]) -> list[list[str]]:
     return out
 
 
+def license_groups(raw_rows: list[dict], notice_no: str) -> list[list[list[str]]]:
+    """면허제한 응답 행 → 그룹 구조(웹앱 수집 `qualify.group_license_rows`와 같은 묶음, 마지막 차수만)."""
+    _import_nego()
+    from nego import qualify
+
+    groups = qualify.group_license_rows(raw_rows).get(notice_no) or []
+    return [[[_paren(n) for n in row] for row in (g.rows or [g.allowed_names])] for g in groups]
+
+
+def _paren(name: str) -> str:
+    """'건축사사무소/4817' → '건축사사무소(4817)'(첨부 판정과 같은 모양)."""
+    m = re.fullmatch(r"\s*(.+?)\s*/\s*(\d{4}|\d{8}|\d{10})\s*", name)
+    return f"{m.group(1)}({m.group(2)})" if m else name.strip()
+
+
+def _api_requirements(license_groups: list[list[list[str]]]) -> list[list[str]]:
+    """그룹 구조 → 요건 목록(요건끼리 모두, 요건 안 '이 중 하나') — 웹앱 자격 팝업과 같은 `qualify.license_requirements`.
+    '조합 중 하나'(그룹마다 행이 여럿)는 여기서 다루지 않음(빈 목록 — 예전처럼 첨부 판정을 씀)."""
+    _import_nego()
+    from nego import qualify
+
+    groups = [qualify.LicenseGroup(group_no=str(i), allowed_names=[n for r in rows for n in r], rows=rows)
+              for i, rows in enumerate(license_groups) if rows]
+    reqs = qualify.license_requirements(groups)
+    if any(r.combos for r in reqs):
+        return []
+    return [list(dict.fromkeys(_paren(n) for n in r.allowed_names)) for r in reqs]
+
+
 def _code(name: str) -> str:
     m = _CODE.search(name)
     return m.group(1) if m else ""
 
 
-def qualification_rows(paths: list[Path], held_codes: set[str], vault=None, licenses: list[str] | None = None) -> list[dict]:
+def qualification_rows(paths: list[Path], held_codes: set[str], vault=None, licenses: list[str] | None = None,
+                       license_groups: list[list[list[str]]] | None = None) -> list[dict]:
     """첨부 참가자격 → [{kind, items:[{name, code, held, docs, paths, need}], source}].
 
     웹앱 수집(`nego.attachments.save_attachment_texts`)과 같은 판정: 모든 첨부의 참가자격 항목을 모아 한 번에
@@ -280,6 +314,27 @@ def qualification_rows(paths: list[Path], held_codes: set[str], vault=None, lice
                     it["need"] = "직접생산확인증명서"
             rows.append({"kind": "이 중 하나" if len(items) > 1 else "필수", "items": items,
                          "source": sources({i["code"] for i in items})})
+
+    # 나라장터 면허제한 그룹 구조가 있으면 업종 요건은 그 구조로(웹앱 수집 자격 팝업과 같게 — 11/05 제보: '[건축사사무소(4817)] 업종 또는
+    # [실내건축공사업(4990)] 업종'인데 서버 OCR 글로는 '또는'을 못 읽어 둘 다 '필수'로 나옴). 첨부 요건 중 코드가 API 요건 하나의
+    # 코드 묶음 안에 다 드는 것은 API 쪽만 남김(웹앱 `qualview.build`와 같은 규칙), 첨부에만 있는 요건(세부품명 등)은 그대로.
+    api_reqs = _api_requirements(license_groups or [])
+    if api_reqs:
+        api_sets = [{_code(n) for n in req} - {""} for req in api_reqs]
+        keep = []
+        for r in rows:
+            codes = {it["code"] for it in r["items"]} - {""}
+            if codes and any(codes <= s for s in api_sets):
+                continue
+            keep.append(r)
+        api_rows = []
+        for req in api_reqs:
+            items = [item(n) for n in req]
+            codes = {i["code"] for i in items} - {""}
+            api_rows.append({"kind": "이 중 하나" if len(items) > 1 else "필수", "items": items,
+                             "source": sources(codes) or "나라장터 면허제한정보"})
+        rows = api_rows + keep
+        licenses = []  # 이미 그룹 구조로 넣음
 
     # 나라장터 면허제한(API) — 첨부에 이미 있는 업종은 빼고(이름 대조)
     known = {_sq(re.sub(r"\(.*$", "", it["name"])) for r in rows for it in r["items"]}

@@ -131,7 +131,8 @@ def _use_page_titles(sheet, hwpx_files: list[Path], source: str) -> None:
 
 
 def analyze(files: list[Path], vault, notice_date: date | None = None, work: Path | None = None,
-            award_method: str = "", contract_method: str = "", licenses: list[str] | None = None) -> Analysis:
+            award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
+            license_groups: list | None = None) -> Analysis:
     files = [Path(f) for f in files]
     work = Path(work or tempfile.mkdtemp(prefix="quantdocs_"))
     work.mkdir(parents=True, exist_ok=True)  # 웹앱이 넘기는 작업 폴더(data/jobs/<id>/work)는 아직 없을 수 있음
@@ -157,7 +158,7 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
     _notice.OCR_USED.clear()
     sheet = read_notice(readable, load_catalog())
     _use_page_titles(sheet, [Path(converted.get(f.name, f)) for f in files], " ".join(f.name for f in files))
-    quals = qualification_rows(readable, vault.held_codes(), vault, licenses)
+    quals = qualification_rows(readable, vault.held_codes(), vault, licenses, license_groups)
     notes += list(dict.fromkeys(_notice.OCR_USED))
     ref = notice_date or date.today()
     candidates = []
@@ -272,7 +273,7 @@ def _safe(name: str) -> str:
 
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
           award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
-          notice_no: str = "", staff_pick: list[str] | None = None) -> Path:
+          notice_no: str = "", staff_pick: list[str] | None = None, license_groups: list | None = None) -> Path:
     """staff_pick: 화면에서 고른 기술인력 이름 — 주면 그 사람만 자기평점 기술인력 점수에(None이면 인력목록 전체)."""
     files = [Path(f) for f in files]
     if staff_pick is not None:
@@ -282,7 +283,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         vault.staff = [r for r in vault.staff if str(r.get("이름") or "").strip() in picked]
     work = Path(tempfile.mkdtemp(prefix="quantdocs_build_"))
     try:
-        a = analyze(files, vault, notice_date, work, award_method, contract_method, licenses)
+        a = analyze(files, vault, notice_date, work, award_method, contract_method, licenses, license_groups)
         forms_dir, filled_dir = work / "cut", work / "서식"
         reports: list[FillReport] = []
         manual: list[str] = []  # 양식 그대로 넣은 서식 파일

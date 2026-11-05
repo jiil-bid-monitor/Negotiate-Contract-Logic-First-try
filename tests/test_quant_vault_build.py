@@ -1610,3 +1610,30 @@ def test_hidden_form_head_title_when_ocr_spaces_letters(monkeypatch):
         assert "[서식 7] 입찰보증금지급각서\n" in text
         forms = {str(f.no): f.name for f in notice.read_forms(text, "r.pdf", notice.load_catalog())}
         assert "입찰보증금" in forms.get("7", "")
+
+
+def test_license_groups_from_g2b_override_misread_attachment(tmp_path):
+    """나라장터 면허제한 '[건축사사무소(4817)] 업종 또는 [실내건축공사업(4990)] 업종'(그룹 둘) — 첨부 글(OCR)에서 '또는'을 못 읽어
+    둘 다 '필수'로 나와도 웹앱 수집처럼 그룹 구조로 '이 중 하나'(11/05 창업진흥원 제보)."""
+    from quantdocs import g2b
+
+    raw = [{"bidNtceNo": "R26BK0", "bidNtceOrd": "000", "lmtGrpNo": "1", "lmtSno": "1", "lcnsLmtNm": "건축사사무소/4817"},
+           {"bidNtceNo": "R26BK0", "bidNtceOrd": "000", "lmtGrpNo": "2", "lmtSno": "1", "lcnsLmtNm": "실내건축공사업/4990"}]
+    groups = g2b.license_groups(raw, "R26BK0")
+    assert groups == [[["건축사사무소(4817)"]], [["실내건축공사업(4990)"]]]
+    doc = tmp_path / "제안요청서.hwpx"
+    import zipfile
+    sec = ('<hs:sec xmlns:hs="s" xmlns:hp="p"><hp:p><hp:run><hp:t>2. 입찰참가자격</hp:t></hp:run></hp:p>'
+           '<hp:p><hp:run><hp:t>가. 「국가를 당사자로 하는 계약에 관한 법률 시행령」 제12조에 따른 자격을 갖춘 자</hp:t></hp:run></hp:p>'
+           '<hp:p><hp:run><hp:t>나. 건축사사무소(업종코드 4817)를 등록한 자</hp:t></hp:run></hp:p>'
+           '<hp:p><hp:run><hp:t>다. 실내건축공사업(업종코드 4990)을 등록한 자</hp:t></hp:run></hp:p>'
+           '<hp:p><hp:run><hp:t>3. 입찰 방법</hp:t></hp:run></hp:p></hs:sec>')
+    with zipfile.ZipFile(doc, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/section0.xml", sec)
+    plain = g2b.qualification_rows([doc], {"4990"}, None, ["건축사사무소", "실내건축공사업"])
+    assert [r["kind"] for r in plain if r["items"][0]["code"]] == ["필수", "필수"]  # 글만 보면 둘 다 필수(문서가 그렇게 적음)
+    rows = g2b.qualification_rows([doc], {"4990"}, None, ["건축사사무소", "실내건축공사업"], groups)
+    lic = [r for r in rows if any(i["code"] for i in r["items"])]
+    assert len(lic) == 1 and lic[0]["kind"] == "이 중 하나"
+    assert {i["code"] for i in lic[0]["items"]} == {"4817", "4990"}

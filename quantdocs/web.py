@@ -156,7 +156,7 @@ def _run_analyze(job: dict) -> None:
             raise RuntimeError("공고를 찾지 못했습니다 — 공고번호를 확인하세요")
         job["notice"] = {"no": nf.no, "ord": nf.ord, "title": nf.title, "institution": nf.institution,
                          "work": nf.work_type, "award": nf.award_method, "contract": nf.contract_method,
-                         "posted": nf.posted, "licenses": nf.licenses, "files": [p.name for p in nf.files],
+                         "posted": nf.posted, "licenses": nf.licenses, "license_groups": nf.license_groups, "files": [p.name for p in nf.files],
                          "skipped": nf.skipped, "negotiation": nf.negotiation}
         if not nf.files:
             raise RuntimeError("첨부 파일을 받지 못했습니다" + (f" — {nf.skipped[0]}" if nf.skipped else ""))
@@ -168,13 +168,15 @@ def _run_analyze(job: dict) -> None:
         job["notice"]["ref_date"] = f"{job['date'] or date.today():%Y-%m-%d}"
         job["notice"]["ref_from"] = "공고 게시일" if job["date"] else "오늘(게시일을 못 읽음)"
         job["step"] = "서식·자격·실적 요건 읽는 중"
-        a = analyze(nf.files, v, job.get("date"), JOBS / job["id"] / "work", nf.award_method, nf.contract_method, nf.licenses)
+        a = analyze(nf.files, v, job.get("date"), JOBS / job["id"] / "work", nf.award_method, nf.contract_method, nf.licenses,
+                     nf.license_groups)
         s = summary(a)
         if not s["forms"] and dropped:
             # 공고문·제안요청서에 서식이 없으면 나머지 첨부까지 읽어 서식을 찾음(11/05 사용자: 공고마다 서식이 다른 곳에 있음)
             job["step"] = "공고문·제안요청서에 서식이 없어 나머지 첨부에서 찾는 중"
             everything = nf.files + dropped
-            a2 = analyze(everything, v, job.get("date"), JOBS / job["id"] / "work2", nf.award_method, nf.contract_method, nf.licenses)
+            a2 = analyze(everything, v, job.get("date"), JOBS / job["id"] / "work2", nf.award_method, nf.contract_method, nf.licenses,
+                         nf.license_groups)
             s2 = summary(a2)
             if s2["forms"]:
                 a, s = a2, s2
@@ -224,7 +226,7 @@ def _run_build(job: dict) -> None:
             n = job.get("notice", {})
             build([Path(f) for f in job["files"]], v, out, n.get("title", ""), job.get("date"),
                   n.get("award", ""), n.get("contract", ""), n.get("licenses") or [], _g2b_no(n, job["no"]),
-                  job.get("staff_pick"))
+                  job.get("staff_pick"), n.get("license_groups") or [])
             job["zip"] = str(out)
             job["state"] = "built"
         except Exception as err:

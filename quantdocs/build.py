@@ -290,6 +290,18 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         merged_forms: list[Path] = []  # 공고 문서마다 서식 전체를 이은 한글 파일
         merge_failed = False  # 잇지 못한 문서가 있으면 서식별 파일도 묶음에 넣음
         cut_names = {str(f.no): f.name for f in a.sheet.forms}
+        # 서식이 PDF에만 있으면(한글 첨부에 서식 없음) 서식 쪽을 OCR로 한글 서식으로 다시 만들어 같은 길로(11/05 사용자 결정 (다) — 첨삭할 수 있게)
+        hangul_forms = any(Path(a.converted.get(f.source, f.source)).suffix.lower() == ".hwpx" for f in a.sheet.forms)
+        if a.sheet.forms and not hangul_forms:
+            from .pdfforms import rebuild
+            for f in files:
+                if f.suffix.lower() != ".pdf" or not any(x.source == f.name for x in a.sheet.forms):
+                    continue
+                hx, why, titles = rebuild(f, work / "pdf_forms" / (f.stem + ".hwpx"), names=cut_names)
+                a.notes += why
+                if hx:
+                    a.converted[f.name] = str(hx)
+                    cut_names.update({k: v for k, v in titles.items() if k not in cut_names})
         agency_no = agency_notice_no(a.sheet.texts)  # 공고문의 기관 공고번호 — 서식 공고번호 칸에(11/04 사용자 요청)
         # 정량평가 자기평점 — 제안요청서 본문 배점기준(11/05 사용자 요청). 제안요청서를 먼저 봄
         criteria = read_criteria(_rfp_first(files, a.converted))

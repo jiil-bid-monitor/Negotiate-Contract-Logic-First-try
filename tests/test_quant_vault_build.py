@@ -1467,3 +1467,57 @@ def test_orders_excel_in_folder_becomes_tracks(tmp_path: Path, monkeypatch):
     assert got["(가상) 전시관 조성"]["발주기관"] == "(가상)시" and got["(가상) 전시관 조성"]["지분율(%)"] == 60
     assert got["(가상) 전시관 조성"]["계약금액(원)"] == 300_000_000 and got["(가상) 전시관 조성"]["준공일"] == dt.date(2024, 6, 30)
     assert "(가상) 새 체험관" in got and "(가상) 직접 더한 실적" in got and len(v.tracks) == 3
+
+
+def test_pdf_form_table_grid_with_merged_cells():
+    """11/05 사용자 결정 (다): PDF 서식 쪽 그림에서 표 칸 찾기 — 가로·세로 선으로 격자, 선이 없는 곳은 합친 칸, 회색 바탕 칸."""
+    import numpy as np
+
+    from quantdocs.pdfforms import find_tables
+
+    g = np.full((900, 1200), 255, dtype=np.uint8)
+    xs, ys = [100, 400, 700, 1000], [100, 200, 300, 600]
+    for y in ys:
+        g[y - 1:y + 2, 100:1001] = 0
+    for x in xs:
+        for r in range(3):
+            if x == 400 and r == 2:  # 마지막 줄은 400 선이 없음 → 첫 두 칸 합침
+                continue
+            g[ys[r]:ys[r + 1] + 1, x - 1:x + 2] = 0
+    g[110:190, 110:390] = 220  # 회색 이름표 칸
+    tables, mask = find_tables(g)
+    assert len(tables) == 1
+    t = tables[0]
+    assert len(t.xs) == 4 and len(t.ys) == 4
+    assert (2, 0, 1, 2) in t.cells and (0, 0, 1, 1) in t.cells and len(t.cells) == 8
+    assert (0, 0) in t.shade and (0, 1) not in t.shade and mask[ys[0], 500]
+
+
+def test_pdf_form_rebuild_writes_cuttable_hwpx(tmp_path: Path, monkeypatch):
+    """다시 만든 한글 서식은 '[서식 N] 제목' 머리 문단마다 잘리고(forms_cut.cut), 표 칸 글은 회사 정보 채우기가 그대로 씀."""
+    import numpy as np
+    from reportlab.pdfgen import canvas
+
+    from quantdocs import pdfforms
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.forms_cut import cut
+
+    p = tmp_path / "rfp.pdf"
+    c = canvas.Canvas(str(p))
+    c.drawString(50, 800, "서식 2 일반현황")
+    c.showPage()
+    c.save()
+
+    def fake_page(img, st, width, pb, uid, drop_head=False):  # 그림·OCR 대신 표 하나(회사명 | 빈칸)
+        t = pdfforms.Table([100, 300, 600], [100, 200], [(0, 0, 1, 1), (0, 1, 1, 1)])
+        t.words[(0, 0)] = [pdfforms.Word("회사명", 120, 130, 200, 160)]
+        return pdfforms._table_xml(st, t, 1.0, uid), ["[서식 2] 일반현황"]
+    monkeypatch.setattr(pdfforms, "page_xml", fake_page)
+    monkeypatch.setattr(pdfforms, "form_pages", lambda data, texts: [0])  # 시험 PDF엔 한글 글꼴이 없어 '서식' 글자가 안 읽힘
+    monkeypatch.setattr("quantdocs.importer._ocr_setup", lambda: object())
+    out, notes, titles = pdfforms.rebuild(p, tmp_path / "f.hwpx", names={"2": "일반현황"})
+    assert out and titles == {"2": "일반현황"} and "다시 만듦" in notes[-1]
+    parts = cut(out, tmp_path / "cut", {"2": "일반현황"})
+    assert [(x.no, x.title) for x in parts] == [("2", "일반현황")]
+    fill_hwpx(tmp_path / "cut" / parts[0].file, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(가상)회사"}))
+    assert "(가상)회사" in zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()

@@ -250,7 +250,7 @@ def cut(path: Path, out_dir: Path, names: dict[str, str] | None = None) -> list[
         first = all_paras[0]
         prefix = "" if f.paras[0].start == first.start else _sec_pr_para(xml, first)
         new_xml = head + prefix + body + tail
-        if names and names.get(f.no) and "-" not in f.no:
+        if names and names.get(f.no):  # 하위 서식('4-1')은 이름에 그 번호가 따로 있을 때만(PDF 서식 다시 만들기가 줌)
             f.title = names[f.no]
         f.file = f"서식{f.no.replace('-', '_')}_{_safe(f.title)}.hwpx"
         target = out_dir / f.file

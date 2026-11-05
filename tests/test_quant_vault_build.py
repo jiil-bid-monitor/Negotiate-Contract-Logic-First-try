@@ -1637,3 +1637,29 @@ def test_license_groups_from_g2b_override_misread_attachment(tmp_path):
     lic = [r for r in rows if any(i["code"] for i in r["items"])]
     assert len(lic) == 1 and lic[0]["kind"] == "이 중 하나"
     assert {i["code"] for i in lic[0]["items"]} == {"4817", "4990"}
+
+
+def test_pdf_form_table_cells_cover_grid_once():
+    """칸들이 격자를 빈틈·겹침 없이 덮어야 한글이 열림 — 'ㄱ'자 합친 칸은 한 칸씩, 칸이 시작하지 않는 줄은 합침(11/05 서식 7 오류)."""
+    import numpy as np
+    from quantdocs import pdfforms
+
+    img = np.full((400, 600), 255, dtype=np.uint8)
+    for y in (20, 120, 220, 320):
+        img[y - 1:y + 2, 20:580] = 0
+    for x in (20, 200, 400, 580):
+        img[20:320, x - 1:x + 2] = 0
+    img[121:219, 199:202] = 255  # 가운데 세로선 일부를 지워 (1,0)-(1,1) 합침
+    img[219:222, 21:199] = 255  # (1,0)-(2,0) 합침 → (1,0),(1,1),(2,0) 'ㄱ'자
+    tables, _ = pdfforms.find_tables(img)
+    t = tables[0]
+    R, C = len(t.ys) - 1, len(t.xs) - 1
+    grid = [[0] * C for _ in range(R)]
+    for r, c, rs, cs in t.cells:
+        for rr in range(r, r + rs):
+            for cc in range(c, c + cs):
+                grid[rr][cc] += 1
+    assert all(v == 1 for row in grid for v in row)
+    assert {r for r, _, _, _ in t.cells} == set(range(R))
+    assert pdfforms._compact([0, 10, 20], [0, 5, 10, 15], [(0, 0, 3, 1), (0, 1, 1, 1), (1, 1, 2, 1)]) == \
+        ([0, 10, 20], [0, 5, 15], [(0, 0, 2, 1), (0, 1, 1, 1), (1, 1, 1, 1)])

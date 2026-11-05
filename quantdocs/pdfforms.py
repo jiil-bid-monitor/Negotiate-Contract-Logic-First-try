@@ -87,6 +87,22 @@ def _cluster(vals: list[int], tol: int) -> list[int]:
     return [int(round(sum(c) / len(c))) for c in out]
 
 
+def _compact(xs: list, ys: list, cells: list[tuple[int, int, int, int]]):
+    """칸이 하나도 시작하지 않는 줄·열(위·왼쪽 칸이 통째로 덮음)은 앞 줄·열에 합침 — 빈 <hp:tr>이 생기지 않게."""
+    R, C = len(ys) - 1, len(xs) - 1
+    keep_r = sorted({r for r, _, _, _ in cells} | {0})
+    keep_c = sorted({c for _, c, _, _ in cells} | {0})
+    if len(keep_r) == R and len(keep_c) == C:
+        return xs, ys, cells
+    def idx(keep, i):  # 옛 번호 i가 들어가는 새 번호
+        return max(n for n, k in enumerate(keep) if k <= i)
+    out = []
+    for r, c, rs, cs in cells:
+        nr, nc = idx(keep_r, r), idx(keep_c, c)
+        out.append((nr, nc, idx(keep_r, r + rs - 1) - nr + 1, idx(keep_c, c + cs - 1) - nc + 1))
+    return [xs[k] for k in keep_c] + [xs[-1]], [ys[k] for k in keep_r] + [ys[-1]], sorted(out)
+
+
 def find_tables(gray) -> tuple[list[Table], object]:
     """회색조 그림 → 표들과 '선 픽셀' 표시(OCR 전에 지움)."""
     import numpy as np
@@ -154,19 +170,22 @@ def find_tables(gray) -> tuple[list[Table], object]:
                     par[f(cid[r][c])] = f(cid[r][c + 1])
                 if r + 1 < R and not has_h(ys[r + 1], xs[c], xs[c + 1]):
                     par[f(cid[r][c])] = f(cid[r + 1][c])
-        boxes: dict[int, list[int]] = {}
+        members: dict[int, list[tuple[int, int]]] = {}
         for r in range(R):
             for c in range(C):
-                b = boxes.setdefault(f(cid[r][c]), [r, c, r, c])
-                b[0], b[1], b[2], b[3] = min(b[0], r), min(b[1], c), max(b[2], r), max(b[3], c)
-        cells, covered = [], set()
-        for r0, c0, r1, c1 in sorted(boxes.values()):
-            if (r0, c0) in covered:
-                continue
-            for r in range(r0, r1 + 1):
-                for c in range(c0, c1 + 1):
-                    covered.add((r, c))
-            cells.append((r0, c0, r1 - r0 + 1, c1 - c0 + 1))
+                members.setdefault(f(cid[r][c]), []).append((r, c))
+        cells = []
+        for got in members.values():
+            r0, r1 = min(r for r, _ in got), max(r for r, _ in got)
+            c0, c1 = min(c for _, c in got), max(c for _, c in got)
+            if len(got) == (r1 - r0 + 1) * (c1 - c0 + 1):
+                cells.append((r0, c0, r1 - r0 + 1, c1 - c0 + 1))
+            else:
+                # 합친 칸이 'ㄱ'자처럼 직사각형이 아니면(선이 일부만 끊겨 보임) 한 칸씩 — 한글 표는 칸이 격자를 빈틈·겹침 없이
+                # 덮어야 열림(11/05 서식 7 '파일을 읽거나 저장하는데 오류' — 빈 격자 칸이 있었음)
+                cells += [(r, c, 1, 1) for r, c in got]
+        cells.sort()
+        xs, ys, cells = _compact(list(xs), list(ys), cells)
         t = Table(xs, ys, cells)
         for r, c, rs, cs in cells:  # 회색 바탕(이름표 칸) — 칸 안쪽 가운데의 밝기
             x0, x1, y0, y1 = xs[c] + 6, xs[c + cs] - 6, ys[r] + 6, ys[r + rs] - 6

@@ -34,6 +34,7 @@ class ExpiryTest(unittest.TestCase):
         self.assertIsNone(expiry_of({"종류": "법인등기사항전부증명서", "발급일": "2026-03-12", "유효기간": "2026-06-12"}))
         self.assertEqual(expiry_of({"종류": "재무제표", "발급일": "2025-03-31", "유효기간": ""}), date(2026, 3, 31))
         self.assertIsNone(expiry_of({"종류": "사업자등록증", "발급일": "2025-08-18", "유효기간": ""}))
+        self.assertIsNone(expiry_of({"종류": "경쟁입찰참가자격등록증", "발급일": "2026-03-18", "유효기간": "2026-06-19"}))
 
     def test_alert_only_within_seven_days(self):
         def left(end, kind="무엇"):

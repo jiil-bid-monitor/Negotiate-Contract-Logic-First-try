@@ -43,6 +43,8 @@ PER_NOTICE = {
     "사업자등록증명": ("사업자등록증명",),
 }
 YEARLY = {"재무제표"}  # 해마다 새로 만듦 — 발급 1년 뒤를 유효기간으로 봄
+# 서류에 날짜가 있어도 서류 유효기간이 아님 — 등록증의 날짜는 공장 임대기간 종료일로 보임(11/05 사용자)
+NO_EXPIRY = {"경쟁입찰참가자격등록증"}
 ALERT_DAYS = 7
 # 같은 종류가 여럿일 수 있어 옮기지 않음 — 사업마다 있는 실적증명서, 품목이 이름에 없는 직접생산확인증명서
 NO_MOVE = {"실적증명서", "직접생산확인증명서"}
@@ -75,7 +77,7 @@ def add_months(day: date, months: int) -> date:
 
 def expiry_of(record: dict) -> date | None:
     """유효기간 끝 — 공고 때 발급하는 서류는 None. 그 밖엔 서류에 적힌 날짜 > 1년 규칙, 없으면 None(기간 없음)."""
-    if record["종류"] in PER_NOTICE:
+    if record["종류"] in PER_NOTICE or record["종류"] in NO_EXPIRY:
         return None
     if record.get("유효기간"):
         return date.fromisoformat(record["유효기간"])
@@ -233,7 +235,7 @@ def run(folder: Path, today: date | None = None, notify: Callable[[str], object]
                   "대표자": "", "원본 위치": LATEST}
         updated[path.name] = record
         added.append(f"{doc.kind} ({doc.issued})")
-        if before.get("유효기간") and not doc.expires and doc.kind not in PER_NOTICE:
+        if before.get("유효기간") and not doc.expires and doc.kind not in PER_NOTICE and doc.kind not in NO_EXPIRY:
             issues.append(f"{doc.kind}: 서류에 유효기간이 있는 종류 — 이름 끝에 _유효YYYY-MM-DD를 붙여 주세요")
     changed = list(updated) != list(records) or bool(moved)
     rows = sorted(updated.values(), key=lambda r: r["종류"])

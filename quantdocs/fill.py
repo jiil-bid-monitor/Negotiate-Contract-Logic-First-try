@@ -133,6 +133,7 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("E-mail", "이메일", "전자우편"), "이메일"),
     (("회사설립", "설립년", "설립연", "설립일", "개업"), "설립일"),
     (("자본금",), "자본금"),
+    (("총직원수", "총종업원수", "종업원수", "직원수", "상시근로자수"), "종업원 수"),  # '총직원수 | 명'(11/05 사용자 요청)
     (("사업분야", "업태"), "사업분야"),
     (("면허/허가/등록증", "면허보유", "등록증보유"), "_licenses"),
     (("입찰명", "입찰건명", "공고명"), "_title"),  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
@@ -235,6 +236,9 @@ def _value(key: str, vault) -> str:
                   and not re.search(r"휴대|담당|팩스|FAX" if key == "전화번호" else r"휴대|담당", k.upper())), "")
     if key == "설립일" and v:
         return _fmt_date(v)
+    if key == "종업원 수" and v:  # '18'·'18명'·'18 명' → '18명'
+        n = re.search(r"\d[\d,]*", v)
+        return f"{n.group(0)}명" if n else v
     if key == "자본금" and v and re.fullmatch(r"[\d,]+", v):
         return f"{int(v.replace(',', '')):,}원"
     return v

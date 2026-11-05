@@ -1177,12 +1177,15 @@ def test_hangul_history_table_date_line_then_content(tmp_path: Path, monkeypatch
     from quantdocs.importer import read_history, read_overview
 
     text = "\n".join(["(가상)회사 일반현황 및 연혁", "1. 일반현황", "회 사 명", "(가상)회사", "대표자명", "(가상)대표",
-                      "팩스번호", "000-000-0000", "2. 회사연혁", "연 월 일", "내         용", "비  고",
+                      "팩스번호", "000-000-0000", "총종업원수", "7명", "2. 회사연혁", "연 월 일", "내         용", "비  고",
                       "2009.09", "(가상) 법인설립", "2020.06", "(가상) 플랫폼", "(가상) 과제 선정", "2024.12", "(가상) 인증"])
     got = read_history(text)
     assert [(h["연월일"], h["내용"]) for h in got] == [("2009.09", "(가상) 법인설립"), ("2020.06", "(가상) 플랫폼 (가상) 과제 선정"),
                                                      ("2024.12", "(가상) 인증")]
-    assert read_overview(text) == {"회사명": "(가상)회사", "대표자": "(가상)대표", "팩스번호": "000-000-0000"}
+    assert read_overview(text) == {"회사명": "(가상)회사", "대표자": "(가상)대표", "팩스번호": "000-000-0000", "종업원 수": "7명"}
+    from quantdocs.fill import _label_key, _value
+    assert _label_key("총직원수") == "종업원 수" and _label_key("총 종업원 수") == "종업원 수"
+    assert _value("종업원 수", vault.Vault({}, info={"종업원 수": "7"})) == "7명"
     # 예전 모양('2005.03 법인 설립' 한 줄)도 그대로
     assert read_history("2005.03 (가상) 법인 설립")[0]["내용"] == "(가상) 법인 설립"
 

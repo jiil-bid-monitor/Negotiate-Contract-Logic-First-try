@@ -48,6 +48,17 @@ class Analysis:
     staff: list[dict] = field(default_factory=list)  # 기술인력 고르기(화면) — staff_status
     staff_rule: str = ""  # 이 공고 기술인력 배점 기준 한 줄(등급별 점수·재직 조건)
     staff_on: bool = False  # 제안요청서에 기술인력 배점 기준(등급별 점수)이 있는 공고 — 화면 칸은 이때만 보임(11/05)
+    hwp_needed: bool = False  # 서식이 PDF에만 있음 — 통합서식을 못 만들어 '한글 파일 필요' 표시(11/05 사용자 결정)
+
+
+HWP_NEEDED_NOTE = ("⚠ 한글 파일 필요 — 이 공고는 서식이 PDF에만 있어 통합서식(한글)을 만들지 않았습니다. "
+                   "나라장터·발주기관에서 한글(HWP/HWPX) 서식을 받아 직접 작성하세요")
+
+
+def _hwp_needed(forms, converted: dict) -> bool:
+    """서식 목록은 있는데 서식이 든 첨부가 모두 한글(.hwp·.hwpx)이 아님(PDF 등)."""
+    return bool(forms) and not any(Path(converted.get(f.source, f.source)).suffix.lower() in (".hwp", ".hwpx")
+                                   or Path(f.source).suffix.lower() in (".hwp", ".hwpx") for f in forms)
 
 
 def _is_hwpx(p: Path) -> bool:
@@ -175,6 +186,7 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
         notes.append(f"{guide(kind)['name']} 공고 — 첨부에서 서식 목록을 찾지 못함. 서식은 {guide(kind)['source']}")
     picks, pick_missing = pick(list(vault.files), [it.text for it in sheet.submit_items], quals, with_history=bool(vault.history))
     a = Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
+    a.hwp_needed = _hwp_needed(sheet.forms, converted)
     crits = read_criteria(_rfp_first(files, converted))
     # 보유기술(특허)을 평가하는 공고면 특허증 원본을 통합본 끝에(11/05 사용자 결정 (가))
     if any(c.kind == "patent" for c in crits):
@@ -229,6 +241,7 @@ def summary(a: Analysis) -> dict:
         "staff": [{"name": p["이름"], "grade": p["등급"], "joined": p["입사일"], "ok": p["counted"], "why": p["why"]} for p in a.staff],
         "staff_rule": a.staff_rule,
         "staff_on": a.staff_on,
+        "hwp_needed": a.hwp_needed,
     }
 
 
@@ -291,18 +304,9 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         merged_forms: list[Path] = []  # 공고 문서마다 서식 전체를 이은 한글 파일
         merge_failed = False  # 잇지 못한 문서가 있으면 서식별 파일도 묶음에 넣음
         cut_names = {str(f.no): f.name for f in a.sheet.forms}
-        # 서식이 PDF에만 있으면(한글 첨부에 서식 없음) 서식 쪽을 OCR로 한글 서식으로 다시 만들어 같은 길로(11/05 사용자 결정 (다) — 첨삭할 수 있게)
-        hangul_forms = any(Path(a.converted.get(f.source, f.source)).suffix.lower() == ".hwpx" for f in a.sheet.forms)
-        if a.sheet.forms and not hangul_forms:
-            from .pdfforms import rebuild
-            for f in files:
-                if f.suffix.lower() != ".pdf" or not any(x.source == f.name for x in a.sheet.forms):
-                    continue
-                hx, why, titles = rebuild(f, work / "pdf_forms" / (f.stem + ".hwpx"), names=cut_names)
-                a.notes += why
-                if hx:
-                    a.converted[f.name] = str(hx)
-                    cut_names.update({k: v for k, v in titles.items() if k not in cut_names})
+        # 서식이 PDF에만 있으면 통합서식을 만들지 않고 '한글 파일 필요'만 알림(11/05 사용자 결정 — OCR로 한글 서식 다시 만들기(pdfforms)는 쓰지 않음)
+        if a.hwp_needed:
+            a.notes.append(HWP_NEEDED_NOTE)
         agency_no = agency_notice_no(a.sheet.texts)  # 공고문의 기관 공고번호 — 서식 공고번호 칸에(11/04 사용자 요청)
         # 정량평가 자기평점 — 제안요청서 본문 배점기준(11/05 사용자 요청). 제안요청서를 먼저 봄
         criteria = read_criteria(_rfp_first(files, a.converted))

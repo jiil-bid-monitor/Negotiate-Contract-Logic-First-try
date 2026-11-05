@@ -1524,8 +1524,9 @@ def test_pdf_form_rebuild_writes_cuttable_hwpx(tmp_path: Path, monkeypatch):
 
 
 def test_hidden_form_head_read_from_page_top(monkeypatch):
-    """'[서식 7]' 머리가 PDF 글 정보에 없는 쪽 — 쪽 위만 OCR해 머리 줄을 붙임(11/05 창업진흥원 입찰보증금지급각서)."""
+    """'[서식 7]' 머리가 PDF 글 정보에 없는 쪽 — 쪽 위만 OCR해 머리 줄을 붙임(11/05 창업진흥원 입찰보증금지급각서, OCR을 켰을 때)."""
     from quantdocs import importer, notice
+    monkeypatch.setattr(notice, "NOTICE_OCR", True)
 
     pages = ["- 34 -\n서식 서식 [ 1]  제안서 표지제안서 표지\n제 안 서", "- 45 -\n제 14 조 운영위원회", "- 46 -\n입 찰 보 증 금 지 급 각 서\n1. 입찰건명 :"]
     seen = []
@@ -1601,6 +1602,7 @@ def test_institution_name_line_in_pledge_is_bidder(tmp_path):
 def test_hidden_form_head_title_when_ocr_spaces_letters(monkeypatch):
     """서버 OCR이 '[서식 7]' 뒤 제목을 '입 찰 보 증 …'처럼 띄어 읽거나 못 읽어도 목록에 이름이 들어감(11/05 서버 화면)."""
     from quantdocs import importer, notice
+    monkeypatch.setattr(notice, "NOTICE_OCR", True)
 
     pages = ["- 28 -\n목차 서식 서식 [ 1]", "- 42 -\n서식 공동수급표준협정서서식 공동수급표준협정서[ 6] ( )\nㆍ",
              "- 46 -\n                 입 찰 보 증 금 지 급 각 서입 찰 보 증 금 지 급 각 서  \n  입찰건명 입찰건명 1. :"]
@@ -1663,3 +1665,17 @@ def test_pdf_form_table_cells_cover_grid_once():
     assert {r for r, _, _, _ in t.cells} == set(range(R))
     assert pdfforms._compact([0, 10, 20], [0, 5, 10, 15], [(0, 0, 3, 1), (0, 1, 1, 1), (1, 1, 2, 1)]) == \
         ([0, 10, 20], [0, 5, 15], [(0, 0, 2, 1), (0, 1, 1, 1), (1, 1, 1, 1)])
+
+
+def test_pdf_only_forms_need_hangul_file(tmp_path):
+    """서식이 PDF에만 있는 공고는 '한글 파일 필요'만 표시 — OCR로 한글 서식을 다시 만들지 않음(11/05 사용자 결정)."""
+    from types import SimpleNamespace
+    from quantdocs import build
+
+    f = lambda src: SimpleNamespace(source=src)
+    assert build._hwp_needed([f("제안요청서.pdf")], {}) is True
+    assert build._hwp_needed([f("제안요청서.hwp")], {"제안요청서.hwp": "w/제안요청서.hwpx"}) is False
+    assert build._hwp_needed([f("제안요청서.hwp")], {}) is False  # 한글 파일은 있음(변환 실패는 따로 알림)
+    assert build._hwp_needed([f("공고문.pdf"), f("서식.hwpx")], {}) is False
+    assert build._hwp_needed([], {}) is False
+    assert "from .pdfforms import" not in open(build.__file__, encoding="utf-8").read()

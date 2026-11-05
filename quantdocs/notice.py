@@ -625,7 +625,7 @@ def doc_text(path: Path) -> str:
             bare = [ln for ln in lines if not re.search(r"[가-힣A-Za-z]{2}", ln)]
             return len(bare) >= 5 and len(bare) >= 0.4 * len(lines)
         broken = [i for i, t in enumerate(pages) if is_broken(t)]
-        if pages and len(broken) >= 3 and len(broken) >= 0.2 * len(pages):
+        if NOTICE_OCR and pages and len(broken) >= 3 and len(broken) >= 0.2 * len(pages):
             from .importer import ocr_pages
 
             got = ocr_pages(data, broken[:OCR_MAX_PAGES])
@@ -711,11 +711,9 @@ def _add_hidden_heads(data: bytes, pages: list[str], text: str, name: str) -> st
     todo = [i for i in range(first + 1, len(pages)) if not re.search(r"서\s*식", pages[i][:200])][:HEAD_SCAN_MAX]
     if not todo:
         return text
-    from .importer import ocr_page_tops  # noqa: F401 — 시험에서 바꿔 끼움
     from . import importer as _imp
-    ocr_page_tops = _imp.ocr_page_tops
 
-    got = ocr_page_tops(data, todo) or {}
+    got = (_imp.ocr_page_tops(data, todo) or {}) if NOTICE_OCR else {}  # OCR을 끄면 쪽 첫 줄 제목으로만 짐작
     last = None  # 앞 서식 번호(머리 없는 쪽의 번호 짐작용)
     for i in range(first, len(pages)):
         hm = re.search(r"\[\s*(\d{1,2})(?:\s*-\s*\d{1,2})?\s*\]", pages[i][:200]) if re.search(r"서\s*식", pages[i][:200]) else None
@@ -749,7 +747,10 @@ def _add_hidden_heads(data: bytes, pages: list[str], text: str, name: str) -> st
     return text
 
 
-OCR_USED: list[str] = []  # 이번 읽기에서 OCR을 쓴 알림(화면·읽어보기에)
+OCR_USED: list[str] = []
+# 공고문 PDF OCR(글이 빠진 쪽 다시 읽기·서식 머리 찾기) — 11/05 사용자 결정으로 끔: PDF만 있는 공고는 '한글 파일 필요'만 표시.
+# 회사 서류(등록증·신용평가 확인서 스캔본) OCR은 그대로(importer).
+NOTICE_OCR = False  # 이번 읽기에서 OCR을 쓴 알림(화면·읽어보기에)
 
 
 def read_notice(paths: list[Path], catalog: list[Document] | None = None) -> NoticeSheet:

@@ -286,7 +286,10 @@ def test_pdf_form_heads_name_before_number():
 
 def test_broken_pdf_pages_read_by_ocr(tmp_path, monkeypatch):
     """11/05 사용자 요청: 글꼴 문제로 본문 글이 빠진 PDF(제목만 남고 '「 」'·'◦'만 남은 쪽)는 그 쪽들만 OCR로 다시 읽음 —
-    제목 줄은 살리고('2 입찰 참가자격' 겹친 글은 한 번, 번호 뒤 점), OCR의 'ㅇ'은 '○', ○ 아래 '가.·나.'는 하위 목으로."""
+    제목 줄은 살리고('2 입찰 참가자격' 겹친 글은 한 번, 번호 뒤 점), OCR의 'ㅇ'은 '○', ○ 아래 '가.·나.'는 하위 목으로.
+    (11/05 사용자 결정으로 공고문 OCR은 기본 꺼짐 — 켜면 이렇게 동작)"""
+    from quantdocs import notice as _n
+    monkeypatch.setattr(_n, "NOTICE_OCR", True)
     from reportlab.pdfgen import canvas
 
     from quantdocs import importer, notice

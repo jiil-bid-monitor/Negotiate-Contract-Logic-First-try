@@ -85,9 +85,9 @@ def expiry_of(record: dict) -> date | None:
 
 
 def days_left_to_alert(record: dict, today: date) -> int | None:
-    """만료까지 ALERT_DAYS일 안이면(이미 지났으면 음수) 남은 날, 아니면 None."""
+    """만료까지 ALERT_DAYS일 안이면 남은 날, 아니면 None. 이미 지난 서류는 알리지 않는다(사용자 결정 — 서류목록 상태에만)."""
     end = expiry_of(record)
-    if end is None or (end - today).days > ALERT_DAYS:
+    if end is None or not 0 <= (end - today).days <= ALERT_DAYS:
         return None
     return (end - today).days
 
@@ -254,8 +254,7 @@ def run(folder: Path, today: date | None = None, notify: Callable[[str], object]
         if left is None or record["파일"] in sent:
             continue
         sent.add(record["파일"])
-        label = f"{-left}일 지남" if left < 0 else f"{left}일 남음"
-        due.append(f"{record['종류']}: {expiry_of(record)} ({label})")
+        due.append(f"{record['종류']}: {expiry_of(record)} ({left}일 남음)")
     new_issues = [i for i in issues if f"확인|{i}" not in sent]
     sent.update(f"확인|{i}" for i in new_issues)
     state["sent"] = sorted(sent)

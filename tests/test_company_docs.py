@@ -42,8 +42,9 @@ class ExpiryTest(unittest.TestCase):
         self.assertEqual(left("2026-11-11"), 6)
         self.assertEqual(left("2026-11-12"), 7)
         self.assertIsNone(left("2026-11-13"))
-        self.assertEqual(left("2026-11-01"), -4)
-        self.assertIsNone(left("2026-11-01", kind="국세 납세증명서"))
+        self.assertEqual(left("2026-11-05"), 0)
+        self.assertIsNone(left("2026-11-01"))  # 이미 지난 서류는 알리지 않음
+        self.assertIsNone(left("2026-11-11", kind="국세 납세증명서"))
 
 
 class IssueLinesTest(unittest.TestCase):

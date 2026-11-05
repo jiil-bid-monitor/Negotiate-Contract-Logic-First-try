@@ -1325,7 +1325,8 @@ def test_patent_folder_counts_and_bundle(tmp_path: Path):
     (tmp_path / "기타폴더" / "무관.pdf").write_bytes(_blank_pdf())
     v = vault.Vault({}, patents=[])
     vault.add_loose(v, tmp_path)
-    assert len(v.patents) == 3 and v.patent_src == "파일" and not any("무관" in k for k in v.files)
+    # 하위 폴더도 모두 읽지만(11/05 '정량서류'·'회사자료' 폴더) 특허 건수는 경로에 '특허'가 든 파일만
+    assert len(v.patents) == 3 and v.patent_src == "파일" and "files/기타폴더/무관.pdf" in v.files
     assert "patent" in AUTO_KINDS
     crit = [c for c in read_criteria([_score_doc(tmp_path)]) if c.kind == "patent"]
     got = score(crit, v, dt.date(2026, 11, 3))[0]
@@ -1355,3 +1356,27 @@ def test_bundle_includes_history_and_all_base_docs(tmp_path: Path):
     files["files/회사연혁.pdf"] = _blank_pdf()
     picks, _ = pick(list(files), [], [], with_history=True)
     assert ("회사 연혁", "files/회사연혁.pdf") in [(p.section, p.path) for p in picks]
+
+
+def test_credit_rating_pdf_feeds_score_and_bundle(tmp_path: Path, monkeypatch):
+    """11/05 사용자: 기업신용평가확인서 PDF를 폴더('정량서류' 등 하위 폴더)에 둠 — 등급·종류·평가일을 읽어 자기평점 경영상태에 쓰고, 통합본에도."""
+    from quantdocs import importer
+    from quantdocs.bundle import pick
+    from quantdocs.importer import read_credit
+
+    text = "기업신용평가등급 확인서\n업체명 (가상)회사\n신용등급 : BB+\n평가일자 : 2026. 06. 15\n유효기간 : 2026.06.15 ~ 2027.06.30"
+    assert read_credit(text) == {"신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급", "신용평가 평가일": "2026-06-15",
+                                 "신용평가 유효기간": "2027-06-30"}
+    assert read_credit("기업어음 신용평가\n평가등급\nA3+") ["신용평가 종류"] == "기업어음"
+    assert read_credit("신용평가 안내문") == {}
+    (tmp_path / "정량서류").mkdir()
+    (tmp_path / "정량서류" / "기업신용평가확인서.pdf").write_bytes(_blank_pdf())
+    v = vault.Vault({}, info={"신용평가등급": "B0"})
+    vault.add_loose(v, tmp_path)
+    assert "files/정량서류/기업신용평가확인서.pdf" in v.files
+    monkeypatch.setattr(vault, "ENV_FILE", tmp_path / "none.env")
+    monkeypatch.setattr(importer, "_cached_text", lambda path, data: text if "신용" in path else "")
+    notes = importer.enrich_vault(v)
+    assert v.info["신용평가등급"] == "BB+" and any("BB+" in n for n in notes)  # 확인서 값이 시트보다 먼저
+    picks, _ = pick(list(v.files), [], [])
+    assert [p.path for p in picks] == ["files/정량서류/기업신용평가확인서.pdf"]

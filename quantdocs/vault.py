@@ -249,42 +249,57 @@ def read_staff_xlsx(data: bytes) -> list[dict] | None:
     return None
 
 
+# jiil-quant-docs 폴더 안에서 안 보는 하위 폴더(프로그램·저장소 폴더)
+_SKIP_DIRS = {"config", "data", "docs", "quantdocs", "tests", "tools", "vault", "node_modules", "__pycache__", "venv", ".venv"}
+LOOSE_EXTS = (".pdf", ".hwp", ".hwpx", ".jpg", ".jpeg", ".png")
+
+
+def _loose_files(folder: Path, depth: int = 4) -> list[Path]:
+    """폴더와 하위 폴더(11/05 사용자: '정량서류'·'회사자료' 폴더에 모든 자료)의 파일 — 프로그램 폴더·숨김 폴더는 빼고, 4단계까지."""
+    out: list[Path] = []
+    try:
+        items = sorted(folder.iterdir())
+    except OSError:
+        return out
+    for x in items:
+        if x.name.startswith((".", "~$")):
+            continue
+        if x.is_dir():
+            if depth > 0 and x.name not in _SKIP_DIRS:
+                out += _loose_files(x, depth - 1)
+        elif x.is_file():
+            out.append(x)
+    return out
+
+
 def add_loose(v: Vault, folder: Path | None = None) -> None:
-    """그 폴더의 PDF를 묶음 files/에 있는 것처럼 메모리에 더함(같은 이름이 묶음에 있으면 묶음 것을 씀) — 서식 채우기·통합본 모두 씀."""
+    """그 폴더(와 하위 폴더)의 PDF·한글·그림을 묶음 files/에 있는 것처럼 메모리에 더함(같은 이름이 묶음에 있으면 묶음 것을 씀),
+    기술인력 엑셀은 인력목록으로 — 서식 채우기·통합본·자기평점 모두 씀."""
     folder = folder or loose_dir()
     if folder is None:
         return
+    found = _loose_files(folder)
     have = {k.rsplit("/", 1)[-1] for k in v.files}
-    for p in sorted(x for x in folder.iterdir() if x.suffix.lower() in (".pdf", ".hwp", ".hwpx")):  # 한글 연혁도(11/05)
-        if p.name in have or not p.is_file():
+    for p in found:
+        if p.suffix.lower() not in LOOSE_EXTS or p.name in have:
             continue
+        rel = p.relative_to(folder).as_posix()
         try:
-            v.files[f"files/{p.name}"] = p.read_bytes()
+            v.files[f"files/{rel}"] = p.read_bytes()
         except OSError:
             continue
-        v.loose.append(p.name)
+        v.loose.append(rel)
         have.add(p.name)
     # 기술인력 엑셀 — 폴더에 두면 묶음을 다시 잠그지 않아도 이것을 씀(11/05 사용자 요청), 여럿이면 가장 최근에 고친 파일
-    for p in sorted((x for x in folder.iterdir() if x.suffix.lower() == ".xlsx" and not x.name.startswith("~$")),
-                    key=lambda x: x.stat().st_mtime, reverse=True):
+    xlsx = [p for p in found if p.suffix.lower() == ".xlsx"]
+    for p in sorted(xlsx, key=lambda x: x.stat().st_mtime, reverse=True):
         try:
             staff = read_staff_xlsx(p.read_bytes())
         except OSError:
             continue
         if staff:
-            v.staff, v.staff_src = staff, p.name
+            v.staff, v.staff_src = staff, p.relative_to(folder).as_posix()
             break
-    # 특허증 — 폴더 안 '특허…' 하위 폴더의 PDF·그림(11/05 사용자: 특허증.zip을 '특허증' 폴더로 풀어 둠)
-    for sub in sorted(x for x in folder.iterdir() if x.is_dir() and "특허" in x.name):
-        for p in sorted(x for x in sub.iterdir() if x.is_file() and x.suffix.lower() in PATENT_EXTS):
-            key = f"files/{sub.name}/{p.name}"
-            if key in v.files:
-                continue
-            try:
-                v.files[key] = p.read_bytes()
-            except OSError:
-                continue
-            v.loose.append(f"{sub.name}/{p.name}")
     derive_patents(v)
 
 

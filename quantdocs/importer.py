@@ -332,6 +332,32 @@ def read_history(text: str) -> list[dict]:
     return out
 
 
+# ── 신용평가등급 확인서(11/05 사용자: 기업신용평가확인서 PDF를 폴더에 둠 — 점수와 통합본 둘 다) ──
+_GRADE = r"(AAA|AA[+0\-]?|A[+0\-]?|BBB[+0\-]?|BB[+0\-]?|B[+0\-]?|CCC[+0\-]?|CC|C|D|A1|A2[+0\-]?|A3[+0\-]?)(?![A-Za-z0-9])"
+_DATE = r"((?:19|20)\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})"
+
+
+def read_credit(text: str) -> dict[str, str]:
+    """확인서 글 → {신용평가등급, 신용평가 종류, 신용평가 평가일, 신용평가 유효기간}. 못 찾은 것은 빼고."""
+    t = re.sub(r"[ \t]+", " ", text or "").replace("Ｏ", "0").replace("ｏ", "0")
+    out: dict[str, str] = {}
+    m = re.search(r"(?:신용\s*등급|평가\s*등급|등\s*급)\s*[:：]?\s*(?:\n\s*)?" + _GRADE, t)
+    if m:
+        g = m.group(1).replace("O", "0")
+        out["신용평가등급"] = g
+    head = re.sub(r"\s+", "", t[:600])
+    out["신용평가 종류"] = "기업어음" if "기업어음" in head else "회사채" if "회사채" in head else "기업신용평가등급"
+    d = re.search(r"평가\s*(?:일자|일|기준일|완료일)\s*[:：]?\s*" + _DATE, t) or re.search(r"(?:발급|확인)\s*일\s*[:：]?\s*" + _DATE, t)
+    if d:
+        out["신용평가 평가일"] = f"{d.group(1)}-{int(d.group(2)):02d}-{int(d.group(3)):02d}"
+    v = re.search(r"유효\s*기간[^\n]{0,40}?[~∼～\-]\s*" + _DATE, t)
+    if v:
+        out["신용평가 유효기간"] = f"{v.group(1)}-{int(v.group(2)):02d}-{int(v.group(3)):02d}"
+    if "신용평가등급" not in out:
+        return {}
+    return out
+
+
 # 회사 '일반현황' 표(한글 연혁 문서 앞쪽) — 이름표 한 줄, 값 다음 줄. 회사정보 시트가 비었을 때만 씀
 _OVERVIEW = {"회사명": "회사명", "상호": "회사명", "대표자명": "대표자", "대표자": "대표자", "주소": "주소",
              "전화번호": "전화번호", "팩스번호": "팩스번호", "사업자번호": "사업자등록번호", "사업자등록번호": "사업자등록번호",
@@ -462,6 +488,8 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     found_info: dict[str, tuple[str, str]] = {}  # 항목 → (값, 파일)
     hist: list[dict] = []
     hist_src = ""
+    credit: dict[str, str] = {}
+    credit_src = ""
     scanned, ocr, skipped_scans, regs = [], [], [], []
     for path, data in sorted(vault.files.items()):
         name = path.rsplit("/", 1)[-1]
@@ -470,7 +498,7 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
             continue
         sq = re.sub(r"\s+", "", name)
         by_name = [k for k, words in (("연혁", ("연혁",)), ("등록증", ("참가자격", "입찰참가")), ("사업자", ("사업자등록",)),
-                                      ("인감", ("인감증명", "등기")))
+                                      ("인감", ("인감증명", "등기")), ("신용", ("신용평가", "신용등급")))
                    if any(w in sq for w in words)]
         text = _cached_text(path, data)
         how = "글"
@@ -501,6 +529,8 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
             kinds.add("인감")
         if re.search(r"(회사|사업|주요)?연혁", head):
             kinds.add("연혁")
+        if re.search(r"신용(?:평가|등급)", head):
+            kinds.add("신용")
         if report is not None:
             report.append((name, how, "·".join(sorted(kinds))))
         if not kinds:
@@ -513,6 +543,8 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
                 found_info.setdefault("대표자 주민등록번호", (rrn, name))
         if kinds == {"인감"}:
             continue
+        if "신용" in kinds and not credit:  # 확인서 값이 회사정보 시트보다 먼저(해마다 6월 갱신되는 서류라)
+            credit, credit_src = read_credit(text), name
         if "연혁" in kinds and not hist:
             hist, hist_src = read_history(text), name
         if "연혁" in kinds and re.search(r"일반\s*현황", head):  # '일반현황 및 연혁' 문서 — 회사명·전화·팩스 등
@@ -531,6 +563,14 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
             filled.append(f"{k}({src})")
     if filled:
         notes.append("회사정보 빈 칸을 서류 PDF에서 읽어 채움: " + ", ".join(filled))
+    if credit:
+        for k, val in credit.items():
+            vault.info[k] = val
+        notes.append(f"신용평가등급 {credit['신용평가등급']}({credit['신용평가 종류']}"
+                     + (f", 평가일 {credit['신용평가 평가일']}" if credit.get("신용평가 평가일") else "") + f")을 '{credit_src}'에서 읽음 — 자기평점 경영상태에 씀")
+        end = credit.get("신용평가 유효기간")
+        if end and end < f"{date.today():%Y-%m-%d}":
+            notes.append(f"⚠ 신용평가등급 확인서 유효기간({end})이 지났음 — 새 확인서로 바꾸세요")
     if hist and len(hist) > len(vault.history):  # 시트 연혁(보통 법인 설립 한 줄)보다 많으면 PDF 연혁을 씀
         vault.history = hist
         notes.append(f"연혁 {len(hist)}줄을 '{hist_src}'에서 읽어 넣음 — 줄 확인")

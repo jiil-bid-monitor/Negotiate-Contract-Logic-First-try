@@ -923,3 +923,82 @@ def test_merge_drops_blank_paragraphs_before_page_break():
     assert out.count("<hp:p ") == 6  # 서식 5·가운데 빈 문단·귀하·둘째 쪽·표 문단 + 맨 앞은 남김
     assert out.startswith(p("〈서식 5〉") + p() + p("장성군수 귀하") + p("둘째 쪽", "1"))
     assert out.endswith("<hp:tbl/></hp:run><hp:linesegarray><hp:lineseg vertpos=\"0\"/></hp:linesegarray></hp:p>")
+
+
+def _score_doc(tmp_path: Path) -> Path:
+    """필암서원 제안요청서 〈별표1〉 주1) 정량적평가 모양을 줄인 가짜 문서(표 구조·글은 원문과 같은 꼴)."""
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    track = _tbl([[_c(0, 0, "평 가 요 소", 7), _c(7, 0, "배점")],
+                  [_c(0, 1, "사업 수행 실적"), _c(1, 1, "누 계 실 적"), _c(2, 1, "누계실적 (최근 5년간 기준/부가세 포함)", 5), _c(7, 1, "6")],
+                  [_c(2, 2, "5.5억 이상"), _c(3, 2, "4억 이상 ~ 5.5억 미만"), _c(4, 2, "2.5억 이상 ~ 4억 미만"),
+                   _c(5, 2, "1억 이상 ~ 2.5억 미만"), _c(6, 2, "1억 미만")],
+                  [_c(2, 3, "6.0"), _c(3, 3, "5.0"), _c(4, 3, "4.0"), _c(5, 3, "3.0"), _c(6, 3, "2.0")]])
+    staff = _tbl([[_c(0, 0, "기술 능력"), _c(1, 0, "특급기술자"), _c(2, 0, "고급기술자"), _c(3, 0, "중급기술자"), _c(4, 0, "초급기술자")],
+                  [_c(1, 1, "1점"), _c(2, 1, "0.5점"), _c(3, 1, "0.3점"), _c(4, 1, "0.2점")]])
+    patent = _tbl([[_c(0, 0, "배점 기준"), _c(1, 0, "2건 이상"), _c(2, 0, "2.0")], [_c(1, 1, "1건 이상 ~ 2건 미만"), _c(2, 1, "1.0")],
+                   [_c(1, 2, "0건"), _c(2, 2, "0")]])
+    credit = _tbl([[_c(0, 0, "평가 요소"), _c(1, 0, "신용평가등급", 2), _c(3, 0, "배점")],
+                   [_c(1, 1, "회사채"), _c(2, 1, "기업신용평가등급")],
+                   [_c(0, 2, "경영 상태"), _c(1, 2, "A- 이상"), _c(2, 2, "A- 이상"), _c(3, 2, "4")],
+                   [_c(1, 3, "BBB+, BBB0, BBB-, BB+, BB0, BB-"), _c(2, 3, "BBB+, BBB0, BBB-, BB+, BB0, BB-"), _c(3, 3, "3.5")],
+                   [_c(1, 4, "CCC+ 이하"), _c(2, 4, "CCC+ 이하"), _c(3, 4, "2")]])
+    sanction = _tbl([[_c(0, 0, "신인도"), _c(1, 0, "부정당업자 제재처분"), _c(2, 0, "해당없음"), _c(3, 0, "해 당")],
+                     [_c(2, 1, "2"), _c(3, 1, "0")]])
+    body = (para("주1) 정량적평가 : 15점") + para("1) 사업수행실적 : 6점") + track
+            + para("※ 1. 누계실적이 본 사업 사업비(400백만원) 이상인 경우 만점으로 함")
+            + para("2. 미디어아트, 실감영상관·전시관 조성 등 단일계약 1건의 수주·준공 금액이 5천만원 이상(부가세포함)의 것을 유사 사업으로 인정함")
+            + para("3. 기성실적은 인정하지 않고, 별건으로 진행된 설계용역 실적은 인정하지 않음")
+            + para("2) 기술인력 보유상태 : 3점") + staff + para("※ 1. 공고일 기준 6개월 이상 해당업체에 근무하고 있는 기술자만 해당")
+            + para("3) 보유 전문기술 현황 : 2점") + patent + para("4) 경영상태 평가 : 4점") + credit
+            + para("5) 신인도 : 2점") + sanction + para("주2) 정성적평가 : 70점") + para("6) 사업의 이해 : 10점"))
+    return _mini_hwpx(tmp_path / "rfp.hwpx", body)
+
+
+def test_self_score_from_rfp_criteria(tmp_path: Path):
+    """11/05 사용자 요청: 자기평점은 제안요청서 본문 배점기준으로 계산 — 실적(최근 5년·준공·유사사업·단일 5천만 이상·설계용역 제외·
+    지분율)·기술인력(6개월 이상 재직, 한 사람은 가장 높은 등급 하나, 최고 배점)·특허 건수·신용등급·제재처분. 자료가 없으면 비움.
+    주석 '사업비 이상이면 만점'과 배점표가 다르면 배점표대로 + 알림(사용자 결정)."""
+    from quantdocs.selfscore import read_criteria, score
+
+    crit = read_criteria([_score_doc(tmp_path)])
+    assert [(c.kind, c.points) for c in crit] == [("track", 6), ("staff", 3), ("patent", 2), ("credit", 4), ("sanction", 2)]
+    v = vault.Vault({}, info={"신용평가등급": "BB+", "부정당업자 제재처분": "없음"},
+                    tracks=[{"사업명": "가상 실감영상관 조성", "준공일": dt.date(2024, 5, 1), "계약금액(원)": 300_000_000},
+                            {"사업명": "가상 미디어아트 전시 제작설치", "준공일": dt.date(2023, 3, 1), "계약금액(원)": 200_000_000, "지분율(%)": 60},
+                            {"사업명": "가상 홍보관 전시설계 용역", "준공일": dt.date(2025, 1, 1), "계약금액(원)": 90_000_000},
+                            {"사업명": "가상 체험관 소품", "준공일": dt.date(2024, 1, 1), "계약금액(원)": 30_000_000},
+                            {"사업명": "가상 전시관 조성", "준공일": dt.date(2020, 1, 1), "계약금액(원)": 500_000_000},
+                            {"사업명": "가상 전시 진행 중", "준공일": dt.date(2027, 1, 1), "계약금액(원)": 500_000_000}],
+                    staff=[{"이름": "갑", "입사일": dt.date(2020, 1, 1), "등급": "특급"}, {"이름": "갑", "입사일": dt.date(2020, 1, 1), "등급": "중급"},
+                           {"이름": "을", "입사일": dt.date(2022, 1, 1), "등급": "고급기술자"}, {"이름": "병", "입사일": dt.date(2026, 9, 1), "등급": "고급"},
+                           {"이름": "정", "입사일": dt.date(2019, 1, 1), "재직": "퇴사", "등급": "특급"}],
+                    patents=[{"명칭": "가상 특허", "등록번호": "10-1"}])
+    got = {s.kind: s for s in score(crit, v, dt.date(2026, 11, 3))}
+    assert got["track"].score == 5.0  # 3억 + 2억×60% = 4.2억 → '4억 이상 ~ 5.5억 미만'
+    assert any("주석" in n and "만점" in n for n in got["track"].notes)  # 4억 이상이면 만점이라는 주석과 다름 — 알림
+    assert got["staff"].score == 1.5 and got["patent"].score == 1.0 and got["credit"].score == 3.5 and got["sanction"].score == 2
+    empty = {s.kind: s for s in score(crit, vault.Vault({}), dt.date(2026, 11, 3))}
+    assert all(s.score is None and any("자료 없음" in n for n in s.notes) for s in empty.values())
+
+
+def test_self_score_fills_form_by_rfp(tmp_path: Path):
+    """서식 24(자기평가 심사표) '자기평점' 칸 — 본문에 있는 항목만 채우고, 본문에 없는 '단일최대' 줄은 비움, 띄어 쓴 '신 인 도'도 맞춤, 계."""
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import read_criteria, score
+
+    crit = read_criteria([_score_doc(tmp_path)])
+    v = vault.Vault({}, info={"신용평가등급": "BB+", "부정당업자 제재처분": "없음"},
+                    tracks=[{"사업명": "가상 실감영상관 조성", "준공일": dt.date(2024, 5, 1), "계약금액(원)": 600_000_000}],
+                    staff=[{"이름": "갑", "입사일": dt.date(2020, 1, 1), "등급": "특급"}], patents=[])
+    sc = score(crit, v, dt.date(2026, 11, 3))
+    rows = [["구 분", "배 점", "자기평점", "심사평점"], ["계", "20", "", ""], ["최근 5년 수행실적(누계)", "4", "", ""],
+            ["최근5년 단일최대 수행실적", "2", "", ""], ["관련 기술인력 보유현황", "6", "", ""], ["전문기술(특허) 보유", "2", "", ""],
+            ["경영상태(신용평가등급)", "4", "", ""], ["신 인 도", "2", "", ""]]
+    src = _mini_hwpx(tmp_path / "f24.hwpx", _tbl([[_c(col, r, t) for col, t in enumerate(row)] for r, row in enumerate(rows)]))
+    rep = fill_hwpx(src, tmp_path / "o24.hwpx", vault.Vault({}), self_scores=sc)
+    out = zipfile.ZipFile(tmp_path / "o24.hwpx").read("Contents/section0.xml").decode()
+    from quantdocs.fill import _cells, _spans
+    got = {c.row: c.text for c in _cells(out, _spans(out, "tbl")[0]) if c.col == 2}
+    assert got == {0: "자기평점", 1: "12.5", 2: "6", 3: "", 4: "1", 5: "0", 6: "3.5", 7: "2"}
+    assert any("단일최대" in x and "비움" in x for x in rep.filled)

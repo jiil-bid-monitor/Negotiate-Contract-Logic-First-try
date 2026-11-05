@@ -958,8 +958,50 @@ def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:
     return None
 
 
+def _self_score_edits(cells: list[Cell], scores: list, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+    """자기평가 심사표('자기평점' 칸)에 제안요청서 본문 배점기준으로 계산한 점수(`selfscore.score`) — 11/05 사용자 요청.
+    서식 줄이 본문에 없는 항목(예: 본문은 누계로만 평가하는데 서식엔 '단일최대 실적')이면 비우고 알림."""
+    from .selfscore import fmt, match
+
+    head = next((c for c in cells if _sq(c.text) in ("자기평점", "자체평점", "자기평가점수")), None)
+    if head is None:
+        return []
+    out, used = [], []
+    rows: dict[int, list[Cell]] = {}
+    for c in cells:
+        rows.setdefault(c.row, []).append(c)
+    target_row = None
+    for r in sorted(rows):
+        if r <= head.row:
+            continue
+        cols = sorted(rows[r], key=lambda c: c.col)
+        mine = next((c for c in cols if c.col <= head.col < c.col + c.colspan), None)
+        if mine is None or not mine.blank:
+            continue
+        label = " ".join(c.text for c in cols if c.col < head.col and not re.fullmatch(r"\s*[\d.]+\s*", c.text))
+        if re.fullmatch(r"\s*(?:계|합\s*계|소\s*계|총\s*점)\s*", label):
+            target_row = mine
+            continue
+        hit = match(label, scores) if label.strip() else None
+        if hit is None:
+            if label.strip():
+                rep.filled.append(f"자기평점 '{_sq(label)[:16]}' — 제안요청서 본문 배점기준에 없는 줄이라 비움(본문 기준으로 계산)")
+            continue
+        if hit.score is None:
+            rep.filled.append(f"자기평점 '{_sq(label)[:16]}' 비움 — " + "; ".join(hit.notes[:2]))
+            continue
+        out.append((mine, [fmt(hit.score)], False))
+        used.append(hit)
+        rep.filled.append(f"자기평점 '{_sq(label)[:16]}' → {fmt(hit.score)}점 ({hit.basis})")
+    if target_row is not None and used and all(s.score is not None for s in scores):
+        total = sum(s.score for s in scores)
+        out.append((target_row, [fmt(total)], False))
+        rep.filled.append(f"자기평점 계 → {fmt(total)}점")
+    return out
+
+
 def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "",
-              notice_no: tuple[str, str] | None = None, g2b_no: str = "") -> FillReport:
+              notice_no: tuple[str, str] | None = None, g2b_no: str = "", self_scores: list | None = None) -> FillReport:
     """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸)."""
     rep = FillReport(Path(dst).name)
     # 묶음은 그대로 두고 이번 서식에만 공고 이름·공고번호를 더함(11/04 사용자 요청 — 공고마다 자동)
@@ -991,6 +1033,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
                 if tracks:
                     edits += _fill_tracks(xml, cells, tracks, rep)
+                if self_scores:
+                    edits += _self_score_edits(cells, self_scores, rep)
                 for c in cells:
                     key = _label_key(c.text)
                     core = re.sub(r"\(.*?\)|[^\w]", "", c.text)  # '〈 주요연혁(요약) 〉' → '주요연혁'

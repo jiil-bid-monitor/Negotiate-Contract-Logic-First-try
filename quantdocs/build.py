@@ -25,6 +25,7 @@ from pathlib import Path
 
 from .bundle import merge, pick
 from .catalog import load_catalog
+from .selfscore import fmt, read_criteria, score as score_items
 from .fill import FillReport, agency_notice_no, fill_hwpx
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
@@ -190,7 +191,7 @@ def summary(a: Analysis) -> dict:
 
 # 공고마다 사람이 정하는 값(담당 PM·투입 인력·조직·경력·자기평가 점수)을 적는 서식 — 회사 자료로 채우지 않고 제안요청서 양식 그대로 넣음
 # (11/03 사용자 요청: 통합본 받은 뒤 직접 기입). 이 서식의 '주소·전화' 같은 칸은 사람 것이라 회사 값을 넣으면 틀림.
-# 자기평가 심사표는 회사 정보 칸만 채움(점수 칸은 비워 둠 — 점수 계산은 하지 않음, 11/04 서식 24)
+# 자기평가 심사표는 회사 정보 칸 + 자기평점(제안요청서 본문 배점기준으로 계산 — 11/05 사용자 요청, `selfscore`)
 _MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참여자|조직|재직|자격\s*사항|실적\s*증명")
 
 
@@ -222,6 +223,11 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         merge_failed = False  # 잇지 못한 문서가 있으면 서식별 파일도 묶음에 넣음
         cut_names = {str(f.no): f.name for f in a.sheet.forms}
         agency_no = agency_notice_no(a.sheet.texts)  # 공고문의 기관 공고번호 — 서식 공고번호 칸에(11/04 사용자 요청)
+        # 정량평가 자기평점 — 제안요청서 본문 배점기준(11/05 사용자 요청). 제안요청서를 먼저 봄
+        hwpx = sorted((Path(a.converted.get(f.name, f)) for f in files if Path(a.converted.get(f.name, f)).suffix.lower() == ".hwpx"),
+                      key=lambda p: (0 if "제안요청" in p.name else 1 if "과업" in p.name else 2))
+        criteria = read_criteria(hwpx)
+        self_scores = score_items(criteria, vault, notice_date or date.today()) if criteria else []
         for f in files:
             src = Path(a.converted.get(f.name, f))
             if src.suffix.lower() != ".hwpx":
@@ -240,7 +246,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                     rows, why = form_tracks(c.title, vault.tracks, notice_date or date.today())
                     a.notes += [f"{c.file}: {w}" for w in why]
                 rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title,
-                                agency_no, notice_no)
+                                agency_no, notice_no, self_scores)
                 reports.append(rep)
                 parts.append((c, filled_dir / c.file))
             if parts:  # 서식 전체(채운 것 + 직접 기입)를 한글 파일 하나로 — 담당자가 이 파일 하나에서 기입(11/03 사용자 요청)
@@ -297,6 +303,12 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             table(wb.create_sheet("통합본 순서"), ["순서", "구분", "파일", "확인"],
                   [[i, p.section, Path(p.path).name, p.note] for i, p in enumerate(a.picks, 1)]
                   or [["", "파일 이름이 맞는 회사 서류가 없음", "", ""]], [6, 40, 40, 36])
+            table(wb.create_sheet("자기평가"), ["항목", "배점", "자기평점", "근거", "확인할 것"],
+                  [[s.name, fmt(s.points), fmt(s.score), s.basis, "\n".join(s.notes)] for s in self_scores]
+                  + ([["계", fmt(sum(s.points for s in self_scores)),
+                       fmt(sum(s.score for s in self_scores)) if all(s.score is not None for s in self_scores) else "",
+                       "제안요청서 본문 정량평가 배점기준으로 계산(서식과 다르면 본문 기준)", ""]] if self_scores else [])
+                  or [["", "", "", "제안요청서에서 정량평가 배점기준(정량적 평가 : N점)을 찾지 못함", ""]], [24, 8, 10, 60, 60])
             table(wb.create_sheet("자동입력"), ["서식 파일", "채운 칸 (확인 필요)", "넣은 실적", "줄 모자라 못 넣은 실적"],
                   f_rows or [["서식을 자르지 못함", "", "", ""]], [40, 60, 10, 14])
             g = guide(a.kind)

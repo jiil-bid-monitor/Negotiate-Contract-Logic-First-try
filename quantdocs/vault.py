@@ -132,6 +132,8 @@ class Vault:
     history: list[dict] = field(default_factory=list)  # 연혁
     docs: list[dict] = field(default_factory=list)  # 서류상태
     tracks: list[dict] = field(default_factory=list)  # 실적목록
+    staff: list[dict] = field(default_factory=list)  # 인력목록(자기평점 기술인력)
+    patents: list[dict] | None = None  # 특허목록(자기평점 보유기술) — 시트가 없으면 None(자료 없음)
     loose: list[str] = field(default_factory=list)  # 묶음 밖에서 더 읽은 PDF(파일 이름)
 
     def file(self, name: str | None) -> bytes | None:
@@ -193,7 +195,8 @@ def load(passphrase: str | None = None, path: Path | None = None) -> Vault:
     if "회사정보" in wb.sheetnames:
         v.info = {str(r.get("항목") or "").strip(): str(r.get("값")).strip()
                   for r in _rows(wb["회사정보"]) if r.get("항목") and r.get("값") not in (None, "")}
-    for sheet, attr in (("연혁", "history"), ("서류상태", "docs"), ("실적목록", "tracks")):
+    for sheet, attr in (("연혁", "history"), ("서류상태", "docs"), ("실적목록", "tracks"), ("인력목록", "staff"),
+                        ("특허목록", "patents")):
         if sheet in wb.sheetnames:
             setattr(v, attr, _rows(wb[sheet]))
     add_loose(v)

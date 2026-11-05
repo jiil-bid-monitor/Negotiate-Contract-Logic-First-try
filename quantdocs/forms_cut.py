@@ -286,6 +286,30 @@ def _drop_sections(hpf: str, drop: list[str]) -> str:
     return hpf
 
 
+_PLAIN_TAGS = re.compile(r"</?(?:[\w.-]+:)?(?:p|run|t|linesegarray|lineseg)\b[^>]*>")
+
+
+def _blank_para(seg: str) -> bool:
+    """글도 표·그림·조판 부호도 없는 빈 문단(글자 모양·줄 배치 태그만)."""
+    return not _text(seg).strip() and not _PLAIN_TAGS.sub("", seg).strip()
+
+
+def _drop_blank_tail(body: str) -> str:
+    """서식 끝과 '새 쪽' 문단 바로 앞의 빈 문단을 지움(11/05 사용자 제보: 통합서식에 빈 쪽) — 서식 5 끝 빈 문단이 쪽을 넘어가
+    혼자 한 쪽을 차지하고, 다음 서식은 다시 새 쪽에서 시작했음. 맨 앞 문단은 남김."""
+    paras = _top_paragraphs(body)
+    drop = set()
+    for i in range(len(paras) - 1, 0, -1):
+        seg = body[paras[i].start:paras[i].end]
+        nxt = body[paras[i + 1].start:paras[i + 1].end] if i + 1 < len(paras) else None
+        ends_page = nxt is None or i + 1 in drop or re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bpageBreak="1"', nxt)
+        if ends_page and _blank_para(seg) and not re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bpageBreak="1"', seg):
+            drop.add(i)
+    for i in sorted(drop, reverse=True):
+        body = body[:paras[i].start] + body[paras[i].end:]
+    return body
+
+
 def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
     """잘라 낸(채웠거나 양식 그대로인) 서식 파일들을 서식 순서대로 다시 한 HWPX로 — 담당자가 한글 파일 하나에서 직접 기입(11/03 사용자 요청).
 
@@ -323,7 +347,7 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
                     xml = re.sub(rf'{k["ref"]}="(\d+)"', lambda m, r=remap, a=k["ref"]: f'{a}="{r.get(m.group(1), m.group(1))}"', xml)
         paras = _top_paragraphs(xml)
         body_paras = paras[-len(f.paras):]  # 채우기는 문단 안만 바꾸므로 문단 수는 그대로 — 앞의 쪽 설정 문단은 뺌
-        body = xml[body_paras[0].start:body_paras[-1].end]
+        body = _drop_blank_tail(xml[body_paras[0].start:body_paras[-1].end])
         bodies.setdefault(f.section, []).append((f, body))
     kept = [s for s in sec_names if s in bodies]
     if not kept:

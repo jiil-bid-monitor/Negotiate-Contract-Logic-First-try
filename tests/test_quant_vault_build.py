@@ -908,3 +908,18 @@ def test_table_keeps_height_when_filled_text_wraps(tmp_path: Path):
             assert any("주요연혁" in x and "줄임" in x for x in rep.filled), rep.filled
     assert heights["roomy"] == 43823  # 쪽에 여유가 있으면 건드리지 않음
     assert 43823 - 6000 < heights["tight"] < 43823  # 늘어난 만큼(+1mm)만 줄임
+
+
+def test_merge_drops_blank_paragraphs_before_page_break():
+    """11/05 제보: 통합서식에 빈 쪽 — 서식 끝 빈 문단이 다음 쪽으로 넘어가 혼자 한 쪽을 차지. 서식 끝·'새 쪽' 앞 빈 문단은 지우고,
+    글·표가 있는 문단과 서식 중간의 빈 문단은 그대로."""
+    from quantdocs.forms_cut import _drop_blank_tail
+
+    def p(t="", brk="0", extra=""):
+        run = f'<hp:run charPrIDRef="0"><hp:t>{t}</hp:t>{extra}</hp:run>' if t or extra else '<hp:run charPrIDRef="0"/>'
+        return f'<hp:p paraPrIDRef="0" pageBreak="{brk}">{run}<hp:linesegarray><hp:lineseg vertpos="0"/></hp:linesegarray></hp:p>'
+    body = p("〈서식 5〉") + p() + p("장성군수 귀하") + p() + p() + p("둘째 쪽", "1") + p() + p("", extra="<hp:tbl/>") + p() + p()
+    out = _drop_blank_tail(body)
+    assert out.count("<hp:p ") == 6  # 서식 5·가운데 빈 문단·귀하·둘째 쪽·표 문단 + 맨 앞은 남김
+    assert out.startswith(p("〈서식 5〉") + p() + p("장성군수 귀하") + p("둘째 쪽", "1"))
+    assert out.endswith("<hp:tbl/></hp:run><hp:linesegarray><hp:lineseg vertpos=\"0\"/></hp:linesegarray></hp:p>")

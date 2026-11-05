@@ -1,4 +1,4 @@
-"""1억 미만 입찰(전시관·체험관) 공고 폴더 자동 생성 — 최소판 (2026-11-04 사용자 결정).
+"""1억 미만 입찰·협상(전시관·체험관) 공고 폴더 자동 생성 — 최소판 (2026-11-04 사용자 결정, 협상은 11-05 추가).
 
 새 공고마다 결과 폴더에 공고문·요약 PDF·서식을 넣고 개발자 방에 알린다. 회사 자료는 잠금 묶음에서만 읽어
 이 코드엔 회사 정보가 없다. 평가 점수·투찰 금액·회사 서류 판정은 하지 않는다.
@@ -39,7 +39,7 @@ _UNSAFE = re.compile(r'[\\/:*?"<>|\r\n\t]')
 
 
 def is_target(candidate) -> bool:
-    """본공고 후보 중 공고명에 전시관·체험관이 있는 입찰(띄어쓰기 무시)."""
+    """본공고 후보 중 공고명에 전시관·체험관이 있는 공고(띄어쓰기 무시). 유형은 `collect`가 받을 때 거른다."""
     title = re.sub(r"\s+", "", candidate.notice.title or "")
     return bool(candidate.is_candidate and candidate.notice.kind == "본공고" and any(w in title for w in TARGET_WORDS))
 
@@ -222,7 +222,8 @@ def build_folder(candidate, amount, source, vault, out_root: Path, now: datetime
         if not write_summary_pdf(candidate, amount, source, tmp / "공고정보_요약.pdf"):
             notes.append("한글 글꼴이 없어 요약 PDF를 만들지 못함")
         (tmp / "자동입력_확인.txt").write_text(
-            "자동으로 채운 칸과 안내입니다. 제출 전 원문과 대조하세요.\r\n\r\n" + "\r\n".join(notes) + "\r\n", encoding="utf-8")
+            f"공고 유형: {candidate.category}\r\n자동으로 채운 칸과 안내입니다. 제출 전 원문과 대조하세요.\r\n\r\n"
+            + "\r\n".join(notes) + "\r\n", encoding="utf-8")
         os.replace(tmp, final)
     except Exception:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -232,23 +233,23 @@ def build_folder(candidate, amount, source, vault, out_root: Path, now: datetime
 
 def alert_text(candidate, amount, source, folder: Path) -> str:
     n = candidate.notice
-    return (f"[1억 미만 시험] 새 공고 폴더\n{n.title}\n{n.demand_institution or n.notice_institution}\n사업금액: {won(amount)} {source}\n"
+    return (f"[1억 미만 시험] 새 공고 폴더 ({candidate.category})\n{n.title}\n{n.demand_institution or n.notice_institution}\n사업금액: {won(amount)} {source}\n"
             f"마감: {deadline_of(candidate)}\n자격: {qualification_label(candidate)}\n폴더: {folder.name}\n{n.detail_url or ''}")
 
 
 def collect(now: datetime, days: int, out: Path) -> list:
-    """입찰 공고를 받아 대상만 고르고 첨부를 읽는다. 지난 마감·지역 미달은 수집기와 같은 규칙으로 뺀다."""
+    """입찰·협상 공고를 받아 대상만 고르고 첨부를 읽는다. 지난 마감·지역 미달은 수집기와 같은 규칙으로 뺀다."""
     from nego import qualify
     from nego.attachments import save_attachment_texts
     from nego.config import load_config
     from nego.http_client import DataGoKrClient
     from nego.pipeline import drop_expired, drop_region_unmet, run
-    from nego.scope import CATEGORY_BID
+    from nego.scope import CATEGORY_BID, CATEGORY_NEGOTIATED
 
     config = load_config()
-    candidates, stats, _ = run(config, now, {CATEGORY_BID}, period=(now - timedelta(days=days), now))
+    candidates, stats, _ = run(config, now, {CATEGORY_BID, CATEGORY_NEGOTIATED}, period=(now - timedelta(days=days), now))
     targets = [c for c in candidates if is_target(c)]
-    log.info("입찰 후보 %d건 중 전시관·체험관 %d건", len(candidates), len(targets))
+    log.info("입찰·협상 후보 %d건 중 전시관·체험관 %d건", len(candidates), len(targets))
     if targets:
         with tempfile.TemporaryDirectory(prefix="under100m_text_") as tmp:
             save_attachment_texts(targets, Path(tmp), held_codes=qualify.load_held_codes(config.held_raw),
@@ -311,7 +312,7 @@ def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="1억 미만 입찰(전시관·체험관) 공고 폴더 만들기")
+    parser = argparse.ArgumentParser(description="1억 미만 입찰·협상(전시관·체험관) 공고 폴더 만들기")
     parser.add_argument("--out", default=os.environ.get("UNDER100M_OUT", ""), help="결과 폴더")
     parser.add_argument("--state", default=os.environ.get("UNDER100M_STATE", ""), help="처리 기록 파일")
     parser.add_argument("--days", type=int, default=3, help="최근 며칠 게시분을 볼지")

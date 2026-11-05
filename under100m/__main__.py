@@ -1,7 +1,9 @@
-"""1억 미만 입찰·협상(전시관·체험관) 공고 폴더 자동 생성 — 최소판 (2026-11-04 사용자 결정, 협상은 11-05 추가).
+"""1억 미만 입찰(전시관·체험관) 공고 폴더 자동 생성 (2026-11-04 사용자 결정. 협상은 11-05 시험 뒤 뺌).
 
-새 공고마다 결과 폴더에 공고문·요약 PDF·서식을 넣고 개발자 방에 알린다. 회사 자료는 잠금 묶음에서만 읽어
-이 코드엔 회사 정보가 없다. 평가 점수·투찰 금액·회사 서류 판정은 하지 않는다.
+새 공고마다 결과 폴더를 표본(1억미만_사업폴더_취합_20261028)과 같은 구조로 만들고 개발자 방에 알린다:
+  <공고>/  최신 공고문·첨부(맨 위) · 공고정보_요약.pdf · 서식자동분리/ · 회사준비서류/ · 이전공고/
+재공고·정정공고는 새 폴더를 만들지 않고 같은 폴더의 맨 위 문서를 이전공고로 옮긴 뒤 새 문서를 맨 위에 둔다.
+회사 값은 NAS 공유 폴더의 회사 프로필·회사 서류 폴더에서만 읽어 이 코드엔 회사 정보가 없다. 평가 점수·투찰 금액은 다루지 않는다.
 
     python -m under100m --out <결과 폴더> [--days 3] [--no-notify]
 
@@ -23,19 +25,29 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
+from .docs import _unique, issue_lines
+from .form_fill import fill_form, load_company
+from .form_split import split_forms
+from .prep import PREP_DIR, prepare
+from .summary import write_summary_pdf
+
 log = logging.getLogger("under100m")
 
 TARGET_WORDS = ("전시관", "체험관")
 LIMIT = 100_000_000
 MAX_TRIES = 3
-# 고정 회사 정보만 채운다. 자본금·면허·연혁·실적처럼 공고마다 확인할 값은 비운다(10/28 사용자 결정).
-COMPANY_KEYS = frozenset({"회사명", "대표자", "사업자등록번호", "법인등록번호", "주소", "전화번호", "팩스번호",
-                          "홈페이지", "이메일", "설립일"})
-TITLE_LABELS = ("입찰건명", "건명", "사업명", "용역명", "과업명", "공사명", "계약건명", "입찰명", "공고명")
-DATE_LABELS = ("입찰일자", "입찰일", "입찰서제출일")
+FORMS_DIR = "서식자동분리"
+PREV_DIR = "이전공고"
+SUMMARY = "공고정보_요약.pdf"
+FORMS_LIST = "제출서류_체크리스트.txt"
+SAME_TITLE_DAYS = 180  # 공고명·기관이 같아도 이보다 오래되면 다른 해의 사업으로 본다
+COMPANY_DOCS = Path(os.environ.get("COMPANY_DOCS_DIR") or "/work/회사서류_최신")
+COMPANY_PROFILE = Path(os.environ.get("COMPANY_PROFILE") or "/work/under100m/회사프로필.json")
 _AMOUNT = re.compile(r"(기초\s*금액|소요\s*예산|사업\s*예산|사\s*업\s*비|사업\s*금액)"
                      r"[^0-9\n]{0,30}?(?:금\s*)?([0-9]{1,3}(?:,[0-9]{3})+)\s*(천원|원)?")
 _UNSAFE = re.compile(r'[\\/:*?"<>|\r\n\t]')
+_RE_NOTICE = re.compile(r"[(\[【<]?\s*(재\s*공고|재\s*입찰|정정|변경|긴급|\d+\s*차)\s*(공고)?\s*[)\]】>]?")
+_DOC_FILE = re.compile(r"공고|제안요청|과업|입찰안내|제출서류")
 
 
 def is_target(candidate) -> bool:
@@ -68,9 +80,9 @@ def notice_key(notice) -> str:
     return f"{notice.notice_no}-{notice.notice_ord or '000'}"
 
 
-def folder_name(notice, now: datetime) -> str:
+def folder_name(notice) -> str:
     title = re.sub(r"\s+", " ", _UNSAFE.sub("_", notice.title or "")).strip(" ._")[:40].rstrip(" ._")
-    return f"{now:%m%d}_{notice_key(notice)}_{title}"
+    return f"{notice_key(notice)}_{title}"
 
 
 def load_state(path: Path) -> dict:
@@ -96,16 +108,6 @@ def deadline_of(candidate) -> str:
     return f"{found[1]:%Y-%m-%d %H:%M} ({found[0]})" if found else "일정 미상 — 공고문 확인"
 
 
-def missing_names(candidate) -> list[str]:
-    names = []
-    for group in candidate.qualification.missing_groups:
-        if group.combos:
-            names.append(" 또는 ".join(" + ".join("/".join(row) for row in combo) for combo in group.combos))
-        else:
-            names.append(" 또는 ".join(group.allowed_names))
-    return list(dict.fromkeys(n for n in names if n))
-
-
 def qualification_label(candidate) -> str:
     q = candidate.qualification
     if not q.checked:
@@ -113,66 +115,18 @@ def qualification_label(candidate) -> str:
     return "자격 미달 가능" if q.missing_groups else "자격 충족"
 
 
-def write_summary_pdf(candidate, amount: float | None, source: str, path: Path) -> bool:
-    """공고 요약 PDF(규칙으로만). 한글 글꼴이 없으면 False — 나머지 자료는 그대로 만든다."""
-    from xml.sax.saxutils import escape
-
-    from quantdocs.bundle import _FONTS
-    from nego.text_requirements import summarize_flag
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.units import mm
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-    font = next((f for f in _FONTS if Path(f).exists()), None)
-    if not font:
-        return False
-    pdfmetrics.registerFont(TTFont("KR", font, subfontIndex=0) if font.endswith(".ttc") else TTFont("KR", font))
-    body = ParagraphStyle("b", fontName="KR", fontSize=9.5, leading=14, wordWrap="CJK")
-    head = ParagraphStyle("h", fontName="KR", fontSize=11.5, leading=17, spaceBefore=9, spaceAfter=4)
-    title = ParagraphStyle("t", fontName="KR", fontSize=14, leading=20, spaceAfter=4, wordWrap="CJK")
-
-    def para(text) -> Paragraph:
-        return Paragraph(escape(str(text or "-")).replace("\n", "<br/>"), body)
-
-    def table(rows: list[list[str]]) -> Table:
-        t = Table([[para(a), para(b)] for a, b in rows], colWidths=[32 * mm, 138 * mm])
-        t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.4, "#b8c0bc"), ("BACKGROUND", (0, 0), (0, -1), "#eef2f0"),
-                               ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-        return t
+def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Path) -> tuple[list[str], list[str], dict[Path, Path]]:
+    """공고 문서의 서식을 서식별 파일로 자르고 회사 정보·공고 정보를 채운다(표본 규칙).
+    돌려주는 값: (제출서류 체크리스트 줄, 자동 입력·안내 줄, {옛 한글 원본: 변환한 hwpx})."""
+    from quantdocs.build import convert_hwp
 
     n = candidate.notice
-    amount_text = f"{won(amount)} ({source})" if amount else "확인 필요 — 공고문·나라장터에서 금액을 찾지 못함"
-    story = [Paragraph(escape(n.title or ""), title), para("자동 생성 자료입니다. 공고문 원문을 기준으로 확인하세요."), Spacer(1, 6),
-             table([["공고번호", notice_key(n)], ["수요기관", n.demand_institution or n.notice_institution], ["공고기관", n.notice_institution],
-                    ["사업금액", amount_text], ["원문", n.detail_url or "-"]])]
-    story += [Paragraph("일정", head),
-              table([[name, f"{when:%Y-%m-%d %H:%M}"] for name, when in candidate.schedule.all_deadlines]
-                    or [["일정", "일정 미상 — 공고문 확인"]])]
-    missing = missing_names(candidate)
-    region = candidate.region_check
-    story += [Paragraph("참가 조건", head),
-              table([["자격 판정", qualification_label(candidate)], ["미보유 자격", "\n".join(missing) or "-"],
-                     ["지역", f"{region.status} ({', '.join(region.required)})" if region.required else region.status],
-                     ["공동수급", candidate.joint.label]])]
-    for flag in candidate.text_flags:
-        story += [Paragraph(f"확인 필요 — {escape(str(flag.get('kind', '')))}", head),
-                  table([[k, v] for k, v in summarize_flag(flag)] + [["원문", flag.get("text", "")]])]
-    SimpleDocTemplate(str(path), pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm,
-                      bottomMargin=18 * mm, title=n.title or "공고 요약").build(story)
-    return True
-
-
-def build_forms(files: list[Path], vault, notice_values: list, out: Path, work: Path) -> list[str]:
-    """공고 문서의 서식을 서식별 파일로 — 회사 고정 정보·사업명·입찰일자만 채움, 인력·실적 등은 양식 그대로. 안내 줄을 돌려준다."""
-    from quantdocs.build import convert_hwp, is_manual
-    from quantdocs.fill import fill_hwpx
-    from quantdocs.forms_cut import cut
-
-    notes = []
-    for f in files:
+    bid = candidate.schedule.bid_deadline
+    bid_date = f"{bid:%Y-%m-%d}" if bid else None
+    notes: list[str] = []
+    converted: dict[Path, Path] = {}
+    cuts = []
+    for number, f in enumerate(files):
         suffix = f.suffix.lower()
         if suffix not in (".hwp", ".hwpx"):
             continue
@@ -182,74 +136,198 @@ def build_forms(files: list[Path], vault, notice_values: list, out: Path, work: 
             if src is None:
                 notes.append(f"{f.name}: 서식을 자르지 못함 — 옛 한글 변환 실패({why})")
                 continue
+            converted[f] = src
+        cut_dir = work / "cut" / str(number)
         try:
-            cut_dir = work / "cut" / f.stem
-            for form in cut(src, cut_dir):
-                if is_manual(form.title):
-                    (out / "서식_직접기입").mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(cut_dir / form.file, out / "서식_직접기입" / form.file)
-                    continue
-                report = fill_hwpx(cut_dir / form.file, out / "서식" / form.file, vault, None, keys=COMPANY_KEYS,
-                                   history=False, extras=notice_values)
-                notes.append(f"{form.file}: " + (", ".join(report.filled) or "채운 칸 없음"))
+            cut_dir.mkdir(parents=True)
+            names, _ = split_forms(src, cut_dir, all_forms=True)  # 표로 거르지 않음 — 표의 번호가 실제 서식과 어긋나는 공고가 있어 서식이 빠짐(2026-11-05)
         except Exception as err:  # noqa: BLE001 — 문서 하나를 못 잘라도 나머지 자료는 만든다
             log.warning("서식 자르기 실패 %s: %s", f.name, err)
             notes.append(f"{f.name}: 서식을 자르지 못함({err})")
-    return notes
+            continue
+        if names:
+            cuts.append((f, cut_dir, names))
+    out.mkdir(parents=True, exist_ok=True)
+    checklist = ["제출서류 체크리스트 — 공고 문서 안의 서식을 모두 만들었습니다 (자동 생성)", "공고문의 제출서류 목록과 대조해 필요 없는 서식은 빼 주세요.", ""]
+    # 서식이 가장 많은 문서가 본 문서 — 다른 문서의 서식은 앞에 문서 이름을 붙임(표본의 과업지시서_서식01)
+    for rank, (f, cut_dir, names) in enumerate(sorted(cuts, key=lambda row: -len(row[2]))):
+        label = next((word for word in ("과업지시서", "제안요청서", "공고문") if word[:2] in f.stem), f.stem[:10])
+        prefix = f"{label}_" if rank else ""
+        for name in names:
+            target = _unique(out / f"{prefix}{name}")
+            checklist.append(f"[ ] {target.name}")
+            filled = fill_form(cut_dir / name, target, company, bid_date, n.title, notice_key(n))
+            notes.append(f"{target.name}: " + (", ".join(filled) if filled else "채운 칸 없음"))
+    return checklist, notes, converted
 
 
-def build_folder(candidate, amount, source, vault, out_root: Path, now: datetime, fetch: Callable | None = None) -> Path:
-    """임시 폴더에 다 만든 뒤 이름을 바꾼다 — 만들다 실패해도 반쪽 폴더가 담당자에게 안 보이게."""
+def read_docs(files: list[Path]) -> list[tuple[Path, str]]:
+    """공고문·제안요청서·과업지시서의 글(읽지 못한 파일은 건너뜀)."""
+    from nego.attachments import _sniff_ext, extract_text
+
+    out = []
+    for f in files:
+        if f.suffix.lower() in (".hwp", ".hwpx", ".pdf") and _DOC_FILE.search(f.name):
+            try:
+                data = f.read_bytes()
+                out.append((f, extract_text(data, f.suffix.lower().lstrip(".") or (_sniff_ext(data) or ""))))
+            except Exception as err:  # noqa: BLE001 — 한 문서를 못 읽어도 나머지로 만든다
+                log.warning("공고 문서 읽기 실패 %s: %s", f.name, err)
+    return out
+
+
+def _digits_date(value) -> str | None:
+    """'2026-11-03 17:58:00'·'202611031758' → 20261103."""
+    digits = re.sub(r"\D", "", str(value or ""))[:8]
+    return digits if len(digits) == 8 else None
+
+
+def place_notice_files(files: list[Path], converted: dict[Path, Path], folder: Path, stamp: str) -> dict[Path, Path]:
+    """공고 문서를 맨 위에 표본 이름(날짜_이름_v1)으로. 옛 한글은 변환한 hwpx도 나란히. {원본: 옮긴 파일}."""
+    placed = {}
+    for f in files:
+        stem = re.sub(r"\s+", "_", f.stem)[:80].rstrip("_.")
+        target = _unique(folder / f"{stamp}_{stem}_v1{f.suffix}")
+        if f in converted:
+            shutil.copyfile(converted[f], target.with_suffix(".hwpx"))
+        os.replace(f, target)
+        placed[f] = target
+    return placed
+
+
+def submit_deadline(schedule) -> str | None:
+    """서류 판단 기준이 되는 제출 마감 — 공동수급협정·의견등록·게시·개찰 빼고 가장 늦은 마감."""
+    days = [when.strftime("%Y-%m-%d") for name, when in schedule.all_deadlines
+            if re.search(r"마감|제출|접수|등록", name) and not re.search(r"공동수급|의견|게시|개찰", name)]
+    return max(days) if days else None
+
+
+def merge_into(old: Path, new: Path, final: Path, previous: dict) -> None:
+    """재공고 — 맨 위 문서와 예전 서식은 이전공고로(담당자가 고쳤을 수 있어 지우지 않음), 회사준비서류는 그대로 두고 새 자료를 맨 위에."""
+    archive = old / PREV_DIR
+    archive.mkdir(exist_ok=True)
+    for name in previous["files"]:
+        if (old / name).exists():
+            os.replace(old / name, _unique(archive / name))
+    if (old / FORMS_DIR).exists():
+        os.replace(old / FORMS_DIR, _unique(archive / f"{FORMS_DIR}_{previous['key']}"))
+    for item in new.iterdir():
+        if (old / item.name).is_file():
+            (old / item.name).unlink()
+        os.replace(item, old / item.name)
+    new.rmdir()
+    os.replace(old, final)
+
+
+def build_folder(candidate, amount, source, company: dict, out_root: Path, now: datetime, fetch: Callable | None = None,
+                 previous: dict | None = None) -> tuple[Path, list[str]]:
+    """임시 폴더에 다 만든 뒤 이름을 바꾼다 — 만들다 실패해도 반쪽 폴더가 담당자에게 안 보이게.
+    `previous`(재공고)면 그 폴더에 합친다. 돌려주는 값: (폴더, 맨 위 공고 문서 이름들 — 다음 재공고 때 이것만 옮긴다)."""
     if fetch is None:
         from quantdocs.g2b import fetch_notice as fetch
     n = candidate.notice
-    final = out_root / folder_name(n, now)
+    final = out_root / folder_name(n)
+    old = out_root / previous["folder"] if previous else None
     tmp = out_root / f".작성중_{notice_key(n)}"
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)
     try:
+        posted_digits = _digits_date(getattr(n, "posted_at", None))
+        stamp = posted_digits or f"{now:%Y%m%d}"
         with tempfile.TemporaryDirectory(prefix="under100m_") as work_dir:
-            work = Path(work_dir)
-            notice_files = fetch(n.notice_no, tmp / "공고문")
-            bid = candidate.schedule.bid_deadline
-            when: date | None = bid.date() if bid else None
-            values = [(TITLE_LABELS, n.title or "")]
-            if when:
-                values.append((DATE_LABELS, f"{when.year}년 {when.month}월 {when.day}일"))
-            notes = build_forms(list(notice_files.files), vault, values, tmp, work)
+            notice_files = fetch(n.notice_no, tmp / ".받은 공고")
+            files = list(notice_files.files)
+            docs = read_docs(files)
+            checklist, notes, converted = build_forms(files, company, candidate, tmp / FORMS_DIR, Path(work_dir))
+            placed = place_notice_files(files, converted, tmp, stamp)
+        shutil.rmtree(tmp / ".받은 공고", ignore_errors=True)
         notes += [f"첨부를 받지 못함: {s}" for s in notice_files.skipped]
-        if not write_summary_pdf(candidate, amount, source, tmp / "공고정보_요약.pdf"):
+        top_files = sorted(p.name for p in tmp.iterdir() if p.is_file())
+        deadline = submit_deadline(candidate.schedule)
+        posted = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:]}" if posted_digits else None
+        form_names = [p.stem for p in (tmp / FORMS_DIR).glob("*.hwpx")]
+        keep_prep = bool(old and (old / PREP_DIR).exists())  # 담당자가 넣은 파일이 있어 재공고 때는 건드리지 않음
+        need, ref = prepare(None if keep_prep else tmp / PREP_DIR, [text for _, text in docs], form_names, COMPANY_DOCS, deadline, posted, now.date(), company)
+        if not write_summary_pdf(candidate, amount, source, tmp / SUMMARY, notice_key(n), need, ref, deadline, [placed[f].name for f, _ in docs], now):
             notes.append("한글 글꼴이 없어 요약 PDF를 만들지 못함")
-        (tmp / "자동입력_확인.txt").write_text(
-            f"공고 유형: {candidate.category}\r\n자동으로 채운 칸과 안내입니다. 제출 전 원문과 대조하세요.\r\n\r\n"
-            + "\r\n".join(notes) + "\r\n", encoding="utf-8")
-        os.replace(tmp, final)
+        if keep_prep:
+            notes.append(f"재공고: {PREP_DIR}는 그대로 둠 — 바뀐 제출서류가 있는지 공고문과 대조하세요.")
+        if not form_names:
+            notes.insert(0, "공고 문서에서 서식을 찾지 못함 — 공고문을 확인하세요.")
+        (tmp / FORMS_DIR / FORMS_LIST).write_text(
+            "\n".join(checklist + ["", f"공고 유형: {candidate.category}", "", "자동으로 채운 칸과 안내 — 제출 전 원문과 대조하세요."] + notes) + "\n",
+            encoding="utf-8")
+        if old:
+            merge_into(old, tmp, final, previous)
+        else:
+            os.replace(tmp, final)
     except Exception:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
-    return final
+    return final, top_files
 
 
-def alert_text(candidate, amount, source, folder: Path) -> str:
+def alert_text(candidate, amount, source, folder: Path, updated: bool = False) -> str:
     n = candidate.notice
-    return (f"[1억 미만 시험] 새 공고 폴더 ({candidate.category})\n{n.title}\n{n.demand_institution or n.notice_institution}\n사업금액: {won(amount)} {source}\n"
+    head = f"재공고·정정 — 기존 폴더 갱신, 이전 문서는 {PREV_DIR}로" if updated else "새 공고 폴더"
+    text = (f"[1억 미만 시험] {head} ({candidate.category})\n{n.title}\n공고번호: {notice_key(n)}\n{n.demand_institution or n.notice_institution}\n사업금액: {won(amount)} {source}\n"
             f"마감: {deadline_of(candidate)}\n자격: {qualification_label(candidate)}\n폴더: {folder.name}\n{n.detail_url or ''}")
+    lines = issue_lines(COMPANY_DOCS, candidate.attachment_text)
+    if lines:
+        text += "\n\n새로 발급할 서류 (제출 요구 여부는 공고문에서 확인)\n" + "\n".join(lines)
+    return text
+
+
+def fetch_basis(notice, config) -> float | None:
+    """기초금액 — 물품 등 조회가 안 되면 None(요약엔 공고문 금액이 대신 들어감)."""
+    from nego import bidcalc, fields
+    from nego.http_client import ApiError
+
+    operation = bidcalc.BASIS_OPERATIONS.get(notice.work_type)
+    if not operation:
+        return None
+    try:
+        rows = bidcalc.make_client(config.api).fetch_all_pages(fields.BID_NOTICE_BASE_URL, operation, {"inqryDiv": "2", "bidNtceNo": notice.notice_no}, "요약 기초금액")
+    except ApiError as err:
+        log.warning("기초금액 조회 실패 %s: %s", notice.notice_no, err)
+        return None
+    row = bidcalc._latest(rows, notice.notice_no)
+    return bidcalc.parse_basis(row).get("basis") if row else None
+
+
+def title_key(notice) -> str:
+    """재공고 표시·띄어쓰기를 뗀 공고명 — 번호가 바뀐 재공고를 알아보는 데 쓴다."""
+    return re.sub(r"\s+", "", _RE_NOTICE.sub("", notice.title or ""))
+
+
+def find_previous(done: dict, notice, now: datetime) -> dict | None:
+    """같은 공고번호의 다른 차수, 또는 180일 안의 같은 공고명·기관 — 이 구조로 만든 폴더만(예전 폴더는 `files`가 없음)."""
+    institution = notice.demand_institution or notice.notice_institution
+    for key, record in done.items():
+        if record.get("status") != "made" or "files" not in record or record.get("replaced_by"):
+            continue
+        same_no = key.rsplit("-", 1)[0] == notice.notice_no
+        recent = (now - datetime.fromisoformat(record["at"])).days <= SAME_TITLE_DAYS
+        if same_no or (recent and record.get("title") == title_key(notice) and record.get("institution") == institution):
+            return {**record, "key": key}
+    return None
 
 
 def collect(now: datetime, days: int, out: Path) -> list:
-    """입찰·협상 공고를 받아 대상만 고르고 첨부를 읽는다. 지난 마감·지역 미달은 수집기와 같은 규칙으로 뺀다."""
+    """입찰 공고를 받아 대상만 고르고 첨부를 읽는다. 지난 마감·지역 미달은 수집기와 같은 규칙으로 뺀다."""
     from nego import qualify
     from nego.attachments import save_attachment_texts
     from nego.config import load_config
     from nego.http_client import DataGoKrClient
     from nego.pipeline import drop_expired, drop_region_unmet, run
-    from nego.scope import CATEGORY_BID, CATEGORY_NEGOTIATED
+    from nego.scope import CATEGORY_BID
+    from webapp.qualview import build as qual_build, held_lookup
 
     config = load_config()
-    candidates, stats, _ = run(config, now, {CATEGORY_BID, CATEGORY_NEGOTIATED}, period=(now - timedelta(days=days), now))
+    candidates, stats, _ = run(config, now, {CATEGORY_BID}, period=(now - timedelta(days=days), now))
     targets = [c for c in candidates if is_target(c)]
-    log.info("입찰·협상 후보 %d건 중 전시관·체험관 %d건", len(candidates), len(targets))
+    log.info("입찰 후보 %d건 중 전시관·체험관 %d건", len(candidates), len(targets))
     if targets:
         with tempfile.TemporaryDirectory(prefix="under100m_text_") as tmp:
             save_attachment_texts(targets, Path(tmp), held_codes=qualify.load_held_codes(config.held_raw),
@@ -262,13 +340,17 @@ def collect(now: datetime, days: int, out: Path) -> list:
         for c in targets:
             if id(c) not in kept:
                 log.info("마감 지남·지역 미달로 뺌: %s %s", notice_key(c.notice), c.notice.title)
+    for c in open_targets:  # 요약 PDF 칸 — 나라장터 기초금액, 자격 묶음
+        c.basis = fetch_basis(c.notice, config)
+        if c.qualification.checked:
+            c.qual_parts = qual_build(c.qualification, held_lookup(config.held_raw), {"industry": True, "product": bool(c.attachment_text)})
     return open_targets
 
 
 def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None, *, collect_fn: Callable = collect,
-             load_vault: Callable | None = None, fetch: Callable | None = None,
+             load_profile: Callable = lambda: load_company(COMPANY_PROFILE), fetch: Callable | None = None,
              notify: Callable[[str], object] = lambda text: None) -> dict:
-    """한 번 돌린다. 처리한 공고는 기록에 남겨 다시 만들지 않고, 정정공고(차수 변경)는 새 폴더로 만든다."""
+    """한 번 돌린다. 처리한 공고는 기록에 남겨 다시 만들지 않고, 재공고·정정공고는 같은 폴더를 갱신한다."""
     now = now or datetime.now()
     state = load_state(state_path)
     done = state.setdefault("notices", {})
@@ -286,14 +368,15 @@ def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None
             continue
         todo.append((candidate, amount, source))
     if todo:
-        if load_vault is None:
-            from quantdocs.vault import load as load_vault
-        vault = load_vault()
+        company = load_profile()
         out.mkdir(parents=True, exist_ok=True)
-    for candidate, amount, source in todo:
+    for candidate, amount, source in sorted(todo, key=lambda row: notice_key(row[0].notice)):  # 같은 번호면 옛 차수부터 — 새 차수가 합쳐진다
         key = notice_key(candidate.notice)
+        previous = find_previous(done, candidate.notice, now)
+        if previous and not (out / previous["folder"]).is_dir():  # 담당자가 폴더를 지웠으면 새로
+            previous = None
         try:
-            folder = build_folder(candidate, amount, source, vault, out, now, fetch)
+            folder, files = build_folder(candidate, amount, source, company, out, now, fetch, previous)
         except Exception as err:  # noqa: BLE001 — 한 공고 실패로 나머지를 막지 않는다. 다음 차례에 다시.
             tries = done.get(key, {}).get("tries", 0) + 1
             done[key] = {"status": "failed", "tries": tries, "error": str(err)[:300], "at": now.isoformat(timespec="seconds")}
@@ -302,17 +385,20 @@ def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None
             if tries >= MAX_TRIES:
                 notify(f"[1억 미만 시험] 폴더 생성 {MAX_TRIES}회 실패 — 더 시도하지 않음\n{candidate.notice.title}\n{key}\n{err}")
             continue
-        done[key] = {"status": "made", "folder": folder.name, "amount": amount, "source": source,
+        if previous:
+            done[previous["key"]] = {**done[previous["key"]], "folder": folder.name, "replaced_by": key}
+        done[key] = {"status": "made", "folder": folder.name, "amount": amount, "source": source, "files": files,
+                     "title": title_key(candidate.notice), "institution": candidate.notice.demand_institution or candidate.notice.notice_institution,
                      "at": now.isoformat(timespec="seconds")}
         result["made"].append(folder.name)
         save_state(state_path, state)  # 알림이 실패해도 같은 폴더를 또 만들지 않게 먼저 저장
-        notify(alert_text(candidate, amount, source, folder))
+        notify(alert_text(candidate, amount, source, folder, updated=bool(previous)))
     save_state(state_path, state)
     return result
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="1억 미만 입찰·협상(전시관·체험관) 공고 폴더 만들기")
+    parser = argparse.ArgumentParser(description="1억 미만 입찰(전시관·체험관) 공고 폴더 만들기")
     parser.add_argument("--out", default=os.environ.get("UNDER100M_OUT", ""), help="결과 폴더")
     parser.add_argument("--state", default=os.environ.get("UNDER100M_STATE", ""), help="처리 기록 파일")
     parser.add_argument("--days", type=int, default=3, help="최근 며칠 게시분을 볼지")

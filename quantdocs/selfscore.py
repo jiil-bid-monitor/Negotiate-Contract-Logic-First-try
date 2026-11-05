@@ -415,6 +415,9 @@ def _patent(c: Criterion, vault) -> ItemScore:
     band = _band(c, n)
     res.score = band.score if band else None
     res.basis = f"{n}건 → '{band.text if band else '구간 없음'}'"
+    if getattr(vault, "patent_src", "") == "파일":
+        res.basis += " (특허증 파일 수 — 파일 하나를 1건으로 셈)"
+        res.notes.append("특허증 파일 하나에 여러 건이 들었거나 만료·말소된 특허가 있으면 고칠 것")
     scope = re.search(r"※\s*([^.\n]*특허[^.\n]*)", c.note)
     if scope:
         res.notes.append(f"공고가 인정하는 특허인지 확인({scope.group(1).strip()[:50]})")
@@ -506,8 +509,8 @@ def score(criteria: list[Criterion], vault, ref: date) -> list[ItemScore]:
 _SCORE_HEAD = ("자기평점", "자체평점", "자기평가점수", "자기평가", "평점", "평가점수")
 
 
-# 자동으로 채점하는 항목 — 기술인력·경영상태(신용평가)·신인도만(11/05 사용자 결정, 실적·보유기술 등은 담당자가 직접)
-AUTO_KINDS = {"staff", "credit", "sanction"}
+# 자동으로 채점하는 항목 — 기술인력·경영상태(신용평가)·신인도·보유기술(특허)(11/05 사용자 결정, 실적은 담당자가 직접)
+AUTO_KINDS = {"staff", "credit", "sanction", "patent"}  # 특허는 11/05 이어서 사용자 결정으로 더함(특허증 파일 수)
 
 
 @dataclass

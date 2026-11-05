@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from .bundle import merge, pick
+from .bundle import Pick, merge, pick
 from .catalog import load_catalog
 from .selfscore import AUTO_KINDS, SelfScore, fmt, read_criteria, score as score_items, staff_status
 from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx
@@ -170,8 +170,14 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
         notes.append(f"{guide(kind)['name']} 공고 — 첨부에서 서식 목록을 찾지 못함. 서식은 {guide(kind)['source']}")
     picks, pick_missing = pick(list(vault.files), [it.text for it in sheet.submit_items], quals)
     a = Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
+    crits = read_criteria(_rfp_first(files, converted))
+    # 보유기술(특허)을 평가하는 공고면 특허증 원본을 통합본 끝에(11/05 사용자 결정 (가))
+    if any(c.kind == "patent" for c in crits):
+        from .vault import patent_files
+        have = {p.path for p in a.picks}
+        a.picks += [Pick("전문기술(특허) 보유 증빙", k) for k in patent_files(vault) if k not in have]
     # 기술인력 고르기(11/05 사용자 요청 (나)) — 이 공고 배점 기준으로 인력목록 사람마다 들어가는지
-    crit = next((c for c in read_criteria(_rfp_first(files, converted)) if c.kind == "staff"), None)
+    crit = next((c for c in crits if c.kind == "staff"), None)
     a.staff = staff_status(crit, vault, ref)
     a.staff_on = bool(crit is not None and crit.per_grade)
     if crit is not None:

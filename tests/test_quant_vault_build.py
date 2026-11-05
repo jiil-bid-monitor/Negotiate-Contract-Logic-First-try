@@ -1005,9 +1005,9 @@ def test_self_score_fills_form_by_rfp(tmp_path: Path):
     out = zipfile.ZipFile(tmp_path / "o24.hwpx").read("Contents/section0.xml").decode()
     from quantdocs.fill import _cells, _spans
     got = {c.row: c.text for c in _cells(out, _spans(out, "tbl")[0]) if c.col == 2}
-    # 11/05 사용자 결정: 기술인력·경영상태·신인도만 자동 — 실적·특허는 담당자가 직접(비움), 그래서 계도 비움
-    # 인력 특급 1명 1점(본문 3점) × 6/3 = 2, 경영 3.5, 신인도 2
-    assert got == {0: "자기평점", 1: "", 2: "", 3: "", 4: "2", 5: "", 6: "3.5", 7: "2"}
+    # 11/05 사용자 결정: 기술인력·경영상태·신인도·특허만 자동 — 실적은 담당자가 직접(비움), 그래서 계도 비움
+    # 인력 특급 1명 1점(본문 3점) × 6/3 = 2, 특허 1건 1점, 경영 3.5, 신인도 2
+    assert got == {0: "자기평점", 1: "", 2: "", 3: "", 4: "2", 5: "1", 6: "3.5", 7: "2"}
     assert any("직접" in r[4] for r in rep.self_rows if r[0].startswith("최근"))
 
 
@@ -1310,3 +1310,25 @@ def test_staff_box_only_when_rfp_has_staff_criteria(tmp_path: Path):
     assert on["staff_on"] and on["staff"] and "특급 1점" in on["staff_rule"]
     plain = _mini_hwpx(tmp_path / "plain.hwpx", '<hp:p><hp:run charPrIDRef="0"><hp:t>가상 공고문</hp:t></hp:run></hp:p>')
     assert summary(analyze([plain], v, dt.date(2026, 11, 3), tmp_path / "w2"))["staff_on"] is False
+
+
+def test_patent_folder_counts_and_bundle(tmp_path: Path):
+    """11/05 사용자 결정 (가): jiil-quant-docs 폴더의 '특허증' 하위 폴더 PDF — 특허목록 시트가 비면 파일 수로 건수를 세어 자기평점(보유기술)을
+    자동으로, 보유기술을 평가하는 공고면 특허증 원본을 통합본 끝에."""
+    from quantdocs.build import analyze
+    from quantdocs.selfscore import AUTO_KINDS, read_criteria, score
+
+    (tmp_path / "특허증").mkdir()
+    for i in range(3):
+        (tmp_path / "특허증" / f"(가상)특허{i}.pdf").write_bytes(_blank_pdf())
+    (tmp_path / "기타폴더").mkdir()
+    (tmp_path / "기타폴더" / "무관.pdf").write_bytes(_blank_pdf())
+    v = vault.Vault({}, patents=[])
+    vault.add_loose(v, tmp_path)
+    assert len(v.patents) == 3 and v.patent_src == "파일" and not any("무관" in k for k in v.files)
+    assert "patent" in AUTO_KINDS
+    crit = [c for c in read_criteria([_score_doc(tmp_path)]) if c.kind == "patent"]
+    got = score(crit, v, dt.date(2026, 11, 3))[0]
+    assert got.score == 2.0 and "특허증 파일 수" in got.basis  # '2건 이상' 2점
+    a = analyze([_score_doc(tmp_path)], v, dt.date(2026, 11, 3), tmp_path / "w")
+    assert [p.path for p in a.picks if "특허" in p.section] == [f"files/특허증/(가상)특허{i}.pdf" for i in range(3)]

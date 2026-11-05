@@ -137,6 +137,7 @@ class Vault:
     patents: list[dict] | None = None  # 특허목록(자기평점 보유기술) — 시트가 없으면 None(자료 없음)
     loose: list[str] = field(default_factory=list)  # 묶음 밖에서 더 읽은 PDF(파일 이름)
     staff_src: str = ""  # 인력목록을 묶음 밖 엑셀에서 읽었으면 그 파일 이름
+    patent_src: str = ""  # 특허 건수를 특허증 파일로 셌으면 '파일'(특허목록 시트가 비었을 때)
 
     def file(self, name: str | None) -> bytes | None:
         """양식의 '파일 이름' 칸 값으로 파일 찾기 — 'files/' 붙여도·안 붙여도, 경로 없이 이름만 적어도."""
@@ -202,6 +203,7 @@ def load(passphrase: str | None = None, path: Path | None = None) -> Vault:
         if sheet in wb.sheetnames:
             setattr(v, attr, _rows(wb[sheet]))
     add_loose(v)
+    derive_patents(v)
     return v
 
 
@@ -272,3 +274,33 @@ def add_loose(v: Vault, folder: Path | None = None) -> None:
         if staff:
             v.staff, v.staff_src = staff, p.name
             break
+    # 특허증 — 폴더 안 '특허…' 하위 폴더의 PDF·그림(11/05 사용자: 특허증.zip을 '특허증' 폴더로 풀어 둠)
+    for sub in sorted(x for x in folder.iterdir() if x.is_dir() and "특허" in x.name):
+        for p in sorted(x for x in sub.iterdir() if x.is_file() and x.suffix.lower() in PATENT_EXTS):
+            key = f"files/{sub.name}/{p.name}"
+            if key in v.files:
+                continue
+            try:
+                v.files[key] = p.read_bytes()
+            except OSError:
+                continue
+            v.loose.append(f"{sub.name}/{p.name}")
+    derive_patents(v)
+
+
+def derive_patents(v: Vault) -> None:
+    """특허목록 시트가 비었으면 특허증 파일 수로 특허 건수(파일 하나 = 1건)."""
+    if not v.patents:
+        found = patent_files(v)
+        if found:
+            v.patents = [{"명칭": Path(k).stem, "등록번호": Path(k).stem, "파일": k} for k in found]
+            v.patent_src = "파일"
+
+
+PATENT_EXTS = (".pdf", ".jpg", ".jpeg", ".png")
+
+
+def patent_files(v: Vault) -> list[str]:
+    """묶음·폴더 안 특허증 파일(경로나 이름에 특허·실용신안이 든 PDF·그림) — 통합본 증빙·건수 셈."""
+    return sorted(k for k in v.files if k.startswith("files/") and k.lower().endswith(PATENT_EXTS)
+                  and re.search(r"특허|실용\s*신안", k))

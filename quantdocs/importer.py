@@ -455,6 +455,8 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
             vault.info[item] = v
     if getattr(vault, "loose", None):
         notes.append("회사 자료 묶음 밖 PDF도 읽음(jiil-quant-docs 폴더): " + ", ".join(vault.loose[:5]))
+    if getattr(vault, "patent_src", "") == "파일":
+        notes.append(f"특허 건수는 특허증 파일 {len(vault.patents)}개로 셈(특허목록 시트가 비어 있음) — 파일 하나 = 1건")
     if getattr(vault, "staff_src", ""):
         notes.append(f"기술인력은 jiil-quant-docs 폴더의 '{vault.staff_src}'에서 읽음({len(vault.staff)}명) — 회사 자료 묶음의 인력목록보다 먼저")
     found_info: dict[str, tuple[str, str]] = {}  # 항목 → (값, 파일)

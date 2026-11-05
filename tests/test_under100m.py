@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+import shutil
 import sys
 import tempfile
 import unittest
@@ -17,12 +19,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from nego.qualify import JointSupply, QualificationResult  # noqa: E402
 from nego.region import RegionCheck  # noqa: E402
 from nego.screen import Schedule  # noqa: E402
-from quantdocs.fill import fill_hwpx  # noqa: E402
-from quantdocs.forms_cut import cut  # noqa: E402
-from under100m.__main__ import (COMPANY_KEYS, TITLE_LABELS, alert_text, business_amount, collect,  # noqa: E402
-                                folder_name, is_target, run_once)
+from under100m.__main__ import alert_text, business_amount, collect, folder_name, is_target, run_once  # noqa: E402
+from under100m.form_fill import fill_form  # noqa: E402
+from under100m.form_split import split_forms  # noqa: E402
 
 NOW = datetime(2026, 11, 4, 10, 0)
+COMPANY = {"회사": {"name": "가나회사", "ceo": "다라", "addr": "마바시 사아로 1", "bizno": "000-00-00000", "tel": "02-000-0000"},
+           "칸": {"자본금": {"빈칸": "", "지일 값": "999,999"}}}
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "attachments" / "jeongseon_culture_center_rfp.hwpx"
 
 
@@ -115,23 +118,62 @@ class RunOnceTest(unittest.TestCase):
         return SimpleNamespace(files=[path], skipped=[])
 
     def go(self, cands, fetch=None):
-        return run_once(self.out, self.state, 3, NOW, collect_fn=lambda *_: cands, load_vault=lambda: object(),
+        return run_once(self.out, self.state, 3, NOW, collect_fn=lambda *_: cands, load_profile=lambda: COMPANY,
                         fetch=fetch or self.fetch, notify=self.sent.append)
 
     def test_makes_folder_once(self):
         c = candidate(assigned=80_000_000)
         result = self.go([c])
-        folder = self.out / folder_name(c.notice, NOW)
+        folder = self.out / folder_name(c.notice)
         self.assertEqual(result["made"], [folder.name])
-        self.assertTrue((folder / "공고문" / "공고문.pdf").exists())
-        self.assertIn("채운 칸", (folder / "자동입력_확인.txt").read_text(encoding="utf-8") + "채운 칸")
+        self.assertTrue((folder / "20261104_공고문_v1.pdf").exists())
+        self.assertTrue((folder / "서식자동분리" / "제출서류_체크리스트.txt").exists())
+        self.assertTrue((folder / "회사준비서류" / "준비서류_체크리스트.txt").exists())
+        self.assertFalse((folder / ".받은 공고").exists())
         self.assertEqual(len(self.sent), 1)
         self.assertEqual(self.go([c])["made"], [])
         self.assertEqual((self.fetches, len(self.sent)), (1, 1))
 
-    def test_correction_gets_new_folder(self):
+    def renotice(self, new):
+        first = candidate(assigned=80_000_000)
+        self.go([first])
+        folder = self.out / folder_name(first.notice)
+        mine = folder / "회사준비서류" / "담당자가_넣은_파일.pdf"
+        mine.write_bytes(b"mine")
+        (folder / "서식자동분리" / "서식01_고친것.hwpx").write_bytes(b"edited")
+        result = self.go([new])
+        self.assertEqual(len(result["made"]), 1)
+        return folder, self.out / result["made"][0]
+
+    def assert_merged(self, old, now):
+        self.assertFalse(old.exists())
+        self.assertEqual([p.name for p in self.out.iterdir() if p.is_dir()], [now.name])
+        self.assertTrue((now / "이전공고" / "20261104_공고문_v1.pdf").exists())
+        self.assertTrue((now / "20261104_공고문_v1.pdf").exists())
+        self.assertTrue((now / "회사준비서류" / "담당자가_넣은_파일.pdf").exists())
+        kept = list((now / "이전공고").glob("서식자동분리_*/서식01_고친것.hwpx"))
+        self.assertEqual(len(kept), 1)
+        self.assertFalse((now / "서식자동분리" / "서식01_고친것.hwpx").exists())
+        self.assertIn("재공고", self.sent[-1])
+
+    def test_correction_updates_same_folder(self):
+        self.assert_merged(*self.renotice(candidate(assigned=80_000_000, ord_="001")))
+
+    def test_new_number_with_same_title_updates_same_folder(self):
+        self.assert_merged(*self.renotice(candidate(assigned=80_000_000, no="R26BK00000002", title="(재공고) ○○ 체험관 전시물 제작 설치")))
+
+    def test_same_title_other_institution_is_new_folder(self):
         self.go([candidate(assigned=80_000_000)])
-        self.assertEqual(len(self.go([candidate(assigned=80_000_000, ord_="001")])["made"]), 1)
+        other = candidate(assigned=80_000_000, no="R26BK00000002")
+        other.notice.demand_institution = "△△군"
+        self.go([other])
+        self.assertEqual(len([p for p in self.out.iterdir() if p.is_dir()]), 2)
+
+    def test_old_structure_folder_is_not_merged(self):
+        (self.out / "예전폴더").mkdir(parents=True)
+        self.state.write_text(json.dumps({"notices": {"R26BK00000001-000": {"status": "made", "folder": "예전폴더", "at": NOW.isoformat()}}}), encoding="utf-8")
+        self.go([candidate(assigned=80_000_000, ord_="001")])
+        self.assertEqual(list((self.out / "예전폴더").iterdir()), [])
 
     def test_over_limit_skipped_and_remembered(self):
         result = self.go([candidate(assigned=100_000_000)])
@@ -157,22 +199,97 @@ class RunOnceTest(unittest.TestCase):
         self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["notices"]["R26BK00000001-000"]["tries"], 3)
 
 
-class FillLimitTest(unittest.TestCase):
-    @unittest.skipUnless(FIXTURE.exists(), "표본 없음")
-    def test_only_fixed_company_info_and_notice_values(self):
-        vault = SimpleNamespace(info={"회사명": "가나회사", "자본금": "999,999", "대표자": "다라"},
-                                history=[{"연월일": "2001-01-01", "내용": "연혁내용"}], docs=[])
-        with tempfile.TemporaryDirectory() as tmp:
-            forms = cut(FIXTURE, Path(tmp) / "cut")
-            form = next(f for f in forms if "일반현황" in f.file)
-            out = Path(tmp) / "out.hwpx"
-            report = fill_hwpx(Path(tmp) / "cut" / form.file, out, vault, None, keys=COMPANY_KEYS, history=False,
-                               extras=[(TITLE_LABELS, "시험 사업")])
-            xml = zipfile.ZipFile(out).read("Contents/section0.xml").decode("utf-8")
-        self.assertIn("가나회사", xml)
+SEC = ('<hs:sec xmlns:hs="s" xmlns:hp="p">{}</hs:sec>')
+
+
+def para(text, attr=""):
+    return f'<hp:p paraPrIDRef="0" styleIDRef="0"{attr}><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p>'
+
+
+def make_hwpx(path, paragraphs):
+    """서식 자르기에 필요한 부분만 있는 HWPX — 쪽 설정·그림 파일 포함."""
+    first = '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:secPr/></hp:run></hp:p>'
+    hpf = ('<opf:package xmlns:opf="o"><opf:manifest><opf:item id="section0" href="Contents/section0.xml"/>'
+           '<opf:item id="image1" href="BinData/image1.png"/></opf:manifest><opf:spine><opf:itemref idref="section0"/></opf:spine></opf:package>')
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", '<hh:head xmlns:hh="h" secCnt="1"></hh:head>')
+        z.writestr("Contents/content.hpf", hpf)
+        z.writestr("Contents/section0.xml", SEC.format(first + "".join(paragraphs)))
+        z.writestr("BinData/image1.png", b"x" * 1000)
+
+
+class FormSampleRuleTest(unittest.TestCase):
+    """표본 규칙 — 11/5 첫 실행에서 나온 문제(빈 첫 쪽·붙은 서식·이름 없음·안 채운 표지·큰 파일)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        make_hwpx(self.dir / "src.hwpx", [
+            para("본문"),
+            para("【서식 제1호】 사업수행능력평가서 표지", ' pageBreak="1"'),
+            para("업 체 명: (대표사)"), para("대 표 자:"), para("주 소:"), para("전화번호:"),
+            para("【서식 제7호】", ' pageBreak="1"'), para("제안업체 경영 상태"), para("내용"),
+            para("【서식 제7-1호】", ' pageBreak="1"'), para("신용평가등급확인서"), para("내용")])
+        self.out = self.dir / "cut"
+        self.out.mkdir()
+        self.names, _ = split_forms(self.dir / "src.hwpx", self.out)
+
+    def section(self, name):
+        return zipfile.ZipFile(self.out / name).read("Contents/section0.xml").decode("utf-8")
+
+    def test_names_and_separate_forms(self):
+        self.assertEqual(sorted(self.names), sorted(["서식01_사업수행능력평가서 표지.hwpx", "서식07_제안업체 경영 상태.hwpx", "서식7-1_신용평가등급확인서.hwpx"]))
+        self.assertNotIn("신용평가등급확인서", self.section("서식07_제안업체 경영 상태.hwpx"))
+
+    def test_no_blank_first_page(self):
+        xml = self.section("서식01_사업수행능력평가서 표지.hwpx")
+        self.assertNotIn('pageBreak="1"', xml)
+        self.assertLess(xml.index("<hp:secPr"), xml.index("【서식 제1호】"))
+        self.assertEqual(xml.count("<hp:p "), 5)  # 쪽 설정만 든 빈 문단을 따로 두지 않음
+
+    def test_unused_images_dropped(self):
+        self.assertNotIn("BinData/image1.png", zipfile.ZipFile(self.out / self.names[0]).namelist())
+
+    def test_cover_filled_without_manual_values(self):
+        target = self.dir / "filled.hwpx"
+        filled = fill_form(self.out / "서식01_사업수행능력평가서 표지.hwpx", target, COMPANY)
+        xml = zipfile.ZipFile(target).read("Contents/section0.xml").decode("utf-8")
+        for value in ("가나회사", "다라", "마바시 사아로 1", "02-000-0000"):
+            self.assertIn(value, xml)
         self.assertNotIn("999,999", xml)
-        self.assertNotIn("연혁내용", xml)
-        self.assertTrue(report.filled)
+        self.assertEqual(len(filled), 4)
+
+    def test_staff_forms_and_agent_line(self):
+        company = {**COMPANY, "칸": {"E-Mail": {"빈칸": "", "지일 값": "a@b.c"}}}
+        cell = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl><hp:tr><hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+                '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>E-Mail</hp:t></hp:run></hp:p></hp:tc><hp:tc><hp:cellAddr colAddr="1" rowAddr="0"/>'
+                '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"/></hp:p></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+        make_hwpx(self.dir / "people.hwpx", [cell, para("소 속:"), para("대 표 자:")])
+        for name, expected in (("서식06_참여인력 이력사항.hwpx", ["줄 소속", "줄 대표자"]), ("서식10_위임장.hwpx", ["표 E-Mail", "줄 대표자"])):
+            shutil.copyfile(self.dir / "people.hwpx", self.dir / name)
+            filled = fill_form(self.dir / name, self.dir / f"out_{name}", company)
+            self.assertEqual([re.sub(" → .*", "", f) for f in filled], expected)
+
+    def test_name_and_ceo_in_one_cell(self):
+        cell = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl><hp:tr><hp:tc><hp:cellAddr colAddr="0" rowAddr="0"/>'
+                '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>업 체 명</hp:t></hp:run></hp:p></hp:tc><hp:tc><hp:cellAddr colAddr="1" rowAddr="0"/>'
+                '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>대표자:             (인)</hp:t></hp:run></hp:p></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+        make_hwpx(self.dir / "q.hwpx", [cell])
+        fill_form(self.dir / "q.hwpx", self.dir / "q_out.hwpx", COMPANY)
+        xml = zipfile.ZipFile(self.dir / "q_out.hwpx").read("Contents/section0.xml").decode("utf-8")
+        self.assertRegex(xml, r"가나회사\s+대표자: 다라\s+\(인\)")
+
+    def test_real_form_document(self):
+        if not FIXTURE.exists():
+            self.skipTest("표본 없음")
+        out = self.dir / "real"
+        out.mkdir()
+        names, _ = split_forms(FIXTURE, out)
+        for name in names:
+            with zipfile.ZipFile(out / name) as z:
+                self.assertIsNone(z.testzip())
 
 
 if __name__ == "__main__":

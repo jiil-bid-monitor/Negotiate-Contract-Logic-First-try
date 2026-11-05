@@ -274,7 +274,10 @@ function staffCount() {
   on.forEach(c => { const g = c.dataset.grade || "등급 없음"; by[g] = (by[g] || 0) + 1; });
   $("#staffN").textContent = STAFF.length ? `${on.length}명 선택` + (on.length ? " (" + Object.entries(by).map(([g, n]) => `${g} ${n}`).join(" · ") + ")" : "") : "";
 }
+const GRADE_ORDER = ["기술사", "특급", "고급", "중급", "초급"];  // 등급 높은 순, 같은 등급은 입사일 빠른 순(11/05 사용자 요청)
 function renderStaff(list, rule, ok) {
+  const rank = g => { const i = GRADE_ORDER.indexOf(g); return i < 0 ? GRADE_ORDER.length : i; };
+  list = [...list].sort((a, b) => rank(a.grade) - rank(b.grade) || String(a.joined).localeCompare(String(b.joined)));
   STAFF = list;
   $("#staffRule").textContent = rule || (list.length ? "제안요청서에서 기술인력 배점 기준을 찾지 못함 — 체크한 사람은 그대로 넘김" : "");
   $("#staff").innerHTML = !ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'

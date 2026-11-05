@@ -1,0 +1,27 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-05",
+ "reportedAt": "2026-11-05T01:44:49+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01810050",
+   "title": "분당서울대학교병원 사인물류 연간 단가계약",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "분당서울대학교병원",
+    "budgetAmount": null,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "안내판"
+    ],
+    "score": 45,
+    "deadline": "2026-11-11T15:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01810050&bidPbancOrd=000"
+   }
+  }
+ ]
+}

@@ -280,14 +280,21 @@ def add_loose(v: Vault, folder: Path | None = None) -> None:
         return
     found = _loose_files(folder)
     have = {k.rsplit("/", 1)[-1] for k in v.files}
+    # 내용이 같은 파일은 한 번만(11/05: '정량서류'·'회사자료' 폴더에 같은 서류가 겹침 — 이름이 달라도 통합본에 두 번 들어가지 않게)
+    seen = {hashlib.sha1(d).digest() for d in v.files.values()}
     for p in found:
         if p.suffix.lower() not in LOOSE_EXTS or p.name in have:
             continue
         rel = p.relative_to(folder).as_posix()
         try:
-            v.files[f"files/{rel}"] = p.read_bytes()
+            data = p.read_bytes()
         except OSError:
             continue
+        digest = hashlib.sha1(data).digest()
+        if digest in seen:
+            continue
+        seen.add(digest)
+        v.files[f"files/{rel}"] = data
         v.loose.append(rel)
         have.add(p.name)
     # 기술인력 엑셀 — 폴더에 두면 묶음을 다시 잠그지 않아도 이것을 씀(11/05 사용자 요청), 여럿이면 가장 최근에 고친 파일

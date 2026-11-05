@@ -1319,10 +1319,10 @@ def test_patent_folder_counts_and_bundle(tmp_path: Path):
     from quantdocs.selfscore import AUTO_KINDS, read_criteria, score
 
     (tmp_path / "특허증").mkdir()
-    for i in range(3):
-        (tmp_path / "특허증" / f"(가상)특허{i}.pdf").write_bytes(_blank_pdf())
+    for i in range(3):  # 내용이 다른 PDF(같으면 한 번만 읽음)
+        (tmp_path / "특허증" / f"(가상)특허{i}.pdf").write_bytes(_blank_pdf(i + 1))
     (tmp_path / "기타폴더").mkdir()
-    (tmp_path / "기타폴더" / "무관.pdf").write_bytes(_blank_pdf())
+    (tmp_path / "기타폴더" / "무관.pdf").write_bytes(_blank_pdf(5))
     v = vault.Vault({}, patents=[])
     vault.add_loose(v, tmp_path)
     # 하위 폴더도 모두 읽지만(11/05 '정량서류'·'회사자료' 폴더) 특허 건수는 경로에 '특허'가 든 파일만
@@ -1383,3 +1383,14 @@ def test_credit_rating_pdf_feeds_score_and_bundle(tmp_path: Path, monkeypatch):
     assert v.info["신용평가등급"] == "BB+" and any("BB+" in n for n in notes)  # 확인서 값이 시트보다 먼저
     picks, _ = pick(list(v.files), [], [])
     assert [p.path for p in picks] == ["files/정량서류/기업신용평가확인서.pdf"]
+
+
+def test_loose_folders_skip_duplicate_contents(tmp_path: Path):
+    """11/05: '정량서류'·'회사자료' 폴더에 같은 서류가 겹침 — 내용이 같으면 이름이 달라도 한 번만(통합본에 두 번 안 들어가게)."""
+    pdf = _blank_pdf()
+    for d, n in (("정량서류", "사업자등록증.pdf"), ("회사자료/files", "사업자등록증 사본.pdf"), ("회사자료/files", "법인등기부등본.pdf")):
+        (tmp_path / d).mkdir(parents=True, exist_ok=True)
+        (tmp_path / d / n).write_bytes(pdf if "사업자" in n else _blank_pdf(2))
+    v = vault.Vault({})
+    vault.add_loose(v, tmp_path)
+    assert sorted(v.files) == ["files/정량서류/사업자등록증.pdf", "files/회사자료/files/법인등기부등본.pdf"]

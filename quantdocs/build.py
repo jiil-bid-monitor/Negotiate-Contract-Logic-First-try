@@ -168,7 +168,7 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
     kind = detect(award_method, contract_method, sheet.texts)
     if kind != "negotiation" and not sheet.forms:
         notes.append(f"{guide(kind)['name']} 공고 — 첨부에서 서식 목록을 찾지 못함. 서식은 {guide(kind)['source']}")
-    picks, pick_missing = pick(list(vault.files), [it.text for it in sheet.submit_items], quals)
+    picks, pick_missing = pick(list(vault.files), [it.text for it in sheet.submit_items], quals, with_history=bool(vault.history))
     a = Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
     crits = read_criteria(_rfp_first(files, converted))
     # 보유기술(특허)을 평가하는 공고면 특허증 원본을 통합본 끝에(11/05 사용자 결정 (가))
@@ -219,7 +219,7 @@ def summary(a: Analysis) -> dict:
                         "amount": c.get("인정 금액(원)"), "check": c.get("확인할 것")} for c in a.candidates[:20]],
         "deadlines": [[k, f"{w:%Y-%m-%d %H:%M}"] for k, w, _ in sh.deadlines],
         "notes": [n for n in a.notes if not _SCREEN_HIDDEN.match(n)],
-        "bundle": [{"section": p.section, "file": Path(p.path).name, "note": p.note} for p in a.picks],
+        "bundle": [{"section": p.section, "file": _pick_name(p.path), "note": p.note} for p in a.picks],
         "bundle_missing": a.pick_missing,
         "staff": [{"name": p["이름"], "grade": p["등급"], "joined": p["입사일"], "ok": p["counted"], "why": p["why"]} for p in a.staff],
         "staff_rule": a.staff_rule,
@@ -255,6 +255,11 @@ def _form_text(p: Path) -> str:
         return re.sub(r"\s+", " ", " ".join(_text(z.read(n).decode("utf-8")) for n in z.namelist() if n.startswith("Contents/section")))
     except (zipfile.BadZipFile, OSError, KeyError):
         return ""
+
+
+def _pick_name(path: str) -> str:
+    from .bundle import HISTORY
+    return "연혁 표(회사 자료로 만듦)" if path == HISTORY else Path(path).name
 
 
 def _safe(name: str) -> str:
@@ -352,7 +357,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                                 in_pdf) if a.picks else (None, [])
         missing += skipped
         for i, p in enumerate(a.picks, 1):
-            if p.path not in in_pdf:
+            if p.path not in in_pdf and p.path in vault.files:
                 attach.append(("첨부/통합본_순서", f"{i:02d}_{_safe(Path(p.path).name)}", vault.files[p.path]))
             if p.note:
                 missing.append(f"{Path(p.path).name}: {p.note}")
@@ -376,7 +381,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                        (f"{r.overflow}건 (금액이 작은 것): " + ", ".join(r.overflow_names[:10])) if r.overflow_names
                        else (r.overflow or "")] for r in reports]
             table(wb.create_sheet("통합본 순서"), ["순서", "구분", "파일", "확인"],
-                  [[i, p.section, Path(p.path).name, p.note] for i, p in enumerate(a.picks, 1)]
+                  [[i, p.section, _pick_name(p.path), p.note] for i, p in enumerate(a.picks, 1)]
                   or [["", "파일 이름이 맞는 회사 서류가 없음", "", ""]], [6, 40, 40, 36])
             form_rows = [r for rep in reports for r in rep.self_rows]  # 자기평가표에 실제로 넣은 점수(서식 기준)
             table(wb.create_sheet("자기평가"), ["항목", "배점", "자기평점", "근거", "확인할 것"],

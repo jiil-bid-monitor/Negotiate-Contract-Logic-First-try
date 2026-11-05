@@ -1332,3 +1332,26 @@ def test_patent_folder_counts_and_bundle(tmp_path: Path):
     assert got.score == 2.0 and "특허증 파일 수" in got.basis  # '2건 이상' 2점
     a = analyze([_score_doc(tmp_path)], v, dt.date(2026, 11, 3), tmp_path / "w")
     assert [p.path for p in a.picks if "특허" in p.section] == [f"files/특허증/(가상)특허{i}.pdf" for i in range(3)]
+
+
+def test_bundle_includes_history_and_all_base_docs(tmp_path: Path):
+    """11/05 사용자 요청: 통합본.pdf에 공고 관련 자격증·연혁·기타 회사 서류 모두 — 제출서류 목록에 없어도 기본 서류는 넣고,
+    연혁 PDF가 없으면 연혁 표 한 장을 만들어 넣음. 공고 자격에 없는 직접생산 증명서는 안 넣음."""
+    from pypdf import PdfReader
+
+    from quantdocs.bundle import HISTORY, merge, pick
+
+    files = {f"files/{n}": _blank_pdf() for n in ("사업자등록증.pdf", "법인등기부등본.pdf", "신용평가등급확인서.pdf", "책상(직접생산).pdf")}
+    picks, _ = pick(list(files), ["사업자등록증 사본 1부"], [], with_history=True)
+    got = [(p.section, p.path) for p in picks]
+    assert got[0] == ("사업자등록증", "files/사업자등록증.pdf") and ("회사 연혁", HISTORY) in got
+    assert ("법인등기부등본", "files/법인등기부등본.pdf") in got and ("신용평가등급확인서", "files/신용평가등급확인서.pdf") in got
+    assert not any("책상" in p for _, p in got)
+    v = vault.Vault(files, info={"회사명": "(가상)회사"}, history=[{"연월일": "2009.09", "내용": "(가상) 법인 설립"}])
+    out, skipped = merge(picks, v, tmp_path / "b.pdf")
+    if not any("글꼴" in s for s in skipped):  # 한글 글꼴이 있는 곳(서버 PC)에서만 연혁 표가 들어감
+        assert "(가상) 법인 설립" in "".join(pg.extract_text() or "" for pg in PdfReader(out).pages)
+    # 연혁 PDF가 있으면 표 대신 그 파일
+    files["files/회사연혁.pdf"] = _blank_pdf()
+    picks, _ = pick(list(files), [], [], with_history=True)
+    assert ("회사 연혁", "files/회사연혁.pdf") in [(p.section, p.path) for p in picks]

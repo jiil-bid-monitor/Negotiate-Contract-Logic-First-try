@@ -100,9 +100,10 @@ def convert_hwp(src: Path, work: Path) -> tuple[Path | None, str]:
 
 
 def main_docs(files: list[Path]) -> tuple[list[Path], list[Path]]:
-    """첨부 중 공고문·제안요청서만(11/05 사용자 요청 — 과업지시서·도면·내역서 등은 안 읽음). 둘 다 없으면 전부.
+    """첨부 중 공고문·제안요청서·서식 파일만(11/05 사용자 요청 — 과업지시서·도면·내역서 등은 안 읽음). 하나도 없으면 전부.
     돌려줌: (읽을 것, 뺀 것)."""
-    keep = [f for f in files if re.search(r"공고|제안\s*요청", re.sub(r"\s+", "", Path(f).name))]
+    # 서식만 따로 담은 첨부('붙임2. 제안서 작성 서식', '별지 서식', '제출 양식')도 — 공고마다 서식이 다른 곳에 있음(11/05)
+    keep = [f for f in files if re.search(r"공고|제안\s*요청|서식|양식|별지", re.sub(r"\s+", "", Path(f).name))]
     if not keep:
         return list(files), []
     return keep, [f for f in files if f not in keep]

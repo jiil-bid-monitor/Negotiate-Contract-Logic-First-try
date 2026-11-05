@@ -151,10 +151,25 @@ def _run_analyze(job: dict) -> None:
         job["step"] = "서식·자격·실적 요건 읽는 중"
         a = analyze(nf.files, v, job.get("date"), JOBS / job["id"] / "work", nf.award_method, nf.contract_method, nf.licenses)
         s = summary(a)
+        if not s["forms"] and dropped:
+            # 공고문·제안요청서에 서식이 없으면 나머지 첨부까지 읽어 서식을 찾음(11/05 사용자: 공고마다 서식이 다른 곳에 있음)
+            job["step"] = "공고문·제안요청서에 서식이 없어 나머지 첨부에서 찾는 중"
+            everything = nf.files + dropped
+            a2 = analyze(everything, v, job.get("date"), JOBS / job["id"] / "work2", nf.award_method, nf.contract_method, nf.licenses)
+            s2 = summary(a2)
+            if s2["forms"]:
+                a, s = a2, s2
+                found_in = sorted({f.source for f in a2.sheet.forms if f.source})
+                s["notes"].append("공고문·제안요청서에 서식이 없어 나머지 첨부에서 서식을 찾음: " + ", ".join(found_in[:5]))
+                nf.files, dropped = everything, []
+                job["notice"]["files"] = [p.name for p in nf.files]
+                job["files"] = [str(p) for p in nf.files]
         if note:
             s["notes"].insert(0, note)
+        if not s["forms"]:
+            s["notes"].append("⚠ 첨부 어디에서도 서식을 찾지 못함 — 서식이 PDF 그림(스캔)이거나 '[서식 N]' 같은 표시가 없을 수 있음, 공고번호를 알려 주면 확인")
         if dropped:
-            s["notes"].append("첨부 중 공고문·제안요청서만 읽음 — 안 읽은 파일: " + ", ".join(p.name for p in dropped[:8])
+            s["notes"].append("첨부 중 공고문·제안요청서·서식만 읽음 — 안 읽은 파일: " + ", ".join(p.name for p in dropped[:8])
                               + (" 외" if len(dropped) > 8 else ""))
         if vault_err:
             s["notes"].insert(0, f"회사 자료 없음 — 지일 보유 여부·정량평가서 만들기는 안 됨 ({vault_err})")

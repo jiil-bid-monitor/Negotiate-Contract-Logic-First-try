@@ -1146,6 +1146,9 @@ def test_main_docs_blank_forms_and_fax_override(tmp_path: Path, monkeypatch):
     keep, dropped = main_docs(files)
     assert [p.name for p in keep] == ["공고문(가상).hwpx", "제안요청서(가상).hwp"] and len(dropped) == 2
     assert main_docs([Path("과업지시서.hwpx")]) == ([Path("과업지시서.hwpx")], [])  # 둘 다 없으면 전부
+    # 서식만 따로 담은 첨부도 읽음(11/05 — 공고마다 서식이 다른 곳에 있음)
+    assert [p.name for p in main_docs([Path("과업지시서.hwp"), Path("붙임2_제안서 작성 서식.hwp"), Path("별지 양식.hwpx")])[0]] \
+        == ["붙임2_제안서 작성 서식.hwp", "별지 양식.hwpx"]
     assert all(is_manual(n) for n in ("서면질의서", "질의서", "공동수급표준협정서(분담이행방식)", "공동수급 대표자 선임계", "공동수급체 합의각서"))
     assert not is_manual("입찰보증금 지급 확약서") and not is_manual("사업수행능력 자기평가 심사표")
     monkeypatch.setattr(vault, "ENV_FILE", tmp_path / "none.env")
@@ -1394,3 +1397,30 @@ def test_loose_folders_skip_duplicate_contents(tmp_path: Path):
     v = vault.Vault({})
     vault.add_loose(v, tmp_path)
     assert sorted(v.files) == ["files/정량서류/사업자등록증.pdf", "files/회사자료/files/법인등기부등본.pdf"]
+
+
+@needs_sample
+def test_forms_found_in_other_attachment_when_rfp_has_none(tmp_path: Path, monkeypatch):
+    """11/05 제보: '공고 자료에서 서식 목록을 찾지 못했습니다' — 공고문·제안요청서만 읽게 한 뒤 서식이 다른 첨부에 있는 공고.
+    공고문·제안요청서에서 서식을 못 찾으면 나머지 첨부까지 읽어 찾음."""
+    import shutil
+
+    from quantdocs import web
+    from quantdocs.g2b import NoticeFiles
+
+    d = tmp_path / "n"
+    d.mkdir()
+    notice = _mini_hwpx(d / "공고문.hwpx", '<hp:p><hp:run charPrIDRef="0"><hp:t>(가상) 공고문 — 서식 없음</hp:t></hp:run></hp:p>')
+    other = d / "과업지시서.hwpx"
+    shutil.copyfile(FIXTURES / "jeongseon_culture_center_rfp.hwpx", other)
+    monkeypatch.setattr(web, "_offline", lambda no, out: None)
+    monkeypatch.setattr(web, "fetch_notice", lambda no, out: NoticeFiles(no, "000", "(가상) 공고", "가상", "용역", "협상에 의한 계약",
+                                                                       "", "2026-08-20 10:00", [], [notice, other]))
+    monkeypatch.setattr(web, "_git_pull", lambda: "")
+    monkeypatch.setattr(web.vault_mod, "load", lambda: vault.Vault({}))
+    monkeypatch.setattr(web, "JOBS", tmp_path / "jobs")
+    job = {"id": "t1", "no": "R26BK0", "state": "running"}
+    web._run_analyze(job)
+    assert job["state"] == "ready", job.get("error")
+    assert len(job["summary"]["forms"]) >= 20 and any("나머지 첨부에서 서식" in n for n in job["summary"]["notes"])
+    assert "과업지시서.hwpx" in job["notice"]["files"]

@@ -147,9 +147,18 @@ _INLINE_RE = re.compile(r"(?P<lab>TEL|Tel|FAX|Fax|E-?mail|전화번호|전화|�
                         r"(?=(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|$)")
 
 
-def _fill_inline(seg: str, vault) -> tuple[str, list[str]]:
-    """칸 안 'TEL :      FAX :' 같은 빈 자리에 값을 넣음(11/04 제보: 제안 제출서 전화번호 칸) — 빈칸 수는 값 길이만큼 줄여 줄 모양 유지."""
+# 표 밖 문단용 — 다음 이름표 앞 '(' · 끝의 ')'도 빈자리로 봄('전화번호 :      (FAX :      )', 11/05 국민안전체험관 서식 12).
+# 표 칸엔 쓰지 않음 — 증명서 발급기관 칸 '기관 명 : (인) (전화 : )'처럼 다른 쪽이 적는 칸이 같은 모양이라.
+_INLINE_LOOSE = re.compile(_INLINE_RE.pattern.replace(
+    r"(?=(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|$)",
+    r"(?=[(（]?\s*(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|\s*[)）]?\s*$)"))
+
+
+def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
+    """칸 안 'TEL :      FAX :' 같은 빈 자리에 값을 넣음(11/04 제보: 제안 제출서 전화번호 칸) — 빈칸 수는 값 길이만큼 줄여 줄 모양 유지.
+    loose = 표 밖 문단(괄호 안 이름표까지)."""
     done: list[str] = []
+    rx = _INLINE_LOOSE if loose else _INLINE_RE
 
     def fill_t(m):
         body = m.group(2)
@@ -163,7 +172,7 @@ def _fill_inline(seg: str, vault) -> tuple[str, list[str]]:
             pad = max(2, len(mm.group("sp")) - len(value) - 1) if mm.end() < len(body) else 0
             return f"{mm.group('lab')}{mm.group('colon')} {_mark(value)}" + " " * pad
         parts = re.split(r"(<[^>]*>)", body)  # 태그(<hp:tab/> 등)는 그대로 두고 글 조각만
-        return m.group(1) + "".join(x if x.startswith("<") else _INLINE_RE.sub(rep, x) for x in parts) + m.group(3)
+        return m.group(1) + "".join(x if x.startswith("<") else rx.sub(rep, x) for x in parts) + m.group(3)
     new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, seg, flags=re.S)
     if done:
         new = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", new, flags=re.S)
@@ -480,6 +489,13 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 edits.append((s, e, seg))
                 rep.filled.append(f"서명 줄 자리표시 → {company} 대표자 {name}")
             continue
+        # 한 줄에 이름표가 둘 이상인 '전화번호 :      (FAX :      )'(11/05 국민안전체험관 서식 12) — 빈자리마다 값
+        if len(_INLINE_LOOSE.findall(text)) >= 2 or re.search(r"[(（]\s*(?:FAX|Fax|팩스|E-?mail|이메일)\s*[:：]", text):
+            seg, done = _fill_inline(xml[s:e], vault, loose=True)
+            if done:
+                edits.append((s, e, seg))
+                rep.filled += done
+            continue
         # '업 체 명 :' 또는 서명 줄 '대표자 :          (인)'(11/04 서식 8·9) · '신청인(대표자) :      (인 또는 서명)'(서식 1)
         m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL})?\s*", text)
         if m:
@@ -501,7 +517,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             seg = seg.replace(f" : {_mark(value)}", f"   {_mark(value)}", 1)
         edits.append((s, e, _hang(seg, chars)))
         rep.filled.append(f"{_sq(label)} → {value[:40]}")
-    for s, e, seg in reversed(edits):
+    for s, e, seg in sorted(edits, key=lambda x: x[0], reverse=True):  # 뒤에서부터 — 문단 순서대로 모이지 않은 고침도 있어 정렬(11/05 서식 3 줄 겹침)
         xml = xml[:s] + seg + xml[e:]
     return xml
 
@@ -1061,6 +1077,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         continue
                     target = by_pos.get((c.row, c.col + c.colspan))
                     value = _value(key, vault)
+                    if key == "전화번호" and re.search(r"FAX|Fax|팩스", c.text) and _value("팩스번호", vault) and value:
+                        value = f"{value} / {_value('팩스번호', vault)}"  # '전화번호(FAX번호)' 한 칸(11/05 국민안전체험관 서식 2)
                     if key == "회사명" and "대표" in _sq(c.text) and not _sq(c.text).startswith("대표사") and _value("대표자", vault):
                         value = f"{value} {_value('대표자', vault)}".strip()  # '상호·법인명(대표성명)'
                     if not value:
@@ -1082,6 +1100,15 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         line = g2b_no or f"제 {notice_no[0]} - {notice_no[1]} 호"
                         edits.append((target, [line], False))
                         rep.filled.append(f"{_sq(c.text)} → {line}")
+                        continue
+                    if key == "회사명" and not target.blank and _value("대표자", vault) and re.fullmatch(
+                            rf"\s*대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL})?\s*", target.text):
+                        # '회사명 | 대표자 :      (인)' — 값 칸에 대표자 서명 줄이 미리 적힌 칸(11/05 국민안전체험관 서식 1 질의서)
+                        seg = _after_colon(xml[target.start:target.end], _value("대표자", vault), True)
+                        if seg is not None:
+                            seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>/]*>)", lambda m: m.group(1) + _mark(value) + "   ", seg, count=1)
+                            edits.append((target, None, seg))
+                            rep.filled.append(f"{_sq(c.text)} → {value} · 대표자 {_value('대표자', vault)}")
                         continue
                     if not target.blank:
                         if not _SEAL_ONLY.match(seal):

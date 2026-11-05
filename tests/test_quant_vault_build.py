@@ -1043,3 +1043,26 @@ def test_package_lists_match_kept_sections(tmp_path: Path):
     assert re.findall(r'idref="([^"]+)"', hpf_out) == ["header", "section0"] and "section1" not in hpf_out
     assert 'secCnt="1"' in z.read("Contents/header.xml").decode()
     assert "서식 2" in z.read("Contents/section0.xml").decode()
+
+
+def test_inline_phone_fax_paragraph_and_company_seal_cell(tmp_path: Path):
+    """11/05 제보(국민안전체험관): ① 표 밖 '전화번호 :      (FAX :      )' 한 줄이 비어 있음 ② 질의서 '회사명 | 대표자 :     (인)' 칸이 빔
+    ③ '전화번호(FAX번호)' 칸에 FAX가 빠짐. 증명서 발급기관 칸 '기관 명 : (인) (전화 : )'(표 칸)은 다른 쪽이 적는 곳이라 그대로.
+    또 이름표 문단 고침이 문서 순서대로 모이지 않아 채운 줄이 엉뚱한 곳에 한 번 더 들어가던 것(줄 겹침)도 함께."""
+    from quantdocs.fill import fill_hwpx
+
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (_tbl([[_c(0, 0, "회사명"), _c(1, 0, "대표자 :          (인)")], [_c(0, 1, "전화번호(FAX번호)"), _c(1, 1, "")],
+                  [_c(0, 2, "기 관 명 :      (인)   (전화 :          )", 2)]])
+            + para("        업 체 명 :           ") + para("        대 표 자 :                  (인)")
+            + para("        주    소 :") + para("        전화번호 :                  (FAX :              )") + para("        작 성 자 :      "))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선", "전화번호": "033-111-2222", "팩스번호": "033-111-3333"})
+    fill_hwpx(_mini_hwpx(tmp_path / "p.hwpx", body), tmp_path / "po.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "po.hwpx").read("Contents/section0.xml").decode()
+    from quantdocs.fill import _text
+    t = re.sub(r"\s+", " ", _text(out))
+    assert "(주)가상 대표자 : 홍길동 (인)" in t
+    assert "033-111-2222 / 033-111-3333" in t
+    assert "(전화 : )" in t  # 발급기관 칸은 그대로
+    assert re.search(r"업 체 명 : \(주\)가상 대 표 자 : 홍길동 \(인\) 주 소 : 강원 정선 전화번호 : 033-111-2222 \(FAX : 033-111-3333 \) 작 성 자 :", t)
+    assert t.count("전화번호 :") == 1  # 한 번만(겹치지 않음)

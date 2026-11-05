@@ -10,6 +10,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -18,7 +19,8 @@ from nego.region import RegionCheck  # noqa: E402
 from nego.screen import Schedule  # noqa: E402
 from quantdocs.fill import fill_hwpx  # noqa: E402
 from quantdocs.forms_cut import cut  # noqa: E402
-from under100m.__main__ import COMPANY_KEYS, TITLE_LABELS, business_amount, folder_name, is_target, run_once  # noqa: E402
+from under100m.__main__ import (COMPANY_KEYS, TITLE_LABELS, alert_text, business_amount, collect,  # noqa: E402
+                                folder_name, is_target, run_once)
 
 NOW = datetime(2026, 11, 4, 10, 0)
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "attachments" / "jeongseon_culture_center_rfp.hwpx"
@@ -31,7 +33,7 @@ def notice(no="R26BK00000001", title="○○ 체험관 전시물 제작 설치",
 
 def candidate(text="", **kw):
     schedule = Schedule(qualification_deadline=None, joint_agreement_deadline=None, bid_deadline=datetime(2026, 11, 20, 18, 0))
-    return SimpleNamespace(notice=notice(**kw), is_candidate=True, attachment_text=text, schedule=schedule,
+    return SimpleNamespace(notice=notice(**kw), is_candidate=True, category="협상", attachment_text=text, schedule=schedule,
                            qualification=QualificationResult(0, [], True, False), region_check=RegionCheck(),
                            joint=JointSupply(True, None, None, None), text_flags=[])
 
@@ -49,6 +51,24 @@ class TargetTest(unittest.TestCase):
         c = candidate()
         c.notice.kind = "사전규격"
         self.assertFalse(is_target(c))
+
+
+class CollectTest(unittest.TestCase):
+    def test_bid_and_negotiated_are_requested(self):
+        seen = {}
+
+        def fake_run(config, now, categories, period):
+            seen.update(categories=set(categories), period=period)
+            return [], SimpleNamespace(), None
+
+        with patch("nego.config.load_config", return_value=SimpleNamespace()), patch("nego.pipeline.run", fake_run):
+            self.assertEqual(collect(NOW, 7, Path("out")), [])
+        self.assertEqual(seen["categories"], {"입찰", "협상"})
+        self.assertEqual(seen["period"][0], datetime(2026, 10, 28, 10, 0))
+
+    def test_alert_names_the_category(self):
+        text = alert_text(candidate(assigned=70_000_000), 70_000_000, "나라장터 배정예산", Path("폴더"))
+        self.assertIn("(협상)", text.splitlines()[0])
 
 
 class AmountTest(unittest.TestCase):

@@ -64,8 +64,9 @@ def test_track_candidates_period_amount_share():
     tracks = [_t(1, dt.date(2024, 6, 30), 250e6), _t(2, dt.date(2022, 12, 31), 180e6),
               _t(3, dt.date(2025, 9, 30), 150e6, 50), _t(4, dt.date(2025, 11, 20), 120e6, None, None)]
     single = track_candidates(TrackReq("", "", 3, 100_000_000, True), tracks, ref)
-    assert [t["번호"] for t in single] == [1, 4]  # 2는 3년 지남, 3은 지분 50% → 7,500만
-    assert single[1]["확인할 것"] == "부가세 포함 여부 확인"
+    # 11/05 사용자 요청: 기간 조건만 — 단일 하한(1억)으로 거르지 않음(3은 지분 50% → 7,500만이어도 넣음), 2는 3년 지남
+    assert [t["번호"] for t in single] == [1, 3, 4]
+    assert single[2]["확인할 것"] == "부가세 포함 여부 확인" and single[1]["인정 금액(원)"] == 75e6
     cumulative = track_candidates(TrackReq("", "", 3, 500_000_000, False), tracks, ref)
     assert [t["번호"] for t in cumulative] == [1, 3, 4]  # 누적은 건별 금액으로 거르지 않음
 

@@ -38,7 +38,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import vault as vault_mod
-from .build import analyze, build, summary
+from .build import analyze, build, main_docs, summary
 from .g2b import NoticeFiles, fetch_notice
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -141,6 +141,8 @@ def _run_analyze(job: dict) -> None:
                          "skipped": nf.skipped, "negotiation": nf.negotiation}
         if not nf.files:
             raise RuntimeError("첨부 파일을 받지 못했습니다" + (f" — {nf.skipped[0]}" if nf.skipped else ""))
+        nf.files, dropped = main_docs(nf.files)  # 공고문·제안요청서만 읽음(11/05 사용자 요청)
+        job["notice"]["files"] = [p.name for p in nf.files]
         job["files"] = [str(p) for p in nf.files]
         # 실적 기간 기준일 = 공고 게시일(11/03 사용자 요청 — 입력칸 대신 자동). 못 읽으면 오늘
         job["date"] = posted_date(nf.posted)
@@ -151,6 +153,9 @@ def _run_analyze(job: dict) -> None:
         s = summary(a)
         if note:
             s["notes"].insert(0, note)
+        if dropped:
+            s["notes"].append("첨부 중 공고문·제안요청서만 읽음 — 안 읽은 파일: " + ", ".join(p.name for p in dropped[:8])
+                              + (" 외" if len(dropped) > 8 else ""))
         if vault_err:
             s["notes"].insert(0, f"회사 자료 없음 — 지일 보유 여부·정량평가서 만들기는 안 됨 ({vault_err})")
         job["summary"] = s

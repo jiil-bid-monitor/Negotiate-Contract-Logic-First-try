@@ -26,6 +26,7 @@ class FillReport:
     rows: int = 0  # 실적집계표에 넣은 실적 수
     overflow: int = 0  # 표 줄이 모자라 못 넣은 실적 수
     overflow_names: list[str] = field(default_factory=list)  # 그 실적 이름(금액이 작아 빠진 것)
+    self_rows: list[list[str]] = field(default_factory=list)  # 자기평가표에 넣은 점수(항목·배점·점수·근거·확인할 것)
 
 
 def _spans(xml: str, tag: str, start: int = 0, end: int | None = None) -> list[tuple[int, int]]:
@@ -193,10 +194,15 @@ def _label_key(text: str) -> str | None:
         return "_notice_no"
     if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
         return "전화번호"
+    if "사업자등록번호" in t and re.match(r"생년월일|법인등록번호|법인번호", t):
+        # '생년월일(사업자등록번호)'·'법인등록번호(사업자등록번호)' — 법인은 생년월일 = 법인등록번호, 괄호 안에 사업자등록번호(11/05 사용자 요청)
+        return "_corp_biz"
+    if t in ("서약자", "서약인", "각서인", "확약자"):  # 청렴계약 이행서약서 '서 약 자 :   (인)' = 대표자 이름(11/05)
+        return "대표자"
     for words, key in LABELS:  # 앞머리가 맞는 것 먼저('홈페이지주소'는 주소가 아니라 홈페이지)
         if any(t.startswith(w) for w in words):
             return key
-    if "사업자등록번호" in t:  # '생년월일(사업자등록번호)' — 법인은 사업자등록번호(서식 24)
+    if "사업자등록번호" in t:
         return "사업자등록번호"
     for words, key in LABELS:
         if len(t) <= 8 and any(w in t for w in words):
@@ -212,6 +218,9 @@ def _fmt_date(v) -> str:
 
 
 def _value(key: str, vault) -> str:
+    if key == "_corp_biz":
+        corp, biz = vault.info.get("법인등록번호", ""), vault.info.get("사업자등록번호", "")
+        return f"{corp} ({biz})" if corp and biz else corp or biz
     if key == "_licenses":
         names = [str(d.get("서류 이름") or "") for d in vault.docs
                  if d.get("서류 이름") and str(d.get("상태") or "") != "재발급"
@@ -248,7 +257,7 @@ def _period(t: dict) -> str:
 
 
 def _amount(t: dict, head: str) -> str:
-    """금액 — 머리글 단위(백만원·천원)에 맞춤(11/04 당진 '계약금액(단위:백만원)')."""
+    """금액 — 머리글 단위(백만원·천원)와 상관없이 원 단위 전체 금액, 절사 없이(11/05 사용자 요청 — 단위는 담당자가 고침)."""
     v = t.get("인정 금액(원)") or t.get("계약금액(원)")
     try:
         v = float(v)
@@ -258,11 +267,7 @@ def _amount(t: dict, head: str) -> str:
 
 
 def _in_unit(v: float, head: str) -> str:
-    if "백만" in head:
-        return f"{v / 1e6:,.1f}".rstrip("0").rstrip(".")
-    if "천원" in head:
-        return f"{round(v / 1000):,}"
-    return f"{int(v):,}"
+    return f"{int(round(v)):,}"
 
 
 def _alone(t: dict) -> str:
@@ -279,7 +284,8 @@ _TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값(t, 머리글)
     (("사업명", "용역명", "공사명", "건명"), lambda t, h: str(t.get("사업명") or "")),
     (("수행기간", "계약기간", "사업기간", "기간"), lambda t, h: _period(t)),
     (("사업개요", "내용", "분야"), lambda t, h: str(t.get("분야") or "")),
-    (("계약금액", "금액", "실적액"), _amount),
+    (("계약금액", "금액", "실적액", "도급액", "도급)액", "납품액"), _amount),
+    (("준공", "완료일", "년월일"), lambda t, h: _fmt_ymd(t.get("준공일"))),  # '납품(준공)년 월 일'(11/05 국민안전체험관 서식 7)
     (("발주기관", "발주처", "발주자"), lambda t, h: str(t.get("발주기관") or "")),
     (("단독", "공동"), lambda t, h: _alone(t)),
     (("구분", "업무"), lambda t, h: (str(t.get("업무") or "") + (f" (지분 {t.get('지분율(%)')}%)" if t.get("지분율(%)") not in (None, "", 100, 100.0) else "")).strip()),
@@ -294,7 +300,8 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
     edits = []
     for r in sorted(rows):
         heads = [_sq(c.text) for c in rows[r]]
-        if not (any("사업명" in h or "용역명" in h or "공사명" in h for h in heads) and any("금액" in h for h in heads)):
+        if not (any("사업명" in h or "용역명" in h or "공사명" in h for h in heads)
+                and any(re.search(r"금액|도급\)?액|납품액|실적액", h) for h in heads)):
             continue
         colmap, headtext, no_col = {}, {}, None
         for c in rows[r]:
@@ -344,16 +351,20 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                     edits.append((c, [v], False))
             rep.rows += 1
         total = sum(float(t.get("인정 금액(원)") or t.get("계약금액(원)") or 0) for t in tracks[:n])
-        unit = "백만원" if "백만" in amount_head else "천원" if "천원" in amount_head else "원"
+        unit = "원"  # 금액은 늘 원 단위 전체(11/05)
         for line in totals if n else []:
             for c in line:
                 h = headtext.get(c.col, "")
                 if _sq(c.text).startswith("총실적금액"):  # '총 실적 금액 :   백만원' 한 칸(11/04 당진)
                     edits.append((c, [f"총 실적 금액 : {_in_unit(total, amount_head)} {unit}"], False))
+                elif _sq(c.text) == "건":  # '실적 누계 | 건 | 천원' 줄(11/05 국민안전체험관 서식 7)
+                    edits.append((c, [f"{n}건"], False))
+                elif _sq(c.text) in ("원", "천원", "백만원"):
+                    edits.append((c, [_in_unit(total, amount_head) + "원"], False))
                 elif "기간" in h and c.blank:
                     edits.append((c, [f"{n}건"], False))
                 elif "금액" in h and c.blank:
-                    edits.append((c, [_in_unit(total, amount_head) + ("" if ("백만" in h or "천원" in h) else "원")], False))
+                    edits.append((c, [_in_unit(total, amount_head) + "원"], False))
         rep.overflow += len(queue)
         break  # 표 하나에 한 번
     return edits
@@ -361,6 +372,16 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
 
 # 지일이 아닌 쪽이 적는 칸 — 장비 공급확약서의 발행자(제조사·공식 수입원) 등(11/04 서식 28: 지일 정보가 들어가 '스스로 확약'이 됨)
 _OTHER_PARTY = re.compile(r"발행자|제조사|수입원|공급자|총판")
+
+
+def _agent_rows(xml: str, cells: list[Cell]) -> set[int]:
+    """'대리인'·'수임인' 칸이 세로로 묶은 줄 번호(위임장 — 대리인 주소는 개인 주소라 비움)."""
+    out: set[int] = set()
+    for c in cells:
+        if re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", _sq(c.text)):
+            rs = re.findall(r'rowSpan="(\d+)"', xml[c.start:c.end])
+            out.update(range(c.row, c.row + (int(rs[-1]) if rs else 1)))
+    return out
 
 
 def _other_party_cells(xml: str) -> list[tuple[int, int]]:
@@ -975,50 +996,103 @@ def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:
     return None
 
 
-def _self_score_edits(cells: list[Cell], scores: list, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
-    """자기평가 심사표('자기평점' 칸)에 제안요청서 본문 배점기준으로 계산한 점수(`selfscore.score`) — 11/05 사용자 요청.
-    서식 줄이 본문에 없는 항목(예: 본문은 누계로만 평가하는데 서식엔 '단일최대 실적')이면 비우고 알림."""
-    from .selfscore import fmt, match
+# ── 입찰보증금 지급 확약서(11/05 사용자 요청) ─────────────────────────
+# 입찰 금액 = 제안요청서의 기초금액(없으면 사업비·사업예산 — 공고문), 보증금 = 그 금액 × BOND_RATE, '금 400,000,000원(금 사억원)'
+BOND_RATE = 0.05  # 서식 '※ 입찰금액의 100분의 5 이상'
+_BASIS = re.compile(r"(?:기초\s*금액|사\s*업\s*비|사업\s*예산|사업\s*금액|소요\s*예산)(?:\([^)]{0,12}\))?[^\d\n]{0,60}?([\d]{1,3}(?:,\d{3}){2,})\s*원")
 
-    head = next((c for c in cells if _sq(c.text) in ("자기평점", "자체평점", "자기평가점수")), None)
-    if head is None:
+
+def basis_amount(texts: dict[str, str]) -> tuple[int, str] | None:
+    """(기초금액, 읽은 문서). 제안요청서 먼저, 그다음 공고문·나머지."""
+    order = sorted(texts, key=lambda n: (0 if "제안요청" in n else 1 if "공고" in n else 2))
+    for name in order:
+        t = re.sub(r"\s+", " ", texts[name] or "")
+        m = _BASIS.search(t)
+        if m:
+            return int(m.group(1).replace(",", "")), name
+    return None
+
+
+_KD = "영일이삼사오육칠팔구"
+
+
+def kor_money(n: int) -> str:
+    """400000000 → '사억', 1500000 → '백오십만', 20000000 → '이천만'."""
+    if n <= 0:
+        return "영"
+    out = []
+    for gi, unit in enumerate(["", "만", "억", "조", "경"]):
+        g = (n // 10 ** (4 * gi)) % 10000
+        if not g:
+            continue
+        part = ""
+        for d, u in ((g // 1000, "천"), (g // 100 % 10, "백"), (g // 10 % 10, "십"), (g % 10, "")):
+            if d:
+                part += ("" if d == 1 and u else _KD[d]) + u
+        out.append(part + unit)
+    return "".join(reversed(out))
+
+
+def _won_text(n: int) -> str:
+    return f"{n:,}원(금 {kor_money(n)}원)"
+
+
+def _fill_bond(xml: str, basis: int | None, rep: FillReport) -> str:
+    """'입 찰 금 액 : 금     원(금     원)'·'입찰 보증금 : 금     원(금     원)' — 보증금 확약서·각서에서만(가격제안서의 입찰금액은 지일이 정함)."""
+    flat = _sq(_text(xml))
+    if not basis or "보증금" not in flat or not re.search(r"확약|각서|지급", flat):
+        return xml
+    bond = int(basis * BOND_RATE)
+    blank = r"(금)\s+(원\s*\(\s*금)\s+(원\s*\))"
+    done = []
+
+    def fill_t(m):
+        body = m.group(2)
+        for label, value in ((r"입\s*찰\s*금\s*액", basis), (r"보\s*증\s*금", bond)):
+            rx = re.compile(rf"({label}\s*[:：]\s*){blank}")
+            if rx.search(body):
+                body = rx.sub(lambda mm: f"{mm.group(1)}금 {_mark(_won_text(value))}", body, count=1)
+                done.append(value)
+        return m.group(1) + body + m.group(3)
+    new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, xml, flags=re.S)
+    if done:  # 값을 넣은 문단은 줄 배치를 다시 계산하게
+        new = re.sub(r"(<(?:[\w.-]+:)?p\b[^>]*>(?:(?!</(?:[\w.-]+:)?p>).)*?\ue000(?:(?!</(?:[\w.-]+:)?p>).)*?)"
+                     r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", r"\1", new, flags=re.S)
+        rep.filled.append(f"입찰 금액 → {basis:,}원(기초금액) · 입찰 보증금 → {bond:,}원(× {BOND_RATE * 100:g}%)")
+    return new
+
+
+def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+    """자기평가 심사표('자기평점'·'평점' 칸)에 점수 — 제안요청서 배점표·계산 조건대로, 서식 배점 기준과 다르면 서식 기준,
+    계산식끼리 다르면 유리한 쪽(11/05 사용자 결정, `selfscore.score_form`). '계' = 모든 줄 점수가 있을 때만 합계."""
+    from .selfscore import fmt, read_form, score_form
+
+    rows = read_form(cells)
+    if not rows:
         return []
-    out, used = [], []
-    rows: dict[int, list[Cell]] = {}
-    for c in cells:
-        rows.setdefault(c.row, []).append(c)
-    target_row = None
-    for r in sorted(rows):
-        if r <= head.row:
+    out = []
+    scored = score_form(rows, ctx.criteria, ctx.vault, ctx.ref)
+    for row, item in scored:
+        name = _sq(row.label)[:16]
+        rep.self_rows.append([row.label, fmt(row.points), fmt(item.score), item.basis, "\n".join(item.notes)])
+        if item.score is None:
+            rep.filled.append(f"자기평점 '{name}' 비움 — " + "; ".join(item.notes[:2]))
             continue
-        cols = sorted(rows[r], key=lambda c: c.col)
-        mine = next((c for c in cols if c.col <= head.col < c.col + c.colspan), None)
-        if mine is None or not mine.blank:
-            continue
-        label = " ".join(c.text for c in cols if c.col < head.col and not re.fullmatch(r"\s*[\d.]+\s*", c.text))
-        if re.fullmatch(r"\s*(?:계|합\s*계|소\s*계|총\s*점)\s*", label):
-            target_row = mine
-            continue
-        hit = match(label, scores) if label.strip() else None
-        if hit is None:
-            if label.strip():
-                rep.filled.append(f"자기평점 '{_sq(label)[:16]}' — 제안요청서 본문 배점기준에 없는 줄이라 비움(본문 기준으로 계산)")
-            continue
-        if hit.score is None:
-            rep.filled.append(f"자기평점 '{_sq(label)[:16]}' 비움 — " + "; ".join(hit.notes[:2]))
-            continue
-        out.append((mine, [fmt(hit.score)], False))
-        used.append(hit)
-        rep.filled.append(f"자기평점 '{_sq(label)[:16]}' → {fmt(hit.score)}점 ({hit.basis})")
-    if target_row is not None and used and all(s.score is not None for s in scores):
-        total = sum(s.score for s in scores)
-        out.append((target_row, [fmt(total)], False))
-        rep.filled.append(f"자기평점 계 → {fmt(total)}점")
+        out.append((row.cell, [fmt(item.score)], False))
+        rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")
+    total = next((r for r in rows if r.total), None)
+    if scored and all(it.score is not None for _, it in scored):
+        value = round(sum(it.score for _, it in scored), 2)
+        if total is not None:
+            out.append((total.cell, [fmt(value)], False))
+            rep.filled.append(f"자기평점 계 → {fmt(value)}점")
+        rep.self_rows.append(["계", fmt(sum(r.points or 0 for r, _ in scored)), fmt(value), "서식 줄 합계", ""])
     return out
 
 
 def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "",
-              notice_no: tuple[str, str] | None = None, g2b_no: str = "", self_scores: list | None = None) -> FillReport:
+              notice_no: tuple[str, str] | None = None, g2b_no: str = "", self_scores=None,
+              basis: int | None = None) -> FillReport:
     """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸)."""
     rep = FillReport(Path(dst).name)
     # 묶음은 그대로 두고 이번 서식에만 공고 이름·공고번호를 더함(11/04 사용자 요청 — 공고마다 자동)
@@ -1048,6 +1122,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 by_pos = {(c.row, c.col): c for c in cells}
                 other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
+                agent_rows = _agent_rows(xml, cells)  # 위임장 '대리인' 칸이 세로로 묶은 줄 — 주소는 비움(11/05 사용자 요청)
                 if tracks:
                     edits += _fill_tracks(xml, cells, tracks, rep)
                 if self_scores:
@@ -1074,6 +1149,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                 rep.filled.append(f"대표자 주민등록번호 → {rrn}")
                         continue
                     if not key:
+                        continue
+                    if key == "주소" and c.row in agent_rows:
                         continue
                     target = by_pos.get((c.row, c.col + c.colspan))
                     value = _value(key, vault)
@@ -1152,6 +1229,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', seg)
                     char_id = _fill_variant(chars, run.group(1) if run else "0")
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
+            xml = _fill_bond(xml, basis, rep)
             xml = _fill_label_paragraphs(xml, vault, rep, chars)
             xml = _apply_marks(xml, chars)
             if chars is not None:

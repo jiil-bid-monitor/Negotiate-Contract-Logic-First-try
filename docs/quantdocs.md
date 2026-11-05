@@ -128,3 +128,8 @@ cd "<jiil-quant-docs 폴더>" && bash start_web.sh
 잠금 묶음(company.enc)에 다시 넣지 않아도, 서버 PC의 **jiil-quant-docs 폴더 맨 위**(프로젝트 폴더 옆, 예: `C:\Users\HJE\나라장터 수집\jiil-quant-docs`)에
 둔 PDF도 묶음 `files/`에 있는 것처럼 읽는다 — 회사정보 빈 칸 채우기(전화·팩스 등)와 통합본.pdf 고르기 모두. 같은 이름이 묶음에 있으면 묶음 것을 쓰고,
 하위 폴더(vault/ 등)는 안 본다. 다른 폴더를 쓰려면 `.env`에 `QUANT_LOOSE_DIR=폴더 경로`. 이 PDF들은 암호화되지 않으니 jiil-quant-docs에 커밋하지 말 것.
+
+## 회사 전화·FAX 바로잡기 (11/05)
+
+회사 자료(회사정보 시트·등록증 PDF)의 FAX·전화 번호가 틀렸으면 묶음을 다시 잠그지 않고 서버 PC 저장소 `.env`에 한 줄씩 넣는다 —
+`QUANT_FAX=번호`, `QUANT_TEL=번호`. 이 값이 묶음 값보다 먼저 쓰인다. 번호는 공개 저장소(이 레포)에 적지 않는다.

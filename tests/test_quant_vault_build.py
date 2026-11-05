@@ -264,10 +264,10 @@ def test_track_form_dangjin_shape(tmp_path: Path):
     finally:
         fill_mod._value = orig
     assert rep.rows == 2
-    for want in ("가상 전시물 제작 설치", "123.4", "2024.01.01~2024.06.30", "단독", "공동(60%)", ">2<",
-                 "총 실적 금액 : 173.4 백만원", "업 체 명 : (주)가상회사"):
+    # 11/05 사용자 요청: 금액은 머리글 단위(백만원)와 상관없이 원 단위 전체 — 단위는 담당자가 고침
+    for want in ("가상 전시물 제작 설치", "123,400,000", "2024.01.01~2024.06.30", "단독", "공동(60%)", ">2<",
+                 "총 실적 금액 : 173,400,000 원", "업 체 명 : (주)가상회사"):
         assert want in xml, want
-    assert "123,400,000" not in xml
 
 
 def test_form_tracks_by_title(monkeypatch):
@@ -278,7 +278,8 @@ def test_form_tracks_by_title(monkeypatch):
               {"사업명": "창호 C", "준공일": dt.date(2025, 5, 1)}, {"사업명": "전시 D", "준공일": None},
               {"사업명": "전시 E", "준공일": dt.date(2024, 2, 1)}]
     got, notes = notice.form_tracks("전시분야 최근 3년간 사업수행실적", tracks, ref)
-    assert [t["사업명"] for t in got] == ["전시 E", "전시 A"]  # 3년 밖·다른 분야 뺌, 오래된 것부터
+    # 11/05 사용자 요청: 기간 조건만 — 분야로 거르지 않음(창호 C도 넣음), 3년 밖(B)은 뺌, 오래된 것부터
+    assert [t["사업명"] for t in got] == ["전시 E", "전시 A", "창호 C"]
     assert notes and "전시 D" in notes[0]
 
 
@@ -330,7 +331,7 @@ def test_tall_track_row_is_split_and_text_fits():
                for c in cells if c.col == 0) == 3000 + 3000 + 30000  # 표 높이 그대로
     rep = FillReport("x")
     vals = {(c.row, c.col): l[0] for c, l, _ in _fill_tracks(xml, cells, tracks, rep)}
-    assert rep.rows == 3 and vals[(2, 1)] == "가상 사업 0" and vals[(4, 2)] == "30,000" and vals[(1, 2)] == "60,000"
+    assert rep.rows == 3 and vals[(2, 1)] == "가상 사업 0" and vals[(4, 2)] == "30,000,000" and vals[(1, 2)] == "60,000,000원"
 
     header = ('<hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr>'
               '<hh:charPr id="1" height="1300"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties>')
@@ -975,33 +976,62 @@ def test_self_score_from_rfp_criteria(tmp_path: Path):
                            {"이름": "정", "입사일": dt.date(2019, 1, 1), "재직": "퇴사", "등급": "특급"}],
                     patents=[{"명칭": "가상 특허", "등록번호": "10-1"}])
     got = {s.kind: s for s in score(crit, v, dt.date(2026, 11, 3))}
-    assert got["track"].score == 5.0  # 3억 + 2억×60% = 4.2억 → '4억 이상 ~ 5.5억 미만'
-    assert any("주석" in n and "만점" in n for n in got["track"].notes)  # 4억 이상이면 만점이라는 주석과 다름 — 알림
+    # 3억 + 2억×60% = 4.2억 → 배점표로는 '4억 이상 ~ 5.5억 미만' 5점, 주석 '사업비(4억) 이상이면 만점' — 계산식끼리 다르면 유리한 쪽(11/05)
+    assert got["track"].score == 6.0
+    assert any("주석" in n and "만점" in n for n in got["track"].notes)
     assert got["staff"].score == 1.5 and got["patent"].score == 1.0 and got["credit"].score == 3.5 and got["sanction"].score == 2
     empty = {s.kind: s for s in score(crit, vault.Vault({}), dt.date(2026, 11, 3))}
-    assert all(s.score is None and any("자료 없음" in n for n in s.notes) for s in empty.values())
+    assert all(s.score is None and any("자료 없음" in n for n in s.notes) for k, s in empty.items() if k != "sanction")
+    assert empty["sanction"].score == 2  # 신인도는 늘 배점 만점(11/05 사용자 결정)
 
 
 def test_self_score_fills_form_by_rfp(tmp_path: Path):
-    """서식 24(자기평가 심사표) '자기평점' 칸 — 본문에 있는 항목만 채우고, 본문에 없는 '단일최대' 줄은 비움, 띄어 쓴 '신 인 도'도 맞춤, 계."""
+    """서식 24(자기평가 심사표) '자기평점' 칸 — 11/05 사용자 결정: 서식 배점이 본문과 다르면 서식 기준(본문 점수를 서식 배점에 맞춰 환산),
+    본문에 없는 '단일최대' 줄은 본문 구간을 단일 최대 실적에 적용, 띄어 쓴 '신 인 도'도 맞춤(늘 만점), 계."""
     from quantdocs.fill import fill_hwpx
-    from quantdocs.selfscore import read_criteria, score
+    from quantdocs.selfscore import SelfScore, read_criteria
 
     crit = read_criteria([_score_doc(tmp_path)])
     v = vault.Vault({}, info={"신용평가등급": "BB+", "부정당업자 제재처분": "없음"},
                     tracks=[{"사업명": "가상 실감영상관 조성", "준공일": dt.date(2024, 5, 1), "계약금액(원)": 600_000_000}],
-                    staff=[{"이름": "갑", "입사일": dt.date(2020, 1, 1), "등급": "특급"}], patents=[])
-    sc = score(crit, v, dt.date(2026, 11, 3))
+                    staff=[{"이름": "갑", "입사일": dt.date(2020, 1, 1), "등급": "특급"}], patents=[{"명칭": "가상", "등록번호": "1"}])
     rows = [["구 분", "배 점", "자기평점", "심사평점"], ["계", "20", "", ""], ["최근 5년 수행실적(누계)", "4", "", ""],
             ["최근5년 단일최대 수행실적", "2", "", ""], ["관련 기술인력 보유현황", "6", "", ""], ["전문기술(특허) 보유", "2", "", ""],
             ["경영상태(신용평가등급)", "4", "", ""], ["신 인 도", "2", "", ""]]
     src = _mini_hwpx(tmp_path / "f24.hwpx", _tbl([[_c(col, r, t) for col, t in enumerate(row)] for r, row in enumerate(rows)]))
-    rep = fill_hwpx(src, tmp_path / "o24.hwpx", vault.Vault({}), self_scores=sc)
+    rep = fill_hwpx(src, tmp_path / "o24.hwpx", vault.Vault({}), self_scores=SelfScore(crit, v, dt.date(2026, 11, 3)))
     out = zipfile.ZipFile(tmp_path / "o24.hwpx").read("Contents/section0.xml").decode()
     from quantdocs.fill import _cells, _spans
     got = {c.row: c.text for c in _cells(out, _spans(out, "tbl")[0]) if c.col == 2}
-    assert got == {0: "자기평점", 1: "12.5", 2: "6", 3: "", 4: "1", 5: "0", 6: "3.5", 7: "2"}
-    assert any("단일최대" in x and "비움" in x for x in rep.filled)
+    # 실적 6억 → 본문 6점 × 4/6 = 4, 단일최대 6억 → 6 × 2/6 = 2, 인력 특급 1명 1점(본문 3점) × 6/3 = 2, 특허 1건 1점, 경영 3.5, 신인도 2
+    assert got == {0: "자기평점", 1: "14.5", 2: "4", 3: "2", 4: "2", 5: "1", 6: "3.5", 7: "2"}
+    assert rep.self_rows[-1][:3] == ["계", "20", "14.5"]
+
+
+def test_self_score_form_with_own_criteria(tmp_path: Path):
+    """국민안전체험관 서식 6 모양 — 서식 표 안에 구간·등급·신용등급이 적힌 자기평가표는 서식 기준으로 계산(11/05 사용자 결정),
+    인력은 '미보유 시 4.2점'(서식)과 '4.2 + ∑'(본문 주석)처럼 식이 다르면 유리한 쪽, 신인도는 만점 고정."""
+    from quantdocs.fill import _cells, _spans
+    from quantdocs.selfscore import Criterion, read_form, score_form
+
+    def r(row, *cols):
+        return [_c(col, row, t) for col, t in cols]
+    rows = [r(0, (0, "항 목"), (1, "세 부 항 목"), (2, "배 점"), (3, "평 점"), (4, "비 고")),
+            r(1, (0, "사업수행실적(최근3년)"), (1, "70억 이상"), (2, "6.0"), (3, ""), (4, "부가세 포함10억이상 실적")),
+            r(2, (1, "50억 이상"), (2, "4.8")), r(3, (1, "50억 미만"), (2, "4.2")), r(4, (1, "상한 점수"), (2, "6.0")),
+            r(5, (0, "기술인력"), (1, "특급기술자"), (2, "0.8/인"), (3, ""), (4, "※ 최고 6점 - 미보유 시 4.2점")),
+            r(6, (1, "고급기술자"), (2, "0.6/인")), r(7, (1, "상한 점수"), (2, "6.0")),
+            r(8, (0, "신인도"), (1, "해당없음"), (2, "2.0"), (3, "")), r(9, (1, "해당"), (2, "1.4"))]
+    xml = _tbl(rows)
+    form = read_form(_cells(xml, _spans(xml, "tbl")[0]))
+    assert [(f.points, bool(f.crit)) for f in form] == [(6.0, True), (6.0, True), (2.0, True)]
+    body = [Criterion("기술인력", 6, "staff", note="※ 평점= 4.2+∑(점수×인원) / 최고 6점")]
+    v = vault.Vault({}, tracks=[{"사업명": "가상 전시관", "준공일": dt.date(2025, 1, 1), "계약금액(원)": 5_500_000_000},
+                                {"사업명": "가상 작은 것", "준공일": dt.date(2025, 2, 1), "계약금액(원)": 500_000_000}],
+                    staff=[{"이름": "갑", "입사일": dt.date(2020, 1, 1), "등급": "특급"}])
+    got = [it.score for _, it in score_form(form, body, v, dt.date(2026, 11, 3))]
+    # 실적: 10억 이상만 → 55억 → '50억 이상' 4.8, 인력: 0.8 → 본문 식 4.2 + 0.8 = 5.0, 신인도 2
+    assert got == [4.8, 5.0, 2.0]
 
 
 def test_package_lists_match_kept_sections(tmp_path: Path):
@@ -1066,3 +1096,74 @@ def test_inline_phone_fax_paragraph_and_company_seal_cell(tmp_path: Path):
     assert "(전화 : )" in t  # 발급기관 칸은 그대로
     assert re.search(r"업 체 명 : \(주\)가상 대 표 자 : 홍길동 \(인\) 주 소 : 강원 정선 전화번호 : 033-111-2222 \(FAX : 033-111-3333 \) 작 성 자 :", t)
     assert t.count("전화번호 :") == 1  # 한 번만(겹치지 않음)
+
+
+def test_bond_pledge_signature_agent_and_corp_numbers(tmp_path: Path):
+    """11/05 사용자 요청 묶음 — ③ 입찰보증금 확약서: 입찰 금액 = 제안요청서 기초금액(숫자 + 괄호 안 한글), 보증금 = × 5%
+    ② 청렴계약 '서 약 자 : (인)' = 대표자 ④ 위임장 대리인 주소는 비움 ⑧ '생년월일(사업자등록번호)' = 법인등록번호 (사업자등록번호)."""
+    from quantdocs.fill import _cells, _spans, basis_amount, fill_hwpx, kor_money
+
+    assert kor_money(400_000_000) == "사억" and kor_money(20_000_000) == "이천만" and kor_money(350_000_000) == "삼억오천만"
+    assert basis_amount({"공고문.hwpx": "기초금액 금 7,000,000,000원", "제안요청서.hwpx": "마. 사 업 비 : 금 400,000,000원(부가가치세 포함)"}) \
+        == (400_000_000, "제안요청서.hwpx")
+    assert basis_amount({"공고문.hwpx": "기초금액(A=B+C)추정가격(B)부가가치세(C)비고7,000,000,000원6,363,636,364원"})[0] == 7_000_000_000
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run><hp:linesegarray><hp:lineseg/></hp:linesegarray></hp:p>'
+    body = (para("입찰보증금 지급 확약서") + para(" 2. 입 찰 금 액 : 금              원(금            원)")
+            + para(" 3. 입찰 보증금 : 금              원(금            원)") + para("입찰보증금을 납입할 것을 확약하고")
+            + para("서 약 자 :           (인)")
+            + _tbl([[_c(0, 0, "대리인", 1).replace('rowSpan="1"', 'rowSpan="2"'), _c(1, 0, "성 명"), _c(2, 0, "")],
+                    [_c(1, 1, "주 소"), _c(2, 1, "")],
+                    [_c(0, 2, "주 소"), _c(1, 2, "", 2)],
+                    [_c(0, 3, "생년월일(사업자등록번호)"), _c(1, 3, "", 2)]]))
+    src = _mini_hwpx(tmp_path / "b.hwpx", body)
+    v = vault.Vault({}, info={"대표자": "홍길동", "주소": "가상시 가상로 1", "법인등록번호": "110111-0000000", "사업자등록번호": "123-45-67890"})
+    rep = fill_hwpx(src, tmp_path / "o.hwpx", v, basis=400_000_000)
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    flat = re.sub(r"<[^>]+>", "", xml)
+    assert "입 찰 금 액 : 금 400,000,000원(금 사억원)" in flat and "입찰 보증금 : 금 20,000,000원(금 이천만원)" in flat
+    assert "서 약 자 : 홍길동" in flat
+    got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
+    assert got[(1, 2)] == "" and got[(2, 1)] == "가상시 가상로 1"  # 대리인 묶음의 주소는 비움, 회사 주소 줄은 채움
+    assert got[(3, 1)] == "110111-0000000 (123-45-67890)"
+    assert any("보증금" in x for x in rep.filled)
+    # 가격제안서처럼 보증금 글이 없는 서식의 '입찰금액'엔 넣지 않음(지일이 정할 금액)
+    src2 = _mini_hwpx(tmp_path / "c.hwpx", para("가격 제안서") + para(" 입 찰 금 액 : 금              원(금            원)"))
+    fill_hwpx(src2, tmp_path / "o2.hwpx", v, basis=400_000_000)
+    assert "400,000,000" not in zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()
+
+
+def test_main_docs_blank_forms_and_fax_override(tmp_path: Path, monkeypatch):
+    """11/05 사용자 요청 — ① 첨부는 공고문·제안요청서만 ⑬⑭ 서면질의서·공동수급 서류는 공란 ⑤ FAX는 .env QUANT_FAX가 먼저."""
+    from quantdocs import importer
+    from quantdocs.build import is_manual, main_docs
+
+    files = [Path(n) for n in ("공고문(가상).hwpx", "제안요청서(가상).hwp", "과업지시서(가상).hwpx", "도면.pdf")]
+    keep, dropped = main_docs(files)
+    assert [p.name for p in keep] == ["공고문(가상).hwpx", "제안요청서(가상).hwp"] and len(dropped) == 2
+    assert main_docs([Path("과업지시서.hwpx")]) == ([Path("과업지시서.hwpx")], [])  # 둘 다 없으면 전부
+    assert all(is_manual(n) for n in ("서면질의서", "질의서", "공동수급표준협정서(분담이행방식)", "공동수급 대표자 선임계", "공동수급체 합의각서"))
+    assert not is_manual("입찰보증금 지급 확약서") and not is_manual("사업수행능력 자기평가 심사표")
+    monkeypatch.setattr(vault, "ENV_FILE", tmp_path / "none.env")
+    monkeypatch.setenv("QUANT_FAX", "000-000-0000")
+    v = vault.Vault({}, info={"팩스번호": "111-111-1111"})
+    importer.enrich_vault(v)
+    assert v.info["팩스번호"] == "000-000-0000"
+
+
+def test_track_form_delivery_amount_and_total_cells(tmp_path: Path):
+    """국민안전체험관 서식 7 '체험물 제작·설치 실적' — '납품(도급)액(천원)'·'남품(준공)년 월 일' 머리, '실적 누계 | 건 | 천원' 줄(11/05)."""
+    from quantdocs.fill import FillReport, _cells, _fill_tracks, _spans
+
+    head = ["남품(준공)년 월 일", "사업명", "발주기관", "납품(도급)액 (천원)", "비고"]
+    rows = [[_hp_cell(i, 0, h) for i, h in enumerate(head)], [_hp_cell(0, 1, "실적 누계"), _hp_cell(1, 1, "건"), _hp_cell(2, 1, "  "),
+                                                               _hp_cell(3, 1, "     천원"), _hp_cell(4, 1, "")]]
+    rows += [[_hp_cell(i, r, "") for i in range(5)] for r in (2, 3)]
+    xml = "<hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    tracks = [{"사업명": "가상 A", "준공일": dt.date(2024, 7, 1), "계약금액(원)": 345_678_912, "발주기관": "가상시"},
+              {"사업명": "가상 B", "준공일": dt.date(2025, 3, 1), "계약금액(원)": 2_100_000_000}]
+    rep = FillReport("x")
+    vals = {(c.row, c.col): l[0] for c, l, _ in _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, rep)}
+    assert vals[(2, 0)] == "2024.07.01" and vals[(2, 1)] == "가상 A" and vals[(2, 3)] == "345,678,912"
+    assert vals[(1, 1)] == "2건" and vals[(1, 3)] == "2,445,678,912원"

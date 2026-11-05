@@ -28,9 +28,10 @@ from .forms_cut import _top_paragraphs
 KINDS = [("track", re.compile(r"실적")), ("staff", re.compile(r"인력|기술자")),
          ("patent", re.compile(r"특허|보유\s*기술|전문\s*기술|기술\s*보유")), ("credit", re.compile(r"경영|신용")),
          ("sanction", re.compile(r"신인도|제재"))]
-_START = re.compile(r"정량\S{0,4}\s*평가\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
-_STOP = re.compile(r"^\s*주\s*\d+\s*\)|정성\S{0,4}\s*평가\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
-_HEAD = re.compile(r"^\s*(?:\d+\)|\(\d+\)|[가-하]\.)\s*([^:：\n]{2,30}?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*점")
+_START = re.compile(r"정량\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
+_STOP = re.compile(r"^\s*주\s*\d+\s*\)|정성\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
+_MARK = re.compile(r"^\s*(\d+\)|\(\d+\)|[가-하]\.|[가-하]\)|\d+\.)")
+_HEAD = re.compile(r"^\s*(?:\d+\)|\(\d+\)|[가-하]\.|[가-하]\))\s*([^:：\n]{2,30}?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*점")
 _MULT = {"억": 1e8, "천만": 1e7, "백만": 1e6, "만": 1e4}
 _QTY = r"([\d]+(?:[.,]\d+)*)\s*(억|천만|백만|만)?\s*(원|건)?"
 _NUM = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*점?\s*$")
@@ -141,6 +142,8 @@ def _read_table(c: Criterion, xml: str, tbl: tuple[int, int]) -> None:
     for r, cols in sorted(rows.items()):
         for col, text in sorted(cols.items()):
             rng = parse_range(text)
+            if len(_sq(text)) > 20:  # '…누계실적 금액(10억 이상 실적)' 같은 설명 칸은 구간이 아님(단일계약 하한)
+                continue
             if not rng or (rng[2] not in ("원", "건") and not re.search(r"억|만|원|건", text)):
                 continue
             score = _num(rows.get(r + 1, {}).get(col, ""))
@@ -171,6 +174,14 @@ def read_criteria(paths: list[Path]) -> list[Criterion]:
     return []
 
 
+def _mark_style(text: str) -> str:
+    """항목 머리표 종류 — '2)'·'가)'·'(1)'·'가.'·'1.' → 'n)'·'k)'·'(n)'·'k.'·'n.'."""
+    m = _MARK.match(text or "")
+    if not m:
+        return ""
+    return re.sub(r"[가-하]", "k", re.sub(r"\d+", "n", m.group(1)))
+
+
 def _read_doc(xmls: list[str]) -> list[Criterion]:
     items: list[tuple[str, str, list[tuple[str, tuple[int, int]]]]] = []  # (글, 표 바깥 글, [(xml, 표)])
     for xml in xmls:
@@ -179,9 +190,13 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
             tbls = [(xml, (p.start + a, p.start + b)) for a, b in _spans(seg, "tbl")]
             outside = re.sub(r"<(?:[\w.-]+:)?tbl\b.*?</(?:[\w.-]+:)?tbl>", "", seg, flags=re.S)
             items.append((_text(outside).strip(), outside, tbls))
-    start = next((i for i, (t, _, _) in enumerate(items) if _START.search(t)), None)
+    # 시작 = '2) 정량적 평가 지표: 20점' 같은 항목 머리 먼저, 없으면 '정량적 평가 20점'이 든 첫 문장
+    start = next((i for i, (t, _, _) in enumerate(items) if _HEAD.match(t) and _START.search(t)), None)
+    if start is None:
+        start = next((i for i, (t, _, _) in enumerate(items) if _START.search(t)), None)
     if start is None:
         return []
+    start_mark = _mark_style(items[start][0])
     out: list[Criterion] = []
     cur: Criterion | None = None
     summary: dict[str, tuple[str, float]] = {}
@@ -190,6 +205,8 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
         if i > start and _STOP.search(text) and not _HEAD.match(text):
             break
         head = _HEAD.match(text)
+        if head and i > start and start_mark and _mark_style(text) == start_mark:
+            break  # '2) 정량적 평가 지표: 20점' 다음의 '3) 입찰가격 평가: 10점' — 같은 차례 머리면 정량평가 절 끝(11/05 국민안전체험관)
         if head and i > start:
             name = head.group(1).strip()
             kind = next((k for k, rx in KINDS if rx.search(name)), "")
@@ -231,7 +248,7 @@ def _won(v: float) -> str:
     return f"{v / 1e8:.2f}억 원" if v >= 1e8 else f"{v:,.0f}원"
 
 
-def _track(c: Criterion, vault, ref: date) -> ItemScore:
+def _track(c: Criterion, vault, ref: date, mode: str = "") -> ItemScore:
     from . import notice as N
 
     res = ItemScore(c.name, c.points, c.kind, None)
@@ -244,9 +261,11 @@ def _track(c: Criterion, vault, ref: date) -> ItemScore:
     note = c.note
     years = re.search(r"최근\s*(\d+)\s*(?:개\s*)?년", note)
     years = int(years.group(1)) if years else None
-    single = re.search(r"단일\s*(?:계약)?\s*(?:1\s*건)?.{0,20}?" + _QTY + r"\s*이상", note)
+    single = re.search(r"단일\s*(?:계약)?\s*(?:1\s*건)?.{0,20}?" + _QTY + r"\s*이상", note) \
+        or re.search(_QTY + r"\s*이상\s*실적", note)  # '(부가세 포함 10억 이상 실적)'(11/05 국민안전체험관)
     min_single = _qty(single.group(1), single.group(2)) if single else None
-    max_mode = bool(re.search(r"단일\s*(?:최대|건)\s*실적.{0,10}평가", note)) and not re.search(r"누계|합계", note)
+    max_mode = (mode == "max") if mode else (bool(re.search(r"단일\s*(?:최대|건)\s*실적.{0,10}평가", note))
+                                             and not re.search(r"누계|합계", note))
     no_design = bool(re.search(r"설계\s*용역.{0,30}인정\s*(?:하지\s*않|불가|제외)", note))
     vat_in = bool(re.search(r"부가세\s*포함|부가가치세\s*포함", note))
     similar = " ".join(re.findall(r"[^.\n]*유사\s*사업[^.\n]*", note)) or note
@@ -300,8 +319,11 @@ def _track(c: Criterion, vault, ref: date) -> ItemScore:
     if full:
         alt = _qty(full.group(1), full.group(2))
         top = max(c.bands, key=lambda b: b.score)
-        if alt <= total and band is not None and band.score < top.score:
-            res.notes.append(f"⚠ 주석은 '{_won(alt)} 이상이면 만점'인데 배점표는 {top.text}만 만점 — 배점표대로 {band.score:g}점(주석대로면 {top.score:g}점), 발주처 확인")
+        if alt <= total and (band is None or band.score < top.score):
+            # 계산 규칙끼리 다르면 지일에게 유리한 쪽(11/05 사용자 결정 — 예전엔 배점표 기준 + 알림)
+            res.notes.append(f"⚠ 주석은 '{_won(alt)} 이상이면 만점'인데 배점표는 {top.text}만 만점 — 유리한 쪽(주석)으로 {top.score:g}점"
+                             + (f"(배점표대로면 {band.score:g}점)" if band else "") + ", 발주처 확인")
+            res.score = top.score
     return res
 
 
@@ -350,6 +372,15 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
             best[name] = (grade, pts)
     raw = sum(p for _, p in best.values())
     res.score = min(raw, c.points)
+    # '평점 = 4.2 + ∑(점수×인원)'(본문)·'미보유 시 4.2점'(서식)처럼 기본 점수가 있으면 — 식끼리 다르면 유리한 쪽(11/05 사용자 결정)
+    base = re.search(r"평점\s*=\s*([\d.]+)\s*\+", c.note)
+    floor = re.search(r"(?:미보유\s*시|최저)\s*([\d.]+)\s*점", c.note)
+    if base and min(raw + float(base.group(1)), c.points) > res.score:
+        res.score = min(raw + float(base.group(1)), c.points)
+        res.notes.append(f"기본 {base.group(1)}점 + 인원 점수(본문 식 — 유리한 쪽)")
+    if floor and float(floor.group(1)) > res.score:
+        res.score = min(float(floor.group(1)), c.points)
+        res.notes.append(f"최저 {floor.group(1)}점 적용")
     counts = {g: sum(1 for gg, _ in best.values() if gg == g) for g in GRADES}
     res.basis = ", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts.items() if n) + f" = {raw:g}점" + (
         f" → 최고 {c.points:g}점" if raw > c.points else "")
@@ -365,7 +396,7 @@ def _patent(c: Criterion, vault) -> ItemScore:
         res.notes.append("배점기준 표(건수 구간)를 읽지 못함 — 제안요청서 확인")
         return res
     pats = getattr(vault, "patents", None)
-    if pats is None:
+    if not pats:  # 시트가 비어 있으면 아직 안 적은 것으로 봄(0건이면 '0건'이라고 직접 기입)
         res.notes.append("자료 없음 — 회사자료 '특허목록' 시트")
         return res
     n = sum(1 for p in pats if str(p.get("등록번호") or p.get("명칭") or "").strip())
@@ -430,19 +461,11 @@ def _credit(c: Criterion, vault) -> ItemScore:
 
 
 def _sanction(c: Criterion, vault) -> ItemScore:
-    res = ItemScore(c.name, c.points, c.kind, None)
-    if not c.sanction:
-        res.notes.append("배점기준 표(해당없음/해당)를 읽지 못함 — 제안요청서 확인")
-        return res
+    """신인도 = 늘 배점 만점(11/05 사용자 결정 '신인도는 2점으로 고정') — 회사정보에 제재처분이 적혀 있으면 알림만."""
+    res = ItemScore(c.name, c.points, c.kind, c.points, "신인도는 배점 만점으로 고정 기재")
     v = _sq(str(vault.info.get("부정당업자 제재처분") or ""))
-    if not v:
-        res.notes.append("자료 없음 — 회사정보 '부정당업자 제재처분'(없음 / 있음·처분일)")
-        return res
-    key = "해당없음" if re.fullmatch(r"없음|해당없음|무|해당사항없음|-", v) else "해당"
-    res.score = c.sanction.get(key)
-    res.basis = f"제재처분 {'없음' if key == '해당없음' else vault.info.get('부정당업자 제재처분')} → {key}"
-    if key == "해당":
-        res.notes.append("처분일이 공고가 보는 기간(최근 N년) 안인지 확인")
+    if v and not re.fullmatch(r"없음|해당없음|무|해당사항없음|-", v):
+        res.notes.append(f"⚠ 회사정보 '부정당업자 제재처분'이 '{vault.info.get('부정당업자 제재처분')}' — 처분 기간 안이면 고칠 것")
     return res
 
 
@@ -461,6 +484,159 @@ def score(criteria: list[Criterion], vault, ref: date) -> list[ItemScore]:
             out.append(_sanction(c, vault))
         else:
             out.append(ItemScore(c.name, c.points, c.kind, None, notes=["계산 규칙이 없는 항목 — 직접 기입"]))
+    return out
+
+
+# ── 서식(자기평가표) 기준 ─────────────────────────────────────────────
+# 11/05 사용자 결정: 제안요청서 배점표·계산 조건대로 계산하되, 서식의 배점 기준과 다르면 서식 기준,
+# 계산식끼리 다르면 지일에게 유리한 쪽. 서식 표 안에 구간·등급이 적힌 서식(국민안전체험관 서식 6)은 그 구간으로,
+# 줄마다 배점만 적힌 서식(필암서원 서식 24)은 본문 기준 점수를 서식 배점에 맞춰 비율로.
+_SCORE_HEAD = ("자기평점", "자체평점", "자기평가점수", "자기평가", "평점", "평가점수")
+
+
+@dataclass
+class SelfScore:
+    """서식 채우기에 넘기는 자기평점 재료 — 본문 기준(`read_criteria`)·회사 자료·기준일."""
+    criteria: list
+    vault: object
+    ref: date
+
+
+@dataclass
+class FormRow:
+    label: str
+    points: float | None  # 서식 배점(상한)
+    cell: object  # 점수를 넣을 칸(fill.Cell)
+    crit: Criterion | None = None  # 서식 표 안의 기준(구간·등급) — 없으면 본문 기준
+    total: bool = False
+
+
+def _per_person(text: str) -> float | None:
+    m = re.fullmatch(r"\s*([\d.]+)\s*점?\s*/\s*인\s*", text or "")
+    return float(m.group(1)) if m else None
+
+
+def read_form(cells) -> list[FormRow]:
+    """자기평가표 표 칸들 → 점수 줄. '배점' 칸과 '자기평점'(또는 '평점') 칸이 있는 표만."""
+    head = next((c for c in cells if _sq(c.text) in _SCORE_HEAD), None)
+    pts_head = next((c for c in cells if _sq(c.text) == "배점"), None)
+    if head is None or pts_head is None or head.row != pts_head.row:
+        return []
+    rows: dict[int, list] = {}
+    for c in cells:
+        if c.row > head.row:
+            rows.setdefault(c.row, []).append(c)
+    pcol, scol = pts_head.col, head.col
+    blocks: list[list[int]] = []
+    for r in sorted(rows):
+        if any(c.col <= scol < c.col + c.colspan for c in rows[r]):
+            blocks.append([r])
+        elif blocks:
+            blocks[-1].append(r)
+    out = []
+    for rs in blocks:
+        first = sorted(rows[rs[0]], key=lambda c: c.col)
+        target = next(c for c in first if c.col <= scol < c.col + c.colspan)
+        if not target.blank:
+            continue
+        def is_label(t: str) -> bool:  # 줄 이름 — 구간('70억 이상')·등급·해당없음 칸은 뺌
+            q = _sq(t)
+            return bool(q) and not (parse_range(t) and len(q) <= 20) and not any(g in q for g in GRADES) \
+                and q not in ("해당없음", "해당") and not re.search(r"회사채|기업어음|^[A-D][A-D0-9+\-]*", q)
+        label = " ".join(re.sub(r"\s+", " ", c.text).strip() for c in first if c.col < min(pcol, scol) and is_label(c.text))
+        if re.fullmatch(r"\s*(?:계|합\s*계|소\s*계|총\s*점)\s*", label):
+            out.append(FormRow(label, None, target, total=True))
+            continue
+        kind = next((k for k, rx in KINDS if rx.search(_sq(label))), "")
+        crit = Criterion(label, 0.0, kind)
+        cap = None
+        kinds: dict[int, str] = {}
+        nums = []
+        for r in rs:
+            line = sorted(rows[r], key=lambda c: c.col)
+            pts_text = next((c.text for c in line if c.col <= pcol < c.col + c.colspan), "")
+            pts, per = _num(pts_text), _per_person(pts_text)
+            crit.note += " ".join(c.text.strip() for c in line if c.col > scol and c.text.strip()) + "\n"
+            texts = [(c.col, re.sub(r"\s+", " ", c.text).strip()) for c in line if c.col < min(pcol, scol) and c.text.strip()]
+            if any("상한" in _sq(t) for _, t in texts):
+                cap = pts
+                continue
+            for col, t in texts:
+                if re.fullmatch(r"회사채.*|기업어음|기업신용.*|신용평가등급", _sq(t)):
+                    kinds[col] = _sq(t)
+            if per is not None:
+                g = next((g for g in GRADES for _, t in texts if g in _sq(t)), None)
+                if g:
+                    crit.per_grade.setdefault(g, per)
+                continue
+            if pts is None:
+                continue
+            nums.append(pts)
+            rules = {kinds[col]: t for col, t in texts if col in kinds and re.search(r"[A-D]", t)}
+            if rules:
+                crit.credit_rows.append((rules, pts))
+                continue
+            key = next((_sq(t) for _, t in texts if _sq(t) in ("해당없음", "해당")), None)
+            if key:
+                crit.sanction[key] = pts
+                continue
+            for _, t in reversed(texts):
+                rng = parse_range(t)
+                if rng and len(_sq(t)) <= 20 and re.search(r"억|만|원|건", t):
+                    crit.bands.append(Band(rng[0], rng[1], pts, t))
+                    crit.unit = crit.unit or rng[2]
+                    break
+        points = cap if cap is not None else (max(nums) if nums else None)
+        crit.points = points or 0.0
+        has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
+        out.append(FormRow(label, points, target, crit if has else None))
+    return out
+
+
+def _scaled(item: ItemScore, points: float | None) -> ItemScore:
+    """본문 기준 점수를 서식 배점에 맞춤(본문 6점 → 서식 4점이면 × 4/6)."""
+    if item.score is None or not points or not item.points or abs(points - item.points) < 1e-9:
+        return item
+    v = round(item.score * points / item.points, 2)
+    return ItemScore(item.name, points, item.kind, v, item.basis + f" → 서식 배점 {points:g}점에 맞춰 ×{points:g}/{item.points:g}",
+                     item.notes + [f"본문 배점 {item.points:g}점과 서식 배점 {points:g}점이 달라 서식 기준으로 환산"])
+
+
+def score_form(rows: list[FormRow], criteria: list[Criterion], vault, ref: date) -> list[tuple[FormRow, ItemScore]]:
+    """서식 점수 줄마다 점수. 계 줄은 빼고 돌려줌."""
+    body = {c.kind: c for c in criteria if c.kind}
+    out = []
+    for row in rows:
+        if row.total:
+            continue
+        label = _sq(row.label)
+        kind = next((k for k, rx in KINDS if rx.search(label)), "")
+        single = kind == "track" and "단일" in label and not re.search(r"누계|합계", label)
+        if kind == "sanction":
+            c = Criterion(row.label, row.points or (body["sanction"].points if "sanction" in body else 0), kind)
+            out.append((row, _sanction(c, vault)))
+            continue
+        if row.crit is not None:
+            c = row.crit
+            if kind in body:  # 기간·단일계약 하한·재직 개월 같은 조건은 본문 주석에서
+                c.note = body[kind].note + "\n" + row.label + "\n" + c.note
+            else:
+                c.note = row.label + "\n" + c.note
+            c.kind = kind
+            item = score([c], vault, ref)[0] if not single else _track(c, vault, ref, "max")
+            item.notes.append("서식 표의 배점 기준으로 계산")
+            out.append((row, item))
+            continue
+        if kind not in body:
+            out.append((row, ItemScore(row.label, row.points or 0, kind, None, notes=["제안요청서 본문에 배점기준이 없어 비움 — 직접 기입"])))
+            continue
+        c = body[kind]
+        if single:  # 본문은 누계로만 평가하는데 서식엔 '단일최대' 줄 — 본문 구간을 단일 최대 실적에 적용해 서식 배점으로 환산
+            item = _track(c, vault, ref, "max")
+            item.notes.append("본문엔 단일최대 기준이 없어 본문 누계 구간을 단일 최대 실적에 적용 — 확인")
+        else:
+            item = score([c], vault, ref)[0]
+        out.append((row, _scaled(item, row.points)))
     return out
 
 

@@ -25,8 +25,8 @@ from pathlib import Path
 
 from .bundle import merge, pick
 from .catalog import load_catalog
-from .selfscore import fmt, read_criteria, score as score_items
-from .fill import FillReport, agency_notice_no, fill_hwpx
+from .selfscore import SelfScore, fmt, read_criteria, score as score_items
+from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
 from .kinds import detect, guide
@@ -94,6 +94,15 @@ def convert_hwp(src: Path, work: Path) -> tuple[Path | None, str]:
         err = raw.decode("cp949", "replace").strip()
     lines = [ln.strip() for ln in err.splitlines() if ln.strip() and not ln.strip().startswith("at ")]
     return None, (lines[0][:200] if lines else f"종료 코드 {r.returncode}")
+
+
+def main_docs(files: list[Path]) -> tuple[list[Path], list[Path]]:
+    """첨부 중 공고문·제안요청서만(11/05 사용자 요청 — 과업지시서·도면·내역서 등은 안 읽음). 둘 다 없으면 전부.
+    돌려줌: (읽을 것, 뺀 것)."""
+    keep = [f for f in files if re.search(r"공고|제안\s*요청", re.sub(r"\s+", "", Path(f).name))]
+    if not keep:
+        return list(files), []
+    return keep, [f for f in files if f not in keep]
 
 
 def _use_page_titles(sheet, hwpx_files: list[Path], source: str) -> None:
@@ -195,13 +204,28 @@ def summary(a: Analysis) -> dict:
 _MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참여자|조직|재직|자격\s*사항|실적\s*증명")
 
 
+# 공란으로 두는 서식(11/05 사용자 요청) — 서면질의서(질의할 때 직접)·공동수급 관련 서류(공동수급할 때만 직접)
+_BLANK_FORM = re.compile(r"질\s*의|공동\s*수급|공동\s*이행|분담\s*이행|공동\s*도급|합의\s*각서")
+
+
 def is_manual(name: str) -> bool:
-    return bool(_MANUAL_FORM.search(name or ""))
+    return bool(_MANUAL_FORM.search(name or "") or _BLANK_FORM.search(name or ""))
 
 
 def _is_basic(name: str) -> bool:
     """회사 기본 정보만 채우면 되는 서식(신청서·제출서·표지 등) — 회사명·대표자 칸이 있음."""
     return bool(re.search(r"신청서|제출서|표지|일반현황|위임장|선임계|서약서", name))
+
+
+def _form_text(p: Path) -> str:
+    """잘라 낸 서식의 글(작성 안내의 '최근 3년 이내' 등을 보려고)."""
+    from .fill import _text
+
+    try:
+        z = zipfile.ZipFile(p)
+        return re.sub(r"\s+", " ", " ".join(_text(z.read(n).decode("utf-8")) for n in z.namelist() if n.startswith("Contents/section")))
+    except (zipfile.BadZipFile, OSError, KeyError):
+        return ""
 
 
 def _safe(name: str) -> str:
@@ -228,6 +252,11 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                       key=lambda p: (0 if "제안요청" in p.name else 1 if "과업" in p.name else 2))
         criteria = read_criteria(hwpx)
         self_scores = score_items(criteria, vault, notice_date or date.today()) if criteria else []
+        score_ctx = SelfScore(criteria, vault, notice_date or date.today())
+        # 입찰보증금 지급 확약서의 입찰 금액 = 제안요청서 기초금액(사업비) — 11/05 사용자 요청
+        basis = basis_amount(a.sheet.texts)
+        if basis:
+            a.notes.append(f"입찰보증금 확약서 입찰 금액 = {basis[0]:,}원 ({basis[1]}에서 읽음)")
         for f in files:
             src = Path(a.converted.get(f.name, f))
             if src.suffix.lower() != ".hwpx":
@@ -240,13 +269,17 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                     manual.append(c.file)
                     parts.append((c, manual_dir / c.file))
                     continue
-                is_track = bool(re.search(r"실적.*(집계|현황)|수행실적", c.title))
+                # 실적 서식 — '사업수행 실적집계표'·'최근 5년간 사업수행실적'·'체험물 제작·설치 실적'(실적증명서는 발주처가 씀)
+                is_track = bool(re.search(r"실적", c.title)) and not re.search(r"증명", c.title)
                 rows = a.candidates
-                if is_track and not rows:  # 공고에 실적 요건이 없으면 서식 제목(분야·최근 N년)으로 고름(11/04 사용자 결정)
-                    rows, why = form_tracks(c.title, vault.tracks, notice_date or date.today())
+                body = _form_text(forms_dir / c.file) if is_track else ""
+                if is_track and (not rows or re.search(r"최근\s*\d+\s*(?:개\s*)?년", c.title + body)):
+                    # 서식(제목·작성 안내)의 '최근 N년' 기간 안 준공 실적 전부(11/05 사용자 요청 — 분야·금액으로 안 거름)
+                    years = re.search(r"최근\s*\d+\s*(?:개\s*)?년", c.title) or re.search(r"최근\s*\d+\s*(?:개\s*)?년", body)
+                    rows, why = form_tracks(years.group(0) if years else c.title, vault.tracks, notice_date or date.today())
                     a.notes += [f"{c.file}: {w}" for w in why]
                 rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title,
-                                agency_no, notice_no, self_scores)
+                                agency_no, notice_no, score_ctx, basis[0] if basis else None)
                 reports.append(rep)
                 parts.append((c, filled_dir / c.file))
             if parts:  # 서식 전체(채운 것 + 직접 기입)를 한글 파일 하나로 — 담당자가 이 파일 하나에서 기입(11/03 사용자 요청)
@@ -303,11 +336,12 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             table(wb.create_sheet("통합본 순서"), ["순서", "구분", "파일", "확인"],
                   [[i, p.section, Path(p.path).name, p.note] for i, p in enumerate(a.picks, 1)]
                   or [["", "파일 이름이 맞는 회사 서류가 없음", "", ""]], [6, 40, 40, 36])
+            form_rows = [r for rep in reports for r in rep.self_rows]  # 자기평가표에 실제로 넣은 점수(서식 기준)
             table(wb.create_sheet("자기평가"), ["항목", "배점", "자기평점", "근거", "확인할 것"],
-                  [[s.name, fmt(s.points), fmt(s.score), s.basis, "\n".join(s.notes)] for s in self_scores]
+                  form_rows or [[s.name, fmt(s.points), fmt(s.score), s.basis, "\n".join(s.notes)] for s in self_scores]
                   + ([["계", fmt(sum(s.points for s in self_scores)),
                        fmt(sum(s.score for s in self_scores)) if all(s.score is not None for s in self_scores) else "",
-                       "제안요청서 본문 정량평가 배점기준으로 계산(서식과 다르면 본문 기준)", ""]] if self_scores else [])
+                       "제안요청서 본문 정량평가 배점기준으로 계산", ""]] if self_scores and not form_rows else [])
                   or [["", "", "", "제안요청서에서 정량평가 배점기준(정량적 평가 : N점)을 찾지 못함", ""]], [24, 8, 10, 60, 60])
             table(wb.create_sheet("자동입력"), ["서식 파일", "채운 칸 (확인 필요)", "넣은 실적", "줄 모자라 못 넣은 실적"],
                   f_rows or [["서식을 자르지 못함", "", "", ""]], [40, 60, 10, 14])

@@ -656,8 +656,7 @@ def track_candidates(req: TrackReq, tracks: list[dict], ref: date) -> list[dict]
         except (TypeError, ValueError):
             counted = None
             notes.append("금액 없음")
-        if req.per_project and req.min_amount and counted is not None and counted < req.min_amount:
-            continue
+        # 금액 하한('단일 30백만원 이상')·분야로는 거르지 않음 — 기간 조건만 맞으면 전부(11/05 사용자 요청)
         if t.get("부가세") in (None, "", "모름"):
             notes.append("부가세 포함 여부 확인")
         out.append({**t, "인정 금액(원)": counted, "확인할 것": ", ".join(notes)})
@@ -689,16 +688,15 @@ def track_field(name: str) -> str:
 
 
 def form_tracks(title: str, tracks: list[dict], ref: date) -> tuple[list[dict], list[str]]:
-    """실적 서식 제목("전시분야 최근 3년간 사업수행실적")으로 넣을 실적 고르기 — 공고에 실적 요건이 없을 때.
-    기간: 제목의 '최근 N년'(준공일 기준, 준공일 없는 실적은 빼고 알림). 분야: 제목 낱말 → 받는 분야(분야 칸이 비면 사업명으로).
+    """실적 서식 제목("전시분야 최근 3년간 사업수행실적")으로 넣을 실적 고르기.
+    기간: 제목의 '최근 N년'(준공일 기준, 준공일 없는 실적은 빼고 알림). 분야로는 거르지 않음(11/05 사용자 요청 — 예전엔 제목 낱말로 분야를 골랐음).
     순서: 준공일 오래된 것부터(서식 주석 '연도순'). 돌려줌: (실적, 알림 줄)."""
     m = re.search(r"최근\s*(\d+)\s*(?:개\s*)?년", title or "")
     years = int(m.group(1)) if m else None
     fields = next((fs for rx, fs in _FORM_FIELDS if rx.search(title or "")), None)
     out, no_done, ongoing, notes = [], [], [], []
+    del fields  # 분야로는 거르지 않음 — 기간 조건만 맞으면 전부(11/05 사용자 요청: '3년 내·5년 내 조건 아래 전체 수집')
     for t in tracks:
-        if fields is not None and (t.get("분야") or track_field(str(t.get("사업명") or ""))) not in fields:
-            continue
         done = _as_date(t.get("준공일"))
         # 수행실적은 준공된 것만(11/04 사용자 확인) — 기간 요건이 없는 서식이어도 진행 중·준공일 없는 실적은 뺌
         if done is None:

@@ -467,6 +467,8 @@ def rebuild(pdf_path: Path, out: Path, max_pages: int = 40,
             break
         img = pdf[i].render(scale=DPI / 72).to_pil()
         found = _pdf_head(texts[i])  # 서식 머리: PDF 글자 정보 먼저(정확), 없으면 OCR 쪽 위 글
+        if found is None:
+            found = _ocr_top_head(img)
         xml, top = page_xml(img, st, content_width, False, i, drop_head=found is not None)
         if found is None:
             m = next((m for m in (_HEAD.match(ln) for ln in top) if m), None)
@@ -501,6 +503,30 @@ def rebuild(pdf_path: Path, out: Path, max_pages: int = 40,
                        compress_type=zipfile.ZIP_STORED if info.filename == "mimetype" else zipfile.ZIP_DEFLATED)
     notes.append(f"{Path(pdf_path).name}: PDF 서식 {count}개({done}쪽)를 글자 인식(OCR)으로 한글 서식으로 다시 만듦 — 칸 모양·글자를 원본 PDF와 대조해 고칠 것")
     return out, notes, titles
+
+
+def _ocr_top_head(img) -> tuple[str, str] | None:
+    """쪽 위쪽 15%만 OCR(psm 4)해 '[서식 N] 제목' → (번호, 제목). 머리가 PDF 글 정보에 없는 쪽(11/05 창업진흥원 서식 7 —
+    쪽 전체 OCR(psm 11)은 '[서직 7]'로 읽음)."""
+    from .importer import _ocr_setup
+    from .notice import _OCR_HEAD
+
+    tess = _ocr_setup()
+    if tess is None:
+        return None
+    w, h = img.size
+    try:
+        top = tess.image_to_string(img.crop((0, 0, w, int(h * 0.15))), lang="kor+eng", config="--psm 4")
+    except Exception:  # noqa: BLE001
+        return None
+    m = _OCR_HEAD.search(top)
+    if not m:
+        return None
+    title = m.group(2).strip()
+    if not re.search(r"[가-힣]{2}", title):
+        rest = [ln.strip() for ln in top[m.end():].splitlines() if re.search(r"[가-힣]{2}", ln)]
+        title = rest[0] if rest else ""
+    return re.sub(r"\s+", "", m.group(1)), title
 
 
 def _pdf_head(text: str) -> tuple[str, str] | None:

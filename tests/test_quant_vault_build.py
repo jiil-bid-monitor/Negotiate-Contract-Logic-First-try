@@ -1521,3 +1521,22 @@ def test_pdf_form_rebuild_writes_cuttable_hwpx(tmp_path: Path, monkeypatch):
     assert [(x.no, x.title) for x in parts] == [("2", "일반현황")]
     fill_hwpx(tmp_path / "cut" / parts[0].file, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(가상)회사"}))
     assert "(가상)회사" in zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+
+
+def test_hidden_form_head_read_from_page_top(monkeypatch):
+    """'[서식 7]' 머리가 PDF 글 정보에 없는 쪽 — 쪽 위만 OCR해 머리 줄을 붙임(11/05 창업진흥원 입찰보증금지급각서)."""
+    from quantdocs import importer, notice
+
+    pages = ["- 34 -\n서식 서식 [ 1]  제안서 표지제안서 표지\n제 안 서", "- 45 -\n제 14 조 운영위원회", "- 46 -\n입 찰 보 증 금 지 급 각 서\n1. 입찰건명 :"]
+    seen = []
+
+    def fake(data, idx, frac=0.15, dpi=300):
+        seen.extend(idx)
+        return {1: "한다.\n", 2: "[서직 7]\n\n입찰보증금지급각서\n"}
+    monkeypatch.setattr(importer, "ocr_page_tops", fake)
+    text = notice._add_hidden_heads(b"", pages, "\n".join(pages), "r.pdf")
+    assert seen == [1, 2]
+    assert "[서식 7] 입찰보증금지급각서\n- 46 -" in text
+    assert "[서식 1]" not in text.split("- 45 -")[1]
+    names = [f.no for f in notice.read_forms(text, "r.pdf", notice.load_catalog())]
+    assert 7 in names or "7" in names

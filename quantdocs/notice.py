@@ -648,7 +648,45 @@ def doc_text(path: Path) -> str:
                 OCR_USED.append(f"{p.name}: 글꼴 문제로 글이 빠진 {len(got)}쪽을 글자 인식(OCR)으로 읽음 — 자격·배점 등 원문과 대조")
             else:
                 OCR_USED.append(f"⚠ {p.name}: 본문 글이 {len(broken)}쪽 빠져 있는데 글자 인식 도구(Tesseract)가 없어 못 읽음 — 서버 PC 설치(docs/quantdocs.md)")
+        text = _add_hidden_heads(data, pages, text, p.name)
     _TEXT_CACHE[key] = text
+    return text
+
+
+_HEAD_IN_TEXT = re.compile(r"서\s*식\s*\[?\s*\d|\[\s*서\s*식|서\s*식\s*[가-힣 ]{1,40}\[\s*\d")
+_OCR_HEAD = re.compile(r"[\[［(〔]\s*서\s*[식직]\s*(?:제\s*)?(\d{1,2}(?:\s*-\s*\d{1,2})?)\s*(?:호\s*)?[\]］)〕]\s*([^\n]*)")
+HEAD_SCAN_MAX = 30
+
+
+def _add_hidden_heads(data: bytes, pages: list[str], text: str, name: str) -> str:
+    """서식 머리 '[서식 N]'이 그림·빠진 글꼴이라 PDF 글 정보에 없는 쪽(11/05 창업진흥원 '[서식 7] 입찰보증금지급각서' — 쪽 글은 제목만 있음).
+    첫 서식 머리가 나온 쪽 뒤에서 앞부분에 '서식'이 없는 쪽만 위쪽 15%를 OCR해 '[서식 N]'이 보이면 그 쪽 글 앞에 '[서식 N] 제목' 줄을 붙임.
+    OCR 도구가 없거나 서식 머리가 없는 PDF면 그대로."""
+    first = next((i for i, t in enumerate(pages) if _HEAD_IN_TEXT.search(t[:200])), None)
+    if first is None:
+        return text
+    todo = [i for i in range(first + 1, len(pages)) if not re.search(r"서\s*식", pages[i][:200])][:HEAD_SCAN_MAX]
+    if not todo:
+        return text
+    from .importer import ocr_page_tops
+
+    got = ocr_page_tops(data, todo) or {}
+    for i, top in got.items():
+        m = _OCR_HEAD.search(top)
+        if not m:
+            continue
+        no = re.sub(r"\s+", "", m.group(1))
+        title = m.group(2).strip()
+        if not re.search(r"[가-힣]{2}", title):  # 제목이 다음 줄에 있으면 그 줄
+            rest = [ln.strip() for ln in top[m.end():].splitlines() if re.search(r"[가-힣]{2}", ln)]
+            title = rest[0] if rest else ""
+        head = f"[서식 {no}] {title}".strip()
+        orig = pages[i]
+        if orig and orig in text:
+            text = text.replace(orig, head + "\n" + orig, 1)
+        else:
+            text += "\n" + head + "\n"
+        OCR_USED.append(f"{name}: {i + 1}쪽 서식 머리 '{head}'를 글자 인식(OCR)으로 읽음")
     return text
 
 

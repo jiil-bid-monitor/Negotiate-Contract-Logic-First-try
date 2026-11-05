@@ -873,3 +873,38 @@ def test_label_paragraph_value_wraps_under_value(tmp_path: Path):
     assert re.findall(r'left value="(\d+)"', block) == ["1000", "2000"]
     assert 'paraProperties itemCnt="2"' in head  # '주  소 :'·'상  호 :'는 앞부분 너비가 같아 사본 하나를 같이 씀
     assert re.search(rf'<hp:p paraPrIDRef="{pid}">(?:(?!</hp:p>).)*\(주\)가상', out, re.S)
+
+
+def test_table_keeps_height_when_filled_text_wraps(tmp_path: Path):
+    """11/05 필암서원 서식 12: 쪽 끝까지 0.2mm만 남는 '글자처럼 취급' 표에서 업태·종목이 두 줄이 되자 표가 통째로 다음 쪽으로 넘어가
+    제목만 남음 → 늘어난 만큼 같은 표의 여유 많은 줄(주요연혁 빈 칸)을 줄여 표 전체 높이를 원래대로. 쪽에 여유가 넉넉한 표는 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1300" useFontSpace="0"><hh:ratio hangul="100"/>'
+              '</hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/>'
+              '<hh:lineSpacing type="PERCENT" value="170"/></hh:paraPr></hh:paraProperties></hh:head>')
+
+    def form(lineseg_bottom):
+        rows = [[_sz_cell(0, 0, "사 업 분 야", 12622, 2912).replace('charPrIDRef="1"', 'charPrIDRef="0"'),
+                 _sz_cell(1, 0, "", 35341, 2912).replace('charPrIDRef="1"', 'charPrIDRef="0"')],
+                [_sz_cell(0, 1, "〈주요연혁(요약)〉", 47963, 43823).replace('charPrIDRef="1"', 'charPrIDRef="0"')]]
+        tbl = ('<hp:tbl rowCnt="2" colCnt="2"><hp:sz width="47963" height="46735"/>'
+               + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>")
+        return ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:secPr><hp:pagePr height="84188"><hp:margin header="1417" footer="1417" '
+                'top="4252" bottom="4252" left="5669" right="5669"/></hp:pagePr></hp:secPr></hp:run></hp:p>'
+                f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0">{tbl}<hp:t/></hp:run><hp:linesegarray>'
+                f'<hp:lineseg textpos="0" vertpos="5880" vertsize="{lineseg_bottom - 5880}"/></hp:linesegarray></hp:p>')
+    v = vault.Vault({}, info={"사업분야": "사업시설 관리, 사업지원 및 임대 서비스업 / 전시, 컨벤션 및 행사 대행업 / 가상 업종 하나 더"})
+    heights = {}
+    for name, bottom in (("tight", 72850 - 150), ("roomy", 72850 - 20000)):
+        src = _mini_hwpx(tmp_path / f"{name}.hwpx", form(bottom))
+        with zipfile.ZipFile(src, "a") as z:
+            z.writestr("Contents/header.xml", header)
+        rep = fill_hwpx(src, tmp_path / f"{name}_o.hwpx", v)
+        out = zipfile.ZipFile(tmp_path / f"{name}_o.hwpx").read("Contents/section0.xml").decode()
+        assert "가상 업종" in out
+        heights[name] = [int(h) for h in re.findall(r'cellSz width="47963" height="(\d+)"', out)][0]
+        if name == "tight":
+            assert any("주요연혁" in x and "줄임" in x for x in rep.filled), rep.filled
+    assert heights["roomy"] == 43823  # 쪽에 여유가 있으면 건드리지 않음
+    assert 43823 - 6000 < heights["tight"] < 43823  # 늘어난 만큼(+1mm)만 줄임

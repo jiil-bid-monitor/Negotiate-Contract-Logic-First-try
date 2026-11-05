@@ -527,12 +527,22 @@ class _Chars:
         self.faces = {m.group(1).upper(): dict(re.findall(r'<(?:[\w.-]+:)?font\b[^>]*\bid="(\d+)"[^>]*\bface="([^"]*)"', m.group(2)))
                       for m in re.finditer(r'<(?:[\w.-]+:)?fontface\b[^>]*\blang="(\w+)"[^>]*>(.*?)</(?:[\w.-]+:)?fontface>', header, re.S)}
 
+    def _block(self, cid: str) -> str:
+        """글자 모양 정의 — 채우면서 더한 사본(11pt·줄인 크기)이면 원래 모양에 그 크기를 넣은 것."""
+        if cid in self.blocks:
+            return self.blocks[cid]
+        for (orig, h), new in self.added.items():
+            if new == cid and orig in self.blocks:
+                b = self.blocks[orig]
+                return re.sub(r'\bheight="\d+"', f'height="{h}"', b, count=1) if h is not None else b
+        return ""
+
     def height(self, cid: str) -> int:
-        m = re.search(r'\bheight="(\d+)"', self.blocks.get(cid, ""))
+        m = re.search(r'\bheight="(\d+)"', self._block(cid))
         return int(m.group(1)) if m else 1000
 
     def ratio(self, cid: str) -> float:
-        m = re.search(r'<(?:[\w.-]+:)?ratio\b[^>]*\bhangul="(\d+)"', self.blocks.get(cid, ""))
+        m = re.search(r'<(?:[\w.-]+:)?ratio\b[^>]*\bhangul="(\d+)"', self._block(cid))
         return int(m.group(1)) / 100 if m else 1.0
 
     def _next_para_id(self) -> str:
@@ -581,7 +591,7 @@ class _Chars:
 
     def char_width(self, cid: str, ch: str) -> float:
         """글자 하나 너비 어림(HWPUNIT). 빈칸은 '글꼴에 어울리는 빈칸'이 꺼져 있으면 글자 크기의 절반(한글 기본)."""
-        h, ratio, block = self.height(cid), self.ratio(cid), self.blocks.get(cid, "")
+        h, ratio, block = self.height(cid), self.ratio(cid), self._block(cid)
         sp = re.search(r'<(?:[\w.-]+:)?spacing\b[^>]*\bhangul="(-?\d+)"', block)
         extra = 1 + (int(sp.group(1)) / 100 if sp else 0)
         if ch == " ":
@@ -596,9 +606,21 @@ class _Chars:
         m = re.search(r'<(?:[\w.-]+:)?align\b[^>]*\bhorizontal="(\w+)"', self.paras.get(pid, ""))
         return m.group(1) if m else ""
 
+    def _para(self, pid: str) -> str:
+        """문단 모양 정의 — 채우면서 더한 사본(가운데 정렬·내어쓰기)이면 원래 모양(줄 간격 등은 같음)."""
+        if pid in self.paras:
+            return self.paras[pid]
+        for orig, new in self.added_para.items():
+            if new == pid:
+                return self.paras.get(orig, "")
+        for (orig, _w), new in self.added_hang.items():
+            if new == pid:
+                return self.paras.get(orig, "")
+        return ""
+
     def spacing(self, pid: str) -> float | None:
         """줄 간격 비율(160% → 1.6). 비율이 아닌 줄 간격(고정값 등)·문단 모양을 모르면 None."""
-        block = self.paras.get(pid, "")
+        block = self._para(pid)
         if not block:
             return 1.6
         m = re.search(r'<(?:[\w.-]+:)?lineSpacing\b[^>]*type="PERCENT"[^>]*value="(\d+)"', block)
@@ -795,6 +817,135 @@ def _align_numbers(xml: str, edits: list, chars: "_Chars", override: dict[int, s
                 override[cell.start] = center
 
 
+def _cell_need(cell: str, chars: "_Chars") -> int | None:
+    """칸 안 글이 차지할 높이 어림(HWPUNIT) — 문단마다 (줄 수 × 가장 큰 글자 × 줄 간격) + 칸 위아래 여백. 표가 든 칸은 None."""
+    if re.search(r"<(?:[\w.-]+:)?tbl\b", cell[cell.find(">") + 1:]):
+        return None
+    size = re.search(r'<(?:[\w.-]+:)?cellSz\b[^>]*width="(\d+)"', cell)
+    tag = re.search(r'<(?:[\w.-]+:)?cellMargin\b[^>]*>', cell)
+    mg = dict(re.findall(r'\b(left|right|top|bottom)="(\d+)"', tag.group(0) if tag else ""))
+    avail = (int(size.group(1)) if size else 0) - int(mg.get("left", 141)) - int(mg.get("right", 141))
+    if avail <= 0:
+        return None
+    need = int(mg.get("top", 141)) + int(mg.get("bottom", 141))
+    for ps, pe in _spans(cell, "p"):
+        para = cell[ps:pe]
+        pm = re.search(r'paraPrIDRef="(\d+)"', para)
+        spacing = chars.spacing(pm.group(1)) if pm else 1.6
+        width, cur, in_t, tallest = 0.0, "0", False, 0
+        for part in re.split(r"(<[^>]+>)", para):
+            if part.startswith("<"):
+                run = re.match(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', part)
+                if run:
+                    cur = run.group(1)
+                    tallest = max(tallest, chars.height(cur))
+                elif re.match(r"<(?:[\w.-]+:)?t\b", part):
+                    in_t = True
+                elif re.match(r"</(?:[\w.-]+:)?t>", part):
+                    in_t = False
+                elif re.match(r"<(?:[\w.-]+:)?tab\b", part):
+                    tw = re.search(r'\bwidth="(\d+)"', part)
+                    width += int(tw.group(1)) if tw else chars.height(cur) * 2
+            elif in_t:
+                width += sum(chars.char_width(cur, ch) for ch in unescape(part))
+        lines = max(1, -(-int(width) // avail))
+        need += int(lines * (tallest or 1000) * (spacing if spacing else 1.0))
+    return need
+
+
+def _row_parts(tbl_xml: str) -> list[list[tuple[int, int]]]:
+    return [[(ts + cs, ts + ce) for cs, ce in _spans(tbl_xml[ts:te], "tc")] for ts, te in _spans(tbl_xml, "tr")]
+
+
+_ROWSPAN = re.compile(r'rowSpan="([2-9]|\d\d+)"')
+
+
+def _row_info(tbl_xml: str, chars: "_Chars") -> list[tuple[int, int]] | None:
+    """줄마다 (칸 높이, 글이 차지할 높이 어림). 세로로 합친 칸은 그 줄 계산에서 뺌. 어림이 안 되는 칸(표가 든 칸)이 있으면 None."""
+    out = []
+    for cells in _row_parts(tbl_xml):
+        height, need = 0, 0
+        for cs, ce in cells:
+            cell = tbl_xml[cs:ce]
+            h = re.search(r'<(?:[\w.-]+:)?cellSz\b[^>]*height="(\d+)"', cell)
+            if not h:
+                return None
+            if _ROWSPAN.search(cell):
+                continue
+            n = _cell_need(cell, chars)
+            if n is None:
+                return None
+            height, need = max(height, int(h.group(1))), max(need, n)
+        out.append((height, need))
+    return out
+
+
+def _page_slack(xml: str, tbl_end: int) -> int | None:
+    """표가 든 문단의 원본 줄 배치(linesegarray)로 본 그 쪽에 남는 높이(HWPUNIT) — 쪽 본문 높이 − (줄 위치 + 줄 높이). 모르면 None."""
+    page = re.search(r'<(?:[\w.-]+:)?pagePr\b[^>]*\bheight="(\d+)".*?<(?:[\w.-]+:)?margin\b([^>]*)>', xml, re.S)
+    seg = re.match(r'(?:<(?:[\w.-]+:)?t\s*/>|</(?:[\w.-]+:)?run>|\s)*<(?:[\w.-]+:)?linesegarray>(.*?)</(?:[\w.-]+:)?linesegarray>',
+                   xml[tbl_end:tbl_end + 2000], re.S)
+    if not page or not seg:
+        return None
+    mg = dict(re.findall(r'\b(header|footer|top|bottom)="(\d+)"', page.group(2)))
+    lines = re.findall(r'vertpos="(\d+)" vertsize="(\d+)"', seg.group(1))
+    if len(mg) < 4 or not lines:
+        return None
+    body = int(page.group(1)) - sum(int(v) for v in mg.values())
+    vp, vs = map(int, lines[-1])
+    return body - vp - vs
+
+
+def _keep_table_heights(before: str, after: str, chars: "_Chars", rep: FillReport) -> str:
+    """채운 글 때문에 줄이 높아지면 같은 표에서 여유가 가장 많은 줄(연혁 빈 칸 등)을 그만큼 줄여 표 전체 높이를 원래대로(11/05 사용자 요청).
+    계기: 필암서원 서식 12 — 원본도 쪽 끝까지 0.2mm만 남는 표인데 업태·종목이 두 줄이 되며 '글자처럼 취급' 표가 통째로 다음 쪽으로 넘어가
+    제목만 남음(서식 2·16도 남는 공간 0.6mm 이하). 어림 오차를 줄이려 채우기 전 같은 표와 비교해 늘어난 만큼만 셈."""
+    old_tbls, new_tbls = _spans(before, "tbl"), _spans(after, "tbl")
+    if len(old_tbls) != len(new_tbls):
+        return after
+    for (os_, oe), (ns, ne) in reversed(list(zip(old_tbls, new_tbls))):
+        old, new = before[os_:oe], after[ns:ne]
+        if old == new or re.search(r"<(?:[\w.-]+:)?tbl\b", new[4:]):
+            continue
+        r_old, r_new = _row_info(old, chars), _row_info(new, chars)
+        if r_old is None or r_new is None or len(r_old) != len(r_new):
+            continue
+        grow = [max(0, n - h) - max(0, no - ho) for (ho, no), (h, n) in zip(r_old, r_new)]
+        extra = sum(grow)  # 늘어난 줄 − 줄어든 줄(빈칸이 값으로 바뀌며 짧아진 줄)
+        slack = _page_slack(before, oe)  # 원본에서 그 쪽에 남던 높이 — 그만큼은 늘어나도 쪽이 안 넘어감(0.5mm 남김)
+        if slack is not None:
+            extra -= max(0, slack - 150)
+        if extra <= 0:
+            continue
+        extra += 300  # 글자 너비는 어림이라 1mm 더 줄여 둠
+        # 여유 = 칸 높이 − 글 높이 − 0.5mm 남김(어림 오차) — 여유가 큰 줄부터 필요한 만큼 줄임
+        rows = _spans(new, "tr")
+        free = sorted(((h - n - 500, i) for i, (h, n) in enumerate(r_new) if grow[i] <= 0), reverse=True)
+        cuts: dict[int, int] = {}
+        for room, i in free:
+            if extra <= 0 or room <= 0:
+                break
+            if _ROWSPAN.search(new[rows[i][0]:rows[i][1]]):
+                continue
+            cuts[i] = min(room, extra)
+            extra -= cuts[i]
+        if not cuts:
+            rep.filled.append("⚠ 채운 글로 표가 길어졌는데 줄일 여유 칸이 없음 — 제목과 표가 다른 쪽이면 확인")
+            continue
+        for i in sorted(cuts, reverse=True):
+            ts, te = rows[i]
+            tr = re.sub(r'(cellSz\b[^>]*height=")(\d+)"', lambda m: f'{m.group(1)}{int(m.group(2)) - cuts[i]}"', new[ts:te])
+            new = new[:ts] + tr + new[te:]
+        total = sum(cuts.values())
+        new = re.sub(r'(<(?:[\w.-]+:)?sz\b[^>]*\bheight=")(\d+)"', lambda m: f'{m.group(1)}{max(0, int(m.group(2)) - total)}"', new, count=1)
+        after = after[:ns] + new + after[ne:]
+        names = ", ".join(f"'{_sq(_text(new[slice(*_spans(new, 'tr')[i])]))[:10]}'" for i in sorted(cuts))
+        rep.filled.append(f"채운 글로 표가 길어져 쪽을 넘지 않게 {names} 줄을 {total / 283.46:.1f}mm 줄임")
+        if extra > 300:
+            rep.filled.append(f"⚠ 줄일 여유가 모자라 표가 쪽을 넘을 수 있음({(extra - 300) / 283.46:.1f}mm) — 제목과 표가 다른 쪽이면 확인")
+    return after
+
+
 _NO_SLOT = re.compile(r"\s*제\s*\d{4}\s*[-–]\s*호\s*")  # 서식에 미리 적힌 '제 2026 - 호'
 
 
@@ -830,6 +981,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
                 for i in range(len(_spans(xml, "tbl"))):
                     xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
+            before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             none_rule = re.search(r"(?:없을|없는)\s*(?:경우|때).{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
             for tbl in _spans(xml, "tbl"):
@@ -930,6 +1082,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
             xml = _fill_label_paragraphs(xml, vault, rep, chars)
             xml = _apply_marks(xml, chars)
+            if chars is not None:
+                xml = _keep_table_heights(before_fill, xml, chars, rep)
             data = xml.encode("utf-8")
         out_entries[name] = data
     if chars is not None and chars.changed:  # 칸에 맞춰 줄인 글자 모양·가운데 정렬 문단 모양을 머리 정보에 더함

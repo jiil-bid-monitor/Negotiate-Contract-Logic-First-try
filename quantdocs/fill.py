@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from xml.sax.saxutils import escape
+from xml.sax.saxutils import escape, unescape
 
 
 @dataclass
@@ -393,7 +393,41 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
     return re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
 
 
-def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
+def _hang(seg: str, chars: "_Chars | None") -> str:
+    """이름표 문단('주 소 : 값')에 값이 들어간 뒤 — 값이 둘째 줄로 넘어가도 값 시작 위치에 맞춰 이어지게 내어쓰기(11/05 사용자 요청).
+    앞부분('   주  소 : ') 너비 = 탭은 한글 파일에 적힌 너비, 글자는 글자 모양 크기로 어림."""
+    if chars is None or _VS not in seg:
+        return seg
+    pm = re.search(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")(\d+)(")', seg)
+    if not pm:
+        return seg
+    width, cur, in_t = 0.0, "0", False
+    for part in re.split(r"(<[^>]+>)", seg[:seg.index(_VS)]):
+        if part.startswith("<"):
+            run = re.match(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', part)
+            if run:
+                cur = run.group(1)
+            elif re.match(r"<(?:[\w.-]+:)?t\b", part):
+                in_t = True
+            elif re.match(r"</(?:[\w.-]+:)?t>", part):
+                in_t = False
+            elif re.match(r"<(?:[\w.-]+:)?tab\b", part):
+                tw = re.search(r'\bwidth="(\d+)"', part)
+                width += int(tw.group(1)) if tw else chars.height(cur) * 2
+            elif re.match(r"<(?:[\w.-]+:)?fwSpace\b", part):
+                width += chars.height(cur)
+            elif re.match(r"<(?:[\w.-]+:)?nbSpace\b", part):
+                width += chars.char_width(cur, " ")
+        elif in_t:
+            width += sum(chars.char_width(cur, ch) for ch in unescape(part))
+    width = int(round(width))
+    if width <= 0 or width > 40000:  # 14cm 넘으면 어림이 틀렸을 수 있어 건드리지 않음
+        return seg
+    new = chars.hanging(pm.group(2), width)
+    return seg[:pm.start(2)] + new + seg[pm.end(2):] if new != pm.group(2) else seg
+
+
+def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None) -> str:
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
     # 표 안이어도 여러 줄짜리 칸(서식 본문 칸)의 줄은 채움 — 한 줄짜리 칸은 이름표 칸이라 표 채우기가 옆 칸에 씀(11/04 서식 8·9 서명 줄)
@@ -465,7 +499,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
             continue
         if bare:  # 쌍점 없는 서식은 쌍점 없이 — ' : 값'을 '   값'으로
             seg = seg.replace(f" : {_mark(value)}", f"   {_mark(value)}", 1)
-        edits.append((s, e, seg))
+        edits.append((s, e, _hang(seg, chars)))
         rep.filled.append(f"{_sq(label)} → {value[:40]}")
     for s, e, seg in reversed(edits):
         xml = xml[:s] + seg + xml[e:]
@@ -488,6 +522,7 @@ class _Chars:
                       re.finditer(r'<(?:[\w.-]+:)?paraPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?paraPr>', header, re.S)}
         self.added: dict[tuple[str, int | None], str] = {}
         self.added_para: dict[str, str] = {}  # 문단 모양 id → 가운데 정렬로 바꾼 사본 id
+        self.added_hang: dict[tuple[str, int], str] = {}  # (문단 모양 id, 내어쓰기 너비) → 사본 id
         # 언어별 글꼴 목록 {LATIN: {id: 이름}} — 채운 글의 숫자·영문을 한글과 같은 글꼴로(11/04 사용자 제보: 숫자 글꼴이 다름)
         self.faces = {m.group(1).upper(): dict(re.findall(r'<(?:[\w.-]+:)?font\b[^>]*\bid="(\d+)"[^>]*\bface="([^"]*)"', m.group(2)))
                       for m in re.finditer(r'<(?:[\w.-]+:)?fontface\b[^>]*\blang="(\w+)"[^>]*>(.*?)</(?:[\w.-]+:)?fontface>', header, re.S)}
@@ -500,14 +535,62 @@ class _Chars:
         m = re.search(r'<(?:[\w.-]+:)?ratio\b[^>]*\bhangul="(\d+)"', self.blocks.get(cid, ""))
         return int(m.group(1)) / 100 if m else 1.0
 
+    def _next_para_id(self) -> str:
+        ids = [int(x) for x in self.paras] + [int(x) for x in self.added_para.values()] + [int(x) for x in self.added_hang.values()]
+        return str(max(ids) + 1)
+
     def centered(self, pid: str) -> str:
         """pid 문단 모양을 가운데 정렬로 바꾼 사본 id(이미 가운데거나 모르면 pid 그대로)."""
         if pid not in self.paras or self.align(pid) in ("CENTER", ""):
             return pid
         if pid not in self.added_para:
-            ids = [int(x) for x in self.paras] + [int(x) for x in self.added_para.values()]
-            self.added_para[pid] = str(max(ids) + 1)
+            self.added_para[pid] = self._next_para_id()
         return self.added_para[pid]
+
+    def margins(self, pid: str) -> tuple[int, int]:
+        """(들여쓰기 intent, 왼쪽 여백) HWPUNIT — 문단 모양의 첫 margin 묶음(hp:case가 있으면 그것)."""
+        block = self.paras.get(pid, "")
+        m = re.search(r"<(?:[\w.-]+:)?margin\b.*?</(?:[\w.-]+:)?margin>", block, re.S)
+        get = lambda k: int(re.search(rf'<(?:[\w.-]+:)?{k}\b[^>]*value="(-?\d+)"', m.group(0)).group(1)) \
+            if m and re.search(rf'<(?:[\w.-]+:)?{k}\b[^>]*value="', m.group(0)) else 0
+        return get("intent"), get("left")
+
+    def hanging(self, pid: str, width: int) -> str:
+        """pid 문단 모양에 내어쓰기 width를 준 사본 id — 둘째 줄부터 첫 줄 시작보다 width만큼 오른쪽에서 시작(11/05 '주 소 :' 줄)."""
+        if pid not in self.paras or self.align(pid) in ("CENTER", "RIGHT", "DISTRIBUTE"):
+            return pid
+        key = (pid, width)
+        if key not in self.added_hang:
+            self.added_hang[key] = self._next_para_id()
+        return self.added_hang[key]
+
+    def _hang_block(self, pid: str, width: int, new: str) -> str:
+        block = re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1)
+        intent, left = self.margins(pid)
+        start = left + max(intent, 0)  # 첫 줄이 시작하는 곳 — 새 모양에서도 첫 줄은 그대로
+
+        def margin(mm):  # hp:default 묶음은 값이 hp:case의 두 배(한글 저장 형식) — 원래 비율대로
+            seg = mm.group(0)
+            cur = re.search(r'<(?:[\w.-]+:)?left\b[^>]*value="(-?\d+)"', seg)
+            factor = (int(cur.group(1)) / left) if cur and left else (2 if mm.start() > first_end else 1)
+            seg = re.sub(r'(<(?:[\w.-]+:)?intent\b[^>]*value=")-?\d+', lambda x: f"{x.group(1)}{round(-width * factor)}", seg, count=1)
+            return re.sub(r'(<(?:[\w.-]+:)?left\b[^>]*value=")-?\d+', lambda x: f"{x.group(1)}{round(start * factor)}", seg, count=1)
+        first = re.search(r"<(?:[\w.-]+:)?margin\b.*?</(?:[\w.-]+:)?margin>", block, re.S)
+        first_end = first.end() if first else 0
+        return re.sub(r"<(?:[\w.-]+:)?margin\b.*?</(?:[\w.-]+:)?margin>", margin, block, flags=re.S)
+
+    def char_width(self, cid: str, ch: str) -> float:
+        """글자 하나 너비 어림(HWPUNIT). 빈칸은 '글꼴에 어울리는 빈칸'이 꺼져 있으면 글자 크기의 절반(한글 기본)."""
+        h, ratio, block = self.height(cid), self.ratio(cid), self.blocks.get(cid, "")
+        sp = re.search(r'<(?:[\w.-]+:)?spacing\b[^>]*\bhangul="(-?\d+)"', block)
+        extra = 1 + (int(sp.group(1)) / 100 if sp else 0)
+        if ch == " ":
+            return h * (0.3 if 'useFontSpace="1"' in block else 0.5) * extra
+        # 한글·한자·전각 + ❍○□※①· 같은 기호(한글 글꼴에서 한 글자 너비)
+        if "가" <= ch <= "힣" or "一" <= ch <= "鿿" or "　" <= ch <= "ヿ" or "＀" <= ch <= "￯" \
+                or "\u2460" <= ch <= "\u27bf" or ch in "※·ㆍ":
+            return h * ratio * extra
+        return h * ratio * (0.5 if ch.isalnum() else 0.45) * extra
 
     def align(self, pid: str) -> str:
         m = re.search(r'<(?:[\w.-]+:)?align\b[^>]*\bhorizontal="(\w+)"', self.paras.get(pid, ""))
@@ -555,17 +638,19 @@ class _Chars:
 
     @property
     def changed(self) -> bool:
-        return bool(self.added or self.added_para)
+        return bool(self.added or self.added_para or self.added_hang)
 
     def finish(self) -> str:
         header = self.header
-        if self.added_para:
+        if self.added_para or self.added_hang:
             extra = "".join(re.sub(r'\bhorizontal="\w+"', 'horizontal="CENTER"',
                                    re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1), count=1)
                             for pid, new in self.added_para.items())
+            extra += "".join(self._hang_block(pid, w, new) for (pid, w), new in self.added_hang.items())
+            n = len(self.added_para) + len(self.added_hang)
             header = re.sub(r"(</(?:[\w.-]+:)?paraProperties>)", lambda m: extra + m.group(1), header, count=1)
             header = re.sub(r'(<(?:[\w.-]+:)?paraProperties\b[^>]*\bitemCnt=")(\d+)"',
-                            lambda m: f'{m.group(1)}{int(m.group(2)) + len(self.added_para)}"', header, count=1)
+                            lambda m: f'{m.group(1)}{int(m.group(2)) + n}"', header, count=1)
         if not self.added:
             return header
 
@@ -843,7 +928,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', seg)
                     char_id = _fill_variant(chars, run.group(1) if run else "0")
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
-            xml = _fill_label_paragraphs(xml, vault, rep)
+            xml = _fill_label_paragraphs(xml, vault, rep, chars)
             xml = _apply_marks(xml, chars)
             data = xml.encode("utf-8")
         out_entries[name] = data

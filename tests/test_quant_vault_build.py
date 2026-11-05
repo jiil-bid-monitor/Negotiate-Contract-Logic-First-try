@@ -844,3 +844,32 @@ def test_filled_text_is_11pt(tmp_path: Path):
     assert size_of("TEL :") == "1000" and size_of("둘째 줄") == "1000"  # 서식 글자는 그대로
     assert re.search(r'charPrIDRef="1"><hp:t>\(주\)가상', out)  # 이미 11pt인 칸은 새 글자 모양 없이
     assert 'charProperties itemCnt="3"' in head  # 10pt → 11pt 사본 하나만 더함
+
+
+def test_label_paragraph_value_wraps_under_value(tmp_path: Path):
+    """11/05 사용자 요청: '          주  소 : 강원특별자치도 … (공장1층)'이 둘째 줄로 넘어가면 줄 맨 앞이 아니라 값 시작 위치에 맞춰 이어지게
+    — 그 문단에 내어쓰기(앞부분 너비)를 준 문단 모양 사본. 첫 줄 시작은 그대로, hp:default 묶음은 hp:case의 두 배."""
+    from quantdocs.fill import fill_hwpx
+
+    margin = lambda f: (f'<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="{1000 * f}" unit="HWPUNIT"/>'
+                        f'<hc:right value="0" unit="HWPUNIT"/></hh:margin>')
+    header = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000" useFontSpace="0"><hh:ratio hangul="100"/>'
+              '<hh:spacing hangul="0"/></hh:charPr></hh:charProperties>'
+              '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/><hp:switch><hp:case>'
+              f'{margin(1)}</hp:case><hp:default>{margin(2)}</hp:default></hp:switch></hh:paraPr></hh:paraProperties></hh:head>')
+    body = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>주  소 :</hp:t></hp:run></hp:p>'
+            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>상  호 :</hp:t></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "h.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "ho.hwpx", vault.Vault({}, info={"주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "회사명": "(주)가상"}))
+    zo = zipfile.ZipFile(tmp_path / "ho.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    pid = re.search(r'<hp:p paraPrIDRef="(\d+)">(?:(?!</hp:p>).)*강원특별자치도', out, re.S).group(1)
+    assert pid != "0"
+    block = re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)
+    # 탭 20000 + '주' '소' 1000씩 + 빈칸 4개(500씩) + ':' 450
+    assert re.findall(r'intent value="(-?\d+)"', block) == ["-24450", "-48900"]
+    assert re.findall(r'left value="(\d+)"', block) == ["1000", "2000"]
+    assert 'paraProperties itemCnt="2"' in head  # '주  소 :'·'상  호 :'는 앞부분 너비가 같아 사본 하나를 같이 씀
+    assert re.search(rf'<hp:p paraPrIDRef="{pid}">(?:(?!</hp:p>).)*\(주\)가상', out, re.S)

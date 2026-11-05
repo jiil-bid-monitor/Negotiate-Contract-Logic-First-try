@@ -325,9 +325,43 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
                 weak.discard(n)
             else:
                 add_one(n, title, i)
+    # ⑥ PDF 머리 '서식 일반현황서식 일반현황[ 2]'·'서식 서식 [ 1]  제안서 표지제안서 표지'(11/05 창업진흥원 제안요청서 — 번호가 이름 뒤,
+    # 굵은 글씨가 두 번 찍혀 글이 겹침). 하위 서식 '[ 4-1]~[ 4-3]'은 4번 하나로 묶어 이름을 이음
+    subs: dict[int, list[str]] = {}
+    for i, ln in enumerate(lines):
+        m = re.match(r"^\s*서식\s*(?P<name>[^\[\]|]*?)\s*\[\s*(?P<no>\d+)\s*(?:-\s*(?P<sub>\d+))?\s*\]\s*(?P<rest>.*)$", ln)
+        if not m:
+            continue
+        name = _undouble(re.split(r"서식", m.group("name"))[0]) or _undouble(re.split(r"\s{2,}|\[", m.group("rest").strip())[0] if m.group("rest").strip() else "")
+        if not name or re.search(r"[<>]", name):
+            continue
+        n = int(m.group("no"))
+        if m.group("sub"):
+            if name not in subs.setdefault(n, []):
+                subs[n].append(name)
+            continue
+        if n not in found or n in weak:
+            if n in found:
+                found[n].name, found[n].doc = _clean_name(name), classify(name, catalog)
+                weak.discard(n)
+            else:
+                add_one(n, name, i)
+    for n, names in subs.items():
+        if n not in found:
+            add_one(n, " · ".join(names) + f" ({n}-1~{n}-{len(names)})" if len(names) > 1 else names[0], 0)
     for n in weak:
         found[n].weak = True
     return sorted(found.values(), key=lambda f: f.no)
+
+
+def _undouble(s: str) -> str:
+    """PDF 굵은 글씨가 두 번 찍혀 '제안서 표지제안서 표지'처럼 겹친 글 → 한 번만. 겹치지 않았으면 그대로."""
+    s = re.sub(r"\s+", " ", s or "").strip(" -·")
+    for k in range(len(s) // 2, 1, -1):
+        a, b = s[:k].strip(), s[k:].strip()
+        if a and a == b:
+            return a
+    return s
 
 
 # ── 제출서류 목록: ①② / 1) 2) / - 줄 ───────────────────────────

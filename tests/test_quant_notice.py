@@ -270,3 +270,15 @@ def test_as_date_accepts_dotted_text():
     assert _as_date("2011.09.01") == dt.date(2011, 9, 1) and _as_date("2020/2/17") == dt.date(2020, 2, 17)
     assert _as_date("2023년 6월 5일") == dt.date(2023, 6, 5) and _as_date("2026-04-27") == dt.date(2026, 4, 27)
     assert _as_date("모름") is None and _as_date(None) is None
+
+
+def test_pdf_form_heads_name_before_number():
+    """11/05 창업진흥원 제안요청서(PDF) — '서식 일반현황서식 일반현황[ 2]'·'서식 서식 [ 1]  제안서 표지제안서 표지'(굵은 글씨가 두 번 찍힘),
+    하위 서식 '[ 4-1]~[ 4-3]'은 4번 하나로."""
+    from quantdocs.notice import read_forms
+
+    text = "\n".join(["서식 서식 [ 1]  제안서 표지제안서 표지", "제  안  서", "서식 일반현황서식 일반현황[ 2] ",
+                      "서식 투입인력 현황서식 투입인력 현황[ 4-1] ", "서식 투입인력 이력사항서식 투입인력 이력사항[ 4-2] ",
+                      "서식 청렴계약이행각서서식 청렴계약이행각서[ 5] "])
+    got = [(f.no, f.name) for f in read_forms(text, "제안요청서.pdf", [])]
+    assert got == [(1, "제안서 표지"), (2, "일반현황"), (4, "투입인력 현황 · 투입인력 이력사항 (4-1~4-2)"), (5, "청렴계약이행각서")]

@@ -265,7 +265,8 @@ def _loose_files(folder: Path, depth: int = 4) -> list[Path]:
         if x.name.startswith((".", "~$")):
             continue
         if x.is_dir():
-            if depth > 0 and x.name not in _SKIP_DIRS:
+            # '예시_사업수행능력평가서'처럼 예시·샘플·참고 폴더는 회사 서류가 아님 — 남의 신용등급·연혁을 잘못 읽지 않게(11/05)
+            if depth > 0 and x.name not in _SKIP_DIRS and not re.match(r"(예시|샘플|참고|sample)", x.name, re.I):
                 out += _loose_files(x, depth - 1)
         elif x.is_file():
             out.append(x)

@@ -496,7 +496,7 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
         hangul = name.lower().endswith((".hwp", ".hwpx"))
         if not name.lower().endswith(".pdf") and not hangul:
             continue
-        sq = re.sub(r"\s+", "", name)
+        sq = re.sub(r"\s+", "", path)  # 폴더 이름까지('연혁/…', '기업신용평가확인/…' — 11/05 사용자가 폴더로 분류)
         by_name = [k for k, words in (("연혁", ("연혁",)), ("등록증", ("참가자격", "입찰참가")), ("사업자", ("사업자등록",)),
                                       ("인감", ("인감증명", "등기")), ("신용", ("신용평가", "신용등급")))
                    if any(w in sq for w in words)]

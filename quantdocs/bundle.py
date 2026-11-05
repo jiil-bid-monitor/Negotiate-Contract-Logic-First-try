@@ -35,6 +35,11 @@ def _sq(s: str) -> str:
     return re.sub(r"\s+", "", str(s or ""))
 
 
+def _where(path: str) -> str:
+    """파일을 고를 때 볼 글 — 'files/' 뒤 폴더 이름까지(11/05 사용자가 폴더로 분류: '기업신용평가확인/신용평가(27.6.15).pdf')."""
+    return _sq(path[len("files/"):] if path.startswith("files/") else Path(path).name)
+
+
 def _stem(path: str) -> str:
     """파일 이름에서 확장자·괄호(유효기간 등)를 뺀 핵심 — '실물모형(~27.7.26).pdf' → '실물모형'."""
     base = Path(path).stem
@@ -135,7 +140,7 @@ def pick(files, submit_texts: list[str], quals: list[dict], today: date | None =
                         for f in hits:
                             add(f"{r['label']} — {title}", f)
                 continue
-            hits = [f for f in pool if any(_sq(w) in _sq(Path(f).name) for w in r["files"])]
+            hits = [f for f in pool if any(_sq(w) in _where(f) for w in r["files"])]
             if not hits:
                 missing.append(f"제출서류 '{text[:40]}': 파일 이름에 '{'·'.join(r['files'])}' 든 서류 없음")
             for f in hits:
@@ -145,7 +150,7 @@ def pick(files, submit_texts: list[str], quals: list[dict], today: date | None =
         for f in hits:
             add(f"자격 — {title}", f)
     # 3) 회사 연혁(11/05 사용자 요청: 통합본에 자격증·연혁·기타 서류 모두) — 연혁 PDF가 있으면 그것, 없으면 연혁 표로 한 장 만듦(merge)
-    hist = [f for f in pool if "연혁" in _sq(Path(f).name) and Path(f).suffix.lower() in MERGEABLE]
+    hist = [f for f in pool if "연혁" in _where(f) and Path(f).suffix.lower() in MERGEABLE]
     for f in hist[:1] or ([HISTORY] if with_history else []):
         add("회사 연혁", f)
     # 4) 그 밖의 회사 기본 서류 — 공고 제출서류 목록에 없어도 파일이 있으면 모두(직접생산 증명서는 공고 자격에 든 품목만)
@@ -153,7 +158,7 @@ def pick(files, submit_texts: list[str], quals: list[dict], today: date | None =
         if r.get("by_qualification"):
             continue
         for f in pool:
-            if any(_sq(w) in _sq(Path(f).name) for w in r["files"]):
+            if any(_sq(w) in _where(f) for w in r["files"]):
                 add(r["label"], f)
     return picks, list(dict.fromkeys(missing))
 

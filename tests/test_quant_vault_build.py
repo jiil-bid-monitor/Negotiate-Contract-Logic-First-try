@@ -1424,3 +1424,20 @@ def test_forms_found_in_other_attachment_when_rfp_has_none(tmp_path: Path, monke
     assert job["state"] == "ready", job.get("error")
     assert len(job["summary"]["forms"]) >= 20 and any("나머지 첨부에서 서식" in n for n in job["summary"]["notes"])
     assert "과업지시서.hwpx" in job["notice"]["files"]
+
+
+def test_folders_by_kind_and_example_folder_skipped(tmp_path: Path):
+    """11/05 사용자가 서류를 종류별 폴더로 나눔 — 파일 이름에 종류가 없어도 폴더 이름으로 통합본 규칙·연혁을 고르고, '예시_…' 폴더는 안 읽음."""
+    from quantdocs.bundle import pick
+
+    for d, n, pages in (("기업신용평가확인", "(27.6.15).pdf", 1), ("연혁", "회사소개.pdf", 2), ("경쟁입찰참가등록증", "스캔0001.pdf", 3),
+                        ("예시_사업수행능력평가서", "남의평가서.pdf", 4)):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / n).write_bytes(_blank_pdf(pages))
+    v = vault.Vault({})
+    vault.add_loose(v, tmp_path)
+    assert not any("예시" in k for k in v.files)
+    got = [(p.section, p.path) for p in pick(list(v.files), [], [], with_history=True)[0]]
+    assert ("회사 연혁", "files/연혁/회사소개.pdf") in got
+    assert ("신용평가등급확인서", "files/기업신용평가확인/(27.6.15).pdf") in got
+    assert ("경쟁입찰참가자격등록증", "files/경쟁입찰참가등록증/스캔0001.pdf") in got

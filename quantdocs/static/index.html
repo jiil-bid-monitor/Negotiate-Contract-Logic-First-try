@@ -62,6 +62,11 @@
   <section id="result" class="hide">
     <h2 style="font-size:18px;margin:4px 2px 4px"><span id="title"></span> <span id="kind2" class="chip" style="font-size:13px;vertical-align:2px"></span></h2>
     <p id="sub" class="muted" style="margin:0 2px 12px"></p>
+    <div class="card">  <!-- 11/05 사용자 요청: 공고 정보를 맨 위로, 제출 안내 카드는 뺌 -->
+      <h2>공고 정보</h2>
+      <div class="grid" id="info"></div>
+    </div>
+
     <div id="notes"></div>
     <div class="card">
       <h2>2. 필요 서식 <span id="fprog" class="fprog"></span></h2>
@@ -81,14 +86,6 @@
       <ul id="bmiss"></ul>
     </div>
 
-    <div class="card" id="kindcard">
-      <h2>제출 안내 <span id="kind" class="chip" style="font-size:13px"></span></h2>
-      <div class="grid"><div><span>언제 내나</span><span id="kwhen" style="color:var(--ink);font-size:14px"></span></div>
-        <div><span>서식이 있는 곳</span><span id="ksource" style="color:var(--ink);font-size:14px"></span></div></div>
-      <h3>기본 준비 서류 <span class="muted" style="font-weight:400">— <b>자동</b> = 회사 자료로 채움 · 공고문·세부기준이 우선</span></h3>
-      <div id="kdocs"></div>
-    </div>
-
     <div class="card">
       <h2>실적 요건 · 후보</h2>
       <ul id="tracks"></ul>
@@ -97,11 +94,6 @@
         <div class="scroll"><table id="cands"></table></div>
         <p class="muted">후보는 기간·금액(지분 반영)만으로 고른 것 — 제출할 실적은 담당자가 확정</p>
       </details>
-    </div>
-
-    <div class="card">
-      <h2>공고 정보</h2>
-      <div class="grid" id="info"></div>
     </div>
 
     <div class="card">
@@ -200,8 +192,7 @@ function showProgress(total, set) {
 function render(j) {
   const n = j.notice, s = j.summary;
   $("#title").textContent = n.title;
-  $("#kind").textContent = s.kind.name; $("#kind2").textContent = s.kind.name; $("#kwhen").textContent = s.kind.when; $("#ksource").textContent = s.kind.source;
-  $("#kdocs").innerHTML = s.kind.docs.map(d => `<span class="chip">${esc(d.name)}${d.auto ? " · <b>자동</b>" : ""}</span>`).join("");
+  $("#kind2").textContent = s.kind.name;
   $("#sub").textContent = [`${n.no}${n.ord ? "-" + n.ord : ""}`, n.institution, n.award].filter(Boolean).join(" · ");
   const info = [["공고번호", `${n.no}${n.ord ? "-" + n.ord : ""}`], ["발주기관", n.institution], ["업무", n.work],
     ["낙찰방법", n.award], ["계약방법", n.contract], ["게시", n.posted],

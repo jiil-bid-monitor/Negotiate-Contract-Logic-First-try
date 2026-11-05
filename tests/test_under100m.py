@@ -69,6 +69,15 @@ class CollectTest(unittest.TestCase):
     def test_alert_names_the_category(self):
         text = alert_text(candidate(assigned=70_000_000), 70_000_000, "나라장터 배정예산", Path("폴더"))
         self.assertIn("(협상)", text.splitlines()[0])
+        self.assertIn("공고번호: R26BK00000001-000", text)
+
+    def test_alert_lists_documents_to_issue(self):
+        with tempfile.TemporaryDirectory() as tmp, patch("under100m.__main__.COMPANY_DOCS", Path(tmp)):
+            (Path(tmp) / "_목록.json").write_text(json.dumps(
+                [{"종류": "사업자등록증명", "파일": "a.pdf", "발급일": "2026-03-12"}], ensure_ascii=False), encoding="utf-8")
+            text = alert_text(candidate(text="사업자등록증명 1부"), 70_000_000, "나라장터 배정예산", Path("폴더"))
+        self.assertIn("새로 발급할 서류", text)
+        self.assertIn("- 사업자등록증명 (보유본 2026-03-12) · 공고문에 있음", text)
 
 
 class AmountTest(unittest.TestCase):

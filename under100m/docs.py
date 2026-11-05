@@ -1,7 +1,8 @@
 """회사 서류 정리·갱신 알림 (2026-11-05 사용자 요청) — OCR 없이 파일 이름만 본다.
 
 담당자가 스캔 PDF를 `[최신 서류]`에 `종류_발급일.pdf`로 넣으면, 같은 종류의 옛날 파일을 `[이전 서류]`로 옮기고
-`_목록.json`·`서류목록.xlsx`를 고친다. 유효기간이 가까워지면 개발자 방에 알린다. 지우지 않고 덮어쓰지 않는다.
+`_목록.json`·`서류목록.xlsx`를 고친다. 늘 유효해야 하는 서류는 만료 7일 전에 한 번 개발자 방에 알리고,
+공고 때 새로 발급하는 서류는 새 공고 알림에 함께 적는다(`issue_lines`). 지우지 않고 덮어쓰지 않는다.
 서류에 유효기간이 적힌 종류는 이름에 `_유효2027-06-17`을 함께 적는다. 규칙에 안 맞으면 옮기지 않고 '확인 필요'로 알린다.
 
     python -m under100m.docs --dir <회사서류 폴더> [--no-notify]
@@ -32,9 +33,17 @@ STATE = "_알림기록.json"
 SETTLE_SECONDS = 120  # 복사 중인 파일을 건드리지 않게
 
 _NAME = re.compile(r"(?P<kind>.+)_(?P<issued>\d{4}-\d{2}-\d{2})(?:_유효(?P<expires>\d{4}-\d{2}-\d{2}))?\.pdf", re.IGNORECASE)
-# 보통 최근 3개월 이내 발급분을 요구하는 서류(관행 — 공고 기준이 우선)
-THREE_MONTHS = {"4대보험 가입증명", "법인등기사항전부증명서", "법인인감증명서", "사업자등록증명"}
-YEARLY = {"재무제표"}
+# 공고 때 새로 발급하는 서류 → 공고문에서 찾을 때 쓰는 말(띄어쓰기 무시). 사용자 확인 목록(11/05, 과거 실적 서류에서 모은 것)
+PER_NOTICE = {
+    "국세 납세증명서": ("국세납세", "납세증명"),
+    "지방세 납세증명서": ("지방세납세", "납세증명"),
+    "4대보험 완납증명서": ("4대보험완납", "완납증명"),
+    "4대보험 가입증명": ("4대보험가입", "가입증명", "가입자명부"),
+    "법인등기사항전부증명서": ("법인등기",),
+    "사업자등록증명": ("사업자등록증명",),
+}
+YEARLY = {"재무제표"}  # 해마다 새로 만듦 — 발급 1년 뒤를 유효기간으로 봄
+ALERT_DAYS = 7
 # 같은 종류가 여럿일 수 있어 옮기지 않음 — 사업마다 있는 실적증명서, 품목이 이름에 없는 직접생산확인증명서
 NO_MOVE = {"실적증명서", "직접생산확인증명서"}
 HEADERS = ["상태", "종류", "사유", "발급일", "유효기간(기준)", "대표자", "원본 위치"]
@@ -65,42 +74,51 @@ def add_months(day: date, months: int) -> date:
 
 
 def expiry_of(record: dict) -> date | None:
-    """유효기간 끝 — 서류에 적힌 날짜 > 종류별 규칙(3개월·1년). 없으면 None(기간 없음)."""
+    """유효기간 끝 — 공고 때 발급하는 서류는 None. 그 밖엔 서류에 적힌 날짜 > 1년 규칙, 없으면 None(기간 없음)."""
+    if record["종류"] in PER_NOTICE:
+        return None
     if record.get("유효기간"):
         return date.fromisoformat(record["유효기간"])
-    issued = date.fromisoformat(record["발급일"])
-    if record["종류"] in THREE_MONTHS:
-        return add_months(issued, 3)
     if record["종류"] in YEARLY:
-        return add_months(issued, 12)
+        return add_months(date.fromisoformat(record["발급일"]), 12)
     return None
 
 
-def stage_of(record: dict, today: date) -> tuple[str, int] | None:
-    """알림 단계와 남은 날 — 지남 / 7일 / 30일. 3개월 서류는 30일 알림 없음(발급 두 달 뒤부터 늘 뜨게 되어)."""
+def days_left_to_alert(record: dict, today: date) -> int | None:
+    """만료까지 ALERT_DAYS일 안이면(이미 지났으면 음수) 남은 날, 아니면 None."""
     end = expiry_of(record)
-    if end is None:
+    if end is None or (end - today).days > ALERT_DAYS:
         return None
-    left = (end - today).days
-    if left < 0:
-        return "지남", left
-    if left <= 7:
-        return "7일", left
-    if left <= 30 and record["종류"] not in THREE_MONTHS:
-        return "30일", left
-    return None
+    return (end - today).days
 
 
 def status_of(record: dict, today: date) -> tuple[str, str]:
     """서류목록 상태·사유."""
     if record.get("메모"):
         return "재발급 필요", record["메모"]
+    if record["종류"] in PER_NOTICE:
+        return "공고 때 발급", "공고문이 요구하면 새로 발급"
     end = expiry_of(record)
     if end is None:
         return "그대로 사용", "기간 없음 — 상호·대표자·주소·업종이 바뀌었으면 새로"
     if end < today:
         return "재발급 필요", f"유효기간 {end} 지남"
-    return ("곧 만료" if (end - today).days <= 30 else "그대로 사용"), f"유효기간 {end}까지"
+    return ("곧 만료" if (end - today).days <= ALERT_DAYS else "그대로 사용"), f"유효기간 {end}까지"
+
+
+def issue_lines(folder: Path, notice_text: str = "") -> list[str]:
+    """새 공고 알림에 적을 '공고 때 새로 발급' 서류 — 보유본 날짜, 공고문에 이름이 있으면 표시. 목록을 못 읽으면 빈 목록."""
+    records = _load_json(folder / LIST_JSON, [])
+    if not records:
+        return []
+    issued = {r.get("종류"): r.get("발급일") for r in records}
+    text = re.sub(r"\s+", "", notice_text or "")
+    lines = []
+    for kind, words in PER_NOTICE.items():
+        have = f"보유본 {issued[kind]}" if issued.get(kind) else "보유본 없음"
+        mark = " · 공고문에 있음" if any(w in text for w in words) else ""
+        lines.append(f"- {kind} ({have}){mark}")
+    return lines
 
 
 def _unique(path: Path) -> Path:
@@ -136,12 +154,13 @@ def write_xlsx(path: Path, records: list[dict], today: date) -> None:
     if sheet.max_row:
         sheet.delete_rows(1, sheet.max_row)
     sheet.append(HEADERS)
-    order = {"재발급 필요": 0, "곧 만료": 1, "그대로 사용": 2}
+    order = {"재발급 필요": 0, "곧 만료": 1, "공고 때 발급": 2, "그대로 사용": 3}
     rows = []
     for record in records:
         status, reason = status_of(record, today)
         end = expiry_of(record)
-        rows.append([status, record["종류"], reason, record["발급일"], str(end) if end else "없음",
+        rows.append([status, record["종류"], reason, record["발급일"],
+                     str(end) if end else ("공고 때 발급" if record["종류"] in PER_NOTICE else "없음"),
                      record.get("대표자") or "", record.get("원본 위치") or ""])
     for row in sorted(rows, key=lambda r: (order[r[0]], r[1])):
         sheet.append(row)
@@ -214,7 +233,7 @@ def run(folder: Path, today: date | None = None, notify: Callable[[str], object]
                   "대표자": "", "원본 위치": LATEST}
         updated[path.name] = record
         added.append(f"{doc.kind} ({doc.issued})")
-        if before.get("유효기간") and not doc.expires:
+        if before.get("유효기간") and not doc.expires and doc.kind not in PER_NOTICE:
             issues.append(f"{doc.kind}: 서류에 유효기간이 있는 종류 — 이름 끝에 _유효YYYY-MM-DD를 붙여 주세요")
     changed = list(updated) != list(records) or bool(moved)
     rows = sorted(updated.values(), key=lambda r: r["종류"])
@@ -231,15 +250,12 @@ def run(folder: Path, today: date | None = None, notify: Callable[[str], object]
 
     due: list[str] = []
     for record in rows:
-        stage = stage_of(record, today)
-        if stage is None:
+        left = days_left_to_alert(record, today)
+        if left is None or record["파일"] in sent:
             continue
-        key = f"{record['파일']}|{stage[0]}"
-        if key not in sent:
-            sent.add(key)
-            end = expiry_of(record)
-            label = f"{-stage[1]}일 지남" if stage[1] < 0 else f"{stage[1]}일 남음"
-            due.append(f"{record['종류']}: {end} ({label})")
+        sent.add(record["파일"])
+        label = f"{-left}일 지남" if left < 0 else f"{left}일 남음"
+        due.append(f"{record['종류']}: {expiry_of(record)} ({label})")
     new_issues = [i for i in issues if f"확인|{i}" not in sent]
     sent.update(f"확인|{i}" for i in new_issues)
     state["sent"] = sorted(sent)

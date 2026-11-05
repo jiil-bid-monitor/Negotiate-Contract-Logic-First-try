@@ -23,11 +23,14 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
+from .docs import issue_lines
+
 log = logging.getLogger("under100m")
 
 TARGET_WORDS = ("전시관", "체험관")
 LIMIT = 100_000_000
 MAX_TRIES = 3
+COMPANY_DOCS = Path(os.environ.get("COMPANY_DOCS_DIR") or "/work/회사서류_최신")
 # 고정 회사 정보만 채운다. 자본금·면허·연혁·실적처럼 공고마다 확인할 값은 비운다(10/28 사용자 결정).
 COMPANY_KEYS = frozenset({"회사명", "대표자", "사업자등록번호", "법인등록번호", "주소", "전화번호", "팩스번호",
                           "홈페이지", "이메일", "설립일"})
@@ -233,8 +236,12 @@ def build_folder(candidate, amount, source, vault, out_root: Path, now: datetime
 
 def alert_text(candidate, amount, source, folder: Path) -> str:
     n = candidate.notice
-    return (f"[1억 미만 시험] 새 공고 폴더 ({candidate.category})\n{n.title}\n{n.demand_institution or n.notice_institution}\n사업금액: {won(amount)} {source}\n"
+    text = (f"[1억 미만 시험] 새 공고 폴더 ({candidate.category})\n{n.title}\n공고번호: {notice_key(n)}\n{n.demand_institution or n.notice_institution}\n사업금액: {won(amount)} {source}\n"
             f"마감: {deadline_of(candidate)}\n자격: {qualification_label(candidate)}\n폴더: {folder.name}\n{n.detail_url or ''}")
+    lines = issue_lines(COMPANY_DOCS, candidate.attachment_text)
+    if lines:
+        text += "\n\n새로 발급할 서류 (제출 요구 여부는 공고문에서 확인)\n" + "\n".join(lines)
+    return text
 
 
 def collect(now: datetime, days: int, out: Path) -> list:

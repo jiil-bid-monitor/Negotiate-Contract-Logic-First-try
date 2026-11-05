@@ -10,7 +10,8 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from under100m.docs import LATEST, LIST_JSON, LIST_XLSX, OLD, add_months, expiry_of, parse_name, run, stage_of
+from under100m.docs import (LATEST, LIST_JSON, LIST_XLSX, OLD, add_months, days_left_to_alert, expiry_of, issue_lines,
+                            parse_name, run)
 
 TODAY = date(2026, 11, 5)
 
@@ -30,19 +31,34 @@ class NameTest(unittest.TestCase):
 class ExpiryTest(unittest.TestCase):
     def test_rules(self):
         self.assertEqual(expiry_of({"종류": "무엇", "발급일": "2026-01-01", "유효기간": "2026-11-11"}), date(2026, 11, 11))
-        self.assertEqual(expiry_of({"종류": "법인등기사항전부증명서", "발급일": "2026-03-12", "유효기간": ""}), date(2026, 6, 12))
+        self.assertIsNone(expiry_of({"종류": "법인등기사항전부증명서", "발급일": "2026-03-12", "유효기간": "2026-06-12"}))
         self.assertEqual(expiry_of({"종류": "재무제표", "발급일": "2025-03-31", "유효기간": ""}), date(2026, 3, 31))
         self.assertIsNone(expiry_of({"종류": "사업자등록증", "발급일": "2025-08-18", "유효기간": ""}))
 
-    def test_stages(self):
-        def stage(end, kind="무엇"):
-            return stage_of({"종류": kind, "발급일": "2026-01-01", "유효기간": end}, TODAY)
+    def test_alert_only_within_seven_days(self):
+        def left(end, kind="무엇"):
+            return days_left_to_alert({"종류": kind, "발급일": "2026-01-01", "유효기간": end}, TODAY)
 
-        self.assertEqual(stage("2026-11-11"), ("7일", 6))
-        self.assertEqual(stage("2026-12-01"), ("30일", 26))
-        self.assertEqual(stage("2026-11-01"), ("지남", -4))
-        self.assertIsNone(stage("2027-06-17"))
-        self.assertIsNone(stage_of({"종류": "사업자등록증명", "발급일": "2026-09-20", "유효기간": ""}, TODAY))  # 12-20 만료, 30일 알림 없음
+        self.assertEqual(left("2026-11-11"), 6)
+        self.assertEqual(left("2026-11-12"), 7)
+        self.assertIsNone(left("2026-11-13"))
+        self.assertEqual(left("2026-11-01"), -4)
+        self.assertIsNone(left("2026-11-01", kind="국세 납세증명서"))
+
+
+class IssueLinesTest(unittest.TestCase):
+    def test_lists_held_dates_and_marks_notice_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / LIST_JSON).write_text(json.dumps(
+                [{"종류": "법인등기사항전부증명서", "파일": "a.pdf", "발급일": "2026-03-12", "유효기간": ""}], ensure_ascii=False), encoding="utf-8")
+            lines = issue_lines(folder, "제출 서류: 법인 등기 사항 전부 증명서 1부")
+        self.assertEqual(len(lines), 6)
+        self.assertIn("- 법인등기사항전부증명서 (보유본 2026-03-12) · 공고문에 있음", lines)
+        self.assertIn("- 사업자등록증명 (보유본 없음)", lines)
+
+    def test_no_list_no_lines(self):
+        self.assertEqual(issue_lines(Path("없는폴더")), [])
 
 
 class RunTest(unittest.TestCase):
@@ -64,7 +80,7 @@ class RunTest(unittest.TestCase):
         (self.dir / LIST_JSON).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
     def go(self, today=TODAY):
-        return run(self.dir, today, self.sent.append, settle=0)
+        return run(self.dir, today, self.sent.append, settle=-5)  # 파일 시각이 시계보다 살짝 앞서도 건너뛰지 않게
 
     def test_new_file_moves_old_and_updates_list(self):
         self.records(("법인등기사항전부증명서", "법인등기사항전부증명서_2026-03-12.pdf", "2026-03-12", ""))
@@ -76,7 +92,7 @@ class RunTest(unittest.TestCase):
         rows = json.loads((self.dir / LIST_JSON).read_text(encoding="utf-8"))
         self.assertEqual([r["파일"] for r in rows], ["법인등기사항전부증명서_2026-11-05.pdf"])
         sheet = load_workbook(self.dir / LIST_XLSX).worksheets[0]
-        self.assertEqual(sheet.cell(2, 1).value, "그대로 사용")
+        self.assertEqual(sheet.cell(2, 1).value, "공고 때 발급")
         self.assertIn("옮김 1건", self.sent[0])
 
     def test_never_overwrites_old_file(self):
@@ -131,12 +147,17 @@ class RunTest(unittest.TestCase):
         result = self.go()
         self.assertIn("_유효YYYY-MM-DD", result["issues"][0])
 
-    def test_alert_once_per_stage(self):
+    def test_alert_once_only(self):
         self.records(("신용평가등급확인서", "신용평가등급확인서_2026-02-20.pdf", "2026-02-20", "2026-11-11"))
         self.assertEqual(len(self.go()["due"]), 1)
         self.assertEqual(self.go()["due"], [])
-        self.assertEqual(len(self.go(date(2026, 11, 12))["due"]), 1)  # 지남은 새 단계
-        self.assertEqual(len(self.sent), 2)
+        self.assertEqual(self.go(date(2026, 11, 12))["due"], [])  # 지난 뒤에도 다시 안 보냄
+        self.assertEqual(len(self.sent), 1)
+
+    def test_per_notice_kinds_never_alert(self):
+        self.records(("국세 납세증명서", "국세 납세증명서_2022-09-23.pdf", "2022-09-23", "2022-10-23"))
+        self.assertEqual(self.go()["due"], [])
+        self.assertEqual(self.sent, [])
 
     def test_memo_keeps_reissue_status(self):
         rows = [{"종류": "사업자등록증", "파일": "사업자등록증_2025-08-18.pdf", "발급일": "2025-08-18", "유효기간": "", "메모": "확인 메모"}]

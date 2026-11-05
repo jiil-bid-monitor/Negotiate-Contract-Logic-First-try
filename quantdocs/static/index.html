@@ -43,6 +43,13 @@
   details.cands > summary { cursor:pointer; color:var(--accent, #1b6e43); font-weight:600; margin:6px 0 }
   details.cands[open] > summary { margin-bottom:8px }
   details.cands .cl, details.cands[open] .op { display:none } details.cands[open] .cl { display:inline }
+  /* 공고 정보 밖의 카드는 열기/닫기(11/05 사용자 요청 — 필요할 때만 열람) */
+  details.fold > summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:10px }
+  details.fold > summary::-webkit-details-marker { display:none }
+  details.fold > summary h2 { margin:0; flex:1 }
+  details.fold > summary .tog { color:var(--accent, #1b6e43); font-weight:600; font-size:13px; white-space:nowrap }
+  details.fold > summary .tog::after { content:"열기 ▾" } details.fold[open] > summary .tog::after { content:"닫기 ▴" }
+  details.fold[open] > summary { margin-bottom:12px }
   .scroll { overflow-x:auto } .nw { white-space:nowrap }
 </style>
 </head>
@@ -68,33 +75,33 @@
     </div>
 
     <div id="notes"></div>
-    <div class="card">
-      <h2>2. 필요 서식 <span id="fprog" class="fprog"></span></h2>
+    <details class="card fold">
+      <summary><h2>2. 필요 서식 <span id="fprog" class="fprog"></span></h2><span class="tog"></span></summary>
       <p class="muted"><b>자동</b> = 회사 정보·연혁·실적을 채워 드림 · <span class="warn">직접 기입</span> = 양식만 넣어 드림(가격·인력·확약 등 공고마다 정하는 값) — 둘 다 통합서식.hwpx 안에 있음</p>
       <div class="scroll"><table id="forms"></table></div>
-    </div>
+    </details>
 
-    <div class="card">
-      <h2>관련 자격 (첨부 공고문 기준)</h2>
+    <details class="card fold">
+      <summary><h2>관련 자격 (첨부 공고문 기준)</h2><span class="tog"></span></summary>
       <div class="scroll"><table id="quals"></table></div>
       <p id="lic" class="muted"></p>
-    </div>
+    </details>
 
-    <div class="card">
-      <h2>통합본에 넣을 회사 서류 <span class="muted" style="font-size:13px;font-weight:400">— 파일 이름 키워드로 골라 원본 그대로 이어 붙임</span></h2>
+    <details class="card fold">
+      <summary><h2>통합본에 넣을 회사 서류 <span class="muted" style="font-size:13px;font-weight:400">— 파일 이름 키워드로 골라 원본 그대로 이어 붙임</span></h2><span class="tog"></span></summary>
       <div class="scroll"><table id="bundle"></table></div>
       <ul id="bmiss"></ul>
-    </div>
+    </details>
 
-    <div class="card">
-      <h2>실적 요건 · 후보</h2>
+    <details class="card fold">
+      <summary><h2>실적 요건 · 후보</h2><span class="tog"></span></summary>
       <ul id="tracks"></ul>
       <details id="candBox" class="cands">
         <summary>실적 후보 <span id="candN"></span> <span class="op">펼치기</span><span class="cl">접기</span></summary>
         <div class="scroll"><table id="cands"></table></div>
         <p class="muted">후보는 기간·금액(지분 반영)만으로 고른 것 — 제출할 실적은 담당자가 확정</p>
       </details>
-    </div>
+    </details>
 
     <div class="card">
       <h2>3. 정량평가서 만들기</h2>

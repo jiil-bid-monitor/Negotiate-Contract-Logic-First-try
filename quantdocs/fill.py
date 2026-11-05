@@ -997,8 +997,8 @@ def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:
 
 
 # ── 입찰보증금 지급 확약서(11/05 사용자 요청) ─────────────────────────
-# 입찰 금액 = 제안요청서의 기초금액(없으면 사업비·사업예산 — 공고문), 보증금 = 그 금액 × BOND_RATE, '금 400,000,000원(금 사억원)'
-BOND_RATE = 0.05  # 서식 '※ 입찰금액의 100분의 5 이상'
+# 입찰 금액 = 제안요청서의 기초금액(없으면 사업비·사업예산 — 공고문), 보증금 = 그 금액 × BOND_RATE, '금 420,000,000원(금 사억이천만원)'
+BOND_RATE = 1.05  # 기초금액 × 1.05(11/05 사용자 확인 — 4억이면 4억 2천만원)
 _BASIS = re.compile(r"(?:기초\s*금액|사\s*업\s*비|사업\s*예산|사업\s*금액|소요\s*예산)(?:\([^)]{0,12}\))?[^\d\n]{0,60}?([\d]{1,3}(?:,\d{3}){2,})\s*원")
 
 
@@ -1042,7 +1042,7 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport) -> str:
     flat = _sq(_text(xml))
     if not basis or "보증금" not in flat or not re.search(r"확약|각서|지급", flat):
         return xml
-    bond = int(basis * BOND_RATE)
+    bond = int(round(basis * BOND_RATE))
     blank = r"(금)\s+(원\s*\(\s*금)\s+(원\s*\))"
     done = []
 
@@ -1058,7 +1058,7 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport) -> str:
     if done:  # 값을 넣은 문단은 줄 배치를 다시 계산하게
         new = re.sub(r"(<(?:[\w.-]+:)?p\b[^>]*>(?:(?!</(?:[\w.-]+:)?p>).)*?\ue000(?:(?!</(?:[\w.-]+:)?p>).)*?)"
                      r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", r"\1", new, flags=re.S)
-        rep.filled.append(f"입찰 금액 → {basis:,}원(기초금액) · 입찰 보증금 → {bond:,}원(× {BOND_RATE * 100:g}%)")
+        rep.filled.append(f"입찰 금액 → {basis:,}원(기초금액) · 입찰 보증금 → {bond:,}원(기초금액 × {BOND_RATE:g})")
     return new
 
 

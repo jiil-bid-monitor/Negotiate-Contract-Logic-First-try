@@ -494,6 +494,10 @@ def score(criteria: list[Criterion], vault, ref: date) -> list[ItemScore]:
 _SCORE_HEAD = ("자기평점", "자체평점", "자기평가점수", "자기평가", "평점", "평가점수")
 
 
+# 자동으로 채점하는 항목 — 기술인력·경영상태(신용평가)·신인도만(11/05 사용자 결정, 실적·보유기술 등은 담당자가 직접)
+AUTO_KINDS = {"staff", "credit", "sanction"}
+
+
 @dataclass
 class SelfScore:
     """서식 채우기에 넘기는 자기평점 재료 — 본문 기준(`read_criteria`)·회사 자료·기준일."""
@@ -611,6 +615,9 @@ def score_form(rows: list[FormRow], criteria: list[Criterion], vault, ref: date)
             continue
         label = _sq(row.label)
         kind = next((k for k, rx in KINDS if rx.search(label)), "")
+        if kind not in AUTO_KINDS:  # 실적·특허 등은 담당자가 직접(11/05 사용자 결정)
+            out.append((row, ItemScore(row.label, row.points or 0, kind, None, notes=["담당자가 직접 채점"])))
+            continue
         single = kind == "track" and "단일" in label and not re.search(r"누계|합계", label)
         if kind == "sanction":
             c = Criterion(row.label, row.points or (body["sanction"].points if "sanction" in body else 0), kind)

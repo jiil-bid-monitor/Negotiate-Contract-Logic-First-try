@@ -1003,9 +1003,10 @@ def test_self_score_fills_form_by_rfp(tmp_path: Path):
     out = zipfile.ZipFile(tmp_path / "o24.hwpx").read("Contents/section0.xml").decode()
     from quantdocs.fill import _cells, _spans
     got = {c.row: c.text for c in _cells(out, _spans(out, "tbl")[0]) if c.col == 2}
-    # 실적 6억 → 본문 6점 × 4/6 = 4, 단일최대 6억 → 6 × 2/6 = 2, 인력 특급 1명 1점(본문 3점) × 6/3 = 2, 특허 1건 1점, 경영 3.5, 신인도 2
-    assert got == {0: "자기평점", 1: "14.5", 2: "4", 3: "2", 4: "2", 5: "1", 6: "3.5", 7: "2"}
-    assert rep.self_rows[-1][:3] == ["계", "20", "14.5"]
+    # 11/05 사용자 결정: 기술인력·경영상태·신인도만 자동 — 실적·특허는 담당자가 직접(비움), 그래서 계도 비움
+    # 인력 특급 1명 1점(본문 3점) × 6/3 = 2, 경영 3.5, 신인도 2
+    assert got == {0: "자기평점", 1: "", 2: "", 3: "", 4: "2", 5: "", 6: "3.5", 7: "2"}
+    assert any("직접" in r[4] for r in rep.self_rows if r[0].startswith("최근"))
 
 
 def test_self_score_form_with_own_criteria(tmp_path: Path):
@@ -1030,8 +1031,8 @@ def test_self_score_form_with_own_criteria(tmp_path: Path):
                                 {"사업명": "가상 작은 것", "준공일": dt.date(2025, 2, 1), "계약금액(원)": 500_000_000}],
                     staff=[{"이름": "갑", "입사일": dt.date(2020, 1, 1), "등급": "특급"}])
     got = [it.score for _, it in score_form(form, body, v, dt.date(2026, 11, 3))]
-    # 실적: 10억 이상만 → 55억 → '50억 이상' 4.8, 인력: 0.8 → 본문 식 4.2 + 0.8 = 5.0, 신인도 2
-    assert got == [4.8, 5.0, 2.0]
+    # 실적은 담당자가 직접(비움), 인력: 0.8 → 본문 식 4.2 + 0.8 = 5.0, 신인도 2
+    assert got == [None, 5.0, 2.0]
 
 
 def test_package_lists_match_kept_sections(tmp_path: Path):
@@ -1099,7 +1100,7 @@ def test_inline_phone_fax_paragraph_and_company_seal_cell(tmp_path: Path):
 
 
 def test_bond_pledge_signature_agent_and_corp_numbers(tmp_path: Path):
-    """11/05 사용자 요청 묶음 — ③ 입찰보증금 확약서: 입찰 금액 = 제안요청서 기초금액(숫자 + 괄호 안 한글), 보증금 = × 5%
+    """11/05 사용자 요청 묶음 — ③ 입찰보증금 확약서: 입찰 금액 = 제안요청서 기초금액(숫자 + 괄호 안 한글), 보증금 = × 1.05
     ② 청렴계약 '서 약 자 : (인)' = 대표자 ④ 위임장 대리인 주소는 비움 ⑧ '생년월일(사업자등록번호)' = 법인등록번호 (사업자등록번호)."""
     from quantdocs.fill import _cells, _spans, basis_amount, fill_hwpx, kor_money
 
@@ -1122,7 +1123,7 @@ def test_bond_pledge_signature_agent_and_corp_numbers(tmp_path: Path):
     rep = fill_hwpx(src, tmp_path / "o.hwpx", v, basis=400_000_000)
     xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     flat = re.sub(r"<[^>]+>", "", xml)
-    assert "입 찰 금 액 : 금 400,000,000원(금 사억원)" in flat and "입찰 보증금 : 금 20,000,000원(금 이천만원)" in flat
+    assert "입 찰 금 액 : 금 400,000,000원(금 사억원)" in flat and "입찰 보증금 : 금 420,000,000원(금 사억이천만원)" in flat
     assert "서 약 자 : 홍길동" in flat
     got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
     assert got[(1, 2)] == "" and got[(2, 1)] == "가상시 가상로 1"  # 대리인 묶음의 주소는 비움, 회사 주소 줄은 채움

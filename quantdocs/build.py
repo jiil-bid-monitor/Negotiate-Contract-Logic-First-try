@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .bundle import merge, pick
 from .catalog import load_catalog
-from .selfscore import SelfScore, fmt, read_criteria, score as score_items
+from .selfscore import AUTO_KINDS, SelfScore, fmt, read_criteria, score as score_items
 from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
@@ -252,6 +252,9 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                       key=lambda p: (0 if "제안요청" in p.name else 1 if "과업" in p.name else 2))
         criteria = read_criteria(hwpx)
         self_scores = score_items(criteria, vault, notice_date or date.today()) if criteria else []
+        for s in self_scores:  # 실적·보유기술 등은 담당자가 직접 채점(11/05 사용자 결정 — 기술인력·경영상태·신인도만 자동)
+            if s.kind not in AUTO_KINDS:
+                s.score, s.basis, s.notes = None, "", ["담당자가 직접 채점"]
         score_ctx = SelfScore(criteria, vault, notice_date or date.today())
         # 입찰보증금 지급 확약서의 입찰 금액 = 제안요청서 기초금액(사업비) — 11/05 사용자 요청
         basis = basis_amount(a.sheet.texts)

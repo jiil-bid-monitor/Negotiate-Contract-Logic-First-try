@@ -347,10 +347,10 @@ def read_credit(text: str) -> dict[str, str]:
         out["신용평가등급"] = g
     head = re.sub(r"\s+", "", t[:600])
     out["신용평가 종류"] = "기업어음" if "기업어음" in head else "회사채" if "회사채" in head else "기업신용평가등급"
-    d = re.search(r"평가\s*(?:일자|일|기준일|완료일)\s*[:：]?\s*" + _DATE, t) or re.search(r"(?:발급|확인)\s*일\s*[:：]?\s*" + _DATE, t)
+    d = re.search(r"(?:등급\s*)?평가\s*(?:일자|일|기준일|완료일)\s*[:：]?\s*" + _DATE, t) or re.search(r"(?:발급|확인)\s*일\s*[:：]?\s*" + _DATE, t)
     if d:
         out["신용평가 평가일"] = f"{d.group(1)}-{int(d.group(2)):02d}-{int(d.group(3)):02d}"
-    v = re.search(r"유효\s*기간[^\n]{0,40}?[~∼～\-]\s*" + _DATE, t)
+    v = re.search(r"유효\s*기간[^\n]{0,40}?[~∼～]\s*" + _DATE, t) or re.search(r"유효\s*기간\s*[:：]?\s*(?:까지\s*)?" + _DATE, t)  # '유효기간 2027년 06월 15일'(KCB 확인서)
     if v:
         out["신용평가 유효기간"] = f"{v.group(1)}-{int(v.group(2)):02d}-{int(v.group(3)):02d}"
     if "신용평가등급" not in out:

@@ -1369,6 +1369,9 @@ def test_credit_rating_pdf_feeds_score_and_bundle(tmp_path: Path, monkeypatch):
                                  "신용평가 유효기간": "2027-06-30"}
     assert read_credit("기업어음 신용평가\n평가등급\nA3+") ["신용평가 종류"] == "기업어음"
     assert read_credit("신용평가 안내문") == {}
+    kcb = "신용평가등급확인서\n● 기업명 (가상)회사 기업신용평가등급\nBB+\n● 등급평가일 2026년 06월 16일\n● 유효기간 2027년 06월 15일"  # KCB 확인서 모양
+    assert read_credit(kcb) == {"신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급", "신용평가 평가일": "2026-06-16",
+                                "신용평가 유효기간": "2027-06-15"}
     (tmp_path / "정량서류").mkdir()
     (tmp_path / "정량서류" / "기업신용평가확인서.pdf").write_bytes(_blank_pdf())
     v = vault.Vault({}, info={"신용평가등급": "B0"})

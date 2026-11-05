@@ -56,6 +56,14 @@ def _sq(s: str) -> str:
     return re.sub(r"\s+", "", s)
 
 
+# 이름표 뒤에 끼워 넣은 값 표시(11/05 사용자 결정: 채운 글은 11pt) — 섹션을 다 채운 뒤 _apply_marks가 그 값만 11pt 글자 모양으로 떼어 냄
+_VS, _VE = "\ue000", "\ue001"
+
+
+def _mark(value: str) -> str:
+    return f"{_VS}{escape(value)}{_VE}"
+
+
 @dataclass
 class Cell:
     start: int
@@ -153,7 +161,7 @@ def _fill_inline(seg: str, vault) -> tuple[str, list[str]]:
                 return mm.group(0)
             done.append(f"{mm.group('lab')} → {value}")
             pad = max(2, len(mm.group("sp")) - len(value) - 1) if mm.end() < len(body) else 0
-            return f"{mm.group('lab')}{mm.group('colon')} {escape(value)}" + " " * pad
+            return f"{mm.group('lab')}{mm.group('colon')} {_mark(value)}" + " " * pad
         parts = re.split(r"(<[^>]*>)", body)  # 태그(<hp:tab/> 등)는 그대로 두고 글 조각만
         return m.group(1) + "".join(x if x.startswith("<") else _INLINE_RE.sub(rep, x) for x in parts) + m.group(3)
     new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, seg, flags=re.S)
@@ -370,7 +378,7 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
         if not ts:
             return None
         last = ts[-1]
-        body = last.group(2).rstrip(" ") + f" : {escape(value)}"
+        body = last.group(2).rstrip(" ") + f" : {_mark(value)}"
     else:
         used = []
 
@@ -378,7 +386,7 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
             if mm.group(1) or used:
                 return mm.group(0)
             used.append(1)
-            return f"{mm.group(2)} {escape(value)}" + " " * max(2 if seal else 0, len(mm.group(3)) - len(value) - 1)
+            return f"{mm.group(2)} {_mark(value)}" + " " * max(2 if seal else 0, len(mm.group(3)) - len(value) - 1)
         last = hit
         body = re.sub(r"(<[^>]*>)|([:：])( *)", put, hit.group(2))
     seg = seg[:last.start(2)] + body + seg[last.end(2):]
@@ -419,8 +427,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
 
                 def fill_t(mm):
                     body = mm.group(2)
-                    body = re.sub(r"\(주\)( {3,})", lambda m2: escape(corp) + " " * max(3, len(m2.group(1)) - len(corp) + 3), body, count=1)
-                    body = re.sub(r"(성\s*명\s*[:：])( {3,})", lambda m2: f"{m2.group(1)} {escape(name)}" + " " * max(3, len(m2.group(2)) - len(name) - 1), body, count=1)
+                    body = re.sub(r"\(주\)( {3,})", lambda m2: _mark(corp) + " " * max(3, len(m2.group(1)) - len(corp) + 3), body, count=1)
+                    body = re.sub(r"(성\s*명\s*[:：])( {3,})", lambda m2: f"{m2.group(1)} {_mark(name)}" + " " * max(3, len(m2.group(2)) - len(name) - 1), body, count=1)
                     return mm.group(1) + body + mm.group(3)
                 seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, xml[s:e], flags=re.S)
                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
@@ -432,8 +440,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
         if ph:
             company, name = _value("회사명", vault), _value("대표자", vault)
             if company and name:
-                seg = re.sub(r"○{2,}(\s*)(?=업체|회사)(?:업체|회사)", lambda mm: escape(company) + mm.group(1), xml[s:e], count=1)
-                seg = re.sub(r"([:：]\s*)○{2,}", lambda mm: f"{mm.group(1)}{escape(name)}", seg, count=1)
+                seg = re.sub(r"○{2,}(\s*)(?=업체|회사)(?:업체|회사)", lambda mm: _mark(company) + mm.group(1), xml[s:e], count=1)
+                seg = re.sub(r"([:：]\s*)○{2,}", lambda mm: f"{mm.group(1)}{_mark(name)}", seg, count=1)
                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                 edits.append((s, e, seg))
                 rep.filled.append(f"서명 줄 자리표시 → {company} 대표자 {name}")
@@ -456,7 +464,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
         if seg is None:
             continue
         if bare:  # 쌍점 없는 서식은 쌍점 없이 — ' : 값'을 '   값'으로
-            seg = seg.replace(f" : {escape(value)}", f"   {escape(value)}", 1)
+            seg = seg.replace(f" : {_mark(value)}", f"   {_mark(value)}", 1)
         edits.append((s, e, seg))
         rep.filled.append(f"{_sq(label)} → {value[:40]}")
     for s, e, seg in reversed(edits):
@@ -464,9 +472,10 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport) -> str:
     return xml
 
 
-# ── 칸에 맞추기(11/04 사용자 요청: 공고문 글꼴 그대로, 칸 안팎으로 넘치거나 겹치지 않게) ─────────────
-# 넣은 글이 칸 너비(여백 뺌)를 넘고 칸 높이에 줄을 더 넣을 자리가 없으면, 같은 글꼴에서 크기만 줄인 글자 모양을
-# header.xml에 하나 더 만들어 씀(최소 7pt). 글꼴·장평·색은 칸의 원래 글자 모양 그대로.
+# ── 채운 글 크기(11/05 사용자 결정: 채운 글은 전부 11pt — 서식에 원래 적힌 글자는 그대로) ─────────────
+# 칸에 한 줄로 안 들어가면 11pt 그대로 두 줄로(칸이 늘어남). 줄 간격이 100% 미만·고정값인 칸만 두 줄이면 글이 겹쳐서(11/04 필암서원 주소 칸)
+# 한 줄에 들어가게 같은 글꼴에서 크기만 줄인 글자 모양을 header.xml에 더해 씀(최소 7pt). 글꼴·장평·색은 칸의 원래 글자 모양 그대로.
+FILL_HEIGHT = 1100  # 11pt
 MIN_HEIGHT = 700  # 7pt
 
 
@@ -587,34 +596,57 @@ def _text_width(text: str, height: int, ratio: float) -> float:
     return w * height
 
 
+def _fill_variant(chars: "_Chars", cid: str) -> str:
+    """cid 글자 모양의 11pt 사본(숫자·영문도 한글 글꼴로). 이미 11pt면 크기는 그대로 두고 글꼴만."""
+    return chars.variant(cid, None if chars.height(cid) == FILL_HEIGHT else FILL_HEIGHT)
+
+
 def _fit_char(cell_xml: str, line: str, chars: "_Chars") -> tuple[str | None, str]:
-    """(바꿔 쓸 글자 모양 id 또는 None, 알림). 칸 너비·높이·여백·줄 간격으로 한 칸 안에 들어가는지 봄."""
+    """(채운 글에 쓸 글자 모양 id, 알림). 늘 11pt — 줄 간격이 100% 미만·고정값인 칸에서 한 줄에 안 들어갈 때만 줄임."""
+    run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', cell_xml)
+    cid = run.group(1) if run else "0"
+    first_p = re.search(r'<(?:[\w.-]+:)?p\b[^>]*paraPrIDRef="(\d+)"', cell_xml)
+    spacing = chars.spacing(first_p.group(1)) if first_p else 1.6
     size = re.search(r'<(?:[\w.-]+:)?cellSz\b[^>]*width="(\d+)"[^>]*height="(\d+)"', cell_xml)
-    if not size:
-        return None, ""
+    if spacing is not None and spacing >= 1.0 or not size:  # 두 줄로 넘어가도 되는 칸
+        return _fill_variant(chars, cid), ""
     tag = re.search(r'<(?:[\w.-]+:)?cellMargin\b[^>]*>', cell_xml)
     mg = dict(re.findall(r'\b(left|right|top|bottom)="(\d+)"', tag.group(0) if tag else ""))
     width = int(size.group(1)) - int(mg.get("left", 141)) - int(mg.get("right", 141))
-    room = int(size.group(2)) - int(mg.get("top", 141)) - int(mg.get("bottom", 141))
-    first_p = re.search(r'<(?:[\w.-]+:)?p\b[^>]*paraPrIDRef="(\d+)"', cell_xml)
-    run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', cell_xml)
-    cid = run.group(1) if run else "0"
-    h, ratio = chars.height(cid), chars.ratio(cid)
-    spacing = chars.spacing(first_p.group(1)) if first_p else 1.6
-    if width <= 0:
-        return None, ""
-    def fits(size: int) -> bool:  # 이 크기에서 칸 높이에 들어가는 줄 수 × 칸 너비 안에 글이 들어가나
-        # 줄 간격이 100%보다 작거나 고정값이면 두 줄로 넘어갈 때 글이 겹침(11/04 필암서원 주소 칸 50%) — 한 줄에 들어가야 함
-        lines_fit = 1 if spacing is None or spacing < 1.0 else max(1, int(room // max(1.0, size * spacing)))
-        return _text_width(line, size, ratio) <= width * 0.95 * lines_fit
+    ratio = chars.ratio(cid)
 
-    if fits(h):
-        return None, ""
-    new_h = next((size for size in range(h - 10, MIN_HEIGHT - 1, -10) if fits(size)), MIN_HEIGHT)
-    note = f"글자 {h / 100:g}→{new_h / 100:g}pt로 줄여 칸에 맞춤"
+    def fits(h: int) -> bool:  # 한 줄에 들어가나
+        return _text_width(line, h, ratio) <= width * 0.95
+
+    if width <= 0 or fits(FILL_HEIGHT):
+        return _fill_variant(chars, cid), ""
+    new_h = next((h for h in range(FILL_HEIGHT - 10, MIN_HEIGHT - 1, -10) if fits(h)), MIN_HEIGHT)
+    note = f"줄 간격이 좁은 칸이라 글자 11→{new_h / 100:g}pt로 줄여 한 줄에 맞춤"
     if not fits(new_h):
-        note += "(7pt로도 넘쳐 칸이 늘어날 수 있음 — 확인)"
+        note += "(7pt로도 넘쳐 글이 겹칠 수 있음 — 확인)"
     return chars.smaller(cid, new_h), note
+
+
+def _apply_marks(xml: str, chars: "_Chars | None") -> str:
+    """이름표 뒤에 끼워 넣은 값(_mark)을 그 글 조각만 11pt 글자 모양으로 떼어 냄 — 같은 줄의 이름표·빈칸은 원래 글자 모양 그대로."""
+    if _VS not in xml:
+        return xml
+    out, pos = [], 0
+    for m in re.finditer(f"{_VS}(.*?){_VE}", xml, re.S):
+        before = xml[max(0, m.start() - 20000):m.start()]
+        runs = list(re.finditer(r'<([\w.-]+:)?run\b[^>]*?charPrIDRef="(\d+)"[^>]*>', before))
+        ts = list(re.finditer(r"<(?:[\w.-]+:)?t\b[^>]*>", before))
+        value = m.group(1)
+        if chars is not None and runs and ts:
+            r, t = runs[-1], ts[-1]
+            new = _fill_variant(chars, r.group(2))
+            if new != r.group(2):
+                p = r.group(1) or ""
+                value = (f'</{p}t></{p}run><{p}run charPrIDRef="{new}"><{p}t>{value}</{p}t></{p}run>'
+                         f"{r.group(0)}{t.group(0)}")
+        out.append(xml[pos:m.start()] + value)
+        pos = m.end()
+    return "".join(out) + xml[pos:]
 
 
 def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int) -> str:
@@ -807,12 +839,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     char_id, note = _fit_char(seg, lines[0], chars)
                     if note:
                         rep.filled.append(f"  ↳ '{lines[0][:20]}' {note}")
-                if chars is not None and char_id is None:  # 크기는 그대로, 숫자·영문만 한글 글꼴로
+                elif chars is not None:  # 여러 줄(연혁 등)도 11pt, 숫자·영문은 한글 글꼴로
                     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', seg)
-                    base = chars.variant(run.group(1)) if run else None
-                    char_id = base if run and base != run.group(1) else None
+                    char_id = _fill_variant(chars, run.group(1) if run else "0")
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
             xml = _fill_label_paragraphs(xml, vault, rep)
+            xml = _apply_marks(xml, chars)
             data = xml.encode("utf-8")
         out_entries[name] = data
     if chars is not None and chars.changed:  # 칸에 맞춰 줄인 글자 모양·가운데 정렬 문단 모양을 머리 정보에 더함

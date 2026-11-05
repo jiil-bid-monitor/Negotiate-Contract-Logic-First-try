@@ -236,7 +236,7 @@ def _hp_cell(col, row, text, colspan=1):
 def test_track_form_dangjin_shape(tmp_path: Path):
     """11/04 당진 '전시분야 최근 3년간 사업수행실적' — 연번 '1'만 적힌 첫 줄도 채움, 백만원 단위, 비고(단독/공동),
     표 밖 '업 체 명 :' 문단, '계 | 총 실적 금액 : 백만원' 줄."""
-    from quantdocs.fill import FillReport, _cells, _fill_label_paragraphs, _fill_tracks, _set_cell, _spans
+    from quantdocs.fill import FillReport, _apply_marks, _cells, _fill_label_paragraphs, _fill_tracks, _set_cell, _spans
 
     head = ["연번", "① 사업명", "사업기간", "② 계약금액 (단위 : 백만원)", "발주처", "③ 구체적 업무수행 내용", "비고 (단독/공동)"]
     rows = [[_hp_cell(i, 0, h) for i, h in enumerate(head)]]
@@ -260,7 +260,7 @@ def test_track_form_dangjin_shape(tmp_path: Path):
     orig = fill_mod._value
     fill_mod._value = lambda key, vault: vault.info.get(key, "")
     try:
-        xml = _fill_label_paragraphs(xml, V(), rep)
+        xml = _apply_marks(_fill_label_paragraphs(xml, V(), rep), None)
     finally:
         fill_mod._value = orig
     assert rep.rows == 2
@@ -335,11 +335,11 @@ def test_tall_track_row_is_split_and_text_fits():
     header = ('<hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr>'
               '<hh:charPr id="1" height="1300"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties>')
     chars = _Chars(header)
+    # 11/05 사용자 결정: 채운 글은 11pt — 줄 간격이 보통인 칸은 넘쳐도 줄이지 않고 두 줄로
     cid, note = _fit_char(_sz_cell(1, 0, "", 6000, 1600), "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", chars)
-    assert cid == "2" and "줄여" in note
+    assert cid == "2" and note == ""
     out = chars.finish()
-    assert 'itemCnt="3"' in out and re.search(r'<hh:charPr id="2" height="(\d+)"', out)
-    assert int(re.search(r'<hh:charPr id="2" height="(\d+)"', out).group(1)) < 1300
+    assert 'itemCnt="3"' in out and re.search(r'<hh:charPr id="2" height="1100"', out)
 
 
 def test_qualification_rows_merge_docs_and_name_only(tmp_path: Path, monkeypatch):
@@ -400,7 +400,8 @@ def test_bundle_pick_one_of_group():
 
 
 def test_fit_one_line_when_line_spacing_below_100():
-    """11/04 필암서원 주소 칸 — 줄 간격 50% 문단에 12pt 주소가 두 줄로 넘어가 글이 겹쳤음 → 한 줄에 들어가게 글자를 줄임."""
+    """11/04 필암서원 주소 칸 — 줄 간격 50% 문단에 12pt 주소가 두 줄로 넘어가 글이 겹쳤음 → 한 줄에 들어가게 글자를 줄임.
+    (11/05 채운 글 11pt 결정 뒤에도 이런 칸만 예외로 줄임)"""
     from quantdocs.fill import _Chars, _fit_char, _text_width
 
     addr = "강원특별자치도 정선군 남면 무릉2로 64(공장1층)"
@@ -413,9 +414,11 @@ def test_fit_one_line_when_line_spacing_below_100():
     assert cid and "줄여" in note
     h = int(re.search(rf'<hh:charPr id="{cid}" height="(\d+)"', chars.finish()).group(1))
     assert _text_width(addr, h, 1.0) <= (19477 - 282) * 0.95  # 한 줄에 들어감
-    # 줄 간격 160%인 칸은 예전처럼 두 줄로 넘어가도 됨(높이가 되면 글자 그대로)
-    tall = _sz_cell(1, 0, "", 19477, 4500).replace('paraPrIDRef="0"', 'paraPrIDRef="1"')
-    assert _fit_char(tall, addr, chars) == (None, "")
+    assert h < 1100
+    # 줄 간격 160%인 칸은 11pt 그대로 두 줄로(칸 높이가 모자라도 줄이지 않음 — 11/05 사용자 결정)
+    tall = _sz_cell(1, 0, "", 19477, 1500).replace('paraPrIDRef="0"', 'paraPrIDRef="1"')
+    cid2, note2 = _fit_char(tall, addr, chars)
+    assert note2 == "" and re.search(rf'<hh:charPr id="{cid2}" height="1100"', chars.finish())
 
 
 def test_unfinished_tracks_are_never_counted(monkeypatch):
@@ -807,3 +810,37 @@ def test_applicant_line_with_corp_and_name_blanks(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", body), tmp_path / "ao.hwpx", v)
     out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
     assert re.search(r"대표자 \(주\)가상 +대표자<hp:fwSpace/> 성명 : 홍길동 +\(인\)", out) and out.count("(주)") == 1
+
+
+def test_filled_text_is_11pt(tmp_path: Path):
+    """11/05 사용자 요청: 채운 글은 전부 11pt. 칸 전체를 채운 글·이름표 뒤에 끼워 넣은 값('TEL :'·'대표자 :') 모두 —
+    같은 줄의 이름표·서식 글자는 원래 크기 그대로, 이미 11pt인 글자 모양은 새로 만들지 않음."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr>'
+              '<hh:charPr id="1" height="1100"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties></hh:head>')
+    inline = ('<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>TEL :          FAX :</hp:t></hp:run></hp:p>'
+              '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>둘째 줄</hp:t></hp:run></hp:p></hp:subList>'
+              '<hp:cellAddr colAddr="0" rowAddr="1"/><hp:cellSpan colSpan="2" rowSpan="1"/></hp:tc>')
+    addr11 = _c(1, 2, "").replace('charPrIDRef="0"', 'charPrIDRef="1"')
+    body = (_tbl([[_c(0, 0, "주 소"), _c(1, 0, "")], [inline], [_c(0, 2, "상호"), addr11]])
+            + '<hp:p><hp:run charPrIDRef="0"><hp:t>대표자 :          (인)</hp:t></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "e.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)",
+                              "전화번호": "033-111-2222", "팩스번호": "033-111-3333"})
+    fill_hwpx(src, tmp_path / "eo.hwpx", v)
+    zo = zipfile.ZipFile(tmp_path / "eo.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    assert "\ue000" not in out and "\ue001" not in out
+    sizes = dict(re.findall(r'<hh:charPr id="(\d+)" height="(\d+)"', head))
+
+    def size_of(text):
+        return sizes[re.findall(r'charPrIDRef="(\d+)"><hp:t>' + re.escape(text), out)[-1]]
+    assert size_of("강원특별자치도") == "1100"  # 칸 전체를 채운 주소
+    assert size_of("033-111-2222") == "1100" and size_of("033-111-3333") == "1100"  # 'TEL :' 뒤에 끼워 넣은 값
+    assert size_of("홍길동") == "1100"  # 서명 줄
+    assert size_of("TEL :") == "1000" and size_of("둘째 줄") == "1000"  # 서식 글자는 그대로
+    assert re.search(r'charPrIDRef="1"><hp:t>\(주\)가상', out)  # 이미 11pt인 칸은 새 글자 모양 없이
+    assert 'charProperties itemCnt="3"' in head  # 10pt → 11pt 사본 하나만 더함

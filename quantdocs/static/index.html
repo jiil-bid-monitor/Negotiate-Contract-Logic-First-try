@@ -258,7 +258,9 @@ function render(j) {
   $("#candBox").open = false;
   $("#candBox").classList.toggle("hide", !s.candidates.length);
   $("#candN").textContent = s.candidates.length ? `${s.candidates.length}건` : "";
-  renderStaff(s.staff || [], s.staff_rule || "", j.vault_ok);
+  // 기술인력 칸은 제안요청서에 기술인력 배점 기준이 있는 공고에서만(11/05 사용자 요청) — 없으면 숨기고 고르기도 안 보냄
+  $("#staffBox").classList.toggle("hide", !s.staff_on);
+  renderStaff(s.staff_on ? (s.staff || []) : [], s.staff_rule || "", j.vault_ok);
   $("#result").classList.remove("hide");
 }
 

@@ -47,6 +47,7 @@ class Analysis:
     pick_missing: list[str] = field(default_factory=list)
     staff: list[dict] = field(default_factory=list)  # 기술인력 고르기(화면) — staff_status
     staff_rule: str = ""  # 이 공고 기술인력 배점 기준 한 줄(등급별 점수·재직 조건)
+    staff_on: bool = False  # 제안요청서에 기술인력 배점 기준(등급별 점수)이 있는 공고 — 화면 칸은 이때만 보임(11/05)
 
 
 def _is_hwpx(p: Path) -> bool:
@@ -172,6 +173,7 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
     # 기술인력 고르기(11/05 사용자 요청 (나)) — 이 공고 배점 기준으로 인력목록 사람마다 들어가는지
     crit = next((c for c in read_criteria(_rfp_first(files, converted)) if c.kind == "staff"), None)
     a.staff = staff_status(crit, vault, ref)
+    a.staff_on = bool(crit is not None and crit.per_grade)
     if crit is not None:
         rule = ", ".join(f"{g} {p:g}점" for g, p in crit.per_grade.items())
         months = re.search(r"\d+\s*개월\s*이상", crit.note)
@@ -215,6 +217,7 @@ def summary(a: Analysis) -> dict:
         "bundle_missing": a.pick_missing,
         "staff": [{"name": p["이름"], "grade": p["등급"], "joined": p["입사일"], "ok": p["counted"], "why": p["why"]} for p in a.staff],
         "staff_rule": a.staff_rule,
+        "staff_on": a.staff_on,
     }
 
 

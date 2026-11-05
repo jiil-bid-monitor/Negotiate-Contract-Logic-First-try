@@ -1298,3 +1298,15 @@ def test_signature_lines_without_colon_and_manual_form(tmp_path: Path):
     out = zipfile.ZipFile(tmp_path / "bo.hwpx").read("Contents/section0.xml").decode()
     assert "업 체 명 : (주)가상" in out and "주    소 : 강원 정선" in out and re.search(r"대 표 자 : 홍길동 +\(인\)", out)
     assert out.count("강원 정선") == 1  # 표 안 '주소' 칸(직원 주소)은 그대로
+
+
+def test_staff_box_only_when_rfp_has_staff_criteria(tmp_path: Path):
+    """11/05 사용자 요청: 기술인력 칸은 제안요청서에 기술인력 배점 기준이 있는 공고에서만 — summary.staff_on."""
+    from quantdocs.build import analyze, summary
+
+    v = vault.Vault({}, staff=[{"이름": "(가)갑", "등급": "특급", "입사일": dt.date(2020, 1, 1)}])
+    rfp = _score_doc(tmp_path)  # 기술인력 배점표 있음
+    on = summary(analyze([rfp], v, dt.date(2026, 11, 3), tmp_path / "w1"))
+    assert on["staff_on"] and on["staff"] and "특급 1점" in on["staff_rule"]
+    plain = _mini_hwpx(tmp_path / "plain.hwpx", '<hp:p><hp:run charPrIDRef="0"><hp:t>가상 공고문</hp:t></hp:run></hp:p>')
+    assert summary(analyze([plain], v, dt.date(2026, 11, 3), tmp_path / "w2"))["staff_on"] is False

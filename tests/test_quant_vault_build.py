@@ -1441,3 +1441,29 @@ def test_folders_by_kind_and_example_folder_skipped(tmp_path: Path):
     assert ("회사 연혁", "files/연혁/회사소개.pdf") in got
     assert ("신용평가등급확인서", "files/기업신용평가확인/(27.6.15).pdf") in got
     assert ("경쟁입찰참가자격등록증", "files/경쟁입찰참가등록증/스캔0001.pdf") in got
+
+
+def test_orders_excel_in_folder_becomes_tracks(tmp_path: Path, monkeypatch):
+    """11/05 사용자 요청: 공사수주현황 엑셀도 폴더에서 바로 실적목록으로 — 묶음 실적에 적어 둔 발주기관·지분율 등은 사업명으로 살림."""
+    from openpyxl import Workbook
+
+    from quantdocs import notice
+
+    monkeypatch.setattr(notice, "track_field", lambda n: "전시·체험")
+    (tmp_path / "공사수주현황").mkdir()
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["공사 수주 현황"])
+    ws.append(["No.", "사업명", "계약종류", "사업기간", "계약금"])
+    ws.append([1, "(가상) 전시관 조성", "용역", "2024.01.02~2024.06.30", 300_000_000])
+    ws.append([2, "(가상) 새 체험관", "공사", "2025.03.01~2025.09.30", 120_000_000])
+    ws.append(["", "합계", "", "", 420_000_000])
+    wb.save(tmp_path / "공사수주현황" / "공사수주현황.xlsx")
+    v = vault.Vault({}, tracks=[{"사업명": "(가상) 전시관  조성", "발주기관": "(가상)시", "지분율(%)": 60, "계약금액(원)": 1},
+                                {"사업명": "(가상) 직접 더한 실적", "준공일": dt.date(2023, 1, 1)}])
+    vault.add_loose(v, tmp_path)
+    assert v.tracks_src == "공사수주현황/공사수주현황.xlsx"
+    got = {t["사업명"]: t for t in v.tracks}
+    assert got["(가상) 전시관 조성"]["발주기관"] == "(가상)시" and got["(가상) 전시관 조성"]["지분율(%)"] == 60
+    assert got["(가상) 전시관 조성"]["계약금액(원)"] == 300_000_000 and got["(가상) 전시관 조성"]["준공일"] == dt.date(2024, 6, 30)
+    assert "(가상) 새 체험관" in got and "(가상) 직접 더한 실적" in got and len(v.tracks) == 3

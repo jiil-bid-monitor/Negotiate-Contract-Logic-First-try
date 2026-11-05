@@ -137,6 +137,7 @@ class Vault:
     patents: list[dict] | None = None  # 특허목록(자기평점 보유기술) — 시트가 없으면 None(자료 없음)
     loose: list[str] = field(default_factory=list)  # 묶음 밖에서 더 읽은 PDF(파일 이름)
     staff_src: str = ""  # 인력목록을 묶음 밖 엑셀에서 읽었으면 그 파일 이름
+    tracks_src: str = ""  # 실적목록을 폴더의 공사수주현황 엑셀에서 읽었으면 그 파일
     patent_src: str = ""  # 특허 건수를 특허증 파일로 셌으면 '파일'(특허목록 시트가 비었을 때)
 
     def file(self, name: str | None) -> bytes | None:
@@ -308,7 +309,41 @@ def add_loose(v: Vault, folder: Path | None = None) -> None:
         if staff:
             v.staff, v.staff_src = staff, p.relative_to(folder).as_posix()
             break
+    # 공사수주현황 엑셀 — 실적목록을 묶음 다시 잠그지 않고 바로(11/05 사용자 요청), 경로에 '수주'가 든 가장 최근 파일
+    orders = [p for p in xlsx if "수주" in p.relative_to(folder).as_posix()]
+    for p in sorted(orders, key=lambda x: x.stat().st_mtime, reverse=True):
+        from .importer import read_orders
+        try:
+            rows = read_orders(p)
+        except Exception:  # noqa: BLE001 — 열 수 없는 엑셀
+            continue
+        if rows:
+            v.tracks = merge_tracks(v.tracks, rows)
+            v.tracks_src = p.relative_to(folder).as_posix()
+            break
     derive_patents(v)
+
+
+def merge_tracks(old: list[dict], new: list[dict]) -> list[dict]:
+    """폴더의 공사수주현황(new)을 실적목록으로 — 사업명이 같은 묶음 실적에 담당자가 적어 둔 발주기관·부가세·지분율·분야·증빙은 살림,
+    공사수주현황에 없는 묶음 실적(직접 더한 것)은 뒤에 그대로."""
+    from .notice import track_field
+
+    by_name = {re.sub(r"\s+", "", str(t.get("사업명") or "")): t for t in old}
+    out, used = [], set()
+    for i, t in enumerate(new, 1):
+        key = re.sub(r"\s+", "", str(t.get("사업명") or ""))
+        prev = by_name.get(key, {})
+        used.add(key)
+        row = {**prev, "번호": i, "업무": t.get("업무") or prev.get("업무"), "사업명": t["사업명"],
+               "계약일": t.get("계약일") or prev.get("계약일"), "준공일": t.get("준공일") or prev.get("준공일"),
+               "계약금액(원)": t.get("계약금액(원)") if t.get("계약금액(원)") is not None else prev.get("계약금액(원)")}
+        row["분야"] = prev.get("분야") or track_field(t["사업명"])
+        if not prev.get("비고"):
+            row["비고"] = t.get("비고")
+        out.append(row)
+    out += [t for k, t in by_name.items() if k not in used]
+    return out
 
 
 def derive_patents(v: Vault) -> None:

@@ -554,10 +554,9 @@ def _ocr_top_head(img) -> tuple[str, str] | None:
     m = _OCR_HEAD.search(top)
     if not m:
         return None
-    title = m.group(2).strip()
-    if not re.search(r"[가-힣]{2}", title):
-        rest = [ln.strip() for ln in top[m.end():].splitlines() if re.search(r"[가-힣]{2}", ln)]
-        title = rest[0] if rest else ""
+    from .notice import _ocr_title
+
+    title = _ocr_title(m.group(2), top[m.end():], "")
     return re.sub(r"\s+", "", m.group(1)), title
 
 

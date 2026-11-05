@@ -1596,3 +1596,17 @@ def test_institution_name_line_in_pledge_is_bidder(tmp_path):
            "<hp:p><hp:run><hp:t>대표자 :                (인)</hp:t></hp:run></hp:p>")
     out = fill._fill_label_paragraphs(xml, v, rep).replace(fill._VS, "").replace(fill._VE, "")
     assert "기관명 : (주)가상" in out and "홍길동" in out
+
+
+def test_hidden_form_head_title_when_ocr_spaces_letters(monkeypatch):
+    """서버 OCR이 '[서식 7]' 뒤 제목을 '입 찰 보 증 …'처럼 띄어 읽거나 못 읽어도 목록에 이름이 들어감(11/05 서버 화면)."""
+    from quantdocs import importer, notice
+
+    pages = ["- 28 -\n목차 서식 서식 [ 1]", "- 42 -\n서식 공동수급표준협정서서식 공동수급표준협정서[ 6] ( )\nㆍ",
+             "- 46 -\n                 입 찰 보 증 금 지 급 각 서입 찰 보 증 금 지 급 각 서  \n  입찰건명 입찰건명 1. :"]
+    for top in ("[서식 7]\n\n입 찰 보 증 금 지 급 각 서\n", "[서식 7]\n\nxr =\n"):
+        monkeypatch.setattr(importer, "ocr_page_tops", lambda *a, top=top, **k: {2: top})
+        text = notice._add_hidden_heads(b"", pages, "\n".join(pages), "r.pdf")
+        assert "[서식 7] 입찰보증금지급각서\n" in text
+        forms = {str(f.no): f.name for f in notice.read_forms(text, "r.pdf", notice.load_catalog())}
+        assert "입찰보증금" in forms.get("7", "")

@@ -661,6 +661,33 @@ HEAD_SCAN_MAX = 30
 _FORM_TITLE_END = re.compile(r"(?:각서|확약서|서약서|확인서|신청서|위임장|증명서|협정서|동의서|명세서|제출서|신고서|청구서|보증서|계획서)$")
 
 
+def _ocr_title(title: str, rest: str, page: str) -> str:
+    """OCR 머리 '[서식 7]' 뒤 제목 — 같은 줄 → 다음 줄(서버 OCR은 '입 찰 보 증 …'처럼 띄어 읽음 — 한 글자씩 띄운 줄은 붙임) → 쪽 글 첫 줄
+    (11/05 서버에서 제목 없이 '[서식 7]'만 읽혀 목록에 안 나옴)."""
+    def clean(t: str) -> str:
+        t = t.strip()
+        if re.fullmatch(r"(?:[가-힣]\s+){2,}[가-힣]", t):
+            t = re.sub(r"\s+", "", t)
+        return t
+    title = clean(title)
+    if re.search(r"[가-힣]{2}", title):
+        return title
+    for ln in rest.splitlines():
+        t = clean(ln)
+        if re.search(r"[가-힣]{2}", t):
+            return t
+    got = guess_form_title(page)
+    if got:
+        return got
+    for ln in page.splitlines():  # 쪽 글의 첫 한글 줄(띄어 쓴 글자·두 번 찍힌 글은 정리)
+        t = re.sub(r"\s+", "", ln)
+        if len(t) % 2 == 0 and t[: len(t) // 2] == t[len(t) // 2:]:
+            t = t[: len(t) // 2]
+        if re.fullmatch(r"[가-힣()·]{3,30}", t):
+            return t
+    return ""
+
+
 def guess_form_title(page: str) -> str | None:
     """쪽 첫 줄(쪽 번호 줄 빼고)이 서식 제목('입 찰 보 증 금 지 급 각 서' — 글자 띄움·두 번 찍힘 포함)이면 그 제목."""
     lines = [ln for ln in page.splitlines() if ln.strip() and not re.fullmatch(r"\s*-\s*\d+\s*-\s*", ln)]
@@ -701,9 +728,7 @@ def _add_hidden_heads(data: bytes, pages: list[str], text: str, name: str) -> st
             top = got[i]
             no = re.sub(r"\s+", "", m.group(1))
             title = m.group(2).strip()
-            if not re.search(r"[가-힣]{2}", title):  # 제목이 다음 줄에 있으면 그 줄
-                rest = [ln.strip() for ln in top[m.end():].splitlines() if re.search(r"[가-힣]{2}", ln)]
-                title = rest[0] if rest else ""
+            title = _ocr_title(title, top[m.end():], pages[i])
             how = "글자 인식(OCR)으로 읽음"
         else:  # OCR이 없거나 못 읽음 — 쪽 첫 줄이 '…각서·확약서' 같은 서식 제목이면 앞 서식 다음 번호로
             title = guess_form_title(pages[i])
@@ -714,6 +739,8 @@ def _add_hidden_heads(data: bytes, pages: list[str], text: str, name: str) -> st
         last = int(re.match(r"\d+", no).group(0))
         head = f"[서식 {no}] {title}".strip()
         orig = pages[i]
+        if not title:
+            continue  # 제목 없는 머리만으로는 서식 목록에 안 들어감 — 그 쪽 첫 줄 제목도 없으면 건너뜀
         if orig and orig in text:
             text = text.replace(orig, head + "\n" + orig, 1)
         else:

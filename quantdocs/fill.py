@@ -609,6 +609,14 @@ class _Chars:
             self.added_left[pid] = self._next_para_id()
         return self.added_left[pid]
 
+    def para_gap(self, pid: str) -> int:
+        """문단 위·아래 간격(prev + next) HWPUNIT — 첫 margin 묶음(hp:case가 있으면 그것). 연혁 줄마다 붙는 '문단 위 1000' 등."""
+        block = self._para(pid)
+        m = re.search(r"<(?:[\w.-]+:)?margin\b.*?</(?:[\w.-]+:)?margin>", block, re.S)
+        if not m:
+            return 0
+        return sum(int(v) for v in re.findall(r'<(?:[\w.-]+:)?(?:prev|next)\b[^>]*value="(-?\d+)"', m.group(0)) if int(v) > 0)
+
     def margins(self, pid: str) -> tuple[int, int]:
         """(들여쓰기 intent, 왼쪽 여백) HWPUNIT — 문단 모양의 첫 margin 묶음(hp:case가 있으면 그것)."""
         block = self.paras.get(pid, "")
@@ -902,7 +910,7 @@ def _cell_need(cell: str, chars: "_Chars") -> int | None:
             elif in_t:
                 width += sum(chars.char_width(cur, ch) for ch in unescape(part))
         lines = max(1, -(-int(width) // avail))
-        need += int(lines * (tallest or 1000) * (spacing if spacing else 1.0))
+        need += int(lines * (tallest or 1000) * (spacing if spacing else 1.0)) + (chars.para_gap(pm.group(1)) if pm else 0)
     return need
 
 
@@ -949,6 +957,40 @@ def _page_slack(xml: str, tbl_end: int) -> int | None:
     return body - vp - vs
 
 
+def _split_long_tables(xml: str, chars: "_Chars", rep: FillReport, marker: str) -> str:
+    """채운 글(연혁 등)이 칸 높이보다 1cm 넘게 길면 그 표를 쪽에서 나뉘게 — '글자처럼 취급'을 풀고 쪽 경계에서 '나눔'(11/05 사용자 요청:
+    연혁이 길어 쪽 끝에서 잘림 — 쪽을 넘겨 모두 보이게). marker: 채운 글 중 한 줄(그 글이 든 표만)."""
+    for ts, te in reversed(_spans(xml, "tbl")):
+        tbl = xml[ts:te]
+        if marker not in tbl or re.search(r"<(?:[\w.-]+:)?tbl\b", tbl[4:]):
+            continue
+        over = 0
+        for cs, ce in _spans(tbl, "tc"):
+            cell = tbl[cs:ce]
+            if marker not in cell:
+                continue
+            h = re.search(r'<(?:[\w.-]+:)?cellSz\b[^>]*height="(\d+)"', cell)
+            need = _cell_need(cell, chars)
+            if h and need:
+                over = max(over, need - int(h.group(1)))
+        if over < 2835:
+            continue
+        head = re.match(r"<[^>]+>", tbl).group(0)
+        new_head = re.sub(r'\bpageBreak="\w+"', 'pageBreak="TABLE"', head) if "pageBreak=" in head else head[:-1] + ' pageBreak="TABLE">'
+        tbl = new_head + tbl[len(head):]
+        tbl = re.sub(r'(<(?:[\w.-]+:)?pos\b[^>]*\btreatAsChar=")1(")', r"\g<1>0\2", tbl, count=1)
+        tbl = re.sub(r'(<(?:[\w.-]+:)?pos\b[^>]*\baffectLSpacing=")1(")', r"\g<1>0\2", tbl, count=1)  # 한글이 쓰는 '나눔' 표 모양 그대로
+        xml = xml[:ts] + tbl + xml[te:]
+        # 표가 든 문단의 줄 배치 정보는 지워 한글이 다시 계산하게
+        pe = xml.find("</hp:p>", ts + len(tbl))
+        if pe > 0:
+            tail = xml[ts + len(tbl):pe]
+            tail = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", tail, flags=re.S)
+            xml = xml[:ts + len(tbl)] + tail + xml[pe:]
+        rep.filled.append(f"연혁이 칸보다 {over / 2834.6:.1f}cm 길어 표가 쪽에서 나뉘게 함(글자처럼 취급 풀고 '나눔') — 한글에서 확인")
+    return xml
+
+
 def _keep_table_heights(before: str, after: str, chars: "_Chars", rep: FillReport) -> str:
     """채운 글 때문에 줄이 높아지면 같은 표에서 여유가 가장 많은 줄(연혁 빈 칸 등)을 그만큼 줄여 표 전체 높이를 원래대로(11/05 사용자 요청).
     계기: 필암서원 서식 12 — 원본도 쪽 끝까지 0.2mm만 남는 표인데 업태·종목이 두 줄이 되며 '글자처럼 취급' 표가 통째로 다음 쪽으로 넘어가
@@ -958,8 +1000,8 @@ def _keep_table_heights(before: str, after: str, chars: "_Chars", rep: FillRepor
         return after
     for (os_, oe), (ns, ne) in reversed(list(zip(old_tbls, new_tbls))):
         old, new = before[os_:oe], after[ns:ne]
-        if old == new or re.search(r"<(?:[\w.-]+:)?tbl\b", new[4:]):
-            continue
+        if old == new or re.search(r"<(?:[\w.-]+:)?tbl\b", new[4:]) or 'pageBreak="TABLE"' in new[:new.find(">")]:
+            continue  # 쪽에서 나뉘게 한 표(연혁이 긴 표)는 줄이지 않음
         r_old, r_new = _row_info(old, chars), _row_info(new, chars)
         if r_old is None or r_new is None or len(r_old) != len(r_new):
             continue
@@ -1252,6 +1294,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             xml = _fill_label_paragraphs(xml, vault, rep, chars)
             xml = _apply_marks(xml, chars)
             if chars is not None:
+                if vault.history:
+                    first = f"{_fmt_ymd(vault.history[0].get('연월일'))}  {vault.history[0].get('내용') or ''}".strip()
+                    xml = _split_long_tables(xml, chars, rep, escape(first))
                 xml = _keep_table_heights(before_fill, xml, chars, rep)
             data = xml.encode("utf-8")
         out_entries[name] = data

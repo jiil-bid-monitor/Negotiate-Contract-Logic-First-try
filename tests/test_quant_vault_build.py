@@ -1220,3 +1220,36 @@ def test_justified_value_cell_gets_left_aligned_copy(tmp_path: Path):
     cell = re.findall(r"<hp:tc.*?</hp:tc>", sec, re.S)[1]
     pid = re.search(r'paraPrIDRef="(\d+)"', cell).group(1)
     assert pid != "0" and re.search(rf'<hh:paraPr id="{pid}"><hh:align horizontal="LEFT"/>', head) and 'itemCnt="2"' in head
+
+
+def test_long_history_table_splits_across_pages(tmp_path: Path):
+    """11/05 사용자 요청: 연혁이 칸보다 길어 쪽 끝에서 잘림 → 그 표만 '글자처럼 취급'을 풀고 쪽 경계에서 '나눔'(pageBreak=TABLE),
+    문단 위 간격(prev)도 높이 어림에 넣음. 짧은 연혁이면 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head xmlns:hh="h"><hh:refList><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/>'
+              '</hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="LEFT"/>'
+              '<hh:margin><hc:prev value="1000"/></hh:margin><hh:lineSpacing type="PERCENT" value="160"/></hh:paraPr></hh:paraProperties>'
+              '</hh:refList></hh:head>')
+    cell = ('<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>주요연혁</hp:t></hp:run></hp:p></hp:subList>'
+            '<hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="40000" height="10000"/></hp:tc>')
+    body = ('<hp:p><hp:run><hp:tbl pageBreak="NONE" rowCnt="1" colCnt="1"><hp:sz width="40000" height="10000"/>'
+            '<hp:pos treatAsChar="1" affectLSpacing="1"/><hp:tr>' + cell + '</hp:tr></hp:tbl></hp:run>'
+            '<hp:linesegarray><hp:lineseg/></hp:linesegarray></hp:p>')
+
+    def run(n):
+        src = _mini_hwpx(tmp_path / f"h{n}.hwpx", body)
+        with zipfile.ZipFile(src) as z:
+            items = {k: z.read(k) for k in z.namelist()}
+        items["Contents/header.xml"] = header.encode()
+        with zipfile.ZipFile(src, "w") as z:
+            for k, d in items.items():
+                z.writestr(k, d)
+        v = vault.Vault({}, history=[{"연월일": f"20{10 + i}.01", "내용": f"(가상) 연혁 {i}"} for i in range(n)])
+        rep = fill_hwpx(src, tmp_path / f"o{n}.hwpx", v)
+        return zipfile.ZipFile(tmp_path / f"o{n}.hwpx").read("Contents/section0.xml").decode(), rep
+    sec, rep = run(20)
+    assert 'pageBreak="TABLE"' in sec and 'treatAsChar="0"' in sec and "<hp:linesegarray>" not in sec.split("</hp:tbl>")[-1]
+    assert any("나뉘게" in x for x in rep.filled)
+    sec, _ = run(2)
+    assert 'pageBreak="NONE"' in sec and 'treatAsChar="1"' in sec

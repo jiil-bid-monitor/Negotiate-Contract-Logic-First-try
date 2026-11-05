@@ -1253,3 +1253,28 @@ def test_long_history_table_splits_across_pages(tmp_path: Path):
     assert any("나뉘게" in x for x in rep.filled)
     sec, _ = run(2)
     assert 'pageBreak="NONE"' in sec and 'treatAsChar="1"' in sec
+
+
+def test_staff_excel_in_folder_and_pick(tmp_path: Path):
+    """11/05 사용자 요청: 기술인력 엑셀을 jiil-quant-docs 폴더에서 바로 읽음(묶음 다시 잠그지 않게, 등급이 '업무' 칸·입사일 '2011.09.01' 글자여도),
+    화면에서 고른 사람만 자기평점 기술인력 점수에(staff_status — 조건에 안 맞는 사람은 이유와 함께 빠짐)."""
+    from openpyxl import Workbook
+
+    from quantdocs.selfscore import Criterion, score, staff_status
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["이름", "입사일", "업무"])
+    for r in (["(가)갑", "2011.09.01", "특급"], ["(가)을", "2020.02.17", "고급"], ["(가)병", "2026.10.01", "초급"], ["(가)정", "2019.01.01", ""]):
+        ws.append(r)
+    wb.save(tmp_path / "기술인력.xlsx")
+    (tmp_path / "~$기술인력.xlsx").write_bytes(b"lock")  # 엑셀이 열어 둔 임시 파일은 안 읽음
+    v = vault.Vault({}, staff=[{"이름": "(가)옛 사람", "등급": "특급", "입사일": dt.date(2010, 1, 1)}])
+    vault.add_loose(v, tmp_path)
+    assert v.staff_src == "기술인력.xlsx" and [r["이름"] for r in v.staff] == ["(가)갑", "(가)을", "(가)병", "(가)정"]
+    c = Criterion("기술인력", 6, "staff", note="※ 공고일 기준 6개월 이상 근무", per_grade={"특급": 1.0, "고급": 0.5, "초급": 0.2})
+    st = {p["이름"]: (p["counted"], p["why"]) for p in staff_status(c, v, dt.date(2026, 11, 5))}
+    assert st == {"(가)갑": (True, ""), "(가)을": (True, ""), "(가)병": (False, "재직 6개월 미만·입사일 없음"), "(가)정": (False, "등급 없음")}
+    assert score([c], v, dt.date(2026, 11, 5))[0].score == 1.5
+    v.staff = [r for r in v.staff if r["이름"] in {"(가)갑"}]  # 화면에서 갑만 고름 — build(staff_pick=)가 하는 일
+    assert score([c], v, dt.date(2026, 11, 5))[0].score == 1.0

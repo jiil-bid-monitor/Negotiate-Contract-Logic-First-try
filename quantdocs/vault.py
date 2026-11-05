@@ -22,6 +22,7 @@ import gzip
 import hashlib
 import io
 import os
+import re
 import tarfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -135,6 +136,7 @@ class Vault:
     staff: list[dict] = field(default_factory=list)  # 인력목록(자기평점 기술인력)
     patents: list[dict] | None = None  # 특허목록(자기평점 보유기술) — 시트가 없으면 None(자료 없음)
     loose: list[str] = field(default_factory=list)  # 묶음 밖에서 더 읽은 PDF(파일 이름)
+    staff_src: str = ""  # 인력목록을 묶음 밖 엑셀에서 읽었으면 그 파일 이름
 
     def file(self, name: str | None) -> bytes | None:
         """양식의 '파일 이름' 칸 값으로 파일 찾기 — 'files/' 붙여도·안 붙여도, 경로 없이 이름만 적어도."""
@@ -211,6 +213,40 @@ def loose_dir() -> Path | None:
     return d if d.is_dir() else None
 
 
+_STAFF_GRADE = ("등급", "기술등급", "기술자등급", "업무")  # 받은 기술인력표는 등급이 '업무' 칸에 있었음(11/05)
+
+
+def read_staff_xlsx(data: bytes) -> list[dict] | None:
+    """기술인력 엑셀(머리 줄에 '이름' + '입사…' + 등급 칸) → 인력목록 줄. 그런 시트가 없으면 None.
+    머리는 앞 5줄 안에서 찾음, '재직' 칸이 없으면 모두 재직."""
+    from openpyxl import load_workbook
+
+    try:
+        wb = load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+    except Exception:  # noqa: BLE001 — 엑셀이 아니거나 깨진 파일
+        return None
+    for ws in wb.worksheets:
+        rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        for hi, head in enumerate(rows[:5]):
+            names = [re.sub(r"\s+", "", str(h or "")) for h in head]
+            col = lambda *ws_: next((i for i, h in enumerate(names) if h in ws_), None)
+            c_name = col("이름", "성명")
+            c_join = next((i for i, h in enumerate(names) if h.startswith("입사")), None)
+            c_grade = col(*_STAFF_GRADE)
+            if c_name is None or c_join is None or c_grade is None:
+                continue
+            c_emp, c_lic = col("재직", "재직여부", "상태"), col("자격증", "자격")
+            out = []
+            for r in rows[hi + 1:]:
+                get = lambda i: r[i] if i is not None and i < len(r) else None
+                if not str(get(c_name) or "").strip():
+                    continue
+                out.append({"이름": str(get(c_name)).strip(), "입사일": get(c_join), "재직": str(get(c_emp) or "재직").strip(),
+                            "등급": str(get(c_grade) or "").strip(), "자격증": get(c_lic)})
+            return out
+    return None
+
+
 def add_loose(v: Vault, folder: Path | None = None) -> None:
     """그 폴더의 PDF를 묶음 files/에 있는 것처럼 메모리에 더함(같은 이름이 묶음에 있으면 묶음 것을 씀) — 서식 채우기·통합본 모두 씀."""
     folder = folder or loose_dir()
@@ -226,3 +262,13 @@ def add_loose(v: Vault, folder: Path | None = None) -> None:
             continue
         v.loose.append(p.name)
         have.add(p.name)
+    # 기술인력 엑셀 — 폴더에 두면 묶음을 다시 잠그지 않아도 이것을 씀(11/05 사용자 요청), 여럿이면 가장 최근에 고친 파일
+    for p in sorted((x for x in folder.iterdir() if x.suffix.lower() == ".xlsx" and not x.name.startswith("~$")),
+                    key=lambda x: x.stat().st_mtime, reverse=True):
+        try:
+            staff = read_staff_xlsx(p.read_bytes())
+        except OSError:
+            continue
+        if staff:
+            v.staff, v.staff_src = staff, p.name
+            break

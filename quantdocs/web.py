@@ -186,7 +186,8 @@ def _run_build(job: dict) -> None:
             out = JOBS / job["id"] / "out" / f"정량평가서_{job['no']}.zip"
             n = job.get("notice", {})
             build([Path(f) for f in job["files"]], v, out, n.get("title", ""), job.get("date"),
-                  n.get("award", ""), n.get("contract", ""), n.get("licenses") or [], _g2b_no(n, job["no"]))
+                  n.get("award", ""), n.get("contract", ""), n.get("licenses") or [], _g2b_no(n, job["no"]),
+                  job.get("staff_pick"))
             job["zip"] = str(out)
             job["state"] = "built"
         except Exception as err:
@@ -239,6 +240,8 @@ def api(method: str, sub: str, body: dict | None = None, base: str = "/api") -> 
             return _j({"error": "먼저 공고를 불러오세요"}, 400)
         if not job.get("vault_ok"):
             return _j({"error": "회사 자료 묶음이 없어 만들 수 없습니다 — 회사 자료를 먼저 넣으세요"}, 400)
+        pick = body.get("staff")  # 화면에서 고른 기술인력 이름(없으면 인력목록 전체)
+        job["staff_pick"] = [str(x) for x in pick][:500] if isinstance(pick, list) else None
         job.update(state="building", error=None, zip=None)
         threading.Thread(target=_run_build, args=(job,), daemon=True).start()
         return _j({"id": job["id"]})

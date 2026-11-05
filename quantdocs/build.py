@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .bundle import merge, pick
 from .catalog import load_catalog
-from .selfscore import AUTO_KINDS, SelfScore, fmt, read_criteria, score as score_items
+from .selfscore import AUTO_KINDS, SelfScore, fmt, read_criteria, score as score_items, staff_status
 from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
@@ -45,6 +45,8 @@ class Analysis:
     kind: str = "other"  # 공고 유형(kinds.detect)
     picks: list = field(default_factory=list)  # 통합본에 넣을 회사 서류(bundle.Pick, 파일 이름 키워드로 고름)
     pick_missing: list[str] = field(default_factory=list)
+    staff: list[dict] = field(default_factory=list)  # 기술인력 고르기(화면) — staff_status
+    staff_rule: str = ""  # 이 공고 기술인력 배점 기준 한 줄(등급별 점수·재직 조건)
 
 
 def _is_hwpx(p: Path) -> bool:
@@ -166,7 +168,23 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
     if kind != "negotiation" and not sheet.forms:
         notes.append(f"{guide(kind)['name']} 공고 — 첨부에서 서식 목록을 찾지 못함. 서식은 {guide(kind)['source']}")
     picks, pick_missing = pick(list(vault.files), [it.text for it in sheet.submit_items], quals)
-    return Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
+    a = Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
+    # 기술인력 고르기(11/05 사용자 요청 (나)) — 이 공고 배점 기준으로 인력목록 사람마다 들어가는지
+    crit = next((c for c in read_criteria(_rfp_first(files, converted)) if c.kind == "staff"), None)
+    a.staff = staff_status(crit, vault, ref)
+    if crit is not None:
+        rule = ", ".join(f"{g} {p:g}점" for g, p in crit.per_grade.items())
+        months = re.search(r"\d+\s*개월\s*이상", crit.note)
+        a.staff_rule = f"{crit.name} {crit.points:g}점 — 1인당 {rule}" + (f" · {months.group(0)} 재직" if months else "") + (
+            " · ⚠ 배점 기준에 '투입·참여' 표현이 있음 — 이 사업에 투입할 사람만 고르세요" if re.search(r"투입|참여\s*(?:인력|기술자)", crit.note) else "")
+    return a
+
+
+def _rfp_first(files: list[Path], converted: dict[str, str]) -> list[Path]:
+    """한글 첨부(HWPX·변환본) — 제안요청서 먼저, 그다음 과업지시서·나머지."""
+    paths = [Path(converted.get(f.name, f)) for f in files]
+    return sorted((p for p in paths if p.suffix.lower() == ".hwpx"),
+                  key=lambda p: (0 if "제안요청" in p.name else 1 if "과업" in p.name else 2))
 
 
 # 화면에서 뺀 알림(11/04 사용자 요청) — 읽어보기.txt엔 그대로 남음
@@ -195,6 +213,8 @@ def summary(a: Analysis) -> dict:
         "notes": [n for n in a.notes if not _SCREEN_HIDDEN.match(n)],
         "bundle": [{"section": p.section, "file": Path(p.path).name, "note": p.note} for p in a.picks],
         "bundle_missing": a.pick_missing,
+        "staff": [{"name": p["이름"], "grade": p["등급"], "joined": p["입사일"], "ok": p["counted"], "why": p["why"]} for p in a.staff],
+        "staff_rule": a.staff_rule,
     }
 
 
@@ -234,8 +254,14 @@ def _safe(name: str) -> str:
 
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
           award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
-          notice_no: str = "") -> Path:
+          notice_no: str = "", staff_pick: list[str] | None = None) -> Path:
+    """staff_pick: 화면에서 고른 기술인력 이름 — 주면 그 사람만 자기평점 기술인력 점수에(None이면 인력목록 전체)."""
     files = [Path(f) for f in files]
+    if staff_pick is not None:
+        import copy
+        picked = set(staff_pick)
+        vault = copy.copy(vault)
+        vault.staff = [r for r in vault.staff if str(r.get("이름") or "").strip() in picked]
     work = Path(tempfile.mkdtemp(prefix="quantdocs_build_"))
     try:
         a = analyze(files, vault, notice_date, work, award_method, contract_method, licenses)
@@ -248,9 +274,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         cut_names = {str(f.no): f.name for f in a.sheet.forms}
         agency_no = agency_notice_no(a.sheet.texts)  # 공고문의 기관 공고번호 — 서식 공고번호 칸에(11/04 사용자 요청)
         # 정량평가 자기평점 — 제안요청서 본문 배점기준(11/05 사용자 요청). 제안요청서를 먼저 봄
-        hwpx = sorted((Path(a.converted.get(f.name, f)) for f in files if Path(a.converted.get(f.name, f)).suffix.lower() == ".hwpx"),
-                      key=lambda p: (0 if "제안요청" in p.name else 1 if "과업" in p.name else 2))
-        criteria = read_criteria(hwpx)
+        criteria = read_criteria(_rfp_first(files, a.converted))
         self_scores = score_items(criteria, vault, notice_date or date.today()) if criteria else []
         for s in self_scores:  # 실적·보유기술 등은 담당자가 직접 채점(11/05 사용자 결정 — 기술인력·경영상태·신인도만 자동)
             if s.kind not in AUTO_KINDS:
@@ -260,6 +284,9 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         basis = basis_amount(a.sheet.texts)
         if basis:
             a.notes.append(f"입찰보증금 확약서 입찰 금액 = {basis[0]:,}원 ({basis[1]}에서 읽음)")
+        if staff_pick is not None:
+            names = sorted({str(r.get("이름")).strip() for r in vault.staff})
+            a.notes.append(f"기술인력 점수는 화면에서 고른 {len(names)}명으로 계산: " + ", ".join(names[:20]))
         for f in files:
             src = Path(a.converted.get(f.name, f))
             if src.suffix.lower() != ".hwpx":

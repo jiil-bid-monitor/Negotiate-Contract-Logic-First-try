@@ -327,18 +327,13 @@ def _track(c: Criterion, vault, ref: date, mode: str = "") -> ItemScore:
     return res
 
 
-def _staff(c: Criterion, vault, ref: date) -> ItemScore:
+def staff_status(c: Criterion | None, vault, ref: date) -> list[dict]:
+    """인력목록 사람마다 이 공고 기술인력 점수에 들어가는지 — 화면에서 고르기(11/05 사용자 요청)·점수 계산이 같이 씀.
+    [{이름, 등급, 입사일, counted, why}] — 한 사람이 여러 줄이면 가장 높은 등급 하나(표에 없는 등급은 뺌)."""
     from . import notice as N
 
-    res = ItemScore(c.name, c.points, c.kind, None)
-    if not c.per_grade:
-        res.notes.append("배점기준 표(등급별 점수)를 읽지 못함 — 제안요청서 확인")
-        return res
-    staff = getattr(vault, "staff", []) or []
-    if not staff:
-        res.notes.append("자료 없음 — 회사자료 '인력목록' 시트(이름·입사일·재직·등급)")
-        return res
-    months = re.search(r"(\d+)\s*개월\s*이상", c.note)
+    per_grade = (c.per_grade if c else {}) or {g: 1.0 for g in GRADES}
+    months = re.search(r"(\d+)\s*개월\s*이상", c.note if c else "")
     months = int(months.group(1)) if months else 0
     cut = None  # 이 날 이전에 입사해야 'N개월 이상 재직'
     if months:
@@ -347,29 +342,46 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
             cut = date(ref.year + y, m + 1, min(ref.day, 28))
         except ValueError:
             cut = None
-    best: dict[str, tuple[str, float]] = {}
-    skipped = {"퇴사": 0, f"재직 {months}개월 미만·입사일 없음": 0, "등급 없음": 0}
-    for r in staff:
+    people: dict[str, dict] = {}
+    for r in getattr(vault, "staff", []) or []:
         name = str(r.get("이름") or "").strip()
         if not name:
             continue
-        if str(r.get("재직") or "재직").strip() == "퇴사":
-            skipped["퇴사"] += 1
-            continue
-        joined = N._as_date(r.get("입사일"))
-        if cut and (joined is None or joined > cut):
-            skipped[f"재직 {months}개월 미만·입사일 없음"] += 1
-            continue
-        grade = next((g for g in GRADES if g in _sq(str(r.get("등급") or ""))), None)
-        if grade == "기술사" and "기술사" not in c.per_grade:
+        raw = str(r.get("등급") or "")
+        grade = next((g for g in GRADES if g in _sq(raw)), None)
+        if grade == "기술사" and "기술사" not in per_grade:
             grade = "특급"  # 기술사는 특급 이상 — 표에 기술사 점수가 없으면 특급 점수
-            res.notes.append(f"{name}: 기술사 → 특급 점수로 셈")
-        if grade not in c.per_grade:
-            skipped["등급 없음"] += 1
-            continue
-        pts = c.per_grade[grade]
-        if name not in best or best[name][1] < pts:
-            best[name] = (grade, pts)
+        joined = N._as_date(r.get("입사일"))
+        why = ""
+        if str(r.get("재직") or "재직").strip() == "퇴사":
+            why = "퇴사"
+        elif cut and (joined is None or joined > cut):
+            why = f"재직 {months}개월 미만·입사일 없음"
+        elif grade not in per_grade:
+            why = "등급 없음"
+        cur = {"이름": name, "등급": grade or raw, "입사일": f"{joined:%Y-%m-%d}" if joined else str(r.get("입사일") or ""),
+               "counted": not why, "why": why, "pts": per_grade.get(grade, 0) if not why else 0}
+        old = people.get(name)
+        if old is None or (cur["counted"], cur["pts"]) > (old["counted"], old["pts"]):
+            people[name] = cur
+    return list(people.values())
+
+
+def _staff(c: Criterion, vault, ref: date) -> ItemScore:
+    res = ItemScore(c.name, c.points, c.kind, None)
+    if not c.per_grade:
+        res.notes.append("배점기준 표(등급별 점수)를 읽지 못함 — 제안요청서 확인")
+        return res
+    staff = getattr(vault, "staff", []) or []
+    if not staff:
+        res.notes.append("자료 없음 — 회사자료 '인력목록' 시트(이름·입사일·재직·등급) 또는 jiil-quant-docs 폴더의 기술인력 엑셀")
+        return res
+    people = staff_status(c, vault, ref)
+    best = {p["이름"]: (p["등급"], p["pts"]) for p in people if p["counted"]}
+    skipped: dict[str, int] = {}
+    for p in people:
+        if not p["counted"]:
+            skipped[p["why"]] = skipped.get(p["why"], 0) + 1
     raw = sum(p for _, p in best.values())
     res.score = min(raw, c.points)
     # '평점 = 4.2 + ∑(점수×인원)'(본문)·'미보유 시 4.2점'(서식)처럼 기본 점수가 있으면 — 식끼리 다르면 유리한 쪽(11/05 사용자 결정)

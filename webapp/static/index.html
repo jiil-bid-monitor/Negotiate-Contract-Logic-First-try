@@ -1003,6 +1003,15 @@ footer b { color: var(--muted); }
 .calc-count { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 2px; border-radius: 9px; background: var(--chip);
   border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--ink); }
 .calc-count:empty { display: none; }
+.calc-draw { margin: 0 0 12px; }
+.calc-draw > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline;
+  background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; }
+.calc-draw > summary::-webkit-details-marker { display: none; }
+.calc-draw > summary::before { content: "▶"; font-size: 11px; color: var(--muted); margin-right: 2px; }
+.calc-draw[open] > summary::before { content: "▼"; }
+.calc-draw > summary .calc-h { margin: 0; }
+.calc-draw > summary .why { font-size: 12px; }
+.calc-draw[open] > summary { margin-bottom: 10px; }
 .calc-record { background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; margin-bottom: 10px; }
 .calc-record .calc-h { margin: 0 0 8px; }
 .calc-record .calc-h .why { font-weight: 400; font-size: 12px; }
@@ -1329,6 +1338,20 @@ footer b { color: var(--muted); }
     </div>
 
 
+    <!-- 투찰 기록(2026-11-06) — 이 금액으로 실제 투찰했으면 남김. 금액은 계산된 투찰금액으로 채워 두고 고칠 수 있음(난수표가 닫혀 있어도 채움) -->
+    <div class="calc-record">
+      <h4 class="calc-h">투찰 기록 <span class="why">— 이 공고에 실제로 투찰했으면 남겨 두세요. '투찰내역'에서 모아 봅니다.</span></h4>
+      <div class="calc-record-row">
+        <label>투찰금액 <input id="cRecBid" inputmode="numeric" placeholder="위 투찰금액"> 원</label>
+        <label>메모 <input id="cRecMemo" maxlength="300" placeholder="예: 외주 추천과 같음, 공동수급 등"></label>
+        <button type="button" id="cRecord" class="primary">투찰 내역에 기록</button>
+        <span id="cRecordMsg" class="job"></span>
+      </div>
+    </div>
+
+    <!-- (11/06 사용자 요청) 난수표(예비가격 15개·모의 추첨·예정가격·하한선)는 눌러야 열림 — 추천 금액이 먼저 보이게. 계산은 닫혀 있어도 그대로 돎 -->
+    <details class="calc-draw" id="cDraw">
+      <summary><span class="calc-h">난수표 · 모의 추첨</span> <span class="why">예비가격 15개 만들기 · 번호 고르기 · 모의 예정가격·하한선 · 기타설정(절상·절사·단위)</span></summary>
     <div class="calc-btns">
       <button type="button" data-method="uniform">난수추출적용</button>
       <button type="button" data-method="geometric">등비추출적용</button>
@@ -1365,22 +1388,12 @@ footer b { color: var(--muted); }
       </tr>
     </table>
 
-    <!-- 투찰 기록(2026-11-06) — 이 금액으로 실제 투찰했으면 남김. 금액은 위 '투찰금액'으로 채워 두고 고칠 수 있음 -->
-    <div class="calc-record">
-      <h4 class="calc-h">투찰 기록 <span class="why">— 이 공고에 실제로 투찰했으면 남겨 두세요. '투찰내역'에서 모아 봅니다.</span></h4>
-      <div class="calc-record-row">
-        <label>투찰금액 <input id="cRecBid" inputmode="numeric" placeholder="위 투찰금액"> 원</label>
-        <label>메모 <input id="cRecMemo" maxlength="300" placeholder="예: 외주 추천과 같음, 공동수급 등"></label>
-        <button type="button" id="cRecord" class="primary">투찰 내역에 기록</button>
-        <span id="cRecordMsg" class="job"></span>
-      </div>
-    </div>
-
     <table class="calc-form calc-summary">
       <tr><th>구 분</th><th>금 액</th><th>사정률 = (예정가격 / 기초금액) × 100</th></tr>
       <tbody id="cSummary"><tr><td colspan="3" class="why">예비가격을 만들고 번호를 고르면 나옵니다.</td></tr></tbody>
     </table>
     <p class="why">예비가격·예정가격·하한선은 이 화면에서 <b>모의로 만든 값</b>입니다 — 실제 예비가격 15개는 나라장터가 무작위로 만들고, 예정가격은 개찰 때 업체들이 많이 고른 번호 4개의 평균으로 정해집니다. 투찰금액은 모의 값이 아니라 위 추천 칸(비슷한 과거 공고의 개찰 결과)으로 정합니다.</p>
+    </details>
 
     </div><!-- /calcPage -->
 

@@ -1277,10 +1277,10 @@ footer b { color: var(--muted); }
 
   <!-- 투찰 계산기(2026-10-15 요청) — 21라인 "복수예가산출프로그램 v0.1" 화면을 따름. 계산은 bidcalc.js, 화면은 bidcalc_ui.js -->
   <section id="tab-calc" hidden>
-    <!-- 투찰 계산기 안 두 쪽(2026-11-06 사용자 요청): 1. 투찰 계산 · 2. 투찰내역(투찰한 공고·금액 기록, data/bid_log.json) -->
+    <!-- 투찰 계산기 안 두 쪽(2026-11-06 사용자 요청): 투찰 계산 · 투찰내역(투찰한 공고·금액 기록, data/bid_log.json) -->
     <div class="calc-subtabs" role="tablist" aria-label="투찰 계산기">
-      <button type="button" role="tab" aria-selected="true" data-calcpage="calc">1. 투찰 계산</button>
-      <button type="button" role="tab" aria-selected="false" data-calcpage="log">2. 투찰내역 <span id="bidlogCount" class="calc-count"></span></button>
+      <button type="button" role="tab" aria-selected="true" data-calcpage="calc">투찰 계산</button>
+      <button type="button" role="tab" aria-selected="false" data-calcpage="log">투찰내역 <span id="bidlogCount" class="calc-count"></span></button>
     </div>
     <div id="calcPage">
     <div class="calc-lookup">
@@ -1354,7 +1354,7 @@ footer b { color: var(--muted); }
 
     <!-- 투찰 기록(2026-11-06) — 이 금액으로 실제 투찰했으면 남김. 금액은 위 '투찰금액'으로 채워 두고 고칠 수 있음 -->
     <div class="calc-record">
-      <h4 class="calc-h">투찰 기록 <span class="why">— 이 공고에 실제로 투찰했으면 남겨 두세요. '2. 투찰내역'에서 모아 봅니다.</span></h4>
+      <h4 class="calc-h">투찰 기록 <span class="why">— 이 공고에 실제로 투찰했으면 남겨 두세요. '투찰내역'에서 모아 봅니다.</span></h4>
       <div class="calc-record-row">
         <label>투찰금액 <input id="cRecBid" inputmode="numeric" placeholder="위 투찰금액"> 원</label>
         <label>메모 <input id="cRecMemo" maxlength="300" placeholder="예: 외주 추천과 같음, 공동수급 등"></label>
@@ -1381,7 +1381,7 @@ footer b { color: var(--muted); }
     </div>
     </div><!-- /calcPage -->
 
-    <!-- 2. 투찰내역 — 투찰 계산에서 기록한 공고·금액 목록(최근 것부터). 서버 PC data/bid_log.json, 공개 저장소엔 안 올림 -->
+    <!-- 투찰내역 — 투찰 계산에서 기록한 공고·금액 목록(최근 것부터). 서버 PC data/bid_log.json, 공개 저장소엔 안 올림 -->
     <div id="bidlogPage" hidden>
       <div class="calc-lookup bidlog-bar">
         <label>찾기 <input id="bidlogQ" type="search" placeholder="공고명·공고번호·발주처·기록자"></label>

@@ -571,7 +571,7 @@
   $("#cNo").addEventListener("keydown", (e) => { if (e.key === "Enter") lookup(); });
 
   // ── 투찰 기록 · 투찰내역(2026-11-06 사용자 요청) ─────────────────────────
-  // 투찰 계산 화면에서 '투찰 내역에 기록' → 서버 data/bid_log.json. '2. 투찰내역' 쪽이 그 목록을 보여 줌
+  // 투찰 계산 화면에서 '투찰 내역에 기록' → 서버 data/bid_log.json. '투찰내역' 쪽이 그 목록을 보여 줌
   const post = async (path, body) => {
     const res = await fetch(path, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await res.json().catch(() => ({ error: `서버 응답을 읽지 못했습니다 (HTTP ${res.status})` }));
@@ -603,7 +603,7 @@
       });
       LOG = d.entries || [];
       renderLog();
-      recordMsg(`기록했습니다 — ${LAST_NOTICE.noticeNo} · ${won(bid)}원 ('2. 투찰내역'에서 확인)`, "ok");
+      recordMsg(`기록했습니다 — ${LAST_NOTICE.noticeNo} · ${won(bid)}원 ('투찰내역'에서 확인)`, "ok");
     } catch (err) {
       recordMsg(`기록 실패: ${err.message}`, "err");
     } finally {
@@ -622,7 +622,7 @@
     $("#bidlogSummary").textContent = LOG.length
       ? `${rows.length}건${q ? ` (전체 ${LOG.length}건 중)` : ""} · 투찰금액 합계 ${won(total)}원` : "";
     if (!rows.length) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="10" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '1. 투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="10" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
       return;
     }
     $("#bidlogRows").innerHTML = rows.map((r) => {

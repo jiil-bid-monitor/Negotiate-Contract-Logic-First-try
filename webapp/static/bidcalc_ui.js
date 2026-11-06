@@ -216,14 +216,14 @@
     const higher = bid != null && netBid != null && netBid > bid;
     $("#cPlanned").textContent = planned ? won(planned) : "-";
     const recNote = rec != null
-      ? `<div class="calc-sub">아래 추천 칸의 '${esc(label(used.name))}' 금액 · 기준 사정률 ${pct(used.rate)}${used.track && used.track.tried
+      ? `<div class="calc-sub">위 추천 칸의 '${esc(label(used.name))}' 금액 · 기준 사정률 ${pct(used.rate)}${used.track && used.track.tried
         ? ` · 비슷한 과거 공고에서 하한선 통과 ${Math.round((used.track.valid / used.track.tried) * 100)}%` : ""}</div>`
         + (fallback ? `<div class="calc-sub">'${esc(label(REC_PICK.name))}' 금액은 이번 모의 추첨 ${gateName}보다 낮아, 다음 순위 방식 금액으로 바꿨어요</div>` : "")
       : allBelow ? `<div class="calc-sub ng">추천 방식 금액이 모두 이번 모의 추첨 ${gateName}보다 낮아, 그 선의 금액을 썼어요</div>`
       : `<div class="calc-sub">추천이 없어 모의 추첨 하한선 금액을 썼어요</div>`;
     const floorCheck = rec != null && gate != null
       ? `<div class="calc-sub ${rec >= gate ? "ok" : "ng"}">이번 모의 추첨 ${gateName} ${won(gate)} 대비 ${rec >= gate ? `✓ ${won(rec - gate)}원 위` : `✗ ${won(gate - rec)}원 아래`}
-        ${tip(`위 표에서 고른 번호로 계산한 <b>모의</b> 예정가격 기준이에요. 실제 예정가격은 개찰 때 업체들이 고른 번호로 정해져 이 값과 달라요. 실제로 통과할 가능성은 아래 추천 칸의 '하한선 통과' 비율을 보세요.${NET_RULE
+        ${tip(`위 표에서 고른 번호로 계산한 <b>모의</b> 예정가격 기준이에요. 실제 예정가격은 개찰 때 업체들이 고른 번호로 정해져 이 값과 달라요. 실제로 통과할 가능성은 위 추천 칸의 '하한선 통과' 비율을 보세요.${NET_RULE
           ? `<br><br>공고문 순공사원가 조건: ${NET_RULE.limit ? `예정가격 ${NET_RULE.limit / 1e8}억 원 미만이면 ` : ""}순공사원가의 ${NET_RULE.rate}% 미만 투찰은 제외 — 하한선과 이 선 중 높은 쪽을 넘어야 해요.<br><span class="calc-sub">${esc(NET_RULE.quote || "")}</span>`
           : ""}`)}</div>`
       : "";

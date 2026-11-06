@@ -142,15 +142,22 @@ class BidLog:
                 raise ValueError("그 기록을 찾지 못했습니다 — 화면을 새로 고치세요")
             self._write(left)
 
-    def csv(self) -> str:
-        buf = io.StringIO()
-        w = csv.writer(buf)
-        w.writerow([label for _, label in CSV_COLUMNS + RESULT_COLUMNS])
+    def table(self) -> tuple[list[str], list[list[Any]]]:
+        """CSV·투찰 이력 엑셀(`webapp/bidnightly.py`)에 같이 쓰는 표 — (머리글, 줄들), 최근 것부터."""
+        rows = []
         for r in self.entries():
             res = r.get("result") or {}
             own, win = res.get("own") or {}, res.get("winner") or {}
             flat = {**res, "ownRank": own.get("rank") if own else ("참가 기록 없음" if res.get("status") == "완료" else None),
                     "winnerName": win.get("name"), "winnerAmount": win.get("amount"), "winnerRate": win.get("rate")}
-            w.writerow(["" if r.get(k) is None else r.get(k) for k, _ in CSV_COLUMNS]
-                       + ["" if flat.get(k) is None else flat.get(k) for k, _ in RESULT_COLUMNS])
-        return "﻿" + buf.getvalue()  # 엑셀이 한글을 깨뜨리지 않게
+            rows.append([r.get(k) for k, _ in CSV_COLUMNS] + [flat.get(k) for k, _ in RESULT_COLUMNS])
+        return [label for _, label in CSV_COLUMNS + RESULT_COLUMNS], rows
+
+    def csv(self) -> str:
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        head, rows = self.table()
+        w.writerow(head)
+        for row in rows:
+            w.writerow(["" if v is None else v for v in row])
+        return "\ufeff" + buf.getvalue()  # 엑셀이 한글을 깨뜨리지 않게

@@ -1787,3 +1787,17 @@ def test_patents_only_in_scope_count_and_go_in_bundle():
     assert _patent(c, v).score == 2.0
     c2 = Criterion("보유기술", 2.0, "patent")  # 분야 문장이 없으면 모두 인정
     assert all(s["counted"] for s in patent_status(c2, v))
+
+
+def test_build_survives_hwpx_that_is_not_zip(tmp_path: Path):
+    """11/06 제보: 만들기 'File is not a zip file' — 이름만 .hwpx이고 속은 옛 한글(OLE)인 첨부를 그대로 자르다 멈춤.
+    변환기가 없으면 알림만 남기고 나머지 첨부로 만들기는 끝까지."""
+    from quantdocs.build import build
+
+    v = vault.load(PW, vault.seal_folder(_company(tmp_path), PW, tmp_path / "c.enc"))
+    fake = tmp_path / "붙임_서식.hwpx"
+    fake.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\0" * 600)  # OLE(옛 한글) 머리
+    out = build([FIXTURES / "jeongseon_culture_center_rfp.hwpx", fake], v, tmp_path / "o.zip", "정선", dt.date(2026, 8, 20))
+    z = zipfile.ZipFile(out)
+    assert "통합서식.hwpx" in z.namelist()
+    assert "붙임_서식.hwpx" in z.read("읽어보기.txt").decode()

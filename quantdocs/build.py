@@ -160,6 +160,15 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
             hx = work / (f.stem + ".hwpx")
             shutil.copyfile(f, hx)
             converted[f.name] = str(hx)
+        elif f.suffix.lower() == ".hwpx" and not _is_hwpx(f):
+            # 이름만 .hwpx이고 속은 옛 한글(.hwp) — 그대로 자르면 'File is not a zip file'로 만들기가 통째로 멈췄음(11/06)
+            old = work / (f.stem + "_원본.hwp")
+            shutil.copyfile(f, old)
+            hx, why = convert_hwp(old, work)
+            if hx:
+                converted[f.name] = str(hx)
+            else:
+                notes.append(f"{f.name}: 이름은 .hwpx인데 한글 파일 모양이 아님({why}) — 서식을 자르지 못함")
         elif f.suffix.lower() == ".hwp":
             hx, why = convert_hwp(f, work)
             if hx:
@@ -358,6 +367,9 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             if src.suffix.lower() != ".hwpx":
                 continue
             parts = []
+            if not _is_hwpx(src):  # 변환에 실패한 .hwpx 등 — 이 첨부만 건너뜀(만들기 전체가 멈추지 않게)
+                a.notes.append(f"{f.name}: 한글(HWPX) 파일이 아니라 서식을 자르지 못함 — 원본을 한글에서 HWPX로 저장해 확인")
+                continue
             for c in cut(src, forms_dir, cut_names):
                 if is_manual(c.title):  # 양식 그대로 — 내려받은 뒤 직접 기입
                     manual_dir.mkdir(parents=True, exist_ok=True)

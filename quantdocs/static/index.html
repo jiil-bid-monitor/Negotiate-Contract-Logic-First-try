@@ -56,6 +56,8 @@
   button.ghost { background:transparent; color:var(--accent); border:1px solid var(--line); padding:5px 12px; font-size:13px }
   #staff td.chk, #staff th.chk { text-align:center; width:48px } #staff input { width:18px; height:18px; accent-color:var(--accent) }
   #staff tr.off td { color:var(--mute) }
+  #patents td.chk, #patents th.chk { text-align:center; width:48px } #patents input { width:18px; height:18px; accent-color:var(--accent) }
+  #patents tr.off td { color:var(--mute) }
 </style>
 </head>
 <body>
@@ -117,6 +119,14 @@
       <div class="scroll"><table id="staff"></table></div>
     </details>
 
+    <details class="card fold hide" id="patentBox">  <!-- 11/06 사용자 요청: 자기평점 보유기술 점수·통합본에 넣을 특허 고르기 -->
+      <summary><h2>보유기술 · 특허 (자기평점) <span id="patentN" class="fprog"></span></h2><span class="tog"></span></summary>
+      <p id="patentRule" class="muted"></p>
+      <p class="muted">체크한 특허만 자기평점 보유기술 점수에 세고 통합본에 특허증을 넣습니다. 처음엔 공고가 인정하는 분야와 이름이 맞는 특허만 체크 — 이름만 보고 고른 것이라 확인하세요.</p>
+      <div class="row" style="margin-bottom:6px"><button type="button" id="patentAll" class="ghost">모두 체크</button><button type="button" id="patentNone" class="ghost">모두 해제</button></div>
+      <div class="scroll"><table id="patents"></table></div>
+    </details>
+
     <div class="card">
       <h2>3. 정량평가서 만들기</h2>
       <div class="row"><button id="build">만들기</button><span id="bstatus" class="muted"></span></div>
@@ -174,7 +184,7 @@ $("#go").onclick = async () => {
 $("#build").onclick = async () => {
   $("#build").disabled = true; $("#dl").classList.add("hide");
   PHASE = "#bstatus";
-  try { await api("/api/build/" + JOB, staffPick()); poll(); }
+  try { await api("/api/build/" + JOB, {...staffPick(), ...patentPick()}); poll(); }
   catch (e) { $("#bstatus").innerHTML = `<span class="err">${esc(e.message)}</span>`; $("#build").disabled = false; }
 };
 
@@ -265,6 +275,9 @@ function render(j) {
   // 기술인력 칸은 제안요청서에 기술인력 배점 기준이 있는 공고에서만(11/05 사용자 요청) — 없으면 숨기고 고르기도 안 보냄
   $("#staffBox").classList.toggle("hide", !s.staff_on);
   renderStaff(s.staff_on ? (s.staff || []) : [], s.staff_rule || "", j.vault_ok);
+  // 보유기술(특허) 칸도 제안요청서에 보유기술 배점식(건수 구간)이 있는 공고에서만(11/06 사용자 요청)
+  $("#patentBox").classList.toggle("hide", !s.patent_on);
+  renderPatents(s.patent_on ? (s.patents || []) : [], s.patent_rule || "", j.vault_ok, !!s.patent_on);
   $("#result").classList.remove("hide");
 }
 
@@ -295,6 +308,30 @@ function renderStaff(list, rule, ok) {
   $("#staffAll").onclick = () => { document.querySelectorAll("#staff input.sp").forEach(c => c.checked = true); staffCount(); };
   $("#staffNone").onclick = () => { document.querySelectorAll("#staff input.sp").forEach(c => c.checked = false); staffCount(); };
   staffCount();
+}
+
+// 보유기술(특허) 고르기 — 칸이 보이는 공고면 체크한 것만 보냄(0건도 보냄 → 0점·통합본에 안 넣음)
+let PATENTS = [], PATENT_ON = false;
+function patentPick() {
+  if (!PATENT_ON || !PATENTS.length) return {};
+  return {patents: [...document.querySelectorAll("#patents input.pp:checked")].map(c => c.dataset.key)};
+}
+function patentCount() {
+  const n = document.querySelectorAll("#patents input.pp:checked").length;
+  $("#patentN").textContent = PATENTS.length ? `${n}건 선택` : "";
+}
+function renderPatents(list, rule, ok, on) {
+  PATENTS = list; PATENT_ON = on;
+  $("#patentRule").textContent = rule;
+  $("#patents").innerHTML = !ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
+    : !list.length ? '<tr><td class="muted">특허 자료가 없습니다 — jiil-quant-docs 폴더 \'특허\' 하위 폴더에 특허증을 두거나 회사자료 특허목록에 적으세요</td></tr>'
+    : '<tr><th class="chk">넣기</th><th>특허</th><th>비고</th></tr>' + list.map(p =>
+      `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="pp" data-key="${esc(p.key)}" ${p.ok ? "checked" : ""}></td>
+       <td>${esc(p.name)}</td><td class="muted">${esc(p.why)}</td></tr>`).join("");
+  $("#patents").onchange = patentCount;
+  $("#patentAll").onclick = () => { document.querySelectorAll("#patents input.pp").forEach(c => c.checked = true); patentCount(); };
+  $("#patentNone").onclick = () => { document.querySelectorAll("#patents input.pp").forEach(c => c.checked = false); patentCount(); };
+  patentCount();
 }
 </script>
 </body>

@@ -1762,3 +1762,28 @@ def test_pagefit_only_fixes_forms_wasting_a_page():
     kl = [[L(page=0, vertpos=mm(i * 20))] for i in range(8)] + [[L(page=1, vertpos=0)]]
     assert pf._step(k, pf._problem(k, kl, chars, body), kl, chars, "", body)
     assert [pf._text(x) for x in k.paras] == ["〈서식 13〉", "", "", "", "", "조직표", "", "주) 3."]
+
+
+def test_patents_only_in_scope_count_and_go_in_bundle():
+    """11/06 사용자 요청: 보유기술 배점이 '※ 영상 제작 및 실감 콘텐츠 관련 보유 특허'만 세는데 보유 특허를 전부 셌음(필암 8건 → 2점).
+    공고 인정 분야와 이름이 맞는 특허만 처음 체크·점수·통합본, 화면에서 고르면 그 특허만, 분야 문장이 없으면 전부."""
+    from types import SimpleNamespace as NS
+
+    from quantdocs.selfscore import Band, Criterion, _patent, patent_status
+
+    c = Criterion("보유 전문기술 현황", 2.0, "patent")
+    c.note = "※ 영상 제작 및 실감 콘텐츠 관련 보유 특허\n"
+    c.bands = [Band(4, None, 2.0, "4건 이상"), Band(3, 4, 1.5, "3건 이상 ~ 4건 미만"), Band(2, 3, 1.0, "2건 이상 ~ 3건 미만"),
+               Band(1, 2, 0.5, "1건 이상 ~ 2건 미만"), Band(0, 1, 0.0, "0건")]
+    names = ["물의순환과정작동모형", "쇼케이스조명장", "정폭도형 체험기구", "치매환자의 기억", "실감형 VR 영상 체험장치"]
+    v = NS(patents=[{"명칭": n, "등록번호": n, "파일": f"files/특허증/{n}.pdf"} for n in names], patent_src="파일")
+    st = patent_status(c, v)
+    assert [s["counted"] for s in st] == [False, False, False, False, True]
+    v.patent_pick = {s["key"] for s in st if s["counted"]}
+    assert _patent(c, v).score == 0.5
+    v.patent_pick = set()  # 화면에서 모두 해제 → 0건
+    assert _patent(c, v).score == 0.0
+    v.patent_pick = None  # 고르기 없음(예전 동작) → 전부
+    assert _patent(c, v).score == 2.0
+    c2 = Criterion("보유기술", 2.0, "patent")  # 분야 문장이 없으면 모두 인정
+    assert all(s["counted"] for s in patent_status(c2, v))

@@ -509,6 +509,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             paras.append((stack.pop(), m.end()))
     other = _other_party_cells(xml)
     cands = []  # (s, e, 이름표, 서명 줄?, 쌍점 없는 이름표?, 문단 순번)
+    party: str | None = None  # 지금 묶음: 'own'(대표사) / 'other'(공동참여자·구성원 — 비움) / None
     sign_at: set[int] = set()  # 쌍점 없는 서명 줄('대표자      ㉿') 문단 순번 — 바로 위 '신청인 업체명' 줄도 서명 묶음으로 봄
     # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
     # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
@@ -518,6 +519,21 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         if sign_only and any(cs <= s and e <= ce for cs, ce in cells):
             continue  # 직접 기입 서식은 표 안(사람별 칸)은 건드리지 않음
         text = _text(xml[s:e])
+        # '○ 대 표 사      업 체 명 :' / '○ 공동참여자      업 체 명 :'처럼 묶음 머리가 앞에 붙은 이름표 줄(11/06 청주 서식) —
+        # 머리는 떼고 이름표만 보고, 공동참여자·구성원 묶음 아래 줄(업체명·주소·대표자)은 다른 회사 칸이라 비움
+        hm = re.fullmatch(r"\s*[○●◦□■▪·\-]\s*(\S(?:.{0,14}?\S)?)(?:\s{3,}(.*))?", text, re.S)
+        if hm and not re.search(r"[:：]", hm.group(1)):
+            head = _sq(hm.group(1))
+            if re.search(r"공동(?:참여|수급|이행|도급)|구성원|참여사|분담", head):
+                party = "other"
+            elif re.search(r"대표사|대표업체|주관사|주계약자|대표자|입찰자|신청인", head):
+                party = "own"
+            if hm.group(2):
+                text = hm.group(2)
+        elif _sq(text) and not re.search(r"[:：]", text) and not re.search(_SEAL_TAIL, text):
+            party = None  # 이름표 아닌 글 줄('청주시장 귀하')에서 묶음이 끝남
+        if party == "other":
+            continue
         if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|주\s*소", text):
             continue
         # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름

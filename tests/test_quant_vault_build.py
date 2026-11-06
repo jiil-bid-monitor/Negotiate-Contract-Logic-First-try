@@ -1878,3 +1878,26 @@ def test_plain_font_title_and_seal_glyph_signature(tmp_path: Path):
     assert cid != "9" and "bold" not in re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", out))
     assert "신청인 업체명 (주)가상" in text and "대표자 홍길동" in text
+
+
+def test_lead_and_joint_member_blocks(tmp_path: Path):
+    """11/06 제보(청주 서식): '○ 대 표 사      업 체 명 :'(묶음 머리가 앞에 붙은 줄) 업체명이 빔, '○ 공동참여자' 묶음엔 지일 주소·대표자가
+    들어감 — 머리는 떼고 이름표로 채우고, 공동참여자 묶음은 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    def p(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (p("2026년    월    일") + p("○ 대  표  사                       업 체 명 :") + p("                                    주    소 : ")
+            + p("                                    대 표 자 :                      (인)") + p("")
+            + p("○ 공동참여자                       업 체 명 :") + p("                                    주    소 : ")
+            + p("                                    대 표 자 :                      (인)") + p("") + p("청주시장  귀하")
+            + p("업 체 명 :") + p("대 표 자 :          (인)"))
+    src = _mini_hwpx(tmp_path / "j.hwpx", body)
+    fill_hwpx(src, tmp_path / "jo.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"}))
+    out = zipfile.ZipFile(tmp_path / "jo.hwpx").read("Contents/section0.xml").decode().replace("", "").replace("", "")
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", out))
+    lead, rest = text.split("○ 공동참여자")
+    joint, tail = rest.split("청주시장")
+    assert "업 체 명 : (주)가상" in lead and "주 소 : 강원 정선" in lead and "대 표 자 : 홍길동" in lead
+    assert "(주)가상" not in joint and "홍길동" not in joint and "강원" not in joint
+    assert "업 체 명 : (주)가상" in tail and "홍길동" in tail  # 묶음이 끝난 뒤 서명 줄은 그대로 채움

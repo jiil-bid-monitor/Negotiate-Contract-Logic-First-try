@@ -31,6 +31,7 @@ from nego.http_client import ApiError
 
 from . import mview
 from .autorestart import RestartAfterCollect
+from .bidlog import BidLog
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .docscan import DocScan
 from .mstore import TeamStore
@@ -71,6 +72,8 @@ class App:
         # 참가여부·올리기 — 팀원 화면 모양(2026-10-19 화면 이식). 예전 sqlite 기록은 처음 한 번 옮겨 온다
         # backup_dir: 판단 기록을 한 부 더 둘 구글 드라이브 동기화 폴더 (webapp/backup.py, 환경변수 BACKUP_DIR)
         self.team = team or TeamStore(store.path.parent, legacy_db=store.path, titles=self._titles, backup_dir=backup_dir)
+        # 투찰 내역 — 투찰 계산기 '2. 투찰내역' 화면(2026-11-06 사용자 요청), data/bid_log.json
+        self.bidlog = BidLog(store.path.parent, backup_dir=backup_dir)
         self._run_cache: tuple[int | None, dict[str, Any] | None] = (None, None)
         self._held_raw: dict[str, Any] | None = None
         # 결과 보기 전용(NAS, WEBAPP_ROLE=viewer) — 수집 버튼을 숨기고 서버 PC가 보낸 결과를 받는다
@@ -281,6 +284,10 @@ def make_handler(app: App):
                 return self._json({"projects": app.past.public_list(), "error": app.past.error})
             if url.path == "/api/decisions":
                 return self._json({"decisions": app.store.decisions()})
+            if url.path == "/api/bidlog":
+                return self._json({"entries": app.bidlog.entries()})
+            if url.path == "/api/bidlog.csv":
+                return self._send(200, app.bidlog.csv().encode("utf-8"), "text/csv; charset=utf-8")
             if url.path == "/api/decisions.csv":
                 # 판단 기록 내려받기(엑셀에서 바로 열리게 BOM 붙인 UTF-8) — 키워드 조정 검토 때 Claude에게 올려 주는 파일
                 return self._send(200, decisions_csv(app.store.decisions(latest_only=False)).encode("utf-8-sig"),
@@ -380,6 +387,15 @@ def make_handler(app: App):
                         raise ValueError("key와 내용이 필요합니다")
                     app.store.add_comment(key, name, body)
                     return self._json({"comments": app.store.comments(key)})
+                if url.path == "/api/bidlog":
+                    entry = app.bidlog.add(data)
+                    return self._json({"ok": True, "entry": entry, "entries": app.bidlog.entries()})
+                if url.path == "/api/bidlog/update":
+                    app.bidlog.update(str(data.get("id") or ""), data)
+                    return self._json({"ok": True, "entries": app.bidlog.entries()})
+                if url.path == "/api/bidlog/delete":
+                    app.bidlog.delete(str(data.get("id") or ""))
+                    return self._json({"ok": True, "entries": app.bidlog.entries()})
                 if url.path == "/api/participation":
                     return self._json({"ok": True, "participation": app.team.update(data)})
                 if url.path == "/api/promote":

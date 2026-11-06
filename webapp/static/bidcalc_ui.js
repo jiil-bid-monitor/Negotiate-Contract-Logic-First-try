@@ -209,6 +209,10 @@
     }
     const rec = used ? recBid(used.rate) : null;
     const bid = rec != null ? rec : gate;
+    // 투찰 기록 칸(2026-11-06)에 넘길 지금 금액·근거
+    CURRENT = REC_LOADING || bid == null ? null
+      : { bid, rate: rec != null ? used.rate : null, method: rec != null ? label(used.name) : "모의 추첨 하한선 금액", planned: planned || null };
+    fillRecordBid();
     const higher = bid != null && netBid != null && netBid > bid;
     $("#cPlanned").textContent = planned ? won(planned) : "-";
     const recNote = rec != null
@@ -276,6 +280,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
+    LAST_NOTICE = null; REC_BID_EDITED = false;
     WORK = ""; REC_METHOD = ""; NET_RULE = null; REGION_LIMITED = null; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
     render();
   };
@@ -291,6 +296,9 @@
       if (d.lookup_error) { lookupMsg("나라장터 조회 실패 — 잠시 뒤 다시 불러오세요", true); return; }
       if (d.found === false) { clearForm(); badNo(`공고번호 ${d.notice_no || no}를 나라장터에서 찾지 못했습니다 — 공고번호를 확인해 다시 입력하세요`); return; }
       const text = (id, v) => { $(id).textContent = v || "-"; };
+      LAST_NOTICE = { noticeNo: d.notice_no || no.replace(/-\d+$/, ""), noticeOrd: d.notice_ord || "", title: d.title || "",
+        institution: d.institution || "", workType: d.work_type || "" };
+      REC_BID_EDITED = false; $("#cRecMemo").value = ""; recordMsg("");
       text("#cTitle", d.title);
       text("#cInst", d.institution);
       text("#cNoShow", d.notice_no ? `${d.notice_no}${d.notice_ord ? "-" + d.notice_ord : ""}` : "");
@@ -362,6 +370,9 @@
   // 추천 사정률(2026-10-28) — 위 입력칸(기초금액·하한율·변동폭·A값)과 불러온 공고의 업무로 서버에 묻는다.
   // 투찰금액은 계산기와 같은 기타설정(절상·절사·단위)으로 자름: 원 단위 예정가격(기초금액 × 사정률) → 하한율 → 끝자리
   let WORK = "";
+  let LAST_NOTICE = null;  // 불러온 공고(투찰 기록용) — 공고번호·차수·공고명·발주처·업무
+  let CURRENT = null;      // 지금 계산된 투찰금액과 근거(방식·기준 사정률)
+  let REC_BID_EDITED = false;  // 투찰 기록 칸 금액을 사람이 고쳤나 — 고쳤으면 다시 계산돼도 덮지 않음
   // 공고문의 순공사원가 조건({rate, limit, quote, file}) — 있을 때만 투찰금액 조건으로 씀(10/29 사용자 결정: 98% 고정 조건 아님)
   let NET_RULE = null;
   let REGION_LIMITED = null;  // 지역제한 입찰인가(불러온 공고) — 추천 칸 경쟁 규모 가늠에 넘김(10/29)
@@ -558,6 +569,123 @@
 
   $("#cLookup").addEventListener("click", lookup);
   $("#cNo").addEventListener("keydown", (e) => { if (e.key === "Enter") lookup(); });
+
+  // ── 투찰 기록 · 투찰내역(2026-11-06 사용자 요청) ─────────────────────────
+  // 투찰 계산 화면에서 '투찰 내역에 기록' → 서버 data/bid_log.json. '2. 투찰내역' 쪽이 그 목록을 보여 줌
+  const post = async (path, body) => {
+    const res = await fetch(path, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({ error: `서버 응답을 읽지 못했습니다 (HTTP ${res.status})` }));
+    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  };
+  const recordMsg = (msg, cls = "") => { const el = $("#cRecordMsg"); el.textContent = msg; el.className = `job ${cls}`; };
+  const whoAmI = () => (document.getElementById("judge")?.value || "").trim();
+  function fillRecordBid() {
+    if (REC_BID_EDITED) return;  // 사람이 고친 금액은 덮지 않음
+    $("#cRecBid").value = CURRENT ? Number(CURRENT.bid).toLocaleString("ko-KR") : "";
+  }
+  $("#cRecBid").addEventListener("input", (e) => { REC_BID_EDITED = true; commaInput(e.target); });
+  $("#cRecord").addEventListener("click", async () => {
+    if (!LAST_NOTICE) { recordMsg("먼저 공고번호로 공고를 불러오세요", "err"); return; }
+    const bid = numIn("#cRecBid");
+    if (!(bid > 0)) { recordMsg("투찰금액을 넣으세요", "err"); return; }
+    const by = whoAmI();
+    if (!by) { recordMsg("화면 맨 위 이름 칸에 이름을 적어 주세요 — 누가 기록했는지 남깁니다", "err"); document.getElementById("judge")?.focus(); return; }
+    const same = CURRENT && Math.round(CURRENT.bid) === Math.round(bid);
+    $("#cRecord").disabled = true;
+    try {
+      const d = await post("/api/bidlog", {
+        ...LAST_NOTICE, basis: numIn("#cBasis"), lowerRate: numIn("#cRate"), rangeLo: numIn("#cLo"), rangeHi: numIn("#cHi"),
+        aValue: aValue() || null, netCost: numIn("#cNet"), bid,
+        // 금액을 손으로 바꿨으면 추천 방식·기준 사정률은 그 금액의 근거가 아니라서 '직접 입력'으로
+        rate: same ? CURRENT.rate : null, method: same ? CURRENT.method : "직접 입력", planned: same ? CURRENT.planned : null,
+        recordedBy: by, memo: $("#cRecMemo").value,
+      });
+      LOG = d.entries || [];
+      renderLog();
+      recordMsg(`기록했습니다 — ${LAST_NOTICE.noticeNo} · ${won(bid)}원 ('2. 투찰내역'에서 확인)`, "ok");
+    } catch (err) {
+      recordMsg(`기록 실패: ${err.message}`, "err");
+    } finally {
+      $("#cRecord").disabled = false;
+    }
+  });
+
+  let LOG = [], EDITING = null;
+  const day = (iso) => (iso ? iso.slice(0, 16).replace("T", " ") : "-");
+  const logMatch = (r, q) => !q || [r.noticeNo, r.title, r.institution, r.recordedBy, r.memo].join(" ").toLowerCase().includes(q);
+  function renderLog() {
+    $("#bidlogCount").textContent = LOG.length ? String(LOG.length) : "";
+    const q = ($("#bidlogQ").value || "").trim().toLowerCase();
+    const rows = LOG.filter((r) => logMatch(r, q));
+    const total = rows.reduce((s, r) => s + (r.bid || 0), 0);
+    $("#bidlogSummary").textContent = LOG.length
+      ? `${rows.length}건${q ? ` (전체 ${LOG.length}건 중)` : ""} · 투찰금액 합계 ${won(total)}원` : "";
+    if (!rows.length) {
+      $("#bidlogRows").innerHTML = `<tr><td colspan="10" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '1. 투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
+      return;
+    }
+    $("#bidlogRows").innerHTML = rows.map((r) => {
+      const edit = EDITING === r.id;
+      const link = `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${encodeURIComponent(r.noticeNo)}&bidPbancOrd=${encodeURIComponent(r.noticeOrd || "000")}`;
+      return `<tr data-id="${esc(r.id)}">
+        <td class="when" data-l="기록일">${esc(day(r.recordedAt))}</td>
+        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a>${r.institution ? ` · ${esc(r.institution)}` : ""}${r.workType ? ` · ${esc(r.workType)}` : ""}</span></td>
+        <td class="num" data-l="기초금액">${won(r.basis)}</td>
+        <td class="num" data-l="하한율">${r.lowerRate != null ? `${r.lowerRate}%` : "-"}</td>
+        <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}</td>
+        <td class="num" data-l="기준 사정률">${r.rate != null ? `${Number(r.rate).toFixed(3)}%` : "-"}</td>
+        <td class="method" data-l="추천 방식">${esc(r.method || "-")}</td>
+        <td data-l="기록자">${esc(r.recordedBy || "-")}</td>
+        <td class="memo" data-l="메모">${edit ? `<input class="edit" data-f="memo" maxlength="300" value="${esc(r.memo || "")}">` : esc(r.memo || "")}</td>
+        <td class="act">${edit
+          ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
+          : `<button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button>`}</td>
+      </tr>`;
+    }).join("");
+  }
+  async function loadLog() {
+    try {
+      LOG = (await api("/api/bidlog")).entries || [];
+    } catch (err) {
+      $("#bidlogRows").innerHTML = `<tr><td colspan="10" class="why">투찰내역을 불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
+      return;
+    }
+    renderLog();
+  }
+  $("#bidlogRows").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const tr = btn.closest("tr"), id = tr.dataset.id, act = btn.dataset.act;
+    const r = LOG.find((x) => x.id === id);
+    try {
+      if (act === "edit") { EDITING = id; renderLog(); return; }
+      if (act === "cancel") { EDITING = null; renderLog(); return; }
+      if (act === "save") {
+        const val = (f) => tr.querySelector(`input[data-f="${f}"]`).value;
+        LOG = (await post("/api/bidlog/update", { id, bid: val("bid").replace(/[^\d.]/g, ""), memo: val("memo") })).entries || [];
+        EDITING = null; renderLog(); return;
+      }
+      if (act === "del") {
+        if (!confirm(`이 투찰 기록을 지울까요?\n${r ? `${r.noticeNo} · ${r.title} · ${won(r.bid)}원` : ""}`)) return;
+        LOG = (await post("/api/bidlog/delete", { id })).entries || [];
+        renderLog();
+      }
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  $("#bidlogQ").addEventListener("input", renderLog);
+  $("#bidlogReload").addEventListener("click", loadLog);
+  // 두 쪽 전환 — 투찰내역 쪽으로 가면 목록을 새로 받음(다른 사람이 기록했을 수 있어서)
+  function showPage(page) {
+    document.querySelectorAll("[data-calcpage]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.calcpage === page)));
+    $("#calcPage").hidden = page !== "calc";
+    $("#bidlogPage").hidden = page !== "log";
+    if (page === "log") loadLog();
+  }
+  document.querySelectorAll("[data-calcpage]").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.calcpage)));
+  loadLog();
 
   render();
 })();

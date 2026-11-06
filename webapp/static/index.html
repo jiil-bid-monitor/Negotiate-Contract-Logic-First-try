@@ -995,6 +995,56 @@ footer b { color: var(--muted); }
 .calc-notes .calc-auto { color: var(--accent); }
 /* 못 찾은 값은 21라인처럼 "-" — 빈 칸 안내 글자가 아니라 값처럼 보이게 */
 .calc-form input::placeholder { color: inherit; opacity: 1; text-align: center; }
+/* 투찰 계산기 안 두 쪽(2026-11-06) */
+.calc-subtabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin: -6px 0 14px; }
+#tab-calc .calc-subtabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted);
+  padding: 8px 16px; margin-bottom: -1px; font-size: 14px; }
+#tab-calc .calc-subtabs button[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); font-weight: 700; }
+.calc-count { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 2px; border-radius: 9px; background: var(--chip);
+  border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--ink); }
+.calc-count:empty { display: none; }
+.calc-record { background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; margin-bottom: 10px; }
+.calc-record .calc-h { margin: 0 0 8px; }
+.calc-record .calc-h .why { font-weight: 400; font-size: 12px; }
+.calc-record-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; }
+.calc-record-row label { display: flex; gap: 6px; align-items: center; color: var(--ink); font-weight: 600; white-space: nowrap; }
+#cRecBid { width: 160px; text-align: right; font-variant-numeric: tabular-nums; }
+#cRecMemo { width: 280px; font-weight: 400; }
+.calc-record .job.ok { color: var(--good, #1b6e43); font-weight: 600; }
+.bidlog-bar { justify-content: space-between; }
+.bidlog-bar input { width: 260px; }
+.bidlog-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.bidlog-csv { font-size: 13px; color: var(--brand); text-decoration: none; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 12px; background: var(--panel); }
+.bidlog-table th { width: auto; }
+.bidlog-table td { font-size: 13px; }
+.bidlog-table td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bidlog-table td.bid { font-weight: 700; color: var(--ink-strong); }
+.bidlog-table td.when, .bidlog-table td.no { white-space: nowrap; }
+.bidlog-table .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.bidlog-table td.act { white-space: nowrap; text-align: right; }
+#tab-calc .bidlog-table td.act button { padding: 3px 8px; font-size: 12px; }
+#tab-calc .bidlog-table td.act button.del { color: var(--urgent); }
+.bidlog-table input.edit { width: 100%; min-width: 90px; font-size: 13px; padding: 3px 6px; }
+.bidlog-wrap { overflow-x: auto; margin-bottom: 10px; }
+.bidlog-wrap .calc-form { margin-bottom: 0; }
+.bidlog-table td.title { min-width: 260px; }
+.bidlog-table .sub a { color: var(--brand); }
+.bidlog-table td.memo { min-width: 100px; }
+.bidlog-table td.method { min-width: 84px; }
+/* 좁은 화면: 한 기록 = 카드 한 장(이름표 + 값) — 위 계산기 표의 2칸 그리드 규칙보다 먼저 오게 선택자를 세게 */
+@media (max-width: 760px) {
+  .calc-form.bidlog-table thead { display: none; }
+  .calc-form.bidlog-table tr { display: block; border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .calc-form.bidlog-table td { display: grid; grid-template-columns: 84px 1fr; gap: 8px; border: 0; padding: 3px 10px;
+    text-align: left !important; min-width: 0; white-space: normal; }
+  .calc-form.bidlog-table td::before { content: attr(data-l); color: var(--muted); font-size: 12px; font-weight: 600; }
+  .calc-form.bidlog-table td.act { display: flex; justify-content: flex-end; gap: 6px; padding-top: 6px; }
+  .calc-form.bidlog-table td.act::before, .calc-form.bidlog-table td[colspan]::before { content: none; }
+  .calc-form.bidlog-table td[colspan] { display: block; }
+  .calc-form.bidlog-table td .sub { grid-column: 2; margin-top: -4px; }
+  .bidlog-bar input, #cRecMemo { width: 100%; }
+  .bidlog-actions { margin-left: 0; }
+}
 .calc-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
 .calc-btns button { font-size: 13px; padding: 5px 10px; }
 .calc-prices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 12px; margin-bottom: 10px; background: var(--panel); border-top: 2px solid var(--accent); }
@@ -1227,6 +1277,12 @@ footer b { color: var(--muted); }
 
   <!-- 투찰 계산기(2026-10-15 요청) — 21라인 "복수예가산출프로그램 v0.1" 화면을 따름. 계산은 bidcalc.js, 화면은 bidcalc_ui.js -->
   <section id="tab-calc" hidden>
+    <!-- 투찰 계산기 안 두 쪽(2026-11-06 사용자 요청): 1. 투찰 계산 · 2. 투찰내역(투찰한 공고·금액 기록, data/bid_log.json) -->
+    <div class="calc-subtabs" role="tablist" aria-label="투찰 계산기">
+      <button type="button" role="tab" aria-selected="true" data-calcpage="calc">1. 투찰 계산</button>
+      <button type="button" role="tab" aria-selected="false" data-calcpage="log">2. 투찰내역 <span id="bidlogCount" class="calc-count"></span></button>
+    </div>
+    <div id="calcPage">
     <div class="calc-lookup">
       <label>공고번호 <input id="cNo" autocomplete="off"></label>
       <button id="cLookup" type="button" class="primary">나라장터에서 불러오기</button>
@@ -1296,6 +1352,17 @@ footer b { color: var(--muted); }
       </tr>
     </table>
 
+    <!-- 투찰 기록(2026-11-06) — 이 금액으로 실제 투찰했으면 남김. 금액은 위 '투찰금액'으로 채워 두고 고칠 수 있음 -->
+    <div class="calc-record">
+      <h4 class="calc-h">투찰 기록 <span class="why">— 이 공고에 실제로 투찰했으면 남겨 두세요. '2. 투찰내역'에서 모아 봅니다.</span></h4>
+      <div class="calc-record-row">
+        <label>투찰금액 <input id="cRecBid" inputmode="numeric" placeholder="위 투찰금액"> 원</label>
+        <label>메모 <input id="cRecMemo" maxlength="300" placeholder="예: 외주 추천과 같음, 공동수급 등"></label>
+        <button type="button" id="cRecord" class="primary">투찰 내역에 기록</button>
+        <span id="cRecordMsg" class="job"></span>
+      </div>
+    </div>
+
     <table class="calc-form calc-summary">
       <tr><th>구 분</th><th>금 액</th><th>사정률 = (예정가격 / 기초금액) × 100</th></tr>
       <tbody id="cSummary"><tr><td colspan="3" class="why">예비가격을 만들고 번호를 고르면 나옵니다.</td></tr></tbody>
@@ -1311,6 +1378,21 @@ footer b { color: var(--muted); }
         <span id="cRecMsg" class="job"></span>
       </div>
       <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고의 개찰 결과로 <b>추천 투찰금액</b>과 방식별 성적을 보여 줍니다.</div>
+    </div>
+    </div><!-- /calcPage -->
+
+    <!-- 2. 투찰내역 — 투찰 계산에서 기록한 공고·금액 목록(최근 것부터). 서버 PC data/bid_log.json, 공개 저장소엔 안 올림 -->
+    <div id="bidlogPage" hidden>
+      <div class="calc-lookup bidlog-bar">
+        <label>찾기 <input id="bidlogQ" type="search" placeholder="공고명·공고번호·발주처·기록자"></label>
+        <span id="bidlogSummary" class="job"></span>
+        <span class="bidlog-actions"><button type="button" id="bidlogReload">새로 보기</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
+      </div>
+      <div class="bidlog-wrap"><table class="calc-form bidlog-table">
+        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>기초금액</th><th>하한율</th><th>투찰금액</th><th>기준 사정률</th><th>추천 방식</th><th>기록자</th><th>메모</th><th></th></tr></thead>
+        <tbody id="bidlogRows"><tr><td colspan="10" class="why">불러오는 중…</td></tr></tbody>
+      </table></div>
+      <p class="why">투찰 계산 화면의 '투찰 내역에 기록'으로 남긴 공고입니다. 잘못 넣은 줄은 '삭제', 금액·메모는 '고치기'로 바로잡으세요. 개찰 결과(실제 순위)는 아직 채우지 않습니다.</p>
     </div>
   </section>
 

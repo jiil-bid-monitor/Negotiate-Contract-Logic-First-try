@@ -1852,3 +1852,29 @@ def test_proxy_groups_bond_won_sign_and_notice_no_paragraph(tmp_path: Path):
     assert "공 고 번 호 : R26BK00000001-000" in text
     assert text.count("가상 전시관 조성") == 1
     assert "금 사억이천만 원 (￦ 420,000,000 )" in text
+
+
+def test_plain_font_title_and_seal_glyph_signature(tmp_path: Path):
+    """11/06 사용자 요청(청주 서식): 새로 기입하는 글은 늘 기본 글꼴 모양 — 서식에 굵게 적힌 입찰건명도 굵게 빼고,
+    표 칸 안 '신청인 업체명' / '대표자      ㉿ (법인인감)'(도장 글자, 쌍점 없음) 서명 묶음에 회사명·대표자."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="2"><hh:charPr id="0" height="1300" textColor="#000000"></hh:charPr>'
+              '<hh:charPr id="9" height="1300" textColor="#000000"><hh:bold/></hh:charPr></hh:charProperties></hh:head>')
+    body = ('<hp:p><hp:run charPrIDRef="0"><hp:t>입찰보증금 지급각서</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>○ 입 찰 건 명 : </hp:t></hp:run><hp:run charPrIDRef="9"><hp:t>가상 전시관 조성</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run><hp:tbl><hp:tr><hp:tc><hp:subList>'
+            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>위와 같이 신청합니다.</hp:t></hp:run></hp:p>'
+            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>          신청인 업체명</hp:t></hp:run></hp:p>'
+            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>             대표자                  \U000F0099 (법인인감)</hp:t></hp:run></hp:p>'
+            '</hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "t.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "to.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}), title="가상 전시관 조성")
+    zo = zipfile.ZipFile(tmp_path / "to.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    cid = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>가상 전시관 조성</hp:t>', out).group(1)
+    assert cid != "9" and "bold" not in re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", out))
+    assert "신청인 업체명 (주)가상" in text and "대표자 홍길동" in text

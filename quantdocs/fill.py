@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 import zipfile
 from dataclasses import dataclass, field
@@ -419,10 +420,19 @@ def _other_party_cells(xml: str) -> list[tuple[int, int]]:
     return out
 
 
-_SEAL_TAIL = r"[(（](?:인|서명)[^()（）]{0,8}[)）]"  # '(인)'·'(인 또는 서명)'
+_SEAL_TAIL = r"(?:[(（](?:인|서명)[^()（）]{0,8}[)）]|[\u327f\U000F0000-\U000FFFFD])"  # '(인)'·'(인 또는 서명)'·도장 글자 ㉿(한글 기호 글꼴은 사용자 영역 문자, 11/06 청주 신청서)
 # 쌍점 없이 이름표만 있는 줄 — 이런 줄이 둘 이상 잇달아 있을 때만(서식 21 '주  소 / 상  호 / 대표자')
 _BARE_LABELS = {"주소": "주소", "소재지": "주소", "상호": "회사명", "업체명": "회사명", "회사명": "회사명",
                 "상호또는법인명": "회사명", "대표자": "대표자", "대표이사": "대표자"}
+
+
+def _bare_label(text: str) -> str | None:
+    """쌍점 없는 이름표 줄 — '업체명'·'신청인 업체명'·'입찰자 상호'(앞의 신청인·입찰자·제안자는 뗌)."""
+    t = _sq(text)
+    if t in _BARE_LABELS:
+        return t
+    t2 = re.sub(r"^(?:신청인|입찰자|제안자|신청자|응찰자)", "", t)
+    return t2 if t2 != t and t2 in _BARE_LABELS else None
 
 
 def _after_colon(seg: str, value: str, seal: bool) -> str | None:
@@ -499,6 +509,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             paras.append((stack.pop(), m.end()))
     other = _other_party_cells(xml)
     cands = []  # (s, e, 이름표, 서명 줄?, 쌍점 없는 이름표?, 문단 순번)
+    sign_at: set[int] = set()  # 쌍점 없는 서명 줄('대표자      ㉿') 문단 순번 — 바로 위 '신청인 업체명' 줄도 서명 묶음으로 봄
     # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
     # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
     for n, (s, e) in enumerate(sorted(paras)):
@@ -511,6 +522,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             continue
         # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름
         bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)))(\s{{3,}})({_SEAL_TAIL}.*)", text)
+        if bare:
+            sign_at.add(n)
         if bare and _value("대표자", vault):
             name = _value("대표자", vault)
             gap = bare.group(2)
@@ -572,10 +585,13 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL})?\s*", text)
         if m:
             cands.append((s, e, m.group(1), bool(m.group(2)), False, n))
-        elif _sq(text) in _BARE_LABELS and not any(cs <= s and e <= ce for cs, ce in cells):  # 표 칸 안 줄은 머리글일 수 있음
-            cands.append((s, e, _sq(text), False, True, n))
-    bare_at = {c[5] for c in cands if c[4]}
+        elif _bare_label(text):  # 표 칸 안 줄은 머리글일 수 있어 — 칸 안이면 바로 옆 줄이 서명 줄일 때만(아래에서 거름)
+            in_cell = any(cs <= s and e <= ce for cs, ce in cells)
+            cands.append((s, e, _bare_label(text), False, "cell" if in_cell else True, n))
+    bare_at = {c[5] for c in cands if c[4]} | sign_at
     for s, e, label, seal, bare, n in cands:
+        if bare == "cell" and not ({n - 1, n + 1} & sign_at):
+            continue  # 표 칸 안 쌍점 없는 이름표는 서명 묶음('신청인 업체명' / '대표자     ㉿')일 때만(11/06 청주 신청서)
         if bare and not ({n - 1, n + 1} & bare_at):
             continue  # 혼자 있는 '주소' 같은 줄은 제목일 수 있음
         key = _BARE_LABELS[label] if bare else _label_key(label)
@@ -766,9 +782,12 @@ class _Chars:
         return self.added[key]
 
     def _grey(self, cid: str) -> bool:
-        """글자 색이 검정이 아닌 모양(서식의 회색 작성 안내) — 채운 값은 검은 글씨로 바꿔 씀."""
-        m = re.search(r'\btextColor="#([0-9A-Fa-f]{6})"', self.blocks.get(cid, ""))
-        return bool(m) and m.group(1).upper() != "000000"
+        """채운 값에 물려주면 안 되는 꾸밈이 있는 모양 — 검정 아닌 글자색(회색 작성 안내)·굵게·기울임·밑줄(11/06 사용자 요청:
+        새로 기입하는 글은 늘 기본 글꼴 모양으로)."""
+        b = self.blocks.get(cid, "")
+        m = re.search(r'\btextColor="#([0-9A-Fa-f]{6})"', b)
+        return (bool(m) and m.group(1).upper() != "000000") or bool(re.search(r"<(?:[\w.-]+:)?(?:bold|italic)\s*/>", b)) \
+            or bool(re.search(r'<(?:[\w.-]+:)?underline\b[^>]*\btype="(?!NONE)', b))
 
     def smaller(self, cid: str, height: int) -> str:
         return self.variant(cid, height)
@@ -797,6 +816,8 @@ class _Chars:
             if h is not None:
                 b = re.sub(r'\bheight="\d+"', f'height="{h}"', b, count=1)
             b = re.sub(r'\btextColor="#[0-9A-Fa-f]{6}"', 'textColor="#000000"', b, count=1)  # 채운 값은 검은 글씨
+            b = re.sub(r"<(?:[\w.-]+:)?(?:bold|italic)\s*/>", "", b)  # 굵게·기울임 없이(11/06)
+            b = re.sub(r'(<(?:[\w.-]+:)?underline\b[^>]*\btype=")\w+(")', r"\g<1>NONE\2", b, count=1)
             ref = self._font_ref(cid)
             return b.replace(ref, self._unified_ref(cid), 1) if ref else b
         extra = "".join(block(cid, h, new) for (cid, h), new in self.added.items())
@@ -1196,6 +1217,23 @@ def _fill_notice_no_para(xml: str, number: str, rep: FillReport) -> str:
     return new
 
 
+def _plain_title(xml: str, title: str) -> str:
+    """서식에 이미 적힌 '입 찰 건 명 :' 뒤 공고 이름(굵게 등) — 그 글 조각을 값 표시로 감싸 기본 모양(11pt, 꾸밈 없음)으로(11/06 청주 각서)."""
+    if not title:
+        return xml
+    want = _sq(title)
+    out, pos = [], 0
+    for m in re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)([^<]*)(</(?:[\w.-]+:)?t>)", xml):
+        if _sq(m.group(2)) != want or _VS in m.group(2):
+            continue
+        before = _para_before(xml, m.start())
+        if not re.search(r"입찰건명[:：]?$", before):
+            continue
+        out.append(xml[pos:m.start()] + m.group(1) + _mark(html.unescape(m.group(2))) + m.group(3))
+        pos = m.end()
+    return "".join(out) + xml[pos:] if out else xml
+
+
 def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") -> str:
     """'입 찰 금 액 : 금     원(금     원)'·'입찰 보증금 : 금     원(금     원)' — 보증금 확약서·각서에서만(가격제안서의 입찰금액은 지일이 정함).
     '입찰금액 :      원 * 부가세 포함'·'입찰보증금액 :      원'(금액 칸만 빈 모양)엔 숫자만, 비어 있는 '입찰건명 :'엔 공고 이름(11/05 창업진흥원 서식 7 —
@@ -1443,6 +1481,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
             xml = _fill_bond(xml, basis, rep, title)
             xml = _fill_notice_no_para(xml, no_text, rep)
+            xml = _plain_title(xml, title)
             xml = _fill_label_paragraphs(xml, vault, rep, chars, sign_only)
             xml = _apply_marks(xml, chars)
             if chars is not None:

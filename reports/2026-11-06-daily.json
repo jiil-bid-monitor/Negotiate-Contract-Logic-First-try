@@ -1,0 +1,162 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-06",
+ "reportedAt": "2026-11-06T03:31:58+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01809651",
+   "title": "1동 ICT센터 원상복구 및 사무공간 재구성 공사(통신)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "건강보험심사평가원",
+    "budgetAmount": 295697273.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간",
+     "통신"
+    ],
+    "products": [],
+    "score": 19,
+    "deadline": "2026-11-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01809651&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813713",
+   "title": "임대형공장(리팩토리 춘천) 신축 공사(통신)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도 춘천시",
+    "budgetAmount": 240581818.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 44,
+    "deadline": "2026-11-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813713&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01812866",
+   "title": "대상㈜ 마곡 어린이집 인테리어 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "대상주식회사",
+    "budgetAmount": null,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "인테리어"
+    ],
+    "products": [],
+    "score": 21,
+    "deadline": "2026-11-11T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01812866&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01811777",
+   "title": "2026년 한반도 가시화물 생성용 해외위성영상",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "한국항공우주연구원",
+    "budgetAmount": 287727273.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 23,
+    "deadline": "2026-11-12T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01811777&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01812069",
+   "title": "2027~2028년 서울공예박물관 전시안내 지킴이 용역(장기계속)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "서울특별시 서울공예박물관",
+    "budgetAmount": 1786871818.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 52,
+    "deadline": "2026-11-12T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01812069&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813463",
+   "title": "광주지점 전체 레이아웃 가구 제작설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "중소기업은행",
+    "budgetAmount": 77899091.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "카운터"
+    ],
+    "score": 47,
+    "deadline": "2026-11-12T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813463&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813438",
+   "title": "광주지점 전체 레이아웃 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "중소기업은행",
+    "budgetAmount": 32460000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 47,
+    "deadline": "2026-11-12T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813438&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01810312",
+   "title": "(긴급)사상초등학교 공간재구조화 교사개축 정보통신공사(계속비)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "부산광역시교육청",
+    "budgetAmount": 1159350000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간",
+     "통신"
+    ],
+    "products": [],
+    "score": 33,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01810312&bidPbancOrd=000"
+   }
+  }
+ ]
+}

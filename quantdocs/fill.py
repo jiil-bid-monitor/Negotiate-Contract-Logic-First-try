@@ -629,6 +629,71 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     return xml
 
 
+# ── 못 채운 칸 찾기(11/06 사용자 결정: 규칙 + 검사 묶음 + 남은 빈칸 알림) ────────────────────────
+# 채운 뒤의 서식에서 '회사 정보 이름표가 있는데 값이 빈 자리'를 찾는다 — 읽어보기 '확인 필요'와 과거 제안요청서 검사(scripts/quant_fill_check.py)가 같이 씀.
+# 다른 쪽이 적는 칸(발행자·제조사 줄, 대리인·공동참여자 묶음)은 빼고 셈.
+_SLOT_KEYS = {"회사명", "대표자", "주소", "전화번호", "사업자등록번호", "법인등록번호", "_notice_no", "_title"}
+_PARA_SLOT = re.compile(
+    r"\s*(?:[○●◦□■▪·\-]\s*)?(?:\S.{0,14}?\s{3,})?"
+    r"(업\s*체\s*명|상\s*호(?:\s*또\s*는\s*법\s*인\s*명(?:\s*칭)?)?|회\s*사\s*명|대\s*표\s*(?:자|이\s*사)|주\s*소|소\s*재\s*지|"
+    r"전\s*화(?:\s*번\s*호)?|공\s*고\s*번\s*호|입\s*찰\s*건\s*명)\s*[:：]\s*(?:" + _SEAL_TAIL + r")?\s*")
+
+
+def unfilled_slots(xml: str, sign_only: bool = False) -> list[str]:
+    """채운 서식 구역 XML에서 회사 정보 이름표가 있는데 값이 빈 자리 — ['표: 업체명', '문단: 대표자 :'] 같은 목록."""
+    out: list[str] = []
+    tbls = _spans(xml, "tbl")
+    if not sign_only:
+        for tbl in tbls:
+            cells = _cells(xml, tbl)
+            if re.search(r"<(?:[\w.-]+:)?tbl\b", xml[tbl[0] + 4:tbl[1]]):
+                cells = [c for c in cells if not re.search(r"<(?:[\w.-]+:)?tbl\b", xml[c.start:c.end])]
+            by_pos = {(c.row, c.col): c for c in cells}
+            other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
+            agent = _agent_rows(xml, cells)
+            for c in cells:
+                if c.row in other_rows or c.row in agent:
+                    continue
+                group = _row_group(cells, c)
+                if group == "대리인":
+                    continue
+                key = _label_key(c.text)
+                if group == "대표자" and re.fullmatch(r"(?:대표자)?(?:성명|이름|성함)|연락처|전화|전화번호", _sq(c.text)):
+                    key = "대표자"
+                if key not in _SLOT_KEYS:
+                    continue
+                right = by_pos.get((c.row, c.col + c.colspan))
+                if right is not None and right.blank and _label_key(right.text) is None:
+                    out.append(f"표: {_sq(c.text)[:14]}")
+    single = [(cs, ce) for cs, ce in _spans(xml, "tc") if len(_spans(xml, "p", cs, ce)) <= 1]
+    party = None
+    paras, stack = [], []
+    for m in re.finditer(r"<(/?)(?:[\w.-]+:)?p\b[^>]*?(/?)>", xml):
+        if m.group(2):
+            continue
+        if not m.group(1):
+            stack.append(m.start())
+        elif stack:
+            paras.append((stack.pop(), m.end()))
+    for s, e in sorted(paras):
+        if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single):
+            continue
+        text = _text(xml[s:e])
+        hm = re.match(r"\s*[○●◦□■▪·\-]\s*(\S(?:.{0,14}?\S)?)(?:\s{3,}|$)", text)
+        if hm and not re.search(r"[:：]", hm.group(1)):
+            head = _sq(hm.group(1))
+            party = "other" if re.search(r"공동(?:참여|수급|이행|도급)|구성원|참여사|분담|대리인|수임인|발행자|제조사", head) else \
+                ("own" if re.search(r"대표사|대표업체|주관사|대표자|입찰자|신청인", head) else party)
+        elif _sq(text) and not re.search(r"[:：]", text) and not re.search(_SEAL_TAIL, text):
+            party = None
+        if party == "other" or re.search(r"대\s*리\s*인|발\s*행\s*자|제\s*조\s*사|수\s*입\s*원", text):
+            continue
+        m = _PARA_SLOT.fullmatch(text)
+        if m:
+            out.append(f"문단: {_sq(m.group(1))}")
+    return out
+
+
 # ── 채운 글 크기(11/05 사용자 결정: 채운 글은 전부 11pt — 서식에 원래 적힌 글자는 그대로) ─────────────
 # 칸에 한 줄로 안 들어가면 11pt 그대로 두 줄로(칸이 늘어남). 줄 간격이 100% 미만·고정값인 칸만 두 줄이면 글이 겹쳐서(11/04 필암서원 주소 칸)
 # 한 줄에 들어가게 같은 글꼴에서 크기만 줄인 글자 모양을 header.xml에 더해 씀(최소 7pt). 글꼴·장평·색은 칸의 원래 글자 모양 그대로.
@@ -1135,7 +1200,7 @@ def _keep_table_heights(before: str, after: str, chars: "_Chars", rep: FillRepor
     return after
 
 
-_NO_SLOT = re.compile(r"\s*제\s*\d{4}\s*[-–]\s*호\s*")  # 서식에 미리 적힌 '제 2026 - 호'
+_NO_SLOT = re.compile(r"\s*(?:공\s*고\s*)?제\s*(?:\d{4}\s*[-–]?\s*)?호\s*")  # 서식에 미리 적힌 '제 2026 - 호'·'공고 제   호'(11/06 청주)
 
 
 def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:

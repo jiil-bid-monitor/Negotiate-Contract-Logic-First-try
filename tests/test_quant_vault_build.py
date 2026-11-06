@@ -1901,3 +1901,26 @@ def test_lead_and_joint_member_blocks(tmp_path: Path):
     assert "업 체 명 : (주)가상" in lead and "주 소 : 강원 정선" in lead and "대 표 자 : 홍길동" in lead
     assert "(주)가상" not in joint and "홍길동" not in joint and "강원" not in joint
     assert "업 체 명 : (주)가상" in tail and "홍길동" in tail  # 묶음이 끝난 뒤 서명 줄은 그대로 채움
+
+
+def test_unfilled_slots_finds_blank_company_labels():
+    """11/06 사용자 결정: 채운 뒤에도 회사 정보 이름표가 빈 자리를 찾아 '확인 필요' 알림·검사 묶음에 씀 —
+    다른 쪽이 적는 칸(대리인 묶음·공동참여자 묶음·발행자 줄)은 세지 않음."""
+    from quantdocs.fill import unfilled_slots
+
+    def c(col, row, text, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p><hp:run><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+
+    def p(t):
+        return f"<hp:p><hp:run><hp:t>{t}</hp:t></hp:run></hp:p>"
+    xml = ("<hs:sec><hp:p><hp:run><hp:tbl>"
+           f"<hp:tr>{c(0, 0, '상호 또는 법인명칭')}{c(1, 0, '')}</hp:tr>"
+           f"<hp:tr>{c(0, 1, '대 리 인', 2)}{c(1, 1, '성 명')}{c(2, 1, '')}</hp:tr>"
+           f"<hp:tr>{c(1, 2, '연 락 처')}{c(2, 2, '')}</hp:tr>"
+           f"<hp:tr>{c(0, 3, '주 소')}{c(1, 3, '강원 정선')}</hp:tr></hp:tbl></hp:run></hp:p>"
+           + p("○ 공 고 번 호 :   ") + p("○ 공동참여자          업 체 명 :") + p("      대 표 자 :        (인)") + p("청주시장 귀하")
+           + p("대 표 자 :          (인)") + "</hs:sec>")
+    got = unfilled_slots(xml)
+    assert got == ["표: 상호또는법인명칭", "문단: 공고번호", "문단: 대표자"]
+    assert unfilled_slots(xml, sign_only=True) == ["문단: 공고번호", "문단: 대표자"]

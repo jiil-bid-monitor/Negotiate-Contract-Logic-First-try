@@ -4,6 +4,9 @@
 
 **새 계정·새 세션에서 이어받을 때는 `docs/HANDOFF.md`부터 읽을 것** (2026-10-16 계정 이전용 인수인계 — 현재 상태·준비할 것·다음 할 일 요약).
 
+**서버 PC 반영 안내엔 늘 웹앱 다시 켜는 명령까지 한 줄로 줄 것**(11/06 사용자 요청): `cd "C:\Users\HJE\나라장터 수집\Negotiate-Contract-Logic-First-try" && git checkout main && git pull && bash webapp/start.sh`
+(실행 중인 창은 먼저 `Ctrl+C`, `requirements.txt`가 바뀌었으면 `git pull` 뒤 `py -m pip install -r requirements.txt`를 끼움, 끝나면 브라우저 F5).
+
 **하루 작업 정리는 `docs/worklog/날짜.md`**(10/21부터, 사용자 요청).
 **"오늘 한 일 정리해줘" 요청은 채팅에 사용자 형식으로**(10/22 사용자 지정 — 10/20 정리 예시): 제목 "오늘 한 일" → "1." 아래 `*` 글머리 한 줄씩
 (쉬운 말, 무엇을 했는지 + 계기·결과를 짧게, PR 번호·파일 이름·코드 용어 없이, 하위 항목은 들여쓴 `*`) → 따로 볼 큰 일은 "제목 (어디, 완료/보류)" 소제목

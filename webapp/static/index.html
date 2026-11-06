@@ -1004,13 +1004,16 @@ footer b { color: var(--muted); }
   border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--ink); }
 .calc-count:empty { display: none; }
 .calc-draw { margin: 0 0 12px; }
-.calc-draw > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline;
-  background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; }
+/* (11/06 사용자: 가시성) 접힌 난수표 줄을 눈에 띄는 버튼 줄로 — 굵은 제목 + 오른쪽 '펼치기' 버튼 */
+.calc-draw > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line-strong); border-left: 4px solid var(--accent); padding: 12px 14px; }
 .calc-draw > summary::-webkit-details-marker { display: none; }
-.calc-draw > summary::before { content: "▶"; font-size: 11px; color: var(--muted); margin-right: 2px; }
-.calc-draw[open] > summary::before { content: "▼"; }
-.calc-draw > summary .calc-h { margin: 0; }
-.calc-draw > summary .why { font-size: 12px; }
+.calc-draw > summary:hover { background: var(--chip); }
+.calc-draw > summary .calc-h { margin: 0; font-size: 15px; font-weight: 700; color: var(--ink-strong); }
+.calc-draw > summary .why { font-size: 13px; }
+.calc-draw > summary::after { content: "펼치기 ▼"; margin-left: auto; padding: 5px 12px; border-radius: var(--radius);
+  background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.calc-draw[open] > summary::after { content: "접기 ▲"; background: var(--panel); color: var(--accent); border: 1px solid var(--accent); }
 .calc-draw[open] > summary { margin-bottom: 10px; }
 .calc-record { background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; margin-bottom: 10px; }
 .calc-record .calc-h { margin: 0 0 8px; }

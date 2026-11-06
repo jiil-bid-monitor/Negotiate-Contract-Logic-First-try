@@ -393,6 +393,23 @@ def make_handler(app: App):
                 if url.path == "/api/bidlog/update":
                     app.bidlog.update(str(data.get("id") or ""), data)
                     return self._json({"ok": True, "entries": app.bidlog.entries()})
+                if url.path == "/api/bidlog/results":
+                    # 개찰 결과 받기(11/06) — 결과 없는 기록만, ids를 주면 그 기록만(force면 다시)
+                    from nego import fields as F
+                    from nego.bidrecommend import default_own_bizno
+                    from .bidresult import fill_results
+                    try:
+                        config = load_config()
+                        if not config.api.service_key:
+                            return self._error(HTTPStatus.CONFLICT, "서버에 나라장터 인증키(NARA_SERVICE_KEY)가 없습니다")
+                        base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
+                        ids = [str(i) for i in data.get("ids") or []] or None
+                        done = fill_results(app.bidlog, bidcalc.make_client(config.api), base, default_own_bizno(),
+                                            ids=ids, force=bool(data.get("force")))
+                    except (ConfigError, ApiError) as err:
+                        key = os.environ.get("NARA_SERVICE_KEY", "")
+                        return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
+                    return self._json({"ok": True, **done, "entries": app.bidlog.entries()})
                 if url.path == "/api/bidlog/delete":
                     app.bidlog.delete(str(data.get("id") or ""))
                     return self._json({"ok": True, "entries": app.bidlog.entries()})
@@ -470,6 +487,24 @@ def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, c
     return App(store, past, collector or Collector(store, past, docscan=docscan), token, backup_dir=backup_dir, docscan=docscan)
 
 
+def start_nightly(app: App) -> None:
+    from nego import fields as F
+    from nego.bidrecommend import default_own_bizno
+    from .bidnightly import Nightly
+
+    def make_client():
+        try:
+            config = load_config()
+        except ConfigError:
+            return None
+        if not config.api.service_key:
+            return None
+        base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
+        return bidcalc.make_client(config.api), base
+
+    Nightly(app.store.path.parent, app.bidlog, app.latest_run, make_client, default_own_bizno()).start()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="webapp", description="입찰 공고 싱크로율 탐색기 (사내 웹앱)")
     parser.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
@@ -502,6 +537,9 @@ def main(argv: list[str] | None = None) -> int:
         timer.start()
     # 텔레그램 보고에 나간 공고 → 판단 기록 '미판단' (bot-state 브랜치의 보고 기록을 몇 분마다 받아 합친다)
     ReportSync(app.team.merge_report).start()
+    # 매일 22시 투찰 이력 자동 수집 — 투찰내역 결과·입찰 공고 개찰 결과(추천 보정 자료)·투찰이력.xlsx·주간 성적표 (webapp/bidnightly.py)
+    if not app.viewer and os.environ.get("BID_NIGHTLY", "1").strip() != "0":
+        start_nightly(app)
     # 예외 낱말 후보 HTML '제출' 파일(다운로드 폴더) → jiil 반영·묶음 다시 잠금·병합 (webapp/exclusionsync.py)
     ExclusionSync().start()
     # 판단 기록 → 피드백 구글 시트 S~V열 (FEEDBACK_SHEET_ID + 서비스 계정 키가 있을 때만, webapp/sheetsync.py)

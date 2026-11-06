@@ -9,7 +9,7 @@ from webapp.bidlog import BidLog, clean_entry
 
 SAMPLE = {"noticeNo": "r26bk01810177", "noticeOrd": "000", "title": "태백 통합공공임대주택 건립사업(통신)",
           "institution": "강원특별자치도 태백시", "workType": "공사", "basis": "193,283,304", "lowerRate": 89.745,
-          "bid": 174582000.4, "rate": 100.55, "method": "고정 100.55%", "recordedBy": "김", "memo": "외주와 같음",
+          "bid": 174582000.4, "rate": 100.55, "method": "고정 100.55%",
           "unknown": "버림"}
 
 
@@ -27,9 +27,9 @@ class TestBidLog(unittest.TestCase):
         self.assertIsNone(e["result"])                     # 개찰 결과 자리는 비워 둠
         second = self.log.add({**SAMPLE, "bid": 175000000})
         self.assertEqual([r["id"] for r in self.log.entries()][0], second["id"])  # 같은 공고도 줄이 하나 더(최근 것 먼저)
-        self.log.update(e["id"], {"bid": "174,600,000", "memo": "금액 정정"})
+        self.log.update(e["id"], {"bid": "174,600,000"})
         row = next(r for r in self.log.entries() if r["id"] == e["id"])
-        self.assertEqual((row["bid"], row["memo"]), (174600000, "금액 정정"))
+        self.assertEqual(row["bid"], 174600000)
         self.log.delete(e["id"])
         self.assertEqual([r["id"] for r in self.log.entries()], [second["id"]])
         # 다시 열어도 그대로(파일에 저장)

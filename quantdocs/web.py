@@ -162,7 +162,7 @@ def _run_analyze(job: dict) -> None:
             raise RuntimeError("공고를 찾지 못했습니다 — 공고번호를 확인하세요")
         job["notice"] = {"no": nf.no, "ord": nf.ord, "title": nf.title, "institution": nf.institution,
                          "work": nf.work_type, "award": nf.award_method, "contract": nf.contract_method,
-                         "posted": nf.posted, "licenses": nf.licenses, "license_groups": nf.license_groups, "files": [p.name for p in nf.files],
+                         "posted": nf.posted, "licenses": nf.licenses, "license_groups": nf.license_groups, "files": [p.name for p in nf.files], "budget": nf.budget,
                          "skipped": nf.skipped, "negotiation": nf.negotiation}
         if not nf.files:
             raise RuntimeError("첨부 파일을 받지 못했습니다" + (f" — {nf.skipped[0]}" if nf.skipped else ""))
@@ -230,7 +230,7 @@ def _run_build(job: dict) -> None:
             n = job.get("notice", {})
             build([Path(f) for f in job["files"]], v, out, n.get("title", ""), job.get("date"),
                   n.get("award", ""), n.get("contract", ""), n.get("licenses") or [], _g2b_no(n, job["no"]),
-                  job.get("staff_pick"), n.get("license_groups") or [], job.get("patent_pick"))
+                  job.get("staff_pick"), n.get("license_groups") or [], job.get("patent_pick"), n.get("budget"))
             job["zip"] = str(out)
             job["state"] = "built"
         except Exception as err:

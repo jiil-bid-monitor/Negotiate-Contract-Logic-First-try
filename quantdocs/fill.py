@@ -1139,6 +1139,8 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
     bond = int(round(basis * BOND_RATE))
     blank = r"(금)\s+(원\s*\(\s*금)\s+(원\s*\))"
     done = []
+    # 이름표만 든 표 칸('입 찰 건 명 :' | 값 칸)엔 끼워 넣지 않음 — 오른쪽 값 칸이 따로 채워져 공고 이름이 두 번 들어갔음(11/06 필암서원 서식 5)
+    label_only = [(a, b) for a, b in _spans(xml, "tc") if re.fullmatch(rf"{_BID_NAME}[:：]?", _sq(_text(xml[a:b])))]
 
     def fill_t(m):
         body = m.group(2)
@@ -1152,7 +1154,8 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
             if value not in done and rx.search(body):
                 body = rx.sub(lambda mm: f"{mm.group(1)} {_mark(f'{value:,}')} {mm.group(3)}", body, count=1)
                 done.append(value)
-        if title and re.search(rf"{_BID_NAME}\s*[:：]?\s*$", body):  # 비어 있는 '입찰건명 :'
+        in_label_cell = any(a <= m.start() < b for a, b in label_only)
+        if title and not in_label_cell and re.search(rf"{_BID_NAME}\s*[:：]?\s*$", body):  # 비어 있는 '입찰건명 :'
             body = re.sub(rf"({_BID_NAME})\s*([:：]?)\s*$",
                           lambda mm: f"{mm.group(1)} {mm.group(2) or ':'} {_mark(title)}", body, count=1)
             done.append(0)

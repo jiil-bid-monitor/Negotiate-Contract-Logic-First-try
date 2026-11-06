@@ -1574,6 +1574,23 @@ def test_bond_amount_filled_without_won_brackets(tmp_path):
     assert "5%" in plain
 
 
+def test_bid_name_label_cell_not_filled_twice():
+    """11/06 필암서원 서식 5: '입 찰 건 명 :'만 든 표 칸엔 공고 이름을 끼워 넣지 않음 — 오른쪽 값 칸에 따로 들어가 두 번 보였음.
+    표 밖 문단·여러 줄 칸의 '입찰건명 :'은 그대로 채움."""
+    from quantdocs import fill
+
+    title = "필암서원 집성관 디지털 콘텐츠 보강 기획 및 제작설치"
+    head = "<hp:p><hp:run><hp:t>입찰보증금 지급 확약서</hp:t></hp:run></hp:p>"
+    cell = lambda t: f"<hp:tc><hp:subList><hp:p><hp:run><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList></hp:tc>"
+    table = f"<hp:tbl><hp:tr>{cell('입 찰 건 명 :')}{cell(' ')}</hp:tr></hp:tbl>"
+    out = fill._fill_bond(head + table, 400_000_000, fill.FillReport("x"), title)
+    assert title not in out.replace(fill._VS, "").replace(fill._VE, "")
+    # 표 밖 문단은 그대로 채움(창업진흥원 서식 7 모양)
+    para = "<hp:p><hp:run><hp:t>1. 입찰건명 :</hp:t></hp:run></hp:p>"
+    out = fill._fill_bond(head + para, 400_000_000, fill.FillReport("x"), title)
+    assert f"입찰건명 : {title}" in out.replace(fill._VS, "").replace(fill._VE, "")
+
+
 def test_ocr_sign_lines_restored_for_fill():
     """OCR이 쌍점을 빠뜨린 서명 줄 '대표자 (인)'·'주 소'·'Al ok 업체명'을 한글 서식 모양으로(11/05 — 한글 서식에서 채우는 값은 OCR 서식에서도)."""
     from quantdocs.pdfforms import _sign_line

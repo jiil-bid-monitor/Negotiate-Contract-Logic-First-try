@@ -536,7 +536,7 @@
         <td>${o.track && o.track.ranked ? `<b>${rankOf(o.track)}</b><small>${o.track.ranked}건</small>` : "-"}</td></tr>`;
     };
     const tried = opts.map((o) => o.track && o.track.tried).find(Boolean);
-    const table = `<details class="rec-more" open><summary>방식별 비교${tried ? ` — 과거 비슷한 공고 ${tried}건에 적용해 봤다면` : ""}
+    const table = `<details class="rec-more"><summary>방식별 비교${tried ? ` — 과거 비슷한 공고 ${tried}건에 적용해 봤다면` : ""}
         ${tip(`<h4>방식별 비교 읽는 법</h4>과거 비슷한 공고마다 <b>그 공고 개찰 전 자료만으로</b> 이 방법대로 금액을 정했다면 어땠을지 센 결과예요.
         <ul><li>하한선 통과: 탈락하지 않았을 비율</li><li>5위 안·1순위: 금액 기준 개찰 순위(적격심사 서류 심사 전)</li>
         <li>평균 순위: 참가 업체 중 평균 상위 몇 %(하한선 미달은 꼴찌 100%로 셈)</li></ul>

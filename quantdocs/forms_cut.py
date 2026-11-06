@@ -345,11 +345,11 @@ def _drop_blank_tail(body: str) -> str:
     return body
 
 
-def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
+def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path, fit_pages: bool = True) -> Path:
     """잘라 낸(채웠거나 양식 그대로인) 서식 파일들을 서식 순서대로 다시 한 HWPX로 — 담당자가 한글 파일 하나에서 직접 기입(11/03 사용자 요청).
 
     parts: (cut()이 돌려준 서식, 그 서식의 최종 파일). 원본(path)의 머리·쪽 설정·글꼴을 그대로 쓰고, 서식 본문만 각 파일에서 가져온다.
-    서식마다 새 쪽에서 시작. 서식이 없는 구역은 뺌."""
+    서식마다 새 쪽에서 시작(fit_pages면 조금 넘쳐 쪽이 낭비되는 서식만 맞춤 — `pagefit`). 서식이 없는 구역은 뺌."""
     path, out = Path(path), Path(out)
     zin = zipfile.ZipFile(path)
     entries = zin.namelist()
@@ -405,6 +405,7 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
         starts_at_first = bodies[sec][0][0].paras[0].start == first.start
         prefix = "" if starts_at_first else _sec_pr_para(xml, first)
         new_sections[sec] = xml[:first.start] + prefix + "".join(chunks) + xml[all_paras[-1].end:]
+
     out.parent.mkdir(parents=True, exist_ok=True)
     replace = {"Preview/PrvText.txt": " ".join(preview)[:1000].encode("utf-8")}
     if header and any(k["extra"] for k in kinds.values()):
@@ -417,4 +418,7 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
                        lambda m, e=k["extra"]: f'{m.group(1)}{int(m.group(2)) + len(e)}"', h, count=1)
         replace["Contents/header.xml"] = h.encode("utf-8")
     _write_package(zin, out, new_sections, replace)
+    if fit_pages:  # 1~2줄·제목만 남아 쪽 하나가 낭비되는 서식만 손봄(11/06 사용자 요청, `pagefit`)
+        from .pagefit import fit
+        fit(out)
     return out

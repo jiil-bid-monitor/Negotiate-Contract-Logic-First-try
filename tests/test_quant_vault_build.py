@@ -1706,3 +1706,59 @@ def test_pdf_only_forms_need_hangul_file(tmp_path):
     # 11/06 필암서원: 서식 목록은 나라장터 공고문 변환본 PDF에서 읽혔지만 제안요청서는 한글 — '한글 파일 필요' 아님
     assert build._hwp_needed([f("공고문.pdf")] * 3, [Path("공고문.hwpx"), Path("공고문.pdf"), Path("제안요청서.hwpx")]) is False
     assert "from .pdfforms import" not in open(build.__file__, encoding="utf-8").read()
+
+
+
+def test_pagefit_only_fixes_forms_wasting_a_page():
+    """11/06 사용자 요청: 서식마다 새 쪽은 그대로, 1~2줄·제목만 남아 쪽 하나가 낭비될 때만 손봄 — 빈 줄 하나로 → 표 줄 여유 줄이기 → 빈 줄 빼기
+    → (제목만) 표 나누기. 종이 기준 그림 서식은 그림 아래 첫 내용 뒤의 빈 줄만."""
+    from types import SimpleNamespace as L
+
+    from quantdocs import pagefit as pf
+    from quantdocs.fill import _Chars
+
+    chars = _Chars('<hh:head><hh:charPr id="0" height="1000"></hh:charPr><hh:paraPr id="0"><hh:align horizontal="CENTER"/></hh:paraPr></hh:head>')
+    body = round(257 * pf.MM)
+
+    def p(t="", inner=""):
+        run = f'<hp:run charPrIDRef="0"><hp:t>{t}</hp:t>{inner}</hp:run>' if t or inner else '<hp:run charPrIDRef="0"/>'
+        return f'<hp:p paraPrIDRef="0" pageBreak="0">{run}</hp:p>'
+
+    def tbl(rows):  # rows: 칸 높이(mm) — 글은 짧아 여유가 큼
+        trs = "".join(f'<hp:tr><hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>칸</hp:t></hp:run></hp:p></hp:subList>'
+                      f'<hp:cellSz width="10000" height="{round(h * pf.MM)}"/></hp:tc></hp:tr>' for h in rows)
+        return (f'<hp:tbl rowCnt="{len(rows)}" colCnt="2" textWrap="TOP_AND_BOTTOM" pageBreak="CELL"><hp:sz width="40000" height="{round(sum(rows) * pf.MM)}"/>'
+                f'<hp:pos treatAsChar="1" affectLSpacing="0" vertRelTo="PARA" horzRelTo="PARA" horzAlign="LEFT" horzOffset="0"/>{trs}</hp:tbl>')
+
+    mm = lambda x: round(x * pf.MM)
+    # 넘침: 끝 한 줄만 다음 쪽
+    f = pf._Form([p("〈서식 1〉"), p(), p(), p(), p("본문"), p("귀하")], False)
+    lines = [[L(page=0, vertpos=0)], [L(page=0, vertpos=mm(10))], [L(page=0, vertpos=mm(20))], [L(page=0, vertpos=mm(30))],
+             [L(page=0, vertpos=mm(40))], [L(page=1, vertpos=0)]]
+    prob = pf._problem(f, lines, chars, body)
+    assert prob[0] == "넘침"
+    assert pf._step(f, prob, lines, chars, "", body) and len(f.paras) == 4  # 잇단 빈 줄 → 하나
+    assert pf._step(f, prob, lines, chars, "", body) and len(f.paras) == 3 and "더 뺌" in f.done[-1]  # 표가 없어 줄이기는 건너뜀
+    assert not pf._step(f, prob, lines, chars, "", body)  # 넘침엔 표 나누기 없음
+    # 두 쪽이 다 차 있으면 손대지 않음
+    full = [[L(page=0, vertpos=0)], [L(page=0, vertpos=mm(200))], [L(page=1, vertpos=mm(100))]]
+    assert pf._problem(pf._Form([p("a"), p("b"), p("c")], False), full, chars, body) is None
+    # 제목만: 표는 그대로 두고 쪽에서 나뉘게(제목 아래에서 시작, 넘치는 부분만 다음 쪽 — 11/06 사용자 결정), 가운데 문단이면 가운데
+    g = pf._Form([p("〈서식 16〉"), p("", tbl([60, 60, 60, 70]))], False)
+    gl = [[L(page=0, vertpos=0)], [L(page=1, vertpos=0)]]
+    prob = pf._problem(g, gl, chars, body)
+    assert prob[0] == "제목만"
+    center = '<hh:paraPr id="0"><hh:align horizontal="CENTER"/></hh:paraPr>'
+    assert pf._step(g, prob, gl, chars, center, body) and "나뉘게" in g.done[-1]
+    assert 'pageBreak="TABLE"' in g.paras[1] and 'treatAsChar="0"' in g.paras[1] and 'horzAlign="CENTER"' in g.paras[1]
+    assert 'height="' + str(mm(60)) + '"' in g.paras[1]  # 칸 높이는 그대로
+    # 나눌 수 없는 표(표지 — 열 하나)는 칸 여유를 줄여 첫 쪽에 들어가게
+    c = pf._Form([p("〈서식 11〉"), p("", tbl([60, 60, 60, 70]).replace('colCnt="2"', 'colCnt="1"'))], False)
+    assert pf._step(c, ("제목만", mm(6), 1), gl, chars, center, body) and "표 칸 여유" in c.done[-1]
+    assert 'pageBreak="TABLE"' not in c.paras[1]
+    # 종이 기준 그림 서식: 그림 문단 다음 첫 내용 뒤의 빈 줄만
+    fig = '<hp:line><hp:pos treatAsChar="0" vertRelTo="PAPER"/></hp:line>'
+    k = pf._Form([p("〈서식 13〉"), p(), p(), p("", fig), p(), p("조직표"), p(), p(), p("주) 3.")], True)
+    kl = [[L(page=0, vertpos=mm(i * 20))] for i in range(8)] + [[L(page=1, vertpos=0)]]
+    assert pf._step(k, pf._problem(k, kl, chars, body), kl, chars, "", body)
+    assert [pf._text(x) for x in k.paras] == ["〈서식 13〉", "", "", "", "", "조직표", "", "주) 3."]

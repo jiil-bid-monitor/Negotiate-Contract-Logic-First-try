@@ -1801,3 +1801,23 @@ def test_build_survives_hwpx_that_is_not_zip(tmp_path: Path):
     z = zipfile.ZipFile(out)
     assert "통합서식.hwpx" in z.namelist()
     assert "붙임_서식.hwpx" in z.read("읽어보기.txt").decode()
+
+
+def test_guide_text_cell_gets_company_in_black(tmp_path: Path):
+    """11/06 제보(입찰참가신청서): '상호 또는 법인명' 값 칸에 회색 안내 '공동도급참여시 대표사'가 있어 (주)지일을 안 넣었음 —
+    안내 글뿐인 칸은 빈 칸으로 보고 회사명을 검은 글씨로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000" textColor="#000000"></hh:charPr>'
+              '<hh:charPr id="7" height="1200" textColor="#808080"></hh:charPr></hh:charProperties></hh:head>')
+    guide = ('<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="7"><hp:t>공동도급참여시 대표사</hp:t></hp:run></hp:p></hp:subList>'
+             '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    src = _mini_hwpx(tmp_path / "g.hwpx", _tbl([[_c(0, 0, "상호 또는 법인명칭"), guide]]))
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "go.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    zo = zipfile.ZipFile(tmp_path / "go.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    cid = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>\(주\)가상', out).group(1)
+    assert "공동도급참여시" not in out and cid != "7"
+    assert 'textColor="#000000"' in re.search(rf'<hh:charPr id="{cid}"[^>]*>', head).group(0)

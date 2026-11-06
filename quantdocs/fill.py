@@ -57,6 +57,11 @@ def _sq(s: str) -> str:
     return re.sub(r"\s+", "", s)
 
 
+# 값 칸에 미리 적힌 작성 안내(대개 회색 글씨) — 빈 칸으로 보고 회사 값을 넣음(11/06 제보: 입찰참가신청서 '상호 또는 법인명' 칸의
+# '공동도급참여시 대표사'를 글이 있는 칸으로 보고 (주)지일을 안 넣었음). 띄어쓰기 뺀 글 전체가 안내일 때만
+_GUIDE_TEXT = re.compile(r"[(\[]?(?:※)?공동(?:도급|수급|이행)(?:으로)?(?:참여|참가|입찰)?(?:시|의경우|인경우|할경우)?(?:에는)?"
+                         r"(?:대표(?:사|업체|자|사명)?)(?:기재|기입|작성|명)?[)\]]?")
+
 # 이름표 뒤에 끼워 넣은 값 표시(11/05 사용자 결정: 채운 글은 11pt) — 섹션을 다 채운 뒤 _apply_marks가 그 값만 11pt 글자 모양으로 떼어 냄
 _VS, _VE = "\ue000", "\ue001"
 
@@ -76,9 +81,10 @@ class Cell:
 
     @property
     def blank(self) -> bool:
-        """빈 칸 — 글이 없거나, 숫자 없는 자리표시('년 월', '총 명', '원', '건')뿐."""
+        """빈 칸 — 글이 없거나, 숫자 없는 자리표시('년 월', '총 명', '원', '건')뿐, 또는 작성 안내 글('공동도급참여시 대표사')뿐."""
         t = _sq(self.text)
-        return t == "" or (not re.search(r"\d", t) and re.fullmatch(r"[년월일총명원건～~\-.:/()]*", t) is not None)
+        return (t == "" or (not re.search(r"\d", t) and re.fullmatch(r"[년월일총명원건～~\-.:/()]*", t) is not None)
+                or _GUIDE_TEXT.fullmatch(t) is not None)
 
 
 def _cells(xml: str, tbl: tuple[int, int]) -> list[Cell]:
@@ -736,13 +742,18 @@ class _Chars:
 
     def variant(self, cid: str, height: int | None = None) -> str:
         """채운 글에 쓸 글자 모양: 숫자·영문도 한글 글꼴로, height를 주면 그 크기로. 바꿀 게 없으면 cid 그대로."""
-        if cid not in self.blocks or (height is None and self._unified_ref(cid) == self._font_ref(cid)):
+        if cid not in self.blocks or (height is None and self._unified_ref(cid) == self._font_ref(cid) and not self._grey(cid)):
             return cid
         key = (cid, height)
         if key not in self.added:
             ids = [int(x) for x in self.blocks] + [int(x) for x in self.added.values()]
             self.added[key] = str(max(ids) + 1)
         return self.added[key]
+
+    def _grey(self, cid: str) -> bool:
+        """글자 색이 검정이 아닌 모양(서식의 회색 작성 안내) — 채운 값은 검은 글씨로 바꿔 씀."""
+        m = re.search(r'\btextColor="#([0-9A-Fa-f]{6})"', self.blocks.get(cid, ""))
+        return bool(m) and m.group(1).upper() != "000000"
 
     def smaller(self, cid: str, height: int) -> str:
         return self.variant(cid, height)
@@ -770,6 +781,7 @@ class _Chars:
             b = re.sub(r'\bid="\d+"', f'id="{new}"', self.blocks[cid], count=1)
             if h is not None:
                 b = re.sub(r'\bheight="\d+"', f'height="{h}"', b, count=1)
+            b = re.sub(r'\btextColor="#[0-9A-Fa-f]{6}"', 'textColor="#000000"', b, count=1)  # 채운 값은 검은 글씨
             ref = self._font_ref(cid)
             return b.replace(ref, self._unified_ref(cid), 1) if ref else b
         extra = "".join(block(cid, h, new) for (cid, h), new in self.added.items())

@@ -670,7 +670,7 @@
       const open = OPEN_ROWS.has(r.id);
       return `<tr data-id="${esc(r.id)}" class="${open ? "is-open" : ""}">
         <td class="when" data-l="기록일">${esc(day(r.recordedAt))}</td>
-        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a>${r.institution ? ` · ${esc(r.institution)}` : ""}${r.workType ? ` · ${esc(r.workType)}` : ""}</span></td>
+        <td class="title" data-l="공고"><a class="notice-link" href="${esc(link)}" target="_blank" rel="noopener" title="나라장터에서 공고 보기">${esc(r.title || r.noticeNo)}</a><span class="sub">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}${r.institution ? ` · ${esc(r.institution)}` : ""}${r.workType ? ` · ${esc(r.workType)}` : ""}</span></td>
         <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub">기초 ${won(r.basis)}${r.lowerRate != null ? ` · 하한율 ${r.lowerRate}%` : ""}</span></td>
         <td class="num" data-l="기준 사정률">${pct3(r.rate)}<span class="sub">${esc(r.method || "-")}</span></td>
         <td class="res" data-l="개찰 결과"><div>${resultCell(r)}</div></td>

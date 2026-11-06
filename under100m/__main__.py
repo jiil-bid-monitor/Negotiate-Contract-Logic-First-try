@@ -1,4 +1,4 @@
-"""1억 미만 입찰(전시관·체험관) 공고 폴더 자동 생성 (2026-11-04 사용자 결정. 협상은 11-05 시험 뒤 뺌).
+"""1억 미만 공고 폴더 자동 생성 — 낙찰방법·공고명과 상관없이 수집기 후보 전부(수의계약은 수집기가 뺌, 2026-11-06 사용자 결정).
 
 새 공고마다 결과 폴더를 표본(1억미만_사업폴더_취합_20261028)과 같은 구조로 만들고 개발자 방에 알린다:
   <공고>/  최신 공고문·첨부(맨 위) · 공고정보_요약.pdf · 서식자동분리/ · 회사준비서류/ · 이전공고/
@@ -33,7 +33,6 @@ from .summary import write_summary_pdf
 
 log = logging.getLogger("under100m")
 
-TARGET_WORDS = ("전시관", "체험관")
 LIMIT = 100_000_000
 MAX_TRIES = 3
 FORMS_DIR = "서식자동분리"
@@ -51,9 +50,13 @@ _DOC_FILE = re.compile(r"공고|제안요청|과업|입찰안내|제출서류")
 
 
 def is_target(candidate) -> bool:
-    """본공고 후보 중 공고명에 전시관·체험관이 있는 공고(띄어쓰기 무시). 유형은 `collect`가 받을 때 거른다."""
-    title = re.sub(r"\s+", "", candidate.notice.title or "")
-    return bool(candidate.is_candidate and candidate.notice.kind == "본공고" and any(w in title for w in TARGET_WORDS))
+    """수집기 후보 중 본공고(사전규격은 낙찰방법·입찰 서류가 아직 없어 뺌)."""
+    return bool(candidate.is_candidate and candidate.notice.kind == "본공고")
+
+
+def over_by_api(notice) -> bool:
+    """나라장터 금액만으로 이미 1억 이상 — 첨부를 읽기 전에 거른다(대상이 전체 후보라 NAS 메모리·시간을 아끼려고)."""
+    return (notice.assigned_budget or 0) >= LIMIT or (notice.estimated_price or 0) * 1.1 >= LIMIT
 
 
 def business_amount(notice, text: str) -> tuple[float | None, str]:
@@ -315,19 +318,19 @@ def find_previous(done: dict, notice, now: datetime) -> dict | None:
 
 
 def collect(now: datetime, days: int, out: Path) -> list:
-    """입찰 공고를 받아 대상만 고르고 첨부를 읽는다. 지난 마감·지역 미달은 수집기와 같은 규칙으로 뺀다."""
+    """모든 낙찰방법의 공고를 받아 대상만 고르고 첨부를 읽는다. 지난 마감·지역 미달은 수집기와 같은 규칙으로 뺀다."""
     from nego import qualify
     from nego.attachments import save_attachment_texts
     from nego.config import load_config
     from nego.http_client import DataGoKrClient
     from nego.pipeline import drop_expired, drop_region_unmet, run
-    from nego.scope import CATEGORY_BID
+    from nego.scope import CATEGORIES
     from webapp.qualview import build as qual_build, held_lookup
 
     config = load_config()
-    candidates, stats, _ = run(config, now, {CATEGORY_BID}, period=(now - timedelta(days=days), now))
-    targets = [c for c in candidates if is_target(c)]
-    log.info("입찰 후보 %d건 중 전시관·체험관 %d건", len(candidates), len(targets))
+    candidates, stats, _ = run(config, now, set(CATEGORIES), period=(now - timedelta(days=days), now))
+    targets = [c for c in candidates if is_target(c) and not over_by_api(c.notice)]
+    log.info("후보 %d건 중 나라장터 금액으로 1억 이상이 아닌 본공고 %d건", len(candidates), len(targets))
     if targets:
         with tempfile.TemporaryDirectory(prefix="under100m_text_") as tmp:
             save_attachment_texts(targets, Path(tmp), held_codes=qualify.load_held_codes(config.held_raw),
@@ -398,7 +401,7 @@ def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="1억 미만 입찰(전시관·체험관) 공고 폴더 만들기")
+    parser = argparse.ArgumentParser(description="1억 미만 공고 폴더 만들기")
     parser.add_argument("--out", default=os.environ.get("UNDER100M_OUT", ""), help="결과 폴더")
     parser.add_argument("--state", default=os.environ.get("UNDER100M_STATE", ""), help="처리 기록 파일")
     parser.add_argument("--days", type=int, default=3, help="최근 며칠 게시분을 볼지")

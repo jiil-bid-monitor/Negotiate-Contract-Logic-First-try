@@ -794,6 +794,15 @@ def test_screen_hides_routine_notes():
               "스캔본이라 글자 인식(OCR)으로 읽은 서류: 인감증명서.pdf — 채운 값(특히 숫자·연혁) 원본과 대조"):
         assert _SCREEN_HIDDEN.match(n)
     assert not _SCREEN_HIDDEN.match("⚠ 회사 전화번호를 찾지 못해 서식의 전화번호 칸이 비어 있음")
+    # 11/06 사용자 요청: 11/05에 더한 자료 읽기 안내도 숨김, '⚠' 경고는 그대로
+    for n in ("회사 자료 묶음 밖 PDF도 읽음(jiil-quant-docs 폴더): 정량서류/연혁/연혁.pdf",
+              "특허 건수는 특허증 파일 8개로 셈(특허목록 시트가 비어 있음) — 파일 하나 = 1건",
+              "실적목록은 jiil-quant-docs 폴더의 '정량서류/공사수주현황/공사수주현황.xlsx'에서 읽음(114건) — 묶음 실적의 발주기관·지분율 등은 사업명으로 살림",
+              "기술인력은 jiil-quant-docs 폴더의 '정량서류/기술인력/인력목록.xlsx'에서 읽음(10명) — 회사 자료 묶음의 인력목록보다 먼저",
+              "신용평가등급 BB+(기업신용평가등급, 평가일 2026-06-16)을 '신용평가(27.6.15).pdf'에서 읽음 — 자기평점 경영상태에 씀",
+              "연혁 21줄을 '주식회사 지일 일반현황 및 연혁.hwp'에서 읽어 넣음 — 줄 확인"):
+        assert _SCREEN_HIDDEN.match(n), n
+    assert not _SCREEN_HIDDEN.match("⚠ 신용평가등급 확인서 유효기간(2026-06-15)이 지났음 — 새 확인서로 바꾸세요")
 
 
 def test_g2b_notice_number_with_order():
@@ -1673,9 +1682,10 @@ def test_pdf_only_forms_need_hangul_file(tmp_path):
     from quantdocs import build
 
     f = lambda src: SimpleNamespace(source=src)
-    assert build._hwp_needed([f("제안요청서.pdf")], {}) is True
-    assert build._hwp_needed([f("제안요청서.hwp")], {"제안요청서.hwp": "w/제안요청서.hwpx"}) is False
-    assert build._hwp_needed([f("제안요청서.hwp")], {}) is False  # 한글 파일은 있음(변환 실패는 따로 알림)
-    assert build._hwp_needed([f("공고문.pdf"), f("서식.hwpx")], {}) is False
-    assert build._hwp_needed([], {}) is False
+    assert build._hwp_needed([f("제안요청서.pdf")], [Path("공고문.pdf"), Path("제안요청서.pdf")]) is True
+    assert build._hwp_needed([f("제안요청서.hwp")], [Path("제안요청서.hwp")]) is False  # 한글 파일은 있음(변환 실패는 따로 알림)
+    assert build._hwp_needed([f("공고문.pdf"), f("서식.hwpx")], [Path("공고문.pdf"), Path("서식.hwpx")]) is False
+    assert build._hwp_needed([], [Path("공고문.pdf")]) is False
+    # 11/06 필암서원: 서식 목록은 나라장터 공고문 변환본 PDF에서 읽혔지만 제안요청서는 한글 — '한글 파일 필요' 아님
+    assert build._hwp_needed([f("공고문.pdf")] * 3, [Path("공고문.hwpx"), Path("공고문.pdf"), Path("제안요청서.hwpx")]) is False
     assert "from .pdfforms import" not in open(build.__file__, encoding="utf-8").read()

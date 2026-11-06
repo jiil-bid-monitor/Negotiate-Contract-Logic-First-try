@@ -198,9 +198,7 @@ def _run_analyze(job: dict) -> None:
             s["notes"].insert(0, stale)
         if not s["forms"]:
             s["notes"].append("⚠ 첨부 어디에서도 서식을 찾지 못함 — 서식이 PDF 그림(스캔)이거나 '[서식 N]' 같은 표시가 없을 수 있음, 공고번호를 알려 주면 확인")
-        if dropped:
-            s["notes"].append("첨부 중 공고문·제안요청서·서식만 읽음 — 안 읽은 파일: " + ", ".join(p.name for p in dropped[:8])
-                              + (" 외" if len(dropped) > 8 else ""))
+        # '첨부 중 공고문·제안요청서·서식만 읽음 — 안 읽은 파일' 안내는 화면에서 뺌(11/06 사용자 요청 — 일상 안내)
         if vault_err:
             s["notes"].insert(0, f"회사 자료 없음 — 지일 보유 여부·정량평가서 만들기는 안 됨 ({vault_err})")
         job["summary"] = s

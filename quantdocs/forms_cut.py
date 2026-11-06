@@ -345,11 +345,112 @@ def _drop_blank_tail(body: str) -> str:
     return body
 
 
-def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
+_PB1 = re.compile(r'^(<(?:[\w.-]+:)?p\b[^>]*?\bpageBreak=")1(")')
+_LINESEGS = re.compile(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", re.S)
+_FIXED_OBJ = re.compile(r'<(?:[\w.-]+:)?pos\b[^>]*\btreatAsChar="0"[^>]*\bvertRelTo="(?:PAPER|PAGE)"')
+SPLIT_MIN_HEIGHT = 11339  # 4cm — 이보다 낮은 표는 쪽에서 나누지 않음(두세 줄짜리 표가 갈라지면 읽기 나쁨)
+# 표지처럼 한 칸짜리 큰 표(15cm 이상, 열 하나) — 두 쪽으로 갈라지면 보기 나빠 그 서식은 통째로 새 쪽(필암 서식 11 평가자료 표지·서식 20 제안서 표지)
+_COVER = re.compile(r'<(?:[\w.-]+:)?tbl\b[^>]*\bcolCnt="1"[^>]*>\s*<(?:[\w.-]+:)?sz\b[^>]*\bheight="(\d+)"')
+COVER_MIN_HEIGHT = 42520
+
+
+def _para_align(header: str, para_id: str) -> str:
+    m = re.search(rf'<(?:[\w.-]+:)?paraPr\b[^>]*\bid="{para_id}".*?</(?:[\w.-]+:)?paraPr>', header, re.S)
+    a = re.search(r'<(?:[\w.-]+:)?align\b[^>]*\bhorizontal="(\w+)"', m.group(0)) if m else None
+    return {"CENTER": "CENTER", "RIGHT": "RIGHT"}.get(a.group(1) if a else "", "LEFT")
+
+
+def _splittable(seg: str, header: str) -> str:
+    """문단 바로 안의 '글자처럼 취급' 표(4cm 이상)를 쪽 경계에서 나뉘는 표로 — 한글이 저장한 '나눔' 표와 같은 모양
+    (treatAsChar·affectLSpacing 0, pageBreak TABLE). 가로 위치는 문단 정렬대로(가운데 문단의 표는 가운데)."""
+    pid = re.match(r'<[^>]*\bparaPrIDRef="(\d+)"', seg)
+    align = _para_align(header, pid.group(1)) if pid else "LEFT"
+    out, pos = [], 0
+    for m in re.finditer(r"<(?:[\w.-]+:)?tbl\b[^>]*>", seg):
+        if m.start() < pos:
+            continue
+        # 표 안 표는 건드리지 않음 — 이 표의 끝까지 건너뜀
+        depth, end = 0, None
+        for t in re.finditer(r"<(/?)(?:[\w.-]+:)?tbl\b[^>]*?(/?)>", seg[m.start():]):
+            if t.group(2):
+                continue
+            depth += -1 if t.group(1) else 1
+            if depth == 0:
+                end = m.start() + t.end()
+                break
+        if end is None:
+            break
+        tbl = seg[m.start():end]
+        head = m.group(0)
+        sz = re.search(r'<(?:[\w.-]+:)?sz\b[^>]*\bheight="(\d+)"', tbl)
+        if ('textWrap="TOP_AND_BOTTOM"' in head and re.search(r'<(?:[\w.-]+:)?pos\b[^>]*\btreatAsChar="1"', tbl[:2000])
+                and sz and int(sz.group(1)) >= SPLIT_MIN_HEIGHT):
+            new_head = re.sub(r'\bpageBreak="\w+"', 'pageBreak="TABLE"', head) if "pageBreak=" in head else head[:-1] + ' pageBreak="TABLE">'
+            body = tbl[len(head):]
+            pos_m = re.search(r"<(?:[\w.-]+:)?pos\b[^>]*>", body)
+            if pos_m:
+                p2 = pos_m.group(0)
+                for k, v in (("treatAsChar", "0"), ("affectLSpacing", "0"), ("horzRelTo", "COLUMN"), ("horzAlign", align), ("horzOffset", "0")):
+                    p2 = re.sub(rf'\b{k}="[^"]*"', f'{k}="{v}"', p2)
+                body = body[:pos_m.start()] + p2 + body[pos_m.end():]
+            tbl = new_head + body
+        out.append(seg[pos:m.start()] + tbl)
+        pos = end
+    out.append(seg[pos:])
+    return "".join(out)
+
+
+def compact(xml: str, header: str) -> str:
+    """통합서식 빈 쪽 줄이기(11/06 사용자 요청: 서식이 한 쪽에 온전히 있을 필요 없음 — 공백을 최대한 줄이되 읽기 좋게).
+    필암서원: 서식 1 끝 한 줄만 다음 쪽으로 넘어가 거의 빈 쪽, 서식 2는 제목만 한 쪽·표는 다음 쪽(쪽에서 안 나뉘는 표), 빈 문단 여러 개로
+    '○○ 귀하'를 쪽 끝에 붙인 서식들. 구역 XML 하나를 받아:
+    ① 서식마다 새 쪽 → 이어서(앞 서식과 빈 줄 하나 띄움) ② 빈 문단이 잇달아 있으면 하나만 ③ 4cm 넘는 '글자처럼 취급' 표는 쪽에서 나뉘게.
+    종이·쪽 기준 위치에 고정된 그림(봉투 예시 날인 원·조직도 선 등)이 있는 서식과 표지(한 칸짜리 큰 표)는 그대로 새 쪽에서 시작하고 손대지 않음
+    (그다음 서식은 이어서). 줄 배치 정보는 지워 한글이 다시 계산하게."""
+    paras = _top_paragraphs(xml)
+    if not paras:
+        return xml
+    # 서식 경계 = '새 쪽' 문단(통합서식은 서식마다 새 쪽으로 이어 붙임)
+    groups, cur = [], []
+    for i, pa in enumerate(paras):
+        if cur and _PB1.match(xml[pa.start:pa.end]):
+            groups.append(cur)
+            cur = []
+        cur.append(i)
+    groups.append(cur)
+    pieces = []
+    for gi, g in enumerate(groups):
+        segs = [xml[paras[i].start:paras[i].end] for i in g]
+        fixed = any(_FIXED_OBJ.search(s) for s in segs) or any(
+            int(m.group(1)) >= COVER_MIN_HEIGHT for s in segs for m in _COVER.finditer(s))
+        if not fixed:
+            kept = []
+            for k, s in enumerate(segs):
+                if k and _blank_para(s) and _blank_para(segs[k - 1]) and "secPr" not in s:
+                    continue
+                kept.append(_splittable(s, header))
+            segs = kept
+            segs = [_LINESEGS.sub("", s) for s in segs]
+        if gi and not fixed and _PB1.match(segs[0]):
+            first = _PB1.sub(r"\g<1>0\2", segs[0], count=1)
+            pid = re.match(r'<[^>]*\bparaPrIDRef="(\d+)"', first)
+            cid = re.search(r'\bcharPrIDRef="(\d+)"', first)
+            if pid and cid and not (pieces and _blank_para(pieces[-1])):
+                ns = re.match(r"<([\w.-]+:)?p\b", first).group(1) or ""
+                gap = (f'<{ns}p id="2147483648" paraPrIDRef="{pid.group(1)}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                       f'<{ns}run charPrIDRef="{cid.group(1)}"/></{ns}p>')
+                segs = [gap, first] + segs[1:]
+            else:
+                segs = [first] + segs[1:]
+        pieces.extend(segs)
+    return xml[:paras[0].start] + "".join(pieces) + xml[paras[-1].end:]
+
+
+def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path, compact_pages: bool = True) -> Path:
     """잘라 낸(채웠거나 양식 그대로인) 서식 파일들을 서식 순서대로 다시 한 HWPX로 — 담당자가 한글 파일 하나에서 직접 기입(11/03 사용자 요청).
 
     parts: (cut()이 돌려준 서식, 그 서식의 최종 파일). 원본(path)의 머리·쪽 설정·글꼴을 그대로 쓰고, 서식 본문만 각 파일에서 가져온다.
-    서식마다 새 쪽에서 시작. 서식이 없는 구역은 뺌."""
+    서식마다 새 쪽에서 시작 — compact_pages면 이어서(빈 쪽 줄이기, `compact`). 서식이 없는 구역은 뺌."""
     path, out = Path(path), Path(out)
     zin = zipfile.ZipFile(path)
     entries = zin.namelist()
@@ -405,6 +506,8 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
         starts_at_first = bodies[sec][0][0].paras[0].start == first.start
         prefix = "" if starts_at_first else _sec_pr_para(xml, first)
         new_sections[sec] = xml[:first.start] + prefix + "".join(chunks) + xml[all_paras[-1].end:]
+        if compact_pages:
+            new_sections[sec] = compact(new_sections[sec], header)
     out.parent.mkdir(parents=True, exist_ok=True)
     replace = {"Preview/PrvText.txt": " ".join(preview)[:1000].encode("utf-8")}
     if header and any(k["extra"] for k in kinds.values()):

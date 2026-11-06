@@ -1706,3 +1706,44 @@ def test_pdf_only_forms_need_hangul_file(tmp_path):
     # 11/06 필암서원: 서식 목록은 나라장터 공고문 변환본 PDF에서 읽혔지만 제안요청서는 한글 — '한글 파일 필요' 아님
     assert build._hwp_needed([f("공고문.pdf")] * 3, [Path("공고문.hwpx"), Path("공고문.pdf"), Path("제안요청서.hwpx")]) is False
     assert "from .pdfforms import" not in open(build.__file__, encoding="utf-8").read()
+
+
+def test_compact_merged_forms_flow_without_blank_pages():
+    """11/06 필암서원 통합서식: 서식마다 새 쪽 + 빈 문단 여러 개 + 쪽에서 안 나뉘는 큰 표 때문에 빈 쪽이 여럿 → 서식을 이어 붙이고(빈 줄 하나),
+    잇단 빈 문단은 하나만, 4cm 넘는 '글자처럼 취급' 표는 쪽에서 나뉘게. 종이 기준 그림이 있는 서식은 그대로 새 쪽."""
+    from quantdocs.forms_cut import compact
+
+    header = ('<hh:head><hh:paraPr id="0"><hh:align horizontal="LEFT"/></hh:paraPr>'
+              '<hh:paraPr id="1"><hh:align horizontal="CENTER"/></hh:paraPr></hh:head>')
+
+    def p(t="", brk="0", inner="", para="0"):
+        run = f'<hp:run charPrIDRef="3"><hp:t>{t}</hp:t>{inner}</hp:run>' if t or inner else '<hp:run charPrIDRef="3"/>'
+        return f'<hp:p id="1" paraPrIDRef="{para}" styleIDRef="0" pageBreak="{brk}">{run}<hp:linesegarray><hp:lineseg vertpos="0"/></hp:linesegarray></hp:p>'
+
+    def tbl(h, inner=""):
+        return (f'<hp:tbl id="9" textWrap="TOP_AND_BOTTOM" pageBreak="NONE" repeatHeader="1"><hp:sz width="48000" height="{h}"/>'
+                f'<hp:pos treatAsChar="1" affectLSpacing="1" vertRelTo="PARA" horzRelTo="PARA" horzAlign="LEFT" horzOffset="0"/>{inner}</hp:tbl>')
+
+    fixed = '<hp:ellipse textWrap="IN_FRONT_OF_TEXT"><hp:pos treatAsChar="0" vertRelTo="PAPER" horzRelTo="PAPER"/></hp:ellipse>'
+    xml = ("<hs:sec>" + p("〈서식 1〉") + p() + p() + p() + p("귀하")
+           + p("〈서식 2〉", "1") + p("", inner=tbl(70000, inner=tbl(30000)), para="1") + p("", inner=tbl(5000))
+           + p("〈서식 3〉", "1") + p() + p() + p("", inner=fixed) + p("귀하")
+           + p("〈서식 4〉", "1") + p("끝") + "</hs:sec>")
+    out = compact(xml, header)
+    paras = re.findall(r"<hp:p [^>]*>", out)
+    starts = [m.group(1) for m in re.finditer(r'pageBreak="(\d)">(?:<hp:run charPrIDRef="3"><hp:t>(〈서식 \d〉))', out)]
+    assert 'pageBreak="1"><hp:run charPrIDRef="3"><hp:t>〈서식 3〉' in out  # 종이 기준 그림 → 새 쪽 그대로
+    for n in ("2", "4"):
+        assert f'pageBreak="0"><hp:run charPrIDRef="3"><hp:t>〈서식 {n}〉' in out
+        assert re.search(rf'<hp:run charPrIDRef="3"/></hp:p><hp:p [^>]*pageBreak="0"><hp:run charPrIDRef="3"><hp:t>〈서식 {n}〉', out)  # 빈 줄 하나 띄움
+    seg1 = out[:out.find("〈서식 2〉")]
+    assert seg1.count("<hp:p ") == 5  # 〈서식 1〉 + 빈 문단 하나 + 귀하 + 띄움 줄 + (〈서식 2〉 문단 머리)
+    assert seg1.count('<hp:run charPrIDRef="3"/>') == 2
+    # 큰 표(7cm)만 나뉘는 표로, 가운데 문단이라 가운데 정렬 · 안쪽 표·작은 표는 그대로
+    big = re.search(r'<hp:tbl id="9"[^>]*pageBreak="TABLE"[^>]*><hp:sz width="48000" height="70000"/><hp:pos ([^>]*)/>', out)
+    assert big and 'treatAsChar="0"' in big.group(1) and 'horzAlign="CENTER"' in big.group(1) and 'horzRelTo="COLUMN"' in big.group(1)
+    assert out.count('pageBreak="TABLE"') == 1 and out.count('treatAsChar="1"') == 2
+    seg3 = out[out.find("〈서식 3〉"):out.find("〈서식 4〉")]
+    assert seg3.count("<hp:p ") == 6 and "linesegarray" in seg3  # 그림 서식은 손대지 않음(빈 문단 둘 그대로) + 띄움 줄 + 〈서식 4〉 머리
+    assert "linesegarray" not in out[:out.find("〈서식 3〉")]
+    assert len(paras) == out.count("</hp:p>")

@@ -10,7 +10,7 @@ from quantdocs.templates import FILE_NAME, build
 def test_build_makes_four_sheets_with_headers(tmp_path: Path):
     out = build(tmp_path)
     wb = load_workbook(out)
-    assert wb.sheetnames == ["안내", "회사정보", "실적목록", "인력목록", "연혁", "서류상태"]
+    assert wb.sheetnames == ["안내", "회사정보", "실적목록", "인력목록", "특허목록", "연혁", "서류상태"]
     heads = [c.value for c in wb["실적목록"][1]]
     assert heads[:3] == ["번호", "업무", "사업명"] and "준공일" in heads and "부가세" in heads
     body = wb["실적목록"].iter_rows(min_row=2, values_only=True)

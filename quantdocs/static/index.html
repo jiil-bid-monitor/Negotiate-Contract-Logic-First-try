@@ -27,13 +27,34 @@
   .muted { color:var(--mute); font-size:13px } .err { color:var(--bad) } .ok { color:var(--good) } .warn { color:var(--warn) }
   table { width:100%; border-collapse:collapse; font-size:14px } th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top }
   th { color:var(--mute); font-weight:600; font-size:12.5px; white-space:nowrap }
-  .chip { display:inline-block; padding:1px 8px; border-radius:99px; background:var(--chip); font-size:12px; margin:1px 2px 1px 0; white-space:nowrap }
+  .chip { display:inline-block; padding:1px 8px; border-radius:99px; background:var(--chip); font-size:12px; margin:1px 2px 1px 0; max-width:100%; box-sizing:border-box; overflow-wrap:anywhere }  /* 긴 파일 이름은 칸 안에서 줄바꿈 */
   .q { color:var(--accent); font-weight:700 } .tick { color:var(--good); font-weight:700 } .cross { color:var(--bad); font-weight:700 }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px 18px }
   .grid div span { display:block; color:var(--mute); font-size:12px }
+  .grid > div { min-width:0; overflow-wrap:anywhere } .grid > .wide { grid-column:1 / -1 }
+  /* 서식 진행 체크(11/04 사용자 요청) — 담당자가 서식을 끝낼 때마다 체크, 이 브라우저에 공고번호별로 남음 */
+  .fprog { font-size:13px; font-weight:600; color:var(--mute); margin-left:8px; white-space:nowrap }
+  .fprog .bar { display:inline-block; width:120px; height:8px; border-radius:99px; background:var(--line); vertical-align:1px; margin-left:6px; overflow:hidden }
+  .fprog .bar i { display:block; height:100%; background:var(--accent) }
+  #forms td.chk, #forms th.chk { text-align:center; width:48px } #forms input.fchk { width:18px; height:18px; cursor:pointer; accent-color:var(--accent) }
+  .chip.hwpneed { background:transparent; color:var(--bad); border:1px solid var(--bad); font-size:12px; font-weight:600; vertical-align:middle }
+  #forms tr.fdone td:not(.chk) { color:var(--mute); text-decoration:line-through }
   ul { margin:6px 0; padding-left:20px } .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:s 1s linear infinite; vertical-align:-2px }
   @keyframes s { to { transform:rotate(360deg) } } .hide { display:none }
+  details.cands > summary { cursor:pointer; color:var(--accent, #1b6e43); font-weight:600; margin:6px 0 }
+  details.cands[open] > summary { margin-bottom:8px }
+  details.cands .cl, details.cands[open] .op { display:none } details.cands[open] .cl { display:inline }
+  /* 공고 정보 밖의 카드는 열기/닫기(11/05 사용자 요청 — 필요할 때만 열람) */
+  details.fold > summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:10px }
+  details.fold > summary::-webkit-details-marker { display:none }
+  details.fold > summary h2 { margin:0; flex:1 }
+  details.fold > summary .tog { color:var(--accent, #1b6e43); font-weight:600; font-size:13px; white-space:nowrap }
+  details.fold > summary .tog::after { content:"열기 ▾" } details.fold[open] > summary .tog::after { content:"닫기 ▴" }
+  details.fold[open] > summary { margin-bottom:12px }
   .scroll { overflow-x:auto } .nw { white-space:nowrap }
+  button.ghost { background:transparent; color:var(--accent); border:1px solid var(--line); padding:5px 12px; font-size:13px }
+  #staff td.chk, #staff th.chk { text-align:center; width:48px } #staff input { width:18px; height:18px; accent-color:var(--accent) }
+  #staff tr.off td { color:var(--mute) }
 </style>
 </head>
 <body>
@@ -52,56 +73,58 @@
   <section id="result" class="hide">
     <h2 style="font-size:18px;margin:4px 2px 4px"><span id="title"></span> <span id="kind2" class="chip" style="font-size:13px;vertical-align:2px"></span></h2>
     <p id="sub" class="muted" style="margin:0 2px 12px"></p>
-    <div id="notes"></div>
-    <div class="card">
-      <h2>2. 필요 서식</h2>
-      <p class="muted"><span class="q">●</span> 정량적 평가서 묶음 · <b>자동</b> = 회사 정보·연혁·실적을 채워 드림 · <span class="warn">직접 기입</span> = 담당 PM·투입 인력 등 공고마다 정하는 값 — 제안요청서 양식 그대로 넣어 드림(내려받은 뒤 직접 작성) · 나머지는 잘라 두기만 함</p>
-      <div class="scroll"><table id="forms"></table></div>
+    <div class="card">  <!-- 11/05 사용자 요청: 공고 정보를 맨 위로, 제출 안내 카드는 뺌 -->
+      <h2>공고 정보</h2>
+      <div class="grid" id="info"></div>
     </div>
 
-    <div class="card">
-      <h2>관련 자격 (첨부 공고문 기준)</h2>
+    <div id="notes"></div>
+    <details class="card fold">
+      <summary><h2>2. 필요 서식 <span id="fprog" class="fprog"></span> <span id="hwpneed" class="chip hwpneed" hidden>한글 파일 필요</span></h2><span class="tog"></span></summary>
+      <p id="hwpneedmsg" class="warn" hidden>서식이 PDF에만 있는 공고입니다 — 통합서식(한글)을 만들지 않습니다. 나라장터·발주기관에서 한글(HWP/HWPX) 서식을 받아 직접 작성하세요.</p>
+      <p class="muted"><b>자동</b> = 회사 정보·연혁·실적을 채워 드림 · <span class="warn">직접 기입</span> = 양식만 넣어 드림(가격·인력·확약 등 공고마다 정하는 값) — 둘 다 통합서식.hwpx 안에 있음</p>
+      <div class="scroll"><table id="forms"></table></div>
+    </details>
+
+    <details class="card fold">
+      <summary><h2>관련 자격 (첨부 공고문 기준)</h2><span class="tog"></span></summary>
       <div class="scroll"><table id="quals"></table></div>
       <p id="lic" class="muted"></p>
-    </div>
+    </details>
 
-    <div class="card">
-      <h2>통합본에 넣을 회사 서류 <span class="muted" style="font-size:13px;font-weight:400">— 파일 이름 키워드로 골라 원본 그대로 이어 붙임</span></h2>
+    <details class="card fold">
+      <summary><h2>통합본에 넣을 회사 서류 <span class="muted" style="font-size:13px;font-weight:400">— 파일 이름 키워드로 골라 원본 그대로 이어 붙임</span></h2><span class="tog"></span></summary>
       <div class="scroll"><table id="bundle"></table></div>
       <ul id="bmiss"></ul>
-    </div>
+    </details>
 
-    <div class="card" id="kindcard">
-      <h2>제출 안내 <span id="kind" class="chip" style="font-size:13px"></span></h2>
-      <div class="grid"><div><span>언제 내나</span><span id="kwhen" style="color:var(--ink);font-size:14px"></span></div>
-        <div><span>서식이 있는 곳</span><span id="ksource" style="color:var(--ink);font-size:14px"></span></div></div>
-      <h3>기본 준비 서류 <span class="muted" style="font-weight:400">— <b>자동</b> = 회사 자료로 채움 · 공고문·세부기준이 우선</span></h3>
-      <div id="kdocs"></div>
-    </div>
-
-    <div class="card">
-      <h2>실적 요건 · 후보</h2>
+    <details class="card fold">
+      <summary><h2>실적 요건 · 후보</h2><span class="tog"></span></summary>
       <ul id="tracks"></ul>
-      <div class="scroll"><table id="cands"></table></div>
-      <p class="muted">후보는 기간·금액(지분 반영)만으로 고른 것 — 제출할 실적은 담당자가 확정</p>
-    </div>
+      <details id="candBox" class="cands">
+        <summary>실적 후보 <span id="candN"></span> <span class="op">펼치기</span><span class="cl">접기</span></summary>
+        <div class="scroll"><table id="cands"></table></div>
+        <p class="muted">후보는 기간·금액(지분 반영)만으로 고른 것 — 제출할 실적은 담당자가 확정</p>
+      </details>
+    </details>
 
-    <div class="card">
-      <h2>공고 정보 · 제출서류</h2>
-      <div class="grid" id="info"></div>
-      <h3>제출서류</h3>
-      <ul id="submit"></ul>
-    </div>
+    <details class="card fold" id="staffBox">  <!-- 11/05 사용자 요청 (나): 자기평점 기술인력 점수에 넣을 사람 고르기 -->
+      <summary><h2>기술인력 (자기평점) <span id="staffN" class="fprog"></span></h2><span class="tog"></span></summary>
+      <p id="staffRule" class="muted"></p>
+      <p class="muted">체크한 사람만 자기평점 기술인력 점수에 넣습니다(처음엔 공고 조건에 맞는 사람 모두 체크). 회색 줄은 조건(퇴사·재직 기간·등급)에 안 맞아 빠지는 사람.</p>
+      <div class="row" style="margin-bottom:6px"><button type="button" id="staffAll" class="ghost">모두 체크</button><button type="button" id="staffNone" class="ghost">모두 해제</button></div>
+      <div class="scroll"><table id="staff"></table></div>
+    </details>
 
     <div class="card">
       <h2>3. 정량평가서 만들기</h2>
       <div class="row"><button id="build">만들기</button><span id="bstatus" class="muted"></span></div>
-      <p class="muted">이번 단계는 회사 연혁·실적·보유 자격(직접생산 포함)만 채웁니다. 인력·경영상태·신인도·가점 서류는 준비표의 '준비 필요'에.</p>
+      <p class="muted">회사 정보·연혁·실적·보유 자격을 채우고, 자기평가표는 기술인력(위에서 고른 사람)·경영상태·신인도만 점수를 넣습니다 — 실적 등 나머지 점수는 직접.</p>
       <div id="dl" class="hide" style="margin-top:12px">
         <h2>4. 내려받기</h2>
         <a id="dlink" class="btn" href="#">정량평가서 묶음 내려받기 (.zip)</a>
         <p class="muted">묶음 안: <b>통합서식.hwpx</b>(서식 전체를 공고 순서대로 이은 한글 파일 — 담당 PM·투입 인력 등은 여기서 직접 기입) ·
-          <b>통합본.pdf</b>(회사 서류 스캔본) · 준비표 · 서식별 파일.</p>
+          <b>통합본.pdf</b>(회사 서류 원본 PDF를 그대로 이은 것) — 제출 파일은 이 둘 · 그 밖에 준비표 · 연혁·실적 증빙 · 공고문.</p>
         <p class="muted">회사 서류가 들어 있습니다 — 사내에서만 보관하세요. 서버의 작업 파일은 2시간 뒤 지워집니다.</p>
       </div>
     </div>
@@ -111,7 +134,7 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const won = n => n == null || n === "" ? "" : Number(n).toLocaleString("ko-KR") + "원";
-let JOB = null, timer = null;
+let JOB = null, timer = null, PHASE = "#status";  // PHASE: 지금 진행 상태를 보일 자리(불러오기 #status · 만들기 #bstatus)
 if (location.search.includes("t=")) history.replaceState(null, "", location.pathname);
 // 프로젝트 1 웹앱의 '정량평가서' 탭(/quant/ — iframe)으로 열리면 API는 /api/quant/…, 머리 띠는 숨기고 부모 화면 테마를 따름(11/03 합침)
 const EMBED = location.pathname.startsWith("/quant");
@@ -143,12 +166,14 @@ $("#go").onclick = async () => {
   const no = $("#no").value.trim();
   if (!no) return;
   $("#go").disabled = true; $("#result").classList.add("hide"); $("#dl").classList.add("hide");
+  PHASE = "#status"; $("#bstatus").innerHTML = "";
   try { JOB = (await api("/api/analyze", {no})).id; poll(); }
   catch (e) { $("#status").innerHTML = `<span class="err">${esc(e.message)}</span>`; $("#go").disabled = false; }
 };
 $("#build").onclick = async () => {
   $("#build").disabled = true; $("#dl").classList.add("hide");
-  try { await api("/api/build/" + JOB, {}); poll(); }
+  PHASE = "#bstatus";
+  try { await api("/api/build/" + JOB, staffPick()); poll(); }
   catch (e) { $("#bstatus").innerHTML = `<span class="err">${esc(e.message)}</span>`; $("#build").disabled = false; }
 };
 
@@ -157,7 +182,8 @@ function poll() {
   timer = setTimeout(async () => {
     let j; try { j = await api("/api/job/" + JOB); } catch (e) { $("#status").textContent = e.message; return; }
     const busy = j.state === "running" || j.state === "building";
-    const where = j.state === "building" ? "#bstatus" : "#status";
+    // 상태 글은 누른 단계(불러오기/만들기) 자리에 — 만들기가 끝나면(built) 만들기 옆 돌던 표시를 '완료'로 바꿈(11/04)
+    const where = PHASE;
     if (busy) { $(where).innerHTML = `<span class="spin"></span> ${esc(j.step || "진행 중")}`; return poll(); }
     $("#go").disabled = false; $("#build").disabled = false;
     if (j.state === "error") { $(where).innerHTML = `<span class="err">${esc(j.error)}</span>`; if (where === "#status") return; }
@@ -168,32 +194,57 @@ function poll() {
   }, 900);
 }
 
+// 서식 완료 체크 — 브라우저 저장소에 공고번호별로(다른 PC·브라우저와는 공유 안 됨). 저장소를 못 쓰면 이번 화면에서만.
+const DONE_MEM = {};
+function loadDone(no) {
+  try { return new Set(JSON.parse(localStorage.getItem("quant-done:" + no) || "[]")); }
+  catch (e) { return new Set(DONE_MEM[no] || []); }
+}
+function saveDone(no, set) {
+  DONE_MEM[no] = [...set];
+  try { localStorage.setItem("quant-done:" + no, JSON.stringify([...set])); } catch (e) {}
+}
+function showProgress(total, set) {
+  const n = Math.min(set.size, total), pct = total ? Math.round(n * 100 / total) : 0;
+  $("#fprog").innerHTML = total ? `완료 ${n} / ${total} (${pct}%)<span class="bar"><i style="width:${pct}%"></i></span>` : "";
+}
+
 function render(j) {
   const n = j.notice, s = j.summary;
   $("#title").textContent = n.title;
-  $("#kind").textContent = s.kind.name; $("#kind2").textContent = s.kind.name; $("#kwhen").textContent = s.kind.when; $("#ksource").textContent = s.kind.source;
-  $("#kdocs").innerHTML = s.kind.docs.map(d => `<span class="chip">${esc(d.name)}${d.auto ? " · <b>자동</b>" : ""}</span>`).join("");
+  $("#kind2").textContent = s.kind.name;
   $("#sub").textContent = [`${n.no}${n.ord ? "-" + n.ord : ""}`, n.institution, n.award].filter(Boolean).join(" · ");
   const info = [["공고번호", `${n.no}${n.ord ? "-" + n.ord : ""}`], ["발주기관", n.institution], ["업무", n.work],
     ["낙찰방법", n.award], ["계약방법", n.contract], ["게시", n.posted],
     ["실적 기준일", n.ref_date ? `${n.ref_date} (${n.ref_from})` : ""]];
   s.deadlines.forEach(([k, w]) => info.push([k, w]));
   $("#info").innerHTML = info.filter(x => x[1]).map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join("") +
-    `<div><span>받은 첨부</span>${n.files.map(f => `<span class="chip">${esc(f)}</span>`).join("")}</div>`;
+    `<div class="wide"><span>받은 첨부</span>${n.files.map(f => `<span class="chip">${esc(f)}</span>`).join("")}</div>`;
   $("#notes").innerHTML = (s.notes.length || n.skipped.length) ?
     `<div class="card"><ul>${s.notes.concat(n.skipped).map(x => `<li class="warn">${esc(x)}</li>`).join("")}</ul></div>` : "";
-  $("#forms").innerHTML = "<tr><th>서식</th><th>이름</th><th></th><th>서류 종류</th><th>자동</th></tr>" +
-    (s.forms.length ? s.forms.map(f => `<tr><td>서식${f.no}</td><td>${esc(f.name)}</td><td>${f.quant ? '<span class="q">●</span>' : ""}</td>
-      <td class="muted">${esc(f.kind)}</td><td>${f.auto ? "<b>자동</b>" : f.manual ? '<span class="warn">직접 기입</span>' : ""}</td></tr>`).join("")
+  const done = loadDone(n.no);
+  $("#hwpneed").hidden = $("#hwpneedmsg").hidden = !s.hwp_needed;
+  $("#forms").innerHTML = "<tr><th>서식</th><th>이름</th><th>서류 종류</th><th>작성</th><th class=\"chk\">완료</th></tr>" +
+    (s.forms.length ? s.forms.map(f => `<tr class="${done.has(String(f.no)) ? "fdone" : ""}"><td>서식${f.no}</td><td>${esc(f.name)}</td>
+      <td class="muted">${esc(f.kind)}</td><td>${s.hwp_needed ? '<span class="warn">한글 파일 필요</span>' : f.auto ? "<b>자동</b>" : '<span class="warn">직접 기입</span>'}</td>
+      <td class="chk"><input type="checkbox" class="fchk" data-no="${esc(String(f.no))}" ${done.has(String(f.no)) ? "checked" : ""} title="이 서식을 다 작성했으면 체크"></td></tr>`).join("")
       : `<tr><td colspan="5" class="muted">공고 자료에서 서식 목록을 찾지 못했습니다</td></tr>`);
-  $("#submit").innerHTML = s.submit.map(x => `<li>${esc(x.text)}${x.kind ? ` <span class="chip">${esc(x.kind)}</span>` : ""}</li>`).join("")
-    || '<li class="muted">못 찾음 — 공고문 확인</li>';
+  $("#forms").onchange = e => {
+    const c = e.target.closest("input.fchk");
+    if (!c) return;
+    const d = loadDone(n.no);
+    c.checked ? d.add(c.dataset.no) : d.delete(c.dataset.no);
+    saveDone(n.no, d);
+    c.closest("tr").classList.toggle("fdone", c.checked);
+    showProgress(s.forms.length, d);
+  };
+  showProgress(s.forms.length, done);
   $("#quals").innerHTML = "<tr><th>조건</th><th>자격</th><th>지일</th><th>첨부할 서류</th></tr>" +
     (s.quals.length ? s.quals.map(q => q.items.map((it, i) => `<tr><td>${i ? "" : esc(q.kind)}</td>
-      <td>${esc(it.name)}${it.code ? ` <span class="muted">(${esc(it.code)})</span>` : ""}</td>
+      <td>${esc(it.name)}${it.code ? ` <span class="muted">(${esc(it.code)})</span>` : ""}${it.need ? ` <span class="chip">${esc(it.need)}</span>` : ""}</td>
       <td class="nw">${!j.vault_ok ? '<span class="muted">회사 자료 없음</span>' : it.held ? '<span class="tick">✓ 보유</span>' : '<span class="cross">✗ 미보유</span>'}</td>
       <td class="muted">${esc(it.docs.join(", "))}</td></tr>`).join("")).join("")
-      : `<tr><td colspan="4" class="muted">첨부 공고문에서 코드로 적힌 자격을 찾지 못했습니다 — 원문 확인</td></tr>`);
+      : `<tr><td colspan="4" class="muted">첨부 공고문에서 자격 요건을 찾지 못했습니다 — 원문 확인</td></tr>`);
   const b = s.bundle || [];
   $("#bundle").innerHTML = !j.vault_ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
     : b.length ? "<tr><th>순서</th><th>구분</th><th>파일</th><th>확인</th></tr>" +
@@ -206,7 +257,43 @@ function render(j) {
   $("#cands").innerHTML = s.candidates.length ? "<tr><th>사업명</th><th>발주기관</th><th>준공</th><th>인정 금액</th><th>확인</th></tr>" +
     s.candidates.map(c => `<tr><td>${esc(c.name)}</td><td>${esc(c.org)}</td><td>${esc(c.done)}</td><td>${won(c.amount)}</td>
       <td class="warn">${esc(c.check)}</td></tr>`).join("") : "";
+  // 실적 후보는 길어서 접어 둠 — '펼치기'를 눌러야 보임(11/04 사용자 요청)
+  $("#candBox").open = false;
+  $("#candBox").classList.toggle("hide", !s.candidates.length);
+  $("#candN").textContent = s.candidates.length ? `${s.candidates.length}건` : "";
+  // 기술인력 칸은 제안요청서에 기술인력 배점 기준이 있는 공고에서만(11/05 사용자 요청) — 없으면 숨기고 고르기도 안 보냄
+  $("#staffBox").classList.toggle("hide", !s.staff_on);
+  renderStaff(s.staff_on ? (s.staff || []) : [], s.staff_rule || "", j.vault_ok);
   $("#result").classList.remove("hide");
+}
+
+// 기술인력 고르기 — 체크한 이름만 만들기에 보냄(목록이 비면 보내지 않아 인력목록 전체)
+let STAFF = [];
+function staffPick() {
+  if (!STAFF.length) return {};
+  return {staff: [...document.querySelectorAll("#staff input.sp:checked")].map(c => c.dataset.name)};
+}
+function staffCount() {
+  const on = [...document.querySelectorAll("#staff input.sp:checked")];
+  const by = {};
+  on.forEach(c => { const g = c.dataset.grade || "등급 없음"; by[g] = (by[g] || 0) + 1; });
+  $("#staffN").textContent = STAFF.length ? `${on.length}명 선택` + (on.length ? " (" + Object.entries(by).map(([g, n]) => `${g} ${n}`).join(" · ") + ")" : "") : "";
+}
+const GRADE_ORDER = ["기술사", "특급", "고급", "중급", "초급"];  // 등급 높은 순, 같은 등급은 입사일 빠른 순(11/05 사용자 요청)
+function renderStaff(list, rule, ok) {
+  const rank = g => { const i = GRADE_ORDER.indexOf(g); return i < 0 ? GRADE_ORDER.length : i; };
+  list = [...list].sort((a, b) => rank(a.grade) - rank(b.grade) || String(a.joined).localeCompare(String(b.joined)));
+  STAFF = list;
+  $("#staffRule").textContent = rule || (list.length ? "제안요청서에서 기술인력 배점 기준을 찾지 못함 — 체크한 사람은 그대로 넘김" : "");
+  $("#staff").innerHTML = !ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
+    : !list.length ? '<tr><td class="muted">인력목록이 비어 있습니다 — jiil-quant-docs 폴더에 기술인력 엑셀(이름·입사일·등급)을 두거나 회사자료 인력목록에 적으세요</td></tr>'
+    : '<tr><th class="chk">넣기</th><th>이름</th><th>등급</th><th>입사일</th><th>비고</th></tr>' + list.map(p =>
+      `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="sp" data-name="${esc(p.name)}" data-grade="${esc(p.grade)}" ${p.ok ? "checked" : ""}></td>
+       <td>${esc(p.name)}</td><td>${esc(p.grade)}</td><td>${esc(p.joined)}</td><td class="muted">${esc(p.why)}</td></tr>`).join("");
+  $("#staff").onchange = staffCount;
+  $("#staffAll").onclick = () => { document.querySelectorAll("#staff input.sp").forEach(c => c.checked = true); staffCount(); };
+  $("#staffNone").onclick = () => { document.querySelectorAll("#staff input.sp").forEach(c => c.checked = false); staffCount(); };
+  staffCount();
 }
 </script>
 </body>

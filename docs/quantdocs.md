@@ -69,7 +69,7 @@ OCR·유효기간 판정·양식 채우기는 다음 단계.
 
 1. 공고번호 입력 → 나라장터에서 공고·첨부를 받아 **필요 서식·자격(보유 ✓/미보유 ✗)·제출서류·실적 요건·실적 후보**를 화면에
 2. **만들기** → 잠금 묶음(`vault/company.enc`)을 메모리에서 풀어 서식을 자르고 회사 정보·연혁·실적을 채우고, 요구 자격에 맞는 회사 서류를 골라 zip
-3. **내려받기** — `통합본.pdf`(공고 제출서류·요구 자격에 맞는 회사 서류를 **파일 이름 키워드로** 골라 원본 그대로 이어 붙임, 목차·책갈피 — 규칙 `config/bundle_keywords.json`) · `서식/`(채운 HWPX) · `첨부/`(자격·연혁·실적 증빙) · `공고문/` · `공고별_준비표.xlsx`(자격요건·자동입력·준비 필요 시트) · `읽어보기.txt`
+3. **내려받기** — `통합본.pdf`(공고 제출서류·요구 자격에 맞는 회사 서류를 **파일 이름 키워드로** 골라 원본 그대로 이어 붙임, 목차·책갈피 — 규칙 `config/bundle_keywords.json`) · `통합서식.hwpx`(서식 전체를 공고 순서대로 이은 한글 파일 하나 — 채운 서식 + 직접 기입 양식, 11/04부터 서식별 파일은 통합서식을 못 만들 때만 `서식/`·`서식_직접기입/`) · `첨부/`(자격·연혁·실적 증빙) · `공고문/` · `공고별_준비표.xlsx`(자격요건·자동입력·준비 필요 시트) · `읽어보기.txt`
 
 이번 단계 범위: 회사 연혁·실적·보유 자격(직접생산 포함)만 채움. 인력·경영상태·신인도·가점은 준비표 '준비 필요'.
 
@@ -95,3 +95,61 @@ cd "<jiil-quant-docs 폴더>" && bash start_web.sh
 설치: 자바 JDK(`winget install EclipseAdoptium.Temurin.17.JDK`) → `bash tools/install_hwp2hwpx.sh [시험할.hwp]`
 (공개 라이브러리 hwp2hwpx·hwplib·hwpxlib, Apache-2.0 — 받아서 `tools/hwp2hwpx/build/hwp2hwpx-cli.jar`로 빌드하고 `.env`에 적음).
 작업 파일은 서버 `data/jobs/`에 2시간 두고 지운다. **내려받은 zip엔 회사 서류가 들어 있으니 사내에서만.**
+
+## 스캔본 회사 서류 글자 인식(OCR) — 서버 PC 설치 (11/04)
+
+연혁·경쟁입찰참가자격등록증·인감증명서가 스캔 이미지 PDF면 Tesseract로 글자를 읽어 회사정보 빈 칸(전화·팩스·대표자 주민등록번호 앞자리)과
+연혁을 채운다(`quantdocs.importer.enrich_vault`). 설치가 안 돼 있으면 읽어보기에 "Tesseract가 없어 읽지 못한 서류"로 알리고 넘어간다.
+
+1. Windows용 Tesseract 설치(UB Mannheim 배포판) — 설치 화면 'Additional language data'에서 **Korean** 체크.
+   한 줄로(Git Bash를 **관리자 권한으로** 열고 — winget 자동 설치엔 한국어가 빠져 kor 데이터를 따로 받음):
+   `cd "C:\Users\HJE\나라장터 수집\Negotiate-Contract-Logic-First-try" && winget install -e --id UB-Mannheim.TesseractOCR && curl -L -o "/c/Program Files/Tesseract-OCR/tessdata/kor.traineddata" https://github.com/tesseract-ocr/tessdata/raw/main/kor.traineddata && py -m pip install pytesseract pypdfium2 && echo >> .env && echo "TESSERACT_CMD='C:\Program Files\Tesseract-OCR\tesseract.exe'" >> .env && "/c/Program Files/Tesseract-OCR/tesseract.exe" --list-langs`
+   — 마지막 줄 목록에 `kor`가 보이면 됨. 확인: `py -m quantdocs vault check`에서 스캔본이 'OCR'로 읽힘.
+   관리자 권한이 안 되면(kor 받기에서 Permission denied) 한국어 데이터를 사용자 폴더에 두고 `.env` `TESSDATA_PREFIX`로 알림:
+   `cd "C:\Users\HJE\나라장터 수집\Negotiate-Contract-Logic-First-try" && git pull origin claude/quantdocs-merge && mkdir -p "$HOME/tessdata" && cp "/c/Program Files/Tesseract-OCR/tessdata/eng.traineddata" "/c/Program Files/Tesseract-OCR/tessdata/osd.traineddata" "$HOME/tessdata/" && curl -L -o "$HOME/tessdata/kor.traineddata" https://github.com/tesseract-ocr/tessdata/raw/main/kor.traineddata && py -m pip install pytesseract pypdfium2 && echo >> .env && echo "TESSERACT_CMD='C:\Program Files\Tesseract-OCR\tesseract.exe'" >> .env && echo "TESSDATA_PREFIX='$(cygpath -w "$HOME/tessdata")'" >> .env && "/c/Program Files/Tesseract-OCR/tesseract.exe" --tessdata-dir "$HOME/tessdata" --list-langs`
+2. `py -m pip install -r requirements.txt` (pytesseract·pypdfium2).
+3. 설치 폴더가 PATH에 없으면 저장소 `.env`에 `TESSERACT_CMD='C:\Program Files\Tesseract-OCR\tesseract.exe'`(**작은따옴표 필수** — `webapp/start.sh`가 .env를 bash로 읽어 빈칸에서 끊김).
+4. NAS(도커)는 `Dockerfile`에 tesseract-ocr-kor가 들어 있음 — 이미지 다시 빌드(부장님).
+
+- 대표자 주민등록번호는 **앞 6자리만** 남기고 뒷자리는 늘 `*******`로 쓴다(원본 번호는 저장하지 않음). 대리인 줄·휴대폰 칸은 비운다.
+- OCR 글은 틀릴 수 있다(예: 숫자 한 자리) — 채운 값은 읽어보기 '스캔본이라 OCR로 읽은 서류'를 보고 원본과 대조.
+- 서식에 '해당 사항이 없을 경우 "해당 없음" 기재'가 있으면 빈 표 첫 칸에 '해당 없음'(자동입력 시트에 확인 알림).
+
+## 서식 칸이 비어 나올 때 — 회사정보 점검 (11/04)
+
+    py -m quantdocs vault check
+
+묶음 안 PDF마다 읽은 방법(글/OCR/스캔본이라 안 읽음)과 알아본 서류 종류(등록증·사업자·인감·연혁), 서식에 넣는 회사정보(회사명·대표자·주소·
+법인등록번호·전화·팩스·대표자 주민등록번호 앞자리)를 어디서 찾았는지 보여 준다. 전화번호·주민등록번호를 못 찾으면 만들기 때도 읽어보기·준비 필요에
+'⚠ … 찾지 못해 비어 있음 — 이유 · 할 일'이 나온다.
+
+## 묶음 밖 회사 서류 PDF (11/04)
+
+잠금 묶음(company.enc)에 다시 넣지 않아도, 서버 PC의 **jiil-quant-docs 폴더 맨 위**(프로젝트 폴더 옆, 예: `C:\Users\HJE\나라장터 수집\jiil-quant-docs`)에
+둔 PDF도 묶음 `files/`에 있는 것처럼 읽는다 — 회사정보 빈 칸 채우기(전화·팩스 등)와 통합본.pdf 고르기 모두. 같은 이름이 묶음에 있으면 묶음 것을 쓰고,
+하위 폴더(vault/ 등)는 안 본다. 다른 폴더를 쓰려면 `.env`에 `QUANT_LOOSE_DIR=폴더 경로`. 이 PDF들은 암호화되지 않으니 jiil-quant-docs에 커밋하지 말 것.
+
+## 회사 전화·FAX 바로잡기 (11/05)
+
+회사 자료(회사정보 시트·등록증 PDF)의 FAX·전화 번호가 틀렸으면 묶음을 다시 잠그지 않고 서버 PC 저장소 `.env`에 한 줄씩 넣는다 —
+`QUANT_FAX=번호`, `QUANT_TEL=번호`. 이 값이 묶음 값보다 먼저 쓰인다. 번호는 공개 저장소(이 레포)에 적지 않는다.
+
+## 기술인력 엑셀 (11/05)
+
+jiil-quant-docs 폴더 맨 위에 기술인력 엑셀(.xlsx)을 두면 묶음을 다시 잠그지 않아도 그것을 인력목록으로 쓴다(묶음 인력목록보다 먼저).
+머리 줄에 `이름`·`입사일`·등급 칸(`등급`·`기술등급`·`업무`)이 있으면 되고, `재직`(퇴사면 '퇴사')·`자격증` 칸은 있으면 씀. 입사일은 '2011.09.01'처럼 적어도 됨.
+여러 개면 가장 최근에 고친 파일. 직원 이름이 든 파일이라 jiil-quant-docs에 커밋하지 말 것.
+정량평가서 화면 '기술인력 (자기평점)' 칸에서 이번 공고 점수에 넣을 사람을 체크(처음엔 공고 조건 — 퇴사·재직 기간·등급 — 에 맞는 사람 모두 체크).
+
+## 특허증 폴더 (11/05)
+
+jiil-quant-docs 폴더 안 이름에 '특허'가 든 하위 폴더(예: `특허증\`)의 PDF·그림을 특허증으로 읽는다. 회사자료 특허목록 시트가 비어 있으면 파일 수를 특허 건수로
+자기평점 '전문기술(특허)'에 쓰고(파일 하나 = 1건), 보유기술을 평가하는 공고면 특허증 원본을 통합본.pdf 끝에 붙인다.
+
+## 폴더 정리 (11/05)
+
+jiil-quant-docs 폴더의 하위 폴더(예: `정량서류\`, `회사자료\`)까지 4단계 안을 모두 읽는다 — PDF·한글·그림은 회사 서류로(통합본·서식 채우기),
+기술인력 엑셀은 인력목록으로, 경로에 '특허'가 든 파일은 특허증으로. 프로그램 폴더(config·data·docs·quantdocs·tests·tools·vault)와 숨김 폴더는 안 본다.
+기업신용평가(등급) 확인서 PDF가 있으면 등급·평가일을 읽어 자기평점 경영상태에 쓴다(회사정보 시트 값보다 먼저).
+
+공사수주현황 엑셀(경로에 '수주'가 든 파일)도 폴더에서 바로 실적목록으로 읽는다 — 묶음 실적목록에 적어 둔 발주기관·부가세·지분율·증빙은 사업명이 같으면 그대로 살린다.

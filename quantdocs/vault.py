@@ -22,6 +22,7 @@ import gzip
 import hashlib
 import io
 import os
+import re
 import tarfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -132,6 +133,12 @@ class Vault:
     history: list[dict] = field(default_factory=list)  # 연혁
     docs: list[dict] = field(default_factory=list)  # 서류상태
     tracks: list[dict] = field(default_factory=list)  # 실적목록
+    staff: list[dict] = field(default_factory=list)  # 인력목록(자기평점 기술인력)
+    patents: list[dict] | None = None  # 특허목록(자기평점 보유기술) — 시트가 없으면 None(자료 없음)
+    loose: list[str] = field(default_factory=list)  # 묶음 밖에서 더 읽은 PDF(파일 이름)
+    staff_src: str = ""  # 인력목록을 묶음 밖 엑셀에서 읽었으면 그 파일 이름
+    tracks_src: str = ""  # 실적목록을 폴더의 공사수주현황 엑셀에서 읽었으면 그 파일
+    patent_src: str = ""  # 특허 건수를 특허증 파일로 셌으면 '파일'(특허목록 시트가 비었을 때)
 
     def file(self, name: str | None) -> bytes | None:
         """양식의 '파일 이름' 칸 값으로 파일 찾기 — 'files/' 붙여도·안 붙여도, 경로 없이 이름만 적어도."""
@@ -192,7 +199,166 @@ def load(passphrase: str | None = None, path: Path | None = None) -> Vault:
     if "회사정보" in wb.sheetnames:
         v.info = {str(r.get("항목") or "").strip(): str(r.get("값")).strip()
                   for r in _rows(wb["회사정보"]) if r.get("항목") and r.get("값") not in (None, "")}
-    for sheet, attr in (("연혁", "history"), ("서류상태", "docs"), ("실적목록", "tracks")):
+    for sheet, attr in (("연혁", "history"), ("서류상태", "docs"), ("실적목록", "tracks"), ("인력목록", "staff"),
+                        ("특허목록", "patents")):
         if sheet in wb.sheetnames:
             setattr(v, attr, _rows(wb[sheet]))
+    add_loose(v)
+    derive_patents(v)
     return v
+
+
+def loose_dir() -> Path | None:
+    """묶음 밖 회사 서류 PDF를 둘 수 있는 폴더 — .env QUANT_LOOSE_DIR, 없으면 옆의 비공개 레포 jiil-quant-docs 맨 위
+    (11/04 사용자 요청: 'jiil-quant-docs에 있는 경쟁입찰참가등록증.pdf를 읽어야 해'). 그 폴더 바로 아래 PDF만(하위 폴더는 안 봄)."""
+    given = read_env("QUANT_LOOSE_DIR")
+    d = Path(given) if given else ROOT.parent / "jiil-quant-docs"
+    return d if d.is_dir() else None
+
+
+_STAFF_GRADE = ("등급", "기술등급", "기술자등급", "업무")  # 받은 기술인력표는 등급이 '업무' 칸에 있었음(11/05)
+
+
+def read_staff_xlsx(data: bytes) -> list[dict] | None:
+    """기술인력 엑셀(머리 줄에 '이름' + '입사…' + 등급 칸) → 인력목록 줄. 그런 시트가 없으면 None.
+    머리는 앞 5줄 안에서 찾음, '재직' 칸이 없으면 모두 재직."""
+    from openpyxl import load_workbook
+
+    try:
+        wb = load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+    except Exception:  # noqa: BLE001 — 엑셀이 아니거나 깨진 파일
+        return None
+    for ws in wb.worksheets:
+        rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        for hi, head in enumerate(rows[:5]):
+            names = [re.sub(r"\s+", "", str(h or "")) for h in head]
+            col = lambda *ws_: next((i for i, h in enumerate(names) if h in ws_), None)
+            c_name = col("이름", "성명")
+            c_join = next((i for i, h in enumerate(names) if h.startswith("입사")), None)
+            c_grade = col(*_STAFF_GRADE)
+            if c_name is None or c_join is None or c_grade is None:
+                continue
+            c_emp, c_lic = col("재직", "재직여부", "상태"), col("자격증", "자격")
+            out = []
+            for r in rows[hi + 1:]:
+                get = lambda i: r[i] if i is not None and i < len(r) else None
+                if not str(get(c_name) or "").strip():
+                    continue
+                out.append({"이름": str(get(c_name)).strip(), "입사일": get(c_join), "재직": str(get(c_emp) or "재직").strip(),
+                            "등급": str(get(c_grade) or "").strip(), "자격증": get(c_lic)})
+            return out
+    return None
+
+
+# jiil-quant-docs 폴더 안에서 안 보는 하위 폴더(프로그램·저장소 폴더)
+_SKIP_DIRS = {"config", "data", "docs", "quantdocs", "tests", "tools", "vault", "node_modules", "__pycache__", "venv", ".venv"}
+LOOSE_EXTS = (".pdf", ".hwp", ".hwpx", ".jpg", ".jpeg", ".png")
+
+
+def _loose_files(folder: Path, depth: int = 4) -> list[Path]:
+    """폴더와 하위 폴더(11/05 사용자: '정량서류'·'회사자료' 폴더에 모든 자료)의 파일 — 프로그램 폴더·숨김 폴더는 빼고, 4단계까지."""
+    out: list[Path] = []
+    try:
+        items = sorted(folder.iterdir())
+    except OSError:
+        return out
+    for x in items:
+        if x.name.startswith((".", "~$")):
+            continue
+        if x.is_dir():
+            # '예시_사업수행능력평가서'처럼 예시·샘플·참고 폴더는 회사 서류가 아님 — 남의 신용등급·연혁을 잘못 읽지 않게(11/05)
+            if depth > 0 and x.name not in _SKIP_DIRS and not re.match(r"(예시|샘플|참고|sample)", x.name, re.I):
+                out += _loose_files(x, depth - 1)
+        elif x.is_file():
+            out.append(x)
+    return out
+
+
+def add_loose(v: Vault, folder: Path | None = None) -> None:
+    """그 폴더(와 하위 폴더)의 PDF·한글·그림을 묶음 files/에 있는 것처럼 메모리에 더함(같은 이름이 묶음에 있으면 묶음 것을 씀),
+    기술인력 엑셀은 인력목록으로 — 서식 채우기·통합본·자기평점 모두 씀."""
+    folder = folder or loose_dir()
+    if folder is None:
+        return
+    found = _loose_files(folder)
+    have = {k.rsplit("/", 1)[-1] for k in v.files}
+    # 내용이 같은 파일은 한 번만(11/05: '정량서류'·'회사자료' 폴더에 같은 서류가 겹침 — 이름이 달라도 통합본에 두 번 들어가지 않게)
+    seen = {hashlib.sha1(d).digest() for d in v.files.values()}
+    for p in found:
+        if p.suffix.lower() not in LOOSE_EXTS or p.name in have:
+            continue
+        rel = p.relative_to(folder).as_posix()
+        try:
+            data = p.read_bytes()
+        except OSError:
+            continue
+        digest = hashlib.sha1(data).digest()
+        if digest in seen:
+            continue
+        seen.add(digest)
+        v.files[f"files/{rel}"] = data
+        v.loose.append(rel)
+        have.add(p.name)
+    # 기술인력 엑셀 — 폴더에 두면 묶음을 다시 잠그지 않아도 이것을 씀(11/05 사용자 요청), 여럿이면 가장 최근에 고친 파일
+    xlsx = [p for p in found if p.suffix.lower() == ".xlsx"]
+    for p in sorted(xlsx, key=lambda x: x.stat().st_mtime, reverse=True):
+        try:
+            staff = read_staff_xlsx(p.read_bytes())
+        except OSError:
+            continue
+        if staff:
+            v.staff, v.staff_src = staff, p.relative_to(folder).as_posix()
+            break
+    # 공사수주현황 엑셀 — 실적목록을 묶음 다시 잠그지 않고 바로(11/05 사용자 요청), 경로에 '수주'가 든 가장 최근 파일
+    orders = [p for p in xlsx if "수주" in p.relative_to(folder).as_posix()]
+    for p in sorted(orders, key=lambda x: x.stat().st_mtime, reverse=True):
+        from .importer import read_orders
+        try:
+            rows = read_orders(p)
+        except Exception:  # noqa: BLE001 — 열 수 없는 엑셀
+            continue
+        if rows:
+            v.tracks = merge_tracks(v.tracks, rows)
+            v.tracks_src = p.relative_to(folder).as_posix()
+            break
+    derive_patents(v)
+
+
+def merge_tracks(old: list[dict], new: list[dict]) -> list[dict]:
+    """폴더의 공사수주현황(new)을 실적목록으로 — 사업명이 같은 묶음 실적에 담당자가 적어 둔 발주기관·부가세·지분율·분야·증빙은 살림,
+    공사수주현황에 없는 묶음 실적(직접 더한 것)은 뒤에 그대로."""
+    from .notice import track_field
+
+    by_name = {re.sub(r"\s+", "", str(t.get("사업명") or "")): t for t in old}
+    out, used = [], set()
+    for i, t in enumerate(new, 1):
+        key = re.sub(r"\s+", "", str(t.get("사업명") or ""))
+        prev = by_name.get(key, {})
+        used.add(key)
+        row = {**prev, "번호": i, "업무": t.get("업무") or prev.get("업무"), "사업명": t["사업명"],
+               "계약일": t.get("계약일") or prev.get("계약일"), "준공일": t.get("준공일") or prev.get("준공일"),
+               "계약금액(원)": t.get("계약금액(원)") if t.get("계약금액(원)") is not None else prev.get("계약금액(원)")}
+        row["분야"] = prev.get("분야") or track_field(t["사업명"])
+        if not prev.get("비고"):
+            row["비고"] = t.get("비고")
+        out.append(row)
+    out += [t for k, t in by_name.items() if k not in used]
+    return out
+
+
+def derive_patents(v: Vault) -> None:
+    """특허목록 시트가 비었으면 특허증 파일 수로 특허 건수(파일 하나 = 1건)."""
+    if not v.patents:
+        found = patent_files(v)
+        if found:
+            v.patents = [{"명칭": Path(k).stem, "등록번호": Path(k).stem, "파일": k} for k in found]
+            v.patent_src = "파일"
+
+
+PATENT_EXTS = (".pdf", ".jpg", ".jpeg", ".png")
+
+
+def patent_files(v: Vault) -> list[str]:
+    """묶음·폴더 안 특허증 파일(경로나 이름에 특허·실용신안이 든 PDF·그림) — 통합본 증빙·건수 셈."""
+    return sorted(k for k in v.files if k.startswith("files/") and k.lower().endswith(PATENT_EXTS)
+                  and re.search(r"특허|실용\s*신안", k))

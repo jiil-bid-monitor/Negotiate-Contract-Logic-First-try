@@ -23,13 +23,14 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from .bundle import merge, pick
+from .bundle import Pick, merge, pick
 from .catalog import load_catalog
-from .fill import FillReport, fill_hwpx
-from .forms_cut import cut, merge as merge_forms
+from .selfscore import AUTO_KINDS, SelfScore, fmt, read_criteria, score as score_items, staff_status
+from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx
+from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
 from .kinds import detect, guide
-from .notice import read_notice, track_candidates, write_sheet
+from .notice import Form, classify, form_tracks, read_notice, track_candidates, unfinished, write_sheet
 
 SCOPE_DOCS = {"history", "track_record", "qualification", "direct_production"}  # 이번 단계에서 채우는 서류 종류
 
@@ -44,6 +45,20 @@ class Analysis:
     kind: str = "other"  # 공고 유형(kinds.detect)
     picks: list = field(default_factory=list)  # 통합본에 넣을 회사 서류(bundle.Pick, 파일 이름 키워드로 고름)
     pick_missing: list[str] = field(default_factory=list)
+    staff: list[dict] = field(default_factory=list)  # 기술인력 고르기(화면) — staff_status
+    staff_rule: str = ""  # 이 공고 기술인력 배점 기준 한 줄(등급별 점수·재직 조건)
+    staff_on: bool = False  # 제안요청서에 기술인력 배점 기준(등급별 점수)이 있는 공고 — 화면 칸은 이때만 보임(11/05)
+    hwp_needed: bool = False  # 서식이 PDF에만 있음 — 통합서식을 못 만들어 '한글 파일 필요' 표시(11/05 사용자 결정)
+
+
+HWP_NEEDED_NOTE = ("⚠ 한글 파일 필요 — 이 공고는 서식이 PDF에만 있어 통합서식(한글)을 만들지 않았습니다. "
+                   "나라장터·발주기관에서 한글(HWP/HWPX) 서식을 받아 직접 작성하세요")
+
+
+def _hwp_needed(forms, converted: dict) -> bool:
+    """서식 목록은 있는데 서식이 든 첨부가 모두 한글(.hwp·.hwpx)이 아님(PDF 등)."""
+    return bool(forms) and not any(Path(converted.get(f.source, f.source)).suffix.lower() in (".hwp", ".hwpx")
+                                   or Path(f.source).suffix.lower() in (".hwp", ".hwpx") for f in forms)
 
 
 def _is_hwpx(p: Path) -> bool:
@@ -95,12 +110,46 @@ def convert_hwp(src: Path, work: Path) -> tuple[Path | None, str]:
     return None, (lines[0][:200] if lines else f"종료 코드 {r.returncode}")
 
 
+def main_docs(files: list[Path]) -> tuple[list[Path], list[Path]]:
+    """첨부 중 공고문·제안요청서·서식 파일만(11/05 사용자 요청 — 과업지시서·도면·내역서 등은 안 읽음). 하나도 없으면 전부.
+    돌려줌: (읽을 것, 뺀 것)."""
+    # 서식만 따로 담은 첨부('붙임2. 제안서 작성 서식', '별지 서식', '제출 양식')도 — 공고마다 서식이 다른 곳에 있음(11/05)
+    keep = [f for f in files if re.search(r"공고|제안\s*요청|서식|양식|별지", re.sub(r"\s+", "", Path(f).name))]
+    if not keep:
+        return list(files), []
+    return keep, [f for f in files if f not in keep]
+
+
+def _use_page_titles(sheet, hwpx_files: list[Path], source: str) -> None:
+    """서식 이름 = 서식 페이지의 제목(가장 큰 글씨) 그대로(11/04 사용자 결정 — 목록·목차·'다음 줄' 짐작보다 우선).
+    공고 목록에 없던 서식도 더함. 한글 파일(HWPX·변환본)이 있을 때만 — 없으면 목록에서 읽은 이름 그대로."""
+    by_no = {f.no: f for f in sheet.forms}
+    for p in hwpx_files:
+        if p.suffix.lower() != ".hwpx" or not p.exists():
+            continue
+        try:
+            titles = page_titles(p, source)
+        except (zipfile.BadZipFile, KeyError, ValueError):
+            continue
+        for no, title in titles.items():
+            doc = classify(title, load_catalog())
+            if no in by_no:
+                f = by_no[no]
+                f.name, f.doc, f.weak = title, doc, False
+            else:
+                by_no[no] = Form(no, title, p.name, False, doc)
+    sheet.forms = sorted(by_no.values(), key=lambda f: f.no)
+
+
 def analyze(files: list[Path], vault, notice_date: date | None = None, work: Path | None = None,
-            award_method: str = "", contract_method: str = "") -> Analysis:
+            award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
+            license_groups: list | None = None) -> Analysis:
     files = [Path(f) for f in files]
     work = Path(work or tempfile.mkdtemp(prefix="quantdocs_"))
     work.mkdir(parents=True, exist_ok=True)  # 웹앱이 넘기는 작업 폴더(data/jobs/<id>/work)는 아직 없을 수 있음
-    notes, converted, readable = [], {}, []
+    from .importer import enrich_vault
+
+    notes, converted, readable = enrich_vault(vault), {}, []  # 연혁·등록증 PDF에서 빈 회사정보·연혁 채움
     for f in files:
         if f.suffix.lower() == ".hwp" and _is_hwpx(f):
             # 이름만 .hwp이고 속은 HWPX(zip)인 첨부 — 변환 없이 그대로(11/03 삼척선 동준교 공고)
@@ -116,19 +165,55 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
             else:
                 notes.append(f"{f.name}: HWPX 변환 실패({why}) — 서식을 자르지 못함(목록 읽기는 됨)")
         readable.append(f)
+    from . import notice as _notice
+    _notice.OCR_USED.clear()
     sheet = read_notice(readable, load_catalog())
-    quals = qualification_rows(readable, vault.held_codes(), vault)
+    _use_page_titles(sheet, [Path(converted.get(f.name, f)) for f in files], " ".join(f.name for f in files))
+    quals = qualification_rows(readable, vault.held_codes(), vault, licenses, license_groups)
+    notes += list(dict.fromkeys(_notice.OCR_USED))
     ref = notice_date or date.today()
     candidates = []
     if sheet.track_reqs:
         req = next((t for t in sheet.track_reqs if t.kind == "제출 요건"), sheet.track_reqs[0])
         candidates = track_candidates(req, vault.tracks, ref)
+        left = unfinished(vault.tracks, ref)
+        if left:  # 수행실적은 준공된 것만 — 진행 중·준공일 없는 실적은 후보에서 뺐다고 알림
+            notes.append(f"준공 전(준공일이 없거나 {ref:%Y-%m-%d} 뒤)이라 실적 후보에서 뺀 실적 {len(left)}건: "
+                         + ", ".join(left[:5]) + (" 외" if len(left) > 5 else ""))
         candidates.sort(key=lambda t: -(t.get("인정 금액(원)") or 0))
     kind = detect(award_method, contract_method, sheet.texts)
     if kind != "negotiation" and not sheet.forms:
         notes.append(f"{guide(kind)['name']} 공고 — 첨부에서 서식 목록을 찾지 못함. 서식은 {guide(kind)['source']}")
-    picks, pick_missing = pick(list(vault.files), [it.text for it in sheet.submit_items], quals)
-    return Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
+    picks, pick_missing = pick(list(vault.files), [it.text for it in sheet.submit_items], quals, with_history=bool(vault.history))
+    a = Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
+    a.hwp_needed = _hwp_needed(sheet.forms, converted)
+    crits = read_criteria(_rfp_first(files, converted))
+    # 보유기술(특허)을 평가하는 공고면 특허증 원본을 통합본 끝에(11/05 사용자 결정 (가))
+    if any(c.kind == "patent" for c in crits):
+        from .vault import patent_files
+        have = {p.path for p in a.picks}
+        a.picks += [Pick("전문기술(특허) 보유 증빙", k) for k in patent_files(vault) if k not in have]
+    # 기술인력 고르기(11/05 사용자 요청 (나)) — 이 공고 배점 기준으로 인력목록 사람마다 들어가는지
+    crit = next((c for c in crits if c.kind == "staff"), None)
+    a.staff = staff_status(crit, vault, ref)
+    a.staff_on = bool(crit is not None and crit.per_grade)
+    if crit is not None:
+        rule = ", ".join(f"{g} {p:g}점" for g, p in crit.per_grade.items())
+        months = re.search(r"\d+\s*개월\s*이상", crit.note)
+        a.staff_rule = f"{crit.name} {crit.points:g}점 — 1인당 {rule}" + (f" · {months.group(0)} 재직" if months else "") + (
+            " · ⚠ 배점 기준에 '투입·참여' 표현이 있음 — 이 사업에 투입할 사람만 고르세요" if re.search(r"투입|참여\s*(?:인력|기술자)", crit.note) else "")
+    return a
+
+
+def _rfp_first(files: list[Path], converted: dict[str, str]) -> list[Path]:
+    """한글 첨부(HWPX·변환본) — 제안요청서 먼저, 그다음 과업지시서·나머지."""
+    paths = [Path(converted.get(f.name, f)) for f in files]
+    return sorted((p for p in paths if p.suffix.lower() == ".hwpx"),
+                  key=lambda p: (0 if "제안요청" in p.name else 1 if "과업" in p.name else 2))
+
+
+# 화면에서 뺀 알림(11/04 사용자 요청) — 읽어보기.txt엔 그대로 남음
+_SCREEN_HIDDEN = re.compile(r"회사정보 빈 칸을 서류 PDF에서 읽어 채움|글이 없는 스캔본인데 글자 인식 도구|스캔본이라 글자 인식\(OCR\)으로 읽은 서류|준공 전\(")
 
 
 def summary(a: Analysis) -> dict:
@@ -150,19 +235,28 @@ def summary(a: Analysis) -> dict:
         "candidates": [{"name": c.get("사업명"), "org": c.get("발주기관"), "done": str(c.get("준공일") or "")[:10],
                         "amount": c.get("인정 금액(원)"), "check": c.get("확인할 것")} for c in a.candidates[:20]],
         "deadlines": [[k, f"{w:%Y-%m-%d %H:%M}"] for k, w, _ in sh.deadlines],
-        "notes": a.notes,
-        "bundle": [{"section": p.section, "file": Path(p.path).name, "note": p.note} for p in a.picks],
+        "notes": [n for n in a.notes if not _SCREEN_HIDDEN.match(n)],
+        "bundle": [{"section": p.section, "file": _pick_name(p.path), "note": p.note} for p in a.picks],
         "bundle_missing": a.pick_missing,
+        "staff": [{"name": p["이름"], "grade": p["등급"], "joined": p["입사일"], "ok": p["counted"], "why": p["why"]} for p in a.staff],
+        "staff_rule": a.staff_rule,
+        "staff_on": a.staff_on,
+        "hwp_needed": a.hwp_needed,
     }
 
 
 # 공고마다 사람이 정하는 값(담당 PM·투입 인력·조직·경력·자기평가 점수)을 적는 서식 — 회사 자료로 채우지 않고 제안요청서 양식 그대로 넣음
 # (11/03 사용자 요청: 통합본 받은 뒤 직접 기입). 이 서식의 '주소·전화' 같은 칸은 사람 것이라 회사 값을 넣으면 틀림.
-_MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참여자|조직|재직|자격\s*사항|자기\s*평가|실적\s*증명")
+# 자기평가 심사표는 회사 정보 칸 + 자기평점(제안요청서 본문 배점기준으로 계산 — 11/05 사용자 요청, `selfscore`)
+_MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참여자|조직|재직|자격\s*사항|실적\s*증명")
+
+
+# 공란으로 두는 서식(11/05 사용자 요청) — 서면질의서(질의할 때 직접)·공동수급 관련 서류(공동수급할 때만 직접)
+_BLANK_FORM = re.compile(r"질\s*의|공동\s*수급|공동\s*이행|분담\s*이행|공동\s*도급|합의\s*각서")
 
 
 def is_manual(name: str) -> bool:
-    return bool(_MANUAL_FORM.search(name or ""))
+    return bool(_MANUAL_FORM.search(name or "") or _BLANK_FORM.search(name or ""))
 
 
 def _is_basic(name: str) -> bool:
@@ -170,22 +264,64 @@ def _is_basic(name: str) -> bool:
     return bool(re.search(r"신청서|제출서|표지|일반현황|위임장|선임계|서약서", name))
 
 
+def _form_text(p: Path) -> str:
+    """잘라 낸 서식의 글(작성 안내의 '최근 3년 이내' 등을 보려고)."""
+    from .fill import _text
+
+    try:
+        z = zipfile.ZipFile(p)
+        return re.sub(r"\s+", " ", " ".join(_text(z.read(n).decode("utf-8")) for n in z.namelist() if n.startswith("Contents/section")))
+    except (zipfile.BadZipFile, OSError, KeyError):
+        return ""
+
+
+def _pick_name(path: str) -> str:
+    from .bundle import HISTORY
+    return "연혁 표(회사 자료로 만듦)" if path == HISTORY else Path(path).name
+
+
 def _safe(name: str) -> str:
     return re.sub(r'[\\/:*?"<>|]+', "_", str(name)).strip() or "파일"
 
 
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
-          award_method: str = "", contract_method: str = "") -> Path:
+          award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
+          notice_no: str = "", staff_pick: list[str] | None = None, license_groups: list | None = None) -> Path:
+    """staff_pick: 화면에서 고른 기술인력 이름 — 주면 그 사람만 자기평점 기술인력 점수에(None이면 인력목록 전체)."""
     files = [Path(f) for f in files]
+    if staff_pick is not None:
+        import copy
+        picked = set(staff_pick)
+        vault = copy.copy(vault)
+        vault.staff = [r for r in vault.staff if str(r.get("이름") or "").strip() in picked]
     work = Path(tempfile.mkdtemp(prefix="quantdocs_build_"))
     try:
-        a = analyze(files, vault, notice_date, work, award_method, contract_method)
+        a = analyze(files, vault, notice_date, work, award_method, contract_method, licenses, license_groups)
         forms_dir, filled_dir = work / "cut", work / "서식"
         reports: list[FillReport] = []
         manual: list[str] = []  # 양식 그대로 넣은 서식 파일
         manual_dir = work / "서식_직접기입"
         merged_forms: list[Path] = []  # 공고 문서마다 서식 전체를 이은 한글 파일
+        merge_failed = False  # 잇지 못한 문서가 있으면 서식별 파일도 묶음에 넣음
         cut_names = {str(f.no): f.name for f in a.sheet.forms}
+        # 서식이 PDF에만 있으면 통합서식을 만들지 않고 '한글 파일 필요'만 알림(11/05 사용자 결정 — OCR로 한글 서식 다시 만들기(pdfforms)는 쓰지 않음)
+        if a.hwp_needed:
+            a.notes.append(HWP_NEEDED_NOTE)
+        agency_no = agency_notice_no(a.sheet.texts)  # 공고문의 기관 공고번호 — 서식 공고번호 칸에(11/04 사용자 요청)
+        # 정량평가 자기평점 — 제안요청서 본문 배점기준(11/05 사용자 요청). 제안요청서를 먼저 봄
+        criteria = read_criteria(_rfp_first(files, a.converted))
+        self_scores = score_items(criteria, vault, notice_date or date.today()) if criteria else []
+        for s in self_scores:  # 실적·보유기술 등은 담당자가 직접 채점(11/05 사용자 결정 — 기술인력·경영상태·신인도만 자동)
+            if s.kind not in AUTO_KINDS:
+                s.score, s.basis, s.notes = None, "", ["담당자가 직접 채점"]
+        score_ctx = SelfScore(criteria, vault, notice_date or date.today())
+        # 입찰보증금 지급 확약서의 입찰 금액 = 제안요청서 기초금액(사업비) — 11/05 사용자 요청
+        basis = basis_amount(a.sheet.texts)
+        if basis:
+            a.notes.append(f"입찰보증금 확약서 입찰 금액 = {basis[0]:,}원 ({basis[1]}에서 읽음)")
+        if staff_pick is not None:
+            names = sorted({str(r.get("이름")).strip() for r in vault.staff})
+            a.notes.append(f"기술인력 점수는 화면에서 고른 {len(names)}명으로 계산: " + ", ".join(names[:20]))
         for f in files:
             src = Path(a.converted.get(f.name, f))
             if src.suffix.lower() != ".hwpx":
@@ -194,12 +330,24 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             for c in cut(src, forms_dir, cut_names):
                 if is_manual(c.title):  # 양식 그대로 — 내려받은 뒤 직접 기입
                     manual_dir.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
+                    if _BLANK_FORM.search(c.title):  # 질의서·공동수급 서식은 공란(11/05)
+                        shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
+                    else:  # 재직증명서 등도 표 밖 서명 줄(업체명·주소·대표자 (인))은 채움(11/05 사용자 요청)
+                        reports.append(fill_hwpx(forms_dir / c.file, manual_dir / c.file, vault, title=notice_title, sign_only=True))
                     manual.append(c.file)
                     parts.append((c, manual_dir / c.file))
                     continue
-                is_track = bool(re.search(r"실적.*(집계|현황)|수행실적", c.title))
-                rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, a.candidates if is_track else None)
+                # 실적 서식 — '사업수행 실적집계표'·'최근 5년간 사업수행실적'·'체험물 제작·설치 실적'(실적증명서는 발주처가 씀)
+                is_track = bool(re.search(r"실적", c.title)) and not re.search(r"증명", c.title)
+                rows = a.candidates
+                body = _form_text(forms_dir / c.file) if is_track else ""
+                if is_track and (not rows or re.search(r"최근\s*\d+\s*(?:개\s*)?년", c.title + body)):
+                    # 서식(제목·작성 안내)의 '최근 N년' 기간 안 준공 실적 전부(11/05 사용자 요청 — 분야·금액으로 안 거름)
+                    years = re.search(r"최근\s*\d+\s*(?:개\s*)?년", c.title) or re.search(r"최근\s*\d+\s*(?:개\s*)?년", body)
+                    rows, why = form_tracks(years.group(0) if years else c.title, vault.tracks, notice_date or date.today())
+                    a.notes += [f"{c.file}: {w}" for w in why]
+                rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title,
+                                agency_no, notice_no, score_ctx, basis[0] if basis else None)
                 reports.append(rep)
                 parts.append((c, filled_dir / c.file))
             if parts:  # 서식 전체(채운 것 + 직접 기입)를 한글 파일 하나로 — 담당자가 이 파일 하나에서 기입(11/03 사용자 요청)
@@ -207,7 +355,9 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 try:
                     merged_forms.append(merge_forms(src, parts, work / "통합서식" / f"통합서식_{_safe(Path(f.name).stem)[:40]}.hwpx"))
                 except (ValueError, zipfile.BadZipFile, KeyError) as err:
+                    merge_failed = True
                     a.notes.append(f"{f.name}: 서식을 한 파일로 잇지 못함({err}) — 서식별 파일을 쓰세요")
+        per_form = merge_failed or not merged_forms
         # 첨부할 회사 서류: 파일 이름 키워드로 고른 것(통합본 순서대로 번호) + 연혁·실적 증빙(양식에 적힌 파일 이름)
         attach: list[tuple[str, str, bytes]] = []  # (폴더, 이름, 내용)
         missing: list[str] = list(a.pick_missing)
@@ -221,13 +371,17 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             if all(n != name or fo != folder for fo, n, _ in attach):
                 attach.append((folder, name, data))
 
+        # 제출 파일은 둘(11/04 사용자 결정): 회사 서류 원본을 그대로 이은 통합본.pdf + 직접 기입할 한글 통합서식.hwpx.
+        # 서류 원본은 PDF에 못 넣은 것만 첨부/통합본_순서에.
+        in_pdf: set = set()
+        merged, skipped = merge(a.picks, vault, work / "통합본.pdf", f"{notice_title or '정량평가서'} — 제출 서류 통합본",
+                                in_pdf) if a.picks else (None, [])
+        missing += skipped
         for i, p in enumerate(a.picks, 1):
-            attach.append(("첨부/통합본_순서", f"{i:02d}_{_safe(Path(p.path).name)}", vault.files[p.path]))
+            if p.path not in in_pdf and p.path in vault.files:
+                attach.append(("첨부/통합본_순서", f"{i:02d}_{_safe(Path(p.path).name)}", vault.files[p.path]))
             if p.note:
                 missing.append(f"{Path(p.path).name}: {p.note}")
-        merged, skipped = merge(a.picks, vault, work / "통합본.pdf",
-                                f"{notice_title or '정량평가서'} — 제출 서류 통합본") if a.picks else (None, [])
-        missing += skipped
         for h in vault.history:
             if h.get("증빙 파일 이름"):
                 add("첨부/연혁", h["증빙 파일 이름"], "연혁 증빙")
@@ -239,15 +393,24 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             q_rows = []
             for i, q in enumerate(a.quals, 1):
                 for it in q["items"]:
-                    q_rows.append([i, q["kind"], f"{it['name']}({it['code']})" if it["code"] else it["name"],
+                    q_rows.append([i, q["kind"], (f"{it['name']}({it['code']})" if it["code"] else it["name"]) + (f" — {it['need']}" if it.get("need") else ""),
                                    "보유" if it["held"] else "미보유", ", ".join(it["docs"]), q["source"]])
             table(wb.create_sheet("자격요건"), ["묶음", "조건", "자격", "지일", "첨부 서류", "출처"],
                   q_rows or [["", "", "첨부 공고문에서 코드로 적힌 자격을 찾지 못함 — 원문 확인", "", "", ""]],
                   [6, 10, 40, 8, 40, 30])
-            f_rows = [[r.file, "\n".join(r.filled) or "-", r.rows or "", r.overflow or ""] for r in reports]
+            f_rows = [[r.file, "\n".join(r.filled) or "-", r.rows or "",
+                       (f"{r.overflow}건 (금액이 작은 것): " + ", ".join(r.overflow_names[:10])) if r.overflow_names
+                       else (r.overflow or "")] for r in reports]
             table(wb.create_sheet("통합본 순서"), ["순서", "구분", "파일", "확인"],
-                  [[i, p.section, Path(p.path).name, p.note] for i, p in enumerate(a.picks, 1)]
+                  [[i, p.section, _pick_name(p.path), p.note] for i, p in enumerate(a.picks, 1)]
                   or [["", "파일 이름이 맞는 회사 서류가 없음", "", ""]], [6, 40, 40, 36])
+            form_rows = [r for rep in reports for r in rep.self_rows]  # 자기평가표에 실제로 넣은 점수(서식 기준)
+            table(wb.create_sheet("자기평가"), ["항목", "배점", "자기평점", "근거", "확인할 것"],
+                  form_rows or [[s.name, fmt(s.points), fmt(s.score), s.basis, "\n".join(s.notes)] for s in self_scores]
+                  + ([["계", fmt(sum(s.points for s in self_scores)),
+                       fmt(sum(s.score for s in self_scores)) if all(s.score is not None for s in self_scores) else "",
+                       "제안요청서 본문 정량평가 배점기준으로 계산", ""]] if self_scores and not form_rows else [])
+                  or [["", "", "", "제안요청서에서 정량평가 배점기준(정량적 평가 : N점)을 찾지 못함", ""]], [24, 8, 10, 60, 60])
             table(wb.create_sheet("자동입력"), ["서식 파일", "채운 칸 (확인 필요)", "넣은 실적", "줄 모자라 못 넣은 실적"],
                   f_rows or [["서식을 자르지 못함", "", "", ""]], [40, 60, 10, 14])
             g = guide(a.kind)
@@ -257,7 +420,8 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                    ["안내", "공고문·세부기준이 우선 — 위는 공고에서 못 찾을 때의 출발점"]], [16, 90])
             todo = [[d.name, d.human or "-", "이번 단계 범위 밖 — 직접 준비"] for d in load_catalog()
                     if d.id not in SCOPE_DOCS and d.id in g["docs"] + ["reissue"]]
-            todo += [[f"서식_직접기입/{m}", "제안요청서 양식 그대로 — 담당 PM·투입 인력 등 직접 기입", "직접 기입"] for m in manual]
+            todo += [[(f"서식_직접기입/{m}" if per_form else f"통합서식.hwpx — {m.rsplit('.', 1)[0]}"),
+                      "제안요청서 양식 그대로 — 담당 PM·투입 인력 등 직접 기입", "직접 기입"] for m in manual]
             todo += [[m, "", "묶음 확인"] for m in missing] + [[n, "", "참고"] for n in a.notes]
             table(wb.create_sheet("준비 필요"), ["서류", "할 일", "비고"], todo, [40, 40, 30])
 
@@ -270,29 +434,34 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 z.write(merged, "통합본.pdf")
             for p in merged_forms:  # 문서가 하나면 '통합서식.hwpx'
                 z.write(p, "통합서식.hwpx" if len(merged_forms) == 1 else p.name)
-            for p in sorted(filled_dir.glob("*.hwpx")) if filled_dir.exists() else []:
-                z.write(p, f"서식/{p.name}")
-            for p in sorted(manual_dir.glob("*.hwpx")) if manual_dir.exists() else []:
-                z.write(p, f"서식_직접기입/{p.name}")
+            if per_form:  # 통합서식을 못 만든 경우만 서식별 파일(11/04 사용자 결정: 한글 통합본만)
+                for p in sorted(filled_dir.glob("*.hwpx")) if filled_dir.exists() else []:
+                    z.write(p, f"서식/{p.name}")
+                for p in sorted(manual_dir.glob("*.hwpx")) if manual_dir.exists() else []:
+                    z.write(p, f"서식_직접기입/{p.name}")
             for folder, name, data in attach:
                 z.writestr(f"{folder}/{name}", data)
             for f in files:
                 z.write(f, f"공고문/{f.name}")
-            z.writestr("읽어보기.txt", _readme(f"{notice_title} [{guide(a.kind)['name']}]", reports, attach, missing, a.notes, manual))
+            z.writestr("읽어보기.txt", _readme(f"{notice_title} [{guide(a.kind)['name']}]", reports, attach, missing, a.notes, manual,
+                                              per_form))
         return out_zip
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _readme(title: str, reports, attach, missing, notes, manual=()) -> str:
+def _readme(title: str, reports, attach, missing, notes, manual=(), per_form: bool = True) -> str:
     lines = [f"정량평가서 준비 묶음 — {title}".strip(), "",
-             "· 서식/ : 공고 첨부 서식을 서식별로 자르고 회사 정보·연혁·실적 후보를 채운 것 — 채운 칸은 준비표 '자동입력' 시트에서 확인",
-             "· 통합서식.hwpx : 아래 서식 전체(회사 정보를 채운 것 + 직접 기입할 양식)를 공고 서식 순서대로 이은 한글 파일 하나 — 이 파일에서 바로 기입",
-             "· 서식_직접기입/ : 담당 PM·투입 인력·조직·경력·자기평가처럼 공고마다 정하는 값을 적는 서식 — 제안요청서 양식 그대로(채우지 않음), 내려받은 뒤 직접 기입",
-             "· 통합본.pdf : (회사 서류 스캔본) 공고 제출서류·요구 자격에 맞는 회사 서류를 파일 이름 키워드로 골라 원본 그대로 이어 붙인 것(목차·책갈피) — 순서는 준비표 '통합본 순서'",
-             "· 첨부/ : 통합본에 넣은 원본(순서 번호) + 연혁·실적 증빙 — 제출 전 유효기간 확인",
-             "· 공고별_준비표.xlsx : 서식 목록·제출서류·자격요건·실적요건·실적후보·준비 필요 서류",
-             "· 실적후보는 후보일 뿐 — 제출할 실적은 담당자가 확정", "· 이 묶음엔 회사 서류가 들어 있으니 사내에서만 보관",
-             "", f"채운 서식 {len(reports)}개, 직접 기입 서식 {len(manual)}개, 첨부 서류 {len(attach)}개"]
+             "· 통합서식.hwpx : 공고 서식 전체를 서식 순서대로 이은 한글 파일 하나 — 회사 정보·연혁·실적을 채운 서식과 "
+             "담당 PM·투입 인력·자기평가처럼 공고마다 정하는 값을 적는 서식(제안요청서 양식 그대로)이 함께 있음, 이 파일에서 바로 기입 "
+             "— 자동으로 채운 칸은 준비표 '자동입력' 시트에서 확인"]
+    if per_form:
+        lines += ["· 서식/ : 서식별로 잘라 채운 것(통합서식을 다 잇지 못해 함께 넣음)",
+                  "· 서식_직접기입/ : 직접 기입할 서식(제안요청서 양식 그대로)"]
+    lines += ["· 통합본.pdf : (회사 서류 스캔본) 공고 제출서류·요구 자격에 맞는 회사 서류를 파일 이름 키워드로 골라 원본 그대로 이어 붙인 것(목차·책갈피) — 순서는 준비표 '통합본 순서'",
+              "· 첨부/ : 연혁·실적 증빙(참고 — 제출할 실적은 담당자가 확정) + 통합본.pdf에 못 넣은 서류 원본 — 제출 전 유효기간 확인",
+              "· 공고별_준비표.xlsx : 서식 목록·제출서류·자격요건·실적요건·실적후보·준비 필요 서류",
+              "· 실적후보는 후보일 뿐 — 제출할 실적은 담당자가 확정", "· 이 묶음엔 회사 서류가 들어 있으니 사내에서만 보관",
+              "", f"채운 서식 {len(reports)}개, 직접 기입 서식 {len(manual)}개, 첨부 서류 {len(attach)}개"]
     lines += [f"! {m}" for m in missing] + [f"※ {n}" for n in notes]
     return "\r\n".join(lines)

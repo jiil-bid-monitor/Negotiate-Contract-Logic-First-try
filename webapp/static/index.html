@@ -1222,7 +1222,7 @@ footer b { color: var(--muted); }
 
   <!-- 정량평가서 준비(11/03 jiil-quant-docs를 합침) — 화면은 quantdocs/static/index.html을 /quant/로 띄움(iframe), API는 /api/quant/… -->
   <section id="tab-quant" hidden>
-    <iframe id="quantFrame" title="정량평가서 준비" style="width:100%;height:calc(100vh - 150px);min-height:600px;border:0;display:block;background:transparent"></iframe>
+    <iframe id="quantFrame" title="정량평가서 준비" style="width:100%;height:calc(100vh - 150px);border:0;display:block;background:transparent"></iframe>
   </section>
 
   <!-- 투찰 계산기(2026-10-15 요청) — 21라인 "복수예가산출프로그램 v0.1" 화면을 따름. 계산은 bidcalc.js, 화면은 bidcalc_ui.js -->
@@ -3504,11 +3504,21 @@ $("corpusRows").onclick = (ev) => {
   const btn = ev.target.closest("[data-proj]");
   if (btn) toggleProject(btn);
 };
+// 정량평가서 탭: 페이지 전체 스크롤을 끄고 iframe을 화면 아래 끝까지 — 스크롤은 iframe 안 하나만(11/04 사용자 요청: 스크롤 2개 불편)
+function fitQuant(on) {
+  document.documentElement.style.overflow = on ? "hidden" : "";
+  if (!on) return;
+  window.scrollTo(0, 0);
+  const f = $("quantFrame");
+  f.style.height = Math.max(200, window.innerHeight - f.getBoundingClientRect().top - 8) + "px";
+}
+window.addEventListener("resize", () => { if (!$("tab-quant").hidden) fitQuant(true); });
 // 기간은 '나라장터에서 불러오기'를 누를 때 쓴다 (바꾸기만 해서는 다시 조회하지 않는다 — 수집이 몇 분 걸려서)
 function showTab(tab) {
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   for (const name of ["live", "excluded", "corpus", "log", "calc", "quant"]) $("tab-" + name).hidden = tab !== name;
   if (tab === "quant" && !$("quantFrame").getAttribute("src")) $("quantFrame").setAttribute("src", "/quant/");
+  fitQuant(tab === "quant");
   // 탭 줄 오른쪽 찾기 칸은 실제 공고·제외된 공고 탭에서만
   $("liveQ").hidden = !(tab === "live" || tab === "excluded");
   if (tab === "excluded") exData ? renderExcluded() : loadExcluded();

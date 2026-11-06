@@ -78,6 +78,7 @@ class Cell:
     col: int
     colspan: int
     text: str
+    rowspan: int = 1
 
     @property
     def blank(self) -> bool:
@@ -94,10 +95,11 @@ def _cells(xml: str, tbl: tuple[int, int]) -> list[Cell]:
         # 칸 안에 표가 또 있으면 그 칸의 주소는 맨 마지막 cellAddr(바깥 칸 것)
         addr = re.findall(r'cellAddr colAddr="(\d+)" rowAddr="(\d+)"', seg)
         span = re.findall(r'cellSpan colSpan="(\d+)"', seg)
+        rspan = re.findall(r'cellSpan colSpan="\d+" rowSpan="(\d+)"', seg)
         if not addr:
             continue
         col, row = map(int, addr[-1])
-        cells.append(Cell(s, e, row, col, int(span[-1]) if span else 1, _text(seg)))
+        cells.append(Cell(s, e, row, col, int(span[-1]) if span else 1, _text(seg), int(rspan[-1]) if rspan else 1))
     return cells
 
 
@@ -382,6 +384,19 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
 
 # 지일이 아닌 쪽이 적는 칸 — 장비 공급확약서의 발행자(제조사·공식 수입원) 등(11/04 서식 28: 지일 정보가 들어가 '스스로 확약'이 됨)
 _OTHER_PARTY = re.compile(r"발행자|제조사|수입원|공급자|총판")
+
+
+def _row_group(cells: list[Cell], c: Cell) -> str | None:
+    """c 왼쪽에서 세로로 여러 줄을 묶은 머리 칸이 '대표자'면 '대표자', '대리인·수임인'이면 '대리인'(위임장·신청서)."""
+    for o in cells:
+        if o is c or o.rowspan < 2 or o.col >= c.col or not (o.row <= c.row < o.row + o.rowspan):
+            continue
+        t = _sq(o.text)
+        if re.fullmatch(r"대표자|대표이사|위임자|위임인", t):
+            return "대표자"
+        if re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", t):
+            return "대리인"
+    return None
 
 
 def _agent_rows(xml: str, cells: list[Cell]) -> set[int]:
@@ -1141,6 +1156,46 @@ _BID_AMOUNT = r"입\s*찰\s*금\s*액"
 _BID_NAME = r"입\s*찰\s*건\s*명"
 
 
+_P_END = re.compile(r"</(?:[\w.-]+:)?p>")
+_NOTICE_NO_LABEL = r"(?:입\s*찰\s*)?공\s*고\s*(?:\(\s*지\s*명\s*\)\s*)?번\s*호"
+
+
+def _rest_of_para(xml: str, pos: int) -> str:
+    """pos 뒤로 그 문단 끝까지의 글(값이 이미 뒤 run에 있는지 보려고)."""
+    m = _P_END.search(xml, pos)
+    return _sq(_text(xml[pos:m.start() if m else len(xml)]))
+
+
+_P_START = re.compile(r"<(?:[\w.-]+:)?p\b[^>]*>")
+
+
+def _para_before(xml: str, pos: int) -> str:
+    """그 문단 시작부터 pos 앞까지의 글 — 이름표가 앞 run에 따로 있을 때('입찰보증금' | ' : 금   원 (￦   )')."""
+    lo = max(0, pos - 6000)
+    starts = list(_P_START.finditer(xml, lo, pos))
+    return _sq(_text(xml[starts[-1].end() if starts else lo:pos]))
+
+
+def _fill_notice_no_para(xml: str, number: str, rep: FillReport) -> str:
+    """표 밖·칸 안 문단 '○ 공 고 번 호 :'(뒤가 비었을 때) — 나라장터 공고번호(11/06 제보: 청주 입찰보증금 지급각서)."""
+    if not number:
+        return xml
+    done = []
+
+    def fill_t(m):
+        body = m.group(2)
+        if re.search(rf"{_NOTICE_NO_LABEL}\s*[:：]\s*$", body) and not _rest_of_para(xml, m.end()):
+            body = re.sub(rf"({_NOTICE_NO_LABEL}\s*[:：])\s*$", lambda mm: f"{mm.group(1)} {_mark(number)}", body, count=1)
+            done.append(1)
+        return m.group(1) + body + m.group(3)
+    new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, xml, flags=re.S)
+    if done:
+        new = re.sub(r"(<(?:[\w.-]+:)?p\b[^>]*>(?:(?!</(?:[\w.-]+:)?p>).)*?\ue000(?:(?!</(?:[\w.-]+:)?p>).)*?)"
+                     r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", r"\1", new, flags=re.S)
+        rep.filled.append(f"공고번호(문단) → {number}")
+    return new
+
+
 def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") -> str:
     """'입 찰 금 액 : 금     원(금     원)'·'입찰 보증금 : 금     원(금     원)' — 보증금 확약서·각서에서만(가격제안서의 입찰금액은 지일이 정함).
     '입찰금액 :      원 * 부가세 포함'·'입찰보증금액 :      원'(금액 칸만 빈 모양)엔 숫자만, 비어 있는 '입찰건명 :'엔 공고 이름(11/05 창업진흥원 서식 7 —
@@ -1150,6 +1205,7 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
         return xml
     bond = int(round(basis * BOND_RATE))
     blank = r"(금)\s+(원\s*\(\s*금)\s+(원\s*\))"
+    won_sign = r"금\s+원\s*\(\s*[￦₩]\s*\)"  # '금        원 (￦        )'(11/06 청주 입찰보증금 지급각서)
     done = []
     # 이름표만 든 표 칸('입 찰 건 명 :' | 값 칸)엔 끼워 넣지 않음 — 오른쪽 값 칸이 따로 채워져 공고 이름이 두 번 들어갔음(11/06 필암서원 서식 5)
     label_only = [(a, b) for a, b in _spans(xml, "tc") if re.fullmatch(rf"{_BID_NAME}[:：]?", _sq(_text(xml[a:b])))]
@@ -1161,13 +1217,26 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
             if rx.search(body):
                 body = rx.sub(lambda mm: f"{mm.group(1)}금 {_mark(_won_text(value))}", body, count=1)
                 done.append(value)
+            # 이름표가 앞 run에 따로 있으면('입찰보증금' | ' : 금   원 (￦   )') 이 조각은 쌍점부터
+            lead = rf"({label}\s*[:：]\s*)" if re.search(label, body) else (
+                r"^(\s*[:：]\s*)" if re.search(rf"{label}$", _para_before(xml, m.start())) else None)
+            if value in done or lead is None:
+                continue
+            for pat, make in ((blank, lambda mm, v=value: f"{mm.group(1)}금 {_mark(_won_text(v))}"),
+                              (won_sign, lambda mm, v=value: f"{mm.group(1)}금 {_mark(kor_money(v))} 원 (￦ {_mark(f'{v:,}')} )")):
+                rx = re.compile(lead + pat)
+                if rx.search(body):
+                    body = rx.sub(make, body, count=1)
+                    done.append(value)
+                    break
         for label, value in ((_BID_AMOUNT, basis), (_BOND_AMOUNT, bond)):  # '입찰금액 :      원' — 숫자만
             rx = re.compile(rf"((?:^|[\s.])({label})\s*[:：]?)\s+(원)(?!\s*\(\s*금)")
             if value not in done and rx.search(body):
                 body = rx.sub(lambda mm: f"{mm.group(1)} {_mark(f'{value:,}')} {mm.group(3)}", body, count=1)
                 done.append(value)
         in_label_cell = any(a <= m.start() < b for a, b in label_only)
-        if title and not in_label_cell and re.search(rf"{_BID_NAME}\s*[:：]?\s*$", body):  # 비어 있는 '입찰건명 :'
+        if title and not in_label_cell and re.search(rf"{_BID_NAME}\s*[:：]?\s*$", body) \
+                and not _rest_of_para(xml, m.end()):  # 비어 있는 '입찰건명 :' — 뒤 run에 이미 이름이 있으면 안 넣음(11/06 청주 각서 중복)
             body = re.sub(rf"({_BID_NAME})\s*([:：]?)\s*$",
                           lambda mm: f"{mm.group(1)} {mm.group(2) or ':'} {_mark(title)}", body, count=1)
             done.append(0)
@@ -1251,6 +1320,16 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     edits += _self_score_edits(cells, self_scores, rep)
                 for c in cells:
                     key = _label_key(c.text)
+                    # 왼쪽 세로 묶음 칸('대 표 자' | 성명 / 주소 / 연락처)의 사람 칸(11/06 제보: 청주 위임장 대표자 성명·연락처가 빔)
+                    group = _row_group(cells, c)
+                    if group == "대표자":
+                        lab = _sq(c.text)
+                        if re.fullmatch(r"(?:대표자)?(?:성명|이름|성함)", lab):
+                            key = "대표자"
+                        elif re.fullmatch(r"연락처|전화|전화번호|연락처\(전화\)", lab):
+                            key = "전화번호"
+                    elif group == "대리인" and key not in ("회사명", None):
+                        continue  # 대리인 줄은 업체명만(성명·주민번호·주소·연락처는 개인 정보라 비움 — 10/28·11/05 결정)
                     core = re.sub(r"\(.*?\)|[^\w]", "", c.text)  # '〈 주요연혁(요약) 〉' → '주요연혁'
                     if "연혁" in core and len(core) <= 8 and vault.history:
                         lines = [f"{_fmt_ymd(h.get('연월일'))}  {h.get('내용') or ''}".strip() for h in vault.history]
@@ -1355,6 +1434,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     char_id = _fill_variant(chars, run.group(1) if run else "0")
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
             xml = _fill_bond(xml, basis, rep, title)
+            xml = _fill_notice_no_para(xml, no_text, rep)
             xml = _fill_label_paragraphs(xml, vault, rep, chars, sign_only)
             xml = _apply_marks(xml, chars)
             if chars is not None:

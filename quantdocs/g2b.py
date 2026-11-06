@@ -53,6 +53,7 @@ class NoticeFiles:
     skipped: list[str] = field(default_factory=list)  # 못 받은 첨부(이유)
     # 면허제한 그룹 구조(웹앱 수집과 같은 판정용): [그룹 = [행 = [이름(코드), 대신 인정 업종…]]] — 그룹끼리 '또는', 행끼리 '모두'
     license_groups: list[list[list[str]]] = field(default_factory=list)
+    budget: int | None = None  # 나라장터 배정예산(부가세 포함) — 제안요청서에서 기초금액을 못 찾을 때 보증금 확약서에(11/06)
 
     @property
     def negotiation(self) -> bool:
@@ -126,6 +127,10 @@ def fetch_notice(notice_no: str, out_dir: Path) -> NoticeFiles:
     out.award_method = str(row.get("sucsfbidMthdNm") or "")
     out.contract_method = str(row.get("cntrctCnclsMthdNm") or "")
     out.posted = str(row.get("bidNtceDt") or row.get("rgstDt") or "")[:16]
+    try:
+        out.budget = int(float(str(row.get("asignBdgtAmt") or 0).replace(",", ""))) or None
+    except ValueError:
+        out.budget = None
     lic_rows = bidcalc.license_rows(client, row, no, out.ord)
     out.licenses = bidcalc.license_names(lic_rows)
     out.license_groups = license_groups(lic_rows, no)

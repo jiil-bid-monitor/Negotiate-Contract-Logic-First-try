@@ -1821,3 +1821,33 @@ def test_guide_text_cell_gets_company_in_black(tmp_path: Path):
     cid = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>\(주\)가상', out).group(1)
     assert "공동도급참여시" not in out and cid != "7"
     assert 'textColor="#000000"' in re.search(rf'<hh:charPr id="{cid}"[^>]*>', head).group(0)
+
+
+def test_proxy_groups_bond_won_sign_and_notice_no_paragraph(tmp_path: Path):
+    """11/06 제보(청주 공항사거리 서식): ① 위임장 '대 표 자'(세로 묶음) 아래 '성 명'·'연 락 처'가 빔 — 대표자 묶음이면 대표자·전화,
+    대리인 묶음은 업체명만 ② 각서 '○ 입찰보증금 : 금      원 (￦      )'(이름표가 앞 run에 따로)가 빔 ③ '○ 공 고 번 호 :' 빔
+    ④ '○ 입 찰 건 명 : '(뒤 run에 이름이 이미 있음)에 이름이 한 번 더 들어감."""
+    from quantdocs.fill import fill_hwpx
+
+    def c(col, row, text, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+    proxy = ("<hp:p><hp:run><hp:tbl>"
+             f"<hp:tr>{c(0, 0, '대 표 자', 2)}{c(1, 0, '성  명')}{c(2, 0, '')}</hp:tr>"
+             f"<hp:tr>{c(1, 1, '연  락  처')}{c(2, 1, '')}</hp:tr>"
+             f"<hp:tr>{c(0, 2, '대 리 인', 2)}{c(1, 2, '성  명')}{c(2, 2, '')}</hp:tr>"
+             f"<hp:tr>{c(1, 3, '연  락  처')}{c(2, 3, '')}</hp:tr></hp:tbl></hp:run></hp:p>")
+    pledge = ('<hp:p><hp:run charPrIDRef="0"><hp:t>입찰보증금 지급각서</hp:t></hp:run></hp:p>'
+              '<hp:p><hp:run charPrIDRef="0"><hp:t>○ 공 고 번 호 :   </hp:t></hp:run></hp:p>'
+              '<hp:p><hp:run charPrIDRef="0"><hp:t>○ 입 찰 건 명 : </hp:t></hp:run><hp:run charPrIDRef="1"><hp:t>가상 전시관 조성</hp:t></hp:run></hp:p>'
+              '<hp:p><hp:run charPrIDRef="0"><hp:t>○ </hp:t></hp:run><hp:run charPrIDRef="1"><hp:t>입찰보증금</hp:t></hp:run>'
+              '<hp:run charPrIDRef="0"><hp:t> : 금            원 (￦            )   </hp:t></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "p.hwpx", proxy + pledge)
+    fill_hwpx(src, tmp_path / "po.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222"}),
+              title="가상 전시관 조성", g2b_no="R26BK00000001-000", basis=400000000)
+    out = zipfile.ZipFile(tmp_path / "po.hwpx").read("Contents/section0.xml").decode().replace("", "").replace("", "")
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", out))
+    assert "성 명 홍길동 연 락 처 033-111-2222 대 리 인 성 명 연 락 처" in text
+    assert "공 고 번 호 : R26BK00000001-000" in text
+    assert text.count("가상 전시관 조성") == 1
+    assert "금 사억이천만 원 (￦ 420,000,000 )" in text

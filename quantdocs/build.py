@@ -316,7 +316,7 @@ def _safe(name: str) -> str:
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
           award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
           notice_no: str = "", staff_pick: list[str] | None = None, license_groups: list | None = None,
-          patent_pick: list[str] | None = None) -> Path:
+          patent_pick: list[str] | None = None, budget: int | None = None) -> Path:
     """staff_pick: 화면에서 고른 기술인력 이름 — 주면 그 사람만 자기평점 기술인력 점수에(None이면 인력목록 전체).
     patent_pick: 화면에서 고른 특허(파일 경로 등 key) — 주면 그 특허만 자기평점·통합본에(None이면 공고 인정 분야에 이름이 맞는 특허)."""
     import copy
@@ -353,6 +353,8 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         score_ctx = SelfScore(criteria, vault, notice_date or date.today())
         # 입찰보증금 지급 확약서의 입찰 금액 = 제안요청서 기초금액(사업비) — 11/05 사용자 요청
         basis = basis_amount(a.sheet.texts)
+        if not basis and budget:  # 제안요청서·공고문에 기초금액 글이 없으면 나라장터 배정예산(11/06 제보: 청주 각서 보증금 빈칸)
+            basis = (int(budget), "나라장터 배정예산")
         if basis:
             a.notes.append(f"입찰보증금 확약서 입찰 금액 = {basis[0]:,}원 ({basis[1]}에서 읽음)")
         if a.patent_on:

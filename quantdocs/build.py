@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .bundle import Pick, merge, pick
 from .catalog import load_catalog
-from .selfscore import AUTO_KINDS, SelfScore, fmt, read_criteria, score as score_items, staff_status
+from .selfscore import AUTO_KINDS, SelfScore, fmt, patent_scope, patent_status, read_criteria, score as score_items, staff_status
 from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
@@ -48,6 +48,9 @@ class Analysis:
     staff: list[dict] = field(default_factory=list)  # 기술인력 고르기(화면) — staff_status
     staff_rule: str = ""  # 이 공고 기술인력 배점 기준 한 줄(등급별 점수·재직 조건)
     staff_on: bool = False  # 제안요청서에 기술인력 배점 기준(등급별 점수)이 있는 공고 — 화면 칸은 이때만 보임(11/05)
+    patents: list[dict] = field(default_factory=list)  # 보유기술(특허) 고르기(화면) — patent_status
+    patent_rule: str = ""  # 이 공고 보유기술 배점 기준 한 줄(건수 구간·인정 분야)
+    patent_on: bool = False  # 제안요청서에 보유기술 배점식(건수 구간)이 있는 공고 — 화면 칸은 이때만(11/06 사용자 요청)
     hwp_needed: bool = False  # 서식이 PDF에만 있음 — 통합서식을 못 만들어 '한글 파일 필요' 표시(11/05 사용자 결정)
 
 
@@ -189,11 +192,21 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
     a = Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
     a.hwp_needed = _hwp_needed(sheet.forms, readable)
     crits = read_criteria(_rfp_first(files, converted))
-    # 보유기술(특허)을 평가하는 공고면 특허증 원본을 통합본 끝에(11/05 사용자 결정 (가))
-    if any(c.kind == "patent" for c in crits):
+    # 보유기술(특허)을 평가하는 공고면 특허증 원본을 통합본 끝에(11/05 사용자 결정 (가)) — 공고 인정 분야에 맞는(또는 화면에서 고른) 특허만(11/06)
+    pcrit = next((c for c in crits if c.kind == "patent"), None)
+    a.patents = patent_status(pcrit, vault)
+    a.patent_on = bool(pcrit is not None and pcrit.bands)
+    if pcrit is not None:
+        scope, _ = patent_scope(pcrit)
+        a.patent_rule = f"{pcrit.name} {pcrit.points:g}점 — " + ", ".join(b.text for b in pcrit.bands) + (f" · 인정: {scope}" if scope else "")
         from .vault import patent_files
+        chosen = getattr(vault, "patent_pick", None)
+        if chosen is None:
+            chosen = {p["key"] for p in a.patents if p["counted"]}
         have = {p.path for p in a.picks}
-        a.picks += [Pick("전문기술(특허) 보유 증빙", k) for k in patent_files(vault) if k not in have]
+        sheet_files = {str(p.get("파일")) for p in (getattr(vault, "patents", None) or []) if p.get("파일")}
+        a.picks += [Pick("전문기술(특허) 보유 증빙", k) for k in patent_files(vault)
+                    if k not in have and (k in chosen or (k not in sheet_files and not sheet_files))]
     # 기술인력 고르기(11/05 사용자 요청 (나)) — 이 공고 배점 기준으로 인력목록 사람마다 들어가는지
     crit = next((c for c in crits if c.kind == "staff"), None)
     a.staff = staff_status(crit, vault, ref)
@@ -245,6 +258,9 @@ def summary(a: Analysis) -> dict:
         "staff": [{"name": p["이름"], "grade": p["등급"], "joined": p["입사일"], "ok": p["counted"], "why": p["why"]} for p in a.staff],
         "staff_rule": a.staff_rule,
         "staff_on": a.staff_on,
+        "patents": [{"key": p["key"], "name": p["명칭"], "ok": p["counted"], "why": p["why"]} for p in a.patents],
+        "patent_rule": a.patent_rule,
+        "patent_on": a.patent_on,
         "hwp_needed": a.hwp_needed,
     }
 
@@ -290,14 +306,19 @@ def _safe(name: str) -> str:
 
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
           award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
-          notice_no: str = "", staff_pick: list[str] | None = None, license_groups: list | None = None) -> Path:
-    """staff_pick: 화면에서 고른 기술인력 이름 — 주면 그 사람만 자기평점 기술인력 점수에(None이면 인력목록 전체)."""
+          notice_no: str = "", staff_pick: list[str] | None = None, license_groups: list | None = None,
+          patent_pick: list[str] | None = None) -> Path:
+    """staff_pick: 화면에서 고른 기술인력 이름 — 주면 그 사람만 자기평점 기술인력 점수에(None이면 인력목록 전체).
+    patent_pick: 화면에서 고른 특허(파일 경로 등 key) — 주면 그 특허만 자기평점·통합본에(None이면 공고 인정 분야에 이름이 맞는 특허)."""
+    import copy
     files = [Path(f) for f in files]
+    vault = copy.copy(vault)
     if staff_pick is not None:
-        import copy
         picked = set(staff_pick)
-        vault = copy.copy(vault)
         vault.staff = [r for r in vault.staff if str(r.get("이름") or "").strip() in picked]
+    if patent_pick is not None:
+        vault.patent_pick = set(patent_pick)
+        vault.patent_pick_from_screen = True
     work = Path(tempfile.mkdtemp(prefix="quantdocs_build_"))
     try:
         a = analyze(files, vault, notice_date, work, award_method, contract_method, licenses, license_groups)
@@ -314,6 +335,8 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         agency_no = agency_notice_no(a.sheet.texts)  # 공고문의 기관 공고번호 — 서식 공고번호 칸에(11/04 사용자 요청)
         # 정량평가 자기평점 — 제안요청서 본문 배점기준(11/05 사용자 요청). 제안요청서를 먼저 봄
         criteria = read_criteria(_rfp_first(files, a.converted))
+        if getattr(vault, "patent_pick", None) is None:  # 화면에서 안 골랐으면 공고 인정 분야에 이름이 맞는 특허만(통합본과 같게)
+            vault.patent_pick = {p["key"] for p in a.patents if p["counted"]}
         self_scores = score_items(criteria, vault, notice_date or date.today()) if criteria else []
         for s in self_scores:  # 실적·보유기술 등은 담당자가 직접 채점(11/05 사용자 결정 — 기술인력·경영상태·신인도만 자동)
             if s.kind not in AUTO_KINDS:
@@ -323,6 +346,10 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         basis = basis_amount(a.sheet.texts)
         if basis:
             a.notes.append(f"입찰보증금 확약서 입찰 금액 = {basis[0]:,}원 ({basis[1]}에서 읽음)")
+        if a.patent_on:
+            got = [p["명칭"] for p in a.patents if p["key"] in vault.patent_pick]
+            a.notes.append(f"보유기술(특허) 점수·통합본 증빙은 {'화면에서 고른' if patent_pick is not None else '공고 인정 분야에 이름이 맞는'} "
+                           f"{len(got)}건: " + (", ".join(got[:10]) or "없음"))
         if staff_pick is not None:
             names = sorted({str(r.get("이름")).strip() for r in vault.staff})
             a.notes.append(f"기술인력 점수는 화면에서 고른 {len(names)}명으로 계산: " + ", ".join(names[:20]))

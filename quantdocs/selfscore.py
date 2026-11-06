@@ -402,25 +402,83 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
     return res
 
 
+# 공고가 인정하는 특허 분야(주석 '※ 영상 제작 및 실감 콘텐츠 관련 보유 특허') — 낱말마다 같은 뜻 낱말도 함께(11/06 사용자 요청)
+_PATENT_SYN = {
+    "영상": ["영상", "동영상", "비디오", "미디어", "디스플레이", "프로젝션", "프로젝터", "홀로그램", "스크린", "촬영"],
+    "실감": ["실감", "가상", "증강", "혼합현실", "몰입", "인터랙티브", "체감", "VR", "AR", "MR", "XR", "메타버스"],
+    "콘텐츠": ["콘텐츠", "컨텐츠"],
+    "미디어": ["미디어", "영상", "디스플레이"],
+    "디지털": ["디지털", "미디어", "영상", "가상", "증강"],
+    "전시": ["전시", "쇼케이스", "진열"],
+    "체험": ["체험"],
+}
+_PATENT_STOP = re.compile(r"관련|보유|특허|실용\s*신안|및|등|인정|기술|분야|해당|건수|제작|개발|^\W+$")
+
+
+def patent_scope(c: Criterion | None) -> tuple[str, list[str]]:
+    """(주석의 인정 분야 문장, 맞춰 볼 낱말들). 분야 문장이 없으면 ('', []) — 모든 특허를 인정으로 봄."""
+    if c is None:
+        return "", []
+    m = re.search(r"※\s*([^.\n]*(?:특허|실용\s*신안)[^.\n]*)", c.note)
+    if not m:
+        return "", []
+    scope = re.sub(r"\s+", " ", m.group(1)).strip()
+    words: list[str] = []
+    for w in re.findall(r"[가-힣A-Za-z]{2,}", scope):
+        if _PATENT_STOP.search(w):
+            continue
+        for k, syn in _PATENT_SYN.items():
+            if k in w:
+                words += syn
+        words.append(w)
+    return scope, list(dict.fromkeys(words))
+
+
+def patent_key(p: dict) -> str:
+    return str(p.get("파일") or p.get("등록번호") or p.get("명칭") or "").strip()
+
+
+def patent_status(c: Criterion | None, vault) -> list[dict]:
+    """특허마다 이 공고 분야에 맞는지 — 화면 고르기(처음 체크 상태)·기본 점수 계산이 같이 씀. [{key, 명칭, counted, why}]."""
+    scope, words = patent_scope(c)
+    out = []
+    for p in getattr(vault, "patents", None) or []:
+        key = patent_key(p)
+        if not key:
+            continue
+        name = str(p.get("명칭") or Path(key).stem)
+        hay = _sq(name + " " + Path(key).stem).upper()
+        hit = next((w for w in words if _sq(w).upper() in hay), None)
+        ok = not words or hit is not None
+        why = "" if not words else (f"'{hit}' 맞음" if hit else "공고 인정 분야와 이름이 안 맞음")
+        out.append({"key": key, "명칭": name, "counted": ok, "why": why})
+    return out
+
+
 def _patent(c: Criterion, vault) -> ItemScore:
     res = ItemScore(c.name, c.points, c.kind, None)
     if not c.bands:
         res.notes.append("배점기준 표(건수 구간)를 읽지 못함 — 제안요청서 확인")
         return res
     pats = getattr(vault, "patents", None)
+    picked = getattr(vault, "patent_pick", None)  # 화면에서 고른 특허(또는 공고 분야로 고른 기본) — 없으면 전부
     if not pats:  # 시트가 비어 있으면 아직 안 적은 것으로 봄(0건이면 '0건'이라고 직접 기입)
         res.notes.append("자료 없음 — 회사자료 '특허목록' 시트")
         return res
-    n = sum(1 for p in pats if str(p.get("등록번호") or p.get("명칭") or "").strip())
+    if picked is not None:
+        pats = [p for p in pats if patent_key(p) in picked]
+    n = sum(1 for p in pats if patent_key(p))
     band = _band(c, n)
     res.score = band.score if band else None
     res.basis = f"{n}건 → '{band.text if band else '구간 없음'}'"
     if getattr(vault, "patent_src", "") == "파일":
         res.basis += " (특허증 파일 수 — 파일 하나를 1건으로 셈)"
         res.notes.append("특허증 파일 하나에 여러 건이 들었거나 만료·말소된 특허가 있으면 고칠 것")
-    scope = re.search(r"※\s*([^.\n]*특허[^.\n]*)", c.note)
+    scope, _ = patent_scope(c)
+    if pats:
+        res.basis += " — " + ", ".join(str(p.get("명칭") or Path(patent_key(p)).stem) for p in pats[:8])
     if scope:
-        res.notes.append(f"공고가 인정하는 특허인지 확인({scope.group(1).strip()[:50]})")
+        res.notes.append(f"공고 인정 분야: {scope[:50]} — {'화면에서 고른' if getattr(vault, 'patent_pick_from_screen', False) else '이름으로 고른'} 특허만 셈, 확인할 것")
     return res
 
 

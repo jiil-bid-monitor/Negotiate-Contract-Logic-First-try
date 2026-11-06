@@ -55,10 +55,11 @@ HWP_NEEDED_NOTE = ("⚠ 한글 파일 필요 — 이 공고는 서식이 PDF에�
                    "나라장터·발주기관에서 한글(HWP/HWPX) 서식을 받아 직접 작성하세요")
 
 
-def _hwp_needed(forms, converted: dict) -> bool:
-    """서식 목록은 있는데 서식이 든 첨부가 모두 한글(.hwp·.hwpx)이 아님(PDF 등)."""
-    return bool(forms) and not any(Path(converted.get(f.source, f.source)).suffix.lower() in (".hwp", ".hwpx")
-                                   or Path(f.source).suffix.lower() in (".hwp", ".hwpx") for f in forms)
+def _hwp_needed(forms, files) -> bool:
+    """서식 목록은 있는데 읽은 첨부에 한글 파일(.hwp·.hwpx)이 하나도 없음(PDF 등만).
+    서식 목록을 어느 파일에서 읽었는지로 보지 않음 — 11/06 필암서원: 나라장터 공고문 변환본 PDF에서 목록이 먼저 읽혀
+    제안요청서가 한글인데도 '한글 파일 필요'가 떴음."""
+    return bool(forms) and not any(Path(f).suffix.lower() in (".hwp", ".hwpx") for f in files)
 
 
 def _is_hwpx(p: Path) -> bool:
@@ -186,7 +187,7 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
         notes.append(f"{guide(kind)['name']} 공고 — 첨부에서 서식 목록을 찾지 못함. 서식은 {guide(kind)['source']}")
     picks, pick_missing = pick(list(vault.files), [it.text for it in sheet.submit_items], quals, with_history=bool(vault.history))
     a = Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
-    a.hwp_needed = _hwp_needed(sheet.forms, converted)
+    a.hwp_needed = _hwp_needed(sheet.forms, readable)
     crits = read_criteria(_rfp_first(files, converted))
     # 보유기술(특허)을 평가하는 공고면 특허증 원본을 통합본 끝에(11/05 사용자 결정 (가))
     if any(c.kind == "patent" for c in crits):
@@ -213,7 +214,10 @@ def _rfp_first(files: list[Path], converted: dict[str, str]) -> list[Path]:
 
 
 # 화면에서 뺀 알림(11/04 사용자 요청) — 읽어보기.txt엔 그대로 남음
-_SCREEN_HIDDEN = re.compile(r"회사정보 빈 칸을 서류 PDF에서 읽어 채움|글이 없는 스캔본인데 글자 인식 도구|스캔본이라 글자 인식\(OCR\)으로 읽은 서류|준공 전\(")
+# (11/06 사용자 요청) 11/05에 더한 자료 읽기 안내도 — 묶음 밖 PDF·특허증 건수·실적/인력 엑셀·신용평가등급·연혁 줄 수. '⚠' 경고는 그대로 보임
+_SCREEN_HIDDEN = re.compile(r"회사정보 빈 칸을 서류 PDF에서 읽어 채움|글이 없는 스캔본인데 글자 인식 도구|스캔본이라 글자 인식\(OCR\)으로 읽은 서류|준공 전\("
+                            r"|회사 자료 묶음 밖 PDF도 읽음|특허 건수는 특허증 파일|실적목록은 jiil-quant-docs 폴더|기술인력은 jiil-quant-docs 폴더"
+                            r"|신용평가등급 \S+\(.*에서 읽음|연혁 \d+줄을 ")
 
 
 def summary(a: Analysis) -> dict:

@@ -428,71 +428,50 @@ class Nightly:
         threading.Thread(target=loop, name="bid-nightly", daemon=True).start()
 
 
-# ── 성적표 글 ───────────────────────────────────────────────
+# ── 성적표 글 (11/06 사용자 요청: 총 투찰 건수·투찰건별 등수·보정 방향만) ─────────────
 
-def _stats(entries: list[dict[str, Any]]) -> str:
-    """개찰 결과가 나온 투찰 기록 묶음 → 한 줄."""
-    done = [e for e in entries if (e.get("result") or {}).get("status") == "완료"]
+def _rank_text(e: dict[str, Any]) -> str:
+    r = e.get("result") or {}
+    if r.get("status") != "완료":
+        return r.get("status") or "개찰 전"
+    own = r.get("own")
+    if not own:
+        return f"참가 기록 없음 ({r.get('bidderCount', '-')}곳)"
+    if own.get("rank") is None:
+        return f"하한 미달 ({r.get('bidderCount', '-')}곳)"
+    return f"{own['rank']}위 / {r.get('bidderCount', '-')}곳"
+
+
+def direction(entries: list[dict[str, Any]]) -> list[str]:
+    """개찰된 지일 투찰로 본 보정 방향 — 미달이 많으면 높이는 쪽, 통과했는데 1위보다 비쌌으면 낮추는 쪽."""
+    done = [e["result"] for e in entries if (e.get("result") or {}).get("status") == "완료" and e["result"].get("own")]
     if not done:
-        return "개찰 결과 0건"
-    own = [e["result"]["own"] for e in done if e["result"].get("own")]
-    ranked = [o for o in own if o.get("rank") is not None]
-    diffs = [e["result"]["rateDiff"] for e in done if e["result"].get("rateDiff") is not None]
-    parts = [f"개찰 {len(done)}건", f"지일 참가 확인 {len(own)}건",
-             f"하한선 통과(순위 있음) {len(ranked)}건" + (f" ({len(ranked) / len(own) * 100:.0f}%)" if own else ""),
-             f"1순위 {sum(1 for o in ranked if o['rank'] == 1)}", f"5위 안 {sum(1 for o in ranked if o['rank'] <= 5)}"]
-    if diffs:
-        parts.append(f"기준 − 실제 사정률 가운데값 {statistics.median(diffs):+.3f}%p")
-    return " · ".join(parts)
+        return ["아직 개찰된 투찰이 없어 판단할 수 없음"]
+    under = [r for r in done if r["own"].get("rank") is None]
+    passed = [r for r in done if r["own"].get("rank") is not None]
+    dear = [r for r in passed if r["own"]["rank"] > 1 and (r.get("gapToWinner") or 0) > 0]
+    diffs = [r["rateDiff"] for r in done if r.get("rateDiff") is not None]
+    mid = f" (기준 사정률이 실제보다 가운데값 {statistics.median(diffs):+.3f}%p)" if diffs else ""
+    lines = [f"개찰 {len(done)}건 중 하한선 통과 {len(passed)}건 · 미달 {len(under)}건 · 1순위 {sum(1 for r in passed if r['own']['rank'] == 1)}건{mid}"]
+    if len(under) > len(passed):
+        lines.append("→ 기준 사정률을 높이는 쪽: 실제 사정률보다 낮게 잡아 하한선에 못 미친 투찰이 더 많음")
+    elif passed and len(dear) * 2 > len(passed):
+        gaps = [r["gapToWinner"] for r in dear]
+        lines.append(f"→ 기준 사정률을 조금 낮추는 쪽: 통과한 투찰 대부분이 1위보다 비쌈(1위와 차이 가운데값 {statistics.median(gaps):,.0f}원)")
+    else:
+        lines.append("→ 지금 수준 유지: 미달과 비싼 투찰이 한쪽으로 몰리지 않음")
+    return lines
 
 
 def build_report(entries: list[dict[str, Any]], live: list[dict[str, Any]], state: dict[str, Any], now: datetime,
                  own_bizno: str = "") -> str:
-    week_ago = now - timedelta(days=7)
-    recent = [e for e in entries if (_parse_dt(e.get("recordedAt")) or now) >= now - timedelta(days=28)]
-    lines = [f"투찰 성적표 — {now:%Y-%m-%d} (매주 자동 작성)", "",
-             "※ 규칙·기준값은 자동으로 바꾸지 않습니다. 쌓인 개찰 결과는 추천 칸이 다음 계산부터 그대로 씁니다.", "",
-             "1. 지일 투찰 기록", f"  전체: {_stats(entries)}", f"  최근 4주 기록: {_stats(recent)}", "", "  추천 방식별(전체):"]
-    by_method: dict[str, list] = {}
+    week = [e for e in entries if (_parse_dt(e.get("recordedAt")) or now) >= now - timedelta(days=7)]
+    lines = [f"투찰 성적표 — {now:%Y-%m-%d}", "",
+             f"■ 총 투찰 {len(entries)}건 (이번 주 {len(week)}건)", "", "■ 투찰건별 등수"]
     for e in entries:
-        by_method.setdefault(e.get("method") or "-", []).append(e)
-    for m, es in sorted(by_method.items(), key=lambda x: -len(x[1])):
-        lines.append(f"   - {m} ({len(es)}건): {_stats(es)}")
-
-    opened = [e for e in entries if (e.get("result") or {}).get("status") == "완료"
-              and (_parse_dt(e["result"].get("fetchedAt")) or now) >= week_ago]
-    lines += ["", f"2. 이번 주 개찰 결과가 나온 투찰 ({len(opened)}건)"]
-    for e in opened:
-        r = e["result"]
-        own = r.get("own") or {}
-        rank = f"{own['rank']}위" if own.get("rank") is not None else ("순위 없음(하한 미달 등)" if own else "참가 기록 없음")
-        rate = f"{r['assessmentRate']:.4f}%" if r.get("assessmentRate") is not None else "-"
-        diff = f"{r['rateDiff']:+.3f}%p" if r.get("rateDiff") is not None else "-"
-        lines.append(f"   - {e.get('noticeNo')} {e.get('title', '')[:30]} — {rank}/{r.get('bidderCount', '-')}곳 · "
-                     f"기준 {e.get('rate') if e.get('rate') is not None else '-'}% · 실제 {rate} ({diff}) · {e.get('method') or '-'}")
-    if not opened:
-        lines.append("   (없음)")
-
-    new = [r for r in live if (_parse_dt(r.get("fetched_at")) or now) >= week_ago]
-    watch = state.get("watch") or {}
-    lines += ["", "3. 투찰 경향 자료 (입찰 공고 개찰 결과 자동 수집)",
-              f"  누적 {len(live)}건 · 이번 주 +{len(new)}건 · 개찰 기다리는 공고 {sum(1 for v in watch.values() if v.get('status') == '대기')}건"
-              f" · 결과 없음(유찰 등) {sum(1 for v in watch.values() if v.get('status') == '결과 없음')}건"]
-    sums = [summarize_record(r, own_bizno) for r in new]
-    rates = [s["rate"] for s in sums if s["rate"]]
-    gaps = [s["winnerGap"] for s in sums if s["winnerGap"] is not None]
-    if rates:
-        lines.append(f"  이번 주 실제 사정률 가운데값 {statistics.median(rates):.4f}% (범위 {min(rates):.3f}~{max(rates):.3f}%)")
-    if gaps:
-        lines.append(f"  이번 주 1순위 투찰률 − 하한율 가운데값 {statistics.median(gaps):+.3f}%p")
-    by_work: dict[str, list] = {}
-    for s in sums:
-        by_work.setdefault(s["work"] or "-", []).append(s)
-    for w, ss in sorted(by_work.items()):
-        rs = [s["rate"] for s in ss if s["rate"]]
-        lines.append(f"   - {w} {len(ss)}건" + (f" · 사정률 가운데 {statistics.median(rs):.4f}%" if rs else "")
-                     + f" · 참가 가운데 {statistics.median([s['bidders'] for s in ss]):.0f}곳")
-    last = state.get("lastResult") or {}
-    if last.get("error"):
-        lines += ["", f"※ 지난 실행 오류: {last['error']}"]
+        lines.append(f"  · {str(e.get('recordedAt') or '')[:10]}  {(e.get('title') or e.get('noticeNo') or '')[:30]}  —  {_rank_text(e)}")
+    if not entries:
+        lines.append("  (없음)")
+    lines += ["", "■ 투찰 경향 보정 방향", *[f"  {x}" for x in direction(entries)],
+              f"  ※ 추천 칸은 모은 개찰 결과 {len(live)}건을 다음 계산부터 자동으로 씀(규칙은 그대로)"]
     return "\n".join(lines) + "\n"

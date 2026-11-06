@@ -1,7 +1,7 @@
 """투찰 내역 — 투찰 계산기에서 정한 금액으로 실제 투찰한 공고를 남긴다(2026-11-06 사용자 요청).
 
 투찰 계산기 탭의 '투찰내역' 화면이 이 기록을 보여 준다. 한 줄 = 한 번 투찰(공고번호·투찰금액·기준 사정률·
-추천 방식·기록자·메모). 같은 공고를 다시 기록하면 줄이 하나 더 생긴다(정정공고·재투찰을 덮어쓰지 않게) — 잘못 넣은 줄은 지운다.
+추천 방식 — 11/06 사용자 요청으로 기록자·메모는 뺌). 같은 공고를 다시 기록하면 줄이 하나 더 생긴다(정정공고·재투찰을 덮어쓰지 않게) — 잘못 넣은 줄은 지운다.
 
 파일은 서버 PC `data/bid_log.json`(저장소에 올리지 않는 폴더 — 지일 투찰 이력은 공개 금지). 판단 기록처럼
 `BACKUP_DIR`이 있으면 저장할 때마다 백업 폴더에도 한 부 쓰고, 이 PC에 파일이 없으면 백업에서 되살린다.
@@ -26,15 +26,13 @@ KST = timezone(timedelta(hours=9))
 FILE_NAME = "bid_log.json"
 
 # 화면이 보내는 값 → 저장할 이름과 종류. 그 밖의 값은 버린다
-_TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "method": 80,
-         "recordedBy": 30, "memo": 300}
+_TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "method": 80}
 _NUMBER = ("basis", "lowerRate", "rangeLo", "rangeHi", "aValue", "bid", "rate", "planned", "netCost")
 _NO_RE = re.compile(r"^[A-Z0-9]{8,14}$")
 
 CSV_COLUMNS = [("recordedAt", "기록일시"), ("noticeNo", "공고번호"), ("noticeOrd", "차수"), ("title", "공고명"),
                ("institution", "발주처"), ("workType", "업무"), ("basis", "기초금액"), ("lowerRate", "하한율(%)"),
-               ("aValue", "A값"), ("bid", "투찰금액"), ("rate", "기준 사정률(%)"), ("method", "추천 방식"),
-               ("recordedBy", "기록자"), ("memo", "메모")]
+               ("aValue", "A값"), ("bid", "투찰금액"), ("rate", "기준 사정률(%)"), ("method", "추천 방식")]
 # 개찰 결과 칸(CSV 뒤쪽) — result 안의 값
 RESULT_COLUMNS = [("status", "개찰 결과"), ("ownRank", "지일 순위"), ("bidderCount", "참가 업체 수"), ("assessmentRate", "실제 사정률(%)"),
                   ("plannedPrice", "예정가격"), ("winnerName", "1순위 업체"), ("winnerAmount", "1순위 투찰금액"), ("winnerRate", "1순위 투찰률(%)"),
@@ -111,14 +109,12 @@ class BidLog:
         return entry
 
     def update(self, entry_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """메모·투찰금액만 고친다(잘못 넣은 금액 바로잡기)."""
+        """투찰금액만 고친다(잘못 넣은 금액 바로잡기)."""
         with self._lock:
             rows = self._read()
             row = next((r for r in rows if r.get("id") == entry_id), None)
             if row is None:
                 raise ValueError("그 기록을 찾지 못했습니다 — 화면을 새로 고치세요")
-            if "memo" in data:
-                row["memo"] = str(data.get("memo") or "").strip()[:_TEXT["memo"]]
             if "bid" in data:
                 bid = _num(data.get("bid"))
                 if not bid or bid <= 0:

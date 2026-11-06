@@ -302,7 +302,7 @@
       const text = (id, v) => { $(id).textContent = v || "-"; };
       LAST_NOTICE = { noticeNo: d.notice_no || no.replace(/-\d+$/, ""), noticeOrd: d.notice_ord || "", title: d.title || "",
         institution: d.institution || "", workType: d.work_type || "" };
-      REC_BID_EDITED = false; $("#cRecMemo").value = ""; recordMsg("");
+      REC_BID_EDITED = false; recordMsg("");
       text("#cTitle", d.title);
       text("#cInst", d.institution);
       text("#cNoShow", d.notice_no ? `${d.notice_no}${d.notice_ord ? "-" + d.notice_ord : ""}` : "");
@@ -583,7 +583,6 @@
     return data;
   };
   const recordMsg = (msg, cls = "") => { const el = $("#cRecordMsg"); el.textContent = msg; el.className = `job ${cls}`; };
-  const whoAmI = () => (document.getElementById("judge")?.value || "").trim();
   function fillRecordBid() {
     if (REC_BID_EDITED) return;  // 사람이 고친 금액은 덮지 않음
     $("#cRecBid").value = CURRENT ? Number(CURRENT.bid).toLocaleString("ko-KR") : "";
@@ -593,8 +592,6 @@
     if (!LAST_NOTICE) { recordMsg("먼저 공고번호로 공고를 불러오세요", "err"); return; }
     const bid = numIn("#cRecBid");
     if (!(bid > 0)) { recordMsg("투찰금액을 넣으세요", "err"); return; }
-    const by = whoAmI();
-    if (!by) { recordMsg("화면 맨 위 이름 칸에 이름을 적어 주세요 — 누가 기록했는지 남깁니다", "err"); document.getElementById("judge")?.focus(); return; }
     const same = CURRENT && Math.round(CURRENT.bid) === Math.round(bid);
     $("#cRecord").disabled = true;
     try {
@@ -603,7 +600,6 @@
         aValue: aValue() || null, netCost: numIn("#cNet"), bid,
         // 금액을 손으로 바꿨으면 추천 방식·기준 사정률은 그 금액의 근거가 아니라서 '직접 입력'으로
         rate: same ? CURRENT.rate : null, method: same ? CURRENT.method : "직접 입력", planned: same ? CURRENT.planned : null,
-        recordedBy: by, memo: $("#cRecMemo").value,
       });
       LOG = d.entries || [];
       renderLog();
@@ -617,7 +613,7 @@
 
   let LOG = [], EDITING = null;
   const day = (iso) => (iso ? iso.slice(0, 16).replace("T", " ") : "-");
-  const logMatch = (r, q) => !q || [r.noticeNo, r.title, r.institution, r.recordedBy, r.memo].join(" ").toLowerCase().includes(q);
+  const logMatch = (r, q) => !q || [r.noticeNo, r.title, r.institution].join(" ").toLowerCase().includes(q);
   // 개찰 결과 칸(11/06) — 순위/참가 · 실제 사정률, 줄을 펼치면 1순위 업체·금액·차이
   const pct3 = (v) => (v == null ? "-" : `${Number(v).toFixed(3)}%`);
   const signed = (v, unit, d = 3) => (v == null ? "" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${unit === "원" ? won(Math.abs(v)) : Math.abs(v).toFixed(d)}${unit}`);
@@ -642,7 +638,7 @@
   function detailRow(r) {
     const res = r.result || {}, o = res.own, w = res.winner;
     const item = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
-    return `<tr class="bidlog-detail" data-id="${esc(r.id)}"><td colspan="9"><div class="res-grid">
+    return `<tr class="bidlog-detail" data-id="${esc(r.id)}"><td colspan="7"><div class="res-grid">
       ${item("1순위 업체", w ? esc(w.name) : "-")}
       ${item("1순위 투찰금액", w && w.amount != null ? `${won(w.amount)}원` : "-")}
       ${item("1순위 투찰률", w && w.rate != null ? pct3(w.rate) : "-")}
@@ -665,7 +661,7 @@
         + (done.length ? ` · 개찰 ${done.length}건 중 1순위 ${done.filter((r) => r.result.own.rank === 1).length} · 5위 안 ${done.filter((r) => r.result.own.rank <= 5).length}` : "")
       : "";
     if (!rows.length) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="9" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="7" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
       return;
     }
     $("#bidlogRows").innerHTML = rows.map((r) => {
@@ -679,8 +675,6 @@
         <td class="num" data-l="기준 사정률">${pct3(r.rate)}<span class="sub">${esc(r.method || "-")}</span></td>
         <td class="res" data-l="개찰 결과"><div>${resultCell(r)}</div></td>
         <td class="num" data-l="실제 사정률">${rateCell(r)}</td>
-        <td data-l="기록자">${esc(r.recordedBy || "-")}</td>
-        <td class="memo" data-l="메모">${edit ? `<input class="edit" data-f="memo" maxlength="300" value="${esc(r.memo || "")}">` : esc(r.memo || "")}</td>
         <td class="act">${edit
           ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
           : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button><span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>
@@ -707,7 +701,7 @@
     try {
       LOG = (await api("/api/bidlog")).entries || [];
     } catch (err) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="9" class="why">투찰내역을 불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="7" class="why">투찰내역을 불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
       return;
     }
     renderLog();
@@ -725,7 +719,7 @@
       if (act === "cancel") { EDITING = null; renderLog(); return; }
       if (act === "save") {
         const val = (f) => tr.querySelector(`input[data-f="${f}"]`).value;
-        LOG = (await post("/api/bidlog/update", { id, bid: val("bid").replace(/[^\d.]/g, ""), memo: val("memo") })).entries || [];
+        LOG = (await post("/api/bidlog/update", { id, bid: val("bid").replace(/[^\d.]/g, "") })).entries || [];
         EDITING = null; renderLog(); return;
       }
       if (act === "del") {

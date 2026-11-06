@@ -995,6 +995,68 @@ footer b { color: var(--muted); }
 .calc-notes .calc-auto { color: var(--accent); }
 /* 못 찾은 값은 21라인처럼 "-" — 빈 칸 안내 글자가 아니라 값처럼 보이게 */
 .calc-form input::placeholder { color: inherit; opacity: 1; text-align: center; }
+/* 투찰 계산기 안 두 쪽(2026-11-06) */
+.calc-subtabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin: -6px 0 14px; }
+#tab-calc .calc-subtabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted);
+  padding: 8px 16px; margin-bottom: -1px; font-size: 14px; }
+#tab-calc .calc-subtabs button[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); font-weight: 700; }
+.calc-count { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 2px; border-radius: 9px; background: var(--chip);
+  border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--ink); }
+.calc-count:empty { display: none; }
+.calc-draw { margin: 0 0 12px; }
+/* (11/06 사용자: 가시성) 접힌 난수표 줄을 눈에 띄는 버튼 줄로 — 굵은 제목 + 오른쪽 '펼치기' 버튼 */
+.calc-draw > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line-strong); border-left: 4px solid var(--accent); padding: 12px 14px; }
+.calc-draw > summary::-webkit-details-marker { display: none; }
+.calc-draw > summary:hover { background: var(--chip); }
+.calc-draw > summary .calc-h { margin: 0; font-size: 15px; font-weight: 700; color: var(--ink-strong); }
+.calc-draw > summary .why { font-size: 13px; }
+.calc-draw > summary::after { content: "펼치기 ▼"; margin-left: auto; padding: 5px 12px; border-radius: var(--radius);
+  background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.calc-draw[open] > summary::after { content: "접기 ▲"; background: var(--panel); color: var(--accent); border: 1px solid var(--accent); }
+.calc-draw[open] > summary { margin-bottom: 10px; }
+.calc-record { background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; margin-bottom: 10px; }
+.calc-record .calc-h { margin: 0 0 8px; }
+.calc-record .calc-h .why { font-weight: 400; font-size: 12px; }
+.calc-record-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; }
+.calc-record-row label { display: flex; gap: 6px; align-items: center; color: var(--ink); font-weight: 600; white-space: nowrap; }
+#cRecBid { width: 160px; text-align: right; font-variant-numeric: tabular-nums; }
+#cRecMemo { width: 280px; font-weight: 400; }
+.calc-record .job.ok { color: var(--good, #1b6e43); font-weight: 600; }
+.bidlog-bar { justify-content: space-between; }
+.bidlog-bar input { width: 260px; }
+.bidlog-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.bidlog-csv { font-size: 13px; color: var(--brand); text-decoration: none; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 12px; background: var(--panel); }
+.bidlog-table th { width: auto; }
+.bidlog-table td { font-size: 13px; }
+.bidlog-table td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bidlog-table td.bid { font-weight: 700; color: var(--ink-strong); }
+.bidlog-table td.when, .bidlog-table td.no { white-space: nowrap; }
+.bidlog-table .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.bidlog-table td.act { white-space: nowrap; text-align: right; }
+#tab-calc .bidlog-table td.act button { padding: 3px 8px; font-size: 12px; }
+#tab-calc .bidlog-table td.act button.del { color: var(--urgent); }
+.bidlog-table input.edit { width: 100%; min-width: 90px; font-size: 13px; padding: 3px 6px; }
+.bidlog-wrap { overflow-x: auto; margin-bottom: 10px; }
+.bidlog-wrap .calc-form { margin-bottom: 0; }
+.bidlog-table td.title { min-width: 260px; }
+.bidlog-table .sub a { color: var(--brand); }
+.bidlog-table td.memo { min-width: 100px; }
+.bidlog-table td.method { min-width: 84px; }
+/* 좁은 화면: 한 기록 = 카드 한 장(이름표 + 값) — 위 계산기 표의 2칸 그리드 규칙보다 먼저 오게 선택자를 세게 */
+@media (max-width: 760px) {
+  .calc-form.bidlog-table thead { display: none; }
+  .calc-form.bidlog-table tr { display: block; border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .calc-form.bidlog-table td { display: grid; grid-template-columns: 84px 1fr; gap: 8px; border: 0; padding: 3px 10px;
+    text-align: left !important; min-width: 0; white-space: normal; }
+  .calc-form.bidlog-table td::before { content: attr(data-l); color: var(--muted); font-size: 12px; font-weight: 600; }
+  .calc-form.bidlog-table td.act { display: flex; justify-content: flex-end; gap: 6px; padding-top: 6px; }
+  .calc-form.bidlog-table td.act::before, .calc-form.bidlog-table td[colspan]::before { content: none; }
+  .calc-form.bidlog-table td[colspan] { display: block; }
+  .calc-form.bidlog-table td .sub { grid-column: 2; margin-top: -4px; }
+  .bidlog-bar input, #cRecMemo { width: 100%; }
+  .bidlog-actions { margin-left: 0; }
+}
 .calc-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
 .calc-btns button { font-size: 13px; padding: 5px 10px; }
 .calc-prices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 12px; margin-bottom: 10px; background: var(--panel); border-top: 2px solid var(--accent); }
@@ -1024,7 +1086,7 @@ footer b { color: var(--muted); }
 .calc-sub.ok { color: var(--brand); }
 .calc-sub.ng { color: var(--urgent); }
 .calc-summary th { text-align: center; }
-.calc-rec { background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; margin-top: 14px; }
+.calc-rec { background: var(--panel); border-top: 2px solid var(--accent); padding: 10px 12px; margin: 4px 0 12px; }
 .calc-rec-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; }
 .calc-rec-bar select { color: var(--ink); font-size: 13px; padding: 4px 8px; }
 /* 추천 칸(10/29 사용자 요청: 보기 쉽게) — 숫자는 크게, 설명은 ? 팝업(.qual/.qtip 재사용) */
@@ -1227,6 +1289,12 @@ footer b { color: var(--muted); }
 
   <!-- 투찰 계산기(2026-10-15 요청) — 21라인 "복수예가산출프로그램 v0.1" 화면을 따름. 계산은 bidcalc.js, 화면은 bidcalc_ui.js -->
   <section id="tab-calc" hidden>
+    <!-- 투찰 계산기 안 두 쪽(2026-11-06 사용자 요청): 투찰 계산 · 투찰내역(투찰한 공고·금액 기록, data/bid_log.json) -->
+    <div class="calc-subtabs" role="tablist" aria-label="투찰 계산기">
+      <button type="button" role="tab" aria-selected="true" data-calcpage="calc">투찰 계산</button>
+      <button type="button" role="tab" aria-selected="false" data-calcpage="log">투찰내역 <span id="bidlogCount" class="calc-count"></span></button>
+    </div>
+    <div id="calcPage">
     <div class="calc-lookup">
       <label>공고번호 <input id="cNo" autocomplete="off"></label>
       <button id="cLookup" type="button" class="primary">나라장터에서 불러오기</button>
@@ -1260,6 +1328,33 @@ footer b { color: var(--muted); }
     </table>
     <div id="cNotes" class="why calc-notes"></div>
 
+    <!-- (11/06 사용자 요청) 추천 투찰금액을 난수표 위로 — 공고를 불러오면 바로 추천 금액이 보이게 -->
+    <!-- 추천 사정률(2026-10-28 사용자 결정 — 과거 개찰 통계 기반). 서버 output/의 개찰 결과로 계산, 위 입력칸 값을 씀 -->
+    <div class="calc-rec">
+      <h4 class="calc-h">추천 투찰금액 — 비슷한 과거 공고의 개찰 결과 기준</h4>
+      <div class="calc-rec-bar">
+        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="auto" selected>자동(닮은 공고로 가늠)</option><option value="all">전체(규모 구분 없이)</option><option value="small">소규모(100곳 미만)</option><option value="large">대규모(100곳 이상)</option></select></label> <span class="qual rec-i" tabindex="0" aria-label="설명"><span class="ico">?</span><span class="qtip"><b>자동</b> — 이번 공고와 닮은 과거 공고(분야·업무·금액·발주 방식·지역제한, 같은 발주기관은 더 크게 반영)의 참가 수로 이번 공고의 참가 수를 가늠합니다. 100곳 미만이면 소규모 공고끼리, 이상이면 대규모 공고끼리 비교합니다.<br>참가가 적을 공고(지역·업종 제한이 좁은 공고 등)라는 걸 알면 직접 <b>소규모</b>를 고르세요 — 자동 판정은 소규모를 대규모로 잡는 경우가 아직 있습니다.</span></span>
+        <button type="button" id="cRecBtn">추천 보기</button>
+        <span id="cRecMsg" class="job"></span>
+      </div>
+      <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고의 개찰 결과로 <b>추천 투찰금액</b>과 방식별 성적을 보여 줍니다.</div>
+    </div>
+
+
+    <!-- 투찰 기록(2026-11-06) — 이 금액으로 실제 투찰했으면 남김. 금액은 계산된 투찰금액으로 채워 두고 고칠 수 있음(난수표가 닫혀 있어도 채움) -->
+    <div class="calc-record">
+      <h4 class="calc-h">투찰 기록 <span class="why">— 이 공고에 실제로 투찰했으면 남겨 두세요. '투찰내역'에서 모아 봅니다.</span></h4>
+      <div class="calc-record-row">
+        <label>투찰금액 <input id="cRecBid" inputmode="numeric" placeholder="위 투찰금액"> 원</label>
+        <label>메모 <input id="cRecMemo" maxlength="300" placeholder="예: 외주 추천과 같음, 공동수급 등"></label>
+        <button type="button" id="cRecord" class="primary">투찰 내역에 기록</button>
+        <span id="cRecordMsg" class="job"></span>
+      </div>
+    </div>
+
+    <!-- (11/06 사용자 요청) 난수표(예비가격 15개·모의 추첨·예정가격·하한선)는 눌러야 열림 — 추천 금액이 먼저 보이게. 계산은 닫혀 있어도 그대로 돎 -->
+    <details class="calc-draw" id="cDraw">
+      <summary><span class="calc-h">난수표 · 모의 추첨</span> <span class="why">예비가격 15개 만들기 · 번호 고르기 · 모의 예정가격·하한선 · 기타설정(절상·절사·단위)</span></summary>
     <div class="calc-btns">
       <button type="button" data-method="uniform">난수추출적용</button>
       <button type="button" data-method="geometric">등비추출적용</button>
@@ -1300,17 +1395,23 @@ footer b { color: var(--muted); }
       <tr><th>구 분</th><th>금 액</th><th>사정률 = (예정가격 / 기초금액) × 100</th></tr>
       <tbody id="cSummary"><tr><td colspan="3" class="why">예비가격을 만들고 번호를 고르면 나옵니다.</td></tr></tbody>
     </table>
-    <p class="why">예비가격·예정가격·하한선은 이 화면에서 <b>모의로 만든 값</b>입니다 — 실제 예비가격 15개는 나라장터가 무작위로 만들고, 예정가격은 개찰 때 업체들이 많이 고른 번호 4개의 평균으로 정해집니다. 투찰금액은 모의 값이 아니라 아래 추천 칸(비슷한 과거 공고의 개찰 결과)으로 정합니다.</p>
+    <p class="why">예비가격·예정가격·하한선은 이 화면에서 <b>모의로 만든 값</b>입니다 — 실제 예비가격 15개는 나라장터가 무작위로 만들고, 예정가격은 개찰 때 업체들이 많이 고른 번호 4개의 평균으로 정해집니다. 투찰금액은 모의 값이 아니라 위 추천 칸(비슷한 과거 공고의 개찰 결과)으로 정합니다.</p>
+    </details>
 
-    <!-- 추천 사정률(2026-10-28 사용자 결정 — 과거 개찰 통계 기반). 서버 output/의 개찰 결과로 계산, 위 입력칸 값을 씀 -->
-    <div class="calc-rec">
-      <h4 class="calc-h">추천 투찰금액 — 비슷한 과거 공고의 개찰 결과 기준</h4>
-      <div class="calc-rec-bar">
-        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="auto" selected>자동(닮은 공고로 가늠)</option><option value="all">전체(규모 구분 없이)</option><option value="small">소규모(100곳 미만)</option><option value="large">대규모(100곳 이상)</option></select></label> <span class="qual rec-i" tabindex="0" aria-label="설명"><span class="ico">?</span><span class="qtip"><b>자동</b> — 이번 공고와 닮은 과거 공고(분야·업무·금액·발주 방식·지역제한, 같은 발주기관은 더 크게 반영)의 참가 수로 이번 공고의 참가 수를 가늠합니다. 100곳 미만이면 소규모 공고끼리, 이상이면 대규모 공고끼리 비교합니다.<br>참가가 적을 공고(지역·업종 제한이 좁은 공고 등)라는 걸 알면 직접 <b>소규모</b>를 고르세요 — 자동 판정은 소규모를 대규모로 잡는 경우가 아직 있습니다.</span></span>
-        <button type="button" id="cRecBtn">추천 보기</button>
-        <span id="cRecMsg" class="job"></span>
+    </div><!-- /calcPage -->
+
+    <!-- 투찰내역 — 투찰 계산에서 기록한 공고·금액 목록(최근 것부터). 서버 PC data/bid_log.json, 공개 저장소엔 안 올림 -->
+    <div id="bidlogPage" hidden>
+      <div class="calc-lookup bidlog-bar">
+        <label>찾기 <input id="bidlogQ" type="search" placeholder="공고명·공고번호·발주처·기록자"></label>
+        <span id="bidlogSummary" class="job"></span>
+        <span class="bidlog-actions"><button type="button" id="bidlogReload">새로 보기</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
       </div>
-      <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고의 개찰 결과로 <b>추천 투찰금액</b>과 방식별 성적을 보여 줍니다.</div>
+      <div class="bidlog-wrap"><table class="calc-form bidlog-table">
+        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>기초금액</th><th>하한율</th><th>투찰금액</th><th>기준 사정률</th><th>추천 방식</th><th>기록자</th><th>메모</th><th></th></tr></thead>
+        <tbody id="bidlogRows"><tr><td colspan="10" class="why">불러오는 중…</td></tr></tbody>
+      </table></div>
+      <p class="why">투찰 계산 화면의 '투찰 내역에 기록'으로 남긴 공고입니다. 잘못 넣은 줄은 '삭제', 금액·메모는 '고치기'로 바로잡으세요. 개찰 결과(실제 순위)는 아직 채우지 않습니다.</p>
     </div>
   </section>
 

@@ -347,7 +347,7 @@ def fill_lines(xml, log):
     def rep(mm):
         k = key_of(mm.group(1))
         if not k or (MODE.get('agent') and re.sub(r'\s', '', mm.group(1)) == '소속'): return mm.group(0)  # 위임장 "소 속:"은 대리인 줄
-        log.append(f'줄 {re.sub(r"\s", "", mm.group(1))} → {JIIL[k]}')
+        log.append('줄 ' + re.sub(r'\s', '', mm.group(1)) + f' → {JIIL[k]}')
         # 지일 작성판처럼 쌍점 뒤 한 칸 띄우고 값, 원래 빈칸은 값 뒤에 남김("대 표 자 : 대표자        (인)")
         return mm.group(1) + mm.group(2) + ' ' + JIIL[k] + MARK + shrink(mm.group(3), JIIL[k], mm.string)
 

@@ -210,8 +210,12 @@
     const rec = used ? recBid(used.rate) : null;
     const bid = rec != null ? rec : gate;
     // 투찰 기록 칸(2026-11-06)에 넘길 지금 금액·근거
-    CURRENT = REC_LOADING || bid == null ? null
-      : { bid, rate: rec != null ? used.rate : null, method: rec != null ? label(used.name) : "모의 추첨 하한선 금액", planned: planned || null };
+    // 투찰 기록 칸 = 추천 칸이 고른 금액 그대로(11/06 사용자 결정 — 모의 하한선은 난수표의 모의 값이라 기록 금액을 바꾸지 않음, 경고 문구도 안 붙임).
+    // 추천이 없을 때만 난수표 투찰금액(모의 하한선)
+    const pickBid = REC_PICK ? recBid(REC_PICK.rate) : null;
+    CURRENT = REC_LOADING ? null
+      : pickBid != null ? { bid: pickBid, rate: REC_PICK.rate, method: label(REC_PICK.name), planned: planned || null }
+      : bid != null ? { bid, rate: null, method: "모의 추첨 하한선 금액", planned: planned || null } : null;
     fillRecordBid();
     const higher = bid != null && netBid != null && netBid > bid;
     $("#cPlanned").textContent = planned ? won(planned) : "-";

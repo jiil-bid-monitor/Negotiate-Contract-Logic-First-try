@@ -10,3 +10,4 @@ reportlab>=4
 Pillow>=10
 pytesseract>=0.3
 pypdfium2>=4.30
+python-hwpx>=6.11

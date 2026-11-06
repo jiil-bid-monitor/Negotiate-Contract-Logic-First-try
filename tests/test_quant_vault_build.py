@@ -1809,7 +1809,7 @@ def test_guide_text_cell_gets_company_in_black(tmp_path: Path):
     from quantdocs.fill import fill_hwpx
 
     header = ('<hh:head><hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000" textColor="#000000"></hh:charPr>'
-              '<hh:charPr id="7" height="1200" textColor="#808080"></hh:charPr></hh:charProperties></hh:head>')
+              '<hh:charPr id="7" height="1200" textColor="#808080"><hh:italic/></hh:charPr></hh:charProperties></hh:head>')
     guide = ('<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="7"><hp:t>공동도급참여시 대표사</hp:t></hp:run></hp:p></hp:subList>'
              '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
     src = _mini_hwpx(tmp_path / "g.hwpx", _tbl([[_c(0, 0, "상호 또는 법인명칭"), guide]]))
@@ -1820,7 +1820,8 @@ def test_guide_text_cell_gets_company_in_black(tmp_path: Path):
     out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
     cid = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>\(주\)가상', out).group(1)
     assert "공동도급참여시" not in out and cid != "7"
-    assert 'textColor="#000000"' in re.search(rf'<hh:charPr id="{cid}"[^>]*>', head).group(0)
+    block = re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
+    assert 'textColor="#000000"' in block and "italic" not in block  # 이름표 칸(기본) 글자 모양으로 — 기울임·회색 안 물려받음
 
 
 def test_proxy_groups_bond_won_sign_and_notice_no_paragraph(tmp_path: Path):

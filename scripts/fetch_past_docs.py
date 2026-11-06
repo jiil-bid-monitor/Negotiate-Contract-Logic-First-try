@@ -10,7 +10,7 @@
   (공사·용역·물품, 공고명 낱말 검색). 끝의 '_241213' 같은 날짜는 뺀다.
 - 공고명에 폴더 이름 낱말이 가장 많이 든 공고 하나를 고른다. 비슷한 공고가 여럿이거나 낱말이 절반도 안 맞으면 받지 않고
   `_찾은_공고_후보.txt`에 후보만 적는다(엉뚱한 사업 문서가 섞이지 않게) — 맞는 공고번호를 골라 `--pick 폴더이름=공고번호`로 다시.
-- 받는 파일: 첨부 중 이름에 제안요청·과업(지시·내용)이 든 것. 없으면(공사 공고 등) 시방서·설계설명서·규격서와 공고문, 그것도 없으면 도면·내역서를 뺀 문서 전부. 받은 공고는 폴더 안 `_공고정보.txt`에 적는다.
+- 받는 파일: 첨부 중 이름에 제안요청·과업(지시·내용)이 든 것만(공고문·시방서 등은 안 받음 — 없으면 0개, `_공고정보.txt`에 첨부 목록). 받은 공고는 폴더 안 `_공고정보.txt`에 적는다.
 - 파일이 이미 든 폴더는 건너뛴다. 인증키는 이 레포 .env(웹앱과 같은 키). 하루 호출 한도에 걸리면 멈춘다 — 다음 날 다시.
 """
 
@@ -38,9 +38,7 @@ QUOTA = "22"
 GENERIC = set("사업 제작 설치 제작설치 공사 리모델링 조성 조성사업 구축 전시물 및 시설 센터 교육 체험공간 디자인 용역 설계 "
               "실시설계 기본 정비 개선 일원 사업명".split())
 KEEP = re.compile(r"제안\s*요청|과업\s*(?:지시|내용)|과업서")
-SPEC = re.compile(r"시방|설계\s*설명|규격서|사업\s*계획|기본\s*계획")  # 공사 공고엔 제안요청서·과업지시서 대신 이런 문서
-NOTICE = re.compile(r"공고")
-NOT_DOC = re.compile(r"도면|내역|단가|산출|견적|\.(?:xlsx?|dwg|zip|jpe?g|png)$", re.I)
+
 SKIP_FILES = {".gitkeep", "_공고정보.txt", "_찾은_공고_후보.txt", "desktop.ini", "Thumbs.db"}
 
 
@@ -126,17 +124,14 @@ def download(cand: dict, folder: Path) -> list[str]:
     with tempfile.TemporaryDirectory() as tmp:
         nf = fetch_notice(cand["no"], Path(tmp))
         files = list(nf.files)
-        # 제안요청서·과업지시서 → 없으면 시방서·설계설명서 등 + 공고문 → 그것도 없으면 도면·내역서를 뺀 문서 전부
-        keep = ([f for f in files if KEEP.search(f.name)]
-                or [f for f in files if SPEC.search(f.name) or NOTICE.search(f.name)]
-                or [f for f in files if not NOT_DOC.search(f.name)])
+        keep = [f for f in files if KEEP.search(f.name)]  # 제안요청서·과업지시서만(11/06 사용자 결정 — 공고문·시방서 등은 안 받음)
         got = []
         for f in keep:
             shutil.copy2(f, folder / f.name)
             got.append(f.name)
     (folder / "_공고정보.txt").write_text(
         f"공고번호: {cand['no']}-{cand['ord']}\n공고명: {cand['title']}\n수요기관: {cand['inst']}\n게시일: {cand['posted']}\n"
-        f"받은 파일: {', '.join(got) or '(제안요청서·과업지시서·공고문 이름의 첨부 없음)'}\n"
+        f"받은 파일: {', '.join(got) or '(제안요청서·과업지시서 이름의 첨부 없음)'}\n"
         f"첨부 전체: {', '.join(f.name for f in files)}\n", encoding="utf-8")
     return got
 

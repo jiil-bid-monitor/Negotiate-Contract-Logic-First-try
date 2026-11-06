@@ -38,6 +38,7 @@
   .fprog .bar i { display:block; height:100%; background:var(--accent) }
   #forms td.chk, #forms th.chk { text-align:center; width:48px } #forms input.fchk { width:18px; height:18px; cursor:pointer; accent-color:var(--accent) }
   .chip.hwpneed { background:transparent; color:var(--bad); border:1px solid var(--bad); font-size:12px; font-weight:600; vertical-align:middle }
+  [hidden] { display:none !important }  /* .chip 등 display를 준 요소도 hidden이면 숨김(11/06 — 한글 파일 필요 칩이 늘 보였음) */
   #forms tr.fdone td:not(.chk) { color:var(--mute); text-decoration:line-through }
   ul { margin:6px 0; padding-left:20px } .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:s 1s linear infinite; vertical-align:-2px }
   @keyframes s { to { transform:rotate(360deg) } } .hide { display:none }

@@ -1743,21 +1743,19 @@ def test_pagefit_only_fixes_forms_wasting_a_page():
     # 두 쪽이 다 차 있으면 손대지 않음
     full = [[L(page=0, vertpos=0)], [L(page=0, vertpos=mm(200))], [L(page=1, vertpos=mm(100))]]
     assert pf._problem(pf._Form([p("a"), p("b"), p("c")], False), full, chars, body) is None
-    # 제목만: 표가 다음 쪽으로 — 표 줄 여유를 줄여 첫 쪽에 들어가게
-    g = pf._Form([p("〈서식 2〉"), p("", tbl([60, 60, 60, 70]))], False)
+    # 제목만: 표는 그대로 두고 쪽에서 나뉘게(제목 아래에서 시작, 넘치는 부분만 다음 쪽 — 11/06 사용자 결정), 가운데 문단이면 가운데
+    g = pf._Form([p("〈서식 16〉"), p("", tbl([60, 60, 60, 70]))], False)
     gl = [[L(page=0, vertpos=0)], [L(page=1, vertpos=0)]]
     prob = pf._problem(g, gl, chars, body)
     assert prob[0] == "제목만"
-    assert pf._step(g, prob, gl, chars, "", body) and "표 칸 여유" in g.done[-1]
-    new = pf._top_table(g.paras[1])
-    assert int(re.search(r'<hp:sz [^>]*height="(\d+)"', new).group(1)) < mm(250)
-    # 여유가 없으면 끝내 표를 쪽에서 나뉘게(가운데 문단이면 가운데)
-    tall = tbl([1]).replace('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>칸</hp:t></hp:run></hp:p>',
-                            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>줄</hp:t></hp:run></hp:p>' * 60)
-    h = pf._Form([p("〈서식 3〉"), p("", tall)], False)  # 글이 칸을 꽉 채워 줄일 여유 없음
-    while pf._step(h, ("제목만", mm(6), 1), gl, chars, '<hh:paraPr id="0"><hh:align horizontal="CENTER"/></hh:paraPr>', body):
-        pass
-    assert 'pageBreak="TABLE"' in h.paras[1] and 'treatAsChar="0"' in h.paras[1] and 'horzAlign="CENTER"' in h.paras[1]
+    center = '<hh:paraPr id="0"><hh:align horizontal="CENTER"/></hh:paraPr>'
+    assert pf._step(g, prob, gl, chars, center, body) and "나뉘게" in g.done[-1]
+    assert 'pageBreak="TABLE"' in g.paras[1] and 'treatAsChar="0"' in g.paras[1] and 'horzAlign="CENTER"' in g.paras[1]
+    assert 'height="' + str(mm(60)) + '"' in g.paras[1]  # 칸 높이는 그대로
+    # 나눌 수 없는 표(표지 — 열 하나)는 칸 여유를 줄여 첫 쪽에 들어가게
+    c = pf._Form([p("〈서식 11〉"), p("", tbl([60, 60, 60, 70]).replace('colCnt="2"', 'colCnt="1"'))], False)
+    assert pf._step(c, ("제목만", mm(6), 1), gl, chars, center, body) and "표 칸 여유" in c.done[-1]
+    assert 'pageBreak="TABLE"' not in c.paras[1]
     # 종이 기준 그림 서식: 그림 문단 다음 첫 내용 뒤의 빈 줄만
     fig = '<hp:line><hp:pos treatAsChar="0" vertRelTo="PAPER"/></hp:line>'
     k = pf._Form([p("〈서식 13〉"), p(), p(), p("", fig), p(), p("조직표"), p(), p(), p("주) 3.")], True)

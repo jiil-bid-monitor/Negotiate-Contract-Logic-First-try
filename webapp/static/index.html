@@ -1036,10 +1036,32 @@ footer b { color: var(--muted); }
 .bidlog-table td.act { white-space: nowrap; text-align: right; }
 #tab-calc .bidlog-table td.act button { padding: 3px 8px; font-size: 12px; }
 #tab-calc .bidlog-table td.act button.del { color: var(--urgent); }
+.bidlog-table td.res { white-space: nowrap; }
+.bidlog-table .res-win { color: var(--good, #1b6e43); }
+.bidlog-table .res-top { color: var(--brand); }
+.bidlog-table .res-bad { color: var(--urgent); }
+.bidlog-table .res-of, .bidlog-table .res-wait, .bidlog-table .res-none { color: var(--muted); }
+.bidlog-table .sub.ok { color: var(--good, #1b6e43); }
+.bidlog-table .sub.ng { color: var(--urgent); }
+.bidlog-table tr.is-open td { border-bottom-color: transparent; }
+.bidlog-table tr.bidlog-detail td { background: var(--chip); padding: 10px 14px 12px; }
+.res-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 18px; font-size: 13px; }
+.res-grid div { display: flex; flex-direction: column; gap: 2px; }
+.res-grid span { color: var(--muted); font-size: 12px; }
+.res-grid b { font-variant-numeric: tabular-nums; color: var(--ink-strong); }
+.res-foot { margin-top: 10px; font-size: 12px; color: var(--muted); }
+#tab-calc .res-foot button, #tab-calc .bidlog-table td.act button.more { padding: 3px 8px; font-size: 12px; }
+#tab-calc .bidlog-table td.act button.more { color: var(--brand); border-color: var(--brand); }
+@media (max-width: 760px) { .res-grid { grid-template-columns: 1fr 1fr; } .calc-form.bidlog-table tr.bidlog-detail td { display: block; } .calc-form.bidlog-table tr.bidlog-detail td::before { content: none; } }
 .bidlog-table input.edit { width: 100%; min-width: 90px; font-size: 13px; padding: 3px 6px; }
 .bidlog-wrap { overflow-x: auto; margin-bottom: 10px; }
 .bidlog-wrap .calc-form { margin-bottom: 0; }
-.bidlog-table td.title { min-width: 260px; }
+.bidlog-table td.title { min-width: 200px; }
+.bidlog-table td.num .sub { white-space: normal; }
+.bidlog-table td.act { width: 1%; }
+.bidlog-table td.act .act2 { display: flex; gap: 4px; justify-content: flex-end; margin-top: 4px; }
+#tab-calc .bidlog-table td.act button.more { width: 100%; }
+.res-grid { max-width: 900px; }
 .bidlog-table .sub a { color: var(--brand); }
 .bidlog-table td.memo { min-width: 100px; }
 .bidlog-table td.method { min-width: 84px; }
@@ -1050,7 +1072,9 @@ footer b { color: var(--muted); }
   .calc-form.bidlog-table td { display: grid; grid-template-columns: 84px 1fr; gap: 8px; border: 0; padding: 3px 10px;
     text-align: left !important; min-width: 0; white-space: normal; }
   .calc-form.bidlog-table td::before { content: attr(data-l); color: var(--muted); font-size: 12px; font-weight: 600; }
-  .calc-form.bidlog-table td.act { display: flex; justify-content: flex-end; gap: 6px; padding-top: 6px; }
+  .calc-form.bidlog-table td.act { display: flex; justify-content: flex-end; align-items: center; gap: 6px; padding-top: 6px; width: auto; }
+  .calc-form.bidlog-table td.act .act2 { margin-top: 0; }
+  #tab-calc .calc-form.bidlog-table td.act button.more { width: auto; }
   .calc-form.bidlog-table td.act::before, .calc-form.bidlog-table td[colspan]::before { content: none; }
   .calc-form.bidlog-table td[colspan] { display: block; }
   .calc-form.bidlog-table td .sub { grid-column: 2; margin-top: -4px; }
@@ -1408,10 +1432,10 @@ footer b { color: var(--muted); }
         <span class="bidlog-actions"><button type="button" id="bidlogReload">새로 보기</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
       </div>
       <div class="bidlog-wrap"><table class="calc-form bidlog-table">
-        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>기초금액</th><th>하한율</th><th>투찰금액</th><th>기준 사정률</th><th>추천 방식</th><th>기록자</th><th>메모</th><th></th></tr></thead>
-        <tbody id="bidlogRows"><tr><td colspan="10" class="why">불러오는 중…</td></tr></tbody>
+        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>투찰금액</th><th>기준 사정률</th><th>개찰 결과</th><th>실제 사정률</th><th>기록자</th><th>메모</th><th></th></tr></thead>
+        <tbody id="bidlogRows"><tr><td colspan="9" class="why">불러오는 중…</td></tr></tbody>
       </table></div>
-      <p class="why">투찰 계산 화면의 '투찰 내역에 기록'으로 남긴 공고입니다. 잘못 넣은 줄은 '삭제', 금액·메모는 '고치기'로 바로잡으세요. 개찰 결과(실제 순위)는 아직 채우지 않습니다.</p>
+      <p class="why">투찰 계산 화면의 '투찰 내역에 기록'으로 남긴 공고입니다. 잘못 넣은 줄은 '삭제', 금액·메모는 '고치기'로 바로잡으세요. 개찰 결과는 이 쪽을 열 때 나라장터에서 받아 채우고(개찰 전이면 1시간 뒤 다시), '결과 ▼'를 누르면 1순위 업체·금액·실제 예정가격이 보입니다.</p>
     </div>
   </section>
 

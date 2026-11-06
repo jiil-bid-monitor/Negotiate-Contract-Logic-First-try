@@ -35,6 +35,10 @@ CSV_COLUMNS = [("recordedAt", "기록일시"), ("noticeNo", "공고번호"), ("n
                ("institution", "발주처"), ("workType", "업무"), ("basis", "기초금액"), ("lowerRate", "하한율(%)"),
                ("aValue", "A값"), ("bid", "투찰금액"), ("rate", "기준 사정률(%)"), ("method", "추천 방식"),
                ("recordedBy", "기록자"), ("memo", "메모")]
+# 개찰 결과 칸(CSV 뒤쪽) — result 안의 값
+RESULT_COLUMNS = [("status", "개찰 결과"), ("ownRank", "지일 순위"), ("bidderCount", "참가 업체 수"), ("assessmentRate", "실제 사정률(%)"),
+                  ("plannedPrice", "예정가격"), ("winnerName", "1순위 업체"), ("winnerAmount", "1순위 투찰금액"), ("winnerRate", "1순위 투찰률(%)"),
+                  ("gapToWinner", "1순위와 금액 차이"), ("rateDiff", "기준 사정률 − 실제(%p)")]
 
 
 def _now() -> str:
@@ -124,6 +128,16 @@ class BidLog:
             self._write(rows)
             return row
 
+    def set_result(self, entry_id: str, result: dict[str, Any]) -> None:
+        """개찰 결과(`webapp/bidresult.py`)를 그 기록에 저장 — 지운 기록이면 아무것도 안 함."""
+        with self._lock:
+            rows = self._read()
+            row = next((r for r in rows if r.get("id") == entry_id), None)
+            if row is None:
+                return
+            row["result"] = result
+            self._write(rows)
+
     def delete(self, entry_id: str) -> None:
         with self._lock:
             rows = self._read()
@@ -135,7 +149,12 @@ class BidLog:
     def csv(self) -> str:
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow([label for _, label in CSV_COLUMNS])
+        w.writerow([label for _, label in CSV_COLUMNS + RESULT_COLUMNS])
         for r in self.entries():
-            w.writerow(["" if r.get(k) is None else r.get(k) for k, _ in CSV_COLUMNS])
+            res = r.get("result") or {}
+            own, win = res.get("own") or {}, res.get("winner") or {}
+            flat = {**res, "ownRank": own.get("rank") if own else ("참가 기록 없음" if res.get("status") == "완료" else None),
+                    "winnerName": win.get("name"), "winnerAmount": win.get("amount"), "winnerRate": win.get("rate")}
+            w.writerow(["" if r.get(k) is None else r.get(k) for k, _ in CSV_COLUMNS]
+                       + ["" if flat.get(k) is None else flat.get(k) for k, _ in RESULT_COLUMNS])
         return "﻿" + buf.getvalue()  # 엑셀이 한글을 깨뜨리지 않게

@@ -393,6 +393,23 @@ def make_handler(app: App):
                 if url.path == "/api/bidlog/update":
                     app.bidlog.update(str(data.get("id") or ""), data)
                     return self._json({"ok": True, "entries": app.bidlog.entries()})
+                if url.path == "/api/bidlog/results":
+                    # 개찰 결과 받기(11/06) — 결과 없는 기록만, ids를 주면 그 기록만(force면 다시)
+                    from nego import fields as F
+                    from nego.bidrecommend import default_own_bizno
+                    from .bidresult import fill_results
+                    try:
+                        config = load_config()
+                        if not config.api.service_key:
+                            return self._error(HTTPStatus.CONFLICT, "서버에 나라장터 인증키(NARA_SERVICE_KEY)가 없습니다")
+                        base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
+                        ids = [str(i) for i in data.get("ids") or []] or None
+                        done = fill_results(app.bidlog, bidcalc.make_client(config.api), base, default_own_bizno(),
+                                            ids=ids, force=bool(data.get("force")))
+                    except (ConfigError, ApiError) as err:
+                        key = os.environ.get("NARA_SERVICE_KEY", "")
+                        return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
+                    return self._json({"ok": True, **done, "entries": app.bidlog.entries()})
                 if url.path == "/api/bidlog/delete":
                     app.bidlog.delete(str(data.get("id") or ""))
                     return self._json({"ok": True, "entries": app.bidlog.entries()})

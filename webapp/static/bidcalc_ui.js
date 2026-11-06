@@ -618,44 +618,100 @@
   let LOG = [], EDITING = null;
   const day = (iso) => (iso ? iso.slice(0, 16).replace("T", " ") : "-");
   const logMatch = (r, q) => !q || [r.noticeNo, r.title, r.institution, r.recordedBy, r.memo].join(" ").toLowerCase().includes(q);
+  // 개찰 결과 칸(11/06) — 순위/참가 · 실제 사정률, 줄을 펼치면 1순위 업체·금액·차이
+  const pct3 = (v) => (v == null ? "-" : `${Number(v).toFixed(3)}%`);
+  const signed = (v, unit, d = 3) => (v == null ? "" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${unit === "원" ? won(Math.abs(v)) : Math.abs(v).toFixed(d)}${unit}`);
+  function resultCell(r) {
+    const res = r.result;
+    if (FETCHING.has(r.id)) return `<span class="res-wait">결과 받는 중…</span>`;
+    if (!res) return `<span class="res-wait">아직 안 받음</span>`;
+    if (res.status === "개찰 전") return `<span class="res-wait">개찰 전</span><span class="sub">${esc(day(res.fetchedAt))} 확인</span>`;
+    if (res.status === "오류") return `<span class="res-bad">받지 못함</span><span class="sub">${esc((res.error || "").slice(0, 40))}</span>`;
+    const o = res.own, n = res.bidderCount;
+    if (!o) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${n}곳</span>`;
+    if (o.rank == null) return `<b class="res-bad">${esc(o.remark || "순위 없음")}</b><span class="sub">참가 ${n}곳</span>`;
+    return `<b class="${o.rank === 1 ? "res-win" : o.rank <= 5 ? "res-top" : ""}">${o.rank}위</b> <span class="res-of">/ ${n}곳</span>`
+      + (res.gapToWinner ? `<span class="sub">1위보다 ${signed(res.gapToWinner, "원")}</span>` : o.rank === 1 ? `<span class="sub">1순위</span>` : "");
+  }
+  function rateCell(r) {
+    const res = r.result;
+    if (!res || res.status !== "완료" || res.assessmentRate == null) return "-";
+    const d = res.rateDiff;
+    return `${pct3(res.assessmentRate)}${d != null ? `<span class="sub ${d >= 0 ? "ok" : "ng"}">기준 ${signed(d, "%p")}${d >= 0 ? " · 하한선 통과 쪽" : " · 미달 쪽"}</span>` : ""}`;
+  }
+  function detailRow(r) {
+    const res = r.result || {}, o = res.own, w = res.winner;
+    const item = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
+    return `<tr class="bidlog-detail" data-id="${esc(r.id)}"><td colspan="9"><div class="res-grid">
+      ${item("1순위 업체", w ? esc(w.name) : "-")}
+      ${item("1순위 투찰금액", w && w.amount != null ? `${won(w.amount)}원` : "-")}
+      ${item("1순위 투찰률", w && w.rate != null ? pct3(w.rate) : "-")}
+      ${item("지일 투찰금액", o && o.amount != null ? `${won(o.amount)}원` : `${won(r.bid)}원 (기록)`)}
+      ${item("지일 투찰률", o && o.rate != null ? pct3(o.rate) : "-")}
+      ${item("지일 순위", o ? (o.rank != null ? `${o.rank}위 / ${res.bidderCount}곳` : esc(o.remark || "순위 없음")) : "참가 기록 없음")}
+      ${item("예정가격 (실제)", res.plannedPrice != null ? `${won(res.plannedPrice)}원` : "-")}
+      ${item("실제 사정률", pct3(res.assessmentRate))}
+      ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
+      </div><div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
+  }
   function renderLog() {
     $("#bidlogCount").textContent = LOG.length ? String(LOG.length) : "";
     const q = ($("#bidlogQ").value || "").trim().toLowerCase();
     const rows = LOG.filter((r) => logMatch(r, q));
     const total = rows.reduce((s, r) => s + (r.bid || 0), 0);
+    const done = rows.filter((r) => r.result && r.result.status === "완료" && r.result.own && r.result.own.rank != null);
     $("#bidlogSummary").textContent = LOG.length
-      ? `${rows.length}건${q ? ` (전체 ${LOG.length}건 중)` : ""} · 투찰금액 합계 ${won(total)}원` : "";
+      ? `${rows.length}건${q ? ` (전체 ${LOG.length}건 중)` : ""} · 투찰금액 합계 ${won(total)}원`
+        + (done.length ? ` · 개찰 ${done.length}건 중 1순위 ${done.filter((r) => r.result.own.rank === 1).length} · 5위 안 ${done.filter((r) => r.result.own.rank <= 5).length}` : "")
+      : "";
     if (!rows.length) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="10" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="9" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
       return;
     }
     $("#bidlogRows").innerHTML = rows.map((r) => {
       const edit = EDITING === r.id;
       const link = `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${encodeURIComponent(r.noticeNo)}&bidPbancOrd=${encodeURIComponent(r.noticeOrd || "000")}`;
-      return `<tr data-id="${esc(r.id)}">
+      const open = OPEN_ROWS.has(r.id);
+      return `<tr data-id="${esc(r.id)}" class="${open ? "is-open" : ""}">
         <td class="when" data-l="기록일">${esc(day(r.recordedAt))}</td>
         <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a>${r.institution ? ` · ${esc(r.institution)}` : ""}${r.workType ? ` · ${esc(r.workType)}` : ""}</span></td>
-        <td class="num" data-l="기초금액">${won(r.basis)}</td>
-        <td class="num" data-l="하한율">${r.lowerRate != null ? `${r.lowerRate}%` : "-"}</td>
-        <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}</td>
-        <td class="num" data-l="기준 사정률">${r.rate != null ? `${Number(r.rate).toFixed(3)}%` : "-"}</td>
-        <td class="method" data-l="추천 방식">${esc(r.method || "-")}</td>
+        <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub">기초 ${won(r.basis)}${r.lowerRate != null ? ` · 하한율 ${r.lowerRate}%` : ""}</span></td>
+        <td class="num" data-l="기준 사정률">${pct3(r.rate)}<span class="sub">${esc(r.method || "-")}</span></td>
+        <td class="res" data-l="개찰 결과"><div>${resultCell(r)}</div></td>
+        <td class="num" data-l="실제 사정률">${rateCell(r)}</td>
         <td data-l="기록자">${esc(r.recordedBy || "-")}</td>
         <td class="memo" data-l="메모">${edit ? `<input class="edit" data-f="memo" maxlength="300" value="${esc(r.memo || "")}">` : esc(r.memo || "")}</td>
         <td class="act">${edit
           ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
-          : `<button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button>`}</td>
-      </tr>`;
+          : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button><span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>
+      </tr>${open ? detailRow(r) : ""}`;
     }).join("");
   }
-  async function loadLog() {
+  // 투찰내역을 열면 결과가 없는 기록만 서버가 나라장터에서 받아 채움(한 번에 몇 건씩 — 남으면 이어서)
+  const FETCHING = new Set(), OPEN_ROWS = new Set();
+  async function fetchResults(ids = null, force = false) {
+    const want = ids || LOG.filter((r) => !r.result || (r.result.status !== "완료")).map((r) => r.id);
+    if (!want.length) return;
+    want.forEach((id) => FETCHING.add(id)); renderLog();
+    try {
+      const d = await post("/api/bidlog/results", ids ? { ids, force } : {});
+      LOG = d.entries || LOG;
+      want.forEach((id) => FETCHING.delete(id)); renderLog();
+      if (!ids && d.left > 0 && d.fetched > 0) fetchResults();
+    } catch (err) {
+      want.forEach((id) => FETCHING.delete(id)); renderLog();
+      $("#bidlogSummary").textContent += ` · 개찰 결과를 받지 못함: ${err.message}`;
+    }
+  }
+  async function loadLog(withResults = false) {
     try {
       LOG = (await api("/api/bidlog")).entries || [];
     } catch (err) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="10" class="why">투찰내역을 불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="9" class="why">투찰내역을 불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
       return;
     }
     renderLog();
+    if (withResults) fetchResults();
   }
   $("#bidlogRows").addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-act]");
@@ -663,6 +719,8 @@
     const tr = btn.closest("tr"), id = tr.dataset.id, act = btn.dataset.act;
     const r = LOG.find((x) => x.id === id);
     try {
+      if (act === "toggle") { OPEN_ROWS.has(id) ? OPEN_ROWS.delete(id) : OPEN_ROWS.add(id); renderLog(); return; }
+      if (act === "refetch") { await fetchResults([id], true); return; }
       if (act === "edit") { EDITING = id; renderLog(); return; }
       if (act === "cancel") { EDITING = null; renderLog(); return; }
       if (act === "save") {
@@ -680,13 +738,13 @@
     }
   });
   $("#bidlogQ").addEventListener("input", renderLog);
-  $("#bidlogReload").addEventListener("click", loadLog);
+  $("#bidlogReload").addEventListener("click", () => loadLog(true));
   // 두 쪽 전환 — 투찰내역 쪽으로 가면 목록을 새로 받음(다른 사람이 기록했을 수 있어서)
   function showPage(page) {
     document.querySelectorAll("[data-calcpage]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.calcpage === page)));
     $("#calcPage").hidden = page !== "calc";
     $("#bidlogPage").hidden = page !== "log";
-    if (page === "log") loadLog();
+    if (page === "log") loadLog(true);
   }
   document.querySelectorAll("[data-calcpage]").forEach((b) => b.addEventListener("click", () => showPage(b.dataset.calcpage)));
   loadLog();

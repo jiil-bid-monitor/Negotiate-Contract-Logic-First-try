@@ -516,25 +516,49 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     for n, (s, e) in enumerate(sorted(paras)):
         if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single + other):
             continue
-        if sign_only and any(cs <= s and e <= ce for cs, ce in cells):
-            continue  # 직접 기입 서식은 표 안(사람별 칸)은 건드리지 않음
+        if sign_only:
+            # 직접 기입 서식은 표 안(사람별 칸)은 건드리지 않음 — 단 회사 서명 묶음('업체명 : / 주소 : / 대표자 : (인)')이 든 칸은 채움
+            # (11/06 과거 제안요청서 검사: 재직증명서 아래 발급 회사 서명 묶음이 표 칸 안이라 비어 있었음)
+            box = next(((cs, ce) for cs, ce in cells if cs <= s and e <= ce), None)
+            if box is not None:
+                bt = _text(xml[box[0]:box[1]])
+                if not (re.search(_SEAL_TAIL, bt) and re.search(r"업\s*체\s*명|회\s*사\s*명|상\s*호", bt)):
+                    continue
         text = _text(xml[s:e])
         # '○ 대 표 사      업 체 명 :' / '○ 공동참여자      업 체 명 :'처럼 묶음 머리가 앞에 붙은 이름표 줄(11/06 청주 서식) —
         # 머리는 떼고 이름표만 보고, 공동참여자·구성원 묶음 아래 줄(업체명·주소·대표자)은 다른 회사 칸이라 비움
-        hm = re.fullmatch(r"\s*[○●◦□■▪·\-]\s*(\S(?:.{0,14}?\S)?)(?:\s{3,}(.*))?", text, re.S)
-        if hm and not re.search(r"[:：]", hm.group(1)):
-            head = _sq(hm.group(1))
-            if re.search(r"공동(?:참여|수급|이행|도급)|구성원|참여사|분담", head):
-                party = "other"
-            elif re.search(r"대표사|대표업체|주관사|주계약자|대표자|입찰자|신청인", head):
-                party = "own"
-            if hm.group(2):
-                text = hm.group(2)
+        got = _party_head(text)
+        if got:
+            party = got[0] or party
+            text = got[1] or text
         elif _sq(text) and not re.search(r"[:：]", text) and not re.search(_SEAL_TAIL, text):
             party = None  # 이름표 아닌 글 줄('청주시장 귀하')에서 묶음이 끝남
         if party == "other":
             continue
         if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|주\s*소", text):
+            continue
+        # 한 줄에 회사 이름표와 대표자 이름표가 같이 — '업체명 :      대표자 :      (인)'·'제안업체 :      대표자 :'(11/06 과거 제안요청서 검사)
+        two = re.fullmatch(rf"\s*(?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：]\s{{2,}}대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL}|[(（])?\s*", text)
+        if two and _value("회사명", vault) and _value("대표자", vault):
+            company, name = _value("회사명", vault), _value("대표자", vault)
+
+            def put_two(mm, state={"c": False, "n": False}):
+                body = mm.group(2)
+                if not state["c"]:
+                    body, k = re.subn(r"((?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：])( {2,})",
+                                      lambda m2: f"{m2.group(1)} {_mark(company)}" + " " * max(2, len(m2.group(2)) - len(company) - 1), body, count=1)
+                    state["c"] = bool(k)
+                if not state["n"]:
+                    body, k = re.subn(r"(대\s*표\s*(?:자|이\s*사)\s*[:：])( *)",
+                                      lambda m2: f"{m2.group(1)} {_mark(name)}" + " " * max(2, len(m2.group(2)) - len(name) - 1), body, count=1)
+                    state["n"] = bool(k)
+                return mm.group(1) + body + mm.group(3)
+            seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", lambda mm, st={"c": False, "n": False}: put_two(mm, st),
+                         xml[s:e], flags=re.S)
+            if seg != xml[s:e]:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 → {company} · 대표자 {name}")
             continue
         # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름
         bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)))(\s{{3,}})({_SEAL_TAIL}.*)", text)
@@ -639,6 +663,26 @@ _PARA_SLOT = re.compile(
     r"전\s*화(?:\s*번\s*호)?|공\s*고\s*번\s*호|입\s*찰\s*건\s*명)\s*[:：]\s*(?:" + _SEAL_TAIL + r")?\s*")
 
 
+def _party_head(text: str) -> tuple[str | None, str] | None:
+    """묶음 머리가 앞에 붙은 줄 → (묶음 'own'/'other'/None, 머리 뗀 나머지). 머리가 없으면 None.
+    '○ 대 표 사      업 체 명 :'·'○ 공동참여자'·'서 약 자   업 체 명 :'·'공동수급체 구성원  상 호 :'(11/06 청주·과거 제안요청서 검사)."""
+    hm = re.fullmatch(r"\s*[○●◦□■▪·\-]\s*(\S(?:.{0,14}?\S)?)(?:\s{3,}(.*))?", text, re.S) or re.fullmatch(
+        r"\s*((?:공\s*동\s*수\s*급\s*체\s*)?(?:대\s*표|구\s*성\s*원)|서\s*약\s*자|제\s*출\s*자|신\s*청\s*(?:자|인)(?:\s*\([^)]{0,20}\))?|"
+        r"입\s*찰\s*자|제\s*안\s*자|확\s*약\s*자|대\s*표\s*자)\s{2,}(\S.*[:：].*)", text, re.S)
+    if not hm or re.search(r"[:：]", hm.group(1)):
+        return None
+    head = _sq(hm.group(1))
+    if re.search(r"구성원|참여사|분담|공동참여자|공동참가자|공동응모자|대리인|수임인|발행자|제조사", head):
+        party = "other"
+    elif re.search(r"대표|주관사|주계약자|입찰자|신청|제출자|서약자|제안자|확약자", head):
+        party = "own"
+    elif re.search(r"공동(?:참여|수급|이행|도급|참가)", head):
+        party = "other"
+    else:
+        party = None
+    return party, (hm.group(2) or "")
+
+
 def unfilled_slots(xml: str, sign_only: bool = False) -> list[str]:
     """채운 서식 구역 XML에서 회사 정보 이름표가 있는데 값이 빈 자리 — ['표: 업체명', '문단: 대표자 :'] 같은 목록."""
     out: list[str] = []
@@ -679,13 +723,15 @@ def unfilled_slots(xml: str, sign_only: bool = False) -> list[str]:
         if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single):
             continue
         text = _text(xml[s:e])
-        hm = re.match(r"\s*[○●◦□■▪·\-]\s*(\S(?:.{0,14}?\S)?)(?:\s{3,}|$)", text)
-        if hm and not re.search(r"[:：]", hm.group(1)):
-            head = _sq(hm.group(1))
-            party = "other" if re.search(r"공동(?:참여|수급|이행|도급)|구성원|참여사|분담|대리인|수임인|발행자|제조사", head) else \
-                ("own" if re.search(r"대표사|대표업체|주관사|대표자|입찰자|신청인", head) else party)
+        got = _party_head(text)
+        if got:
+            party = got[0] or party
+            text = got[1] or text
         elif _sq(text) and not re.search(r"[:：]", text) and not re.search(_SEAL_TAIL, text):
             party = None
+        if re.search(r"발\s*급|기\s*관\s*명|증\s*명\s*기\s*관|확\s*인\s*기\s*관|발\s*주\s*처|소\s*속\s*[:：]", text):
+            party = "other"  # 증명서 발급기관·담당 부서, 위임받는 사람(소속) 묶음 — 다른 쪽이 적는 칸
+            continue
         if party == "other" or re.search(r"대\s*리\s*인|발\s*행\s*자|제\s*조\s*사|수\s*입\s*원", text):
             continue
         m = _PARA_SLOT.fullmatch(text)

@@ -1924,3 +1924,37 @@ def test_unfilled_slots_finds_blank_company_labels():
     got = unfilled_slots(xml)
     assert got == ["표: 상호또는법인명칭", "문단: 공고번호", "문단: 대표자"]
     assert unfilled_slots(xml, sign_only=True) == ["문단: 공고번호", "문단: 대표자"]
+
+
+def test_signature_shapes_from_past_rfps(tmp_path: Path):
+    """11/06 과거 제안요청서 검사에서 나온 빈칸 모양: ① '업체명 :      대표자 :      (인)' 한 줄 두 이름표 ② '서 약 자   업 체 명 :'·
+    '제출자  상 호 :'(역할 이름이 앞에 붙은 줄) ③ '공동수급체 대표  상 호 :'는 채우고 '공동수급체 구성원  상 호 :' 아래는 비움
+    ④ 직접 기입 서식(재직증명서)도 표 칸 안 회사 서명 묶음은 채움."""
+    from quantdocs.fill import fill_hwpx
+
+    def p(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (p("2026년  월  일") + p("업체명 :            대표자 :            (인)") + p("") + p("귀하")
+            + p("서 약 자        업   체   명 :") + p("                 대  표  자 :          (인)") + p("") + p("귀하")
+            + p("공동수급체 대  표   상  호 :") + p("대표자:          (서명 또는 인)")
+            + p("공동수급체 구성원   상  호 :") + p("대표자:          (서명 또는 인)"))
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"})
+    fill_hwpx(src, tmp_path / "so.hwpx", v)
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode()
+                                     .replace("", "").replace("", "")))
+    assert "업체명 : (주)가상 대표자 : 홍길동" in text
+    assert "서 약 자 업 체 명 : (주)가상" in text
+    lead, member = text.split("공동수급체 구성원")
+    assert "상 호 : (주)가상" in lead and "홍길동" in lead.split("공동수급체 대 표")[1]
+    assert "(주)가상" not in member and "홍길동" not in member
+    # ④ 재직증명서: 사람 칸(표)은 그대로, 같은 표 안 회사 서명 묶음 칸은 채움
+    cert = ("<hp:p><hp:run><hp:tbl><hp:tr>" + _c(0, 0, "성 명") + _c(1, 0, "") + "</hp:tr><hp:tr>"
+            '<hp:tc><hp:subList>' + p("위와 같이 재직 중임을 증명합니다.") + p("업 체 명 :") + p("주    소 :") + p("대 표 자 :            (인)")
+            + '</hp:subList><hp:cellAddr colAddr="0" rowAddr="1"/><hp:cellSpan colSpan="2" rowSpan="1"/></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+    src2 = _mini_hwpx(tmp_path / "c.hwpx", cert)
+    fill_hwpx(src2, tmp_path / "co.hwpx", v, sign_only=True)
+    t2 = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", zipfile.ZipFile(tmp_path / "co.hwpx").read("Contents/section0.xml").decode()
+                                   .replace("", "").replace("", "")))
+    assert "업 체 명 : (주)가상" in t2 and "주 소 : 강원 정선" in t2 and "대 표 자 : 홍길동" in t2
+    assert t2.startswith(" 성 명 위와") or "성 명 위와" in t2  # 사람 칸은 비운 채

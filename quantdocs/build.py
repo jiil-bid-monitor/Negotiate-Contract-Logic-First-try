@@ -281,7 +281,7 @@ _MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참�
 
 
 # 공란으로 두는 서식(11/05 사용자 요청) — 서면질의서(질의할 때 직접)·공동수급 관련 서류(공동수급할 때만 직접)
-_BLANK_FORM = re.compile(r"질\s*의|공동\s*수급|공동\s*이행|분담\s*이행|공동\s*도급|합의\s*각서")
+_BLANK_FORM = re.compile(r"질\s*의|공동\s*수급|공동\s*이행|분담\s*이행|공동\s*도급|합의\s*각서|공동\s*(?:참가|응모|참여)\s*(?:협정|합의|계약)")
 
 
 def _note_unfilled(a: "Analysis", form, path: Path, sign_only: bool) -> None:

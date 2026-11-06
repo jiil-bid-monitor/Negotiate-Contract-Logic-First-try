@@ -1521,9 +1521,13 @@ async function loadNotices(refresh) {
     if (data.thresholds) { HIGH = data.thresholds.high; LOW = data.thresholds.border; }
     checkPageVersion(data.static_version);
     if (data.job?.running && !jobTimer) watchJob(data.job, false);
+    // 결과 보기 전용 서버(NAS)엔 수집 버튼이 없다 — 수집은 서버 PC 화면에서 (webapp/resultpush.py)
+    const viewer = data.canCollect === false;
+    $("refresh").style.display = $("days").style.display = viewer ? "none" : "";
     if (data.empty) {
       $("loadState").textContent = "";
-      $("liveMeta").innerHTML = "아직 수집한 결과가 없습니다. 기간을 고르고 <b>나라장터에서 불러오기</b>를 누르세요.";
+      $("liveMeta").innerHTML = viewer ? "아직 받은 수집 결과가 없습니다. 서버 PC 화면에서 수집하면 끝난 뒤 여기에 나타납니다."
+        : "아직 수집한 결과가 없습니다. 기간을 고르고 <b>나라장터에서 불러오기</b>를 누르세요.";
       renderNotices([], [], [], data.heldProducts || []);
       return;
     }
@@ -1538,7 +1542,9 @@ async function loadNotices(refresh) {
       (col ? ` · 나라장터에서 받은 공고 본공고 ${num(col.bid)}건 · 사전규격 ${num(col.pre)}건` : "") +
       (data.prespecError ? ` · <span style="color:var(--warn)">사전규격 조회 실패</span>` : "") +
       // 판정은 수집할 때 계산해 저장한다 — 서버 코드가 바뀐 뒤 예전 결과를 보고 있으면 다시 불러오라고 알린다
-      (data.format !== data.resultFormat ? `<br><span style="color:var(--warn)">이 결과는 이전 버전으로 수집됐습니다 — '나라장터에서 불러오기'를 다시 하면 새 판정으로 보입니다.</span>` : "") +
+      (data.format !== data.resultFormat ? `<br><span style="color:var(--warn)">이 결과는 이전 버전으로 수집됐습니다 — ${viewer ? "서버 PC에서 다시 수집하면" : "'나라장터에서 불러오기'를 다시 하면"} 새 판정으로 보입니다.</span>` : "") +
+      // 서버 PC 화면 — NAS로 보낸 결과 (실패하면 서버가 1분마다 다시 시도한다)
+      (data.push?.error ? `<br><span style="color:var(--urgent)">NAS로 보내지 못함 — ${esc(data.push.error)} (1분마다 다시 시도)</span>` : data.push?.at ? ` · NAS 반영 ${esc(fmtDT(data.push.at))}` : "") +
       `<br>목록 <b>${data.items.length}건</b> · ` +
       `싱크로율 높음 <b>${hi}</b> · 경계선 <b>${mid}</b> · 낮음 <b>${data.items.length - hi - mid}</b>`;
     if (!jobTimer) $("loadState").textContent = `완료 ${fmtDT(new Date())}`;

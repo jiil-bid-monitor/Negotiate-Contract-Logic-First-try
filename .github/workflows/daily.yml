@@ -127,10 +127,11 @@ jobs:
           cache: pip
 
       - name: 의존성 설치
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest
 
+      # pytest로 돌린다 — 정량평가서 테스트(test_quant_*)가 pytest 형식이라 unittest로는 불러오지도 못한다(2026-11-05)
       - name: 테스트
-        run: python -m unittest discover -s tests -t .
+        run: python -m pytest -q tests
 
       # 스케줄 실행에는 입력값이 없으므로 여기서 실행 모드를 정한다. 수동 실행은
       # 입력값을 그대로 쓴다. 아래 수집·재시도 단계는 모두 이 출력값만 본다.

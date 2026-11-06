@@ -13,7 +13,7 @@
 
 ## 11/05 저녁 — 세션 종료 시점 (다음 세션은 여기부터)
 
-- 브랜치 `claude/quantdocs-merge`(main 미병합, main 마지막 = PR #245 병합). 서버 PC는 사용자가 수시로 pull — 마지막 반영 여부는 확인 안 됨.
+- 브랜치 `claude/quantdocs-merge` — **11/06 main 병합**(main에 PR #246까지 있던 상태에서 합침). 서버 PC는 사용자가 수시로 pull — 마지막 반영 여부는 확인 안 됨.
 - 확인 대기: ① 창업진흥원(몽골 울란바타르 스타트업 타운) 공고 — 서식 7 '입찰보증금지급각서'가 목록에 보이는지, 관련 자격이 '이 중 하나: 4817·4990'인지
   ② 보낸 `통합서식_복구.hwpx`가 한글에서 열리는지 ③ 11pt·내어쓰기·표 높이·연혁 쪽 나눔(필암서원) 한글 화면.
 - 계획 변경(사용자): PDF만 있는 공고는 '한글 파일 필요' 표시만 — 공고문 OCR·PDF→한글 서식 다시 만들기는 꺼 둠(`notice.NOTICE_OCR`, build에서 `pdfforms` 안 부름, 코드는 남김).
@@ -53,6 +53,27 @@
   서버 PC 명령은 `cd "경로"`부터 `&&`로 한 줄, 평가 점수 계산은 범위 밖, 고친 뒤엔 필암서원 실제 서식으로 다시 만들어 그림 확인.
 
 ## 11/03 — 지금 상태와 다음 할 일 (먼저 읽을 것)
+
+## 11/05 — 서버 PC 수집 결과를 NAS로 (먼저 읽을 것)
+
+- 브랜치 `claude/nas-result-sync`: NAS `.env` `WEBAPP_ROLE=viewer` + 서버 PC `.env` `RESULT_PUSH_URL`. 설정법 `webapp/README.md`, 결정 `CLAUDE.md` "2026-11-05" 절.
+- 켜기 전에: 서버 PC·NAS 코드 갱신, 서버 PC `data/` 판단 기록을 NAS로 한 번 옮기기, 팀원 접속 주소를 NAS로. 사용자 결정 대기: NAS 판단 기록 백업.
+
+## 11/04 — 지금 상태와 다음 할 일
+
+- 오늘 정리: `docs/worklog/2026-11-04.md`, 결정: `CLAUDE.md` "2026-11-04" 절(정량평가서 쪽은 `claude/quantdocs-merge`의 `CLAUDE.md`에).
+- **main 마지막 = PR #241**(수집 뒤 NAS 웹앱 자동 재시작). 웹앱 NAS 컨테이너 2개·1억 미만 최소판·정량평가서 탭(#235)이 main에 있음.
+- 병합 안 한 브랜치: `claude/quantdocs-merge`(#235 뒤 정량평가서 고침 40커밋), `claude/bidfield-notice-fallback`(추천 칸 분야 보완 등), `claude/track1-folders`(보류).
+- 서버 PC는 11/04 확인 때 `claude/quantdocs-merge`로 돌아감. NAS에 어느 코드까지 반영됐는지는 미확인.
+- **다음에 할 일**
+  1. 사용자 결정 대기: 공개 저장소의 `docs/quantdocs_meeting_2026-10-30.md`·`docs/server_pc_nas_request.md`를 비공개 레포 `jiil-quant-docs`로 옮길지, 기록까지 지울지. `docs/quantdocs.md`의 합치기 전 안내도 고칠 것.
+  2. `claude/quantdocs-merge` main 병합(요청 때만) — `Dockerfile`·`requirements.txt`가 바뀌어 NAS는 부장님이 이미지를 다시 빌드해야 함.
+  3. 서버 PC: Tesseract OCR 결과, `통합서식.hwpx`를 한글로 열어 확인.
+  4. NAS: 옛 한글 변환기 경로(`HWP2HWPX_CMD`), 1억 미만 실행 확인.
+  5. 11/03에서 이어짐: 실적 부가세 '포함' 채우기(사용자 결정 대기), 회사 서류 보충, `claude/bidfield-notice-fallback` 합칠지(사용자 결정 대기), 주말 수집 0건 원인 진단.
+- **지킬 것**: 한국어 답변, 요청 전엔 고치지 않기, 회사 서류·잠금 묶음·비밀번호는 공개 레포에 올리지 않기, 평가 점수 계산은 범위 밖, 통합본 PDF는 원본 그대로(서류를 그림으로 붙인 한글 하나로 되돌리지 않기), NAS 관리 작업은 부장님 경유.
+
+## 11/03 — 지금 상태와 다음 할 일
 
 - 오늘 정리: `docs/worklog/2026-11-03.md`, 결정: `CLAUDE.md` "2026-11-03" 절.
 - **정량평가서 준비(프로젝트 2)를 이 레포로 합침** — 브랜치 `claude/quantdocs-merge`(main 기준, **미병합**). 웹앱 '투찰 계산기' 옆 '정량평가서' 탭.

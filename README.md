@@ -114,7 +114,7 @@ pip install -r requirements.txt
 python scripts/demo.py
 
 # 테스트
-python -m unittest discover -s tests -t .
+python -m pytest -q tests
 
 # 실제 수집 (인증키 필요)
 export NARA_SERVICE_KEY="발급받은 인증키(Decoding/평문)"

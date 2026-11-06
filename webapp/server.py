@@ -17,6 +17,7 @@ import logging
 import mimetypes
 import os
 import secrets
+import sys
 import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -29,9 +30,11 @@ from nego.config import ConfigError, load_config, redact
 from nego.http_client import ApiError
 
 from . import mview
+from .autorestart import RestartAfterCollect
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .docscan import DocScan
 from .mstore import TeamStore
+from .resultpush import ResultPush
 from .exclusionsync import ExclusionSync
 from .reportsync import ReportSync
 from .sheetsync import SheetSync
@@ -40,6 +43,8 @@ from .sync import BORDER, HIGH, PastIndex
 
 STATIC = Path(__file__).resolve().parent / "static"
 MAX_BODY = 200_000
+MAX_IMPORT = 500_000_000  # 서버 PC가 보내는 수집 결과 — 제외 공고까지 들어 있어 수십 MB
+VIEWER_MESSAGE = "이 서버는 결과 보기 전용입니다 — 수집은 서버 PC 화면에서 하세요"
 
 
 def static_version() -> str:
@@ -68,6 +73,10 @@ class App:
         self.team = team or TeamStore(store.path.parent, legacy_db=store.path, titles=self._titles, backup_dir=backup_dir)
         self._run_cache: tuple[int | None, dict[str, Any] | None] = (None, None)
         self._held_raw: dict[str, Any] | None = None
+        # 결과 보기 전용(NAS, WEBAPP_ROLE=viewer) — 수집 버튼을 숨기고 서버 PC가 보낸 결과를 받는다
+        self.viewer = False
+        self.imported = False
+        self.push: ResultPush | None = None
 
     def _titles(self) -> dict[str, str]:
         run = self.store.latest_run() or {}
@@ -173,6 +182,7 @@ def make_handler(app: App):
                     "categories": scope.CATEGORIES, "sync_thresholds": {"high": HIGH, "border": BORDER},
                     "has_service_key": bool(os.environ.get("NARA_SERVICE_KEY", "").strip()),
                     "has_ai_key": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
+                    "can_collect": not app.viewer,
                 })
             if url.path == "/api/bidcalc":
                 # 투찰 계산기 — 공고번호로 기초금액·하한율·A값 불러오기 (서비스키는 서버에만)
@@ -230,6 +240,8 @@ def make_handler(app: App):
             if url.path == "/api/notices":
                 job = app.collector.job.snapshot()
                 if q.get("refresh", [""])[0] == "1":
+                    if app.viewer:
+                        return self._error(HTTPStatus.CONFLICT, VIEWER_MESSAGE)
                     # 나라장터 조회 + 첨부 읽기는 몇 분 걸려서 응답을 붙잡지 않는다 — 수집을 시작하고 화면이 /api/job을 본다
                     days = int(q.get("days", ["7"])[0]) if q.get("days", ["7"])[0].isdigit() else 7
                     try:
@@ -241,6 +253,7 @@ def make_handler(app: App):
                 data = mview.notices(app.latest_run(), app.team.promoted, app.held_raw(),
                                      app.docscan.codes() if app.docscan else None)
                 return self._json({**data, "job": job, "static_version": app.static_version, "resultFormat": RESULT_FORMAT,
+                                   "canCollect": not app.viewer, "push": app.push.state if app.push else None,
                                    "docScan": app.docscan.state if app.docscan else None})
             if url.path == "/api/excluded":
                 return self._json(mview.excluded(app.latest_run(), app.team.promoted, app.held_raw()))
@@ -314,10 +327,14 @@ def make_handler(app: App):
             if not self._authorized():
                 return self._error(HTTPStatus.UNAUTHORIZED, "접속 토큰이 필요합니다")
             try:
+                if url.path == "/api/import-run":
+                    return self._import_run()
                 data = self._body()
                 if url.path.startswith("/api/quant/"):
                     return self._quant("POST", url.path[len("/api/quant"):], data)
                 if url.path == "/api/collect":
+                    if app.viewer:
+                        raise RuntimeError(VIEWER_MESSAGE)
                     cats = data.get("categories") or None
                     job = app.collector.start(
                         days=int(data["days"]) if data.get("days") else None,
@@ -379,6 +396,28 @@ def make_handler(app: App):
             except (ValueError, json.JSONDecodeError) as err:
                 return self._error(HTTPStatus.BAD_REQUEST, str(err))
 
+        def _import_run(self) -> None:
+            """서버 PC가 보낸 수집 결과 저장(webapp/resultpush.py) — 본문을 다 받아 확인한 뒤에야 저장해, 끊기면 이전 결과가 그대로다."""
+            if not app.viewer:
+                return self._error(HTTPStatus.FORBIDDEN, "이 서버는 결과를 받지 않습니다 (WEBAPP_ROLE=viewer일 때만)")
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > MAX_IMPORT:
+                return self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "수집 결과가 너무 큽니다")
+            data = json.loads(self.rfile.read(length).decode("utf-8"))
+            payload = data.get("payload") if isinstance(data, dict) else None
+            if not isinstance(payload, dict) or not isinstance(payload.get("candidates"), list) \
+                    or not data.get("started_at") or not data.get("finished_at"):
+                raise ValueError("수집 결과 형식이 아닙니다")
+            if int(payload.get("format") or 0) > RESULT_FORMAT:
+                raise RuntimeError(f"NAS 코드가 예전 버전입니다(결과 형식 {payload.get('format')}, NAS {RESULT_FORMAT}) — NAS 코드를 먼저 갱신하세요")
+            run_id = app.store.import_run(str(data["started_at"]), str(data["finished_at"]), data.get("params") or {}, payload)
+            if isinstance(data.get("doc_products"), dict):
+                app.docscan.merge(data["doc_products"])
+            if run_id is not None:
+                app.imported = True  # 수집 뒤처럼 조용해지면 다시 켜 메모리를 비운다 (webapp/autorestart.py)
+                logging.getLogger(__name__).info("서버 PC 수집 결과 저장: %d번 — 후보 %d건", run_id, len(payload["candidates"]))
+            return self._json({"run_id": run_id, "skipped": run_id is None})
+
     return Handler
 
 
@@ -399,6 +438,12 @@ def decisions_csv(rows: list[dict[str, Any]]) -> str:
                     ", ".join(sn.get("matched_keywords") or []), sn.get("review_exclude") or "",
                     sn.get("excluded_reason") or "", sn.get("sync_level") or "", sn.get("qual_summary") or ""])
     return buf.getvalue()
+
+
+def busy_now(app: App) -> bool:
+    """수집·세부품명 확인·정량평가서 작업 중이면 True — 다시 켜면 끊기는 일들."""
+    quant = sys.modules.get("quantdocs.web")  # 정량평가서 탭을 안 썼으면 불러오지 않는다
+    return bool(app.collector.job.running or app.docscan.state["running"] or (quant is not None and quant.busy()))
 
 
 def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, collector: Collector | None = None,
@@ -426,6 +471,13 @@ def main(argv: list[str] | None = None) -> int:
     # 판단 기록 백업 폴더 — 구글 드라이브 데스크톱이 동기화하는 폴더 (webapp/backup.py). 비어 있으면 백업하지 않는다
     backup_dir = Path(os.environ["BACKUP_DIR"].strip()) if os.environ.get("BACKUP_DIR", "").strip() else None
     app = build_app(Path(args.db), token, backup_dir=backup_dir)
+    app.viewer = os.environ.get("WEBAPP_ROLE", "").strip() == "viewer"
+    # 서버 PC — 수집이 끝나면 결과를 NAS로 보낸다(webapp/resultpush.py). 판단 기록은 NAS에만 쌓이므로 아래 시트 쓰기는 끈다
+    push_url = os.environ.get("RESULT_PUSH_URL", "").strip()
+    if push_url and not app.viewer:
+        app.push = ResultPush(push_url, os.environ.get("RESULT_PUSH_TOKEN", "").strip() or token, app.store, app.docscan,
+                              lambda: busy_now(app), Path(args.db).parent / "result_push.json")
+        app.push.start()
     if backup_dir is not None:
         app.team.backup_now()
         # 로그인하자마자 서버가 뜨면 구글 드라이브가 아직 연결되기 전일 수 있어 2분 뒤 한 번 더
@@ -442,8 +494,13 @@ def main(argv: list[str] | None = None) -> int:
     except feedback_sheet.SheetsError as err:
         sheet_cfg = None
         logging.warning("피드백 시트: %s", err)
-    if sheet_cfg is not None:
+    if sheet_cfg is not None and app.push is None:  # 서버 PC의 오래된 판단으로 시트를 덮어쓰지 않게
         SheetSync(app.team.snapshot).start()
+    # NAS에서만 — 수집이 끝나면 다시 켜 메모리를 비운다 (webapp/autorestart.py)
+    restart_file = os.environ.get("WEBAPP_RESTART_FILE", "").strip()
+    if restart_file:
+        RestartAfterCollect(Path(restart_file), lambda: app.collector.job.finished_at is not None or app.imported,
+                            lambda: busy_now(app)).start()
     if app.past.error:
         logging.warning(app.past.error)
     else:
@@ -460,7 +517,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  판단 기록 백업: {backup_dir}" + ("" if backup_dir.exists() else "  ⚠ 폴더가 없습니다 — 구글 드라이브가 켜져 있는지 확인하세요"))
     else:
         print("  판단 기록 백업: 꺼져 있음 (환경변수 BACKUP_DIR에 구글 드라이브 폴더를 적으면 켜집니다)")
-    print("  피드백 시트에 판단 쓰기: " + ("켜짐" if sheet_cfg is not None else
+    if app.viewer:
+        print("  결과 보기 전용: 수집 버튼 없음, 서버 PC가 보낸 결과를 받습니다")
+    if app.push is not None:
+        print("  수집 결과 보내기: 켜짐 — 판단 기록은 NAS에서 받으므로 이 PC의 시트 쓰기는 끕니다")
+    print("  피드백 시트에 판단 쓰기: " + ("꺼짐 (NAS가 씁니다)" if app.push is not None else "켜짐" if sheet_cfg is not None else
           "꺼져 있음 (.env에 FEEDBACK_SHEET_ID·GOOGLE_SERVICE_ACCOUNT_FILE을 적으면 켜집니다 — docs/decision_log.md 9절)"))
     print("  종료: Ctrl+C\n")
     try:

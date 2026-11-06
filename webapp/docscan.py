@@ -48,6 +48,12 @@ class DocScan:
         with self._lock:
             return {no: r["codes"] for no, r in self.results.items() if r.get("codes")}
 
+    def merge(self, results: dict[str, dict[str, Any]]) -> None:
+        """서버 PC가 읽어 보낸 결과를 합친다(webapp/resultpush.py) — NAS는 수집을 안 해 직접 읽지 않는다."""
+        with self._lock:
+            self.results.update(results)
+            self._save()
+
     def start(self, notices: list[Any], held_products: set[str]) -> None:
         """아직 안 읽은 공고만 데몬 스레드로 읽는다. 이미 도는 중이면 이번 요청은 건너뛴다(다음 수집 때 이어서)."""
         with self._lock:

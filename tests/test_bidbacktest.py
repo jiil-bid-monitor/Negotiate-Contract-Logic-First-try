@@ -195,6 +195,17 @@ class ResultRecordDateTest(unittest.TestCase):
             history = br.load_history([path])
         self.assertEqual(dict(history.skip_reasons), {"하한율 없음": 1, "개찰 결과 없음(조회 오류)": 1, "참가업체 없음": 1})
 
+    def test_broken_line_skips_whole_file(self):
+        """한 줄씩 읽어도 예전처럼 — 깨진 줄이 있으면 그 파일의 앞줄까지 통째로 안 쓴다. 빈 줄은 건너뛴다."""
+        with tempfile.TemporaryDirectory() as tmp:
+            good = Path(tmp) / "bid_results.jsonl"
+            good.write_text("\n" + json.dumps(self._line()) + "\n\n", encoding="utf-8")
+            broken = Path(tmp) / "bid_results_2.jsonl"
+            broken.write_text(json.dumps(self._line(no="R25BK00000002")) + "\n{깨진 줄\n", encoding="utf-8")
+            history = br.load_history([good, broken])
+        self.assertEqual([r.notice_no for r in history.records], ["R25BK00000001"])
+        self.assertEqual(history.files, ["bid_results.jsonl"])
+
 
 class MainTest(unittest.TestCase):
     def test_reads_history_and_finds_own_bid(self):

@@ -235,6 +235,29 @@ class TestReportSync(unittest.TestCase):
         self.assertEqual(sync.pull(), 0, "이미 합친 파일은 다시 읽지 않는다")
         self.assertEqual(sum(1 for c in git.calls if c[0] == "cat-file"), 2)
 
+    def test_http_without_git(self):
+        from webapp.reportsync import HttpGit
+        body = json.dumps(_entry("daily", "2026-11-09", "A")).encode("utf-8")
+
+        class Res:
+            def __init__(self, data=None, content=b""):
+                self.data, self.content = data, content
+            def raise_for_status(self):
+                pass
+            def json(self):
+                return self.data
+
+        class Session:
+            def get(self, url, timeout):
+                if "api.github.com" in url:
+                    return Res([{"name": "2026-11-09-daily.json", "sha": "abc", "download_url": "https://raw/x"}])
+                return Res(content=body)
+
+        store = TeamStore(Path(tempfile.mkdtemp()))
+        sync = ReportSync(store.merge_report, git=HttpGit(Session()))
+        self.assertEqual(sync.pull(), 1)
+        self.assertEqual(sync.pull(), 0)
+
     def test_failure_is_quiet(self):
         store = TeamStore(Path(tempfile.mkdtemp()))
         sync = ReportSync(store.merge_report, git=FakeGit({}, fail=True))

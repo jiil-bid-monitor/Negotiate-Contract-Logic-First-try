@@ -18,18 +18,22 @@ import os
 import re
 import threading
 import time
-from datetime import datetime
+from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Callable
 
 import requests
 
 from nego.telegram import API_BASE, _short_money
 
+from . import docexpiry
+
 log = logging.getLogger(__name__)
 
 COMMANDS = [("notice", "공고번호로 공고 요약 — /notice R26BK01234567"),
             ("deadline", "N일 안에 마감하는 공고 — /deadline 3"),
             ("today", "가장 최근 매일 보고 다시 받기"),
+            ("docs", "회사 서류 유효기간 (서류목록.xlsx)"),
             ("help", "명령어 목록")]
 _NO = re.compile(r"[A-Z0-9]{10,14}", re.I)
 
@@ -152,6 +156,8 @@ def reply(text: str, run: dict | None, now: datetime, reports: dict[str, dict] |
         return deadline_reply(run, arg, now)
     if cmd == "today":
         return today_reply(reports or {}, now)
+    if cmd == "docs":
+        return docexpiry.docs_reply(docexpiry.read_docs(docexpiry.docs_dir()), now.date())
     if cmd in ("help", "start"):
         return "\n".join(f"/{name} — {desc}" for name, desc in COMMANDS)
     return None
@@ -166,6 +172,24 @@ class TelegramBot:
         self.reports = reports
         self.session = session or requests.Session()
         self.offset = 0
+        # 서류 만료 알림은 담당자 방(TELEGRAM_CHAT_ID)에만, 하루 한 번 — 개발자 방엔 안 보냄
+        self.alert_chats = [c.strip() for c in os.environ.get("TELEGRAM_CHAT_ID", "").split(",") if c.strip()]
+        self.sent_path = Path("data") / "doc_alerts_sent.json"
+        self.checked_day: date | None = None
+
+    def check_docs(self, now: datetime) -> int:
+        """아침 9시가 지나면 하루 한 번 — 7일 안에 끝나는 회사 서류를 담당자 방에 알린다. 보낸 방 수."""
+        if self.checked_day == now.date() or now.hour < docexpiry.ALERT_HOUR:
+            return 0
+        self.checked_day = now.date()
+        sent = docexpiry.load_sent(self.sent_path)
+        text, keys = docexpiry.due_alert(docexpiry.read_docs(docexpiry.docs_dir()), now.date(), sent)
+        if not text:
+            return 0
+        for chat in self.alert_chats:
+            self._api("sendMessage", chat_id=chat, text=text, parse_mode="HTML")
+        docexpiry.save_sent(self.sent_path, sent | set(keys))
+        return len(self.alert_chats)
 
     @classmethod
     def from_env(cls, latest_run: Callable[[], dict | None], reports: Callable[[], dict] = dict) -> "TelegramBot | None":
@@ -210,6 +234,7 @@ class TelegramBot:
                 log.warning("텔레그램 명령어 메뉴 등록 실패: %s", str(err).replace(self.token, "***"))
             while True:
                 try:
+                    self.check_docs(datetime.now())
                     self.poll_once()
                 except Exception as err:  # noqa: BLE001 — 끊겨도 서버는 계속
                     log.warning("텔레그램 명령어 받기 실패: %s", str(err).replace(self.token, "***"))

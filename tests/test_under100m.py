@@ -19,9 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from nego.qualify import JointSupply, QualificationResult  # noqa: E402
 from nego.region import RegionCheck  # noqa: E402
 from nego.screen import Schedule  # noqa: E402
-from under100m.__main__ import alert_text, business_amount, collect, folder_name, is_target, over_by_api, run_once  # noqa: E402
+from under100m.__main__ import alert_text, business_amount, collect, doc_label, folder_name, is_target, over_by_api, run_once  # noqa: E402
 from under100m.form_fill import fill_form  # noqa: E402
-from under100m.form_split import split_forms  # noqa: E402
+from under100m.form_split import split_forms, tidy  # noqa: E402
 
 NOW = datetime(2026, 11, 4, 10, 0)
 COMPANY = {"회사": {"name": "가나회사", "ceo": "다라", "addr": "마바시 사아로 1", "bizno": "000-00-00000", "tel": "02-000-0000"},
@@ -204,6 +204,22 @@ class RunOnceTest(unittest.TestCase):
         self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["notices"]["R26BK00000001-000"]["tries"], 3)
 
 
+class NameRuleTest(unittest.TestCase):
+    def test_tidy_cases_from_real_notices(self):
+        self.assertEqual(tidy("서 약 서상호 또는법인 명칭법인등록번호 대표자사업자등록번호주 소전화번호"), "서약서")
+        self.assertEqual(tidy("국가계약법 제27조의5 및 동법시행령 제12조 제5항에 따른 서약서 당사는 「국가계약법」"), "국가계약법 제27조의5 및 동법시행령 제12조 제5항에 따른 서약서")
+        self.assertEqual(tidy("<재무구조 및 최근 3년간 매출액>"), "재무구조 및 최근 3년간 매출액")
+        self.assertEqual(tidy("상세규격서 (개정 2020. 04. 06)"), "상세규격서")
+        self.assertEqual(tidy("입 찰 참 가 신 청 서"), "입찰참가신청서")
+        self.assertEqual(tidy("제 안 서 (표지"), "제안서 (표지)")
+        self.assertEqual(tidy("용역이행 실적증명서 신청인 업체명(상호) 대표자 영업소재지"), "용역이행 실적증명서")
+        self.assertEqual(tidy("상세규격서 _개정 2020. 04. 06_"), "상세규격서")
+
+    def test_doc_label_drops_numbering(self):
+        self.assertEqual(doc_label(Path("붙임6._조세포탈_유무_확인_서약서.hwp"), 40), "조세포탈 유무 확인 서약서")
+        self.assertEqual(doc_label(Path("붙임2_과업지시서.hwp")), "과업지시서")
+
+
 SEC = ('<hs:sec xmlns:hs="s" xmlns:hp="p">{}</hs:sec>')
 
 
@@ -297,6 +313,14 @@ class FormSampleRuleTest(unittest.TestCase):
         out.mkdir()
         names, _ = split_forms(self.dir / "t.hwpx", out, all_forms=True)
         self.assertEqual(sorted(names), ["서식01_표지.hwpx", "서식02_위임장.hwpx"])
+
+    def test_inline_name_beats_body_mention_and_notes_are_not_names(self):
+        make_hwpx(self.dir / "n.hwpx", [para("입찰 참가 접수 확인서 1부 [서식 2]"), para("【서식 1】 &lt;제안업체 일반현황&gt;"), para("내용"),
+                                        para("【서식 2】정성제안서에 포함"), para("투입인력 계획"), para("내용")])
+        out = self.dir / "n"
+        out.mkdir()
+        names, _ = split_forms(self.dir / "n.hwpx", out, all_forms=True)
+        self.assertEqual(sorted(names), ["서식01_제안업체 일반현황.hwpx", "서식02_투입인력 계획.hwpx"])
 
     def test_real_form_document(self):
         if not FIXTURE.exists():

@@ -91,6 +91,7 @@ class App:
         # 결과 보기 전용(NAS, WEBAPP_ROLE=viewer) — 수집 버튼을 숨기고 서버 PC가 보낸 결과를 받는다
         self.viewer = False
         self.imported = False
+        self.reports: dict[str, dict] = {}  # 보고 종류별 가장 최근 보고 기록 — 텔레그램 /today
         self.push: ResultPush | None = None
 
     def _titles(self) -> dict[str, str]:
@@ -553,12 +554,18 @@ def main(argv: list[str] | None = None) -> int:
         timer.daemon = True
         timer.start()
     # 텔레그램 보고에 나간 공고 → 판단 기록 '미판단' (bot-state 브랜치의 보고 기록을 몇 분마다 받아 합친다)
-    ReportSync(app.team.merge_report).start()
+    def on_report(entry: dict) -> int:
+        kind = entry.get("kind") or ""
+        if (entry.get("date") or "") >= (app.reports.get(kind, {}).get("date") or ""):
+            app.reports[kind] = entry
+        return app.team.merge_report(entry)
+
+    ReportSync(on_report).start()
     # 매일 22시 투찰 이력 자동 수집 — 투찰내역 결과·입찰 공고 개찰 결과(추천 보정 자료)·투찰이력.xlsx·주간 성적표 (webapp/bidnightly.py)
     if not app.viewer and os.environ.get("BID_NIGHTLY", "1").strip() != "0":
         start_nightly(app)
     # 텔레그램 명령어(/notice·/deadline) — TELEGRAM_COMMANDS=1인 곳(NAS)에서만 (webapp/telegrambot.py)
-    bot = TelegramBot.from_env(app.latest_run)
+    bot = TelegramBot.from_env(app.latest_run, lambda: app.reports)
     if bot is not None:
         bot.start()
     # 예외 낱말 후보 HTML '제출' 파일(다운로드 폴더) → jiil 반영·묶음 다시 잠금·병합 (webapp/exclusionsync.py)

@@ -49,10 +49,14 @@ class UploadFlowTest(unittest.TestCase):
         self.assertEqual(kb[0][0], {"text": "신용평가등급확인서", "callback_data": "k:0"})
         cb = {"id": "c", "data": "k:0", "message": {"message_id": self.last_id(), "chat": {"id": int(CHAT)}}}
         self.assertTrue(self.up.handle_callback(cb))
+        sent = self.calls[-1][1]
+        self.assertEqual((sent["reply_to_message_id"], sent["reply_markup"]["force_reply"]), (3, True),
+                         "날짜 질문은 PDF 보낸 메시지에 답장 + 답장 칸 자동")
         ask = self.last_id()
         self.assertTrue(self.up.handle_message(self.msg(4, "몰라", reply_to=ask)))
         self.assertIn("못 읽었습니다", self.calls[-1][1]["text"])
-        self.assertTrue(self.up.handle_message(self.msg(5, "2027.6.16", reply_to=self.last_id())))
+        first = 101  # 맨 처음 "PDF를 보내 주세요" 메시지에 답장해도 받는다
+        self.assertTrue(self.up.handle_message(self.msg(5, "2027.6.16", reply_to=first)))
         new = self.dir / "[최신 서류]" / "신용평가등급확인서_2026-11-09_유효2027-06-16.pdf"
         self.assertEqual(new.read_bytes(), b"%PDF new F1")
         self.assertTrue((self.dir / "[이전 서류]" / "신용평가등급확인서_2026-02-20.pdf").exists())

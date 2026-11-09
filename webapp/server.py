@@ -23,6 +23,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
 from nego import bidcalc, bidrecommend, feedback_sheet, scope
@@ -57,6 +58,15 @@ def static_version() -> str:
             digest.update(path.name.encode())
             digest.update(path.read_bytes())
     return digest.hexdigest()[:12]
+
+
+
+def in_backup_window(now: datetime) -> bool:
+    """토요일 03시~일요일 03시 — NAS HyperBackup 시간(2026-11-09 부장님 요청). 이때는 수집을 안 받는다."""
+    return (now.weekday() == 5 and now.hour >= 3) or (now.weekday() == 6 and now.hour < 3)
+
+
+BACKUP_MESSAGE = "NAS 백업 시간(토요일 03시~일요일 03시)에는 수집을 쉽니다 — 일요일 03시 이후에 불러와 주세요."
 
 
 class App:
@@ -342,6 +352,8 @@ def make_handler(app: App):
                 if url.path == "/api/collect":
                     if app.viewer:
                         raise RuntimeError(VIEWER_MESSAGE)
+                    if os.environ.get("PAUSE_DURING_BACKUP") and in_backup_window(datetime.now()):
+                        raise RuntimeError(BACKUP_MESSAGE)
                     cats = data.get("categories") or None
                     job = app.collector.start(
                         days=int(data["days"]) if data.get("days") else None,

@@ -27,6 +27,7 @@ import requests
 from nego.telegram import API_BASE, _short_money
 
 from . import docexpiry
+from .docupload import Uploader
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ COMMANDS = [("notice", "공고번호로 공고 요약 — /notice R26BK01234567"
             ("deadline", "N일 안에 마감하는 공고 — /deadline 3"),
             ("today", "가장 최근 매일 보고 다시 받기"),
             ("docs", "회사 서류 유효기간 (서류목록.xlsx)"),
+            ("upload", "회사 서류 PDF 넣기 (봇 메시지에 답장으로)"),
             ("help", "명령어 목록")]
 _NO = re.compile(r"[A-Z0-9]{10,14}", re.I)
 
@@ -177,6 +179,7 @@ class TelegramBot:
         self.sent_path = Path("data") / "doc_alerts_sent.json"
         self.checked_day: date | None = None
         self.tidied_at = 0.0
+        self.uploader = Uploader(self._api, self._download, set(self.alert_chats))
 
     def tidy_docs(self, now: float) -> None:
         """10분마다 회사서류_최신/[최신 서류]를 정리(옛 파일 → [이전 서류], 서류목록.xlsx 다시 씀 — under100m/docs.py).
@@ -222,14 +225,26 @@ class TelegramBot:
             raise RuntimeError(f"{method}: {data.get('description')}")
         return data.get("result")
 
+    def _download(self, file_id: str) -> bytes:
+        info = self._api("getFile", file_id=file_id)
+        res = self.session.get(f"{API_BASE}/file/bot{self.token}/{info['file_path']}", timeout=120)
+        res.raise_for_status()
+        return res.content
+
     def poll_once(self, wait: int = 50) -> int:
         """한 번 받아 답한다. 답한 수를 돌려준다."""
         updates = self._api("getUpdates", http_timeout=wait + 15, offset=self.offset, timeout=wait,
-                            allowed_updates=["message"])
+                            allowed_updates=["message", "callback_query"])
         answered = 0
         for u in updates or []:
             self.offset = max(self.offset, u["update_id"] + 1)
+            if u.get("callback_query"):
+                answered += self.uploader.handle_callback(u["callback_query"])
+                continue
             msg = u.get("message") or {}
+            if self.uploader.handle_message(msg):
+                answered += 1
+                continue
             chat = str((msg.get("chat") or {}).get("id", ""))
             text = reply(msg.get("text") or "", self.latest_run(), datetime.now(), self.reports())
             if text and chat not in self.chats:

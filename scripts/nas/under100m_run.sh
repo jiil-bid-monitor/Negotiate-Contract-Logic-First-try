@@ -8,6 +8,7 @@ pid=""
 trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; exit 0' TERM INT
 
 while :; do
+  date "+%Y-%m-%d %H:%M" > /work/under100m/.alive 2>/dev/null  # 대기 중에도 컨테이너가 살아 있는지 바깥에서 확인용
   if [ -f "$JOB" ]; then
     sh "$JOB" &
     pid=$!

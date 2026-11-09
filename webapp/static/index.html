@@ -1301,6 +1301,11 @@ footer b { color: var(--muted); }
         <option value="보류">보류</option>
         <option value="불참">불참</option>
       </select>
+      <select id="logKind" aria-label="보고">
+        <option value="">모든 보고</option>
+        <option value="daily">매일 보고 (입찰)</option>
+        <option value="weekly">주간 보고 (협상·규격가격·사전규격)</option>
+      </select>
     </div>
     <div id="logList"></div>
     <div class="log-empty" id="logEmpty" hidden>아직 판단 기록이 없습니다. 텔레그램으로 보고된 공고가 '미판단'으로 쌓이고, 실제 공고 카드에서 참가·보류·불참을 고르면 사유와 함께 남습니다.</div>
@@ -3004,6 +3009,8 @@ function weekOf(dateText) {
 }
 const REPORT_KIND = { daily: "매일", weekly: "주간" };
 /** "10/20 매일 보고 · 10/20 주간 보고" — 이 공고가 나간 보고 */
+/** 이 공고가 나간 보고 종류 — 매일·주간 둘 다 나갔으면 매일 보고로(2026-11-09 사용자 결정), 보고 없이 판단만 했으면 "" */
+const reportKindOf = (p) => ((p.reports || []).some((r) => r.kind === "daily") ? "daily" : (p.reports || []).length ? "weekly" : "");
 const reportsText = (p) => (p.reports || []).map((r) => `${r.date.slice(5).replace("-", "/")} ${REPORT_KIND[r.kind] || ""} 보고`).join(" · ");
 
 function renderLog() {
@@ -3022,7 +3029,8 @@ function renderLog() {
 
   const q = ($("logQ").value || "").replace(/\s+/g, "").toLowerCase();
   const stf = $("logStatus").value;
-  const list = entries.filter(({ p, st }) => (!stf || st === stf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
+  const kf = $("logKind").value;
+  const list = entries.filter(({ p, st }) => (!stf || st === stf) && (!kf || reportKindOf(p) === kf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
   const byNo = new Map(lastItems.map((n) => [n.noticeNo, n]));
   const row = ({ p, st }) => {
     const n = byNo.get(p.noticeNo);
@@ -3125,6 +3133,7 @@ $("logMeta").addEventListener("click", (ev) => {
 });
 $("logQ").oninput = () => renderLog();
 $("logStatus").onchange = () => renderLog();
+$("logKind").onchange = () => renderLog();
 $("logList").addEventListener("click", (ev) => {
   const btn = ev.target.closest("[data-goto]");
   if (!btn) return;

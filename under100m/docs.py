@@ -213,7 +213,8 @@ def tidy(folder: Path, known: set[str], settle: float, now: float) -> tuple[list
 
 
 def run(folder: Path, today: date | None = None, notify: Callable[[str], object] = lambda text: None,
-        settle: float = SETTLE_SECONDS, now: float | None = None) -> dict:
+        settle: float = SETTLE_SECONDS, now: float | None = None, alert_due: bool = True) -> dict:
+    """alert_due=False: 만료 알림은 빼고 정리만(NAS 웹앱 — 만료 알림은 텔레그램 봇이 담당자 방에, webapp/docexpiry.py)."""
     today = today or date.today()
     now = time.time() if now is None else now
     if not (folder / LATEST).is_dir():
@@ -253,7 +254,7 @@ def run(folder: Path, today: date | None = None, notify: Callable[[str], object]
     due: list[str] = []
     for record in rows:
         left = days_left_to_alert(record, today)
-        if left is None or record["파일"] in sent:
+        if not alert_due or left is None or record["파일"] in sent:
             continue
         sent.add(record["파일"])
         due.append(f"{record['종류']}: {expiry_of(record)} ({left}일 남음)")

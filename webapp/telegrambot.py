@@ -176,6 +176,21 @@ class TelegramBot:
         self.alert_chats = [c.strip() for c in os.environ.get("TELEGRAM_CHAT_ID", "").split(",") if c.strip()]
         self.sent_path = Path("data") / "doc_alerts_sent.json"
         self.checked_day: date | None = None
+        self.tidied_at = 0.0
+
+    def tidy_docs(self, now: float) -> None:
+        """10분마다 회사서류_최신/[최신 서류]를 정리(옛 파일 → [이전 서류], 서류목록.xlsx 다시 씀 — under100m/docs.py).
+        새 서류·옮김·확인 필요는 개발자 방, 만료 알림은 check_docs가 담당자 방에(여기선 안 보냄)."""
+        if now - self.tidied_at < 600:
+            return
+        self.tidied_at = now
+        folder = docexpiry.docs_dir()
+        if not (folder / "[최신 서류]").is_dir():
+            return
+        from nego.telegram import send_dev_alert
+        from under100m import docs
+
+        docs.run(folder, datetime.now().date(), send_dev_alert, alert_due=False)
 
     def check_docs(self, now: datetime) -> int:
         """아침 9시가 지나면 하루 한 번 — 7일 안에 끝나는 회사 서류를 담당자 방에 알린다. 보낸 방 수."""
@@ -234,6 +249,7 @@ class TelegramBot:
                 log.warning("텔레그램 명령어 메뉴 등록 실패: %s", str(err).replace(self.token, "***"))
             while True:
                 try:
+                    self.tidy_docs(time.time())
                     self.check_docs(datetime.now())
                     self.poll_once()
                 except Exception as err:  # noqa: BLE001 — 끊겨도 서버는 계속

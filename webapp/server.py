@@ -40,6 +40,7 @@ from .nasload import busy_reason
 from .resultpush import ResultPush
 from .exclusionsync import ExclusionSync
 from .reportsync import ReportSync
+from .telegrambot import TelegramBot
 from .sheetsync import SheetSync
 from .store import DECISION_REASONS, DECISION_SUMMARY_MIN, STATUSES, Store
 from .sync import BORDER, HIGH, PastIndex
@@ -556,6 +557,10 @@ def main(argv: list[str] | None = None) -> int:
     # 매일 22시 투찰 이력 자동 수집 — 투찰내역 결과·입찰 공고 개찰 결과(추천 보정 자료)·투찰이력.xlsx·주간 성적표 (webapp/bidnightly.py)
     if not app.viewer and os.environ.get("BID_NIGHTLY", "1").strip() != "0":
         start_nightly(app)
+    # 텔레그램 명령어(/notice·/deadline) — TELEGRAM_COMMANDS=1인 곳(NAS)에서만 (webapp/telegrambot.py)
+    bot = TelegramBot.from_env(app.latest_run)
+    if bot is not None:
+        bot.start()
     # 예외 낱말 후보 HTML '제출' 파일(다운로드 폴더) → jiil 반영·묶음 다시 잠금·병합 (webapp/exclusionsync.py)
     ExclusionSync().start()
     # 판단 기록 → 피드백 구글 시트 S~V열 (FEEDBACK_SHEET_ID + 서비스 계정 키가 있을 때만, webapp/sheetsync.py)

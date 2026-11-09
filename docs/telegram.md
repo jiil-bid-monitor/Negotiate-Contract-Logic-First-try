@@ -286,5 +286,5 @@ https://console.cron-job.org 가입 → **Create cronjob**. 두 개 모두 공�
 - **NAS `.env`에만** 세 줄: `TELEGRAM_COMMANDS=1`, `TELEGRAM_BOT_TOKEN=…`, `TELEGRAM_CHAT_ID=-1004487982383`
   (개발자 방도 쓰려면 `TELEGRAM_DEV_CHAT_ID=…`). 넣은 뒤 `control/restart-webapp` 파일을 만들면 반영 — 컨테이너 다시 만들 필요 없음.
 - 서버 PC에는 `TELEGRAM_COMMANDS`를 넣지 말 것 — 봇 하나를 두 곳에서 받으면 텔레그램이 막습니다(409).
-- 위 대화방에서 온 명령만 답합니다(개인 대화·다른 방은 무시). 아침 보고는 그대로 GitHub Actions가 보냅니다.
+- 위 대화방에서 온 명령만 답합니다. 다른 방에서 명령을 치면 공고 내용 대신 그 방 ID만 알려 줍니다(넣을 ID 확인용). 아침 보고는 그대로 GitHub Actions가 보냅니다.
 - 답은 NAS가 받은 **최신 수집 결과** 기준 — 서버 PC가 새로 수집해 보내기 전엔 그 전 결과로 답합니다.

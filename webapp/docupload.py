@@ -57,6 +57,8 @@ class Uploader:
         if markup:
             body["reply_markup"] = markup
         res = self.api("sendMessage", **body) or {}
+        if chat in self.pending:  # 진행 중 봇이 보낸 메시지는 어느 것에 답장해도 받는다(11/09 — 앞 메시지에 답장해 넘어감)
+            self.pending[chat]["asks"].add(res.get("message_id"))
         return res.get("message_id")
 
     def handle_message(self, msg: dict) -> bool:
@@ -73,9 +75,9 @@ class Uploader:
                 return True
             ask = self._say(chat, "회사 서류 PDF를 <b>이 메시지에 답장</b>으로 보내 주세요. (그만두려면 답장으로 '취소')",
                             msg.get("message_id"), FORCE)
-            self.pending[chat] = {"step": "file", "ask": ask}
+            self.pending[chat] = {"step": "file", "ask": ask, "asks": {ask}}
             return True
-        if not state or replied != state.get("ask"):
+        if not state or replied not in state["asks"]:
             return False
         if text == "취소":
             self.pending.pop(chat, None)

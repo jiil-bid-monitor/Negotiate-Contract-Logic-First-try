@@ -44,12 +44,13 @@ class TelegramBotTest(unittest.TestCase):
             "daily": {"kind": "daily", "date": "2026-11-09", "notices": [
                 {"title": "체험관", "meta": {"detailUrl": "https://x/1", "budgetAmount": 320000000,
                                              "deadline": "2026-11-12T10:00", "score": 66}}]},
-            "weekly": {"kind": "weekly", "date": "2026-11-02", "notices": []},
+            "weekly": {"kind": "weekly", "date": "2026-11-09", "notices": [{"title": "주간공고", "meta": {}}]},
         }
         text = tb.reply("/today", RUN, NOW, reports)
         self.assertIn("매일 보고 (2026-11-09) — 1건", text)
         self.assertIn("3.2억 · D-3 · 싱크로율 66%", text)
         self.assertNotIn("주간", text)
+        self.assertIn("보고 기록이 없습니다", tb.reply("/today", RUN, NOW, {"weekly": reports["weekly"]}))
         self.assertIn("보고 기록이 없습니다", tb.reply("/today", RUN, NOW, {}))
 
     def test_other(self):

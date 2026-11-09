@@ -280,7 +280,7 @@ https://console.cron-job.org 가입 → **Create cronjob**. 두 개 모두 공�
 |---|---|
 | `/notice R26BK01234567` | 그 공고의 금액·마감(D-N)·자격·싱크로율, 제외된 공고면 제외 사유 |
 | `/deadline` (또는 `/deadline 7`) | 3일(또는 N일) 안에 마감하는 후보 공고 |
-| `/today` | 가장 최근 텔레그램 보고(매일, 같은 날이면 주간도) — 공고명·금액·D-N·싱크로율 |
+| `/today` | 가장 최근 매일 보고(주간 보고는 안 넣음) — 공고명·금액·D-N·싱크로율 |
 | `/help` | 명령어 목록 |
 
 - **NAS `.env`에만** 세 줄: `TELEGRAM_COMMANDS=1`, `TELEGRAM_BOT_TOKEN=…`, `TELEGRAM_CHAT_ID=-1004487982383`

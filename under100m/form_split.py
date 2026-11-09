@@ -28,8 +28,14 @@ MARK2 = re.compile(r'^\s*[【\[<〈《(〔［]\s*제\s*(\d+(?:\s*-\s*\d+)?)\s*�
 MARK3 = re.compile(r'^\s*[【\[［]\s*(붙\s*임)\s*(\d+(?:\s*-\s*\d+)?)\s*[】\]］]\s*(.*)$')
 
 
+# 번호 뒤 마침표와 이름이 괄호 안에 있는 모양 — [서식 1. 입찰 참가신청서] (2026-11-09 주진불빛공원 제안요청서: 앞 목록 줄만 서식으로 잘렸음)
+MARK4 = re.compile(r'^\s*[【\[<〈《〔［]\s*(' + KINDS + r')\s*(?:제\s*)?(\d+(?:\s*-\s*\d+)?)\s*(?:호)?\s*[.．]\s*([^】\]>〉》〕］]{2,40})[】\]>〉》〕］]\s*(?:※.*)?$')  # 뒤 안내 "※ 참여자 모두 작성하여 제출"은 허용
+
+
 def mark_match(t):
     """(종류, 번호, 뒤 글) 또는 None"""
+    m = MARK4.match(t)
+    if m: return m.group(1), m.group(2), m.group(3)
     m = MARK.match(t)
     if m: return m.group(1), m.group(2), m.group(3)
     m = MARK2.match(t)
@@ -140,6 +146,20 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
         raw_starts = [x for x in raw_starts if x[3] != '붙임']
     order =[(s, i) for s in sections for i in range(len(docs[s]['spans']))]
     pos = {k: n for n, k in enumerate(order)}
+    # 서식 목록(제목 줄 3개 이상이 연달아) 줄은, 같은 번호의 실제 서식 머리가 따로 있으면 버림 — 목록 끝 줄이 뒤 내용(표지 등)을
+    # 끌고 가 다른 서식에 붙었음(2026-11-09 주진불빛공원: <서식 25> 목록 줄 + 서식1 표지)
+    at = sorted(pos[(s, i)] for s, i, *_ in raw_starts)
+    run, listy = [], set()
+    for p in at + [None]:
+        if run and (p is None or p != run[-1] + 1):
+            if len(run) >= 3:
+                listy.update(run)
+            run = []
+        if p is not None:
+            run.append(p)
+    real = {x[2] for x in raw_starts if pos[(x[0], x[1])] not in listy}
+    toc = [x for x in raw_starts if pos[(x[0], x[1])] in listy and x[2] in real]
+    raw_starts = [x for x in raw_starts if x not in toc]
     # 같은 번호가 여러 번이면(목차 줄 "[서식1] 입찰참가신청서" + 실제 서식) 다음 머리까지 가장 긴 것을 실제 서식으로
     seg = {}
     for k, (s, i, n, kind) in enumerate(raw_starts):
@@ -166,8 +186,8 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
     # 본문(첫 서식 앞)의 "[서식1] 입찰참가신청서" 언급 — 서식 이름과, 제출서류 표가 없을 때 '제출할 서식' 목록으로
     first_form = pos[(starts[0][0], starts[0][1])] if starts else len(order)
     body = ' '.join(text_of(docs[s]['xml'][docs[s]['spans'][i][0]:docs[s]['spans'][i][1]]) for s, i in order[:first_form])
-    REF = re.compile(r'[\[【<〈〔［]\s*(?:' + KINDS + r')\s*(?:제\s*)?([\d\s호~∼,\-]+?)\s*(?:서\s*식)?\s*[\]】>〉〕］]\s*([가-힣][가-힣\d\s·()]{1,30})?')
-    body_refs, ref_cands = {}, {}
+    REF = re.compile(r'[\[【<〈〔［]\s*(?:' + KINDS + r')\s*(?:제\s*)?([\d\s호~∼,\-]+?)\s*(?:서\s*식)?\s*[\]】>〉〕］]\s*([가-힣][가-힣\d\s·‧ㆍ()]{1,30})?')  # ‧: 수집‧이용‧제공(주진불빛공원)
+    body_refs, ref_cands, guessed = {}, {}, set()
     for m in REF.finditer(body):
         nums = expand(m.group(1).replace('호', ''))  # "6호 ~ 13호" → 6…13
         # 이름은 앞 글("- 청렴계약이행서약서 1부 <서식 2호>")이나 뒤 글("[서식1] 입찰참가신청서")
@@ -187,6 +207,8 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
         before = [s for s in c['before'] if ok(s) and len(s) <= 16]
         # "[서식1] 입찰참가신청서"처럼 뒤에 적힌 이름이 먼저, 없을 때만 "- 청렴계약이행서약서 1부 <서식 2호>"처럼 앞 글
         body_refs[n] = max(after, key=len) if after else (min(before, key=len) if before else '')
+        if not after and before:
+            guessed.add(n)  # 앞 글에서 짐작한 이름 — 머리 줄에 이름이 있으면 그쪽을 씀(주진불빛공원 서식16이 앞 줄 '제안서'를 가져감)
     # 빠진 번호 — 발주처가 서식 표시를 빼먹은 경우(2026-10-28 경상남도: "<서식 1>" 신청서 표 바로 뒤에 "위 임 장" 제목과 표, 다음이 "<서식 3>").
     # 앞뒤 번호 사이에 빠진 번호가 하나면, 앞 서식 안에서 본문이 말한 그 서식 이름이나 서식 제목처럼 생긴 짧은 줄 + 바로 뒤 표를 찾아 거기서 나눔
     TITLE_LINE = re.compile(r'^((?:[가-힣]\s*){2,12})$')
@@ -212,6 +234,24 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
                 break
     if extra:
         starts = sorted(starts + extra, key=lambda x: pos[(x[0], x[1])])
+    # 앞쪽 서식 목록 줄을 버리고 나면, 목록 끝과 첫 서식 머리 사이의 내용(표지 등)은 첫 서식 것 —
+    # 주진불빛공원 "<서식 1> 입찰 참가 신청서(표지 포함)": 표지가 "[서식 1. …]" 머리 앞에 있음
+    begin = {}
+    if starts:
+        first = pos[(starts[0][0], starts[0][1])]
+        dropped = [pos[(x[0], x[1])] for x in raw_starts + toc if x not in keep and pos[(x[0], x[1])] < first]
+        if dropped:
+            b = max(dropped) + 1
+            while b < first:
+                sb, ib = order[b]
+                q = docs[sb]['xml'][docs[sb]['spans'][ib][0]:docs[sb]['spans'][ib][1]]
+                t = text_of(q).strip()
+                if '<hp:tbl' not in q and (not t or re.match(r'^[【\[<〈《〔［]', t)):
+                    b += 1  # 빈 줄·목록 줄(<별표1> …)은 건너뜀
+                else:
+                    break
+            if b < first:
+                begin[starts[0][2]] = b
     for s, i, n, kind in starts:
         if n in names: continue
         d = docs[s]
@@ -318,7 +358,7 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
         if use_table and num not in wanted:
             skipped.append(num); continue
         end = pos[(starts[k + 1][0], starts[k + 1][1])] if k + 1 < len(starts) else len(order)
-        picked = order[pos[(s, i)]:end]
+        picked = order[begin.get(num, pos[(s, i)]):end]
         by_sec = {}
         for sec, idx in picked: by_sec.setdefault(sec, []).append(idx)
         files = {}
@@ -328,7 +368,7 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
             # 첫 문단: 쪽 나누기 끄고, 구역 첫 문단이 아니면 쪽 설정(secPr) 붙이기
             paras[0] = re.sub(r'pageBreak="1"', 'pageBreak="0"', paras[0], count=1)
             # 서식 머리 줄([서식2] 줄)에 붙은 발주처 로고 그림은 뺌 — 자리를 많이 차지(2026-10-28 유아숲 "함께 여는 미래" 로고)
-            if sec == picked[0][0] and '<hp:pic' in paras[0]:
+            if sec == picked[0][0] and '<hp:pic' in paras[0] and '<hp:tbl' not in paras[0]:  # 표지 표 안 그림은 둠
                 n_pic = len(re.findall(r'<hp:pic\b', paras[0]))
                 paras[0] = re.sub(r'<hp:pic\b.*?</hp:pic>', '', paras[0], flags=re.S)
                 paras[0] = re.sub(r'<hp:linesegarray>.*?</hp:linesegarray>', '', paras[0], flags=re.S)
@@ -395,3 +435,70 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
         lines += [f'[ ] {m[4]}' for m in made]
         lines += ['', '공고문의 제출서류 목록과 대조해 필요 없는 서식은 빼 주세요.']
     return [m[4] for m in made], lines
+
+
+_SEC_NAME = re.compile(r'Contents/section(\d+)\.xml$')
+
+
+def merge_forms(files: list[Path], target: Path) -> int:
+    """같은 공고 문서에서 잘라 채운 서식들을 한 파일로 합친다 — 서식마다 구역 하나(쪽 설정·가로세로 그대로, 새 쪽에서 시작).
+    서식 채우기가 파일마다 더한 문단 모양(paraPr)은 번호가 겹칠 수 있어 새 번호로 바꾼다. 돌려주는 값: 합친 구역 수.
+    (2026-11-09 사용자 요청: 서식을 하나씩 나누지 말고 하나로)"""
+    zs = [zipfile.ZipFile(f) for f in files]
+    try:
+        return _merge(zs, target)
+    finally:
+        for z in zs:
+            z.close()
+
+
+def _merge(zs: list[zipfile.ZipFile], target: Path) -> int:
+    heads = [z.read('Contents/header.xml').decode('utf-8') for z in zs]
+    para_ids = [set(re.findall(r'<hh:paraPr id="(\d+)"', h)) for h in heads]
+    common = set.intersection(*para_ids) if para_ids else set()
+    head = heads[0]
+    next_id = max([int(i) for i in para_ids[0]] or [-1]) + 1
+    sections, bins, bin_items = [], {}, {}
+    for k, z in enumerate(zs):
+        remap = {}
+        if k:
+            for pid in sorted(para_ids[k] - common, key=int):  # 이 서식 채우기에서 더한 문단 모양
+                src = re.search(rf'<hh:paraPr id="{pid}"(?:[^>]*/>|.*?</hh:paraPr>)', heads[k], flags=re.S).group(0)
+                remap[pid] = str(next_id)
+                head = head.replace('</hh:paraProperties>', re.sub(r'<hh:paraPr id="\d+"', f'<hh:paraPr id="{next_id}"', src, count=1) + '</hh:paraProperties>', 1)
+                next_id += 1
+        names = sorted((n for n in z.namelist() if _SEC_NAME.match(n)), key=lambda n: int(_SEC_NAME.match(n).group(1)))
+        for n in names:
+            x = z.read(n).decode('utf-8')
+            if remap:
+                x = re.sub(r'paraPrIDRef="(\d+)"', lambda m: f'paraPrIDRef="{remap.get(m.group(1), m.group(1))}"', x)
+            sections.append(x)
+        hpf = z.read('Contents/content.hpf').decode('utf-8')
+        for m in re.finditer(r'<opf:item id="([^"]+)" href="(BinData/[^"]+)"[^>]*/>', hpf):
+            if m.group(2) in z.namelist() and m.group(2) not in bins:
+                bins[m.group(2)] = z.read(m.group(2))
+                bin_items.setdefault(m.group(1), m.group(0))
+    head = re.sub(r'(<hh:paraProperties itemCnt=")\d+', lambda m: m.group(1) + str(len(re.findall(r'<hh:paraPr id=', head))), head, count=1)
+    head = re.sub(r'secCnt="\d+"', f'secCnt="{len(sections)}"', head)
+    hpf = zs[0].read('Contents/content.hpf').decode('utf-8')
+    item = re.search(r'<opf:item id="section\d+"[^>]*/>', hpf).group(0)
+    ref = re.search(r'<opf:itemref idref="section\d+"[^>]*/>', hpf).group(0)
+    hpf = re.sub(r'<opf:item id="section\d+"[^>]*/>|<opf:itemref idref="section\d+"[^>]*/>|<opf:item id="[^"]+" href="BinData/[^"]+"[^>]*/>', '', hpf)
+    new_items = ''.join(re.sub(r'section\d+', f'section{i}', item) for i in range(len(sections))) + ''.join(bin_items.values())
+    hpf = hpf.replace('</opf:manifest>', new_items + '</opf:manifest>', 1)
+    hpf = hpf.replace('</opf:spine>', ''.join(re.sub(r'section\d+', f'section{i}', ref) for i in range(len(sections))) + '</opf:spine>', 1)
+    base = zs[0]
+    with zipfile.ZipFile(target, 'w') as w:
+        for info in base.infolist():
+            n = info.filename
+            if _SEC_NAME.match(n) or n.startswith('BinData/') or n in ('Contents/content.hpf', 'Contents/header.xml'):
+                continue
+            w.writestr(zipfile.ZipInfo(n, info.date_time), base.read(n),
+                       compress_type=zipfile.ZIP_STORED if n == 'mimetype' else zipfile.ZIP_DEFLATED)
+        w.writestr('Contents/header.xml', head, compress_type=zipfile.ZIP_DEFLATED)
+        w.writestr('Contents/content.hpf', hpf, compress_type=zipfile.ZIP_DEFLATED)
+        for i, x in enumerate(sections):
+            w.writestr(f'Contents/section{i}.xml', x, compress_type=zipfile.ZIP_DEFLATED)
+        for n, data in bins.items():
+            w.writestr(n, data, compress_type=zipfile.ZIP_DEFLATED)
+    return len(sections)

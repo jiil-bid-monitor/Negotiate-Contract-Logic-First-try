@@ -20,8 +20,8 @@ from nego.qualify import JointSupply, QualificationResult  # noqa: E402
 from nego.region import RegionCheck  # noqa: E402
 from nego.screen import Schedule  # noqa: E402
 from under100m.__main__ import alert_text, business_amount, collect, doc_label, folder_name, is_target, over_by_api, run_once  # noqa: E402
-from under100m.form_fill import fill_form  # noqa: E402
-from under100m.form_split import split_forms, tidy  # noqa: E402
+from under100m.form_fill import fill_form, load_company, read_company_sheet  # noqa: E402
+from under100m.form_split import merge_forms, split_forms, tidy  # noqa: E402
 
 NOW = datetime(2026, 11, 4, 10, 0)
 COMPANY = {"회사": {"name": "가나회사", "ceo": "다라", "addr": "마바시 사아로 1", "bizno": "000-00-00000", "tel": "02-000-0000"},
@@ -62,7 +62,7 @@ class TargetTest(unittest.TestCase):
 
 
 class CollectTest(unittest.TestCase):
-    def test_all_award_methods_are_requested(self):
+    def test_only_bid_award_methods_are_requested(self):
         seen = {}
 
         def fake_run(config, now, categories, period):
@@ -71,7 +71,7 @@ class CollectTest(unittest.TestCase):
 
         with patch("nego.config.load_config", return_value=SimpleNamespace()), patch("nego.pipeline.run", fake_run):
             self.assertEqual(collect(NOW, 7, Path("out")), [])
-        self.assertEqual(seen["categories"], {"협상", "규격가격동시입찰", "입찰"})
+        self.assertEqual(seen["categories"], {"입찰"})  # 적격심사·최저가만
         self.assertEqual(seen["period"][0], datetime(2026, 10, 28, 10, 0))
 
     def test_alert_names_the_category(self):
@@ -131,6 +131,7 @@ class RunOnceTest(unittest.TestCase):
         result = self.go([c])
         folder = self.out / folder_name(c.notice)
         self.assertEqual(result["made"], [folder.name])
+        self.assertTrue(folder.name.startswith("[1억미만] "))
         self.assertTrue((folder / "20261104_공고문_v1.pdf").exists())
         self.assertTrue((folder / "서식자동분리" / "제출서류_체크리스트.txt").exists())
         self.assertTrue((folder / "회사준비서류" / "준비서류_체크리스트.txt").exists())
@@ -281,6 +282,104 @@ class FormSampleRuleTest(unittest.TestCase):
             self.assertIn(value, xml)
         self.assertNotIn("999,999", xml)
         self.assertEqual(len(filled), 4)
+
+    def test_toc_lines_and_bracket_name_heads(self):
+        """앞쪽 서식 목록 줄은 버리고, '[서식 1. 이름] ※ 안내' 머리로 자름 — 목록 뒤 표지는 서식1에(2026-11-09 주진불빛공원)."""
+        make_hwpx(self.dir / "toc.hwpx", [
+            para("본문"), para("&lt;서식 1&gt; 입찰 참가 신청서(표지 포함)"), para("&lt;서식 2&gt; 위임장"), para("&lt;서식 3&gt; 확약서"),
+            para("표지 내용"), para("[서식 1. 입찰 참가신청서]"), para("신청서 내용"),
+            para("[서식 2. 위임장] ※ 참여자 모두 작성"), para("위임장 내용"), para("[서식 3. 확약서]"), para("확약서 내용")])
+        out = self.dir / "toc_cut"
+        names, _ = split_forms(self.dir / "toc.hwpx", out, all_forms=True)
+        self.assertEqual(len(names), 3)
+        first = zipfile.ZipFile(out / sorted(names)[0]).read("Contents/section0.xml").decode("utf-8")
+        self.assertIn("표지 내용", first)
+        self.assertIn("신청서 내용", first)
+        self.assertNotIn("위임장 내용", first)
+        last = zipfile.ZipFile(out / sorted(names)[2]).read("Contents/section0.xml").decode("utf-8")
+        self.assertIn("확약서 내용", last)
+        self.assertNotIn("표지 내용", last)
+
+    def test_company_sheet_overrides_profile(self):
+        """회사자료 원본의 회사정보 시트 값이 프로필보다 우선(2026-11-09)."""
+        from openpyxl import Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "회사정보"
+        for row in (("항목", "값"), ("대표자", "새대표"), ("주소", "새주소 1"), ("자본금", "1억"), ("팩스번호", None)):
+            ws.append(row)
+        sheet = self.dir / "회사자료_양식.xlsx"
+        wb.save(sheet)
+        self.assertEqual(read_company_sheet(sheet), {"ceo": "새대표", "addr": "새주소 1"})
+        profile = self.dir / "p.json"
+        profile.write_text(json.dumps(COMPANY, ensure_ascii=False), encoding="utf-8")
+        got = load_company(profile, sheet)["회사"]
+        self.assertEqual((got["name"], got["ceo"], got["addr"]), ("가나회사", "새대표", "새주소 1"))
+        self.assertEqual(load_company(profile, self.dir / "없음.xlsx")["회사"]["ceo"], "다라")
+
+    def test_unknown_company_label_reported(self):
+        """규칙이 모르는 회사 칸 이름표는 못 채운 칸으로 남김."""
+        cell = lambda col, t: (f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSz width="9000"/>'
+                               f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0">{f"<hp:t>{t}</hp:t>" if t else ""}</hp:run></hp:p></hp:tc>')
+        tbl = '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl><hp:tr>' + cell(0, "업체 소재 지역") + cell(1, "") + '</hp:tr></hp:tbl></hp:run></hp:p>'
+        make_hwpx(self.dir / "u.hwpx", [tbl])
+        log = fill_form(self.dir / "u.hwpx", self.dir / "u_out.hwpx", COMPANY)
+        self.assertIn("못 채운 칸(규칙에 없는 이름표): 업체소재지역", log)
+
+    def test_forms_merged_into_one_file(self):
+        """서식을 하나로 — 서식마다 구역 하나, 순서 그대로, 그림은 쓰는 것만(2026-11-09 사용자 요청)."""
+        filled = []
+        for name in sorted(self.names):
+            target = self.dir / f"filled_{name}"
+            fill_form(self.out / name, target, COMPANY)
+            filled.append(target)
+        merged = self.dir / "서식_통합.hwpx"
+        self.assertEqual(merge_forms(filled, merged), 3)
+        z = zipfile.ZipFile(merged)
+        self.addCleanup(z.close)
+        secs = [z.read(f"Contents/section{i}.xml").decode("utf-8") for i in range(3)]
+        self.assertIn("【서식 제1호】", secs[0])
+        self.assertIn("【서식 제7호】", secs[1])
+        self.assertIn("【서식 제7-1호】", secs[2])
+        self.assertIn("가나회사", secs[0])
+        hpf = z.read("Contents/content.hpf").decode("utf-8")
+        self.assertEqual(hpf.count("<opf:itemref"), 3)
+        self.assertIn('secCnt="3"', z.read("Contents/header.xml").decode("utf-8"))
+        self.assertNotIn("BinData/image1.png", z.namelist())
+        self.assertEqual(z.namelist()[0], "mimetype")
+
+    def test_merge_renumbers_added_paragraph_shapes(self):
+        """서식 채우기가 파일마다 더한 문단 모양 번호가 겹치면 새 번호로."""
+        def doc(path, extra, text):
+            head = ('<hh:head xmlns:hh="h" secCnt="1"><hh:paraProperties itemCnt="3"><hh:paraPr id="0"/><hh:paraPr id="1"/>'
+                    f'<hh:paraPr id="2" mark="{extra}"/></hh:paraProperties></hh:head>')
+            hpf = ('<opf:package xmlns:opf="o"><opf:manifest><opf:item id="section0" href="Contents/section0.xml"/></opf:manifest>'
+                   '<opf:spine><opf:itemref idref="section0"/></opf:spine></opf:package>')
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("mimetype", "application/hwp+zip")
+                z.writestr("Contents/header.xml", head)
+                z.writestr("Contents/content.hpf", hpf)
+                z.writestr("Contents/section0.xml", SEC.format(para(text).replace('paraPrIDRef="0"', 'paraPrIDRef="2"')))
+        a, b, c = self.dir / "a.hwpx", self.dir / "b.hwpx", self.dir / "c.hwpx"
+        doc(a, "A", "첫 서식")
+        doc(b, "B", "둘째 서식")
+        with zipfile.ZipFile(c, "w") as z:  # 아무것도 더하지 않은 서식 — 원래 문단 모양(0~1)만
+            with zipfile.ZipFile(a) as src:
+                for n in ("mimetype", "Contents/content.hpf"):
+                    z.writestr(n, src.read(n))
+            z.writestr("Contents/header.xml", '<hh:head xmlns:hh="h" secCnt="1"><hh:paraProperties itemCnt="2"><hh:paraPr id="0"/><hh:paraPr id="1"/></hh:paraProperties></hh:head>')
+            z.writestr("Contents/section0.xml", SEC.format(para("셋째 서식")))
+        merged = self.dir / "m.hwpx"
+        merge_forms([a, b, c], merged)
+        z = zipfile.ZipFile(merged)
+        self.addCleanup(z.close)
+        head = z.read("Contents/header.xml").decode("utf-8")
+        self.assertIn('<hh:paraPr id="2" mark="A"/>', head)
+        self.assertIn('<hh:paraPr id="3" mark="B"/>', head)
+        self.assertIn('itemCnt="4"', head)
+        self.assertIn('paraPrIDRef="2"', z.read("Contents/section0.xml").decode("utf-8"))
+        self.assertIn('paraPrIDRef="3"', z.read("Contents/section1.xml").decode("utf-8"))
+        self.assertIn('paraPrIDRef="0"', z.read("Contents/section2.xml").decode("utf-8"))
 
     def test_staff_forms_and_agent_line(self):
         company = {**COMPANY, "칸": {"E-Mail": {"빈칸": "", "지일 값": "a@b.c"}}}

@@ -1,5 +1,6 @@
 requests>=2.31
 pypdf>=4.0
+pymupdf>=1.24
 olefile>=0.47
 anthropic>=1.8
 cryptography>=42

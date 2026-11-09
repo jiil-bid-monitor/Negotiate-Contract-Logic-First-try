@@ -28,6 +28,7 @@ from typing import Callable
 from .docs import _unique, issue_lines
 from .form_fill import fill_form, load_company
 from .form_split import merge_forms, split_forms
+from .pdf_forms import fill_pdf, split_pdf
 from .prep import PREP_DIR, prepare
 from .summary import write_summary_pdf
 
@@ -50,6 +51,10 @@ _AMOUNT = re.compile(r"(기초\s*금액|소요\s*예산|사업\s*예산|사\s*�
 _UNSAFE = re.compile(r'[\\/:*?"<>|\r\n\t]')
 _RE_NOTICE = re.compile(r"[(\[【<]?\s*(재\s*공고|재\s*입찰|정정|변경|긴급|\d+\s*차)\s*(공고)?\s*[)\]】>]?")
 _DOC_FILE = re.compile(r"공고|제안요청|과업|입찰안내|제출서류")
+# 파일 전체가 서식 하나인 첨부(안에 서식 표시 없음) — 입찰서·서약서 등. 짧은 문서만(2026-11-05 인하대·암센터)
+_WHOLE_FORM = re.compile(r"서약서|각서|입찰서|신청서|위임장|확인서|동의서|협정서|인감계|증명서")
+_NOT_WHOLE_FORM = re.compile(r"공고|제안요청|과업|규격|시방|유의서|조건|기준|사유서|내역|명세|안내|설명")
+WHOLE_FORM_CHARS = 6000
 
 
 def is_target(candidate) -> bool:
@@ -124,8 +129,27 @@ def qualification_label(candidate) -> str:
     return "자격 미달 가능" if q.missing_groups else "자격 충족"
 
 
+def doc_label(f: Path, limit: int = 10) -> str:
+    """파일 이름에서 "붙임4._"·"1." 같은 앞 번호를 뗀 이름 — 과업지시서·제안요청서·공고문이면 그 낱말."""
+    for word in ("과업지시서", "제안요청서", "공고문"):
+        if limit <= 10 and word[:2] in f.stem:
+            return word
+    name = re.sub(r"^[\s\d._\-]*(?:붙임|별첨|첨부)?[\s\d._\-]*", "", f.stem).replace("_", " ")
+    return (re.sub(r"\s+", " ", _UNSAFE.sub(" ", name)).strip()[:limit].strip() or f.stem[:limit]).rstrip(" .")
+
+
+def is_short_doc(hwpx: Path) -> bool:
+    from nego.attachments import extract_text
+
+    try:
+        return len(extract_text(hwpx.read_bytes(), "hwpx")) <= WHOLE_FORM_CHARS
+    except Exception:  # noqa: BLE001 — 못 읽으면 서식으로 안 봄
+        return False
+
+
 def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Path) -> tuple[list[str], list[str], dict[Path, Path], list[str]]:
-    """공고 문서의 서식을 서식마다 잘라 회사 정보·공고 정보를 채운 뒤, 문서마다 한 파일(서식_통합.hwpx)로 합친다(표본 규칙).
+    """공고 문서의 서식을 서식마다 잘라 회사 정보·공고 정보를 채운 뒤, 한글 서식은 모두 서식_통합.hwpx 한 파일로 합친다
+    (2026-11-09 사용자 요청). PDF로만 있는 서식은 한글에 넣을 수 없어 따로 둔다.
     돌려주는 값: (제출서류 체크리스트 줄, 자동 입력·안내 줄, {옛 한글 원본: 변환한 hwpx}, 서식 이름들)."""
     from quantdocs.build import convert_hwp
 
@@ -135,6 +159,7 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
     notes: list[str] = []
     converted: dict[Path, Path] = {}
     cuts = []
+    whole_candidates: list[tuple[Path, Path]] = []
     for number, f in enumerate(files):
         suffix = f.suffix.lower()
         if suffix not in (".hwp", ".hwpx"):
@@ -156,35 +181,71 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
             continue
         if names:
             cuts.append((f, cut_dir, names))
+        elif _WHOLE_FORM.search(f.stem) and not _NOT_WHOLE_FORM.search(f.stem) and is_short_doc(src):
+            whole_candidates.append((f, src))
     out.mkdir(parents=True, exist_ok=True)
     checklist = ["제출서류 체크리스트 — 공고 문서 안의 서식을 모두 만들었습니다 (자동 생성)", "공고문의 제출서류 목록과 대조해 필요 없는 서식은 빼 주세요.",
-                 f"서식은 문서마다 '{MERGED_FORMS}' 한 파일에 순서대로 들어 있습니다(서식마다 새 쪽).", ""]
+                 f"한글 서식은 '{MERGED_FORMS}' 한 파일에 아래 순서대로 들어 있습니다(서식마다 새 쪽).", ""]
+    filled_dir = work / "채움"
+    filled_dir.mkdir(exist_ok=True)
+    used: set[str] = set()
+    hwpx: list[Path] = []  # 합칠 순서대로
     form_names: list[str] = []
-    # 서식이 가장 많은 문서가 본 문서 — 다른 문서의 서식 파일은 앞에 문서 이름을 붙임(과업지시서_서식_통합)
-    for rank, (f, cut_dir, names) in enumerate(sorted(cuts, key=lambda row: -len(row[2]))):
-        label = next((word for word in ("과업지시서", "제안요청서", "공고문") if word[:2] in f.stem), f.stem[:10])
-        prefix = f"{label}_" if rank else ""
-        filled_dir = cut_dir / "채움"
-        filled_dir.mkdir()
-        filled_files = []
+
+    def target_for(name: str, f: Path, folder: Path) -> Path:
+        """같은 번호가 이미 있으면 앞에 문서 이름을 붙임(표본의 과업지시서_서식01)."""
+        number = name.split("_")[0]
+        if number not in used:
+            used.add(number)
+            return _unique(folder / name)
+        return _unique(folder / f"{doc_label(f)}_{name}")
+
+    # 서식이 가장 많은 문서가 본 문서
+    for f, cut_dir, names in sorted(cuts, key=lambda row: -len(row[2])):
         for name in names:
-            target = filled_dir / name
+            target = target_for(name, f, filled_dir)
             filled = fill_form(cut_dir / name, target, company, bid_date, n.title, notice_key(n))
-            filled_files.append(target)
-            form_names.append(Path(f"{prefix}{name}").stem)
-            notes.append(f"{prefix}{name}: " + (", ".join(filled) if filled else "채운 칸 없음"))
-        merged = _unique(out / f"{prefix}{MERGED_FORMS}")
+            hwpx.append(target)
+            notes.append(f"{target.name}: " + (", ".join(filled) if filled else "채운 칸 없음"))
+    cut_files = {row[0] for row in cuts}
+    for f, src in whole_candidates:  # 파일 전체가 서식인 첨부
+        if f in cut_files:
+            continue
+        target = _unique(filled_dir / f"별도_{doc_label(f, 40)}.hwpx")
+        shutil.copyfile(src, work / target.name)
+        filled = fill_form(work / target.name, target, company, bid_date, n.title, notice_key(n))
+        hwpx.append(target)
+        notes.append(f"{target.name}: " + (", ".join(filled) if filled else "채운 칸 없음"))
+    if hwpx:
+        merged = out / MERGED_FORMS
         try:
-            merge_forms(filled_files, merged)
-            checklist += [f"[ ] {merged.name} — {k}. {Path(name).stem}" for k, name in enumerate(names, 1)]
+            merge_forms(hwpx, merged)
+            checklist += [f"[ ] {k}. {p.stem}" for k, p in enumerate(hwpx, 1)]
         except Exception as err:  # noqa: BLE001 — 합치지 못하면 서식별 파일로라도 남긴다
-            log.warning("서식 합치기 실패 %s: %s", f.name, err)
+            log.warning("서식 합치기 실패: %s", err)
             merged.unlink(missing_ok=True)
-            notes.append(f"{f.name}: 서식을 한 파일로 합치지 못해 서식별 파일로 둠({err})")
-            for target in filled_files:
-                kept = _unique(out / f"{prefix}{target.name}")
-                shutil.copyfile(target, kept)
+            notes.append(f"서식을 한 파일로 합치지 못해 서식별 파일로 둠({err})")
+            for p in hwpx:
+                kept = _unique(out / p.name)
+                shutil.copyfile(p, kept)
                 checklist.append(f"[ ] {kept.name}")
+        form_names += [p.stem for p in hwpx]
+    stems = {f.stem for f in files if f.suffix.lower() in (".hwp", ".hwpx")}
+    for number, f in enumerate(files):  # 같은 이름의 한글 파일이 있으면 한글 쪽을 씀 — PDF로만 있는 서식만(한글 통합본에 못 넣어 따로)
+        if f.suffix.lower() != ".pdf" or f.stem in stems:
+            continue
+        cut_dir = work / "pdf" / str(number)
+        try:
+            names = split_pdf(f, cut_dir)
+            for name in names:
+                target = target_for(name, f, out)
+                filled, why = fill_pdf(cut_dir / name, target, company, n.title)
+                checklist.append(f"[ ] {target.name} — " + ("PDF 자동 입력, 칸 위치 확인 필요" if filled else "PDF 서식, 직접 작성"))
+                notes.append(f"{target.name}: " + (", ".join(filled) if filled else why or "채운 칸 없음"))
+                form_names.append(target.stem)
+        except Exception as err:  # noqa: BLE001 — PDF 하나를 못 나눠도 나머지 자료는 만든다
+            log.warning("PDF 서식 나누기 실패 %s: %s", f.name, err)
+            notes.append(f"{f.name}: PDF 서식을 나누지 못함({err})")
     return checklist, notes, converted, form_names
 
 

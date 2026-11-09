@@ -90,6 +90,32 @@ def balanced_run(first):
     return ''
 
 
+_TITLE_END = re.compile('|'.join(r'\s*'.join(word) for word in (
+    '서약서', '각서', '신청서', '증명서', '확인서', '협정서', '선임계', '인감계', '위임장', '질의서', '동의서', '평가표', '제출서', '현황', '사항', '표지', '양식', '실적', '내용')) + r'(?:\s*\))?')
+
+
+def tidy(t):
+    """'입 찰 참 가 신 청 서 ※ 아래…' → '입찰참가신청서' — 한 글자씩 띄운 이름 붙이고 ※·괄호 안내 뒤는 자름"""
+    t = re.split(r'※|\s{3,}|•', t)[0].strip()
+    t = re.sub(r'^[^:：]{0,12}[:：]\s*', '', t, count=1)     # "접수방법 : 제공한 서면질의서" → "제공한 서면질의서"(앞 짧은 머리말만)
+    t = re.sub(r'^(제공(된|한)|별첨|첨부)\s*', '', t)          # → "서면질의서"
+    t = re.sub(r'[\s ]*\(\s*p[\s \dp,~\-]*\)', '', t)  # 강릉 "(p14)", "(p18 p19 p20)" 쪽 표시
+    t = re.sub(r'[\s(\[]*개정\s*[\d.\s]+[)\]]?', '', t)  # "상세규격서 (개정 2020. 04. 06)"
+    t = re.sub(r'^[<〈《「\s]+|[>〉》」\s]+$', '', t)         # "<제안업체 일반현황>"
+    # 표 글이 이어 붙은 긴 이름("서 약 서상호 또는법인 명칭…") — 서식 이름 끝말까지만(2026-11-05 대구·산불 공고)
+    if len(t) > 20:
+        m = _TITLE_END.search(t)
+        if m:
+            end = m.end()
+            while (more := _TITLE_END.match(t, end)):  # "실적증명서"를 "실적"에서 끊지 않게(2026-11-09 대구 용역이행 실적증명서)
+                end = more.end()
+            t = t[:end]
+    t = re.sub(r'(?:(?<=^)|(?<=\s))((?:[가-힣]\s+)+[가-힣])(?=\s|$)', lambda m: re.sub(r'\s', '', m.group(1)), t)
+    if t.count('(') > t.count(')'):
+        t += ')'  # "제안서(표지"
+    return t.strip(' _')[:45]
+
+
 def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str], list[str]]:
     """(만든 파일 이름들, 제출서류 체크리스트 줄)."""
     z = zipfile.ZipFile(SRC)
@@ -157,21 +183,6 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
         return out
 
 
-    def tidy(t):
-        """'입 찰 참 가 신 청 서 ※ 아래…' → '입찰참가신청서' — 한 글자씩 띄운 이름 붙이고 ※·괄호 안내 뒤는 자름"""
-        t = re.split(r'※|\s{3,}|•', t)[0].strip()
-        t = re.sub(r'^[^:：]{0,12}[:：]\s*', '', t, count=1)     # "접수방법 : 제공한 서면질의서" → "제공한 서면질의서"(앞 짧은 머리말만)
-        t = re.sub(r'^(제공(된|한)|별첨|첨부)\s*', '', t)          # → "서면질의서"
-        t = re.sub(r'[\s ]*\(\s*p[\s \dp,~\-]*\)', '', t)  # 강릉 "(p14)", "(p18 p19 p20)" 쪽 표시
-        t = re.sub(r'(?:(?<=^)|(?<=\s))((?:[가-힣]\s){2,}[가-힣])(?=\s|$)', lambda m: m.group(1).replace(' ', ''), t)
-        # 표 글이 이어 붙은 긴 이름("보안서약 서제안자상호또는…") — 서식 이름 끝말까지만
-        if len(t) > 20:
-            sq = t.replace(' ', '')
-            m = re.match(r'^(.{2,24}?(?:서약서|각서|신청서|증명서|확인서|협정서|선임계|인감계|현황|사항|평가표|표지|양식|실적|내용|제출서))', sq)
-            if m: t = m.group(1)
-        return t.strip()[:45]
-
-
     # 본문(첫 서식 앞)의 "[서식1] 입찰참가신청서" 언급 — 서식 이름과, 제출서류 표가 없을 때 '제출할 서식' 목록으로
     first_form = pos[(starts[0][0], starts[0][1])] if starts else len(order)
     body = ' '.join(text_of(docs[s]['xml'][docs[s]['spans'][i][0]:docs[s]['spans'][i][1]]) for s, i in order[:first_form])
@@ -188,7 +199,7 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
             if len(nums) == 1:
                 ref_cands[n]['after'].append(tidy(m.group(2) or ''))
                 if before: ref_cands[n]['before'].append(tidy(before))
-    FORM_END = re.compile(r'(서|장|표|계|지|원|현황|사항|실적|내용|각서|확인서|증명서|신청서|협정서|선임계|표지)(\s*\([^)]*\))?$')
+    FORM_END = re.compile(r'(서|장|표|계|지|원|계획|체계|현황|사항|실적|내용|각서|확인서|증명서|신청서|협정서|선임계|표지)(\s*\([^)]*\))?$')
     JOSA = re.compile(r'^(에|을|를|의|은|는|으로|로)(\s|$)')
     for n, c in ref_cands.items():
         ok = lambda s: len(s) >= 2 and FORM_END.search(s) and not JOSA.match(s) and not re.search(r'[.,「」]|\d\.|서식|제\s*\d+\s*호|번호$', s)
@@ -253,14 +264,13 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
                     and not mark_match(t) and not re.search(r'번\s*호$', t)):
                 title = tidy(t); break
         ref = body_refs.get(n) or ''
-        inl = inline.get(n, '')
-        # 머리 뒤 글이 근거 규정의 서식 번호("정보통신보안업무지침【서식 제5호】")면 이름 아님(2026-10-29 도로교통공단 과업설명서)
-        if re.search(r'[【\[<〈]\s*(서\s*식|별\s*지|양\s*식)|제\s*\d+\s*호', inl): inl = ''
-        bg = lambda s: {s[k:k + 2] for k in range(len(s) - 1)} if (s := re.sub(r'\s', '', s)) else set()
-        # 본문 언급 이름이 서식 제목과 한 글자 묶음도 안 겹치면 제목을 씀(2026-10-29 도로교통공단 제안요청서 서식1 "제안사 일반현황")
-        title_wins = title and FORM_END.search(title.replace(' ', '')) and not (bg(ref) & bg(title))
-        if len(ref) >= 2 and not title_wins and not (n in guessed and len(inl) >= 2): names[n] = ref
-        elif len(inl) >= 2: names[n] = inl[:45]
+        inl = tidy(inline.get(n, ''))
+        # 머리 뒤 글이 근거 규정의 서식 번호("정보통신보안업무지침【서식 제5호】")나 안내("정성제안서에 포함")면 이름 아님
+        if re.search(r'[【\[<〈]\s*(서\s*식|별\s*지|양\s*식)|제\s*\d+\s*호|(포함|참조|작성|제출|사용)$', inl): inl = ''
+        # 서식에 직접 적힌 이름이 먼저 — 본문 언급은 다른 서식 이름이 붙기도 함(2026-11-05 대구: 입찰참가신청서 → "서류․입찰참가접수확인서")
+        if len(inl) >= 2: names[n] = inl
+        elif title and FORM_END.search(title.replace(' ', '')): names[n] = title
+        elif len(ref) >= 2: names[n] = ref
         elif title: names[n] = title
 
     # 제출서류 목록 표(머리에 '제출서류'·'서식') — 줄마다 서류 이름·비고(필수/대리인 접수시 …)·별지 번호. 표가 있으면 표에 나온 별지만 만든다

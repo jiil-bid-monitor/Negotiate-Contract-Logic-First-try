@@ -81,6 +81,33 @@ class UploadFlowTest(unittest.TestCase):
         self.assertTrue(self.up.handle_callback(more))
         self.assertEqual(self.calls[-1][1]["text"], "어떤 서류인가요?")
 
+    def cb(self, data):
+        return {"id": "c", "data": data, "message": {"message_id": self.last_id(), "chat": {"id": int(CHAT)}}}
+
+    def test_new_kind(self):
+        self.up.handle_message(self.msg(1, "/upload"))
+        self.up.handle_message(self.msg(2, reply_to=self.last_id(), doc={"file_id": "F", "file_name": "scan.pdf"}))
+        last_row = self.calls[-1][1]["reply_markup"]["inline_keyboard"][-1]
+        self.assertEqual([b["callback_data"] for b in last_row], ["k:new", "k:x"])
+        self.assertTrue(self.up.handle_callback(self.cb("k:new")))
+        self.assertTrue(self.up.handle_message(self.msg(3, "a/b", reply_to=self.last_id())))
+        self.assertIn("다시 적어", self.calls[-1][1]["text"])
+        self.up.handle_message(self.msg(4, "조경식재공사업  등록증", reply_to=self.last_id()))
+        self.up.handle_message(self.msg(5, "없음", reply_to=self.last_id()))
+        self.assertTrue((self.dir / "[최신 서류]" / "조경식재공사업 등록증_2026-11-09.pdf").exists())
+        self.assertIn("조경식재공사업 등록증", json.loads((self.dir / "_목록.json").read_text(encoding="utf-8"))[0]["종류"] + "|"
+                      + json.loads((self.dir / "_목록.json").read_text(encoding="utf-8"))[1]["종류"])
+
+    def test_remove(self):
+        self.assertTrue(self.up.handle_message(self.msg(1, "/remove")))
+        self.assertEqual(self.calls[-1][1]["reply_markup"]["inline_keyboard"][0][0]["callback_data"], "r:0")
+        self.assertTrue(self.up.handle_callback(self.cb("r:0")))
+        self.assertIn("뺄까요", self.calls[-1][1]["text"])
+        self.assertTrue(self.up.handle_callback(self.cb("r:y:0")))
+        self.assertTrue((self.dir / "[이전 서류]" / "신용평가등급확인서_2026-02-20.pdf").exists())
+        self.assertEqual(json.loads((self.dir / "_목록.json").read_text(encoding="utf-8")), [])
+        self.assertIn("뺐습니다", self.calls[-1][1]["text"])
+
     def test_guess_kind(self):
         kinds = ["직접생산확인증명서", "직접생산확인증명서(조형물)", "직접생산확인증명서(실물모형및전시물)", "사업자등록증",
                  "사업자등록증명", "사용인감계", "중소기업·소상공인확인서"]

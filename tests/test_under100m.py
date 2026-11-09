@@ -20,7 +20,7 @@ from nego.qualify import JointSupply, QualificationResult  # noqa: E402
 from nego.region import RegionCheck  # noqa: E402
 from nego.screen import Schedule  # noqa: E402
 from under100m.__main__ import alert_text, business_amount, collect, folder_name, is_target, over_by_api, run_once  # noqa: E402
-from under100m.form_fill import fill_form  # noqa: E402
+from under100m.form_fill import fill_form, load_company, read_company_sheet  # noqa: E402
 from under100m.form_split import merge_forms, split_forms  # noqa: E402
 
 NOW = datetime(2026, 11, 4, 10, 0)
@@ -283,6 +283,32 @@ class FormSampleRuleTest(unittest.TestCase):
         last = zipfile.ZipFile(out / sorted(names)[2]).read("Contents/section0.xml").decode("utf-8")
         self.assertIn("확약서 내용", last)
         self.assertNotIn("표지 내용", last)
+
+    def test_company_sheet_overrides_profile(self):
+        """회사자료 원본의 회사정보 시트 값이 프로필보다 우선(2026-11-09)."""
+        from openpyxl import Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "회사정보"
+        for row in (("항목", "값"), ("대표자", "새대표"), ("주소", "새주소 1"), ("자본금", "1억"), ("팩스번호", None)):
+            ws.append(row)
+        sheet = self.dir / "회사자료_양식.xlsx"
+        wb.save(sheet)
+        self.assertEqual(read_company_sheet(sheet), {"ceo": "새대표", "addr": "새주소 1"})
+        profile = self.dir / "p.json"
+        profile.write_text(json.dumps(COMPANY, ensure_ascii=False), encoding="utf-8")
+        got = load_company(profile, sheet)["회사"]
+        self.assertEqual((got["name"], got["ceo"], got["addr"]), ("가나회사", "새대표", "새주소 1"))
+        self.assertEqual(load_company(profile, self.dir / "없음.xlsx")["회사"]["ceo"], "다라")
+
+    def test_unknown_company_label_reported(self):
+        """규칙이 모르는 회사 칸 이름표는 못 채운 칸으로 남김."""
+        cell = lambda col, t: (f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSz width="9000"/>'
+                               f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0">{f"<hp:t>{t}</hp:t>" if t else ""}</hp:run></hp:p></hp:tc>')
+        tbl = '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl><hp:tr>' + cell(0, "업체 소재 지역") + cell(1, "") + '</hp:tr></hp:tbl></hp:run></hp:p>'
+        make_hwpx(self.dir / "u.hwpx", [tbl])
+        log = fill_form(self.dir / "u.hwpx", self.dir / "u_out.hwpx", COMPANY)
+        self.assertIn("못 채운 칸(규칙에 없는 이름표): 업체소재지역", log)
 
     def test_forms_merged_into_one_file(self):
         """서식을 하나로 — 서식마다 구역 하나, 순서 그대로, 그림은 쓰는 것만(2026-11-09 사용자 요청)."""

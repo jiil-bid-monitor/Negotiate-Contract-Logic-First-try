@@ -43,6 +43,8 @@ MERGED_FORMS = "서식_통합.hwpx"
 SAME_TITLE_DAYS = 180  # 공고명·기관이 같아도 이보다 오래되면 다른 해의 사업으로 본다
 COMPANY_DOCS = Path(os.environ.get("COMPANY_DOCS_DIR") or "/work/회사서류_최신")
 COMPANY_PROFILE = Path(os.environ.get("COMPANY_PROFILE") or "/work/under100m/회사프로필.json")
+# 회사자료 원본(프로젝트 2와 같은 파일, NAS jiil-webapp 공유 폴더 — 비밀번호 없이 폴더 권한으로 보호)
+COMPANY_SHEET = Path(os.environ.get("COMPANY_SHEET") or "/work/jiil-quant-docs/회사자료/회사자료_양식.xlsx")
 _AMOUNT = re.compile(r"(기초\s*금액|소요\s*예산|사업\s*예산|사\s*업\s*비|사업\s*금액)"
                      r"[^0-9\n]{0,30}?(?:금\s*)?([0-9]{1,3}(?:,[0-9]{3})+)\s*(천원|원)?")
 _UNSAFE = re.compile(r'[\\/:*?"<>|\r\n\t]')
@@ -372,7 +374,7 @@ def collect(now: datetime, days: int, out: Path) -> list:
 
 
 def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None, *, collect_fn: Callable = collect,
-             load_profile: Callable = lambda: load_company(COMPANY_PROFILE), fetch: Callable | None = None,
+             load_profile: Callable = lambda: load_company(COMPANY_PROFILE, COMPANY_SHEET), fetch: Callable | None = None,
              notify: Callable[[str], object] = lambda text: None) -> dict:
     """한 번 돌린다. 처리한 공고는 기록에 남겨 다시 만들지 않고, 재공고·정정공고는 같은 폴더를 갱신한다."""
     now = now or datetime.now()

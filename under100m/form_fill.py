@@ -25,9 +25,42 @@ TITLE: str | None = None
 NOTICE_NO: str | None = None
 
 
-def load_company(path: Path) -> dict:
-    """없으면 FileNotFoundError — 회사 정보 없이 빈 서식을 담당자에게 주지 않게 실행을 멈추고 알린다."""
+# 회사자료 원본(프로젝트 2와 같은 양식)의 '회사정보' 시트 항목 → 회사 값 키(2026-11-09 사용자 결정: 원본을 읽어 한 곳에서 관리)
+SHEET_KEYS = {"회사명": "name", "대표자": "ceo", "사업자등록번호": "bizno", "법인등록번호": "corpno", "주소": "addr",
+              "전화번호": "tel", "팩스번호": "fax"}
+
+
+def read_company_sheet(path: Path) -> dict[str, str]:
+    """회사자료_양식.xlsx '회사정보' 시트(항목·값) → {name: …}. 파일·시트가 없으면 빈 dict."""
+    if not Path(path).is_file():
+        return {}
+    from openpyxl import load_workbook
+    wb = load_workbook(path, read_only=True, data_only=True)
+    if "회사정보" not in wb.sheetnames:
+        wb.close()
+        return {}
+    try:
+        rows = wb["회사정보"].iter_rows(values_only=True)
+        head = [str(h or "").strip() for h in next(rows, ())]
+        if "항목" not in head or "값" not in head:
+            return {}
+        i, j = head.index("항목"), head.index("값")
+        out = {}
+        for r in rows:
+            key = SHEET_KEYS.get(str(r[i] or "").strip()) if len(r) > max(i, j) else None
+            if key and r[j] not in (None, ""):
+                out[key] = str(r[j]).strip()
+        return out
+    finally:
+        wb.close()  # 읽기 전용은 파일을 잡고 있음
+
+
+def load_company(path: Path, sheet: Path | None = None) -> dict:
+    """없으면 FileNotFoundError — 회사 정보 없이 빈 서식을 담당자에게 주지 않게 실행을 멈추고 알린다.
+    `sheet`(회사자료 원본)에 값이 있으면 그 값이 회사프로필보다 우선 — 칸 목록(표본 값)은 프로필 것을 씀."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if sheet:
+        data.setdefault("회사", {}).update(read_company_sheet(sheet))
     if not data.get("회사", {}).get("name"):
         raise ValueError(f"{path}에 회사 정보가 없습니다")
     return data
@@ -241,7 +274,11 @@ def fill_tables(xml, log):
                 continue
             prof = None if MODE.get('staff') else profile_of(label)
             # 해당부문 사업기간은 빈칸(2026-10-28 사용자 결정 — 발주처마다 기준일이 달라 직접 작성). career()는 남겨 둠
-            if not k and not prof: continue
+            if not k and not prof:
+                nxt = at.get((r, c + cs))
+                if not MODE.get('staff') and ASK.search(label) and len(label) <= 20 and nxt and not re.sub(r'\s+', '', text(nxt[5])):
+                    MISSED.add(label)  # 회사 칸 같은데 규칙이 모름 — 체크리스트에 남겨 규칙을 늘림
+                continue
             if r in agent_rows: continue
             if MODE['cert'] and r not in applicant_rows: continue
             if k == 'rrn' and r not in ceo_rows: continue
@@ -407,6 +444,9 @@ def fill_lines(xml, log):
     return xml
 
 
+MISSED: set[str] = set()  # 이번 서식에서 회사 칸으로 보이지만 못 채운 이름표
+# 회사 기본 정보 칸으로 보이는 이름표 — 자본금·인력·면허·매출은 일부러 비우는 칸이라 뺌
+ASK = re.compile(r'상호|업체|회사|대표|주소|소재지|사업자|법인|전화|연락처|팩스|FAX|이메일|E-?mail|홈페이지|설립', re.I)
 HEADER = {'xml': ''}  # 지금 고치는 파일의 header.xml — 정렬을 바꾼 문단 모양(paraPr)을 여기에 더함
 LABEL_WORDS = ['주소', '상호', '성명', '업체명', '대표자', '회사명', '소속', '직위', '소재지', '사업자번호', '전화번호', '생년월일',
                '주민등록번호', '주민(법인)등록번호', '법인등록번호', '제안업체명', '제안업체대표', '사업체명', '서약자', '동의자', '대리인']
@@ -549,6 +589,7 @@ def fill_form(src: Path, dst: Path, company: dict, bid_date: str | None = None, 
         STRIKE.clear()
         STRIKE.update(m.group(1) for m in re.finditer(r'<hh:charPr id="(\d+)"(?:(?!</hh:charPr>).)*?<hh:strikeout shape="(?!NONE|3D)[A-Z_]+"', head, flags=re.S))
         HEADER["xml"] = head
+        MISSED.clear()
         datas = {info.filename: z.read(info.filename) for info in z.infolist()}
         if not skip:
             MODE["cert"] = bool(CERT.search(src.name))
@@ -565,4 +606,6 @@ def fill_form(src: Path, dst: Path, company: dict, bid_date: str | None = None, 
             for info in z.infolist():
                 w.writestr(zipfile.ZipInfo(info.filename, info.date_time), datas[info.filename],
                            compress_type=zipfile.ZIP_STORED if info.filename == "mimetype" else zipfile.ZIP_DEFLATED)
+    if MISSED:
+        log.append("못 채운 칸(규칙에 없는 이름표): " + ", ".join(sorted(MISSED)))
     return log

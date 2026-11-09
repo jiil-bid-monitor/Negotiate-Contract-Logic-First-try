@@ -93,6 +93,8 @@ class App:
         self.imported = False
         self.reports: dict[str, dict] = {}  # 보고 종류별 가장 최근 보고 기록 — 텔레그램 /today
         self.push: ResultPush | None = None
+        # 서버 PC — 판단 기록은 NAS 한 곳에 저장(2026-11-09 사용자 결정). (NAS 주소, 토큰) — 있으면 /api/participation을 NAS로 넘긴다
+        self.team_remote: tuple[str, str] | None = None
 
     def _titles(self) -> dict[str, str]:
         run = self.store.latest_run() or {}
@@ -148,6 +150,17 @@ def make_handler(app: App):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(body)
+
+        def _remote_participation(self, method: str, data: Any = None) -> None:
+            """판단 기록을 NAS에서 읽고 쓴다 — 서버 PC에 따로 쌓여 둘로 갈라지지 않게. NAS가 안 되면 오류(이 PC에 몰래 쓰지 않음)."""
+            import requests
+            base, token = app.team_remote
+            try:
+                res = requests.request(method, base + "/api/participation", json=data, timeout=15,
+                                       headers={"X-App-Token": token})
+            except requests.RequestException:
+                return self._error(HTTPStatus.BAD_GATEWAY, "NAS에 연결하지 못해 판단 기록을 읽거나 저장하지 못했습니다 — 잠시 뒤 다시")
+            return self._send(res.status_code, res.content, "application/json; charset=utf-8")
 
         def _json(self, data: Any, status: int = 200) -> None:
             self._send(status, json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
@@ -281,6 +294,8 @@ def make_handler(app: App):
                 return self._json({"running": False, "done": 0, "total": 0, "byNo": {}, "keepQualifications": [],
                                    "headquartersRegion": app.held_raw().get("companyRegion")})
             if url.path == "/api/participation":
+                if app.team_remote:
+                    return self._remote_participation("GET")
                 return self._json({"participation": app.team.participation, "statuses": STATUSES})
             if url.path == "/api/search":
                 return self._json(mview.search(q.get("q", [""])[0], app.latest_run(), app.past, app.held_raw()))
@@ -432,6 +447,8 @@ def make_handler(app: App):
                     app.bidlog.delete(str(data.get("id") or ""))
                     return self._json({"ok": True, "entries": app.bidlog.entries()})
                 if url.path == "/api/participation":
+                    if app.team_remote:
+                        return self._remote_participation("POST", data)
                     return self._json({"ok": True, "participation": app.team.update(data)})
                 if url.path == "/api/promote":
                     return self._json({"ok": True, "promoted": app.team.promote(data)})
@@ -547,6 +564,7 @@ def main(argv: list[str] | None = None) -> int:
         app.push = ResultPush(push_url, os.environ.get("RESULT_PUSH_TOKEN", "").strip() or token, app.store, app.docscan,
                               lambda: busy_now(app), Path(args.db).parent / "result_push.json")
         app.push.start()
+        app.team_remote = (push_url.rstrip("/"), os.environ.get("RESULT_PUSH_TOKEN", "").strip() or token or "")
     if backup_dir is not None:
         app.team.backup_now()
         # 로그인하자마자 서버가 뜨면 구글 드라이브가 아직 연결되기 전일 수 있어 2분 뒤 한 번 더

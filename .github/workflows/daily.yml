@@ -289,6 +289,7 @@ jobs:
           LLM_MODEL: ${{ vars.LLM_MODEL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_JUDGE_URL: ${{ secrets.TELEGRAM_JUDGE_URL }}  # 보고 끝 "판단하러 가기" — 사내 웹앱 판단 기록 탭(토큰 포함이라 Secret)
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}

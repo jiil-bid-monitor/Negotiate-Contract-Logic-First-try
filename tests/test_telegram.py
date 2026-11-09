@@ -269,5 +269,17 @@ class TestDevAlert(unittest.TestCase):
         self.assertEqual(T.main(["oops"]), 2)
 
 
+class TestJudgeLink(unittest.TestCase):
+    def test_link_only_when_set(self):
+        import os
+        from unittest import mock
+        rows = [_row("공고", 5)]
+        self.assertNotIn("판단하러 가기", "".join(T.build_messages(rows, "제목")))
+        with mock.patch.dict(os.environ, {"TELEGRAM_JUDGE_URL": "http://192.168.0.18:8765/?t=x#log"}):
+            text = "".join(T.build_messages(rows, "제목"))
+            self.assertIn('<a href="http://192.168.0.18:8765/?t=x#log">판단하러 가기 →</a>', text)
+            self.assertNotIn("판단하러 가기", "".join(T.build_messages([], "제목")))
+
+
 if __name__ == "__main__":
     unittest.main()

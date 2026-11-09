@@ -524,6 +524,27 @@ class TestServer(unittest.TestCase):
         self.assertEqual(self.call("/api/bidlog", token="wrong")[0], 401)
         self.assertEqual(self.call("/api/bidlog/delete", {"id": entry_id})[1]["entries"], [])
 
+    def test_participation_goes_to_nas(self):
+        """서버 PC(team_remote 있음)의 판단 기록 읽기·쓰기는 NAS 한 곳으로(2026-11-09) — 이 PC엔 안 쌓인다."""
+        nas_store = Store(Path(tempfile.mkdtemp()) / "n.sqlite3")
+        nas = App(nas_store, FakePast(), Collector(nas_store, FakePast(), runner=fixture_run, config_loader=config_with_key),
+                  token="nas-token")
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(nas))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        local = App(Store(Path(tempfile.mkdtemp()) / "l.sqlite3"), FakePast(), self.collector, token="secret-token")
+        local.team_remote = (f"http://127.0.0.1:{httpd.server_address[1]}", "nas-token")
+        self.httpd.RequestHandlerClass = make_handler(local)
+        status, data = self.call("/api/participation", {"noticeNo": "R26BK01000001", "status": "참가", "by": "김",
+                                                         "title": "체험관"})
+        self.assertEqual(status, 200, data)
+        self.assertIn("R26BK01000001", nas.team.participation)
+        self.assertNotIn("R26BK01000001", local.team.participation)
+        self.assertIn("R26BK01000001", self.call("/api/participation")[1]["participation"])
+        local.team_remote = ("http://127.0.0.1:9", "x")  # NAS 꺼짐
+        self.assertEqual(self.call("/api/participation")[0], 502)
+
     def test_token_required_for_api_not_for_page(self):
         self.assertEqual(self.call("/api/meta", token="wrong")[0], 401)
         with urllib.request.urlopen(self.base + "/") as res:

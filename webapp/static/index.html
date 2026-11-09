@@ -561,6 +561,9 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 #logList:empty { display: none; }
 .log-row { padding: 14px 18px; border-top: 1px solid var(--line); }
 .log-row:first-child { border-top: 0; }
+.log-week + .log-week { border-top: 1px solid var(--line-strong); }
+.log-week > summary { padding: 10px 18px; cursor: pointer; background: var(--bg); font-size: 13.5px; color: var(--ink-strong); }
+.log-week > .log-row:first-of-type { border-top: 1px solid var(--line); }
 .log-top { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .log-top h3 { margin: 0; flex: 1 1 300px; min-width: 0; font-family: var(--head); font-size: 14.5px; font-weight: 500; line-height: 1.5; color: var(--ink-strong); }
 .log-top h3 a { color: inherit; text-decoration: none; }
@@ -1297,6 +1300,11 @@ footer b { color: var(--muted); }
         <option value="참가">참가</option>
         <option value="보류">보류</option>
         <option value="불참">불참</option>
+      </select>
+      <select id="logKind" aria-label="보고">
+        <option value="">모든 보고</option>
+        <option value="daily">매일 보고 (입찰)</option>
+        <option value="weekly">주간 보고 (협상·규격가격·사전규격)</option>
       </select>
     </div>
     <div id="logList"></div>
@@ -2981,15 +2989,28 @@ function logStatusOf(p) {
 }
 const UNDECIDED = ["미판단", "놓침"];
 /** 판단 기록 탭에 싣는 공고와 그 상태 — 최근 순 (판단한 공고는 판단 시각, 판단 전 공고는 마지막 보고일) */
+const logKey = (e) => (UNDECIDED.includes(e.st) ? e.p.reports.at(-1).date : String(e.p.decidedAt || e.p.updatedAt || ""));
 function logEntriesOf() {
-  const key = (e) => (UNDECIDED.includes(e.st) ? e.p.reports.at(-1).date : String(e.p.decidedAt || e.p.updatedAt || ""));
   return Object.values(participation)
     .map((p) => ({ p, st: logStatusOf(p) }))
     .filter((e) => e.st)
-    .sort((a, b) => key(b).localeCompare(key(a)));
+    .sort((a, b) => logKey(b).localeCompare(logKey(a)));
+}
+/** 그 날짜가 든 주(월~일) — 판단 기록을 주 단위로 묶어 보인다(2026-11-09 사용자 요청: 놓침이 쌓이면 보기 어려움) */
+function weekOf(dateText) {
+  const d = new Date(String(dateText).slice(0, 10) + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return { key: "", label: "날짜 없음" };
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const md = (t) => `${t.getMonth() + 1}/${t.getDate()}`;
+  return { key: `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, "0")}-${String(mon.getDate()).padStart(2, "0")}`, label: `${md(mon)}(월) ~ ${md(sun)}(일)` };
 }
 const REPORT_KIND = { daily: "매일", weekly: "주간" };
 /** "10/20 매일 보고 · 10/20 주간 보고" — 이 공고가 나간 보고 */
+/** 이 공고가 나간 보고 종류 — 매일·주간 둘 다 나갔으면 매일 보고로(2026-11-09 사용자 결정), 보고 없이 판단만 했으면 "" */
+const reportKindOf = (p) => ((p.reports || []).some((r) => r.kind === "daily") ? "daily" : (p.reports || []).length ? "weekly" : "");
 const reportsText = (p) => (p.reports || []).map((r) => `${r.date.slice(5).replace("-", "/")} ${REPORT_KIND[r.kind] || ""} 보고`).join(" · ");
 
 function renderLog() {
@@ -2999,7 +3020,8 @@ function renderLog() {
   const count = (s) => entries.filter((e) => e.st === s).length;
   $("logMeta").innerHTML =
     `판단 기록 <b>${num(entries.length)}</b>건 — ${[...UNDECIDED, ...DECISIONS].filter((s) => s !== "놓침" || count(s)).map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
-    `<button type="button" class="linkish" id="logCsv">CSV 내려받기</button>`;
+    `<button type="button" class="linkish" id="logCsv">CSV 내려받기</button>` +
+    `<br><span class="faint-note">판단 없이 마감된 '놓침'은 마감 4주 뒤 자동으로 지웁니다 (판단·담당·대화가 있으면 남김)</span>`;
   $("logAggNote").textContent = all.length >= LOG_AGG_MIN
     ? "아래 키워드 조정용 집계는 판단할 때 공고에 걸린 관심 키워드 기준입니다."
     : `판단이 ${LOG_AGG_MIN}건 쌓이면 아래에 키워드 조정용 집계가 열립니다 (${all.length}/${LOG_AGG_MIN}).`;
@@ -3008,7 +3030,8 @@ function renderLog() {
 
   const q = ($("logQ").value || "").replace(/\s+/g, "").toLowerCase();
   const stf = $("logStatus").value;
-  const list = entries.filter(({ p, st }) => (!stf || st === stf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
+  const kf = $("logKind").value;
+  const list = entries.filter(({ p, st }) => (!stf || st === stf) && (!kf || reportKindOf(p) === kf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
   const byNo = new Map(lastItems.map((n) => [n.noticeNo, n]));
   const row = ({ p, st }) => {
     const n = byNo.get(p.noticeNo);
@@ -3036,8 +3059,19 @@ function renderLog() {
       ${metaLine}
     </div>`;
   };
+  // 주마다 접기 — 가장 최근 주만 펼치고, 찾기 중이면 모두 펼친다
+  const weeks = [];
+  for (const e of list) {
+    const w = weekOf(logKey(e));
+    if (weeks.at(-1)?.key !== w.key) weeks.push({ ...w, items: [] });
+    weeks.at(-1).items.push(e);
+  }
+  const weekHtml = (w, i) => {
+    const cnt = [...UNDECIDED, ...DECISIONS].map((s) => [s, w.items.filter((e) => e.st === s).length]).filter(([, c]) => c).map(([s, c]) => `${s} ${c}`).join(" · ");
+    return `<details class="log-week"${i === 0 || q ? " open" : ""}><summary><b>${esc(w.label)}</b> · ${w.items.length}건 <span class="faint-note">${esc(cnt)}</span></summary>${w.items.map(row).join("")}</details>`;
+  };
   $("logList").innerHTML = entries.length
-    ? list.length ? list.map(row).join("") : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
+    ? list.length ? weeks.map(weekHtml).join("") : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
     : "";
   $("logAgg").innerHTML = all.length >= LOG_AGG_MIN ? logAggHtml(all) : "";
 }
@@ -3100,6 +3134,7 @@ $("logMeta").addEventListener("click", (ev) => {
 });
 $("logQ").oninput = () => renderLog();
 $("logStatus").onchange = () => renderLog();
+$("logKind").onchange = () => renderLog();
 $("logList").addEventListener("click", (ev) => {
   const btn = ev.target.closest("[data-goto]");
   if (!btn) return;
@@ -3851,6 +3886,8 @@ document.addEventListener("submit", (ev) => {
 loadParticipation();
 setInterval(loadParticipation, 10000);
 
+// 텔레그램 '판단하러 가기' 링크(…#log) — 판단 기록 탭으로 바로
+if (location.hash === "#log") showTab("log");
 boot();
 </script>
 <!-- 투찰 계산기 — 계산은 bidcalc.js(BidCalc), 화면은 bidcalc_ui.js (2026-10-15, 21라인 복수예가산출프로그램 모양) -->

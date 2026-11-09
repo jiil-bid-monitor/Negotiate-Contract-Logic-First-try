@@ -94,15 +94,33 @@ def parse(text: str) -> dict[str, Any] | None:
     return {"v": 1, "kind": e["kind"], "date": e["date"], "reportedAt": str(e.get("reportedAt") or ""), "notices": notices}
 
 
-def merge(records: dict[str, dict[str, Any]], entry: dict[str, Any], now: str) -> bool:
+# 판단 없이 마감된 '놓침'은 마감 뒤 이만큼만 남긴다(2026-11-09 사용자 결정 — 근거(판단·사유) 있는 기록만 오래 둔다).
+# 판단·담당·대화가 하나라도 있으면 지우지 않는다. 보고 기록(bot-state)은 그대로라 다시 합쳐도 이 기준으로 안 들어온다.
+MISSED_KEEP_DAYS = 28
+
+
+def _stale(p: dict[str, Any], cutoff: datetime) -> bool:
+    """판단·담당·대화 없이 마감이 cutoff보다 앞인 보고 공고."""
+    if p.get("status") in DECISIONS or p.get("owner") or p.get("comments") or not p.get("reports"):
+        return False
+    due = _deadline((p.get("meta") or {}).get("deadline"))
+    return due is not None and due < cutoff
+
+
+def merge(records: dict[str, dict[str, Any]], entry: dict[str, Any], now: str,
+          today: datetime | None = None) -> bool:
     """보고 기록을 판단 기록에 합친다. 이미 있는 공고는 판단·담당·대화를 건드리지 않고 보고 표시만 더한다.
-    같은 보고를 여러 번 합쳐도 결과가 같다. 바뀐 게 있으면 True (그때만 저장한다)."""
+    같은 보고를 여러 번 합쳐도 결과가 같다. 바뀐 게 있으면 True (그때만 저장한다).
+    마감 뒤 MISSED_KEEP_DAYS일 지난 '놓침'(판단·담당·대화 없음)은 지우고 새로 넣지도 않는다."""
+    cutoff = (today or datetime.now(KST)).astimezone(KST) - timedelta(days=MISSED_KEEP_DAYS)
     changed = False
     for n in entry["notices"]:
         no = n["noticeNo"]
         ref = {"date": entry["date"], "kind": entry["kind"]}
         meta = dict(n.get("meta") or {})
         p = records.get(no)
+        if p is None and _stale({"reports": [ref], "meta": meta}, cutoff):
+            continue
         if p is None:
             records[no] = {"noticeNo": no, "title": n["title"], "status": None, "owner": "",
                            "updatedAt": entry.get("reportedAt") or now, "comments": [], "meta": meta, "reports": [ref]}
@@ -119,6 +137,9 @@ def merge(records: dict[str, dict[str, Any]], entry: dict[str, Any], now: str) -
         if not p.get("meta"):
             p["meta"] = meta
             changed = True
+    for no in [no for no, p in records.items() if _stale(p, cutoff)]:
+        del records[no]
+        changed = True
     return changed
 
 

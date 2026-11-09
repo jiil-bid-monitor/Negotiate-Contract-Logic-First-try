@@ -112,6 +112,24 @@ class TestMerge(unittest.TestCase):
         self.assertEqual(records["A"]["reports"], [{"date": "2026-10-19", "kind": "weekly"}, {"date": "2026-10-21", "kind": "daily"}])
 
 
+class TestMissedPruned(unittest.TestCase):
+    def test_old_missed_dropped_but_judged_kept(self):
+        today = datetime(2026, 11, 9, 10, 0, tzinfo=KST)
+        records = {}
+        R.merge(records, _entry("daily", "2026-10-01", "OLD", "JUDGED", "TALKED", deadline="2026-10-05T18:00"), "now", today)
+        self.assertEqual(records, {}, "마감 4주 넘은 놓침은 새로 넣지 않는다")
+        R.merge(records, _entry("daily", "2026-10-20", "RECENT", deadline="2026-10-25T18:00"), "now", today)
+        self.assertIn("RECENT", records, "4주 안 놓침은 남긴다")
+        records["JUDGED"] = {"noticeNo": "JUDGED", "status": "불참", "reports": [{"date": "2026-10-01", "kind": "daily"}],
+                             "meta": {"deadline": "2026-10-05T18:00"}}
+        records["TALKED"] = {"noticeNo": "TALKED", "status": None, "comments": [{"by": "김", "text": "검토"}],
+                             "reports": [{"date": "2026-10-01", "kind": "daily"}], "meta": {"deadline": "2026-10-05T18:00"}}
+        records["STALE"] = {"noticeNo": "STALE", "status": None, "owner": "", "comments": [],
+                            "reports": [{"date": "2026-10-01", "kind": "daily"}], "meta": {"deadline": "2026-10-05T18:00"}}
+        self.assertTrue(R.merge(records, _entry("daily", "2026-11-09", "NEW"), "now", today))
+        self.assertEqual(sorted(records), ["JUDGED", "NEW", "RECENT", "TALKED"])
+
+
 class TestLogStatus(unittest.TestCase):
     NOW = datetime(2026, 10, 24, 12, 0, tzinfo=KST)
     REP = {"reports": [{"date": "2026-10-20", "kind": "daily"}]}

@@ -289,3 +289,4 @@ https://console.cron-job.org 가입 → **Create cronjob**. 두 개 모두 공�
 - 위 대화방에서 온 명령만 답합니다. 다른 방에서 명령을 치면 공고 내용 대신 그 방 ID만 알려 줍니다(넣을 ID 확인용). 아침 보고는 그대로 GitHub Actions가 보냅니다.
 - 답은 NAS가 받은 **최신 수집 결과** 기준 — 서버 PC가 새로 수집해 보내기 전엔 그 전 결과로 답합니다.
 - 매일·주간 보고와 `/today`·`/deadline` 줄 끝에 공고번호(눌러서 복사)가 붙습니다 — 복사해 `/notice 번호`로 바로 물을 수 있게(2026-11-09).
+- 보고와 `/today` 끝에 "판단하러 가기 →" 링크 — 사내 웹앱 판단 기록 탭(`…#log`)으로 바로. 주소(접속 토큰 포함)는 GitHub Secret `TELEGRAM_JUDGE_URL`·NAS `.env` `TELEGRAM_JUDGE_URL`, 사내망에서만 열림(2026-11-09).

@@ -3020,7 +3020,8 @@ function renderLog() {
   const count = (s) => entries.filter((e) => e.st === s).length;
   $("logMeta").innerHTML =
     `판단 기록 <b>${num(entries.length)}</b>건 — ${[...UNDECIDED, ...DECISIONS].filter((s) => s !== "놓침" || count(s)).map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
-    `<button type="button" class="linkish" id="logCsv">CSV 내려받기</button>`;
+    `<button type="button" class="linkish" id="logCsv">CSV 내려받기</button>` +
+    `<br><span class="faint-note">판단 없이 마감된 '놓침'은 마감 4주 뒤 자동으로 지웁니다 (판단·담당·대화가 있으면 남김)</span>`;
   $("logAggNote").textContent = all.length >= LOG_AGG_MIN
     ? "아래 키워드 조정용 집계는 판단할 때 공고에 걸린 관심 키워드 기준입니다."
     : `판단이 ${LOG_AGG_MIN}건 쌓이면 아래에 키워드 조정용 집계가 열립니다 (${all.length}/${LOG_AGG_MIN}).`;

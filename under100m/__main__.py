@@ -27,7 +27,7 @@ from typing import Callable
 
 from .docs import _unique, issue_lines
 from .form_fill import fill_form, load_company
-from .form_split import split_forms
+from .form_split import merge_forms, split_forms
 from .prep import PREP_DIR, prepare
 from .summary import write_summary_pdf
 
@@ -39,6 +39,7 @@ FORMS_DIR = "서식자동분리"
 PREV_DIR = "이전공고"
 SUMMARY = "공고정보_요약.pdf"
 FORMS_LIST = "제출서류_체크리스트.txt"
+MERGED_FORMS = "서식_통합.hwpx"
 SAME_TITLE_DAYS = 180  # 공고명·기관이 같아도 이보다 오래되면 다른 해의 사업으로 본다
 COMPANY_DOCS = Path(os.environ.get("COMPANY_DOCS_DIR") or "/work/회사서류_최신")
 COMPANY_PROFILE = Path(os.environ.get("COMPANY_PROFILE") or "/work/under100m/회사프로필.json")
@@ -83,9 +84,12 @@ def notice_key(notice) -> str:
     return f"{notice.notice_no}-{notice.notice_ord or '000'}"
 
 
+FOLDER_TAG = "[1억미만]"  # NAS 공유 폴더에서 다른 공고 폴더와 구분(2026-11-09 사용자 요청)
+
+
 def folder_name(notice) -> str:
     title = re.sub(r"\s+", " ", _UNSAFE.sub("_", notice.title or "")).strip(" ._")[:40].rstrip(" ._")
-    return f"{notice_key(notice)}_{title}"
+    return f"{FOLDER_TAG} {notice_key(notice)}_{title}"
 
 
 def load_state(path: Path) -> dict:
@@ -118,9 +122,9 @@ def qualification_label(candidate) -> str:
     return "자격 미달 가능" if q.missing_groups else "자격 충족"
 
 
-def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Path) -> tuple[list[str], list[str], dict[Path, Path]]:
-    """공고 문서의 서식을 서식별 파일로 자르고 회사 정보·공고 정보를 채운다(표본 규칙).
-    돌려주는 값: (제출서류 체크리스트 줄, 자동 입력·안내 줄, {옛 한글 원본: 변환한 hwpx})."""
+def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Path) -> tuple[list[str], list[str], dict[Path, Path], list[str]]:
+    """공고 문서의 서식을 서식마다 잘라 회사 정보·공고 정보를 채운 뒤, 문서마다 한 파일(서식_통합.hwpx)로 합친다(표본 규칙).
+    돌려주는 값: (제출서류 체크리스트 줄, 자동 입력·안내 줄, {옛 한글 원본: 변환한 hwpx}, 서식 이름들)."""
     from quantdocs.build import convert_hwp
 
     n = candidate.notice
@@ -151,17 +155,35 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
         if names:
             cuts.append((f, cut_dir, names))
     out.mkdir(parents=True, exist_ok=True)
-    checklist = ["제출서류 체크리스트 — 공고 문서 안의 서식을 모두 만들었습니다 (자동 생성)", "공고문의 제출서류 목록과 대조해 필요 없는 서식은 빼 주세요.", ""]
-    # 서식이 가장 많은 문서가 본 문서 — 다른 문서의 서식은 앞에 문서 이름을 붙임(표본의 과업지시서_서식01)
+    checklist = ["제출서류 체크리스트 — 공고 문서 안의 서식을 모두 만들었습니다 (자동 생성)", "공고문의 제출서류 목록과 대조해 필요 없는 서식은 빼 주세요.",
+                 f"서식은 문서마다 '{MERGED_FORMS}' 한 파일에 순서대로 들어 있습니다(서식마다 새 쪽).", ""]
+    form_names: list[str] = []
+    # 서식이 가장 많은 문서가 본 문서 — 다른 문서의 서식 파일은 앞에 문서 이름을 붙임(과업지시서_서식_통합)
     for rank, (f, cut_dir, names) in enumerate(sorted(cuts, key=lambda row: -len(row[2]))):
         label = next((word for word in ("과업지시서", "제안요청서", "공고문") if word[:2] in f.stem), f.stem[:10])
         prefix = f"{label}_" if rank else ""
+        filled_dir = cut_dir / "채움"
+        filled_dir.mkdir()
+        filled_files = []
         for name in names:
-            target = _unique(out / f"{prefix}{name}")
-            checklist.append(f"[ ] {target.name}")
+            target = filled_dir / name
             filled = fill_form(cut_dir / name, target, company, bid_date, n.title, notice_key(n))
-            notes.append(f"{target.name}: " + (", ".join(filled) if filled else "채운 칸 없음"))
-    return checklist, notes, converted
+            filled_files.append(target)
+            form_names.append(Path(f"{prefix}{name}").stem)
+            notes.append(f"{prefix}{name}: " + (", ".join(filled) if filled else "채운 칸 없음"))
+        merged = _unique(out / f"{prefix}{MERGED_FORMS}")
+        try:
+            merge_forms(filled_files, merged)
+            checklist += [f"[ ] {merged.name} — {k}. {Path(name).stem}" for k, name in enumerate(names, 1)]
+        except Exception as err:  # noqa: BLE001 — 합치지 못하면 서식별 파일로라도 남긴다
+            log.warning("서식 합치기 실패 %s: %s", f.name, err)
+            merged.unlink(missing_ok=True)
+            notes.append(f"{f.name}: 서식을 한 파일로 합치지 못해 서식별 파일로 둠({err})")
+            for target in filled_files:
+                kept = _unique(out / f"{prefix}{target.name}")
+                shutil.copyfile(target, kept)
+                checklist.append(f"[ ] {kept.name}")
+    return checklist, notes, converted, form_names
 
 
 def read_docs(files: list[Path]) -> list[tuple[Path, str]]:
@@ -242,14 +264,13 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
             notice_files = fetch(n.notice_no, tmp / ".받은 공고")
             files = list(notice_files.files)
             docs = read_docs(files)
-            checklist, notes, converted = build_forms(files, company, candidate, tmp / FORMS_DIR, Path(work_dir))
+            checklist, notes, converted, form_names = build_forms(files, company, candidate, tmp / FORMS_DIR, Path(work_dir))
             placed = place_notice_files(files, converted, tmp, stamp)
         shutil.rmtree(tmp / ".받은 공고", ignore_errors=True)
         notes += [f"첨부를 받지 못함: {s}" for s in notice_files.skipped]
         top_files = sorted(p.name for p in tmp.iterdir() if p.is_file())
         deadline = submit_deadline(candidate.schedule)
         posted = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:]}" if posted_digits else None
-        form_names = [p.stem for p in (tmp / FORMS_DIR).glob("*.hwpx")]
         keep_prep = bool(old and (old / PREP_DIR).exists())  # 담당자가 넣은 파일이 있어 재공고 때는 건드리지 않음
         need, ref = prepare(None if keep_prep else tmp / PREP_DIR, [text for _, text in docs], form_names, COMPANY_DOCS, deadline, posted, now.date(), company)
         if not write_summary_pdf(candidate, amount, source, tmp / SUMMARY, notice_key(n), need, ref, deadline, [placed[f].name for f, _ in docs], now):

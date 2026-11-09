@@ -385,3 +385,70 @@ def split_forms(SRC: Path, OUT: Path, all_forms: bool = False) -> tuple[list[str
         lines += [f'[ ] {m[4]}' for m in made]
         lines += ['', '공고문의 제출서류 목록과 대조해 필요 없는 서식은 빼 주세요.']
     return [m[4] for m in made], lines
+
+
+_SEC_NAME = re.compile(r'Contents/section(\d+)\.xml$')
+
+
+def merge_forms(files: list[Path], target: Path) -> int:
+    """같은 공고 문서에서 잘라 채운 서식들을 한 파일로 합친다 — 서식마다 구역 하나(쪽 설정·가로세로 그대로, 새 쪽에서 시작).
+    서식 채우기가 파일마다 더한 문단 모양(paraPr)은 번호가 겹칠 수 있어 새 번호로 바꾼다. 돌려주는 값: 합친 구역 수.
+    (2026-11-09 사용자 요청: 서식을 하나씩 나누지 말고 하나로)"""
+    zs = [zipfile.ZipFile(f) for f in files]
+    try:
+        return _merge(zs, target)
+    finally:
+        for z in zs:
+            z.close()
+
+
+def _merge(zs: list[zipfile.ZipFile], target: Path) -> int:
+    heads = [z.read('Contents/header.xml').decode('utf-8') for z in zs]
+    para_ids = [set(re.findall(r'<hh:paraPr id="(\d+)"', h)) for h in heads]
+    common = set.intersection(*para_ids) if para_ids else set()
+    head = heads[0]
+    next_id = max([int(i) for i in para_ids[0]] or [-1]) + 1
+    sections, bins, bin_items = [], {}, {}
+    for k, z in enumerate(zs):
+        remap = {}
+        if k:
+            for pid in sorted(para_ids[k] - common, key=int):  # 이 서식 채우기에서 더한 문단 모양
+                src = re.search(rf'<hh:paraPr id="{pid}"(?:[^>]*/>|.*?</hh:paraPr>)', heads[k], flags=re.S).group(0)
+                remap[pid] = str(next_id)
+                head = head.replace('</hh:paraProperties>', re.sub(r'<hh:paraPr id="\d+"', f'<hh:paraPr id="{next_id}"', src, count=1) + '</hh:paraProperties>', 1)
+                next_id += 1
+        names = sorted((n for n in z.namelist() if _SEC_NAME.match(n)), key=lambda n: int(_SEC_NAME.match(n).group(1)))
+        for n in names:
+            x = z.read(n).decode('utf-8')
+            if remap:
+                x = re.sub(r'paraPrIDRef="(\d+)"', lambda m: f'paraPrIDRef="{remap.get(m.group(1), m.group(1))}"', x)
+            sections.append(x)
+        hpf = z.read('Contents/content.hpf').decode('utf-8')
+        for m in re.finditer(r'<opf:item id="([^"]+)" href="(BinData/[^"]+)"[^>]*/>', hpf):
+            if m.group(2) in z.namelist() and m.group(2) not in bins:
+                bins[m.group(2)] = z.read(m.group(2))
+                bin_items.setdefault(m.group(1), m.group(0))
+    head = re.sub(r'(<hh:paraProperties itemCnt=")\d+', lambda m: m.group(1) + str(len(re.findall(r'<hh:paraPr id=', head))), head, count=1)
+    head = re.sub(r'secCnt="\d+"', f'secCnt="{len(sections)}"', head)
+    hpf = zs[0].read('Contents/content.hpf').decode('utf-8')
+    item = re.search(r'<opf:item id="section\d+"[^>]*/>', hpf).group(0)
+    ref = re.search(r'<opf:itemref idref="section\d+"[^>]*/>', hpf).group(0)
+    hpf = re.sub(r'<opf:item id="section\d+"[^>]*/>|<opf:itemref idref="section\d+"[^>]*/>|<opf:item id="[^"]+" href="BinData/[^"]+"[^>]*/>', '', hpf)
+    new_items = ''.join(re.sub(r'section\d+', f'section{i}', item) for i in range(len(sections))) + ''.join(bin_items.values())
+    hpf = hpf.replace('</opf:manifest>', new_items + '</opf:manifest>', 1)
+    hpf = hpf.replace('</opf:spine>', ''.join(re.sub(r'section\d+', f'section{i}', ref) for i in range(len(sections))) + '</opf:spine>', 1)
+    base = zs[0]
+    with zipfile.ZipFile(target, 'w') as w:
+        for info in base.infolist():
+            n = info.filename
+            if _SEC_NAME.match(n) or n.startswith('BinData/') or n in ('Contents/content.hpf', 'Contents/header.xml'):
+                continue
+            w.writestr(zipfile.ZipInfo(n, info.date_time), base.read(n),
+                       compress_type=zipfile.ZIP_STORED if n == 'mimetype' else zipfile.ZIP_DEFLATED)
+        w.writestr('Contents/header.xml', head, compress_type=zipfile.ZIP_DEFLATED)
+        w.writestr('Contents/content.hpf', hpf, compress_type=zipfile.ZIP_DEFLATED)
+        for i, x in enumerate(sections):
+            w.writestr(f'Contents/section{i}.xml', x, compress_type=zipfile.ZIP_DEFLATED)
+        for n, data in bins.items():
+            w.writestr(n, data, compress_type=zipfile.ZIP_DEFLATED)
+    return len(sections)

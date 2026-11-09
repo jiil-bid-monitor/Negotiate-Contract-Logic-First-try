@@ -21,7 +21,7 @@ from nego.region import RegionCheck  # noqa: E402
 from nego.screen import Schedule  # noqa: E402
 from under100m.__main__ import alert_text, business_amount, collect, folder_name, is_target, over_by_api, run_once  # noqa: E402
 from under100m.form_fill import fill_form  # noqa: E402
-from under100m.form_split import split_forms  # noqa: E402
+from under100m.form_split import merge_forms, split_forms  # noqa: E402
 
 NOW = datetime(2026, 11, 4, 10, 0)
 COMPANY = {"회사": {"name": "가나회사", "ceo": "다라", "addr": "마바시 사아로 1", "bizno": "000-00-00000", "tel": "02-000-0000"},
@@ -131,6 +131,7 @@ class RunOnceTest(unittest.TestCase):
         result = self.go([c])
         folder = self.out / folder_name(c.notice)
         self.assertEqual(result["made"], [folder.name])
+        self.assertTrue(folder.name.startswith("[1억미만] "))
         self.assertTrue((folder / "20261104_공고문_v1.pdf").exists())
         self.assertTrue((folder / "서식자동분리" / "제출서류_체크리스트.txt").exists())
         self.assertTrue((folder / "회사준비서류" / "준비서류_체크리스트.txt").exists())
@@ -265,6 +266,61 @@ class FormSampleRuleTest(unittest.TestCase):
             self.assertIn(value, xml)
         self.assertNotIn("999,999", xml)
         self.assertEqual(len(filled), 4)
+
+    def test_forms_merged_into_one_file(self):
+        """서식을 하나로 — 서식마다 구역 하나, 순서 그대로, 그림은 쓰는 것만(2026-11-09 사용자 요청)."""
+        filled = []
+        for name in sorted(self.names):
+            target = self.dir / f"filled_{name}"
+            fill_form(self.out / name, target, COMPANY)
+            filled.append(target)
+        merged = self.dir / "서식_통합.hwpx"
+        self.assertEqual(merge_forms(filled, merged), 3)
+        z = zipfile.ZipFile(merged)
+        self.addCleanup(z.close)
+        secs = [z.read(f"Contents/section{i}.xml").decode("utf-8") for i in range(3)]
+        self.assertIn("【서식 제1호】", secs[0])
+        self.assertIn("【서식 제7호】", secs[1])
+        self.assertIn("【서식 제7-1호】", secs[2])
+        self.assertIn("가나회사", secs[0])
+        hpf = z.read("Contents/content.hpf").decode("utf-8")
+        self.assertEqual(hpf.count("<opf:itemref"), 3)
+        self.assertIn('secCnt="3"', z.read("Contents/header.xml").decode("utf-8"))
+        self.assertNotIn("BinData/image1.png", z.namelist())
+        self.assertEqual(z.namelist()[0], "mimetype")
+
+    def test_merge_renumbers_added_paragraph_shapes(self):
+        """서식 채우기가 파일마다 더한 문단 모양 번호가 겹치면 새 번호로."""
+        def doc(path, extra, text):
+            head = ('<hh:head xmlns:hh="h" secCnt="1"><hh:paraProperties itemCnt="3"><hh:paraPr id="0"/><hh:paraPr id="1"/>'
+                    f'<hh:paraPr id="2" mark="{extra}"/></hh:paraProperties></hh:head>')
+            hpf = ('<opf:package xmlns:opf="o"><opf:manifest><opf:item id="section0" href="Contents/section0.xml"/></opf:manifest>'
+                   '<opf:spine><opf:itemref idref="section0"/></opf:spine></opf:package>')
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("mimetype", "application/hwp+zip")
+                z.writestr("Contents/header.xml", head)
+                z.writestr("Contents/content.hpf", hpf)
+                z.writestr("Contents/section0.xml", SEC.format(para(text).replace('paraPrIDRef="0"', 'paraPrIDRef="2"')))
+        a, b, c = self.dir / "a.hwpx", self.dir / "b.hwpx", self.dir / "c.hwpx"
+        doc(a, "A", "첫 서식")
+        doc(b, "B", "둘째 서식")
+        with zipfile.ZipFile(c, "w") as z:  # 아무것도 더하지 않은 서식 — 원래 문단 모양(0~1)만
+            with zipfile.ZipFile(a) as src:
+                for n in ("mimetype", "Contents/content.hpf"):
+                    z.writestr(n, src.read(n))
+            z.writestr("Contents/header.xml", '<hh:head xmlns:hh="h" secCnt="1"><hh:paraProperties itemCnt="2"><hh:paraPr id="0"/><hh:paraPr id="1"/></hh:paraProperties></hh:head>')
+            z.writestr("Contents/section0.xml", SEC.format(para("셋째 서식")))
+        merged = self.dir / "m.hwpx"
+        merge_forms([a, b, c], merged)
+        z = zipfile.ZipFile(merged)
+        self.addCleanup(z.close)
+        head = z.read("Contents/header.xml").decode("utf-8")
+        self.assertIn('<hh:paraPr id="2" mark="A"/>', head)
+        self.assertIn('<hh:paraPr id="3" mark="B"/>', head)
+        self.assertIn('itemCnt="4"', head)
+        self.assertIn('paraPrIDRef="2"', z.read("Contents/section0.xml").decode("utf-8"))
+        self.assertIn('paraPrIDRef="3"', z.read("Contents/section1.xml").decode("utf-8"))
+        self.assertIn('paraPrIDRef="0"', z.read("Contents/section2.xml").decode("utf-8"))
 
     def test_staff_forms_and_agent_line(self):
         company = {**COMPANY, "칸": {"E-Mail": {"빈칸": "", "지일 값": "a@b.c"}}}

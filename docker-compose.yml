@@ -19,7 +19,7 @@ services:
       HOST: "0.0.0.0"
       PORT: "8765"
       # 서버 PC의 구글 드라이브 백업 폴더(Windows 경로)는 NAS에 없어 끈다.
-      BACKUP_DIR: ""
+      BACKUP_DIR: /work/backup  # 판단 기록 사본·날짜별 30일 — 토요일 HyperBackup 사이 보호(2026-11-09 사용자 결정)
     volumes:
       # 위 jiil-webapp 폴더 전체를 /work로 — 코드·data·output·과거 실적을 NAS 파일 그대로 읽고 쓴다.
       - ..:/work

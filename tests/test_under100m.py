@@ -283,6 +283,18 @@ class FormSampleRuleTest(unittest.TestCase):
         self.assertNotIn("999,999", xml)
         self.assertEqual(len(filled), 4)
 
+    def test_org_name_label_and_phone_fax_line(self):
+        """'1. 기관(업체)명' 칸과 '전화번호 :   팩스번호 :' 줄(2026-11-09 제안업체 일반현황)."""
+        cell = lambda col, t: (f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSz width="9000"/>'
+                               f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0">{f"<hp:t>{t}</hp:t>" if t else ""}</hp:run></hp:p></hp:tc>')
+        tbl = '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl><hp:tr>' + cell(0, "1. 기관(업체)명") + cell(1, "") + '</hp:tr></hp:tbl></hp:run></hp:p>'
+        company = {"회사": {**COMPANY["회사"], "fax": "02-000-0001"}, "칸": {}}
+        make_hwpx(self.dir / "o.hwpx", [tbl, para("전화번호 :          팩스번호 : ")])
+        fill_form(self.dir / "o.hwpx", self.dir / "o_out.hwpx", company)
+        xml = zipfile.ZipFile(self.dir / "o_out.hwpx").read("Contents/section0.xml").decode("utf-8")
+        for value in ("가나회사", "02-000-0000", "02-000-0001"):
+            self.assertIn(value, xml)
+
     def test_toc_lines_and_bracket_name_heads(self):
         """앞쪽 서식 목록 줄은 버리고, '[서식 1. 이름] ※ 안내' 머리로 자름 — 목록 뒤 표지는 서식1에(2026-11-09 주진불빛공원)."""
         make_hwpx(self.dir / "toc.hwpx", [

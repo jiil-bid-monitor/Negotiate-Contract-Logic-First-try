@@ -36,6 +36,7 @@ from .bidlog import BidLog
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .docscan import DocScan
 from .mstore import TeamStore
+from .nasload import busy_reason
 from .resultpush import ResultPush
 from .exclusionsync import ExclusionSync
 from .reportsync import ReportSync
@@ -352,8 +353,11 @@ def make_handler(app: App):
                 if url.path == "/api/collect":
                     if app.viewer:
                         raise RuntimeError(VIEWER_MESSAGE)
-                    if os.environ.get("PAUSE_DURING_BACKUP") and in_backup_window(datetime.now()):
-                        raise RuntimeError(BACKUP_MESSAGE)
+                    if os.environ.get("PAUSE_DURING_BACKUP"):
+                        if in_backup_window(datetime.now()):
+                            raise RuntimeError(BACKUP_MESSAGE)
+                        if (reason := busy_reason()):
+                            raise RuntimeError(reason + " — 잠시 뒤 다시 눌러 주세요.")
                     cats = data.get("categories") or None
                     job = app.collector.start(
                         days=int(data["days"]) if data.get("days") else None,

@@ -1,4 +1,4 @@
-"""1억 미만 공고 폴더 자동 생성 — 낙찰방법·공고명과 상관없이 수집기 후보 전부(수의계약은 수집기가 뺌, 2026-11-06 사용자 결정).
+"""1억 미만 공고 폴더 자동 생성 — 적격심사·최저가 입찰만(협상·규격가격은 정량평가 쪽, 2026-11-09 사용자 결정), 공고명 무관, 수의계약은 수집기가 뺌.
 
 새 공고마다 결과 폴더를 표본(1억미만_사업폴더_취합_20261028)과 같은 구조로 만들고 개발자 방에 알린다:
   <공고>/  최신 공고문·첨부(맨 위) · 공고정보_요약.pdf · 서식자동분리/ · 회사준비서류/ · 이전공고/
@@ -345,11 +345,11 @@ def collect(now: datetime, days: int, out: Path) -> list:
     from nego.config import load_config
     from nego.http_client import DataGoKrClient
     from nego.pipeline import drop_expired, drop_region_unmet, run
-    from nego.scope import CATEGORIES
+    from nego.scope import CATEGORY_BID
     from webapp.qualview import build as qual_build, held_lookup
 
     config = load_config()
-    candidates, stats, _ = run(config, now, set(CATEGORIES), period=(now - timedelta(days=days), now))
+    candidates, stats, _ = run(config, now, {CATEGORY_BID}, period=(now - timedelta(days=days), now))
     targets = [c for c in candidates if is_target(c) and not over_by_api(c.notice)]
     log.info("후보 %d건 중 나라장터 금액으로 1억 이상이 아닌 본공고 %d건", len(candidates), len(targets))
     if targets:

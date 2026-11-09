@@ -1,0 +1,127 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-09",
+ "reportedAt": "2026-11-08T23:58:53+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01814707",
+   "title": "도계 탄광유산 디지털 아카이빙 전시시설 및 전시물 제작·설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "강원특별자치도 삼척시",
+    "budgetAmount": 321391155.0,
+    "confidence": "강력추천",
+    "bidMethod": "입찰",
+    "keywords": [
+     "전시시설",
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "score": 66,
+    "deadline": "2026-11-11T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01814707&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01776320",
+   "title": "국립디자인박물관 및 디지털문화유산센터 건립공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "행정중심복합도시건설청",
+    "budgetAmount": 64813179608.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 48,
+    "deadline": "2026-11-11T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01776320&bidPbancOrd=001"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813232",
+   "title": "진해 벚꽃로드 관광경관 명소화 편의 및 녹지공간 조형물 제작 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "경상남도 창원시",
+    "budgetAmount": 867490909.0,
+    "confidence": "강력추천",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간"
+    ],
+    "products": [
+     "조형물"
+    ],
+    "score": 74,
+    "deadline": "2026-11-15T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813232&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01810269",
+   "title": "분당선 선릉 외 1개 역사 시설개량공사 안내사인물 제조 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "국가철도공단 GTX본부",
+    "budgetAmount": 623472000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "안내판"
+    ],
+    "score": 58,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01810269&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01815655",
+   "title": "덕남정수장 노후시설 개량공사 기본 및 실시설계 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "전남광주통합특별시 상수도사업본부",
+    "budgetAmount": 1830000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": 28,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01815655&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01814412",
+   "title": "약성정수장 성능회복 개량공사 기본 및 실시설계용역 사업집행계획 및 사업수행 능력평가서 제출 안내 공고",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경상북도 포항시 맑은물사업소",
+    "budgetAmount": 1590909091.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": null,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01814412&bidPbancOrd=000"
+   }
+  }
+ ]
+}

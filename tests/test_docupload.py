@@ -4,7 +4,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from webapp.docupload import Uploader, parse_expiry
+from webapp.docupload import Uploader, guess_kind, parse_expiry
 
 CHAT = "-5"
 
@@ -69,6 +69,27 @@ class UploadFlowTest(unittest.TestCase):
         self.up.handle_message(self.msg(1, "/upload"))
         self.assertTrue(self.up.handle_message(self.msg(2, "취소", reply_to=self.last_id())))
         self.assertEqual(self.up.pending, {})
+
+    def test_guessed_kind_one_click(self):
+        self.up.handle_message(self.msg(1, "/upload"))
+        self.up.handle_message(self.msg(2, reply_to=self.last_id(),
+                                        doc={"file_id": "F", "file_name": "신용평가 등급확인서 2027.pdf"}))
+        sent = self.calls[-1][1]
+        self.assertIn("<b>신용평가등급확인서</b> 맞나요?", sent["text"])
+        self.assertEqual([b["text"] for b in sent["reply_markup"]["inline_keyboard"][0]], ["맞음", "다른 종류"])
+        more = {"id": "c", "data": "k:more", "message": {"message_id": self.last_id(), "chat": {"id": int(CHAT)}}}
+        self.assertTrue(self.up.handle_callback(more))
+        self.assertEqual(self.calls[-1][1]["text"], "어떤 서류인가요?")
+
+    def test_guess_kind(self):
+        kinds = ["직접생산확인증명서", "직접생산확인증명서(조형물)", "직접생산확인증명서(실물모형및전시물)", "사업자등록증",
+                 "사업자등록증명", "사용인감계", "중소기업·소상공인확인서"]
+        self.assertEqual(guess_kind(kinds, "직접생산 확인증명서_조형물.pdf"), "직접생산확인증명서(조형물)")
+        self.assertEqual(guess_kind(kinds, "scan001.pdf", "직접생산확인증명서 … 품명 조형물"), "직접생산확인증명서(조형물)")
+        self.assertEqual(guess_kind(kinds, "직접생산확인증명서.pdf"), "직접생산확인증명서")
+        self.assertEqual(guess_kind(kinds, "사업자등록증명원.pdf"), "사업자등록증명")
+        self.assertEqual(guess_kind(kinds, "중소기업 소상공인 확인서.pdf"), "중소기업·소상공인확인서")
+        self.assertIsNone(guess_kind(kinds, "스캔.pdf"))
 
     def test_parse_expiry(self):
         self.assertEqual(parse_expiry("2028-11-09"), date(2028, 11, 9))

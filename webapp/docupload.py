@@ -44,6 +44,37 @@ def parse_expiry(text: str) -> date | None | str:
         return ""
 
 
+def _norm(text: str) -> str:
+    return re.sub(r"[\W_]+", "", text or "").lower()
+
+
+def guess_kind(options: list[str], name: str, text: str = "") -> str | None:
+    """파일 이름·PDF 글자로 서류 종류 짐작 — '직접생산확인증명서(조형물)'은 품목까지 맞아야. 여럿이면 가장 긴 이름."""
+    hay = _norm(name) + "|" + _norm(text)
+    hits = []
+    for kind in options:
+        base, _, item = kind.partition("(")
+        if _norm(kind) in hay or (_norm(base) in hay and (not item or _norm(item.rstrip(")")) in hay)):
+            hits.append(kind)
+    return max(hits, key=len) if hits else None
+
+
+def pdf_text(data: bytes) -> str:
+    """앞 3쪽 글자(스캔본이면 빈 글) — 종류 짐작용."""
+    try:
+        import io
+
+        from pypdf import PdfReader
+
+        return "\n".join((page.extract_text() or "") for page in PdfReader(io.BytesIO(data)).pages[:3])
+    except Exception:  # noqa: BLE001 — 못 읽으면 이름으로만 짐작
+        return ""
+
+
+def _is_pdf(doc: dict) -> bool:
+    return bool(doc) and (doc.get("file_name", "").lower().endswith(".pdf") or doc.get("mime_type") == "application/pdf")
+
+
 class Uploader:
     def __init__(self, api: Callable[..., Any], download: Callable[[str], bytes], chats: set[str],
                  folder: Callable[[], Path] = docexpiry.docs_dir, today: Callable[[], date] = date.today):
@@ -77,6 +108,7 @@ class Uploader:
                             msg.get("message_id"), FORCE)
             self.pending[chat] = {"step": "file", "ask": ask, "asks": {ask}}
             return True
+        doc = msg.get("document") or {}
         if not state or replied not in state["asks"]:
             return False
         if text == "취소":
@@ -84,16 +116,11 @@ class Uploader:
             self._say(chat, "서류 넣기를 그만뒀습니다.", msg.get("message_id"))
             return True
         if state["step"] == "file":
-            doc = msg.get("document") or {}
-            if not doc or not (doc.get("file_name", "").lower().endswith(".pdf") or doc.get("mime_type") == "application/pdf"):
+            if not _is_pdf(doc):
                 state["ask"] = self._say(chat, "PDF 파일을 답장으로 보내 주세요.", msg.get("message_id"), FORCE)
                 return True
-            options = kinds(self.folder())
-            state.update(step="kind", file_id=doc["file_id"], kinds=options, user_msg=msg.get("message_id"))
-            buttons = [[{"text": k, "callback_data": f"k:{i}"}] for i, k in enumerate(options)]
-            buttons.append([{"text": "취소", "callback_data": "k:x"}])
-            state["ask"] = self._say(chat, f"어떤 서류인가요? ({html.escape(doc.get('file_name') or 'PDF')})",
-                                     msg.get("message_id"), {"inline_keyboard": buttons})
+            state.update(doc=doc, user_msg=msg.get("message_id"))
+            self._ask_kind(chat, state)
             return True
         if state["step"] == "expiry":
             end = parse_expiry(text)
@@ -109,12 +136,15 @@ class Uploader:
         chat = str((msg.get("chat") or {}).get("id", ""))
         state = self.pending.get(chat)
         data = cb.get("data") or ""
-        if not data.startswith("k:") or not state or state.get("step") != "kind" or msg.get("message_id") != state.get("ask"):
+        if not data.startswith("k:") or not state or state.get("step") != "kind" or msg.get("message_id") not in state["asks"]:
             return False
         self.api("answerCallbackQuery", callback_query_id=cb["id"])
         if data == "k:x":
             self.pending.pop(chat, None)
             self._say(chat, "서류 넣기를 그만뒀습니다.")
+            return True
+        if data == "k:more":
+            self._kind_list(chat, state)
             return True
         state.update(step="expiry", kind=state["kinds"][int(data[2:])])
         state["ask"] = self._say(chat, f"<b>{html.escape(state['kind'])}</b> — 유효기간 끝나는 날을 답장으로 보내 주세요.\n"
@@ -122,13 +152,35 @@ class Uploader:
         # ↑ PDF 보낸 사람 메시지에 답장으로 + force_reply → 그 사람 입력창이 이 질문에 대한 답장으로 바로 열린다(selective)
         return True
 
+    def _ask_kind(self, chat: str, state: dict) -> None:
+        """PDF를 받아 종류를 짐작 — 맞으면 버튼 하나로 끝, 아니면 전체 목록(두 줄씩)."""
+        doc = state["doc"]
+        state["data"] = self.download(doc["file_id"])
+        state.update(step="kind", kinds=kinds(self.folder()))
+        guess = guess_kind(state["kinds"], doc.get("file_name") or "", pdf_text(state["data"]))
+        if guess is None:
+            self._kind_list(chat, state)
+            return
+        i = state["kinds"].index(guess)
+        state["ask"] = self._say(chat, f"<b>{html.escape(guess)}</b> 맞나요?", state.get("user_msg"),
+                                 {"inline_keyboard": [[{"text": "맞음", "callback_data": f"k:{i}"},
+                                                       {"text": "다른 종류", "callback_data": "k:more"}],
+                                                      [{"text": "취소", "callback_data": "k:x"}]]})
+
+    def _kind_list(self, chat: str, state: dict) -> None:
+        opts = state["kinds"]
+        rows = [[{"text": k, "callback_data": f"k:{j}"} for j, k in list(enumerate(opts))[i:i + 2]]
+                for i in range(0, len(opts), 2)]
+        rows.append([{"text": "취소", "callback_data": "k:x"}])
+        state["ask"] = self._say(chat, "어떤 서류인가요?", state.get("user_msg"), {"inline_keyboard": rows})
+
     def _save(self, chat: str, state: dict, end: date | None, reply_to: int | None) -> None:
         from under100m import docs
 
         folder = self.folder()
         name = f"{state['kind']}_{self.today()}" + (f"_유효{end}" if end else "") + ".pdf"
         target = docs._unique(folder / "[최신 서류]" / name)
-        target.write_bytes(self.download(state["file_id"]))
+        target.write_bytes(state["data"])
         self.pending.pop(chat, None)
         notes: list[str] = []
         docs.run(folder, self.today(), notes.append, settle=0, alert_due=False)

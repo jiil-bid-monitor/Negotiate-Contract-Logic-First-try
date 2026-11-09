@@ -134,6 +134,9 @@ def today_reply(reports: dict[str, dict], now: datetime) -> str:
         out.append(f"… 외 {len(notices) - 40}건은 웹앱에서")
     if not notices:
         out.append("새 공고 없음")
+    judge_url = os.environ.get("TELEGRAM_JUDGE_URL", "").strip()
+    if judge_url and notices:
+        out.append(f'<a href="{html.escape(judge_url, quote=True)}">판단하러 가기 →</a> (사내망에서)')
     return "\n".join(out)
 
 

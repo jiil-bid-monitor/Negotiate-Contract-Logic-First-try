@@ -240,6 +240,10 @@ def build_messages(rows: list[Row], title: str, warnings: list[str] | None = Non
             blocks[first_block] = f"<b>{esc(section_title)} {len(section_rows)}건</b>\n\n{blocks[first_block]}"
     if footer:
         blocks.append(esc(footer))
+    # 사내 웹앱 판단 기록 탭으로 — 주소(접속 토큰 포함)는 Secret TELEGRAM_JUDGE_URL (2026-11-09 사용자 요청)
+    judge_url = os.environ.get("TELEGRAM_JUDGE_URL", "").strip()
+    if judge_url and rows:
+        blocks.append(f'<a href="{esc(judge_url, quote=True)}">판단하러 가기 →</a> (사내망에서)')
 
     messages: list[str] = []
     current = "\n".join(header)

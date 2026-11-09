@@ -561,6 +561,9 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 #logList:empty { display: none; }
 .log-row { padding: 14px 18px; border-top: 1px solid var(--line); }
 .log-row:first-child { border-top: 0; }
+.log-week + .log-week { border-top: 1px solid var(--line-strong); }
+.log-week > summary { padding: 10px 18px; cursor: pointer; background: var(--bg); font-size: 13.5px; color: var(--ink-strong); }
+.log-week > .log-row:first-of-type { border-top: 1px solid var(--line); }
 .log-top { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .log-top h3 { margin: 0; flex: 1 1 300px; min-width: 0; font-family: var(--head); font-size: 14.5px; font-weight: 500; line-height: 1.5; color: var(--ink-strong); }
 .log-top h3 a { color: inherit; text-decoration: none; }
@@ -2981,12 +2984,23 @@ function logStatusOf(p) {
 }
 const UNDECIDED = ["미판단", "놓침"];
 /** 판단 기록 탭에 싣는 공고와 그 상태 — 최근 순 (판단한 공고는 판단 시각, 판단 전 공고는 마지막 보고일) */
+const logKey = (e) => (UNDECIDED.includes(e.st) ? e.p.reports.at(-1).date : String(e.p.decidedAt || e.p.updatedAt || ""));
 function logEntriesOf() {
-  const key = (e) => (UNDECIDED.includes(e.st) ? e.p.reports.at(-1).date : String(e.p.decidedAt || e.p.updatedAt || ""));
   return Object.values(participation)
     .map((p) => ({ p, st: logStatusOf(p) }))
     .filter((e) => e.st)
-    .sort((a, b) => key(b).localeCompare(key(a)));
+    .sort((a, b) => logKey(b).localeCompare(logKey(a)));
+}
+/** 그 날짜가 든 주(월~일) — 판단 기록을 주 단위로 묶어 보인다(2026-11-09 사용자 요청: 놓침이 쌓이면 보기 어려움) */
+function weekOf(dateText) {
+  const d = new Date(String(dateText).slice(0, 10) + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return { key: "", label: "날짜 없음" };
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const md = (t) => `${t.getMonth() + 1}/${t.getDate()}`;
+  return { key: `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, "0")}-${String(mon.getDate()).padStart(2, "0")}`, label: `${md(mon)}(월) ~ ${md(sun)}(일)` };
 }
 const REPORT_KIND = { daily: "매일", weekly: "주간" };
 /** "10/20 매일 보고 · 10/20 주간 보고" — 이 공고가 나간 보고 */
@@ -3036,8 +3050,19 @@ function renderLog() {
       ${metaLine}
     </div>`;
   };
+  // 주마다 접기 — 가장 최근 주만 펼치고, 찾기 중이면 모두 펼친다
+  const weeks = [];
+  for (const e of list) {
+    const w = weekOf(logKey(e));
+    if (weeks.at(-1)?.key !== w.key) weeks.push({ ...w, items: [] });
+    weeks.at(-1).items.push(e);
+  }
+  const weekHtml = (w, i) => {
+    const cnt = [...UNDECIDED, ...DECISIONS].map((s) => [s, w.items.filter((e) => e.st === s).length]).filter(([, c]) => c).map(([s, c]) => `${s} ${c}`).join(" · ");
+    return `<details class="log-week"${i === 0 || q ? " open" : ""}><summary><b>${esc(w.label)}</b> · ${w.items.length}건 <span class="faint-note">${esc(cnt)}</span></summary>${w.items.map(row).join("")}</details>`;
+  };
   $("logList").innerHTML = entries.length
-    ? list.length ? list.map(row).join("") : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
+    ? list.length ? weeks.map(weekHtml).join("") : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
     : "";
   $("logAgg").innerHTML = all.length >= LOG_AGG_MIN ? logAggHtml(all) : "";
 }
@@ -3851,6 +3876,8 @@ document.addEventListener("submit", (ev) => {
 loadParticipation();
 setInterval(loadParticipation, 10000);
 
+// 텔레그램 '판단하러 가기' 링크(…#log) — 판단 기록 탭으로 바로
+if (location.hash === "#log") showTab("log");
 boot();
 </script>
 <!-- 투찰 계산기 — 계산은 bidcalc.js(BidCalc), 화면은 bidcalc_ui.js (2026-10-15, 21라인 복수예가산출프로그램 모양) -->

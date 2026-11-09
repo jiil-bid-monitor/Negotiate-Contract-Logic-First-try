@@ -111,7 +111,7 @@ class TestBuildMessages(unittest.TestCase):
     def test_interest_and_product_sections(self):
         """2026-10-19 통합 결정 12·14번 — 관심 / 세부품명 구역, 품목 표시, [정정], 배정예산 표시."""
         rows = [
-            T.Row("관심 공고", "https://g2b/1", "입찰", 150_000_000, 5, "자격 충족"),
+            T.Row("관심 공고", "https://g2b/1", "입찰", 150_000_000, 5, "자격 충족", notice_no="R26BK01000001"),
             T.Row("안내판 설치", "https://g2b/2", "입찰", 120_000_000, 8, "자격 충족", section="세부품명",
                   products=["안내판"], budget_kind="배정예산"),
             T.Row("정정된 공고", "https://g2b/3", "입찰", None, 12, "자격 미확인", corrected=True, notes=["해외 의심"]),
@@ -122,6 +122,7 @@ class TestBuildMessages(unittest.TestCase):
         self.assertIn("1.2억(배정) · <b>🔴 D-8</b> · 자격 충족 — 품목: 안내판", text)
         self.assertIn("[정정] <a", text)
         self.assertIn("금액 모름 · D-12 · 자격 미확인 · 해외 의심", text)
+        self.assertIn("자격 충족 · <code>R26BK01000001</code>", text)
 
     def test_one_missing_requirement_is_not_qualified(self):
         """예전엔 passes(빠진 요건 1개까지 허용)로 '자격 충족'이 나왔다."""

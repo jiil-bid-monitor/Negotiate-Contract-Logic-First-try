@@ -33,6 +33,7 @@ class TelegramBotTest(unittest.TestCase):
     def test_deadline(self):
         text = tb.reply("/deadline", RUN, NOW)
         self.assertIn("3일 안에 마감 1건", text)
+        self.assertIn("자격 충족 · <code>R26BK01000001</code>", text)
         self.assertNotIn("지난 공고", text)
         text = tb.reply("/deadline 14", RUN, NOW)
         self.assertIn("2건", text)
@@ -42,13 +43,13 @@ class TelegramBotTest(unittest.TestCase):
     def test_today(self):
         reports = {
             "daily": {"kind": "daily", "date": "2026-11-09", "notices": [
-                {"title": "체험관", "meta": {"detailUrl": "https://x/1", "budgetAmount": 320000000,
+                {"noticeNo": "R26BK01000001", "title": "체험관", "meta": {"detailUrl": "https://x/1", "budgetAmount": 320000000,
                                              "deadline": "2026-11-12T10:00", "score": 66}}]},
             "weekly": {"kind": "weekly", "date": "2026-11-09", "notices": [{"title": "주간공고", "meta": {}}]},
         }
         text = tb.reply("/today", RUN, NOW, reports)
         self.assertIn("매일 보고 (2026-11-09) — 1건", text)
-        self.assertIn("3.2억 · D-3 · 싱크로율 66%", text)
+        self.assertIn("3.2억 · D-3 · 싱크로율 66% · <code>R26BK01000001</code>", text)
         self.assertNotIn("주간", text)
         self.assertIn("보고 기록이 없습니다", tb.reply("/today", RUN, NOW, {"weekly": reports["weekly"]}))
         self.assertIn("보고 기록이 없습니다", tb.reply("/today", RUN, NOW, {}))

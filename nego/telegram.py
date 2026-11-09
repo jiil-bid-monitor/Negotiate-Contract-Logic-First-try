@@ -102,6 +102,7 @@ class Row:
     budget_kind: str | None = None  # 추정가격 / 배정예산 / None
     corrected: bool = False  # 이미 보낸 공고의 정정공고(차수 오름)
     notes: list[str] = field(default_factory=list)  # "해외 의심", "지역 제한 의심"
+    notice_no: str = ""  # 줄 끝에 눌러 복사되는 공고번호 — /notice에 붙여 넣기 쉽게(2026-11-09 사용자 요청)
 
     @classmethod
     def from_candidate(cls, c: Any) -> "Row":
@@ -131,7 +132,8 @@ class Row:
                    products=list(getattr(sr, "matched_product_codes", []) or []),
                    budget_kind=getattr(c.notice, "budget_kind", None),
                    corrected=bool(getattr(c, "corrected", False)),
-                   notes=notes)
+                   notes=notes,
+                   notice_no=getattr(c.notice, "notice_no", "") or "")
 
 
 def _short_money(value: float | None, kind: str | None = None) -> str:
@@ -179,6 +181,8 @@ def _line(index: int, row: Row, tagged: bool) -> str:
         line += f" · {esc(row.linked)}에서 확인"
     for note in row.notes:
         line += f" · {esc(note)}"
+    if row.notice_no:
+        line += f" · <code>{esc(row.notice_no)}</code>"
     if row.section == "세부품명" and row.products:
         line += f" — 품목: {esc(', '.join(row.products))}"
     return line

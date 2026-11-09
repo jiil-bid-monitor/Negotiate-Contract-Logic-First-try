@@ -49,6 +49,11 @@ def _title(c: dict) -> str:
     return f'<a href="{html.escape(url, quote=True)}">{title}</a>' if url else title
 
 
+def _no(no: str | None) -> str:
+    """눌러서 복사되는 공고번호 — /notice에 붙여 넣기 쉽게."""
+    return f" · <code>{html.escape(no)}</code>" if no else ""
+
+
 def _qual(c: dict) -> str:
     q = c.get("qualification") or {}
     if not q.get("checked"):
@@ -103,7 +108,7 @@ def deadline_reply(run: dict | None, arg: str, now: datetime) -> str:
     out = [f"<b>{days}일 안에 마감 {len(rows)}건</b>"]
     for i, (d, c) in enumerate(rows[:30], 1):
         out.append(f"{i}. {_title(c)}\n   {_short_money(c.get('budget'), c.get('budget_kind'))} · {_days_text(d)} · "
-                   f"{html.escape(_qual(c))}")
+                   f"{html.escape(_qual(c))}{_no(c.get('notice_no'))}")
     if len(rows) > 30:
         out.append(f"… 외 {len(rows) - 30}건은 웹앱에서")
     return "\n".join(out)
@@ -123,7 +128,8 @@ def today_reply(reports: dict[str, dict], now: datetime) -> str:
             title = f'<a href="{html.escape(meta["detailUrl"], quote=True)}">{title}</a>'
         score = meta.get("score")
         out.append(f"{i}. {title}\n   {_short_money(meta.get('budgetAmount'))} · "
-                   f"{_days_text(_dday(meta.get('deadline'), now))}" + (f" · 싱크로율 {score}%" if score is not None else ""))
+                   f"{_days_text(_dday(meta.get('deadline'), now))}" + (f" · 싱크로율 {score}%" if score is not None else "")
+                   + _no(n.get("noticeNo")))
     if len(notices) > 40:
         out.append(f"… 외 {len(notices) - 40}건은 웹앱에서")
     if not notices:

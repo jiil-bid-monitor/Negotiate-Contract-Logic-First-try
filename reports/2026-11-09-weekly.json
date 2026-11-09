@@ -1,0 +1,1872 @@
+{
+ "v": 1,
+ "kind": "weekly",
+ "date": "2026-11-09",
+ "reportedAt": "2026-11-09T00:03:39+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01809648",
+   "title": "빙해수조 모형시험용 모형선 제작",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "한국해양과학기술원 부설 선박해양플랜트연구소",
+    "budgetAmount": 51000000.0,
+    "confidence": "강력추천",
+    "bidMethod": "규격가격동시",
+    "keywords": [
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "score": 42,
+    "deadline": "2026-11-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01809648&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296431",
+   "title": "(긴급) 다대포해수욕장 일원 품격있는 부산거리 디자인사업 디자인조명 물품 제작 설치",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "부산광역시",
+    "budgetAmount": 877396000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "LED경관조명기구"
+    ],
+    "score": 60,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296431"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296444",
+   "title": "(긴급) 다대포해수욕장 일원 품격있는 부산거리 디자인사업 디자인조형물 물품 제작 설치",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "부산광역시",
+    "budgetAmount": 1364200000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "조형물"
+    ],
+    "score": 52,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296444"
+   }
+  },
+  {
+   "noticeNo": "R26BD00293938",
+   "title": "2027년 KTL SNS 운영 및 홍보시안 제작 용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "한국산업기술시험원",
+    "budgetAmount": 179965080.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 51,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00293938"
+   }
+  },
+  {
+   "noticeNo": "R26BD00294953",
+   "title": "2027년 관세청 SNS 콘텐츠 제작 및 홍보 지원",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "관세청",
+    "budgetAmount": 201830000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 45,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00294953"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295171",
+   "title": "2027년 국립대구기상과학관 운영·유지관리 용역사업",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "기상청 대구지방기상청",
+    "budgetAmount": 788257230.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "과학관"
+    ],
+    "products": [],
+    "score": 50,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295171"
+   }
+  },
+  {
+   "noticeNo": "R26BD00294906",
+   "title": "2027년 상설전시관 및 옥외전시장 관리(청소) 용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "문화체육관광부 국립민속박물관",
+    "budgetAmount": 33000000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "전시관"
+    ],
+    "products": [],
+    "score": 56,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00294906"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295772",
+   "title": "2027년 서소문청사 통신시스템 유지관리 용역(긴급)",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "서울특별시",
+    "budgetAmount": 321911000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 54,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295772"
+   }
+  },
+  {
+   "noticeNo": "R26BD00294836",
+   "title": "2027년 흥덕구 정보통신장비 및 방송장비 통합유지관리용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "충청북도 청주시 흥덕구",
+    "budgetAmount": 147848940.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 54,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00294836"
+   }
+  },
+  {
+   "noticeNo": "R26BD00294742",
+   "title": "2027년도 사인물 제작 및 설치 연간 단가계약",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "국민건강보험공단 일산병원",
+    "budgetAmount": 59343524.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "안내판"
+    ],
+    "score": 52,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00294742"
+   }
+  },
+  {
+   "noticeNo": "R26BD00294689",
+   "title": "IBK하남데이터센터 통신 인프라 1차 유지관리 2026 연장 (CISCO)",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "중소기업은행",
+    "budgetAmount": 731390440.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 27,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00294689"
+   }
+  },
+  {
+   "noticeNo": "R26BD00294795",
+   "title": "SOL POOL 테스트 베드 수영장 인테리어",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "주식회사 테바",
+    "budgetAmount": 66000000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "인테리어"
+    ],
+    "products": [],
+    "score": 22,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00294795"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295114",
+   "title": "강남구도시관리공단 정보통신서비스(인터넷, 전화) 용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "서울시 강남구도시관리공단",
+    "budgetAmount": 1874949000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 49,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295114"
+   }
+  },
+  {
+   "noticeNo": "R26BK01805080",
+   "title": "러닝커먼즈 LED 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "울산과학기술원",
+    "budgetAmount": 156400000.0,
+    "confidence": "참고용",
+    "bidMethod": "규격가격동시",
+    "keywords": [],
+    "products": [
+     "영상정보디스플레이장치"
+    ],
+    "score": 60,
+    "deadline": "2026-11-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01805080&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BD00294609",
+   "title": "소수서원 국가유산 야행 멀티미디어 콘텐츠 제작 용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "경상북도 영주시",
+    "budgetAmount": 252431000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 54,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00294609"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296068",
+   "title": "평화의댐 물문화관 식당 및 매점 개선공사 실시설계용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "한국수자원공사",
+    "budgetAmount": 43560000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": 53,
+    "deadline": "2026-11-10T00:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296068"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296392",
+   "title": "한성백제박물관 냉발설비 개선(냉각탑)",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "한성백제박물관",
+    "budgetAmount": 490600000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 57,
+    "deadline": "2026-11-09T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296392"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295354",
+   "title": "2027년 교통신호제어시스템 유지관리용역 (제1지역)",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "부산광역시 교통정보서비스센터",
+    "budgetAmount": 374190000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 44,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295354"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295358",
+   "title": "2027년 교통신호제어시스템 유지관리용역(제2지역)",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "부산광역시 교통정보서비스센터",
+    "budgetAmount": 373560000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 43,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295358"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295676",
+   "title": "2027년 국립박물관문화재단 환경미화용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "국립박물관문화재단",
+    "budgetAmount": 1027638240.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 53,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295676"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295682",
+   "title": "2027년 미국 소재 한국 문화유산 디지털 콘텐츠 전시",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "국외소재문화유산재단",
+    "budgetAmount": 465821200.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "전시회기획및대행서비스"
+    ],
+    "score": 57,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295682"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295336",
+   "title": "2027년 지하공간통합지도 수정갱신 사업",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "한국국토정보공사",
+    "budgetAmount": 1664143560.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 54,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295336"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295448",
+   "title": "경민대학교 기숙사 신축 통신공사",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "공사",
+    "institution": "경민대학교",
+    "budgetAmount": 559358000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 37,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295448"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813633",
+   "title": "공간분할 방사선 생성을 위한 맞춤형 미니그리드 제작",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "한국전기연구원",
+    "budgetAmount": 29000000.0,
+    "confidence": "참고용",
+    "bidMethod": "규격가격동시",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 29,
+    "deadline": "2026-11-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813633&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295907",
+   "title": "광운대학교 실내·외 사인물 제작·설치 단가계약",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "광운대학교",
+    "budgetAmount": 35200000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "안내판"
+    ],
+    "score": 38,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295907"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295555",
+   "title": "국립목포대학교 조명공원 구축 상징 조형물 제작·설치",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "목포대학교",
+    "budgetAmount": 110000000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "조형물"
+    ],
+    "score": 66,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295555"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295236",
+   "title": "세종시 3단계 2차 스마트도시 정보통신공사 지급자재(CCTV, 폴, 비상벨)",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "한국토지주택공사",
+    "budgetAmount": 423830000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 38,
+    "deadline": "2026-11-10T10:33",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295236"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295309",
+   "title": "오수처리장 하수관로 합류부 단면확장 및 수문 개선 공사 실시설계 용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "전북대학교",
+    "budgetAmount": 111826000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": 50,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295309"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295745",
+   "title": "제천시 어린이 과학체험공간 확충사업 전시물 설계 및 제작·설치용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "충청북도 제천시",
+    "budgetAmount": 2000000000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "전시물",
+     "공간"
+    ],
+    "products": [],
+    "score": 74,
+    "deadline": "2026-11-10T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295745"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295219",
+   "title": "충남도청이전신도시 RH15BL 단지내 자동크린넷 시설공사 실시설계용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "한국토지주택공사",
+    "budgetAmount": 142131000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": 28,
+    "deadline": "2026-11-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295219"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296446",
+   "title": "2027년 광주청사 행정정보통신망 외 4종 유지관리 용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "전남광주통합특별시 광주청사",
+    "budgetAmount": 792252000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 49,
+    "deadline": "2026-11-11T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296446"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296309",
+   "title": "2027년 국립충남기상과학관 운영ㆍ유지관리 용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "기상청 대전지방기상청",
+    "budgetAmount": 788257230.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "과학관"
+    ],
+    "products": [],
+    "score": 54,
+    "deadline": "2026-11-11T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296309"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296448",
+   "title": "2027년 무안청사 행정정보통신망 외 2종 유지관리 용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "전남광주통합특별시 광주청사",
+    "budgetAmount": 518972000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 39,
+    "deadline": "2026-11-11T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296448"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295975",
+   "title": "가칭 충남교육청 교직원수련원 신축공사 제작가구(붙박이장 등) 설치",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "충청남도교육청",
+    "budgetAmount": 364726600.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "카운터"
+    ],
+    "score": 55,
+    "deadline": "2026-11-11T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295975"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296290",
+   "title": "문체부 유튜브 콘텐츠 및 정책 캠페인 영상 제작 사업",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "문화체육관광부",
+    "budgetAmount": 323749600.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 44,
+    "deadline": "2026-11-11T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296290"
+   }
+  },
+  {
+   "noticeNo": "R26BD00295709",
+   "title": "선박 운항 데이터 통합 교환 미들웨어 SW 개발",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "한국해양과학기술원 부설 선박해양플랜트연구소",
+    "budgetAmount": 350491300.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 49,
+    "deadline": "2026-11-11T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00295709"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296424",
+   "title": "성남금토 스마트도시 정보통신공사-금속기둥",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "한국토지주택공사 경기남부지역본부",
+    "budgetAmount": 272412380.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 51,
+    "deadline": "2026-11-11T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296424"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296202",
+   "title": "용산 국제업무지구 스마트시티 정보통신 실시설계 용역",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "용역",
+    "institution": "서울주택도시개발공사",
+    "budgetAmount": 526394000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 54,
+    "deadline": "2026-11-11T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296202"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296045",
+   "title": "진례 도예 관광활성화 돔하우스 미디어월 제작 설치",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "물품",
+    "institution": "경상남도 김해시",
+    "budgetAmount": 2895611560.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [
+     "안내전광판"
+    ],
+    "score": 61,
+    "deadline": "2026-11-11T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296045"
+   }
+  },
+  {
+   "noticeNo": "R26BK01802876",
+   "title": "당진교육종합센터 전시체험 콘텐츠 제작 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "충청남도교육청 충청남도당진교육지원청",
+    "budgetAmount": 315836364.0,
+    "confidence": "강력추천",
+    "bidMethod": "협상",
+    "keywords": [
+     "체험콘텐츠",
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "score": 72,
+    "deadline": "2026-11-12T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01802876&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01802657",
+   "title": "2026년 과천시 행복쉘터 제작설치(협상)(긴급)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "경기도 과천시",
+    "budgetAmount": 118690909.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "디자인서비스"
+    ],
+    "score": 50,
+    "deadline": "2026-11-12T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01802657&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01799561",
+   "title": "2027년 국립민속박물관 업무시스템 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "문화체육관광부 국립민속박물관",
+    "budgetAmount": 54909090.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 43,
+    "deadline": "2026-11-12T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01799561&bidPbancOrd=001"
+   }
+  },
+  {
+   "noticeNo": "R26BK01803143",
+   "title": "거창박물관 증축 타당성 평가 및 중장기 운영계획 수립 용역(협상에의한계약)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경상남도 거창군",
+    "budgetAmount": 72727273.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 58,
+    "deadline": "2026-11-12T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01803143&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BD00296597",
+   "title": "충주성심학교 스프링클러 설치 통신공사",
+   "meta": {
+    "sourceType": "사전규격",
+    "businessType": "공사",
+    "institution": "충청북도교육청 충주성심학교",
+    "budgetAmount": 191143000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 37,
+    "deadline": "2026-11-12T23:59",
+    "detailUrl": "https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=R26BD00296597"
+   }
+  },
+  {
+   "noticeNo": "R26BK01807719",
+   "title": "[재공고] 속로로 여행자센터 인테리어 구축 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "(주)서피비치",
+    "budgetAmount": 229000000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "인테리어"
+    ],
+    "products": [],
+    "score": 61,
+    "deadline": "2026-11-13T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01807719&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01809838",
+   "title": "경상남도교육청 학생안전체험원 공공형 안전체험교육장 구축 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "경상남도교육청 경상남도교육청학생안전체험원",
+    "budgetAmount": 469090909.0,
+    "confidence": "강력추천",
+    "bidMethod": "협상",
+    "keywords": [
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "score": 70,
+    "deadline": "2026-11-15T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01809838&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01802660",
+   "title": "2026년 국립아시아문화전당 어린이체험관 상설전시 지식과 문명 영역 인트로 전시 개편 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "국립아시아문화전당재단",
+    "budgetAmount": 72700000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "체험관"
+    ],
+    "products": [],
+    "score": 68,
+    "deadline": "2026-11-15T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01802660&bidPbancOrd=002"
+   }
+  },
+  {
+   "noticeNo": "R26BK01809304",
+   "title": "SOL POOL 테스트 베드 수영장 인테리어",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "주식회사 테바",
+    "budgetAmount": 60000000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "인테리어"
+    ],
+    "products": [],
+    "score": 30,
+    "deadline": "2026-11-15T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01809304&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01777537",
+   "title": "화원 복합커뮤니티센터 공간 디자인 및 디자인 가구 제작 설치 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "대구광역시 달성군",
+    "budgetAmount": 4363636364.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 66,
+    "deadline": "2026-11-15T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01777537&bidPbancOrd=001"
+   }
+  },
+  {
+   "noticeNo": "R26BK01810513",
+   "title": "2026년 한전MCS 정보통신망 사업자 선정(재공고)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "한전엠씨에스주식회사",
+    "budgetAmount": 777060000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 31,
+    "deadline": "2026-11-16T15:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01810513&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813333",
+   "title": "2027~2028년 종합정보통신망 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "서울특별시 서울기록원",
+    "budgetAmount": 543523636.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 63,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813333&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01807759",
+   "title": "2027년 국립박물관 대표누리집 통합 유지관리",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "문화체육관광부 국립중앙박물관",
+    "budgetAmount": 180000000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 47,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01807759&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813838",
+   "title": "2027년 국립박물관단지 홈페이지 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "행정중심복합도시 국립박물관단지 통합운영지원센터",
+    "budgetAmount": 53581818.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 52,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813838&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01806309",
+   "title": "2027년 국립생물자원관 SNS채널 운영과 홍보 확산",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "기후에너지환경부 국립생물자원관",
+    "budgetAmount": 136363636.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 42,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01806309&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01809308",
+   "title": "2027년 방송통신시스템 통합유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경기도 군포시",
+    "budgetAmount": 259517273.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 47,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01809308&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813042",
+   "title": "2027년 성평등가족부 온라인 홍보 영상 제작",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "성평등가족부",
+    "budgetAmount": 245454545.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 49,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813042&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01812917",
+   "title": "26년 그린리모델링시스템 기능개선 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "국토안전관리원",
+    "budgetAmount": 1863636364.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 56,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01812917&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01815265",
+   "title": "고등학교 학점 이수 지원을 위한 나이스 기능개선",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "한국교육학술정보원",
+    "budgetAmount": 470000000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 50,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01815265&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01815776",
+   "title": "남강유등전시관 유등 융복합조형물 제작·전시 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경상남도 진주시",
+    "budgetAmount": 136363636.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "전시관"
+    ],
+    "products": [],
+    "score": 57,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01815776&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01805466",
+   "title": "문자메시지 및 전자팩스 전송서비스 계약",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "국민건강보험공단 일산병원",
+    "budgetAmount": 127398469.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 46,
+    "deadline": "2026-11-16T10:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01805466&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01803498",
+   "title": "이산화탄소 순감축량 산정 플랫폼 구축",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "한국산업기술시험원",
+    "budgetAmount": 449992812.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 50,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01803498&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813050",
+   "title": "2027년 국립민속박물관 [민속소식] 발간",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "문화체육관광부 국립민속박물관",
+    "budgetAmount": 75454545.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 48,
+    "deadline": "2026-11-17T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813050&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01784475",
+   "title": "2027년 행정안전부 디지털 영상 제작 및 운영지원사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "행정안전부",
+    "budgetAmount": 172727273.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 38,
+    "deadline": "2026-11-17T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01784475&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01814927",
+   "title": "국방 차세대 기록관리시스템 전환 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "국방부 국방전산정보원",
+    "budgetAmount": 10553303636.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 59,
+    "deadline": "2026-11-17T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01814927&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01809579",
+   "title": "2027-28년도 국립부산과학관 전시·과학문화·교육 해설 및 업무지원 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "국립부산과학관",
+    "budgetAmount": 2266909091.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "과학관"
+    ],
+    "products": [],
+    "score": 45,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01809579&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01760453",
+   "title": "2027~2028년 강남구 정보통신 통합유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "서울특별시 강남구",
+    "budgetAmount": 2414926736.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 36,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01760453&bidPbancOrd=001"
+   }
+  },
+  {
+   "noticeNo": "R26BK01810895",
+   "title": "빈집 활용 DIT기반 주거공간 기획·조성 용역 (협상에의한계약)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "수원도시재단",
+    "budgetAmount": 80000000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 45,
+    "deadline": "2026-11-18T17:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01810895&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01811953",
+   "title": "지역구분변경 안전성평가 VR 시뮬레이션 콘텐츠 제작",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "한국가스안전공사",
+    "budgetAmount": 180000000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "패키지소프트웨어개발및도입서비스"
+    ],
+    "score": 62,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01811953&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01810711",
+   "title": "국립충주박물관 누리집 구축",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "문화체육관광부 국립중앙박물관",
+    "budgetAmount": 272727273.0,
+    "confidence": "강력추천",
+    "bidMethod": "협상",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 58,
+    "deadline": "2026-11-19T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01810711&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01812571",
+   "title": "박물관교육 영상제작 및 스튜디오 운영·관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "문화체육관광부 국립중앙박물관",
+    "budgetAmount": 289090909.0,
+    "confidence": "강력추천",
+    "bidMethod": "협상",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 51,
+    "deadline": "2026-11-19T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01812571&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01809556",
+   "title": "부산 업사이클센터 전시·체험(콘텐츠) 제작·설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "부산광역시",
+    "budgetAmount": 1454545455.0,
+    "confidence": "강력추천",
+    "bidMethod": "규격가격동시",
+    "keywords": [
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "score": 86,
+    "deadline": "2026-11-19T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01809556&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01811909",
+   "title": "2027년 생활안전용 CCTV 자가 정보통신망 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경기도 군포시",
+    "budgetAmount": 169376364.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 46,
+    "deadline": "2026-11-19T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01811909&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813409",
+   "title": "2027년 재난안전통신망 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "해양경찰청",
+    "budgetAmount": 574545455.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 34,
+    "deadline": "2026-11-19T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813409&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01804417",
+   "title": "2027년 김포시 정보통신인프라 통합 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경기도 김포시",
+    "budgetAmount": 418545455.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 39,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01804417&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01801576",
+   "title": "2027년 인천사이버진로교육원 홈페이지플랫폼 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "인천광역시교육청",
+    "budgetAmount": 388545455.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "소프트웨어유지및지원서비스"
+    ],
+    "score": 63,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01801576&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01805671",
+   "title": "2027년 재정경제부 유튜브 채널 운영 및 영상 콘텐츠 제작 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "재정경제부",
+    "budgetAmount": 545454545.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 50,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01805671&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01800722",
+   "title": "2027년 중소기업 통합플랫폼 운영 및 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "중소벤처기업진흥공단",
+    "budgetAmount": 2310709091.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "소프트웨어유지및지원서비스"
+    ],
+    "score": 48,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01800722&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01803401",
+   "title": "법원 보청기기 보조장비 구축사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "사단법인 한국장애인단체총연맹",
+    "budgetAmount": 677272727.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 45,
+    "deadline": "2026-11-23T11:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01803401&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01805445",
+   "title": "울산 라이징포트 신규영상 개발 및 연계 체험공간 구축 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "울산광역시",
+    "budgetAmount": 454545455.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 62,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01805445&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01806620",
+   "title": "필암서원 집성관 디지털 콘텐츠 보강 기획 및 제작설치(협상에의한계약)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "전남광주통합특별시 장성군",
+    "budgetAmount": 363636364.0,
+    "confidence": "강력추천",
+    "bidMethod": "협상",
+    "keywords": [
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "score": 74,
+    "deadline": "2026-11-24T17:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01806620&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01797179",
+   "title": "2027년 법제처 온라인 홍보 운영",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "법제처",
+    "budgetAmount": 244304545.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "동영상제작서비스"
+    ],
+    "score": 50,
+    "deadline": "2026-11-24T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01797179&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01759226",
+   "title": "2026년 전북특별자치도교육청 AI 기반  교육플랫폼 특화서비스 구축 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "전북특별자치도교육청",
+    "budgetAmount": 636363636.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 53,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01759226&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01806661",
+   "title": "2027년 군포시 교통신호시스템 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경기도 군포시",
+    "budgetAmount": 260410000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 40,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01806661&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01802991",
+   "title": "AI 서비스 플랫폼 구축",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "(재)제주테크노파크",
+    "budgetAmount": 2727218182.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "패키지소프트웨어개발및도입서비스"
+    ],
+    "score": 46,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01802991&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01800763",
+   "title": "용담1동 문화예술SOC 디지털 전시장비 구축 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "제주특별자치도 제주시",
+    "budgetAmount": 654000000.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "영상정보디스플레이장치"
+    ],
+    "score": 64,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01800763&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01811911",
+   "title": "2027년 정보통신시스템 통합 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "제주특별자치도",
+    "budgetAmount": 232586364.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 47,
+    "deadline": "2026-11-26T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01811911&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01797202",
+   "title": "지능형 무역투자 플랫폼 구축",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "대한무역투자진흥공사",
+    "budgetAmount": 18809090909.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 60,
+    "deadline": "2026-11-26T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01797202&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01808449",
+   "title": "거창군 농촌공간 재구조화 시행계획 수립 및 농촌협약 공모 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경상남도 거창군 농업기술센터",
+    "budgetAmount": 272727273.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 38,
+    "deadline": "2026-11-29T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01808449&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01805572",
+   "title": "학생의 실질적 AI 역량 강화를 위한 주권 AI 구축 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "부산대학교",
+    "budgetAmount": 794545455.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 44,
+    "deadline": "2026-11-30T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01805572&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01807542",
+   "title": "2027~2028년 정보통신시스템 통합 위탁운영 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "농촌진흥청",
+    "budgetAmount": 2274545455.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 42,
+    "deadline": "2026-12-07T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01807542&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01808965",
+   "title": "우편요금 신용카드 결제 및 현금영수증 서비스 관리 부가가치통신망[VAN] 사업자 선정",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "과학기술정보통신부 우정사업본부 우정정보관리원",
+    "budgetAmount": null,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 51,
+    "deadline": "2026-12-08T14:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01808965&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01806449",
+   "title": "전남광주통합특별시 대표 누리집 구축",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "전남광주통합특별시 광주청사",
+    "budgetAmount": 1029545455.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "score": 57,
+    "deadline": "2026-12-14T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01806449&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01810510",
+   "title": "옛길박물관 전시개편사업 전시 설계 및 전시물 제작 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "경상북도 문경시 문경새재관리사무소",
+    "budgetAmount": 2181818182.0,
+    "confidence": "강력추천",
+    "bidMethod": "규격가격동시",
+    "keywords": [
+     "박물관",
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "score": 78,
+    "deadline": "2026-12-15T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01810510&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01807887",
+   "title": "2027년 정보통신시스템 통합유지관리 용역(연간단가)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "서울특별시 서대문구",
+    "budgetAmount": 499947273.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 39,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01807887&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01813931",
+   "title": "김천시 도로대장 전산화 구축 용역(협상에 의한 계약)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경상북도 김천시",
+    "budgetAmount": 1363636364.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 51,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01813931&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01807381",
+   "title": "머무는 덕산으로 순환경제 만들기 조성사업(물품 제작·설치) 공고(협상에 의한 계약)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "충청남도 예산군",
+    "budgetAmount": 5363636364.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [],
+    "products": [
+     "LED경관조명기구",
+     "실물모형및전시물",
+     "조형물"
+    ],
+    "score": 66,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01807381&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01812769",
+   "title": "부안군 도로대장 전산화 구축 용역[협상에 의한 계약]",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "전북특별자치도 부안군",
+    "budgetAmount": 1458181818.0,
+    "confidence": "참고용",
+    "bidMethod": "협상",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "score": 53,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01812769&bidPbancOrd=000"
+   }
+  }
+ ]
+}

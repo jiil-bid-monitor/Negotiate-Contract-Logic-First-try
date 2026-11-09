@@ -18,7 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _TAG = re.compile(r"<(/?)((?:[\w.-]+:)?)(p|run|t|secPr)\b([^>]*?)(/?)>")
-_HEAD = re.compile(r"^[\[〔<【(（]\s*서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:[-–]\s*(\d+))?\s*[\]〕>】)）]")
+# 서식 머리: 특수기호 하나 + 서식 N(호)(-M) + 특수기호 하나 — 괄호 모양을 가리지 않음(11/04 사용자 요청)
+_HEAD = re.compile(r"^[^\w\s]\s*서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:[-–]\s*(\d+))?\s*[^\w\s]")
 
 
 @dataclass
@@ -91,7 +92,93 @@ def _sec_pr_para(xml: str, first: Para) -> str:
     return seg[:runs[0][0]] + kept + seg[runs[-1][1]:]
 
 
-def find_forms(sections: dict[str, str]) -> list[CutForm]:
+_INNER_P = re.compile(r"<(?:[\w.-]+:)?p\b[^>]*>(?:(?!<(?:[\w.-]+:)?p\b).)*?</(?:[\w.-]+:)?p>", re.S)
+_RUN = re.compile(r'<(?:[\w.-]+:)?run\b[^>]*?charPrIDRef="(\d+)"[^>]*>(.*?)</(?:[\w.-]+:)?run>', re.S)
+_NOT_TITLE = re.compile(r"\d{4}\s*년|년\s*월\s*일|절\s*취\s*선|^\s*(?:※|주\s*\)|붙\s*임|접\s*수\s*번\s*호)|(?:귀\s*하|귀\s*중)\s*$")
+
+
+def char_heights(zin: zipfile.ZipFile) -> dict[str, int]:
+    """header.xml 글자 모양 id → 글자 크기(height, 1/100pt)."""
+    try:
+        h = zin.read("Contents/header.xml").decode("utf-8")
+    except KeyError:
+        return {}
+    out = {}
+    for m in re.finditer(r"<(?:[\w.-]+:)?charPr\b([^>]*)>", h):
+        a = dict(re.findall(r'(\w+)="([^"]*)"', m.group(1)))
+        if a.get("id") and a.get("height", "").isdigit():
+            out[a["id"]] = int(a["height"])
+    return out
+
+
+def page_title(body_xml: str, heights: dict[str, int], source: str = "") -> str:
+    """서식 페이지 전체(표 안 포함)에서 가장 큰 글씨 = 제목(11/04 사용자 제안 — '다음 줄' 짐작은 날짜·공고명을 잡았음).
+    같은 크기로 바로 이어지는 문단(줄이 넘어간 제목)은 이어 붙임. 서식 머리·날짜('2026년 월 일')·절취선·안내(※·주))·
+    '○○ 귀하'·「공고명」은 빼고, 파일 이름에 있는 공고명 낱말도 뺌('정선군 … 제작설치 제안서' → '제안서').
+    제목이 본문보다 크지 않으면 ''(짐작하지 않음)."""
+    src = re.sub(r"[^가-힣A-Za-z0-9]", "", re.sub(r"\.[A-Za-z]+(?=\s|$)", "", source))
+    keyof = lambda t: re.sub(r"[^가-힣A-Za-z0-9]", "", t)
+    paras = []  # (글자 크기, 글, 제목 후보인지)
+    for m in _INNER_P.finditer(body_xml):
+        parts, h = [], 0
+        for cid, inner in _RUN.findall(m.group()):
+            t = _text(inner)
+            if t.strip():
+                parts.append(t)
+                h = max(h, heights.get(cid, 0))
+        text = re.sub(r"[「『][^」』]*[」』]", " ", " ".join(parts)).strip()
+        if not keyof(text):
+            continue
+        ok = not (_HEAD.match(_squash(text)) or _NOT_TITLE.search(text))
+        paras.append((h, text, ok))
+    if not paras:
+        return ""
+    sizes = [h for h, _, _ in paras]
+    common = min(set(sizes), key=lambda x: (-sizes.count(x), x))  # 본문 크기 = 가장 많이 쓴 크기(같으면 작은 쪽)
+    best = max((h for h, _, ok in paras if ok), default=0)
+    if best <= common:  # 제목이 따로 크지 않은 서식
+        return ""
+    i = next(k for k, (h, _, ok) in enumerate(paras) if ok and h == best)
+    lines = [paras[i][1]]
+    for h, t, ok in paras[i + 1:i + 4]:  # 줄이 넘어간 제목
+        if h != best or not ok:
+            break
+        lines.append(t)
+    words = " ".join(lines).split()
+    if len(src) >= 8:  # 파일 이름에 이어서 나오는 낱말 묶음(공고명)은 뺌
+        span = None
+        for a in range(len(words)):
+            for b in range(len(words), a, -1):
+                run = keyof("".join(words[a:b]))
+                if len(run) >= 8 and run in src:
+                    if span is None or b - a > span[1] - span[0]:
+                        span = (a, b)
+                    break
+        if span:
+            words = words[:span[0]] + words[span[1]:]
+    title = _norm_title(" ".join(words))
+    return title if 2 <= len(keyof(title)) <= 40 else ""
+
+
+def page_titles(path: Path, source: str = "") -> dict[int, str]:
+    """HWPX 공고 문서의 서식마다 페이지 제목(가장 큰 글씨) — 서식 번호 → 제목. 하위 서식(4-1)·제목을 못 고른 서식은 뺌."""
+    zin = zipfile.ZipFile(path)
+    heights = char_heights(zin)
+    if not heights:
+        return {}
+    sections = {n: zin.read(n).decode("utf-8") for n in zin.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n)}
+    out = {}
+    for f in find_forms(sections):
+        if "-" in f.no:
+            continue
+        xml = sections[f.section]
+        t = page_title(xml[f.paras[0].start:f.paras[-1].end], heights, source)
+        if t:
+            out[int(f.no)] = t
+    return out
+
+
+def find_forms(sections: dict[str, str], heights: dict[str, int] | None = None, source: str = "") -> list[CutForm]:
     found: dict[str, CutForm] = {}
     order: list[str] = []
     for name, xml in sections.items():
@@ -102,13 +189,13 @@ def find_forms(sections: dict[str, str]) -> list[CutForm]:
             m = _HEAD.match(sq)
             if not m:
                 continue
-            if len(re.findall(r"[\[〔<【]서식\d+", sq)) >= 2:  # 서식 목차 표 — 본문 아님
+            if len(re.findall(r"[^\w\s]서식\d+", sq)) >= 2:  # 서식 목차 표 — 본문 아님
                 continue
             heads.append((idx, m.group(1) + (f"-{m.group(2)}" if m.group(2) else "")))
         for k, (idx, no) in enumerate(heads):
             end = heads[k + 1][0] if k + 1 < len(heads) else len(paras)
             body = paras[idx:end]
-            title = _guess_title(body)
+            title = (page_title(xml[body[0].start:body[-1].end], heights, source) if heights else "") or _guess_title(body)
             if no not in found:
                 order.append(no)
             found[no] = CutForm(no, title, name, body)  # 같은 번호는 뒤(본문) 것으로
@@ -127,11 +214,11 @@ def _norm_title(line: str) -> str:
 
 def _guess_title(body: list[Para]) -> str:
     """제목 문단의 '[서식 N]' 뒤 글, 없으면 다음 줄들 중 처음 2글자 넘는 줄."""
-    rest = re.sub(r"^\s*[\[〔<【(（]\s*서식\s*[\d\s\-–]+[\]〕>】)）]", "", body[0].text)
+    rest = re.sub(r"^\s*[^\w\s]\s*서식\s*(?:제\s*)?[\d\s\-–호]+[^\w\s]", "", body[0].text)  # '〔서식 1호〕'도(11/04 당진)
     lines = [ln for p in [rest] + [p.text for p in body[1:4]] for ln in p.splitlines()]
     for ln in lines:
         t = _norm_title(ln)
-        if len(_squash(t)) >= 2 and not re.match(r"^(접수번호|공고번호|구\s*분)", t):
+        if len(_squash(t)) >= 2 and not re.match(r"^(접수번호|공고번호|구\s*분)", t) and not re.fullmatch(r"<[^>]*>", t):
             return t
     return ""
 
@@ -151,39 +238,75 @@ def cut(path: Path, out_dir: Path, names: dict[str, str] | None = None) -> list[
     sec_names = sorted((n for n in entries if re.fullmatch(r"Contents/section\d+\.xml", n)),
                        key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[1]).group()))
     sections = {n: zin.read(n).decode("utf-8") for n in sec_names}
-    forms = find_forms(sections)
+    forms = find_forms(sections, char_heights(zin), path.name)
     out_dir.mkdir(parents=True, exist_ok=True)
-    hpf = zin.read("Contents/content.hpf").decode("utf-8") if "Contents/content.hpf" in entries else None
     for f in forms:
         xml = sections[f.section]
         all_paras = _top_paragraphs(xml)
         head = xml[:all_paras[0].start]
         tail = xml[all_paras[-1].end:]
         body = "".join(xml[p.start:p.end] for p in f.paras)
+        body = re.sub(r'^(<(?:[\w.-]+:)?p\b[^>]*?)\bpageBreak="1"', r'\1pageBreak="0"', body, count=1)  # 빈 첫 쪽 방지
         first = all_paras[0]
         prefix = "" if f.paras[0].start == first.start else _sec_pr_para(xml, first)
         new_xml = head + prefix + body + tail
-        if names and names.get(f.no) and "-" not in f.no:
+        if names and names.get(f.no):  # 하위 서식('4-1')은 이름에 그 번호가 따로 있을 때만(PDF 서식 다시 만들기가 줌)
             f.title = names[f.no]
         f.file = f"서식{f.no.replace('-', '_')}_{_safe(f.title)}.hwpx"
         target = out_dir / f.file
-        with zipfile.ZipFile(target, "w") as zout:
-            for info in zin.infolist():
-                n = info.filename
-                if n in sections and n != f.section:
-                    continue  # 다른 구역은 뺌
-                if n == f.section:
-                    data = new_xml.encode("utf-8")
-                elif n == "Contents/content.hpf" and hpf is not None:
-                    data = _drop_sections(hpf, [s for s in sec_names if s != f.section]).encode("utf-8")
-                elif n == "Preview/PrvText.txt":
-                    data = _text(body)[:1000].encode("utf-8")  # 미리보기 글(원본도 UTF-8)
-                else:
-                    data = zin.read(n)
-                # mimetype은 압축하지 않고 맨 앞(원본 순서 유지)
-                ctype = zipfile.ZIP_STORED if n == "mimetype" else zipfile.ZIP_DEFLATED
-                zout.writestr(zipfile.ZipInfo(n, date_time=info.date_time), data, compress_type=ctype)
+        # 다른 구역은 뺌 — 남는 구역은 section0으로(목록·구역 수도 맞춤)
+        _write_package(zin, target, {f.section: new_xml}, {"Preview/PrvText.txt": _text(body)[:1000].encode("utf-8")})
     return forms
+
+
+def section_names(names) -> list[str]:
+    return sorted((n for n in names if re.fullmatch(r"Contents/section\d+\.xml", n)),
+                  key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[1]).group()))
+
+
+_SEC_REF = re.compile(r"Contents/section\d+\.xml")
+
+
+def _write_package(zin: zipfile.ZipFile, out: Path, sections_out: dict[str, str], replace: dict[str, bytes] | None = None) -> None:
+    """원본 HWPX(zin)를 바탕으로 out을 씀. sections_out = 남길 구역(원본 이름 → 새 XML), replace = 바꿔 쓸 다른 파일.
+    뺀 구역은 content.hpf(manifest·spine)·META-INF/container.rdf에서도 지우고 머리 정보 구역 수(secCnt)를 맞추며,
+    남는 구역은 section0부터 차례로 다시 이름 붙임(11/05 제보: 구역이 둘인 제안요청서로 만든 통합서식이 '파일이 손상되었습니다' —
+    content.hpf에서만 지우고 container.rdf·secCnt는 그대로였음)."""
+    replace = replace or {}
+    all_secs = section_names(zin.namelist())
+    kept = [n for n in all_secs if n in sections_out]
+    dropped = [n for n in all_secs if n not in sections_out]
+    rename = {old: f"Contents/section{i}.xml" for i, old in enumerate(kept)}
+    renamed = lambda text: _SEC_REF.sub(lambda m: rename.get(m.group(0), m.group(0)), text)
+    with zipfile.ZipFile(out, "w") as zout:
+        for info in zin.infolist():
+            n = name = info.filename
+            if n in dropped:
+                continue
+            if n in sections_out:
+                name, data = rename[n], sections_out[n].encode("utf-8")
+            else:
+                data = replace[n] if n in replace else zin.read(n)
+                if n == "Contents/content.hpf":
+                    text = _drop_sections(data.decode("utf-8"), dropped)
+                    ids = {}  # 남는 구역 항목 이름(id)도 새 번호로 — spine의 idref와 함께
+                    for old, new in rename.items():
+                        m = re.search(rf'<(?:[\w.-]+:)?item\b[^>]*href="{re.escape(old)}"[^>]*/>', text)
+                        got = re.search(r'\bid="([^"]+)"', m.group()) if m else None
+                        if got:
+                            ids[got.group(1)] = new.rsplit("/", 1)[1].rsplit(".", 1)[0]
+                    text = re.sub(r'\b(id|idref)="([^"]+)"', lambda m: f'{m.group(1)}="{ids.get(m.group(2), m.group(2))}"', text)
+                    data = renamed(text).encode("utf-8")
+                elif n == "META-INF/container.rdf":
+                    text = data.decode("utf-8")
+                    for d in dropped:  # 뺀 구역을 가리키는 Description 묶음을 지움
+                        text = re.sub(rf'<((?:[\w.-]+:)?Description)\b(?:(?!</\1>).)*?"{re.escape(d)}"(?:(?!</\1>).)*?</\1>', "", text, flags=re.S)
+                    data = renamed(text).encode("utf-8")
+                elif n == "Contents/header.xml":
+                    data = re.sub(rb'(\bsecCnt=")\d+"', lambda m: m.group(1) + str(len(kept)).encode() + b'"', data, count=1)
+            # mimetype은 압축하지 않고 맨 앞(원본 순서 유지)
+            ctype = zipfile.ZIP_STORED if n == "mimetype" else zipfile.ZIP_DEFLATED
+            zout.writestr(zipfile.ZipInfo(name, date_time=info.date_time), data, compress_type=ctype)
 
 
 def _drop_sections(hpf: str, drop: list[str]) -> str:
@@ -198,11 +321,35 @@ def _drop_sections(hpf: str, drop: list[str]) -> str:
     return hpf
 
 
-def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
+_PLAIN_TAGS = re.compile(r"</?(?:[\w.-]+:)?(?:p|run|t|linesegarray|lineseg)\b[^>]*>")
+
+
+def _blank_para(seg: str) -> bool:
+    """글도 표·그림·조판 부호도 없는 빈 문단(글자 모양·줄 배치 태그만)."""
+    return not _text(seg).strip() and not _PLAIN_TAGS.sub("", seg).strip()
+
+
+def _drop_blank_tail(body: str) -> str:
+    """서식 끝과 '새 쪽' 문단 바로 앞의 빈 문단을 지움(11/05 사용자 제보: 통합서식에 빈 쪽) — 서식 5 끝 빈 문단이 쪽을 넘어가
+    혼자 한 쪽을 차지하고, 다음 서식은 다시 새 쪽에서 시작했음. 맨 앞 문단은 남김."""
+    paras = _top_paragraphs(body)
+    drop = set()
+    for i in range(len(paras) - 1, 0, -1):
+        seg = body[paras[i].start:paras[i].end]
+        nxt = body[paras[i + 1].start:paras[i + 1].end] if i + 1 < len(paras) else None
+        ends_page = nxt is None or i + 1 in drop or re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bpageBreak="1"', nxt)
+        if ends_page and _blank_para(seg) and not re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bpageBreak="1"', seg):
+            drop.add(i)
+    for i in sorted(drop, reverse=True):
+        body = body[:paras[i].start] + body[paras[i].end:]
+    return body
+
+
+def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path, fit_pages: bool = True) -> Path:
     """잘라 낸(채웠거나 양식 그대로인) 서식 파일들을 서식 순서대로 다시 한 HWPX로 — 담당자가 한글 파일 하나에서 직접 기입(11/03 사용자 요청).
 
     parts: (cut()이 돌려준 서식, 그 서식의 최종 파일). 원본(path)의 머리·쪽 설정·글꼴을 그대로 쓰고, 서식 본문만 각 파일에서 가져온다.
-    서식마다 새 쪽에서 시작. 서식이 없는 구역은 뺌."""
+    서식마다 새 쪽에서 시작(fit_pages면 조금 넘쳐 쪽이 낭비되는 서식만 맞춤 — `pagefit`). 서식이 없는 구역은 뺌."""
     path, out = Path(path), Path(out)
     zin = zipfile.ZipFile(path)
     entries = zin.namelist()
@@ -210,11 +357,33 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
                        key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[1]).group()))
     sections = {n: zin.read(n).decode("utf-8") for n in sec_names}
     bodies: dict[str, list[tuple[CutForm, str]]] = {}
+    header = zin.read("Contents/header.xml").decode("utf-8") if "Contents/header.xml" in entries else ""
+    # 채울 때 더한 글자 모양(charPr)·문단 모양(paraPr, 가운데 정렬 사본) — 원본 머리에 없는 id는 새 번호로 옮겨 더함
+    kinds = {}
+    for tag, ref, group in (("charPr", "charPrIDRef", "charProperties"), ("paraPr", "paraPrIDRef", "paraProperties")):
+        rx = re.compile(rf'<(?:[\w.-]+:)?{tag}\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?{tag}>', re.S)
+        known_ids = {m.group(1) for m in rx.finditer(header)}
+        kinds[tag] = {"rx": rx, "ref": ref, "group": group, "known": known_ids,
+                      "next": max([int(x) for x in known_ids] or [0]) + 1, "extra": []}
     for f, file in parts:
-        xml = zipfile.ZipFile(file).read(f.section).decode("utf-8")
+        pz = zipfile.ZipFile(file)
+        part_secs = section_names(pz.namelist())  # 잘라 낸 서식 파일엔 구역이 하나(section0으로 다시 이름 붙임)
+        xml = pz.read(f.section if f.section in part_secs else part_secs[0]).decode("utf-8")
+        # 채울 때 칸에 맞춰 줄인 글자 모양(원본 머리에 없는 id) — 새 번호로 옮겨 통합 머리에 더함(서식마다 같은 번호를 따로 썼을 수 있어서)
+        if header and "Contents/header.xml" in pz.namelist():
+            part_header = pz.read("Contents/header.xml").decode("utf-8")
+            for k in kinds.values():
+                remap = {}
+                for m in k["rx"].finditer(part_header):
+                    if m.group(1) not in k["known"] and f'{k["ref"]}="{m.group(1)}"' in xml:
+                        remap[m.group(1)] = str(k["next"])
+                        k["extra"].append(re.sub(r'\bid="\d+"', f'id="{k["next"]}"', m.group(0), count=1))
+                        k["next"] += 1
+                if remap:
+                    xml = re.sub(rf'{k["ref"]}="(\d+)"', lambda m, r=remap, a=k["ref"]: f'{a}="{r.get(m.group(1), m.group(1))}"', xml)
         paras = _top_paragraphs(xml)
         body_paras = paras[-len(f.paras):]  # 채우기는 문단 안만 바꾸므로 문단 수는 그대로 — 앞의 쪽 설정 문단은 뺌
-        body = xml[body_paras[0].start:body_paras[-1].end]
+        body = _drop_blank_tail(xml[body_paras[0].start:body_paras[-1].end])
         bodies.setdefault(f.section, []).append((f, body))
     kept = [s for s in sec_names if s in bodies]
     if not kept:
@@ -229,26 +398,27 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path) -> Path:
         for i, (f, body) in enumerate(bodies[sec]):
             if i or sec != kept[0]:
                 body = re.sub(r'^(<(?:[\w.-]+:)?p\b[^>]*?)\bpageBreak="0"', r'\1pageBreak="1"', body, count=1)
+            else:  # 맨 앞 서식은 쪽 나눔 없이 — 쪽 설정 문단 뒤 '새 쪽'이면 첫 장이 빈 쪽이 됐음(11/04 필암서원)
+                body = re.sub(r'^(<(?:[\w.-]+:)?p\b[^>]*?)\bpageBreak="1"', r'\1pageBreak="0"', body, count=1)
             chunks.append(body)
             preview.append(_text(body))
         starts_at_first = bodies[sec][0][0].paras[0].start == first.start
         prefix = "" if starts_at_first else _sec_pr_para(xml, first)
         new_sections[sec] = xml[:first.start] + prefix + "".join(chunks) + xml[all_paras[-1].end:]
-    hpf = zin.read("Contents/content.hpf").decode("utf-8") if "Contents/content.hpf" in entries else None
+
     out.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(out, "w") as zout:
-        for info in zin.infolist():
-            n = info.filename
-            if n in sections and n not in new_sections:
+    replace = {"Preview/PrvText.txt": " ".join(preview)[:1000].encode("utf-8")}
+    if header and any(k["extra"] for k in kinds.values()):
+        h = header
+        for k in kinds.values():
+            if not k["extra"]:
                 continue
-            if n in new_sections:
-                data = new_sections[n].encode("utf-8")
-            elif n == "Contents/content.hpf" and hpf is not None:
-                data = _drop_sections(hpf, [s for s in sec_names if s not in new_sections]).encode("utf-8")
-            elif n == "Preview/PrvText.txt":
-                data = " ".join(preview)[:1000].encode("utf-8")
-            else:
-                data = zin.read(n)
-            ctype = zipfile.ZIP_STORED if n == "mimetype" else zipfile.ZIP_DEFLATED
-            zout.writestr(zipfile.ZipInfo(n, date_time=info.date_time), data, compress_type=ctype)
+            h = re.sub(rf"(</(?:[\w.-]+:)?{k['group']}>)", lambda m, e=k["extra"]: "".join(e) + m.group(1), h, count=1)
+            h = re.sub(rf'(<(?:[\w.-]+:)?{k["group"]}\b[^>]*\bitemCnt=")(\d+)"',
+                       lambda m, e=k["extra"]: f'{m.group(1)}{int(m.group(2)) + len(e)}"', h, count=1)
+        replace["Contents/header.xml"] = h.encode("utf-8")
+    _write_package(zin, out, new_sections, replace)
+    if fit_pages:  # 1~2줄·제목만 남아 쪽 하나가 낭비되는 서식만 손봄(11/06 사용자 요청, `pagefit`)
+        from .pagefit import fit
+        fit(out)
     return out

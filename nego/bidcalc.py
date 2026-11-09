@@ -297,8 +297,8 @@ def _notice_day(notice: dict) -> str | None:
     return None
 
 
-def _licenses(client: DataGoKrClient, notice: dict, notice_no: str, notice_ord: str) -> list[str]:
-    """면허제한 업종 이름(21라인 '업종제한' 칸) — 실패하면 빈 목록.
+def license_rows(client: DataGoKrClient, notice: dict, notice_no: str, notice_ord: str) -> list[dict]:
+    """면허제한 응답 행(이 공고만) — 실패하면 빈 목록.
 
     이 오퍼레이션은 공고번호 조회(inqryDiv=2)를 받지 않는다(2026-10-15 실측: resultCode=08 필수값 입력 에러).
     수집과 같이 inqryDiv=1 + 등록일 하루치로 받고 공고번호로 거른다."""
@@ -314,6 +314,15 @@ def _licenses(client: DataGoKrClient, notice: dict, notice_no: str, notice_ord: 
     rows = [r for r in rows if str(r.get("bidNtceNo") or "").strip() == notice_no]
     if notice_ord:
         rows = [r for r in rows if str(r.get("bidNtceOrd") or "") in ("", notice_ord)] or rows
+    return rows
+
+
+def _licenses(client: DataGoKrClient, notice: dict, notice_no: str, notice_ord: str) -> list[str]:
+    """면허제한 업종 이름(21라인 '업종제한' 칸) — 실패하면 빈 목록."""
+    return license_names(license_rows(client, notice, notice_no, notice_ord))
+
+
+def license_names(rows: list[dict]) -> list[str]:
     names: list[str] = []
     for r in rows:
         name = str(r.get("lcnsLmtNm") or "").split("/")[0].strip()

@@ -61,7 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     im.add_argument("--direct", help="직접생산확인증명서 폴더 또는 zip")
     im.add_argument("--registration", help="경쟁입찰참가자격등록증 PDF(나라장터 출력본)")
     vt = sub.add_parser("vault", help="지일 회사 자료 잠금 묶음(vault/company.enc) 만들기·확인")
-    vt.add_argument("action", choices=["seal", "list"], help="seal: 폴더를 잠가 묶음 만들기, list: 묶음 안 파일 목록")
+    vt.add_argument("action", choices=["seal", "list", "check"],
+                    help="seal: 폴더를 잠가 묶음 만들기, list: 묶음 안 파일 목록, check: 서식에 넣을 회사정보를 어디서 찾는지 점검")
     vt.add_argument("--src", help="seal할 회사자료 폴더(회사자료_양식.xlsx + files/)")
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
@@ -128,6 +129,22 @@ def main(argv: list[str] | None = None) -> int:
                 out = vault.seal_folder(Path(args.src), pw)
                 vault.load(pw, out)  # 바로 열어 봄
                 print(f"잠금 묶음을 만들었습니다: {out} — 이 파일만 커밋하세요(원본 폴더는 커밋하지 않음)")
+            elif args.action == "check":
+                from .importer import enrich_vault
+                v = vault.load(pw)
+                sheet = dict(v.info)
+                rows: list = []
+                notes = enrich_vault(v, rows)
+                print("묶음 안 PDF — 읽은 방법 · 알아본 서류 종류")
+                for name, how, kinds in rows:
+                    print(f"  {name} — {how} · {kinds or '-'}")
+                print("서식에 넣는 회사정보 — 값 (출처)")
+                for k in ("회사명", "대표자", "주소", "법인등록번호", "사업자등록번호", "전화번호", "팩스번호", "대표자 주민등록번호"):
+                    val = v.info.get(k, "")
+                    src = "회사정보 시트" if sheet.get(k) else ("서류 PDF" if val else "")
+                    print(f"  {k}: {val or '(없음)'}" + (f"  ({src})" if src else ""))
+                for n in notes:
+                    print("※ " + n)
             else:
                 v = vault.load(pw)
                 print(f"파일 {len(v.files)}개 · 회사정보 {len(v.info)}항목 · 연혁 {len(v.history)} · 서류 {len(v.docs)} · 실적 {len(v.tracks)}")

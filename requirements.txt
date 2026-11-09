@@ -9,3 +9,6 @@ scikit-learn>=1.5
 openpyxl>=3.1
 reportlab>=4
 Pillow>=10
+pytesseract>=0.3
+pypdfium2>=4.30
+python-hwpx>=6.11

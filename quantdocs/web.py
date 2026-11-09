@@ -38,7 +38,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import vault as vault_mod
-from .build import analyze, build, summary
+from .build import analyze, build, main_docs, summary
 from .g2b import NoticeFiles, fetch_notice
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -66,6 +66,25 @@ def _cleanup() -> None:
             if d.is_dir() and now - d.stat().st_mtime > KEEP_SEC:
                 shutil.rmtree(d, ignore_errors=True)
                 _jobs.pop(d.name, None)
+
+
+def _code_stamp() -> str:
+    """quantdocs 폴더 .py 파일들의 마지막 고친 시각 — 켤 때와 지금이 다르면 예전 코드로 실행 중(11/05: 서버에서 고친 내용이 안 보임)."""
+    try:
+        return max(f"{p.stat().st_mtime:.0f}" for p in (ROOT / "quantdocs").glob("*.py"))
+    except (OSError, ValueError):
+        return ""
+
+
+_STARTED_STAMP = _code_stamp()
+
+
+def _stale_note() -> str:
+    now = _code_stamp()
+    if _STARTED_STAMP and now and now != _STARTED_STAMP:
+        return ("⚠ 프로그램 코드가 바뀌었는데(git pull) 웹앱을 다시 켜지 않아 예전 코드로 실행 중 — 웹앱을 껐다 켠 뒤 F5 → 다시 불러오기. "
+                "켠 이후 고친 내용(서식 찾기·채우기 등)이 이번 결과엔 없음")
+    return ""
 
 
 def _git_pull() -> str:
@@ -143,20 +162,43 @@ def _run_analyze(job: dict) -> None:
             raise RuntimeError("공고를 찾지 못했습니다 — 공고번호를 확인하세요")
         job["notice"] = {"no": nf.no, "ord": nf.ord, "title": nf.title, "institution": nf.institution,
                          "work": nf.work_type, "award": nf.award_method, "contract": nf.contract_method,
-                         "posted": nf.posted, "licenses": nf.licenses, "files": [p.name for p in nf.files],
+                         "posted": nf.posted, "licenses": nf.licenses, "license_groups": nf.license_groups, "files": [p.name for p in nf.files], "budget": nf.budget,
                          "skipped": nf.skipped, "negotiation": nf.negotiation}
         if not nf.files:
             raise RuntimeError("첨부 파일을 받지 못했습니다" + (f" — {nf.skipped[0]}" if nf.skipped else ""))
+        nf.files, dropped = main_docs(nf.files)  # 공고문·제안요청서만 읽음(11/05 사용자 요청)
+        job["notice"]["files"] = [p.name for p in nf.files]
         job["files"] = [str(p) for p in nf.files]
         # 실적 기간 기준일 = 공고 게시일(11/03 사용자 요청 — 입력칸 대신 자동). 못 읽으면 오늘
         job["date"] = posted_date(nf.posted)
         job["notice"]["ref_date"] = f"{job['date'] or date.today():%Y-%m-%d}"
         job["notice"]["ref_from"] = "공고 게시일" if job["date"] else "오늘(게시일을 못 읽음)"
         job["step"] = "서식·자격·실적 요건 읽는 중"
-        a = analyze(nf.files, v, job.get("date"), JOBS / job["id"] / "work", nf.award_method, nf.contract_method)
+        a = analyze(nf.files, v, job.get("date"), JOBS / job["id"] / "work", nf.award_method, nf.contract_method, nf.licenses,
+                     nf.license_groups)
         s = summary(a)
+        if not s["forms"] and dropped:
+            # 공고문·제안요청서에 서식이 없으면 나머지 첨부까지 읽어 서식을 찾음(11/05 사용자: 공고마다 서식이 다른 곳에 있음)
+            job["step"] = "공고문·제안요청서에 서식이 없어 나머지 첨부에서 찾는 중"
+            everything = nf.files + dropped
+            a2 = analyze(everything, v, job.get("date"), JOBS / job["id"] / "work2", nf.award_method, nf.contract_method, nf.licenses,
+                         nf.license_groups)
+            s2 = summary(a2)
+            if s2["forms"]:
+                a, s = a2, s2
+                found_in = sorted({f.source for f in a2.sheet.forms if f.source})
+                s["notes"].append("공고문·제안요청서에 서식이 없어 나머지 첨부에서 서식을 찾음: " + ", ".join(found_in[:5]))
+                nf.files, dropped = everything, []
+                job["notice"]["files"] = [p.name for p in nf.files]
+                job["files"] = [str(p) for p in nf.files]
         if note:
             s["notes"].insert(0, note)
+        stale = _stale_note()
+        if stale:
+            s["notes"].insert(0, stale)
+        if not s["forms"]:
+            s["notes"].append("⚠ 첨부 어디에서도 서식을 찾지 못함 — 서식이 PDF 그림(스캔)이거나 '[서식 N]' 같은 표시가 없을 수 있음, 공고번호를 알려 주면 확인")
+        # '첨부 중 공고문·제안요청서·서식만 읽음 — 안 읽은 파일' 안내는 화면에서 뺌(11/06 사용자 요청 — 일상 안내)
         if vault_err:
             s["notes"].insert(0, f"회사 자료 없음 — 지일 보유 여부·정량평가서 만들기는 안 됨 ({vault_err})")
         job["summary"] = s
@@ -170,6 +212,15 @@ def _run_analyze(job: dict) -> None:
         job["step"] = ""
 
 
+def _g2b_no(n: dict, fallback: str) -> str:
+    """서식 공고번호 칸에 넣을 나라장터 입찰공고번호 — 차수까지('R26BK01806620-000', 나라장터 화면 표기)."""
+    no = str(n.get("no") or fallback or "").strip()
+    ord_ = str(n.get("ord") or "").strip()
+    if no and "-" not in no and ord_:
+        no = f"{no}-{ord_.zfill(3)}"
+    return no
+
+
 def _run_build(job: dict) -> None:
     with _build_lock:
         try:
@@ -178,7 +229,8 @@ def _run_build(job: dict) -> None:
             out = JOBS / job["id"] / "out" / f"정량평가서_{job['no']}.zip"
             n = job.get("notice", {})
             build([Path(f) for f in job["files"]], v, out, n.get("title", ""), job.get("date"),
-                  n.get("award", ""), n.get("contract", ""))
+                  n.get("award", ""), n.get("contract", ""), n.get("licenses") or [], _g2b_no(n, job["no"]),
+                  job.get("staff_pick"), n.get("license_groups") or [], job.get("patent_pick"), n.get("budget"))
             job["zip"] = str(out)
             job["state"] = "built"
         except Exception as err:
@@ -231,6 +283,10 @@ def api(method: str, sub: str, body: dict | None = None, base: str = "/api") -> 
             return _j({"error": "먼저 공고를 불러오세요"}, 400)
         if not job.get("vault_ok"):
             return _j({"error": "회사 자료 묶음이 없어 만들 수 없습니다 — 회사 자료를 먼저 넣으세요"}, 400)
+        pick = body.get("staff")  # 화면에서 고른 기술인력 이름(없으면 인력목록 전체)
+        job["staff_pick"] = [str(x) for x in pick][:500] if isinstance(pick, list) else None
+        ppick = body.get("patents")  # 화면에서 고른 특허(없으면 공고 인정 분야에 이름이 맞는 것)
+        job["patent_pick"] = [str(x) for x in ppick][:500] if isinstance(ppick, list) else None
         job.update(state="building", error=None, zip=None)
         threading.Thread(target=_run_build, args=(job,), daemon=True).start()
         return _j({"id": job["id"]})

@@ -123,7 +123,7 @@ jobs:
       - name: Python 설정
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: pip
 
       - name: 의존성 설치
@@ -131,7 +131,24 @@ jobs:
 
       # pytest로 돌린다 — 정량평가서 테스트(test_quant_*)가 pytest 형식이라 unittest로는 불러오지도 못한다(2026-11-05)
       - name: 테스트
-        run: python -m pytest -q tests
+        id: tests
+        run: |
+          set -o pipefail
+          python -m pytest -q tests 2>&1 | tee test.log
+
+      # 테스트에서 멈추면 아래 수집·개발자 알림·재시도가 모두 건너뛰어져 보고가 조용히 안 나간다(2026-11-06 사용자 결정 — 알림 추가).
+      # 코드 문제라 재시도해도 같으므로 재시도는 하지 않는다.
+      - name: 테스트 실패 알림 (개발자 방)
+        if: failure() && steps.tests.outcome == 'failure'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          ERRORS=$( (grep -E "^(FAILED|ERROR) |^E  +[A-Za-z]*Error" test.log 2>/dev/null || true) | tail -5 | cut -c1-300)
+          [ -z "$ERRORS" ] && ERRORS="(오류 줄 없음 — Actions 로그 확인)"
+          TEXT=$(printf '[개발자 알림] 테스트 실패 — 수집을 시작하지 않아 담당자 보고가 나가지 않았습니다 (자동 재시도 없음).\n\n오류:\n%s\n\n로그: %s' "$ERRORS" "$RUN_URL")
+          python -m nego.telegram dev-alert "$TEXT"
 
       # 스케줄 실행에는 입력값이 없으므로 여기서 실행 모드를 정한다. 수동 실행은
       # 입력값을 그대로 쓴다. 아래 수집·재시도 단계는 모두 이 출력값만 본다.

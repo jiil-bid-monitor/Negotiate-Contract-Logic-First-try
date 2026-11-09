@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from nego.qualify import JointSupply, QualificationResult  # noqa: E402
 from nego.region import RegionCheck  # noqa: E402
 from nego.screen import Schedule  # noqa: E402
-from under100m.__main__ import alert_text, business_amount, collect, doc_label, folder_name, is_target, run_once  # noqa: E402
+from under100m.__main__ import alert_text, business_amount, collect, doc_label, folder_name, is_target, over_by_api, run_once  # noqa: E402
 from under100m.form_fill import fill_form  # noqa: E402
 from under100m.form_split import split_forms, tidy  # noqa: E402
 
@@ -42,10 +42,15 @@ def candidate(text="", **kw):
 
 
 class TargetTest(unittest.TestCase):
-    def test_title_words_ignore_spaces(self):
-        self.assertTrue(is_target(candidate(title="역사 전시 관 조성")))
+    def test_title_does_not_matter(self):
         self.assertTrue(is_target(candidate(title="체험관 리모델링")))
-        self.assertFalse(is_target(candidate(title="도서관 냉난방 교체")))
+        self.assertTrue(is_target(candidate(title="도서관 냉난방 교체")))
+
+    def test_over_by_api_uses_business_amount(self):
+        self.assertTrue(over_by_api(notice(assigned=100_000_000)))
+        self.assertTrue(over_by_api(notice(estimated=94_000_000)))  # 부가세 포함 1.034억
+        self.assertFalse(over_by_api(notice(assigned=99_000_000, estimated=90_000_000)))
+        self.assertFalse(over_by_api(notice()))  # 금액 모름 — 첨부에서 찾음
 
     def test_only_candidates_and_main_notices(self):
         c = candidate()
@@ -57,7 +62,7 @@ class TargetTest(unittest.TestCase):
 
 
 class CollectTest(unittest.TestCase):
-    def test_bid_and_negotiated_are_requested(self):
+    def test_all_award_methods_are_requested(self):
         seen = {}
 
         def fake_run(config, now, categories, period):
@@ -66,7 +71,7 @@ class CollectTest(unittest.TestCase):
 
         with patch("nego.config.load_config", return_value=SimpleNamespace()), patch("nego.pipeline.run", fake_run):
             self.assertEqual(collect(NOW, 7, Path("out")), [])
-        self.assertEqual(seen["categories"], {"입찰"})
+        self.assertEqual(seen["categories"], {"협상", "규격가격동시입찰", "입찰"})
         self.assertEqual(seen["period"][0], datetime(2026, 10, 28, 10, 0))
 
     def test_alert_names_the_category(self):

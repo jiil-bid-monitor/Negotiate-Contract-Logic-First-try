@@ -10,6 +10,10 @@ ENV PYTHONUTF8=1 \
     PIP_NO_CACHE_DIR=1 \
     TZ=KST-9
 
+# 정량평가서: 스캔본 회사 서류(연혁·등록증·인감증명) 글자 인식 — Tesseract + 한국어 데이터(11/04)
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 

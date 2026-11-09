@@ -83,7 +83,7 @@ def split_pdf(src: Path, out: Path) -> list[str]:
         name = _UNSAFE.sub("_", f"{label}_{title}".strip("_ "))[:80].strip() + ".pdf"
         for page in writer.pages:
             page.compress_content_streams()  # 그대로 쓰면 압축이 풀려 원본 0.7MB가 쪽마다 13MB가 됐음(2026-11-09 5·6호선)
-        writer.compress_identical_objects(remove_identicals=True, remove_orphans=True)
+        writer.compress_identical_objects()  # 기본값이 겹친 것·안 쓰는 것 모두 지움
         with open(out / name, "wb") as handle:
             writer.write(handle)
         names.append(name)

@@ -512,6 +512,18 @@ class TestServer(unittest.TestCase):
         self.assertTrue(meta["static_version"])
         self.assertEqual(meta["static_version"], res["static_version"])
 
+    def test_bidlog_routes(self):
+        """투찰 계산기 '투찰내역'(2026-11-06): 기록·목록·고치기·지우기, 토큰 없으면 막힘."""
+        self.assertEqual(self.call("/api/bidlog")[1]["entries"], [])
+        status, data = self.call("/api/bidlog", {"noticeNo": "R26BK01810177", "title": "태백", "bid": 174582000})
+        self.assertEqual(status, 200)
+        entry_id = data["entry"]["id"]
+        self.assertEqual(len(self.call("/api/bidlog")[1]["entries"]), 1)
+        self.assertEqual(self.call("/api/bidlog/update", {"id": entry_id, "bid": "174,600,000"})[1]["entries"][0]["bid"], 174600000)
+        self.assertEqual(self.call("/api/bidlog", {"noticeNo": "", "bid": 1})[0], 400)
+        self.assertEqual(self.call("/api/bidlog", token="wrong")[0], 401)
+        self.assertEqual(self.call("/api/bidlog/delete", {"id": entry_id})[1]["entries"], [])
+
     def test_token_required_for_api_not_for_page(self):
         self.assertEqual(self.call("/api/meta", token="wrong")[0], 401)
         with urllib.request.urlopen(self.base + "/") as res:

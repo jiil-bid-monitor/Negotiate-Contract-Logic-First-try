@@ -295,6 +295,23 @@ class FormSampleRuleTest(unittest.TestCase):
         for value in ("가나회사", "02-000-0000", "02-000-0001"):
             self.assertIn(value, xml)
 
+    def test_colon_cell_and_click_here_guide(self):
+        """'주소 | : | 값' 세 칸 표는 쌍점 다음 칸에, 누름틀 안내 글 '업체명'엔 회사명(2026-11-09 광주지점 서약서)."""
+        cell = lambda col, t: (f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSz width="9000"/>'
+                               f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0">{f"<hp:t>{t}</hp:t>" if t else ""}</hp:run></hp:p></hp:tc>')
+        tbl = '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl><hp:tr>' + cell(0, "주소") + cell(1, ":") + cell(2, "") + '</hp:tr></hp:tbl></hp:run></hp:p>'
+        guide = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="5"><hp:ctrl><hp:fieldBegin id="1" type="CLICK_HERE" name="">'
+                 '<hp:parameters cnt="1" name=""><hp:stringParam name="Command">Clickhere:set:45:Direction:wstring:3:업체명 </hp:stringParam>'
+                 '</hp:parameters></hp:fieldBegin></hp:ctrl></hp:run><hp:run charPrIDRef="8"><hp:t>업체명</hp:t></hp:run>'
+                 '<hp:run charPrIDRef="5"><hp:ctrl><hp:fieldEnd beginIDRef="1"/></hp:ctrl><hp:t> 는 서약합니다.</hp:t></hp:run></hp:p>')
+        make_hwpx(self.dir / "g.hwpx", [tbl, guide])
+        fill_form(self.dir / "g.hwpx", self.dir / "g_out.hwpx", COMPANY)
+        xml = zipfile.ZipFile(self.dir / "g_out.hwpx").read("Contents/section0.xml").decode("utf-8")
+        self.assertIn("<hp:t>:</hp:t>", xml)  # 쌍점 칸은 그대로
+        self.assertIn(COMPANY["회사"]["addr"], xml)
+        self.assertNotIn("<hp:t>업체명</hp:t>", xml)
+        self.assertIn(COMPANY["회사"]["name"], xml)
+
     def test_toc_lines_and_bracket_name_heads(self):
         """앞쪽 서식 목록 줄은 버리고, '[서식 1. 이름] ※ 안내' 머리로 자름 — 목록 뒤 표지는 서식1에(2026-11-09 주진불빛공원)."""
         make_hwpx(self.dir / "toc.hwpx", [

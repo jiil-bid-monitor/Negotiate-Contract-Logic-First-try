@@ -283,6 +283,9 @@ def fill_tables(xml, log):
             if MODE['cert'] and r not in applicant_rows: continue
             if k == 'rrn' and r not in ceo_rows: continue
             nxt = at.get((r, c + cs))
+            # "주소 | : | 값"처럼 쌍점만 든 칸이 사이에 있으면 그 다음 칸이 값 칸(2026-11-09 광주지점 안전보건관리 준수 서약서)
+            if nxt and re.sub(r'\s+', '', text(nxt[5])) in (':', '：'):
+                nxt = at.get((r, c + cs + nxt[2]))
             # 오른쪽 칸이 아주 좁으면 값 칸이 아니라 상자 사이 간격(2026-10-28 유아숲 조직도 — 간격 칸에 ㈜지일이 들어갔음)
             nw = re.search(r'<hp:cellSz width="(\d+)"', nxt[5]) if nxt else None
             if nw and int(nw.group(1)) < 2500:
@@ -576,6 +579,18 @@ CERT = re.compile(r'실적\s*증명|증명원|실적\s*확인서')
 MODE = {'cert': False}
 
 
+def fill_guides(xml, log):
+    """누름틀(빨간 안내 글 "업체명")에 회사 값 — 안내 글이 회사 칸 이름일 때만, 글자 모양은 누름틀 앞 글자 것으로(2026-11-09 광주지점 서약서)."""
+    def one(m):
+        k = key_of(m.group(3))
+        if not k or MODE.get("staff"):
+            return m.group(0)
+        log.append(f"누름틀 {m.group(3)} → {JIIL[k]}")
+        return f'{m.group(1)}<hp:run charPrIDRef="{m.group(2)}"><hp:t>{html_escape(JIIL[k])}{MARK}</hp:t></hp:run>'
+    return re.sub(r'(<hp:run charPrIDRef="(\d+)"><hp:ctrl><hp:fieldBegin [^>]*type="CLICK_HERE"(?:(?!</hp:ctrl>).)*?</hp:ctrl></hp:run>)'
+                  r'<hp:run charPrIDRef="\d+"><hp:t>([^<]{1,20})</hp:t></hp:run>', one, xml, flags=re.S)
+
+
 def fill_form(src: Path, dst: Path, company: dict, bid_date: str | None = None, title: str | None = None,
               notice_no: str | None = None) -> list[str]:
     """서식 한 장을 채워 `dst`에. 넣은 칸 목록을 돌려준다(여러 회사·남이 발급하는 서식은 안 채움)."""
@@ -600,6 +615,7 @@ def fill_form(src: Path, dst: Path, company: dict, bid_date: str | None = None, 
                 if re.match(r"Contents/section\d+\.xml$", name):
                     x = datas[name].decode("utf-8")
                     x = fill_tables(x, log)
+                    x = fill_guides(x, log)
                     x = fix_title(x, log) if MODE["cert"] else fill_lines(x, log)  # 증명서는 서명 줄(증명기관) 안 채움
                     datas[name] = drop_layout(fix_tabs(align_blocks(x, log), log)).encode("utf-8")
             datas["Contents/header.xml"] = HEADER["xml"].encode("utf-8")  # 정렬을 바꾼 문단 모양이 더해진 header

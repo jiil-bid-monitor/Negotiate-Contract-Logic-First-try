@@ -2,6 +2,7 @@
 
 /notice 공고번호 — 최신 수집 결과에서 그 공고의 금액·마감·자격·싱크로율
 /deadline [N]   — N일(기본 3일) 안에 마감하는 후보 공고
+/today          — 가장 최근 텔레그램 보고(매일·주간)를 다시
 /help           — 명령어 목록
 
 `TELEGRAM_COMMANDS=1`인 곳에서만 켠다 — 봇 하나를 두 곳에서 받으면(getUpdates) 텔레그램이 409로 막으므로
@@ -28,6 +29,7 @@ log = logging.getLogger(__name__)
 
 COMMANDS = [("notice", "공고번호로 공고 요약 — /notice R26BK01234567"),
             ("deadline", "N일 안에 마감하는 공고 — /deadline 3"),
+            ("today", "가장 최근 보고 다시 받기"),
             ("help", "명령어 목록")]
 _NO = re.compile(r"[A-Z0-9]{10,14}", re.I)
 
@@ -107,7 +109,34 @@ def deadline_reply(run: dict | None, arg: str, now: datetime) -> str:
     return "\n".join(out)
 
 
-def reply(text: str, run: dict | None, now: datetime) -> str | None:
+def today_reply(reports: dict[str, dict], now: datetime) -> str:
+    """가장 최근 매일 보고(같은 날 주간 보고가 있으면 함께) — 보고 기록(nego/report_log.py) 그대로."""
+    if not reports:
+        return "아직 받은 보고 기록이 없습니다."
+    latest = max(e.get("date") or "" for e in reports.values())
+    out = []
+    for kind, label in (("daily", "매일"), ("weekly", "주간")):
+        entry = reports.get(kind)
+        if not entry or entry.get("date") != latest:
+            continue
+        notices = entry.get("notices") or []
+        out.append(f"<b>{label} 보고 ({html.escape(latest)}) — {len(notices)}건</b>")
+        for i, n in enumerate(notices[:40], 1):
+            meta = n.get("meta") or {}
+            title = html.escape(n.get("title") or "(공고명 없음)")
+            if meta.get("detailUrl"):
+                title = f'<a href="{html.escape(meta["detailUrl"], quote=True)}">{title}</a>'
+            score = meta.get("score")
+            out.append(f"{i}. {title}\n   {_short_money(meta.get('budgetAmount'))} · "
+                       f"{_days_text(_dday(meta.get('deadline'), now))}" + (f" · 싱크로율 {score}%" if score is not None else ""))
+        if len(notices) > 40:
+            out.append(f"… 외 {len(notices) - 40}건은 웹앱에서")
+        if not notices:
+            out.append("새 공고 없음")
+    return "\n".join(out)
+
+
+def reply(text: str, run: dict | None, now: datetime, reports: dict[str, dict] | None = None) -> str | None:
     """명령어 한 줄 → 답(명령어가 아니면 None). 단체방에선 '/notice@봇이름'으로 온다."""
     m = re.match(r"^/(\w+)(?:@\w+)?\s*(.*)$", (text or "").strip(), re.S)
     if not m:
@@ -117,6 +146,8 @@ def reply(text: str, run: dict | None, now: datetime) -> str | None:
         return notice_reply(run, arg, now)
     if cmd == "deadline":
         return deadline_reply(run, arg, now)
+    if cmd == "today":
+        return today_reply(reports or {}, now)
     if cmd in ("help", "start"):
         return "\n".join(f"/{name} — {desc}" for name, desc in COMMANDS)
     return None
@@ -124,21 +155,22 @@ def reply(text: str, run: dict | None, now: datetime) -> str | None:
 
 class TelegramBot:
     def __init__(self, token: str, chats: set[str], latest_run: Callable[[], dict | None],
-                 session: requests.Session | None = None):
+                 session: requests.Session | None = None, reports: Callable[[], dict] = dict):
         self.token = token
         self.chats = chats
         self.latest_run = latest_run
+        self.reports = reports
         self.session = session or requests.Session()
         self.offset = 0
 
     @classmethod
-    def from_env(cls, latest_run: Callable[[], dict | None]) -> "TelegramBot | None":
+    def from_env(cls, latest_run: Callable[[], dict | None], reports: Callable[[], dict] = dict) -> "TelegramBot | None":
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
         chats = {c.strip() for key in ("TELEGRAM_CHAT_ID", "TELEGRAM_DEV_CHAT_ID")
                  for c in os.environ.get(key, "").split(",") if c.strip()}
         if os.environ.get("TELEGRAM_COMMANDS", "").strip() != "1" or not token or not chats:
             return None
-        return cls(token, chats, latest_run)
+        return cls(token, chats, latest_run, reports=reports)
 
     def _api(self, method: str, http_timeout: float = 30, **body: Any) -> Any:
         res = self.session.post(f"{API_BASE}/bot{self.token}/{method}", json=body, timeout=http_timeout)
@@ -158,7 +190,7 @@ class TelegramBot:
             chat = str((msg.get("chat") or {}).get("id", ""))
             if chat not in self.chats:
                 continue
-            text = reply(msg.get("text") or "", self.latest_run(), datetime.now())
+            text = reply(msg.get("text") or "", self.latest_run(), datetime.now(), self.reports())
             if text:
                 self._api("sendMessage", chat_id=chat, text=text, parse_mode="HTML",
                           disable_web_page_preview=True, reply_to_message_id=msg.get("message_id"))

@@ -77,9 +77,13 @@ class TelegramBotTest(unittest.TestCase):
                 return r
 
         bot = tb.TelegramBot("T", {"-100"}, lambda: RUN, Session())
-        self.assertEqual(bot.poll_once(wait=0), 1)
+        self.assertEqual(bot.poll_once(wait=0), 2)
         self.assertEqual(bot.offset, 7)
         self.assertEqual(sent[0]["chat_id"], "-100")
+        self.assertIn("/today", sent[0]["text"])
+        self.assertEqual(sent[1]["chat_id"], "777")
+        self.assertIn("대화방 ID: <code>777</code>", sent[1]["text"])
+        self.assertNotIn("/today", sent[1]["text"])
 
 
 if __name__ == "__main__":

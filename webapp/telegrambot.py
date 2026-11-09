@@ -188,9 +188,10 @@ class TelegramBot:
             self.offset = max(self.offset, u["update_id"] + 1)
             msg = u.get("message") or {}
             chat = str((msg.get("chat") or {}).get("id", ""))
-            if chat not in self.chats:
-                continue
             text = reply(msg.get("text") or "", self.latest_run(), datetime.now(), self.reports())
+            if text and chat not in self.chats:
+                # 등록 안 된 방 — 공고 내용 대신 방 ID만 알려 준다(NAS .env TELEGRAM_CHAT_ID에 넣으면 답함)
+                text = f"이 대화방은 명령어가 꺼져 있습니다.\n대화방 ID: <code>{html.escape(chat)}</code> — 관리자에게 알려 주세요."
             if text:
                 self._api("sendMessage", chat_id=chat, text=text, parse_mode="HTML",
                           disable_web_page_preview=True, reply_to_message_id=msg.get("message_id"))

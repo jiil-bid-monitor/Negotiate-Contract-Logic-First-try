@@ -267,6 +267,23 @@ class FormSampleRuleTest(unittest.TestCase):
         self.assertNotIn("999,999", xml)
         self.assertEqual(len(filled), 4)
 
+    def test_toc_lines_and_bracket_name_heads(self):
+        """앞쪽 서식 목록 줄은 버리고, '[서식 1. 이름] ※ 안내' 머리로 자름 — 목록 뒤 표지는 서식1에(2026-11-09 주진불빛공원)."""
+        make_hwpx(self.dir / "toc.hwpx", [
+            para("본문"), para("&lt;서식 1&gt; 입찰 참가 신청서(표지 포함)"), para("&lt;서식 2&gt; 위임장"), para("&lt;서식 3&gt; 확약서"),
+            para("표지 내용"), para("[서식 1. 입찰 참가신청서]"), para("신청서 내용"),
+            para("[서식 2. 위임장] ※ 참여자 모두 작성"), para("위임장 내용"), para("[서식 3. 확약서]"), para("확약서 내용")])
+        out = self.dir / "toc_cut"
+        names, _ = split_forms(self.dir / "toc.hwpx", out, all_forms=True)
+        self.assertEqual(len(names), 3)
+        first = zipfile.ZipFile(out / sorted(names)[0]).read("Contents/section0.xml").decode("utf-8")
+        self.assertIn("표지 내용", first)
+        self.assertIn("신청서 내용", first)
+        self.assertNotIn("위임장 내용", first)
+        last = zipfile.ZipFile(out / sorted(names)[2]).read("Contents/section0.xml").decode("utf-8")
+        self.assertIn("확약서 내용", last)
+        self.assertNotIn("표지 내용", last)
+
     def test_forms_merged_into_one_file(self):
         """서식을 하나로 — 서식마다 구역 하나, 순서 그대로, 그림은 쓰는 것만(2026-11-09 사용자 요청)."""
         filled = []

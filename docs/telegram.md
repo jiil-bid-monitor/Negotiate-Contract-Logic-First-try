@@ -271,3 +271,19 @@ https://console.cron-job.org 가입 → **Create cronjob**. 두 개 모두 공�
   시험: `python -m nego.exclusion_apply 파일 --dry-run`(올리거나 병합하지 않음).
 - 코드: `nego/exclusion_report.py`(이 레포) + jiil 레포 `evaluation/exclusion_suggest.py`. 손으로 돌리기:
   `python -m nego.exclusion_report output/attachment_text --no-send` → `output/예외낱말_후보.html`.
+
+## 11. 명령어 — /notice · /deadline (2026-11-09, 사용자 결정)
+
+대화방에서 봇에게 물으면 NAS 웹앱이 최신 수집 결과로 답합니다(`webapp/telegrambot.py`).
+
+| 명령 | 답 |
+|---|---|
+| `/notice R26BK01234567` | 그 공고의 금액·마감(D-N)·자격·싱크로율, 제외된 공고면 제외 사유 |
+| `/deadline` (또는 `/deadline 7`) | 3일(또는 N일) 안에 마감하는 후보 공고 |
+| `/help` | 명령어 목록 |
+
+- **NAS `.env`에만** 세 줄: `TELEGRAM_COMMANDS=1`, `TELEGRAM_BOT_TOKEN=…`, `TELEGRAM_CHAT_ID=-1004487982383`
+  (개발자 방도 쓰려면 `TELEGRAM_DEV_CHAT_ID=…`). 넣은 뒤 `control/restart-webapp` 파일을 만들면 반영 — 컨테이너 다시 만들 필요 없음.
+- 서버 PC에는 `TELEGRAM_COMMANDS`를 넣지 말 것 — 봇 하나를 두 곳에서 받으면 텔레그램이 막습니다(409).
+- 위 대화방에서 온 명령만 답합니다(개인 대화·다른 방은 무시). 아침 보고는 그대로 GitHub Actions가 보냅니다.
+- 답은 NAS가 받은 **최신 수집 결과** 기준 — 서버 PC가 새로 수집해 보내기 전엔 그 전 결과로 답합니다.

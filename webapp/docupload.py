@@ -75,6 +75,12 @@ def _is_pdf(doc: dict) -> bool:
     return bool(doc) and (doc.get("file_name", "").lower().endswith(".pdf") or doc.get("mime_type") == "application/pdf")
 
 
+def _grid(options: list[str], prefix: str) -> list[list[dict]]:
+    """버튼 두 개씩 한 줄 — 25종도 한눈에."""
+    return [[{"text": k, "callback_data": f"{prefix}:{j}"} for j, k in list(enumerate(options))[i:i + 2]]
+            for i in range(0, len(options), 2)]
+
+
 class Uploader:
     def __init__(self, api: Callable[..., Any], download: Callable[[str], bytes], chats: set[str],
                  folder: Callable[[], Path] = docexpiry.docs_dir, today: Callable[[], date] = date.today):
@@ -108,6 +114,16 @@ class Uploader:
                             msg.get("message_id"), FORCE)
             self.pending[chat] = {"step": "file", "ask": ask, "asks": {ask}}
             return True
+        if re.match(r"^/remove(@\w+)?$", text):
+            opts = kinds(self.folder())
+            if not opts:
+                self._say(chat, "뺄 서류가 없습니다.", msg.get("message_id"))
+                return True
+            self.pending[chat] = {"step": "remove", "ask": None, "asks": set(), "kinds": opts, "user_msg": msg.get("message_id")}
+            self.pending[chat]["ask"] = self._say(
+                chat, "목록에서 뺄 서류를 고르세요. (파일은 지우지 않고 [이전 서류]로 옮깁니다)", msg.get("message_id"),
+                {"inline_keyboard": _grid(opts, "r") + [[{"text": "취소", "callback_data": "r:x"}]]})
+            return True
         doc = msg.get("document") or {}
         if not state or replied not in state["asks"]:
             return False
@@ -121,6 +137,15 @@ class Uploader:
                 return True
             state.update(doc=doc, user_msg=msg.get("message_id"))
             self._ask_kind(chat, state)
+            return True
+        if state["step"] == "newname":
+            name = re.sub(r"\s+", " ", text).strip()
+            if not name or len(name) > 40 or re.search(r'[\\/:*?"<>|]', name):
+                state["ask"] = self._say(chat, "서류 이름을 다시 적어 주세요. (40자 안, 파일 이름에 못 쓰는 기호 빼고)",
+                                         msg.get("message_id"), FORCE)
+                return True
+            state["kind"] = name
+            self._ask_expiry(chat, state)
             return True
         if state["step"] == "expiry":
             end = parse_expiry(text)
@@ -136,17 +161,37 @@ class Uploader:
         chat = str((msg.get("chat") or {}).get("id", ""))
         state = self.pending.get(chat)
         data = cb.get("data") or ""
-        if not data.startswith("k:") or not state or state.get("step") != "kind" or msg.get("message_id") not in state["asks"]:
+        step = {"k": "kind", "r": "remove"}.get(data[:1])
+        if not state or not step or state.get("step") != step or msg.get("message_id") not in state["asks"]:
             return False
         self.api("answerCallbackQuery", callback_query_id=cb["id"])
-        if data == "k:x":
+        if data in ("k:x", "r:x"):
             self.pending.pop(chat, None)
-            self._say(chat, "서류 넣기를 그만뒀습니다.")
+            self._say(chat, "그만뒀습니다.")
             return True
         if data == "k:more":
             self._kind_list(chat, state)
             return True
-        state.update(step="expiry", kind=state["kinds"][int(data[2:])])
+        if data == "k:new":
+            state["step"] = "newname"
+            state["ask"] = self._say(chat, "새 서류 이름을 답장으로 적어 주세요. 예) 조경식재공사업 등록증",
+                                     state.get("user_msg"), FORCE)
+            return True
+        if data.startswith("r:y:"):
+            self._remove(chat, state["kinds"][int(data[4:])])
+            return True
+        if step == "remove":
+            kind = state["kinds"][int(data[2:])]
+            state["ask"] = self._say(chat, f"<b>{html.escape(kind)}</b> — 목록과 만료 알림에서 뺄까요?", state.get("user_msg"),
+                                     {"inline_keyboard": [[{"text": "빼기", "callback_data": f"r:y:{data[2:]}"},
+                                                           {"text": "아니요", "callback_data": "r:x"}]]})
+            return True
+        state["kind"] = state["kinds"][int(data[2:])]
+        self._ask_expiry(chat, state)
+        return True
+
+    def _ask_expiry(self, chat: str, state: dict) -> None:
+        state["step"] = "expiry"
         state["ask"] = self._say(chat, f"<b>{html.escape(state['kind'])}</b> — 유효기간 끝나는 날을 답장으로 보내 주세요.\n"
                                        "예) 2028-11-09 · 유효기간이 없으면 '없음'", state.get("user_msg"), FORCE)
         # ↑ PDF 보낸 사람 메시지에 답장으로 + force_reply → 그 사람 입력창이 이 질문에 대한 답장으로 바로 열린다(selective)
@@ -168,11 +213,27 @@ class Uploader:
                                                       [{"text": "취소", "callback_data": "k:x"}]]})
 
     def _kind_list(self, chat: str, state: dict) -> None:
-        opts = state["kinds"]
-        rows = [[{"text": k, "callback_data": f"k:{j}"} for j, k in list(enumerate(opts))[i:i + 2]]
-                for i in range(0, len(opts), 2)]
-        rows.append([{"text": "취소", "callback_data": "k:x"}])
+        rows = _grid(state["kinds"], "k")
+        rows.append([{"text": "➕ 새 종류", "callback_data": "k:new"}, {"text": "취소", "callback_data": "k:x"}])
         state["ask"] = self._say(chat, "어떤 서류인가요?", state.get("user_msg"), {"inline_keyboard": rows})
+
+    def _remove(self, chat: str, kind: str) -> None:
+        """그 종류 파일을 [이전 서류]로 옮기고(지우지 않음) 목록을 다시 쓴다 — 목록·/docs·만료 알림에서 빠짐."""
+        from under100m import docs
+
+        folder = self.folder()
+        old = folder / "[이전 서류]"
+        old.mkdir(exist_ok=True)
+        moved = 0
+        for path in (folder / "[최신 서류]").glob("*.pdf"):
+            doc = docs.parse_name(path.name)
+            if doc and doc.kind == kind:
+                path.replace(docs._unique(old / path.name))
+                moved += 1
+        self.pending.pop(chat, None)
+        docs.run(folder, self.today(), lambda text: None, settle=0, alert_due=False)
+        self._say(chat, f"<b>{html.escape(kind)}</b> 뺐습니다 — 파일 {moved}개를 [이전 서류]로 옮김. "
+                        "다시 필요하면 /upload 로 넣으면 됩니다.")
 
     def _save(self, chat: str, state: dict, end: date | None, reply_to: int | None) -> None:
         from under100m import docs

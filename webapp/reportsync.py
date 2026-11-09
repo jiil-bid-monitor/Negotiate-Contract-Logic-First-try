@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -33,13 +34,42 @@ def _git(*args: str) -> str:
     return done.stdout.decode("utf-8", "replace")
 
 
+class HttpGit:
+    """git이 없는 곳(NAS 이미지)용 — 저장소가 공개라 GitHub에서 bot-state의 reports/를 바로 받는다(2026-11-09).
+    ReportSync가 부르는 세 명령(fetch·ls-tree·cat-file)만 흉내 낸다. 목록 1번 = API 1회(5분마다, 시간당 60회 한도 안)."""
+
+    API = "https://api.github.com/repos/jiil-bid-monitor/Negotiate-Contract-Logic-First-try/contents/reports?ref=bot-state"
+
+    def __init__(self, session=None):
+        import requests
+        self.session = session or requests.Session()
+        self.urls: dict[str, str] = {}
+
+    def __call__(self, *args: str) -> str:
+        if args[0] == "fetch":
+            return ""
+        if args[0] == "ls-tree":
+            res = self.session.get(self.API, timeout=30)
+            res.raise_for_status()
+            lines = []
+            for item in res.json():
+                self.urls[item["sha"]] = item["download_url"]
+                lines.append(f"100644 blob {item['sha']}\treports/{item['name']}")
+            return "\n".join(lines)
+        if args[0] == "cat-file":
+            res = self.session.get(self.urls[args[-1]], timeout=30)
+            res.raise_for_status()
+            return res.content.decode("utf-8", "replace")
+        raise ValueError(args[0])
+
+
 class ReportSync:
     """bot-state의 보고 기록을 판단 기록에 합친다. 이미 합친 파일(git blob 해시)은 다시 읽지 않는다 —
     다시 합쳐도 결과는 같다(`report_log.merge`)."""
 
-    def __init__(self, merge: Callable[[dict], int], git: Callable[..., str] = _git):
+    def __init__(self, merge: Callable[[dict], int], git: Callable[..., str] | None = None):
         self._merge = merge
-        self._git = git
+        self._git = git or (_git if shutil.which("git") else HttpGit())
         self._seen: set[str] = set()
         self._last_error = ""
 

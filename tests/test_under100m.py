@@ -214,6 +214,7 @@ class NameRuleTest(unittest.TestCase):
         self.assertEqual(tidy("제 안 서 (표지"), "제안서 (표지)")
         self.assertEqual(tidy("용역이행 실적증명서 신청인 업체명(상호) 대표자 영업소재지"), "용역이행 실적증명서")
         self.assertEqual(tidy("상세규격서 _개정 2020. 04. 06_"), "상세규격서")
+        self.assertEqual(tidy("상세규격서 <개정 2020. 04. 06>"), "상세규격서")
 
     def test_doc_label_drops_numbering(self):
         self.assertEqual(doc_label(Path("붙임6._조세포탈_유무_확인_서약서.hwp"), 40), "조세포탈 유무 확인 서약서")

@@ -156,6 +156,15 @@ class RunTest(unittest.TestCase):
         self.assertEqual(self.go(date(2026, 11, 12))["due"], [])  # 지난 뒤에도 다시 안 보냄
         self.assertEqual(len(self.sent), 1)
 
+    def test_alert_due_off_still_tidies(self):
+        """NAS 웹앱은 정리만 — 만료 알림은 텔레그램 봇이 담당자 방에(2026-11-09)."""
+        self.records(("신용평가등급확인서", "신용평가등급확인서_2026-02-20.pdf", "2026-02-20", "2026-11-11"))
+        self.put("법인등기사항전부증명서_2026-11-05.pdf")
+        result = run(self.dir, TODAY, self.sent.append, settle=-5, alert_due=False)
+        self.assertEqual(result["due"], [])
+        self.assertEqual(result["added"], ["법인등기사항전부증명서 (2026-11-05)"])
+        self.assertNotIn("갱신 필요", self.sent[0])
+
     def test_per_notice_kinds_never_alert(self):
         self.records(("국세 납세증명서", "국세 납세증명서_2022-09-23.pdf", "2022-09-23", "2022-10-23"))
         self.assertEqual(self.go()["due"], [])

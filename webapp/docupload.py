@@ -89,7 +89,7 @@ class Uploader:
                 state["ask"] = self._say(chat, "PDF 파일을 답장으로 보내 주세요.", msg.get("message_id"), FORCE)
                 return True
             options = kinds(self.folder())
-            state.update(step="kind", file_id=doc["file_id"], kinds=options)
+            state.update(step="kind", file_id=doc["file_id"], kinds=options, user_msg=msg.get("message_id"))
             buttons = [[{"text": k, "callback_data": f"k:{i}"}] for i, k in enumerate(options)]
             buttons.append([{"text": "취소", "callback_data": "k:x"}])
             state["ask"] = self._say(chat, f"어떤 서류인가요? ({html.escape(doc.get('file_name') or 'PDF')})",
@@ -118,7 +118,8 @@ class Uploader:
             return True
         state.update(step="expiry", kind=state["kinds"][int(data[2:])])
         state["ask"] = self._say(chat, f"<b>{html.escape(state['kind'])}</b> — 유효기간 끝나는 날을 답장으로 보내 주세요.\n"
-                                       "예) 2028-11-09 · 유효기간이 없으면 '없음'", None, FORCE)
+                                       "예) 2028-11-09 · 유효기간이 없으면 '없음'", state.get("user_msg"), FORCE)
+        # ↑ PDF 보낸 사람 메시지에 답장으로 + force_reply → 그 사람 입력창이 이 질문에 대한 답장으로 바로 열린다(selective)
         return True
 
     def _save(self, chat: str, state: dict, end: date | None, reply_to: int | None) -> None:

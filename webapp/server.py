@@ -314,6 +314,9 @@ def make_handler(app: App):
                 return self._json({"decisions": app.store.decisions()})
             if url.path == "/api/bidlog":
                 return self._json({"entries": app.bidlog.entries()})
+            if url.path == "/api/bidlog/bidders":
+                # 투찰 업체 전부(11/10) — 없으면 bidders=null(화면이 '결과 다시 받기' 뒤 다시 부름)
+                return self._json({"bidders": app.bidlog.bidders(q.get("id", [""])[0])})
             if url.path == "/api/bidlog.csv":
                 return self._send(200, app.bidlog.csv().encode("utf-8"), "text/csv; charset=utf-8")
             if url.path == "/api/decisions.csv":

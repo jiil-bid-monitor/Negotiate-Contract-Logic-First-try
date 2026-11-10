@@ -654,6 +654,34 @@
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
       </div><div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
   }
+  // 투찰 업체 전부(11/10 사용자 요청) — 개찰 완료 줄의 '투찰 업체' 버튼으로 펼침, 누를 때만 서버에서 받음
+  const BIDDER_ROWS = new Set(), BIDDERS = new Map();   // id → 목록 | "loading" | {error}
+  function biddersRow(r) {
+    const got = BIDDERS.get(r.id);
+    let body;
+    if (!got || got === "loading") body = `<p class="why">투찰 업체를 불러오는 중…</p>`;
+    else if (got.error) body = `<p class="why">투찰 업체를 불러오지 못했습니다: ${esc(got.error)}</p>`;
+    else if (!got.length) body = `<p class="why">투찰 업체 정보가 없습니다.</p>`;
+    else body = `<div class="bidders-wrap"><table class="bidders"><thead><tr><th class="num">순위</th><th>업체명</th><th class="num">투찰금액</th><th class="num">투찰률</th><th>비고</th></tr></thead><tbody>${
+      got.map((b) => `<tr class="${b.own ? "own" : ""}${b.rank == null ? " unranked" : ""}"><td class="num">${b.rank ?? "-"}</td><td>${esc(b.name || "-")}</td>`
+        + `<td class="num">${b.amount != null ? `${won(b.amount)}원` : "-"}</td><td class="num">${b.rate != null ? pct3(b.rate) : "-"}</td><td>${esc(b.remark || "")}</td></tr>`).join("")
+    }</tbody></table></div>`;
+    return `<tr class="bidlog-detail bidlog-bidders" data-id="${esc(r.id)}"><td colspan="7"><div class="bidders-head">투찰 업체 ${got && got.length ? `${got.length}곳` : ""}</div>${body}</td></tr>`;
+  }
+  async function loadBidders(id) {
+    BIDDERS.set(id, "loading"); renderLog();
+    try {
+      let d = await api(`/api/bidlog/bidders?id=${encodeURIComponent(id)}`);
+      if (d.bidders == null) {   // 11/10 전에 받은 결과엔 업체 목록이 없음 — 결과를 다시 받아 채움
+        await fetchResults([id], true);
+        d = await api(`/api/bidlog/bidders?id=${encodeURIComponent(id)}`);
+      }
+      BIDDERS.set(id, d.bidders || []);
+    } catch (err) {
+      BIDDERS.set(id, { error: err.message });
+    }
+    renderLog();
+  }
   function renderLog() {
     $("#bidlogCount").textContent = LOG.length ? String(LOG.length) : "";
     const q = ($("#bidlogQ").value || "").trim().toLowerCase();
@@ -681,8 +709,9 @@
         <td class="num" data-l="실제 사정률">${rateCell(r)}</td>
         <td class="act">${edit
           ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
-          : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button><span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>
-      </tr>${open ? detailRow(r) : ""}`;
+          : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button>${r.result && r.result.status === "완료"
+            ? `<button type="button" data-act="bidders" class="more bidders-btn">${BIDDER_ROWS.has(r.id) ? "업체 접기 ▲" : "투찰 업체 ▼"}</button>` : ""}<span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>
+      </tr>${open ? detailRow(r) : ""}${BIDDER_ROWS.has(r.id) && r.result && r.result.status === "완료" ? biddersRow(r) : ""}`;
     }).join("");
   }
   // 투찰내역을 열면 결과가 없는 기록만 서버가 나라장터에서 받아 채움(한 번에 몇 건씩 — 남으면 이어서)
@@ -718,7 +747,13 @@
     const r = LOG.find((x) => x.id === id);
     try {
       if (act === "toggle") { OPEN_ROWS.has(id) ? OPEN_ROWS.delete(id) : OPEN_ROWS.add(id); renderLog(); return; }
-      if (act === "refetch") { await fetchResults([id], true); return; }
+      if (act === "refetch") { BIDDERS.delete(id); await fetchResults([id], true); if (BIDDER_ROWS.has(id)) loadBidders(id); return; }
+      if (act === "bidders") {
+        if (BIDDER_ROWS.has(id)) { BIDDER_ROWS.delete(id); renderLog(); return; }
+        BIDDER_ROWS.add(id);
+        if (Array.isArray(BIDDERS.get(id))) renderLog(); else loadBidders(id);
+        return;
+      }
       if (act === "edit") { EDITING = id; renderLog(); return; }
       if (act === "cancel") { EDITING = null; renderLog(); return; }
       if (act === "save") {

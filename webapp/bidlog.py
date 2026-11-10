@@ -24,6 +24,7 @@ from .backup import backup_content, restore_if_missing
 
 KST = timezone(timedelta(hours=9))
 FILE_NAME = "bid_log.json"
+BIDDERS_DIR = "bid_log_bidders"
 
 # 화면이 보내는 값 → 저장할 이름과 종류. 그 밖의 값은 버린다
 _TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "method": 80, "openingAt": 25, "closingAt": 25}
@@ -73,6 +74,7 @@ class BidLog:
     def __init__(self, folder: Path, backup_dir: Path | None = None):
         folder.mkdir(parents=True, exist_ok=True)
         self.path = folder / FILE_NAME
+        self.bidders_dir = folder / BIDDERS_DIR   # 투찰 업체 목록(공고마다 수백~수천 곳 — 화면 목록 응답이 무거워지지 않게 따로)
         self.backup_dir = backup_dir
         self._lock = threading.Lock()
         restore_if_missing(self.path, backup_dir)
@@ -131,8 +133,31 @@ class BidLog:
             row = next((r for r in rows if r.get("id") == entry_id), None)
             if row is None:
                 return
+            bidders = result.pop("bidders", None)
+            if bidders is not None:
+                result["bidderListCount"] = len(bidders)
+                self._write_bidders(entry_id, bidders)
             row["result"] = result
             self._write(rows)
+
+    def _bidders_path(self, entry_id: str) -> Path:
+        return self.bidders_dir / f"{re.sub(r'[^0-9A-Za-z]', '', entry_id)}.json"
+
+    def _write_bidders(self, entry_id: str, bidders: list[dict[str, Any]]) -> None:
+        self.bidders_dir.mkdir(parents=True, exist_ok=True)
+        path = self._bidders_path(entry_id)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(bidders, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+
+    def bidders(self, entry_id: str) -> list[dict[str, Any]] | None:
+        """그 기록 공고의 투찰 업체 전부(개찰 순위 순) — 아직 안 받았으면 None."""
+        path = self._bidders_path(entry_id)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return data if isinstance(data, list) else None
 
     def set_times(self, entry_id: str, times: dict[str, str]) -> None:
         """개찰 일시·투찰 마감을 그 기록에 저장(예전 기록 채우기) — 못 찾은 칸도 빈 글자로 남겨 다시 찾지 않음."""
@@ -153,6 +178,7 @@ class BidLog:
             if len(left) == len(rows):
                 raise ValueError("그 기록을 찾지 못했습니다 — 화면을 새로 고치세요")
             self._write(left)
+            self._bidders_path(entry_id).unlink(missing_ok=True)
 
     def table(self) -> tuple[list[str], list[list[Any]]]:
         """CSV·투찰 이력 엑셀(`webapp/bidnightly.py`)에 같이 쓰는 표 — (머리글, 줄들), 최근 것부터."""

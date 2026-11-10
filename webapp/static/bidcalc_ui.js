@@ -685,7 +685,7 @@
         const rank = b.rank ?? neg.get(b) ?? "-";
         return `<tr class="${b.own ? "own" : ""}${b.rank == null ? " unranked" : ""}">`
           + `<td class="${neg.has(b) ? "under" : ""}">${rank}</td>`
-          + `<td class="name">${esc(b.name || "-")}</td><td>${esc(b.ceo || "-")}</td>`
+          + `<td class="name">${esc(b.name || "-")}</td>`
           + `<td class="num">${amt != null ? won(amt) : "-"}${amt != null && top != null ? `<span class="paren">(${comma(amt - top)})</span>` : ""}</td>`
           + `<td class="num">${fx(b.rate, 5)}</td>`
           // 21라인과 같게: 사정률은 소수 다섯째 자리까지(끝 0 뺌), 괄호는 −100을 셋째 자리로 반올림해 다섯 자리로 적음
@@ -695,7 +695,7 @@
           + `<td class="remark">${esc((b.remark || "").replace("낙찰하한선미달", "낙찰하한선 미달"))}</td>`
           + `<td class="num">${amt != null && planned && planned > a ? fx((amt - a) / (planned - a) * 100, 4) : "-"}</td></tr>`;
       };
-      body = `<div class="bidders-wrap"><table class="bidders"><colgroup>${[5, 18, 7, 12, 8, 9, 7, 12, 12, 10].map((w) => `<col style="width:${w}%">`).join("")}</colgroup><thead><tr><th>순위</th><th>업체명</th><th>대표자</th>`
+      body = `<div class="bidders-wrap"><table class="bidders"><colgroup>${[5, 22, 13, 8, 10, 8, 12, 12, 10].map((w) => `<col style="width:${w}%">`).join("")}</colgroup><thead><tr><th>순위</th><th>업체명</th>`
         + `<th title="아래 괄호: 1순위 금액과 차이">투찰금액<br><small>(1순위와 차이)</small></th><th>투찰률</th>`
         + `<th title="이 금액이 낙찰하한선이 되는 사정률 — 실제 사정률보다 낮으면 미달. 아래 괄호: −100">사정률<br><small>(−100)</small></th>`
         + `<th title="투찰금액 ÷ 기초금액">기초금액<br>대비</th><th>사업자번호</th><th>비고</th>`

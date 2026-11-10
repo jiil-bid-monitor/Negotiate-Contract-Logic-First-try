@@ -140,7 +140,7 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("전화",), "전화번호"),
     (("팩스", "FAX"), "팩스번호"),
     (("홈페이지",), "홈페이지"),
-    (("E-mail", "이메일", "전자우편"), "이메일"),
+    (("E-mail", "E-Mail", "e-mail", "Email", "EMAIL", "E-MAIL", "이메일", "전자우편"), "이메일"),
     (("회사설립", "설립년", "설립연", "설립일", "개업"), "설립일"),
     (("자본금",), "자본금"),
     (("총직원수", "총종업원수", "종업원수", "직원수", "상시근로자수"), "종업원 수"),  # '총직원수 | 명'(11/05 사용자 요청)
@@ -404,7 +404,7 @@ def _row_group(cells: list[Cell], c: Cell) -> str | None:
         if o is c or o.rowspan < 2 or o.col >= c.col or not (o.row <= c.row < o.row + o.rowspan):
             continue
         t = _sq(o.text)
-        if re.fullmatch(r"대표자|대표이사|위임자|위임인", t):
+        if re.fullmatch(r"(?:입찰|신청|제안|응모)?(?:대표자|대표이사)|위임자|위임인", t):  # '입찰 대표자'(11/10 경남교육청 위임장)
             return "대표자"
         if re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", t):
             return "대리인"
@@ -590,14 +590,14 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|회\s*사\s*명|주\s*소", text):
             continue
         # 한 줄에 회사 이름표와 대표자 이름표가 같이 — '업체명 :      대표자 :      (인)'·'제안업체 :      대표자 :'(11/06 과거 제안요청서 검사)
-        two = re.fullmatch(rf"\s*(?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：]\s{{2,}}대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL}|[(（])?\s*", text)
+        two = re.fullmatch(rf"\s*(?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*(?:[:：]\s{{2,}}|\s{{2,}}/\s*)대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL}|[(（])?\s*", text)  # '업체명      / 대표자 :   (인)'도(11/10 경남교육청 서약서)
         if two and _value("회사명", vault) and _value("대표자", vault):
             company, name = _value("회사명", vault), _value("대표자", vault)
 
             def put_two(mm, state={"c": False, "n": False}):
                 body = mm.group(2)
                 if not state["c"]:
-                    body, k = re.subn(r"((?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：])( {2,})",
+                    body, k = re.subn(r"((?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：]?)( {2,})(?=\S)",
                                       lambda m2: f"{m2.group(1)} {_mark(company)}" + " " * max(2, len(m2.group(2)) - len(company) - 1), body, count=1)
                     state["c"] = bool(k)
                 if not state["n"]:
@@ -1585,14 +1585,18 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if "연혁" in core and len(core) <= 8 and vault.history:
                         lines = [f"{_fmt_ymd(h.get('연월일'))}  {h.get('내용') or ''}".strip() for h in vault.history]
                         right = by_pos.get((c.row, c.col + c.colspan))
+                        below = by_pos.get((c.row + c.rowspan, c.col))
                         if right is not None and right.blank:
                             edits.append((right, lines, False))
+                        elif below is not None and below.blank and below.colspan == c.colspan:
+                            # 이름표 칸 바로 아래 같은 너비의 빈 칸 = 답 칸(11/10 경남교육청 서식 14 — 이름표 칸에 붙여 상자 밖에 적혔음)
+                            edits.append((below, lines, False))
                         else:  # 한 줄 전체 칸 — 이름표 아래에 붙임
                             edits.append((c, lines, True))
                         rep.filled.append(f"연혁 → {len(lines)}줄")
                         continue
-                    if not key and _sq(c.text) == "생년월일" and c.row not in agent_rows \
-                            and any(o.row == c.row and _sq(o.text).startswith("대표자") for o in cells):
+                    if not key and _sq(c.text) == "생년월일" and c.row not in agent_rows and (group == "대표자" or any(
+                            o.row == c.row and _sq(o.text).startswith("대표자") for o in cells)):
                         # 신청인 '대 표 자 | 이름 | 생년월일 | __'(11/10 경남교육청 입찰참가신청서) — 대표자 주민등록번호 앞 6자리로, 대리인 줄은 비움
                         birth = _birth(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
                         target = by_pos.get((c.row, c.col + c.colspan))

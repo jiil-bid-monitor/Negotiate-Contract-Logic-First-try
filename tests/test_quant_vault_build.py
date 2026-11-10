@@ -2042,3 +2042,12 @@ def test_applicant_signature_line(tmp_path: Path):
     text = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     lines = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", m)).strip() for m in re.findall(r"<hp:p\b.*?</hp:p>", text, re.S)]
     assert lines[2] == "신 청 인 : 홍길동 (인)" and lines[3] == "신청인 :"
+
+
+def test_slash_signature_and_bid_rep_group():
+    """11/10 경남교육청: 서약서 '업체명      / 대표자 :      (인)', 위임장 묶음 머리 '입찰 대표자', 'E-Mail' 이름표."""
+    from quantdocs.fill import _label_key, _row_group, Cell
+    assert _label_key("E-Mail") == "이메일"
+    head = Cell(start=0, end=0, row=0, col=0, colspan=1, text="입찰 대표자", rowspan=3)
+    name = Cell(start=0, end=0, row=1, col=1, colspan=1, text="성  명")
+    assert _row_group([head, name], name) == "대표자"

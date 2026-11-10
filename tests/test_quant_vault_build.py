@@ -2051,3 +2051,15 @@ def test_slash_signature_and_bid_rep_group():
     head = Cell(start=0, end=0, row=0, col=0, colspan=1, text="입찰 대표자", rowspan=3)
     name = Cell(start=0, end=0, row=1, col=1, colspan=1, text="성  명")
     assert _row_group([head, name], name) == "대표자"
+
+
+def test_credit_labels_and_applicant_group():
+    """11/10 경남교육청: 신용평가등급 확인서 칸 이름표, 실적증명서 '신청인' 묶음(직접 기입 서식이어도 채움)."""
+    from quantdocs.fill import _label_key, _row_group, _value, Cell
+    assert _label_key("등급평가일") == "신용평가 평가일" and _label_key("등급 유효기간") == "신용평가 유효기간"
+    assert _label_key("기업신용 평가등급") == "신용평가등급"
+    v = vault.Vault({}, info={"신용평가 평가일": "2026-06-16"})
+    assert _value("신용평가 평가일", v) == "2026. 06. 16."
+    head = Cell(start=0, end=0, row=0, col=0, colspan=1, text="신 청 인", rowspan=4)
+    lab = Cell(start=0, end=0, row=1, col=1, colspan=1, text="대 표 자")
+    assert _row_group([head, lab], lab) == "신청인"

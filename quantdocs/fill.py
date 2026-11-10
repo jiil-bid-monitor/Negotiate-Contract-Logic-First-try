@@ -146,7 +146,11 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("총직원수", "총종업원수", "종업원수", "직원수", "상시근로자수"), "종업원 수"),  # '총직원수 | 명'(11/05 사용자 요청)
     (("사업분야", "업태"), "사업분야"),
     (("면허/허가/등록증", "면허보유", "등록증보유"), "_licenses"),
-    (("입찰명", "입찰건명", "공고명"), "_title"),  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
+    (("입찰명", "입찰건명", "공고명"), "_title"),
+    # 신용평가등급 확인서(11/10 경남교육청 서식 19) — 신용평가 확인서 PDF에서 읽은 값(importer.read_credit)
+    (("기업신용평가등급", "기업신용등급", "신용평가등급", "신용등급"), "신용평가등급"),
+    (("등급평가일", "신용평가일", "평가일자"), "신용평가 평가일"),
+    (("등급유효기간", "신용등급유효기간", "신용평가유효기간"), "신용평가 유효기간"),  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
 ]
 _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
 
@@ -249,6 +253,10 @@ def _value(key: str, vault) -> str:
         return ", ".join(dict.fromkeys(names))
     if key == "사업분야":
         return vault.info.get("사업분야") or vault.info.get("종목") or vault.info.get("업태") or ""
+    if key in ("신용평가 평가일", "신용평가 유효기간"):  # '2026-06-16' → '2026. 06. 16.'
+        d = str(vault.info.get(key) or "")
+        m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", d)
+        return f"{m.group(1)}. {m.group(2)}. {m.group(3)}." if m else d
     v = vault.info.get(key, "")
     if not v and key in ("전화번호", "팩스번호"):  # 회사정보 시트 항목 이름이 '대표전화'·'TEL'·'FAX' 등이어도
         words = ("전화", "TEL", "연락처") if key == "전화번호" else ("팩스", "FAX")
@@ -408,6 +416,8 @@ def _row_group(cells: list[Cell], c: Cell) -> str | None:
             return "대표자"
         if re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", t):
             return "대리인"
+        if re.fullmatch(r"신청인|신청자|증명신청인|제출자", t):
+            return "신청인"
     return None
 
 
@@ -1559,8 +1569,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             none_rule = re.search(r"(?:없을|없는)\s*(?:경우|때).{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
-            for tbl in ([] if sign_only else _spans(xml, "tbl")):
+            for tbl in _spans(xml, "tbl"):
                 cells = _cells(xml, tbl)
+                # 직접 기입 서식(실적증명서 등)은 표 안을 건드리지 않음 — 단 '신청인' 묶음 줄(업체명·대표자·사업자번호·소재지·전화)은 채움
+                # (11/10 경남교육청 사업이행 실적증명서 — 증명 내용은 발주처가, 신청인 칸은 지일이)
+                if sign_only and not any(_row_group(cells, x) == "신청인" for x in cells):
+                    continue
                 by_pos = {(c.row, c.col): c for c in cells}
                 other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
@@ -1570,6 +1584,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if self_scores:
                     edits += _self_score_edits(cells, self_scores, rep)
                 for c in cells:
+                    if sign_only and _row_group(cells, c) != "신청인":
+                        continue
                     key = _label_key(c.text)
                     # 왼쪽 세로 묶음 칸('대 표 자' | 성명 / 주소 / 연락처)의 사람 칸(11/06 제보: 청주 위임장 대표자 성명·연락처가 빔)
                     group = _row_group(cells, c)
@@ -1618,6 +1634,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if key == "주소" and c.row in agent_rows:
                         continue
                     target = by_pos.get((c.row, c.col + c.colspan))
+                    if target is None and key == "신용평가등급":
+                        # 머리 칸 '기업신용 평가등급' 아래 빈 칸이 값 칸(11/10 경남교육청 서식 19)
+                        below = by_pos.get((c.row + c.rowspan, c.col))
+                        target = below if below is not None and below.blank and below.colspan == c.colspan else None
                     value = _value(key, vault)
                     if key == "전화번호" and re.search(r"FAX|Fax|팩스", c.text) and _value("팩스번호", vault) and value:
                         value = f"{value} / {_value('팩스번호', vault)}"  # '전화번호(FAX번호)' 한 칸(11/05 국민안전체험관 서식 2)

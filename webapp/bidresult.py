@@ -64,6 +64,9 @@ def summarize(result: BidResult, entry: dict[str, Any], own_bizno: str, now: dat
         assessmentRate=rate,
         winner={"name": winner.name, "bizno": winner.bizno, "amount": winner.amount, "rate": winner.rate} if winner else None,
         own=({"rank": own.rank, "amount": own.amount, "rate": own.rate, "remark": own.remark} if own else None),
+        # 투찰 업체 전부(11/10 사용자 요청 — '투찰 업체' 버튼으로 봄). BidLog가 기록 파일 밖에 따로 저장
+        bidders=[{"rank": b.rank, "name": b.name, "bizno": b.bizno, "amount": b.amount, "rate": b.rate,
+                  "remark": b.remark, **({"own": True} if b is own else {})} for b in result.bidders],
     )
     # 기록한 기준 사정률 − 실제 사정률(양수 = 실제보다 높게 잡음 → 하한선 통과 쪽), 지일 금액 − 1위 금액
     if rate is not None and entry.get("rate") is not None:

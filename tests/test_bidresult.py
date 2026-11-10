@@ -109,6 +109,22 @@ class TestFill(unittest.TestCase):
         self.assertEqual(got["fetched"], 0)
         r = log.entries()[0]
         self.assertEqual((r["openingAt"], r["closingAt"]), ("2026-11-13 11:00:00", "2026-11-13 10:00:00"))  # 빈 값으로 안 덮음
+    def test_bidders_saved_apart(self):
+        """투찰 업체 전부(11/10) — 기록 파일 밖에 따로 저장, 지일 줄 표시, 지우면 같이 지움."""
+        log = BidLog(Path(tempfile.mkdtemp()))
+        a = log.add({"noticeNo": "R26BK01810177", "bid": 1, "workType": "공사"})
+        self.assertIsNone(log.bidders(a["id"]))
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(BIDDERS))
+        res = log.entries()[0]["result"]
+        self.assertNotIn("bidders", res)                      # 목록 응답은 가볍게
+        self.assertEqual(res["bidderListCount"], 4)
+        got = log.bidders(a["id"])
+        self.assertEqual([b["name"] for b in got], ["가나건설", "다라전기", "(주)지일", "마바"])
+        self.assertEqual([b.get("own", False) for b in got], [False, False, True, False])
+        self.assertNotIn("bidders", log.path.read_text(encoding="utf-8"))
+        log.delete(a["id"])
+        self.assertIsNone(log.bidders(a["id"]))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1054,6 +1054,15 @@ footer b { color: var(--muted); }
 .res-grid span { color: var(--muted); font-size: 12px; }
 .res-grid b { font-variant-numeric: tabular-nums; color: var(--ink-strong); }
 .res-foot { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.bidders-head { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.bidders-wrap { max-height: 360px; overflow: auto; border: 1px solid var(--line); background: var(--panel); }
+table.bidders { width: 100%; border-collapse: collapse; font-size: 12px; }
+#tab-calc table.bidders th { position: sticky; top: 0; background: var(--chip); text-align: left; padding: 5px 10px; font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--line); }
+#tab-calc table.bidders td { padding: 4px 10px; border-bottom: 1px solid var(--line-soft); font-size: 12px; }
+#tab-calc table.bidders .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#tab-calc .bidlog-table td.act button.bidders-btn { display: block; margin-top: 4px; }
+table.bidders tr.own td { font-weight: 700; color: var(--brand); }
+table.bidders tr.unranked td { color: var(--muted); }
 #tab-calc .res-foot button, #tab-calc .bidlog-table td.act button.more { padding: 3px 8px; font-size: 12px; }
 #tab-calc .bidlog-table td.act button.more { color: var(--brand); border-color: var(--brand); }
 @media (max-width: 760px) { .res-grid { grid-template-columns: 1fr 1fr; } .calc-form.bidlog-table tr.bidlog-detail td { display: block; } .calc-form.bidlog-table tr.bidlog-detail td::before { content: none; } }

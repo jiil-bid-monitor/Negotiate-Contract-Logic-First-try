@@ -662,10 +662,43 @@
     if (!got || got === "loading") body = `<p class="why">투찰 업체를 불러오는 중…</p>`;
     else if (got.error) body = `<p class="why">투찰 업체를 불러오지 못했습니다: ${esc(got.error)}</p>`;
     else if (!got.length) body = `<p class="why">투찰 업체 정보가 없습니다.</p>`;
-    else body = `<div class="bidders-wrap"><table class="bidders"><thead><tr><th class="num">순위</th><th>업체명</th><th class="num">투찰금액</th><th class="num">투찰률</th><th>비고</th></tr></thead><tbody>${
-      got.map((b) => `<tr class="${b.own ? "own" : ""}${b.rank == null ? " unranked" : ""}"><td class="num">${b.rank ?? "-"}</td><td>${esc(b.name || "-")}</td>`
-        + `<td class="num">${b.amount != null ? `${won(b.amount)}원` : "-"}</td><td class="num">${b.rate != null ? pct3(b.rate) : "-"}</td><td>${esc(b.remark || "")}</td></tr>`).join("")
-    }</tbody></table></div>`;
+    else {
+      // 낙찰하한선 미달 업체는 하한선에 가까운(금액이 큰) 업체부터 -1, -2, …(11/10 사용자 요청)
+      const under = got.filter((b) => b.rank == null && /미달/.test(b.remark || "") && b.amount != null)
+        .sort((a, b) => b.amount - a.amount);
+      const neg = new Map(under.map((b, i) => [b, -(i + 1)]));
+      const shown = [...got.filter((b) => !neg.has(b)), ...under];   // 순위 있는 업체 → 그 밖 → 미달(-1부터)
+      // 칸은 21라인 경쟁업체 표와 같게(11/10 사용자 요청): 금액 아래 1순위와 차이, 사정률 = 이 금액이 하한선이 되는 사정률(아래 −100),
+      // 기초금액 대비 투찰률(붉게), 추첨번호, 사업자번호, 비고, A값을 뺀 투찰률((금액 − A) ÷ (예정가격 − A) — 하한율과 견주는 값)
+      const res = r.result || {};
+      const basis = res.basisAmount || r.basis, planned = res.plannedPrice, lower = r.lowerRate;
+      const a = res.aValue ?? r.aValue ?? 0;
+      const top = (got.find((b) => b.rank === 1) || {}).amount;
+      const fx = (v, d) => (v == null || !Number.isFinite(v) ? "-" : v.toFixed(d));
+      const comma = (v) => (v < 0 ? "-" : "") + Math.abs(Math.round(v)).toLocaleString("ko-KR");
+      const rateAt = (amt) => (basis && lower ? (a + (amt - a) / (lower / 100)) / basis * 100 : null);
+      const row = (b) => {
+        const amt = b.amount, rt = amt != null ? rateAt(amt) : null;
+        const rank = b.rank ?? neg.get(b) ?? "-";
+        return `<tr class="${b.own ? "own" : ""}${b.rank == null ? " unranked" : ""}">`
+          + `<td class="${neg.has(b) ? "under" : ""}">${rank}</td>`
+          + `<td class="name">${esc(b.name || "-")}</td><td>${esc(b.ceo || "-")}</td>`
+          + `<td class="num">${amt != null ? won(amt) : "-"}${amt != null && top != null ? `<span class="paren">(${comma(amt - top)})</span>` : ""}</td>`
+          + `<td class="num">${fx(b.rate, 5)}</td>`
+          // 21라인과 같게: 사정률은 소수 다섯째 자리까지(끝 0 뺌), 괄호는 −100을 셋째 자리로 반올림해 다섯 자리로 적음
+          + `<td class="num">${rt != null ? String(Number(rt.toFixed(5))) : "-"}${rt != null ? `<span class="paren">(${(rt - 100).toFixed(3)}00)</span>` : ""}</td>`
+          + `<td class="num basis-rate">${amt != null && basis ? fx(amt / basis * 100, 4) : "-"}</td>`
+          + `<td>${esc(b.draws || "-")}</td><td>${esc(String(b.bizno || "").replace(/\D/g, "") || "-")}</td>`
+          + `<td class="remark">${esc((b.remark || "").replace("낙찰하한선미달", "낙찰하한선 미달"))}</td>`
+          + `<td class="num">${amt != null && planned && planned > a ? fx((amt - a) / (planned - a) * 100, 4) : "-"}</td></tr>`;
+      };
+      body = `<div class="bidders-wrap"><table class="bidders"><thead><tr><th>순위</th><th>업체명</th><th>대표자</th>`
+        + `<th title="아래 괄호: 1순위 금액과 차이">투찰금액<br><small>(1순위와 차이)</small></th><th>투찰률</th>`
+        + `<th title="이 금액이 낙찰하한선이 되는 사정률 — 실제 사정률보다 낮으면 미달. 아래 괄호: −100">사정률<br><small>(−100)</small></th>`
+        + `<th title="투찰금액 ÷ 기초금액">기초금액<br>대비</th><th>추첨번호</th><th>사업자번호</th><th>비고</th>`
+        + `<th title="(투찰금액 − A값) ÷ (예정가격 − A값) — 하한율보다 낮으면 미달">A값 제외<br>투찰률</th></tr></thead><tbody>${
+          shown.map(row).join("")}</tbody></table></div>`;
+    }
     return `<tr class="bidlog-detail bidlog-bidders" data-id="${esc(r.id)}"><td colspan="7"><div class="bidders-head">투찰 업체 ${got && got.length ? `${got.length}곳` : ""}</div>${body}</td></tr>`;
   }
   async function loadBidders(id) {

@@ -67,6 +67,22 @@ class Bidder:
     amount: float | None
     rate: float | None
     remark: str
+    ceo: str = ""      # 대표자(투찰내역 '투찰 업체' 표, 11/10)
+    draws: str = ""    # 업체가 고른 예비가격 추첨번호 '01/14'(11/10)
+
+
+# 참가업체 응답의 대표자·추첨번호 칸 이름 — 활용가이드 기준 추정(실응답 미확인, 11/10). 없으면 빈칸.
+_CEO_KEYS = ("prcbdrCeoNm", "prcbdrRprsntvNm", "ceoNm", "rprsntvNm")
+_DRAW_KEYS = (("drwtNo1", "drwtNo2"), ("drwtNum1", "drwtNum2"), ("prcbdrDrwtNo1", "prcbdrDrwtNo2"))
+
+
+def _draws(row: dict) -> str:
+    for a, b in _DRAW_KEYS:
+        nums = [str(row.get(k) or "").strip() for k in (a, b)]
+        nums = [n.zfill(2) if n.isdigit() else n for n in nums if n]
+        if nums:
+            return "/".join(nums)
+    return ""
 
 
 @dataclass
@@ -134,6 +150,8 @@ def parse_bidders(rows: list[dict]) -> list[Bidder]:
                 amount=_num(row.get("bidprcAmt")),
                 rate=_num(row.get("bidprcrt")),
                 remark=str(row.get("rmrk") or ""),
+                ceo=next((str(row[k]).strip() for k in _CEO_KEYS if row.get(k)), ""),
+                draws=_draws(row),
             )
         )
     return sorted(bidders, key=lambda b: (b.rank is None, b.rank or 0))

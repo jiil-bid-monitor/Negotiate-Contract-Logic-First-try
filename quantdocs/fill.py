@@ -493,6 +493,46 @@ def _hang(seg: str, chars: "_Chars | None") -> str:
     return seg[:pm.start(2)] + new + seg[pm.end(2):] if new != pm.group(2) else seg
 
 
+_MULTI_KEYS = {"회사명", "대표자", "주소", "전화번호", "팩스번호", "사업자등록번호", "법인등록번호"}
+_MULTI_LABEL = r"[^:：\s](?:[^:：]{0,14}[^:：\s])?"
+
+
+def _multi_labels(text: str) -> list[tuple[str, str]] | None:
+    """'이름표 : (빈칸) 이름표 : (빈칸) [(인)]'만 있는 줄 → [(이름표, 항목)] — 이름표가 둘 이상이고 모두 회사 정보 항목일 때만."""
+    if not re.fullmatch(rf"\s*(?:{_MULTI_LABEL}\s*[:：]\s*)+(?:{_SEAL_TAIL})?\s*", text):
+        return None
+    labels = re.findall(rf"({_MULTI_LABEL})\s*[:：]", text)
+    keys = [_label_key(lab) for lab in labels]
+    if len(labels) < 2 or not all(k in _MULTI_KEYS for k in keys) or len(set(keys)) != len(keys):
+        return None
+    return list(zip(labels, keys))
+
+
+def _fill_multi(seg: str, multi: list[tuple[str, str]], vault) -> tuple[str, list[str]]:
+    """_multi_labels 줄의 이름표마다 쌍점 뒤에 값 — 빈칸 수는 값 길이만큼 줄여 줄 모양 유지."""
+    todo = list(multi)
+    done: list[str] = []
+
+    def fill_t(m):
+        body = m.group(2)
+        while todo:
+            lab, key = todo[0]
+            pat = r"\s*".join(re.escape(ch) for ch in re.sub(r"\s+", "", lab))
+            mm = re.search(rf"({pat}\s*[:：])( *)", body)
+            if not mm:
+                break
+            value = _value(key, vault)
+            pad = max(2, len(mm.group(2)) - len(value) - 1) if mm.end() < len(body) else 0
+            body = body[:mm.start()] + f"{mm.group(1)} {_mark(value)}" + " " * pad + body[mm.end():]
+            done.append(f"{_sq(lab)} {value[:20]}")
+            todo.pop(0)
+        return m.group(1) + body + m.group(3)
+    new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, seg, flags=re.S)
+    if done:
+        new = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", new, flags=re.S)
+    return new, done
+
+
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None, sign_only: bool = False) -> str:
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
@@ -511,6 +551,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     other = _other_party_cells(xml)
     cands = []  # (s, e, 이름표, 서명 줄?, 쌍점 없는 이름표?, 문단 순번)
     party: str | None = None  # 지금 묶음: 'own'(대표사) / 'other'(공동참여자·구성원 — 비움) / None
+    multi_done: set[str] = set()  # 한 줄 여러 이름표로 이미 채운 항목 — 아래 묶음(공동참여 구성원 칸)의 같은 줄은 비움
     sign_at: set[int] = set()  # 쌍점 없는 서명 줄('대표자      ㉿') 문단 순번 — 바로 위 '신청인 업체명' 줄도 서명 묶음으로 봄
     # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
     # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
@@ -536,7 +577,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             party = None  # 이름표 아닌 글 줄('청주시장 귀하')에서 묶음이 끝남
         if party == "other":
             continue
-        if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|주\s*소", text):
+        if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|회\s*사\s*명|주\s*소", text):
             continue
         # 한 줄에 회사 이름표와 대표자 이름표가 같이 — '업체명 :      대표자 :      (인)'·'제안업체 :      대표자 :'(11/06 과거 제안요청서 검사)
         two = re.fullmatch(rf"\s*(?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：]\s{{2,}}대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL}|[(（])?\s*", text)
@@ -560,6 +601,15 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                 edits.append((s, e, seg))
                 rep.filled.append(f"서명 줄 → {company} · 대표자 {name}")
+            continue
+        # 한 줄에 회사 정보 이름표가 둘 이상 — '주    소 :      전화번호 :'·'대표업체명:      대표자:      (인)'(11/10 과거 제안요청서 검사)
+        multi = _multi_labels(text)
+        if multi and all(_value(k, vault) for _, k in multi) and not any(k in multi_done for _, k in multi):
+            seg, done = _fill_multi(xml[s:e], multi, vault)
+            if done:
+                multi_done.update(k for _, k in multi)
+                edits.append((s, e, seg))
+                rep.filled.append("한 줄 이름표 → " + " · ".join(done))
             continue
         # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름
         bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)))(\s{{3,}})({_SEAL_TAIL}.*)", text)

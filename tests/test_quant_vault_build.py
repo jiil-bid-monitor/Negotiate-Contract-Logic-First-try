@@ -1995,3 +1995,30 @@ def test_fill_face_unified_and_big_label_size(tmp_path: Path):
     fill_hwpx(src, tmp_path / "b.hwpx", v, face="휴먼명조")    # 통합서식 첫 서식 글꼴로
     big = char_of(tmp_path / "b.hwpx", "홍길동")
     assert 'hangul="0"' in big and 'latin="0"' in big and 'height="1500"' in big
+
+
+def test_multi_label_lines_and_sign_only_company(tmp_path: Path):
+    """11/10 과거 제안요청서 검사 남은 3건: ① 한 줄 여러 이름표 '주    소 :      전화번호 :'(첫 묶음만 — 아래 같은 줄은 구성원 칸)
+    ② '대표업체명:      대표자:      (인)' ③ 직접 기입 서식(재직증명서) 서명 묶음의 '회사명 :'."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (p("청 렴 서 약 서") + p("   회 사 명 :") + p("   주    소 :                                  전화번호 :")
+            + p("   대 표 자 :               (인)") + p("   주    소 :                                  전화번호 :")
+            + p("대표업체명:                 대표자:              (인)"))
+    src = _mini_hwpx(tmp_path / "t.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "정선군 가상로 1", "전화번호": "033-000-0000"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    text = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    lines = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", m)).strip() for m in re.findall(r"<hp:p\b.*?</hp:p>", text, re.S)]
+    assert lines[2] == "주 소 : 정선군 가상로 1 전화번호 : 033-000-0000"
+    assert lines[4] == "주 소 : 전화번호 :"                         # 같은 줄이 또 나오면(아래 묶음) 비움
+    assert lines[5] == "대표업체명: (주)가상 대표자: 홍길동 (인)"
+
+    body2 = (p("재 직 증 명 서") + '<hp:p><hp:run><hp:tbl><hp:tr><hp:tc><hp:subList>'
+             + p("위 사실을 증명합니다.") + p("     회사명 :") + p("     주  소 :") + p("     대표자 :          (인)")
+             + '</hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+    src2 = _mini_hwpx(tmp_path / "t2.hwpx", body2)
+    fill_hwpx(src2, tmp_path / "o2.hwpx", v, sign_only=True)
+    text2 = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()))
+    assert "회사명 : (주)가상" in text2 and "대표자 : 홍길동" in text2

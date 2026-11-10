@@ -623,7 +623,7 @@
     if (!res) return `<span class="res-wait">아직 안 받음</span>`;
     // 개찰 전이면 확인 시각 대신 투찰 마감·개찰 일시를 붉게(11/10 사용자 요청) — 둘 다 모르면 예전처럼 확인 시각
     if (res.status === "개찰 전") return `<span class="res-wait">개찰 전</span>${r.closingAt || r.openingAt
-      ? (r.closingAt ? `<span class="sub res-close">${esc(day(r.closingAt))} 마감</span>` : "")
+      ? (r.closingAt ? `<span class="sub res-close">마감 ${esc(day(r.closingAt))}</span>` : "")
         + (r.openingAt ? `<span class="sub res-open">개찰 ${esc(day(r.openingAt))}</span>` : "")
       : `<span class="sub">${esc(day(res.fetchedAt))} 확인</span>`}`;
     if (res.status === "오류") return `<span class="res-bad">받지 못함</span><span class="sub">${esc((res.error || "").slice(0, 40))}</span>`;

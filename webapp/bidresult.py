@@ -90,9 +90,20 @@ def fetch_entry(client: Any, base_url: str, entry: dict[str, Any], own_bizno: st
     return summarize(last, entry, own_bizno)
 
 
+def _lookup_opening(client: Any, entry: dict[str, Any]) -> str:
+    try:
+        from nego.bidcalc import opening_at
+        return opening_at(client, entry.get("noticeNo") or "", entry.get("workType") or "")
+    except Exception:  # noqa: BLE001 — 개찰일은 보조 정보라 실패해도 결과 받기는 계속
+        return ""
+
+
 def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str] | None = None, force: bool = False,
-                 fetch: Callable[..., BidResult] | None = None) -> dict[str, Any]:
-    """결과가 필요한 기록을 받아 `log`에 저장. ids를 주면 그 기록만(force면 '완료'도 다시)."""
+                 fetch: Callable[..., BidResult] | None = None,
+                 opening: Callable[[Any, dict[str, Any]], str] | None = None) -> dict[str, Any]:
+    """결과가 필요한 기록을 받아 `log`에 저장. ids를 주면 그 기록만(force면 '완료'도 다시).
+
+    개찰 일시가 없는 예전 기록(11/10 전에 기록)은 결과가 '개찰 전'이면 공고에서 개찰 일시를 찾아 함께 저장."""
     now = _now()
     entries = log.entries()
     if ids:
@@ -100,6 +111,12 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
     else:
         targets = [e for e in entries if needs_fetch(e, now)]
     done = targets[:MAX_PER_CALL]
+    lookup = opening or _lookup_opening
     for e in done:
-        log.set_result(e["id"], fetch_entry(client, base_url, e, own_bizno, fetch))
+        res = fetch_entry(client, base_url, e, own_bizno, fetch)
+        log.set_result(e["id"], res)
+        if res.get("status") == "개찰 전" and not e.get("openingAt"):
+            found = lookup(client, e)
+            if found:
+                log.set_opening(e["id"], found)
     return {"fetched": len(done), "left": max(0, len(targets) - len(done))}

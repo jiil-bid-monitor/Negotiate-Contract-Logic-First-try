@@ -301,7 +301,7 @@
       if (d.found === false) { clearForm(); badNo(`공고번호 ${d.notice_no || no}를 나라장터에서 찾지 못했습니다 — 공고번호를 확인해 다시 입력하세요`); return; }
       const text = (id, v) => { $(id).textContent = v || "-"; };
       LAST_NOTICE = { noticeNo: d.notice_no || no.replace(/-\d+$/, ""), noticeOrd: d.notice_ord || "", title: d.title || "",
-        institution: d.institution || "", workType: d.work_type || "" };
+        institution: d.institution || "", workType: d.work_type || "", openingAt: d.opening_at || "" };
       REC_BID_EDITED = false; recordMsg("");
       text("#cTitle", d.title);
       text("#cInst", d.institution);
@@ -621,7 +621,10 @@
     const res = r.result;
     if (FETCHING.has(r.id)) return `<span class="res-wait">결과 받는 중…</span>`;
     if (!res) return `<span class="res-wait">아직 안 받음</span>`;
-    if (res.status === "개찰 전") return `<span class="res-wait">개찰 전</span><span class="sub">${esc(day(res.fetchedAt))} 확인</span>`;
+    // 개찰 전이면 확인 시각 대신 개찰 일시를 붉게(11/10 사용자 요청) — 모르면 예전처럼 확인 시각
+    if (res.status === "개찰 전") return `<span class="res-wait">개찰 전</span>${r.openingAt
+      ? `<span class="sub res-open">개찰 ${esc(day(r.openingAt))}</span>`
+      : `<span class="sub">${esc(day(res.fetchedAt))} 확인</span>`}`;
     if (res.status === "오류") return `<span class="res-bad">받지 못함</span><span class="sub">${esc((res.error || "").slice(0, 40))}</span>`;
     const o = res.own, n = res.bidderCount;
     if (!o) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${n}곳</span>`;

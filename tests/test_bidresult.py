@@ -73,6 +73,23 @@ class TestFill(unittest.TestCase):
         self.assertEqual(fill_results(log, None, "u", OWN, ids=[a["id"]], force=True, fetch=fake)["fetched"], 1)
         self.assertIn("1순위 업체", log.csv())
 
+    def test_opening_saved_and_filled(self):
+        """개찰 일시(11/10) — 기록할 때 저장, 예전 기록은 '개찰 전'이면 공고에서 찾아 채움."""
+        log = BidLog(Path(tempfile.mkdtemp()))
+        new = log.add({"noticeNo": "R26BK01810177", "bid": 1, "workType": "공사", "openingAt": "2026-11-12 10:00:00"})
+        old = log.add({"noticeNo": "R26BK01799159", "bid": 1, "workType": "용역"})
+        asked = []
+
+        def look(client, entry):
+            asked.append(entry["noticeNo"])
+            return "2026-11-13 11:00:00"
+
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result([]), opening=look)
+        rows = {r["id"]: r for r in log.entries()}
+        self.assertEqual(rows[new["id"]]["openingAt"], "2026-11-12 10:00:00")   # 이미 있으면 안 찾음
+        self.assertEqual(rows[old["id"]]["openingAt"], "2026-11-13 11:00:00")
+        self.assertEqual(asked, ["R26BK01799159"])
+
 
 if __name__ == "__main__":
     unittest.main()

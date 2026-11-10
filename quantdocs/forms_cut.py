@@ -19,7 +19,8 @@ from pathlib import Path
 
 _TAG = re.compile(r"<(/?)((?:[\w.-]+:)?)(p|run|t|secPr)\b([^>]*?)(/?)>")
 # 서식 머리: 특수기호 하나 + 서식 N(호)(-M) + 특수기호 하나 — 괄호 모양을 가리지 않음(11/04 사용자 요청)
-_HEAD = re.compile(r"^[^\w\s]\s*서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:[-–]\s*(\d+))?\s*[^\w\s]")
+# '[서식 1]'·'〔서식 1호〕'·'【별지서식 4-1】'·'[별지 제1호 서식]'(11/10 경남교육청 학생안전체험원 — '별지'가 끼면 못 잘랐음)
+_HEAD = re.compile(r"^[^\w\s]\s*(?:별\s*지\s*)?(?:서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:[-–]\s*(\d+))?|제\s*(\d+)\s*호\s*(?:[-–]\s*(\d+))?\s*서식)\s*[^\w\s]")
 
 
 @dataclass
@@ -189,9 +190,10 @@ def find_forms(sections: dict[str, str], heights: dict[str, int] | None = None, 
             m = _HEAD.match(sq)
             if not m:
                 continue
-            if len(re.findall(r"[^\w\s]서식\d+", sq)) >= 2:  # 서식 목차 표 — 본문 아님
+            if len(re.findall(r"[^\w\s](?:별지)?서식\d+", sq)) >= 2:  # 서식 목차 표 — 본문 아님
                 continue
-            heads.append((idx, m.group(1) + (f"-{m.group(2)}" if m.group(2) else "")))
+            no, sub_no = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+            heads.append((idx, no + (f"-{sub_no}" if sub_no else "")))
         for k, (idx, no) in enumerate(heads):
             end = heads[k + 1][0] if k + 1 < len(heads) else len(paras)
             body = paras[idx:end]
@@ -214,7 +216,7 @@ def _norm_title(line: str) -> str:
 
 def _guess_title(body: list[Para]) -> str:
     """제목 문단의 '[서식 N]' 뒤 글, 없으면 다음 줄들 중 처음 2글자 넘는 줄."""
-    rest = re.sub(r"^\s*[^\w\s]\s*서식\s*(?:제\s*)?[\d\s\-–호]+[^\w\s]", "", body[0].text)  # '〔서식 1호〕'도(11/04 당진)
+    rest = re.sub(r"^\s*[^\w\s]\s*(?:별\s*지\s*)?(?:서식\s*(?:제\s*)?[\d\s\-–호]+|제[\d\s\-–호]+서식\s*)[^\w\s]", "", body[0].text)  # '〔서식 1호〕'도(11/04 당진)
     lines = [ln for p in [rest] + [p.text for p in body[1:4]] for ln in p.splitlines()]
     for ln in lines:
         t = _norm_title(ln)

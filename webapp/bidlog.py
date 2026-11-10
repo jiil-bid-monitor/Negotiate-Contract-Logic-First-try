@@ -26,7 +26,7 @@ KST = timezone(timedelta(hours=9))
 FILE_NAME = "bid_log.json"
 
 # 화면이 보내는 값 → 저장할 이름과 종류. 그 밖의 값은 버린다
-_TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "method": 80, "openingAt": 25}
+_TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "method": 80, "openingAt": 25, "closingAt": 25}
 _NUMBER = ("basis", "lowerRate", "rangeLo", "rangeHi", "aValue", "bid", "rate", "planned", "netCost")
 _NO_RE = re.compile(r"^[A-Z0-9]{8,14}$")
 
@@ -134,14 +134,16 @@ class BidLog:
             row["result"] = result
             self._write(rows)
 
-    def set_opening(self, entry_id: str, opening: str) -> None:
-        """개찰 일시를 그 기록에 저장(예전 기록 채우기) — 지운 기록이면 아무것도 안 함."""
+    def set_times(self, entry_id: str, times: dict[str, str]) -> None:
+        """개찰 일시·투찰 마감을 그 기록에 저장(예전 기록 채우기) — 못 찾은 칸도 빈 글자로 남겨 다시 찾지 않음."""
         with self._lock:
             rows = self._read()
             row = next((r for r in rows if r.get("id") == entry_id), None)
             if row is None:
                 return
-            row["openingAt"] = str(opening or "")[:25]
+            for key in ("openingAt", "closingAt"):
+                if times.get(key) or key not in row:
+                    row[key] = str(times.get(key) or "")[:25]
             self._write(rows)
 
     def delete(self, entry_id: str) -> None:

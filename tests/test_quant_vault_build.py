@@ -1958,3 +1958,40 @@ def test_signature_shapes_from_past_rfps(tmp_path: Path):
                                    .replace("", "").replace("", "")))
     assert "업 체 명 : (주)가상" in t2 and "주 소 : 강원 정선" in t2 and "대 표 자 : 홍길동" in t2
     assert t2.startswith(" 성 명 위와") or "성 명 위와" in t2  # 사람 칸은 비운 채
+
+
+def test_fill_face_unified_and_big_label_size(tmp_path: Path):
+    """11/10 사용자 요청(필암 5쪽): ① 채운 글 글꼴을 통합서식 첫 서식의 채운 글 글꼴로 통일(face) ② 이름표가 11pt보다 크면
+    값도 이름표 크기('나'안 — 굵게는 뺌), 11pt보다 작으면 11pt."""
+    from quantdocs.fill import fill_hwpx
+
+    fonts = ('<hh:fontfaces><hh:fontface lang="HANGUL" fontCnt="2"><hh:font id="0" face="휴먼명조" type="TTF"/>'
+             '<hh:font id="1" face="HY견명조" type="TTF"/></hh:fontface>'
+             '<hh:fontface lang="LATIN" fontCnt="2"><hh:font id="0" face="휴먼명조" type="TTF"/><hh:font id="1" face="HY견명조" type="TTF"/>'
+             '</hh:fontface></hh:fontfaces>')
+    header = ('<hh:head>' + fonts + '<hh:charProperties itemCnt="2">'
+              '<hh:charPr id="0" height="1000" textColor="#000000"><hh:fontRef hangul="0" latin="0"/></hh:charPr>'
+              '<hh:charPr id="5" height="1500" textColor="#000000"><hh:fontRef hangul="1" latin="1"/><hh:bold/></hh:charPr>'
+              '</hh:charProperties></hh:head>')
+    body = ('<hp:p><hp:run charPrIDRef="0"><hp:t>보안서약서</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>업 체 명 :</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run charPrIDRef="5"><hp:t>서 약 자 :              </hp:t></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "t.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+
+    def char_of(path, value):
+        zo = zipfile.ZipFile(path)
+        out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+        cid = re.search(rf'<hp:run charPrIDRef="(\d+)"><hp:t>{re.escape(value)}</hp:t>', out).group(1)
+        return re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
+
+    rep = fill_hwpx(src, tmp_path / "a.hwpx", v)               # 글꼴을 정하지 않으면 그 줄 글꼴 그대로
+    big = char_of(tmp_path / "a.hwpx", "홍길동")
+    assert 'height="1500"' in big and "bold" not in big and 'hangul="1"' in big   # 이름표 15pt → 값 15pt, 굵게 뺌
+    assert 'height="1100"' in char_of(tmp_path / "a.hwpx", "(주)가상")          # 10pt 이름표 → 11pt
+    assert rep.face == "휴먼명조"                                                  # 첫 값의 글꼴
+    fill_hwpx(src, tmp_path / "b.hwpx", v, face="휴먼명조")    # 통합서식 첫 서식 글꼴로
+    big = char_of(tmp_path / "b.hwpx", "홍길동")
+    assert 'hangul="0"' in big and 'latin="0"' in big and 'height="1500"' in big

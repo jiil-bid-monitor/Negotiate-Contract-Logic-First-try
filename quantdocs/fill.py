@@ -28,6 +28,7 @@ class FillReport:
     overflow: int = 0  # 표 줄이 모자라 못 넣은 실적 수
     overflow_names: list[str] = field(default_factory=list)  # 그 실적 이름(금액이 작아 빠진 것)
     self_rows: list[list[str]] = field(default_factory=list)  # 자기평가표에 넣은 점수(항목·배점·점수·근거·확인할 것)
+    face: str = ""  # 이 서식에 채운 글의 한글 글꼴 이름(첫 값 기준) — 다음 서식들도 이 글꼴로(11/10 통합서식 글꼴 통일)
 
 
 def _spans(xml: str, tag: str, start: int = 0, end: int | None = None) -> list[tuple[int, int]]:
@@ -748,8 +749,10 @@ MIN_HEIGHT = 700  # 7pt
 
 
 class _Chars:
-    def __init__(self, header: str):
+    def __init__(self, header: str, face: str = ""):
         self.header = header
+        self.face = face          # 채운 글에 쓸 한글 글꼴 이름(통합서식 첫 서식의 채운 글 글꼴, 11/10) — 비면 그 글 조각의 글꼴
+        self.used_face = ""       # 이 서식에서 처음 채운 글의 글꼴 이름
         self.blocks = {m.group(1): m.group(0) for m in
                        re.finditer(r'<(?:[\w.-]+:)?charPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?charPr>', header, re.S)}
         self.paras = {m.group(1): m.group(0) for m in
@@ -883,12 +886,22 @@ class _Chars:
         m = re.search(r"<(?:[\w.-]+:)?fontRef\b[^>]*>", self.blocks.get(cid, ""))
         return m.group(0) if m else ""
 
+    def _face_of(self, cid: str) -> str:
+        hangul = re.search(r'\bhangul="(\d+)"', self._font_ref(cid))
+        return self.faces.get("HANGUL", {}).get(hangul.group(1), "") if hangul else ""
+
+    def _target_face(self, cid: str) -> str:
+        """채운 글의 한글 글꼴 — 통합서식 글꼴(self.face)이 이 문서 글꼴 목록에 있으면 그것, 아니면 그 글 조각의 글꼴."""
+        if self.face and self.face in self.faces.get("HANGUL", {}).values():
+            return self.face
+        return self._face_of(cid)
+
     def _unified_ref(self, cid: str) -> str:
         """fontRef에서 한글 말고 다른 언어(영문·숫자·기호 등)도 한글과 같은 글꼴을 가리키게 — 문서 글꼴 목록에 그 글꼴이 있는 언어만.
+        통합서식 글꼴(self.face)이 정해져 있으면 한글도 그 글꼴로(11/10 사용자 요청: 5쪽만 채운 글 글꼴이 달랐음).
         (글꼴을 새로 더하지 않음: 통합서식으로 이을 때 원본 머리의 글꼴 목록을 그대로 쓰기 때문)"""
         ref = self._font_ref(cid)
-        hangul = re.search(r'\bhangul="(\d+)"', ref)
-        face = self.faces.get("HANGUL", {}).get(hangul.group(1)) if hangul else None
+        face = self._target_face(cid)
         if not face:
             return ref
 
@@ -896,10 +909,12 @@ class _Chars:
             lang, cur = m.group(1), m.group(2)
             ids = [i for i, f in self.faces.get(lang.upper(), {}).items() if f == face]
             return f'{lang}="{ids[0] if ids else cur}"'
-        return re.sub(r'\b(latin|hanja|japanese|other|symbol|user)="(\d+)"', swap, ref)
+        return re.sub(r'\b(hangul|latin|hanja|japanese|other|symbol|user)="(\d+)"', swap, ref)
 
     def variant(self, cid: str, height: int | None = None) -> str:
         """채운 글에 쓸 글자 모양: 숫자·영문도 한글 글꼴로, height를 주면 그 크기로. 바꿀 게 없으면 cid 그대로."""
+        if cid in self.blocks and not self.used_face:
+            self.used_face = self._target_face(cid)
         if cid not in self.blocks or (height is None and self._unified_ref(cid) == self._font_ref(cid) and not self._grey(cid)):
             return cid
         key = (cid, height)
@@ -973,6 +988,13 @@ def _fill_variant(chars: "_Chars", cid: str) -> str:
     return chars.variant(cid, None if chars.height(cid) == FILL_HEIGHT else FILL_HEIGHT)
 
 
+def _label_variant(chars: "_Chars", cid: str) -> str:
+    """이름표 뒤에 끼워 넣은 값의 글자 모양 — 11pt, 다만 이름표가 11pt보다 크면 이름표 크기(11/10 사용자 결정 '나':
+    '서 약 자 :'처럼 큰 서명 줄에서 값만 작아 보였음). 굵게·기울임·색은 늘 뺌."""
+    h = chars.height(cid)
+    return chars.variant(cid, None if h >= FILL_HEIGHT else FILL_HEIGHT)
+
+
 def _fit_char(cell_xml: str, line: str, chars: "_Chars") -> tuple[str | None, str]:
     """(채운 글에 쓸 글자 모양 id, 알림). 늘 11pt — 줄 간격이 100% 미만·고정값인 칸에서 한 줄에 안 들어갈 때만 줄임."""
     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', cell_xml)
@@ -1011,7 +1033,7 @@ def _apply_marks(xml: str, chars: "_Chars | None") -> str:
         value = m.group(1)
         if chars is not None and runs and ts:
             r, t = runs[-1], ts[-1]
-            new = _fill_variant(chars, r.group(2))
+            new = _label_variant(chars, r.group(2))
             if new != r.group(2):
                 p = r.group(1) or ""
                 value = (f'</{p}t></{p}run><{p}run charPrIDRef="{new}"><{p}t>{value}</{p}t></{p}run>'
@@ -1447,9 +1469,10 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cel
 
 def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "",
               notice_no: tuple[str, str] | None = None, g2b_no: str = "", self_scores=None,
-              basis: int | None = None, sign_only: bool = False) -> FillReport:
+              basis: int | None = None, sign_only: bool = False, face: str = "") -> FillReport:
     """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸).
-    sign_only: 직접 기입 서식(재직증명서 등) — 표는 건드리지 않고 표 밖 서명 줄('업 체 명 :'·'주 소 :'·'대 표 자 : (인)')만(11/05)."""
+    sign_only: 직접 기입 서식(재직증명서 등) — 표는 건드리지 않고 표 밖 서명 줄('업 체 명 :'·'주 소 :'·'대 표 자 : (인)')만(11/05).
+    face: 채운 글의 한글 글꼴 이름(통합서식 첫 서식의 채운 글 글꼴 — 11/10). 돌려주는 rep.face = 이 서식에서 쓴 글꼴."""
     rep = FillReport(Path(dst).name)
     # 묶음은 그대로 두고 이번 서식에만 공고 이름·공고번호를 더함(11/04 사용자 요청 — 공고마다 자동)
     # 공고번호 = 공고문의 기관 공고번호('제2026-1129호'), 못 찾으면 나라장터 공고번호
@@ -1460,7 +1483,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
         vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text}, docs=vault.docs, history=vault.history)
     zin = zipfile.ZipFile(src)
     out_entries = {}
-    chars = _Chars(zin.read("Contents/header.xml").decode("utf-8")) if "Contents/header.xml" in zin.namelist() else None
+    chars = _Chars(zin.read("Contents/header.xml").decode("utf-8"), face) if "Contents/header.xml" in zin.namelist() else None
     for name in zin.namelist():
         data = zin.read(name)
         if re.fullmatch(r"Contents/section\d+\.xml", name):
@@ -1618,6 +1641,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 xml = _keep_table_heights(before_fill, xml, chars, rep)
             data = xml.encode("utf-8")
         out_entries[name] = data
+    if chars is not None:
+        rep.face = chars.used_face
     if chars is not None and chars.changed:  # 칸에 맞춰 줄인 글자 모양·가운데 정렬 문단 모양을 머리 정보에 더함
         out_entries["Contents/header.xml"] = chars.finish().encode("utf-8")
     Path(dst).parent.mkdir(parents=True, exist_ok=True)

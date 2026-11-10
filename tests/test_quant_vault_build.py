@@ -2030,3 +2030,15 @@ def test_birth_and_proposal_notice_label():
     assert _label_key("입찰(제안)공고번호") == "_notice_no" and _label_key("입찰공고번호") == "_notice_no"
     assert _birth("800101-1******") == "1980. 01. 01." and _birth("050302-3******") == "2005. 03. 02."
     assert _birth("") == "" and _birth("801301-1******") == ""
+
+
+def test_applicant_signature_line(tmp_path: Path):
+    """11/10 경남교육청 입찰참가신청서 끝 '신 청 인 :          (인)' — 대표자 이름. (인) 없는 '신청인 :'은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "t.hwpx", p("입찰참가신청서") + p("2026 .   .   .") + p("   신 청 인 :                      (인)") + p("   신청인 :"))
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    text = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    lines = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", m)).strip() for m in re.findall(r"<hp:p\b.*?</hp:p>", text, re.S)]
+    assert lines[2] == "신 청 인 : 홍길동 (인)" and lines[3] == "신청인 :"

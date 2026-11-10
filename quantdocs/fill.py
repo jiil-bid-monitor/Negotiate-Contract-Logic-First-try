@@ -699,6 +699,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         if not key and _sq(label) == "기관명" and re.search(r"각\s*서|확\s*약\s*서|서\s*약\s*서", _text(xml)) \
                 and not any(cs <= s and e <= ce for cs, ce in single):
             key = "회사명"  # 각서·확약서 끝 '기관명 :  / 대표자 : (인)' = 입찰자(11/05 창업진흥원 서식 7) — 증명서 발급기관 칸(한 줄 칸)은 아님
+        if not key and seal and re.fullmatch(r"신청(?:인|자)|제안(?:자|인)|입찰(?:자|인)|응모(?:자|인)", _sq(label)):
+            key = "대표자"  # 서명 줄 '신 청 인 :        (인)'(11/10 경남교육청 입찰참가신청서) — (인)이 붙은 줄만, 대표자 이름
         value = _value(key, vault) if key else ""
         if not value:
             continue

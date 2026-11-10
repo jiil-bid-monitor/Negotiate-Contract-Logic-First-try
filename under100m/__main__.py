@@ -25,6 +25,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
+from .ai_summary import lines as ai_lines, summarize as summarize_docs
 from .docs import _unique, issue_lines
 from .form_fill import fill_form, load_company
 from .form_split import merge_forms, split_forms
@@ -255,7 +256,7 @@ def read_docs(files: list[Path]) -> list[tuple[Path, str]]:
 
     out = []
     for f in files:
-        if f.suffix.lower() in (".hwp", ".hwpx", ".pdf") and _DOC_FILE.search(f.name):
+        if f.suffix.lower() in (".hwp", ".hwpx", ".pdf") and _DOC_FILE.search(re.sub(r"[\s_]", "", f.name)):  # "제출 서류"·"제출_서류"도
             try:
                 data = f.read_bytes()
                 out.append((f, extract_text(data, f.suffix.lower().lstrip(".") or (_sniff_ext(data) or ""))))
@@ -335,8 +336,11 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
         deadline = submit_deadline(candidate.schedule)
         posted = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:]}" if posted_digits else None
         keep_prep = bool(old and (old / PREP_DIR).exists())  # 담당자가 넣은 파일이 있어 재공고 때는 건드리지 않음
+        ai = summarize_docs([(f.name, text) for f, text in docs])
+        if ai:
+            notes += ai_lines(ai)
         need, ref = prepare(None if keep_prep else tmp / PREP_DIR, [text for _, text in docs], form_names, COMPANY_DOCS, deadline, posted, now.date(), company)
-        if not write_summary_pdf(candidate, amount, source, tmp / SUMMARY, notice_key(n), need, ref, deadline, [placed[f].name for f, _ in docs], now):
+        if not write_summary_pdf(candidate, amount, source, tmp / SUMMARY, notice_key(n), need, ref, deadline, [placed[f].name for f, _ in docs], now, ai):
             notes.append("한글 글꼴이 없어 요약 PDF를 만들지 못함")
         if keep_prep:
             notes.append(f"재공고: {PREP_DIR}는 그대로 둠 — 바뀐 제출서류가 있는지 공고문과 대조하세요.")

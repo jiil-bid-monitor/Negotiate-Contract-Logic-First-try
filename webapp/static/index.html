@@ -1057,12 +1057,15 @@ footer b { color: var(--muted); }
 .bidders-head { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 .bidders-wrap { max-height: 360px; overflow: auto; border: 1px solid var(--line); background: var(--panel); }
 table.bidders { width: 100%; border-collapse: collapse; font-size: 12px; }
-#tab-calc table.bidders th { position: sticky; top: 0; background: var(--chip); text-align: left; padding: 5px 10px; font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--line); }
-#tab-calc table.bidders td { padding: 4px 10px; border-bottom: 1px solid var(--line-soft); font-size: 12px; }
+#tab-calc table.bidders th { position: sticky; top: 0; background: var(--chip); text-align: center; padding: 6px 8px; font-weight: 600; font-size: 12px; border: 1px solid var(--line); line-height: 1.3; }
+#tab-calc table.bidders th small { font-weight: 400; color: var(--muted); }
+#tab-calc table.bidders td { padding: 5px 8px; border: 1px solid var(--line); font-size: 12px; text-align: center; vertical-align: middle; }
+#tab-calc table.bidders td.name { text-align: left; min-width: 120px; }
+#tab-calc table.bidders td.remark { min-width: 72px; }
 #tab-calc table.bidders .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-#tab-calc .bidlog-table td.act button.bidders-btn { display: block; margin-top: 4px; }
-table.bidders tr.own td { font-weight: 700; color: var(--brand); }
-table.bidders tr.unranked td { color: var(--muted); }
+#tab-calc table.bidders .paren { display: block; color: var(--muted); }
+#tab-calc table.bidders td.basis-rate { color: var(--urgent); }
+#tab-calc table.bidders tr.own td { font-weight: 700; color: var(--brand); }
 #tab-calc table.bidders td.under { color: var(--urgent); }  /* 미달 순위 -1, -2 … 붉게(11/10) */
 #tab-calc .res-foot button, #tab-calc .bidlog-table td.act button.more { padding: 3px 8px; font-size: 12px; }
 #tab-calc .bidlog-table td.act button.more { color: var(--brand); border-color: var(--brand); }

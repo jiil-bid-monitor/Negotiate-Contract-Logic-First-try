@@ -197,11 +197,21 @@ def _masked(v: str) -> str:
     return f"{m.group(1)}-*******" if m else ""
 
 
+def _birth(v: str) -> str:
+    """주민등록번호 앞 6자리 → '1965. 03. 12.'(올해 두 자리보다 크면 1900년대). 번호가 없으면 빈 글자."""
+    m = re.search(r"(\d{2})(\d{2})(\d{2})\s*-?\s*[\d*Xx]{7}", v or "")
+    if not m or not (1 <= int(m.group(2)) <= 12 and 1 <= int(m.group(3)) <= 31):
+        return ""
+    yy = int(m.group(1))
+    century = 2000 if yy <= date.today().year % 100 else 1900
+    return f"{century + yy}. {m.group(2)}. {m.group(3)}."
+
+
 def _label_key(text: str) -> str | None:
     t = _sq(text).strip(":：")
     if not t or len(t) > 16 or _SKIP_LABEL.search(t):
         return None
-    if re.fullmatch(r"(?:입찰)?공고(?:\(지명\))?번호", t):  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)
+    if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호", t):  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
         return "_notice_no"
     if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
         return "전화번호"
@@ -1377,7 +1387,7 @@ _BID_NAME = r"입\s*찰\s*건\s*명"
 
 
 _P_END = re.compile(r"</(?:[\w.-]+:)?p>")
-_NOTICE_NO_LABEL = r"(?:입\s*찰\s*)?공\s*고\s*(?:\(\s*지\s*명\s*\)\s*)?번\s*호"
+_NOTICE_NO_LABEL = r"(?:입\s*찰\s*)?(?:\(\s*제\s*안\s*\)\s*|제\s*안\s*)?공\s*고\s*(?:\(\s*지\s*명\s*\)\s*)?번\s*호"
 
 
 def _rest_of_para(xml: str, pos: int) -> str:
@@ -1578,6 +1588,15 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         else:  # 한 줄 전체 칸 — 이름표 아래에 붙임
                             edits.append((c, lines, True))
                         rep.filled.append(f"연혁 → {len(lines)}줄")
+                        continue
+                    if not key and _sq(c.text) == "생년월일" and c.row not in agent_rows \
+                            and any(o.row == c.row and _sq(o.text).startswith("대표자") for o in cells):
+                        # 신청인 '대 표 자 | 이름 | 생년월일 | __'(11/10 경남교육청 입찰참가신청서) — 대표자 주민등록번호 앞 6자리로, 대리인 줄은 비움
+                        birth = _birth(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
+                        target = by_pos.get((c.row, c.col + c.colspan))
+                        if birth and target is not None and target.blank:
+                            edits.append((target, [birth], False))
+                            rep.filled.append(f"대표자 생년월일 → {birth}")
                         continue
                     if not key and "주민등록번호" in _sq(c.text):
                         # 대표자 줄의 주민등록번호만(위임장 '대 표 자 | 이름 | 주민등록번호 | __') — 대리인 줄은 비움, 뒷자리는 '*'

@@ -2022,3 +2022,11 @@ def test_multi_label_lines_and_sign_only_company(tmp_path: Path):
     fill_hwpx(src2, tmp_path / "o2.hwpx", v, sign_only=True)
     text2 = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()))
     assert "회사명 : (주)가상" in text2 and "대표자 : 홍길동" in text2
+
+
+def test_birth_and_proposal_notice_label():
+    """11/10 경남교육청 입찰참가신청서: '입찰(제안)공고번호' 칸, 대표자 줄 '생년월일' 칸(대표자 주민번호 앞 6자리)."""
+    from quantdocs.fill import _birth, _label_key
+    assert _label_key("입찰(제안)공고번호") == "_notice_no" and _label_key("입찰공고번호") == "_notice_no"
+    assert _birth("800101-1******") == "1980. 01. 01." and _birth("050302-3******") == "2005. 03. 02."
+    assert _birth("") == "" and _birth("801301-1******") == ""

@@ -25,12 +25,12 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
-from .ai_summary import lines as ai_lines, summarize as summarize_docs
 from .docs import _unique, issue_lines
 from .form_fill import fill_form, load_company
 from .form_split import merge_forms, split_forms
 from .pdf_forms import fill_pdf, split_pdf
 from .prep import PREP_DIR, prepare
+from .sections import find_sections
 from .summary import write_summary_pdf
 
 log = logging.getLogger("under100m")
@@ -336,11 +336,9 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
         deadline = submit_deadline(candidate.schedule)
         posted = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:]}" if posted_digits else None
         keep_prep = bool(old and (old / PREP_DIR).exists())  # 담당자가 넣은 파일이 있어 재공고 때는 건드리지 않음
-        ai = summarize_docs([(f.name, text) for f, text in docs])
-        if ai:
-            notes += ai_lines(ai)
         need, ref = prepare(None if keep_prep else tmp / PREP_DIR, [text for _, text in docs], form_names, COMPANY_DOCS, deadline, posted, now.date(), company)
-        if not write_summary_pdf(candidate, amount, source, tmp / SUMMARY, notice_key(n), need, ref, deadline, [placed[f].name for f, _ in docs], now, ai):
+        if not write_summary_pdf(candidate, amount, source, tmp / SUMMARY, notice_key(n), need, ref, deadline, [placed[f].name for f, _ in docs], now,
+                                 find_sections([(placed[f].name, text) for f, text in docs])):
             notes.append("한글 글꼴이 없어 요약 PDF를 만들지 못함")
         if keep_prep:
             notes.append(f"재공고: {PREP_DIR}는 그대로 둠 — 바뀐 제출서류가 있는지 공고문과 대조하세요.")

@@ -825,11 +825,13 @@ class _Chars:
         self.header = header
         self.face = face          # 채운 글에 쓸 한글 글꼴 이름(통합서식 첫 서식의 채운 글 글꼴, 11/10) — 비면 그 글 조각의 글꼴
         self.used_face = ""       # 이 서식에서 처음 채운 글의 글꼴 이름
+        self.cur_height = 0       # 지금 채우는 칸의 이름표 글자 크기 — 11pt보다 크면 값도 그 크기('나'안을 표 칸에도, 11/10)
+        self.cur_face = ""        # 지금 채우는 칸의 이름표 글꼴(11/10 사용자 요청: 양식 글꼴과 같게) — 있으면 이것이 먼저
         self.blocks = {m.group(1): m.group(0) for m in
                        re.finditer(r'<(?:[\w.-]+:)?charPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?charPr>', header, re.S)}
         self.paras = {m.group(1): m.group(0) for m in
                       re.finditer(r'<(?:[\w.-]+:)?paraPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?paraPr>', header, re.S)}
-        self.added: dict[tuple[str, int | None], str] = {}
+        self.added: dict[tuple[str, int | None, str], str] = {}  # (원래 모양, 크기, 글꼴) → 사본 id
         self.added_para: dict[str, str] = {}  # 문단 모양 id → 가운데 정렬로 바꾼 사본 id
         self.added_left: dict[str, str] = {}  # 문단 모양 id → 왼쪽 정렬로 바꾼 사본 id(양쪽·배분 정렬 칸)
         self.added_hang: dict[tuple[str, int], str] = {}  # (문단 모양 id, 내어쓰기 너비) → 사본 id
@@ -841,7 +843,7 @@ class _Chars:
         """글자 모양 정의 — 채우면서 더한 사본(11pt·줄인 크기)이면 원래 모양에 그 크기를 넣은 것."""
         if cid in self.blocks:
             return self.blocks[cid]
-        for (orig, h), new in self.added.items():
+        for (orig, h, _f), new in self.added.items():
             if new == cid and orig in self.blocks:
                 b = self.blocks[orig]
                 return re.sub(r'\bheight="\d+"', f'height="{h}"', b, count=1) if h is not None else b
@@ -963,17 +965,19 @@ class _Chars:
         return self.faces.get("HANGUL", {}).get(hangul.group(1), "") if hangul else ""
 
     def _target_face(self, cid: str) -> str:
-        """채운 글의 한글 글꼴 — 통합서식 글꼴(self.face)이 이 문서 글꼴 목록에 있으면 그것, 아니면 그 글 조각의 글꼴."""
-        if self.face and self.face in self.faces.get("HANGUL", {}).values():
-            return self.face
+        """채운 글의 한글 글꼴 — 칸 옆 이름표 글꼴(cur_face) → 통합서식 글꼴(self.face) → 그 글 조각의 글꼴 순(문서 글꼴 목록에 있을 때만)."""
+        known = self.faces.get("HANGUL", {}).values()
+        for f in (self.cur_face, self.face):
+            if f and f in known:
+                return f
         return self._face_of(cid)
 
-    def _unified_ref(self, cid: str) -> str:
+    def _unified_ref(self, cid: str, face: str | None = None) -> str:
         """fontRef에서 한글 말고 다른 언어(영문·숫자·기호 등)도 한글과 같은 글꼴을 가리키게 — 문서 글꼴 목록에 그 글꼴이 있는 언어만.
         통합서식 글꼴(self.face)이 정해져 있으면 한글도 그 글꼴로(11/10 사용자 요청: 5쪽만 채운 글 글꼴이 달랐음).
         (글꼴을 새로 더하지 않음: 통합서식으로 이을 때 원본 머리의 글꼴 목록을 그대로 쓰기 때문)"""
         ref = self._font_ref(cid)
-        face = self._target_face(cid)
+        face = self._target_face(cid) if face is None else face
         if not face:
             return ref
 
@@ -989,7 +993,7 @@ class _Chars:
             self.used_face = self._target_face(cid)
         if cid not in self.blocks or (height is None and self._unified_ref(cid) == self._font_ref(cid) and not self._grey(cid)):
             return cid
-        key = (cid, height)
+        key = (cid, height, self._target_face(cid))
         if key not in self.added:
             ids = [int(x) for x in self.blocks] + [int(x) for x in self.added.values()]
             self.added[key] = str(max(ids) + 1)
@@ -1025,7 +1029,7 @@ class _Chars:
         if not self.added:
             return header
 
-        def block(cid: str, h: int | None, new: str) -> str:
+        def block(cid: str, h: int | None, new: str, face: str) -> str:
             b = re.sub(r'\bid="\d+"', f'id="{new}"', self.blocks[cid], count=1)
             if h is not None:
                 b = re.sub(r'\bheight="\d+"', f'height="{h}"', b, count=1)
@@ -1033,8 +1037,8 @@ class _Chars:
             b = re.sub(r"<(?:[\w.-]+:)?(?:bold|italic)\s*/>", "", b)  # 굵게·기울임 없이(11/06)
             b = re.sub(r'(<(?:[\w.-]+:)?underline\b[^>]*\btype=")\w+(")', r"\g<1>NONE\2", b, count=1)
             ref = self._font_ref(cid)
-            return b.replace(ref, self._unified_ref(cid), 1) if ref else b
-        extra = "".join(block(cid, h, new) for (cid, h), new in self.added.items())
+            return b.replace(ref, self._unified_ref(cid, face), 1) if ref else b
+        extra = "".join(block(cid, h, new, face) for (cid, h, face), new in self.added.items())
         h = re.sub(r"(</(?:[\w.-]+:)?charProperties>)", lambda m: extra + m.group(1), header, count=1)
         return re.sub(r'(<(?:[\w.-]+:)?charProperties\b[^>]*\bitemCnt=")(\d+)"',
                       lambda m: f'{m.group(1)}{int(m.group(2)) + len(self.added)}"', h, count=1)
@@ -1055,9 +1059,29 @@ def _text_width(text: str, height: int, ratio: float) -> float:
     return w * height
 
 
+def _label_face(xml: str, cell: "Cell", chars: "_Chars") -> tuple[str, int]:
+    """값을 넣을 칸의 이름표 칸(같은 줄 왼쪽 칸, 없으면 바로 위 칸) (글꼴 이름, 글자 크기) — 값도 양식 글꼴로(11/10 사용자 요청)."""
+    tbl = None
+    for t in _spans(xml, "tbl"):
+        if t[0] <= cell.start < t[1] and (tbl is None or t[0] > tbl[0]):
+            tbl = t
+    if tbl is None:
+        return "", 0
+    cells = [c for c in _cells(xml, tbl) if not (c.start == cell.start)]
+    left = next((o for o in cells if o.col + o.colspan == cell.col and o.row <= cell.row < o.row + o.rowspan), None)
+    above = next((o for o in cells if o.col == cell.col and o.row + o.rowspan == cell.row), None)
+    for o in (left, above):
+        if o is not None and _sq(o.text):
+            run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', xml[o.start:o.end])
+            if run:
+                return chars._face_of(run.group(1)), chars.height(run.group(1))
+    return "", 0
+
+
 def _fill_variant(chars: "_Chars", cid: str) -> str:
     """cid 글자 모양의 11pt 사본(숫자·영문도 한글 글꼴로). 이미 11pt면 크기는 그대로 두고 글꼴만."""
-    return chars.variant(cid, None if chars.height(cid) == FILL_HEIGHT else FILL_HEIGHT)
+    want = max(FILL_HEIGHT, chars.cur_height or 0)  # 이름표가 11pt보다 크면 이름표 크기
+    return chars.variant(cid, None if chars.height(cid) == want else want)
 
 
 def _label_variant(chars: "_Chars", cid: str) -> str:
@@ -1084,7 +1108,7 @@ def _fit_char(cell_xml: str, line: str, chars: "_Chars") -> tuple[str | None, st
     def fits(h: int) -> bool:  # 한 줄에 들어가나
         return _text_width(line, h, ratio) <= width * 0.95
 
-    if width <= 0 or fits(FILL_HEIGHT):
+    if width <= 0 or fits(max(FILL_HEIGHT, chars.cur_height or 0)):
         return _fill_variant(chars, cid), ""
     new_h = next((h for h in range(FILL_HEIGHT - 10, MIN_HEIGHT - 1, -10) if fits(h)), MIN_HEIGHT)
     note = f"줄 간격이 좁은 칸이라 글자 11→{new_h / 100:g}pt로 줄여 한 줄에 맞춤"
@@ -1716,6 +1740,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if cell.start in base_char:
                     seg = re.sub(r'(<(?:[\w.-]+:)?run\b[^>]*\bcharPrIDRef=")\d+(")', rf"\g<1>{base_char[cell.start]}\2", seg)
                 char_id = None
+                if chars is not None:
+                    chars.cur_face, chars.cur_height = _label_face(xml, cell, chars)
                 if chars is not None and len(lines) == 1 and not keep:
                     char_id, note = _fit_char(seg, lines[0], chars)
                     if note:
@@ -1723,6 +1749,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 elif chars is not None:  # 여러 줄(연혁 등)도 11pt, 숫자·영문은 한글 글꼴로
                     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', seg)
                     char_id = _fill_variant(chars, run.group(1) if run else "0")
+                if chars is not None:
+                    chars.cur_face, chars.cur_height = "", 0
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
             xml = _fill_bond(xml, basis, rep, title)
             xml = _fill_notice_no_para(xml, no_text, rep)

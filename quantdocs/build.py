@@ -383,7 +383,6 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             if src.suffix.lower() != ".hwpx":
                 continue
             parts = []
-            face = ""  # 통합서식 하나 안에서 채운 글 글꼴 통일 — 첫 서식(번호순)에 채운 글의 글꼴(11/10 사용자 요청)
             if not _is_hwpx(src):  # 변환에 실패한 .hwpx 등 — 이 첨부만 건너뜀(만들기 전체가 멈추지 않게)
                 a.notes.append(f"{f.name}: 한글(HWPX) 파일이 아니라 서식을 자르지 못함 — 원본을 한글에서 HWPX로 저장해 확인")
                 continue
@@ -393,9 +392,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                     if _BLANK_FORM.search(c.title):  # 질의서·공동수급 서식은 공란(11/05)
                         shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
                     else:  # 재직증명서 등도 표 밖 서명 줄(업체명·주소·대표자 (인))은 채움(11/05 사용자 요청)
-                        reports.append(fill_hwpx(forms_dir / c.file, manual_dir / c.file, vault, title=notice_title, sign_only=True,
-                                                 face=face))
-                        face = face or reports[-1].face
+                        reports.append(fill_hwpx(forms_dir / c.file, manual_dir / c.file, vault, title=notice_title, sign_only=True))
                         _note_unfilled(a, c, manual_dir / c.file, True)
                     manual.append(c.file)
                     parts.append((c, manual_dir / c.file))
@@ -410,8 +407,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                     rows, why = form_tracks(years.group(0) if years else c.title, vault.tracks, notice_date or date.today())
                     a.notes += [f"{c.file}: {w}" for w in why]
                 rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title,
-                                agency_no, notice_no, score_ctx, basis[0] if basis else None, face=face)
-                face = face or rep.face
+                                agency_no, notice_no, score_ctx, basis[0] if basis else None)
                 reports.append(rep)
                 _note_unfilled(a, c, filled_dir / c.file, False)
                 parts.append((c, filled_dir / c.file))

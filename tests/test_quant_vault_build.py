@@ -2063,3 +2063,26 @@ def test_credit_labels_and_applicant_group():
     head = Cell(start=0, end=0, row=0, col=0, colspan=1, text="신 청 인", rowspan=4)
     lab = Cell(start=0, end=0, row=1, col=1, colspan=1, text="대 표 자")
     assert _row_group([head, lab], lab) == "신청인"
+
+
+def test_table_value_follows_label_font(tmp_path: Path):
+    """11/10 사용자 요청: 표 칸 값은 옆 이름표 칸과 같은 글꼴·크기(이름표가 11pt보다 크면 그 크기) — 빈 칸의 기본 글꼴(굴림)을 따르지 않음."""
+    from quantdocs.fill import fill_hwpx
+
+    fonts = ('<hh:fontfaces><hh:fontface lang="HANGUL" fontCnt="2"><hh:font id="0" face="굴림" type="TTF"/><hh:font id="1" face="휴먼명조" type="TTF"/></hh:fontface>'
+             '<hh:fontface lang="LATIN" fontCnt="2"><hh:font id="0" face="굴림" type="TTF"/><hh:font id="1" face="휴먼명조" type="TTF"/></hh:fontface></hh:fontfaces>')
+    header = ('<hh:head>' + fonts + '<hh:charProperties itemCnt="2">'
+              '<hh:charPr id="0" height="1000" textColor="#000000"><hh:fontRef hangul="0" latin="0"/></hh:charPr>'
+              '<hh:charPr id="3" height="1200" textColor="#000000"><hh:fontRef hangul="1" latin="1"/></hh:charPr></hh:charProperties></hh:head>')
+    cell = lambda c, t, cid: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="{cid}"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                              f'<hp:cellAddr colAddr="{c}" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    body = '<hp:p><hp:run><hp:tbl><hp:tr>' + cell(0, "상호", "3") + cell(1, "", "0") + '</hp:tr></hp:tbl></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "t.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    cid = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>\(주\)가상</hp:t>', out).group(1)
+    block = re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
+    assert 'hangul="1"' in block and 'height="1200"' in block

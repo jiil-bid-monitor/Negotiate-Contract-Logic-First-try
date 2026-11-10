@@ -639,7 +639,8 @@
     // 지일 등수·하한선 통과/미달을 먼저, 실제 사정률은 부가 정보로(11/10 사용자 요청) — 등수는 하한선 위면 N등, 미달이면 -N등
     const o = res.own, place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
     const pass = o && o.rank != null ? true : place ? false : d != null ? d >= 0 : null;
-    const main = [place ? `지일 ${place}` : "", pass == null ? "" : pass ? "하한선 통과" : "하한선 미달"].filter(Boolean).join(" · ");
+    // 하한선 통과/미달은 옆 개찰 결과 칸(낙찰·탈락 아래)과 겹쳐 등수만(11/10) — 지일이 참가 안 한 공고만 기준 대비 통과/미달
+    const main = place ? `지일 ${place}` : pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
     const sub = `실제 ${pct3(res.assessmentRate)}${d != null ? ` · 기준 ${signed(d, "%p")}` : ""}`;
     return main ? `<span class="rate-main nowrap ${pass ? "ok" : "ng"}">${main}</span><span class="sub nowrap">${sub}</span>`
       : `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap">기준 ${signed(d, "%p")}</span>` : ""}`;

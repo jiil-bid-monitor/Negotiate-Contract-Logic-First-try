@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 import zipfile
 from dataclasses import dataclass, field
@@ -419,10 +420,19 @@ def _other_party_cells(xml: str) -> list[tuple[int, int]]:
     return out
 
 
-_SEAL_TAIL = r"[(（](?:인|서명)[^()（）]{0,8}[)）]"  # '(인)'·'(인 또는 서명)'
+_SEAL_TAIL = r"(?:[(（](?:인|서명)[^()（）]{0,8}[)）]|[\u327f\U000F0000-\U000FFFFD])"  # '(인)'·'(인 또는 서명)'·도장 글자 ㉿(한글 기호 글꼴은 사용자 영역 문자, 11/06 청주 신청서)
 # 쌍점 없이 이름표만 있는 줄 — 이런 줄이 둘 이상 잇달아 있을 때만(서식 21 '주  소 / 상  호 / 대표자')
 _BARE_LABELS = {"주소": "주소", "소재지": "주소", "상호": "회사명", "업체명": "회사명", "회사명": "회사명",
                 "상호또는법인명": "회사명", "대표자": "대표자", "대표이사": "대표자"}
+
+
+def _bare_label(text: str) -> str | None:
+    """쌍점 없는 이름표 줄 — '업체명'·'신청인 업체명'·'입찰자 상호'(앞의 신청인·입찰자·제안자는 뗌)."""
+    t = _sq(text)
+    if t in _BARE_LABELS:
+        return t
+    t2 = re.sub(r"^(?:신청인|입찰자|제안자|신청자|응찰자)", "", t)
+    return t2 if t2 != t and t2 in _BARE_LABELS else None
 
 
 def _after_colon(seg: str, value: str, seal: bool) -> str | None:
@@ -499,18 +509,61 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             paras.append((stack.pop(), m.end()))
     other = _other_party_cells(xml)
     cands = []  # (s, e, 이름표, 서명 줄?, 쌍점 없는 이름표?, 문단 순번)
+    party: str | None = None  # 지금 묶음: 'own'(대표사) / 'other'(공동참여자·구성원 — 비움) / None
+    sign_at: set[int] = set()  # 쌍점 없는 서명 줄('대표자      ㉿') 문단 순번 — 바로 위 '신청인 업체명' 줄도 서명 묶음으로 봄
     # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
     # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
     for n, (s, e) in enumerate(sorted(paras)):
         if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single + other):
             continue
-        if sign_only and any(cs <= s and e <= ce for cs, ce in cells):
-            continue  # 직접 기입 서식은 표 안(사람별 칸)은 건드리지 않음
+        if sign_only:
+            # 직접 기입 서식은 표 안(사람별 칸)은 건드리지 않음 — 단 회사 서명 묶음('업체명 : / 주소 : / 대표자 : (인)')이 든 칸은 채움
+            # (11/06 과거 제안요청서 검사: 재직증명서 아래 발급 회사 서명 묶음이 표 칸 안이라 비어 있었음)
+            box = next(((cs, ce) for cs, ce in cells if cs <= s and e <= ce), None)
+            if box is not None:
+                bt = _text(xml[box[0]:box[1]])
+                if not (re.search(_SEAL_TAIL, bt) and re.search(r"업\s*체\s*명|회\s*사\s*명|상\s*호", bt)):
+                    continue
         text = _text(xml[s:e])
+        # '○ 대 표 사      업 체 명 :' / '○ 공동참여자      업 체 명 :'처럼 묶음 머리가 앞에 붙은 이름표 줄(11/06 청주 서식) —
+        # 머리는 떼고 이름표만 보고, 공동참여자·구성원 묶음 아래 줄(업체명·주소·대표자)은 다른 회사 칸이라 비움
+        got = _party_head(text)
+        if got:
+            party = got[0] or party
+            text = got[1] or text
+        elif _sq(text) and not re.search(r"[:：]", text) and not re.search(_SEAL_TAIL, text):
+            party = None  # 이름표 아닌 글 줄('청주시장 귀하')에서 묶음이 끝남
+        if party == "other":
+            continue
         if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|주\s*소", text):
+            continue
+        # 한 줄에 회사 이름표와 대표자 이름표가 같이 — '업체명 :      대표자 :      (인)'·'제안업체 :      대표자 :'(11/06 과거 제안요청서 검사)
+        two = re.fullmatch(rf"\s*(?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：]\s{{2,}}대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL}|[(（])?\s*", text)
+        if two and _value("회사명", vault) and _value("대표자", vault):
+            company, name = _value("회사명", vault), _value("대표자", vault)
+
+            def put_two(mm, state={"c": False, "n": False}):
+                body = mm.group(2)
+                if not state["c"]:
+                    body, k = re.subn(r"((?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：])( {2,})",
+                                      lambda m2: f"{m2.group(1)} {_mark(company)}" + " " * max(2, len(m2.group(2)) - len(company) - 1), body, count=1)
+                    state["c"] = bool(k)
+                if not state["n"]:
+                    body, k = re.subn(r"(대\s*표\s*(?:자|이\s*사)\s*[:：])( *)",
+                                      lambda m2: f"{m2.group(1)} {_mark(name)}" + " " * max(2, len(m2.group(2)) - len(name) - 1), body, count=1)
+                    state["n"] = bool(k)
+                return mm.group(1) + body + mm.group(3)
+            seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", lambda mm, st={"c": False, "n": False}: put_two(mm, st),
+                         xml[s:e], flags=re.S)
+            if seg != xml[s:e]:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 → {company} · 대표자 {name}")
             continue
         # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름
         bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)))(\s{{3,}})({_SEAL_TAIL}.*)", text)
+        if bare:
+            sign_at.add(n)
         if bare and _value("대표자", vault):
             name = _value("대표자", vault)
             gap = bare.group(2)
@@ -572,10 +625,13 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL})?\s*", text)
         if m:
             cands.append((s, e, m.group(1), bool(m.group(2)), False, n))
-        elif _sq(text) in _BARE_LABELS and not any(cs <= s and e <= ce for cs, ce in cells):  # 표 칸 안 줄은 머리글일 수 있음
-            cands.append((s, e, _sq(text), False, True, n))
-    bare_at = {c[5] for c in cands if c[4]}
+        elif _bare_label(text):  # 표 칸 안 줄은 머리글일 수 있어 — 칸 안이면 바로 옆 줄이 서명 줄일 때만(아래에서 거름)
+            in_cell = any(cs <= s and e <= ce for cs, ce in cells)
+            cands.append((s, e, _bare_label(text), False, "cell" if in_cell else True, n))
+    bare_at = {c[5] for c in cands if c[4]} | sign_at
     for s, e, label, seal, bare, n in cands:
+        if bare == "cell" and not ({n - 1, n + 1} & sign_at):
+            continue  # 표 칸 안 쌍점 없는 이름표는 서명 묶음('신청인 업체명' / '대표자     ㉿')일 때만(11/06 청주 신청서)
         if bare and not ({n - 1, n + 1} & bare_at):
             continue  # 혼자 있는 '주소' 같은 줄은 제목일 수 있음
         key = _BARE_LABELS[label] if bare else _label_key(label)
@@ -595,6 +651,93 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     for s, e, seg in sorted(edits, key=lambda x: x[0], reverse=True):  # 뒤에서부터 — 문단 순서대로 모이지 않은 고침도 있어 정렬(11/05 서식 3 줄 겹침)
         xml = xml[:s] + seg + xml[e:]
     return xml
+
+
+# ── 못 채운 칸 찾기(11/06 사용자 결정: 규칙 + 검사 묶음 + 남은 빈칸 알림) ────────────────────────
+# 채운 뒤의 서식에서 '회사 정보 이름표가 있는데 값이 빈 자리'를 찾는다 — 읽어보기 '확인 필요'와 과거 제안요청서 검사(scripts/quant_fill_check.py)가 같이 씀.
+# 다른 쪽이 적는 칸(발행자·제조사 줄, 대리인·공동참여자 묶음)은 빼고 셈.
+_SLOT_KEYS = {"회사명", "대표자", "주소", "전화번호", "사업자등록번호", "법인등록번호", "_notice_no", "_title"}
+_PARA_SLOT = re.compile(
+    r"\s*(?:[○●◦□■▪·\-]\s*)?(?:\S.{0,14}?\s{3,})?"
+    r"(업\s*체\s*명|상\s*호(?:\s*또\s*는\s*법\s*인\s*명(?:\s*칭)?)?|회\s*사\s*명|대\s*표\s*(?:자|이\s*사)|주\s*소|소\s*재\s*지|"
+    r"전\s*화(?:\s*번\s*호)?|공\s*고\s*번\s*호|입\s*찰\s*건\s*명)\s*[:：]\s*(?:" + _SEAL_TAIL + r")?\s*")
+
+
+def _party_head(text: str) -> tuple[str | None, str] | None:
+    """묶음 머리가 앞에 붙은 줄 → (묶음 'own'/'other'/None, 머리 뗀 나머지). 머리가 없으면 None.
+    '○ 대 표 사      업 체 명 :'·'○ 공동참여자'·'서 약 자   업 체 명 :'·'공동수급체 구성원  상 호 :'(11/06 청주·과거 제안요청서 검사)."""
+    hm = re.fullmatch(r"\s*[○●◦□■▪·\-]\s*(\S(?:.{0,14}?\S)?)(?:\s{3,}(.*))?", text, re.S) or re.fullmatch(
+        r"\s*((?:공\s*동\s*수\s*급\s*체\s*)?(?:대\s*표|구\s*성\s*원)|서\s*약\s*자|제\s*출\s*자|신\s*청\s*(?:자|인)(?:\s*\([^)]{0,20}\))?|"
+        r"입\s*찰\s*자|제\s*안\s*자|확\s*약\s*자|대\s*표\s*자)\s{2,}(\S.*[:：].*)", text, re.S)
+    if not hm or re.search(r"[:：]", hm.group(1)):
+        return None
+    head = _sq(hm.group(1))
+    if re.search(r"구성원|참여사|분담|공동참여자|공동참가자|공동응모자|대리인|수임인|발행자|제조사", head):
+        party = "other"
+    elif re.search(r"대표|주관사|주계약자|입찰자|신청|제출자|서약자|제안자|확약자", head):
+        party = "own"
+    elif re.search(r"공동(?:참여|수급|이행|도급|참가)", head):
+        party = "other"
+    else:
+        party = None
+    return party, (hm.group(2) or "")
+
+
+def unfilled_slots(xml: str, sign_only: bool = False) -> list[str]:
+    """채운 서식 구역 XML에서 회사 정보 이름표가 있는데 값이 빈 자리 — ['표: 업체명', '문단: 대표자 :'] 같은 목록."""
+    out: list[str] = []
+    tbls = _spans(xml, "tbl")
+    if not sign_only:
+        for tbl in tbls:
+            cells = _cells(xml, tbl)
+            if re.search(r"<(?:[\w.-]+:)?tbl\b", xml[tbl[0] + 4:tbl[1]]):
+                cells = [c for c in cells if not re.search(r"<(?:[\w.-]+:)?tbl\b", xml[c.start:c.end])]
+            by_pos = {(c.row, c.col): c for c in cells}
+            other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
+            agent = _agent_rows(xml, cells)
+            for c in cells:
+                if c.row in other_rows or c.row in agent:
+                    continue
+                group = _row_group(cells, c)
+                if group == "대리인":
+                    continue
+                key = _label_key(c.text)
+                if group == "대표자" and re.fullmatch(r"(?:대표자)?(?:성명|이름|성함)|연락처|전화|전화번호", _sq(c.text)):
+                    key = "대표자"
+                if key not in _SLOT_KEYS:
+                    continue
+                right = by_pos.get((c.row, c.col + c.colspan))
+                if right is not None and right.blank and _label_key(right.text) is None:
+                    out.append(f"표: {_sq(c.text)[:14]}")
+    single = [(cs, ce) for cs, ce in _spans(xml, "tc") if len(_spans(xml, "p", cs, ce)) <= 1]
+    party = None
+    paras, stack = [], []
+    for m in re.finditer(r"<(/?)(?:[\w.-]+:)?p\b[^>]*?(/?)>", xml):
+        if m.group(2):
+            continue
+        if not m.group(1):
+            stack.append(m.start())
+        elif stack:
+            paras.append((stack.pop(), m.end()))
+    for s, e in sorted(paras):
+        if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single):
+            continue
+        text = _text(xml[s:e])
+        got = _party_head(text)
+        if got:
+            party = got[0] or party
+            text = got[1] or text
+        elif _sq(text) and not re.search(r"[:：]", text) and not re.search(_SEAL_TAIL, text):
+            party = None
+        if re.search(r"발\s*급|기\s*관\s*명|증\s*명\s*기\s*관|확\s*인\s*기\s*관|발\s*주\s*처|소\s*속\s*[:：]", text):
+            party = "other"  # 증명서 발급기관·담당 부서, 위임받는 사람(소속) 묶음 — 다른 쪽이 적는 칸
+            continue
+        if party == "other" or re.search(r"대\s*리\s*인|발\s*행\s*자|제\s*조\s*사|수\s*입\s*원", text):
+            continue
+        m = _PARA_SLOT.fullmatch(text)
+        if m:
+            out.append(f"문단: {_sq(m.group(1))}")
+    return out
 
 
 # ── 채운 글 크기(11/05 사용자 결정: 채운 글은 전부 11pt — 서식에 원래 적힌 글자는 그대로) ─────────────
@@ -766,9 +909,12 @@ class _Chars:
         return self.added[key]
 
     def _grey(self, cid: str) -> bool:
-        """글자 색이 검정이 아닌 모양(서식의 회색 작성 안내) — 채운 값은 검은 글씨로 바꿔 씀."""
-        m = re.search(r'\btextColor="#([0-9A-Fa-f]{6})"', self.blocks.get(cid, ""))
-        return bool(m) and m.group(1).upper() != "000000"
+        """채운 값에 물려주면 안 되는 꾸밈이 있는 모양 — 검정 아닌 글자색(회색 작성 안내)·굵게·기울임·밑줄(11/06 사용자 요청:
+        새로 기입하는 글은 늘 기본 글꼴 모양으로)."""
+        b = self.blocks.get(cid, "")
+        m = re.search(r'\btextColor="#([0-9A-Fa-f]{6})"', b)
+        return (bool(m) and m.group(1).upper() != "000000") or bool(re.search(r"<(?:[\w.-]+:)?(?:bold|italic)\s*/>", b)) \
+            or bool(re.search(r'<(?:[\w.-]+:)?underline\b[^>]*\btype="(?!NONE)', b))
 
     def smaller(self, cid: str, height: int) -> str:
         return self.variant(cid, height)
@@ -797,6 +943,8 @@ class _Chars:
             if h is not None:
                 b = re.sub(r'\bheight="\d+"', f'height="{h}"', b, count=1)
             b = re.sub(r'\btextColor="#[0-9A-Fa-f]{6}"', 'textColor="#000000"', b, count=1)  # 채운 값은 검은 글씨
+            b = re.sub(r"<(?:[\w.-]+:)?(?:bold|italic)\s*/>", "", b)  # 굵게·기울임 없이(11/06)
+            b = re.sub(r'(<(?:[\w.-]+:)?underline\b[^>]*\btype=")\w+(")', r"\g<1>NONE\2", b, count=1)
             ref = self._font_ref(cid)
             return b.replace(ref, self._unified_ref(cid), 1) if ref else b
         extra = "".join(block(cid, h, new) for (cid, h), new in self.added.items())
@@ -1098,7 +1246,7 @@ def _keep_table_heights(before: str, after: str, chars: "_Chars", rep: FillRepor
     return after
 
 
-_NO_SLOT = re.compile(r"\s*제\s*\d{4}\s*[-–]\s*호\s*")  # 서식에 미리 적힌 '제 2026 - 호'
+_NO_SLOT = re.compile(r"\s*(?:공\s*고\s*)?제\s*(?:\d{4}\s*[-–]?\s*)?호\s*")  # 서식에 미리 적힌 '제 2026 - 호'·'공고 제   호'(11/06 청주)
 
 
 def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:
@@ -1194,6 +1342,23 @@ def _fill_notice_no_para(xml: str, number: str, rep: FillReport) -> str:
                      r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", r"\1", new, flags=re.S)
         rep.filled.append(f"공고번호(문단) → {number}")
     return new
+
+
+def _plain_title(xml: str, title: str) -> str:
+    """서식에 이미 적힌 '입 찰 건 명 :' 뒤 공고 이름(굵게 등) — 그 글 조각을 값 표시로 감싸 기본 모양(11pt, 꾸밈 없음)으로(11/06 청주 각서)."""
+    if not title:
+        return xml
+    want = _sq(title)
+    out, pos = [], 0
+    for m in re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)([^<]*)(</(?:[\w.-]+:)?t>)", xml):
+        if _sq(m.group(2)) != want or _VS in m.group(2):
+            continue
+        before = _para_before(xml, m.start())
+        if not re.search(r"입찰건명[:：]?$", before):
+            continue
+        out.append(xml[pos:m.start()] + m.group(1) + _mark(html.unescape(m.group(2))) + m.group(3))
+        pos = m.end()
+    return "".join(out) + xml[pos:] if out else xml
 
 
 def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") -> str:
@@ -1302,6 +1467,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             xml = data.decode("utf-8")
             edits: list[tuple[Cell, list[str], bool]] = []
             para_override: dict[int, str] = {}  # 칸 시작 위치 → 쓸 문단 모양(번호 칸 가운데 정렬 맞춤)
+            base_char: dict[int, str] = {}  # 칸 시작 위치 → 쓸 글자 모양(안내 글 칸은 이름표 칸 모양으로)
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
                 for i in range(len(_spans(xml, "tbl"))):
                     xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
@@ -1396,6 +1562,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if chars is not None and pm:  # '(인)'이 오른쪽 정렬이던 칸 — 이름까지 넣으면 가운데로(11/04 사용자 요청)
                             para_override[target.start] = chars.centered(pm.group(1))
                     edits.append((target, [value], False))
+                    if _GUIDE_TEXT.fullmatch(_sq(target.text)):
+                        # 회색·기울임 안내 글이 있던 칸 — 그 글자 모양 대신 이름표 칸 글자 모양으로(11/06 사용자 요청: 기본 폰트와 같게)
+                        lm = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', xml[c.start:c.end])
+                        if lm:
+                            base_char[target.start] = lm.group(1)
                     rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
                 targets = {e[0].start for e in edits}
                 for c in cells:  # 'TEL :      FAX :'처럼 칸 안에 이름표와 빈자리가 같이 있는 칸
@@ -1424,6 +1595,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 elif chars is not None:  # 양쪽·배분 정렬 칸은 왼쪽 정렬 사본으로 — 넘친 줄의 글자 사이가 벌어지지 않게
                     seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")(\d+)(")', lambda m: m.group(1) + chars.left(m.group(2)) + m.group(3),
                                  seg, count=1)
+                if cell.start in base_char:
+                    seg = re.sub(r'(<(?:[\w.-]+:)?run\b[^>]*\bcharPrIDRef=")\d+(")', rf"\g<1>{base_char[cell.start]}\2", seg)
                 char_id = None
                 if chars is not None and len(lines) == 1 and not keep:
                     char_id, note = _fit_char(seg, lines[0], chars)
@@ -1435,6 +1608,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
             xml = _fill_bond(xml, basis, rep, title)
             xml = _fill_notice_no_para(xml, no_text, rep)
+            xml = _plain_title(xml, title)
             xml = _fill_label_paragraphs(xml, vault, rep, chars, sign_only)
             xml = _apply_marks(xml, chars)
             if chars is not None:

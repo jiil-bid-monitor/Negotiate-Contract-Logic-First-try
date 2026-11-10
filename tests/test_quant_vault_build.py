@@ -1809,7 +1809,7 @@ def test_guide_text_cell_gets_company_in_black(tmp_path: Path):
     from quantdocs.fill import fill_hwpx
 
     header = ('<hh:head><hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000" textColor="#000000"></hh:charPr>'
-              '<hh:charPr id="7" height="1200" textColor="#808080"></hh:charPr></hh:charProperties></hh:head>')
+              '<hh:charPr id="7" height="1200" textColor="#808080"><hh:italic/></hh:charPr></hh:charProperties></hh:head>')
     guide = ('<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="7"><hp:t>공동도급참여시 대표사</hp:t></hp:run></hp:p></hp:subList>'
              '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
     src = _mini_hwpx(tmp_path / "g.hwpx", _tbl([[_c(0, 0, "상호 또는 법인명칭"), guide]]))
@@ -1820,7 +1820,8 @@ def test_guide_text_cell_gets_company_in_black(tmp_path: Path):
     out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
     cid = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>\(주\)가상', out).group(1)
     assert "공동도급참여시" not in out and cid != "7"
-    assert 'textColor="#000000"' in re.search(rf'<hh:charPr id="{cid}"[^>]*>', head).group(0)
+    block = re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
+    assert 'textColor="#000000"' in block and "italic" not in block  # 이름표 칸(기본) 글자 모양으로 — 기울임·회색 안 물려받음
 
 
 def test_proxy_groups_bond_won_sign_and_notice_no_paragraph(tmp_path: Path):
@@ -1851,3 +1852,109 @@ def test_proxy_groups_bond_won_sign_and_notice_no_paragraph(tmp_path: Path):
     assert "공 고 번 호 : R26BK00000001-000" in text
     assert text.count("가상 전시관 조성") == 1
     assert "금 사억이천만 원 (￦ 420,000,000 )" in text
+
+
+def test_plain_font_title_and_seal_glyph_signature(tmp_path: Path):
+    """11/06 사용자 요청(청주 서식): 새로 기입하는 글은 늘 기본 글꼴 모양 — 서식에 굵게 적힌 입찰건명도 굵게 빼고,
+    표 칸 안 '신청인 업체명' / '대표자      ㉿ (법인인감)'(도장 글자, 쌍점 없음) 서명 묶음에 회사명·대표자."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="2"><hh:charPr id="0" height="1300" textColor="#000000"></hh:charPr>'
+              '<hh:charPr id="9" height="1300" textColor="#000000"><hh:bold/></hh:charPr></hh:charProperties></hh:head>')
+    body = ('<hp:p><hp:run charPrIDRef="0"><hp:t>입찰보증금 지급각서</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>○ 입 찰 건 명 : </hp:t></hp:run><hp:run charPrIDRef="9"><hp:t>가상 전시관 조성</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run><hp:tbl><hp:tr><hp:tc><hp:subList>'
+            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>위와 같이 신청합니다.</hp:t></hp:run></hp:p>'
+            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>          신청인 업체명</hp:t></hp:run></hp:p>'
+            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>             대표자                  \U000F0099 (법인인감)</hp:t></hp:run></hp:p>'
+            '</hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "t.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "to.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}), title="가상 전시관 조성")
+    zo = zipfile.ZipFile(tmp_path / "to.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    cid = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>가상 전시관 조성</hp:t>', out).group(1)
+    assert cid != "9" and "bold" not in re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", out))
+    assert "신청인 업체명 (주)가상" in text and "대표자 홍길동" in text
+
+
+def test_lead_and_joint_member_blocks(tmp_path: Path):
+    """11/06 제보(청주 서식): '○ 대 표 사      업 체 명 :'(묶음 머리가 앞에 붙은 줄) 업체명이 빔, '○ 공동참여자' 묶음엔 지일 주소·대표자가
+    들어감 — 머리는 떼고 이름표로 채우고, 공동참여자 묶음은 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    def p(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (p("2026년    월    일") + p("○ 대  표  사                       업 체 명 :") + p("                                    주    소 : ")
+            + p("                                    대 표 자 :                      (인)") + p("")
+            + p("○ 공동참여자                       업 체 명 :") + p("                                    주    소 : ")
+            + p("                                    대 표 자 :                      (인)") + p("") + p("청주시장  귀하")
+            + p("업 체 명 :") + p("대 표 자 :          (인)"))
+    src = _mini_hwpx(tmp_path / "j.hwpx", body)
+    fill_hwpx(src, tmp_path / "jo.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"}))
+    out = zipfile.ZipFile(tmp_path / "jo.hwpx").read("Contents/section0.xml").decode().replace("", "").replace("", "")
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", out))
+    lead, rest = text.split("○ 공동참여자")
+    joint, tail = rest.split("청주시장")
+    assert "업 체 명 : (주)가상" in lead and "주 소 : 강원 정선" in lead and "대 표 자 : 홍길동" in lead
+    assert "(주)가상" not in joint and "홍길동" not in joint and "강원" not in joint
+    assert "업 체 명 : (주)가상" in tail and "홍길동" in tail  # 묶음이 끝난 뒤 서명 줄은 그대로 채움
+
+
+def test_unfilled_slots_finds_blank_company_labels():
+    """11/06 사용자 결정: 채운 뒤에도 회사 정보 이름표가 빈 자리를 찾아 '확인 필요' 알림·검사 묶음에 씀 —
+    다른 쪽이 적는 칸(대리인 묶음·공동참여자 묶음·발행자 줄)은 세지 않음."""
+    from quantdocs.fill import unfilled_slots
+
+    def c(col, row, text, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p><hp:run><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+
+    def p(t):
+        return f"<hp:p><hp:run><hp:t>{t}</hp:t></hp:run></hp:p>"
+    xml = ("<hs:sec><hp:p><hp:run><hp:tbl>"
+           f"<hp:tr>{c(0, 0, '상호 또는 법인명칭')}{c(1, 0, '')}</hp:tr>"
+           f"<hp:tr>{c(0, 1, '대 리 인', 2)}{c(1, 1, '성 명')}{c(2, 1, '')}</hp:tr>"
+           f"<hp:tr>{c(1, 2, '연 락 처')}{c(2, 2, '')}</hp:tr>"
+           f"<hp:tr>{c(0, 3, '주 소')}{c(1, 3, '강원 정선')}</hp:tr></hp:tbl></hp:run></hp:p>"
+           + p("○ 공 고 번 호 :   ") + p("○ 공동참여자          업 체 명 :") + p("      대 표 자 :        (인)") + p("청주시장 귀하")
+           + p("대 표 자 :          (인)") + "</hs:sec>")
+    got = unfilled_slots(xml)
+    assert got == ["표: 상호또는법인명칭", "문단: 공고번호", "문단: 대표자"]
+    assert unfilled_slots(xml, sign_only=True) == ["문단: 공고번호", "문단: 대표자"]
+
+
+def test_signature_shapes_from_past_rfps(tmp_path: Path):
+    """11/06 과거 제안요청서 검사에서 나온 빈칸 모양: ① '업체명 :      대표자 :      (인)' 한 줄 두 이름표 ② '서 약 자   업 체 명 :'·
+    '제출자  상 호 :'(역할 이름이 앞에 붙은 줄) ③ '공동수급체 대표  상 호 :'는 채우고 '공동수급체 구성원  상 호 :' 아래는 비움
+    ④ 직접 기입 서식(재직증명서)도 표 칸 안 회사 서명 묶음은 채움."""
+    from quantdocs.fill import fill_hwpx
+
+    def p(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (p("2026년  월  일") + p("업체명 :            대표자 :            (인)") + p("") + p("귀하")
+            + p("서 약 자        업   체   명 :") + p("                 대  표  자 :          (인)") + p("") + p("귀하")
+            + p("공동수급체 대  표   상  호 :") + p("대표자:          (서명 또는 인)")
+            + p("공동수급체 구성원   상  호 :") + p("대표자:          (서명 또는 인)"))
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"})
+    fill_hwpx(src, tmp_path / "so.hwpx", v)
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode()
+                                     .replace("", "").replace("", "")))
+    assert "업체명 : (주)가상 대표자 : 홍길동" in text
+    assert "서 약 자 업 체 명 : (주)가상" in text
+    lead, member = text.split("공동수급체 구성원")
+    assert "상 호 : (주)가상" in lead and "홍길동" in lead.split("공동수급체 대 표")[1]
+    assert "(주)가상" not in member and "홍길동" not in member
+    # ④ 재직증명서: 사람 칸(표)은 그대로, 같은 표 안 회사 서명 묶음 칸은 채움
+    cert = ("<hp:p><hp:run><hp:tbl><hp:tr>" + _c(0, 0, "성 명") + _c(1, 0, "") + "</hp:tr><hp:tr>"
+            '<hp:tc><hp:subList>' + p("위와 같이 재직 중임을 증명합니다.") + p("업 체 명 :") + p("주    소 :") + p("대 표 자 :            (인)")
+            + '</hp:subList><hp:cellAddr colAddr="0" rowAddr="1"/><hp:cellSpan colSpan="2" rowSpan="1"/></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+    src2 = _mini_hwpx(tmp_path / "c.hwpx", cert)
+    fill_hwpx(src2, tmp_path / "co.hwpx", v, sign_only=True)
+    t2 = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", zipfile.ZipFile(tmp_path / "co.hwpx").read("Contents/section0.xml").decode()
+                                   .replace("", "").replace("", "")))
+    assert "업 체 명 : (주)가상" in t2 and "주 소 : 강원 정선" in t2 and "대 표 자 : 홍길동" in t2
+    assert t2.startswith(" 성 명 위와") or "성 명 위와" in t2  # 사람 칸은 비운 채

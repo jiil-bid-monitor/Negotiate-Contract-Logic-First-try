@@ -26,7 +26,7 @@ from pathlib import Path
 from .bundle import Pick, merge, pick
 from .catalog import load_catalog
 from .selfscore import AUTO_KINDS, SelfScore, fmt, patent_scope, patent_status, read_criteria, score as score_items, staff_status
-from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx
+from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx, unfilled_slots
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
 from .kinds import detect, guide
@@ -281,7 +281,21 @@ _MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참�
 
 
 # 공란으로 두는 서식(11/05 사용자 요청) — 서면질의서(질의할 때 직접)·공동수급 관련 서류(공동수급할 때만 직접)
-_BLANK_FORM = re.compile(r"질\s*의|공동\s*수급|공동\s*이행|분담\s*이행|공동\s*도급|합의\s*각서")
+_BLANK_FORM = re.compile(r"질\s*의|공동\s*수급|공동\s*이행|분담\s*이행|공동\s*도급|합의\s*각서|공동\s*(?:참가|응모|참여)\s*(?:협정|합의|계약)")
+
+
+def _note_unfilled(a: "Analysis", form, path: Path, sign_only: bool) -> None:
+    """채운 서식에 회사 정보 이름표가 있는데 빈 자리가 남았으면 '⚠ 확인 필요' 알림(11/06 사용자 결정 — 담당자가 볼 곳을 바로 알게)."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            slots = [s for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n)
+                     for s in unfilled_slots(z.read(n).decode("utf-8"), sign_only)]
+    except (zipfile.BadZipFile, OSError, KeyError):
+        return
+    if slots:
+        names = list(dict.fromkeys(s.split(": ", 1)[-1] for s in slots))
+        a.notes.append(f"⚠ 확인 필요 — 서식 {form.no} {form.title[:30]}: 채우지 못한 칸 " + ", ".join(names[:6])
+                       + (" 외" if len(names) > 6 else "") + " (회사 정보 이름표가 있는데 빈칸 — 한글에서 직접 기입)")
 
 
 def is_manual(name: str) -> bool:
@@ -379,6 +393,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                         shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
                     else:  # 재직증명서 등도 표 밖 서명 줄(업체명·주소·대표자 (인))은 채움(11/05 사용자 요청)
                         reports.append(fill_hwpx(forms_dir / c.file, manual_dir / c.file, vault, title=notice_title, sign_only=True))
+                        _note_unfilled(a, c, manual_dir / c.file, True)
                     manual.append(c.file)
                     parts.append((c, manual_dir / c.file))
                     continue
@@ -394,6 +409,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title,
                                 agency_no, notice_no, score_ctx, basis[0] if basis else None)
                 reports.append(rep)
+                _note_unfilled(a, c, filled_dir / c.file, False)
                 parts.append((c, filled_dir / c.file))
             if parts:  # 서식 전체(채운 것 + 직접 기입)를 한글 파일 하나로 — 담당자가 이 파일 하나에서 기입(11/03 사용자 요청)
                 parts.sort(key=lambda x: [int(n) for n in re.findall(r"\d+", x[0].no)])

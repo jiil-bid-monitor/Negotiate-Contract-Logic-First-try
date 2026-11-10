@@ -435,6 +435,11 @@ def make_handler(app: App):
                 if url.path == "/api/postaward":
                     app.postaward.add(str(data.get("no") or ""), str(data.get("title") or ""), str(data.get("work") or ""))
                     return self._json({"ok": True, "items": app.postaward.items()})
+                if url.path == "/api/postaward/folder":
+                    # 폴더는 공유 폴더 맨 위 '낙찰후서류'(NAS: \\jiilserver\jiil-webapp\낙찰후서류), POSTAWARD_DIR로 바꿈
+                    root = Path(os.environ.get("POSTAWARD_DIR", "").strip() or app.store.path.resolve().parents[2] / "낙찰후서류")
+                    folder, _ = app.postaward.prepare(str(data.get("key") or ""), root)
+                    return self._json({"ok": True, "folder": str(folder), "items": app.postaward.items()})
                 if url.path == "/api/postaward/delete":
                     app.postaward.remove(str(data.get("key") or ""))
                     return self._json({"ok": True, "items": app.postaward.items()})

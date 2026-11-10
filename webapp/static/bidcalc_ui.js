@@ -655,11 +655,11 @@
       ${item("예정가격 (실제)", res.plannedPrice != null ? `${won(res.plannedPrice)}원` : "-")}
       ${item("실제 사정률", pct3(res.assessmentRate))}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
-      </div><div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
+      </div>${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
   }
-  // 투찰 업체 전부(11/10 사용자 요청) — 개찰 완료 줄의 '투찰 업체' 버튼으로 펼침, 누를 때만 서버에서 받음
-  const BIDDER_ROWS = new Set(), BIDDERS = new Map();   // id → 목록 | "loading" | {error}
-  function biddersRow(r) {
+  // 투찰 업체 전부(11/10 사용자 요청) — 개찰 완료 줄의 '결과 ▼'를 펼치면 결과 아래에 보임, 펼칠 때만 서버에서 받음
+  const BIDDERS = new Map();   // id → 목록 | "loading" | {error}
+  function biddersBlock(r) {
     const got = BIDDERS.get(r.id);
     let body;
     if (!got || got === "loading") body = `<p class="why">투찰 업체를 불러오는 중…</p>`;
@@ -672,7 +672,7 @@
       const neg = new Map(under.map((b, i) => [b, -(i + 1)]));
       const shown = [...got.filter((b) => !neg.has(b)), ...under];   // 순위 있는 업체 → 그 밖 → 미달(-1부터)
       // 칸은 21라인 경쟁업체 표와 같게(11/10 사용자 요청): 금액 아래 1순위와 차이, 사정률 = 이 금액이 하한선이 되는 사정률(아래 −100),
-      // 기초금액 대비 투찰률(붉게), 추첨번호, 사업자번호, 비고, A값을 뺀 투찰률((금액 − A) ÷ (예정가격 − A) — 하한율과 견주는 값)
+      // 기초금액 대비 투찰률(붉게), 사업자번호, 비고, A값을 뺀 투찰률((금액 − A) ÷ (예정가격 − A) — 하한율과 견주는 값)
       const res = r.result || {};
       const basis = res.basisAmount || r.basis, planned = res.plannedPrice, lower = r.lowerRate;
       const a = res.aValue ?? r.aValue ?? 0;
@@ -691,18 +691,18 @@
           // 21라인과 같게: 사정률은 소수 다섯째 자리까지(끝 0 뺌), 괄호는 −100을 셋째 자리로 반올림해 다섯 자리로 적음
           + `<td class="num">${rt != null ? String(Number(rt.toFixed(5))) : "-"}${rt != null ? `<span class="paren">(${(rt - 100).toFixed(3)}00)</span>` : ""}</td>`
           + `<td class="num basis-rate">${amt != null && basis ? fx(amt / basis * 100, 4) : "-"}</td>`
-          + `<td>${esc(b.draws || "-")}</td><td>${esc(String(b.bizno || "").replace(/\D/g, "") || "-")}</td>`
+          + `<td>${esc(String(b.bizno || "").replace(/\D/g, "") || "-")}</td>`
           + `<td class="remark">${esc((b.remark || "").replace("낙찰하한선미달", "낙찰하한선 미달"))}</td>`
           + `<td class="num">${amt != null && planned && planned > a ? fx((amt - a) / (planned - a) * 100, 4) : "-"}</td></tr>`;
       };
-      body = `<div class="bidders-wrap"><table class="bidders"><thead><tr><th>순위</th><th>업체명</th><th>대표자</th>`
+      body = `<div class="bidders-wrap"><table class="bidders"><colgroup>${[5, 18, 7, 12, 8, 9, 7, 12, 12, 10].map((w) => `<col style="width:${w}%">`).join("")}</colgroup><thead><tr><th>순위</th><th>업체명</th><th>대표자</th>`
         + `<th title="아래 괄호: 1순위 금액과 차이">투찰금액<br><small>(1순위와 차이)</small></th><th>투찰률</th>`
         + `<th title="이 금액이 낙찰하한선이 되는 사정률 — 실제 사정률보다 낮으면 미달. 아래 괄호: −100">사정률<br><small>(−100)</small></th>`
-        + `<th title="투찰금액 ÷ 기초금액">기초금액<br>대비</th><th>추첨번호</th><th>사업자번호</th><th>비고</th>`
+        + `<th title="투찰금액 ÷ 기초금액">기초금액<br>대비</th><th>사업자번호</th><th>비고</th>`
         + `<th title="(투찰금액 − A값) ÷ (예정가격 − A값) — 하한율보다 낮으면 미달">A값 제외<br>투찰률</th></tr></thead><tbody>${
           shown.map(row).join("")}</tbody></table></div>`;
     }
-    return `<tr class="bidlog-detail bidlog-bidders" data-id="${esc(r.id)}"><td colspan="7"><div class="bidders-head">투찰 업체 ${got && got.length ? `${got.length}곳` : ""}</div>${body}</td></tr>`;
+    return `<div class="bidders-box"><div class="bidders-head">투찰 업체 ${got && got.length ? `${got.length}곳` : ""}</div>${body}</div>`;
   }
   async function loadBidders(id) {
     BIDDERS.set(id, "loading"); renderLog();
@@ -745,9 +745,8 @@
         <td class="num" data-l="실제 사정률">${rateCell(r)}</td>
         <td class="act">${edit
           ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
-          : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button>${r.result && r.result.status === "완료"
-            ? `<button type="button" data-act="bidders" class="more bidders-btn">${BIDDER_ROWS.has(r.id) ? "업체 접기 ▲" : "투찰 업체 ▼"}</button>` : ""}<span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>
-      </tr>${open ? detailRow(r) : ""}${BIDDER_ROWS.has(r.id) && r.result && r.result.status === "완료" ? biddersRow(r) : ""}`;
+          : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button><span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>
+      </tr>${open ? detailRow(r) : ""}`;
     }).join("");
   }
   // 투찰내역을 열면 결과가 없는 기록만 서버가 나라장터에서 받아 채움(한 번에 몇 건씩 — 남으면 이어서)
@@ -782,14 +781,14 @@
     const tr = btn.closest("tr"), id = tr.dataset.id, act = btn.dataset.act;
     const r = LOG.find((x) => x.id === id);
     try {
-      if (act === "toggle") { OPEN_ROWS.has(id) ? OPEN_ROWS.delete(id) : OPEN_ROWS.add(id); renderLog(); return; }
-      if (act === "refetch") { BIDDERS.delete(id); await fetchResults([id], true); if (BIDDER_ROWS.has(id)) loadBidders(id); return; }
-      if (act === "bidders") {
-        if (BIDDER_ROWS.has(id)) { BIDDER_ROWS.delete(id); renderLog(); return; }
-        BIDDER_ROWS.add(id);
-        if (Array.isArray(BIDDERS.get(id))) renderLog(); else loadBidders(id);
+      if (act === "toggle") {
+        if (OPEN_ROWS.has(id)) { OPEN_ROWS.delete(id); renderLog(); return; }
+        OPEN_ROWS.add(id);
+        // 개찰 완료면 결과 아래 투찰 업체 목록도(처음 펼칠 때 서버에서 받음)
+        if (r && r.result && r.result.status === "완료" && !Array.isArray(BIDDERS.get(id))) loadBidders(id); else renderLog();
         return;
       }
+      if (act === "refetch") { BIDDERS.delete(id); await fetchResults([id], true); if (OPEN_ROWS.has(id)) loadBidders(id); return; }
       if (act === "edit") { EDITING = id; renderLog(); return; }
       if (act === "cancel") { EDITING = null; renderLog(); return; }
       if (act === "save") {

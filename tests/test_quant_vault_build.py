@@ -2086,3 +2086,9 @@ def test_table_value_follows_label_font(tmp_path: Path):
     cid = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>\(주\)가상</hp:t>', out).group(1)
     block = re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
     assert 'hangul="1"' in block and 'height="1200"' in block
+
+
+def test_selfscore_nopoints_layout_pieces():
+    """11/10 경남교육청 자체평가표: '3건 ~ 2건' 구간, '배점(점)' 머리."""
+    from quantdocs.selfscore import parse_range
+    assert parse_range("3건 ~ 2건") == (2.0, 4.0, "건") and parse_range("0건") == (0.0, 1.0, "건")

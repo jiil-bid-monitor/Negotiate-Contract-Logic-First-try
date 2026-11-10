@@ -1551,7 +1551,8 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cel
         if item.score is None:
             rep.filled.append(f"자기평점 '{name}' 비움 — " + "; ".join(item.notes[:2]))
             continue
-        out.append((row.cell, [fmt(item.score)], False))
+        cell = row.by_points.get(item.score, row.cell) if row.by_points else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
+        out.append((cell, [fmt(item.score)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")
     total = next((r for r in rows if r.total), None)
     if scored and all(it.score is not None for _, it in scored):

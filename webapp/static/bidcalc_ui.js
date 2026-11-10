@@ -637,10 +637,13 @@
     const res = r.result;
     if (!res || res.status !== "완료" || res.assessmentRate == null) return "-";
     const d = res.rateDiff;
-    // 지일 등수(11/10) — 하한선 위면 N등, 미달이면 투찰 업체 표와 같은 -N등
+    // 지일 등수·하한선 통과/미달을 먼저, 실제 사정률은 부가 정보로(11/10 사용자 요청) — 등수는 하한선 위면 N등, 미달이면 -N등
     const o = res.own, place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
-    return `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap ${d >= 0 ? "ok" : "ng"}">기준 ${signed(d, "%p")} · ${d >= 0 ? "하한선 통과" : "하한선 미달"}</span>` : ""}`
-      + (place ? `<span class="sub nowrap ${o.rank != null ? "ok" : "ng"}">지일 ${place}</span>` : "");
+    const pass = o && o.rank != null ? true : place ? false : d != null ? d >= 0 : null;
+    const main = [place ? `지일 ${place}` : "", pass == null ? "" : pass ? "하한선 통과" : "하한선 미달"].filter(Boolean).join(" · ");
+    const sub = `실제 ${pct3(res.assessmentRate)}${d != null ? ` · 기준 ${signed(d, "%p")}` : ""}`;
+    return main ? `<span class="rate-main nowrap ${pass ? "ok" : "ng"}">${main}</span><span class="sub nowrap">${sub}</span>`
+      : `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap">기준 ${signed(d, "%p")}</span>` : ""}`;
   }
   function detailRow(r) {
     const res = r.result || {}, o = res.own, w = res.winner;
@@ -742,7 +745,7 @@
         <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub">기초 ${won(r.basis)}${r.lowerRate != null ? ` · 하한율 ${r.lowerRate}%` : ""}</span></td>
         <td class="num" data-l="기준 사정률">${pct3(r.rate)}<span class="sub">${esc(r.method || "-")}</span></td>
         <td class="res" data-l="개찰 결과"><div>${resultCell(r)}</div></td>
-        <td class="num" data-l="실제 사정률">${rateCell(r)}</td>
+        <td class="num" data-l="등수 · 사정률">${rateCell(r)}</td>
         <td class="act">${edit
           ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
           : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button><span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>

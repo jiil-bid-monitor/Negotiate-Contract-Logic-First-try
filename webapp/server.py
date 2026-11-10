@@ -617,6 +617,14 @@ def main(argv: list[str] | None = None) -> int:
     # 매일 22시 투찰 이력 자동 수집 — 투찰내역 결과·입찰 공고 개찰 결과(추천 보정 자료)·투찰이력.xlsx·주간 성적표 (webapp/bidnightly.py)
     if not app.viewer and os.environ.get("BID_NIGHTLY", "1").strip() != "0":
         start_nightly(app)
+    # 새 협상 공고 정량평가서 미리 검사 → 규칙이 모르는 모양이면 개발자 방 알림 (webapp/quantprecheck.py, 11/10)
+    if not app.viewer and os.environ.get("QUANT_PRECHECK", "1").strip() != "0":
+        from quantdocs.g2b import service_key
+
+        from .quantprecheck import Precheck
+
+        if service_key():  # 나라장터 인증키가 없으면 첨부를 못 받음 — 켜지 않음
+            Precheck(Path(args.db).parent, app.latest_run, lambda: busy_now(app)).start()
     # 텔레그램 명령어(/notice·/deadline) — TELEGRAM_COMMANDS=1인 곳(NAS)에서만 (webapp/telegrambot.py)
     bot = TelegramBot.from_env(app.latest_run, lambda: app.reports)
     if bot is not None:

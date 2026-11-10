@@ -621,10 +621,9 @@
     const res = r.result;
     if (FETCHING.has(r.id)) return `<span class="res-wait">결과 받는 중…</span>`;
     if (!res) return `<span class="res-wait">아직 안 받음</span>`;
-    // 개찰 전이면 확인 시각 대신 투찰 마감·개찰 일시를 붉게(11/10 사용자 요청) — 둘 다 모르면 예전처럼 확인 시각
-    if (res.status === "개찰 전") return `<span class="res-wait">개찰 전</span>${r.closingAt || r.openingAt
-      ? (r.closingAt ? `<span class="sub res-close">${esc(day(r.closingAt))} 마감</span>` : "")
-        + (r.openingAt ? `<span class="sub res-open">개찰 ${esc(day(r.openingAt))}</span>` : "")
+    // 개찰 전이면 확인 시각 대신 투찰 마감을 붉게(11/10 사용자 요청 — 개찰 일시 줄은 뺌) — 모르면 예전처럼 확인 시각
+    if (res.status === "개찰 전") return `<span class="res-wait">개찰 전</span>${r.closingAt
+      ? `<span class="sub res-close">${esc(day(r.closingAt))} 마감</span>`
       : `<span class="sub">${esc(day(res.fetchedAt))} 확인</span>`}`;
     if (res.status === "오류") return `<span class="res-bad">받지 못함</span><span class="sub">${esc((res.error || "").slice(0, 40))}</span>`;
     const o = res.own, n = res.bidderCount;

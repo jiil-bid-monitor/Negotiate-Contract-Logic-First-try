@@ -90,6 +90,15 @@ class TestFill(unittest.TestCase):
         self.assertEqual(rows[old["id"]]["openingAt"], "2026-11-13 11:00:00")
         self.assertEqual(asked, ["R26BK01799159"])
 
+    def test_opening_filled_without_refetch(self):
+        """결과를 다시 받을 때(1시간)가 아니어도 '개찰 전'인데 개찰 일시가 비면 바로 채움."""
+        log = BidLog(Path(tempfile.mkdtemp()))
+        old = log.add({"noticeNo": "R26BK01799159", "bid": 1})
+        log.set_result(old["id"], {"status": "개찰 전", "fetchedAt": datetime.now(KST).isoformat()})
+        got = fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result([]), opening=lambda c, e: "2026-11-13 11:00:00")
+        self.assertEqual(got["fetched"], 0)
+        self.assertEqual(log.entries()[0]["openingAt"], "2026-11-13 11:00:00")
+
 
 if __name__ == "__main__":
     unittest.main()

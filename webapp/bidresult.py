@@ -119,4 +119,12 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
             found = lookup(client, e)
             if found:
                 log.set_opening(e["id"], found)
+    # 결과를 다시 받을 때가 아니어도 '개찰 전'인데 개찰 일시가 빈 예전 기록은 바로 채움(공고 조회 한 번씩)
+    done_ids = {e["id"] for e in done}
+    pending = [e for e in entries if e.get("id") not in done_ids and not e.get("openingAt")
+               and (e.get("result") or {}).get("status") == "개찰 전" and (not ids or e.get("id") in ids)]
+    for e in pending[:MAX_PER_CALL]:
+        found = lookup(client, e)
+        if found:
+            log.set_opening(e["id"], found)
     return {"fetched": len(done), "left": max(0, len(targets) - len(done))}

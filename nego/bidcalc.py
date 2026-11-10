@@ -54,8 +54,9 @@ def _latest(rows: list[dict], notice_no: str) -> dict | None:
     return max(same, key=lambda r: str(r.get("bidNtceOrd") or ""))
 
 
-def opening_at(client: DataGoKrClient, notice_no: str, work_type: str = "") -> str:
-    """공고번호 → 개찰 일시 문자열(나라장터 opengDt, 마지막 차수). 못 찾으면 빈 글자 — 투찰내역 예전 기록 채우기용."""
+def notice_times(client: DataGoKrClient, notice_no: str, work_type: str = "") -> dict[str, str]:
+    """공고번호 → {"openingAt": 개찰 일시(opengDt), "closingAt": 투찰 마감(bidClseDt)}, 마지막 차수.
+    못 찾으면 빈 dict — 투찰내역 예전 기록 채우기용."""
     works = [work_type] if work_type in WORK_TYPES else list(WORK_TYPES)
     for wt in works:
         try:
@@ -66,8 +67,9 @@ def opening_at(client: DataGoKrClient, notice_no: str, work_type: str = "") -> s
             continue
         row = _latest(rows, notice_no)
         if row:
-            return str(row.get("opengDt") or "").strip()
-    return ""
+            return {"openingAt": str(row.get("opengDt") or "").strip(),
+                    "closingAt": str(row.get("bidClseDt") or "").strip()}
+    return {}
 
 
 def a_value(row: dict) -> tuple[float, list[dict]]:
@@ -372,6 +374,7 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
             "notice_ord": str(notice.get("bidNtceOrd") or ""),
             # 개찰 일시(11/10 사용자 요청 — 투찰내역 '개찰 전' 줄에 붉게)
             "opening_at": str(notice.get("opengDt") or "").strip(),
+            "closing_at": str(notice.get("bidClseDt") or "").strip(),   # 투찰(입찰서 제출) 마감
             "title": str(notice.get("bidNtceNm") or ""),
             "institution": str(notice.get("dminsttNm") or notice.get("ntceInsttNm") or ""),
             "notice_institution": str(notice.get("ntceInsttNm") or ""),

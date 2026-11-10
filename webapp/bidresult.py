@@ -90,20 +90,26 @@ def fetch_entry(client: Any, base_url: str, entry: dict[str, Any], own_bizno: st
     return summarize(last, entry, own_bizno)
 
 
-def _lookup_opening(client: Any, entry: dict[str, Any]) -> str:
+def _lookup_times(client: Any, entry: dict[str, Any]) -> dict[str, str]:
     try:
-        from nego.bidcalc import opening_at
-        return opening_at(client, entry.get("noticeNo") or "", entry.get("workType") or "")
-    except Exception:  # noqa: BLE001 — 개찰일은 보조 정보라 실패해도 결과 받기는 계속
-        return ""
+        from nego.bidcalc import notice_times
+        return notice_times(client, entry.get("noticeNo") or "", entry.get("workType") or "")
+    except Exception:  # noqa: BLE001 — 일시는 보조 정보라 실패해도 결과 받기는 계속
+        return {}
+
+
+def _needs_times(entry: dict[str, Any], status: str | None) -> bool:
+    """'개찰 전'인데 투찰 마감을 아직 안 찾아본 기록(11/10 전 기록 — 새 기록은 불러올 때 둘 다 저장)."""
+    return status == "개찰 전" and "closingAt" not in entry
 
 
 def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str] | None = None, force: bool = False,
                  fetch: Callable[..., BidResult] | None = None,
-                 opening: Callable[[Any, dict[str, Any]], str] | None = None) -> dict[str, Any]:
+                 times: Callable[[Any, dict[str, Any]], dict[str, str]] | None = None) -> dict[str, Any]:
     """결과가 필요한 기록을 받아 `log`에 저장. ids를 주면 그 기록만(force면 '완료'도 다시).
 
-    개찰 일시가 없는 예전 기록(11/10 전에 기록)은 결과가 '개찰 전'이면 공고에서 개찰 일시를 찾아 함께 저장."""
+    예전 기록(11/10 전)은 결과가 '개찰 전'이면 공고에서 개찰 일시·투찰 마감을 찾아 함께 저장 —
+    결과를 다시 받을 때(1시간)가 아니어도 바로."""
     now = _now()
     entries = log.entries()
     if ids:
@@ -111,20 +117,15 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
     else:
         targets = [e for e in entries if needs_fetch(e, now)]
     done = targets[:MAX_PER_CALL]
-    lookup = opening or _lookup_opening
+    lookup = times or _lookup_times
     for e in done:
         res = fetch_entry(client, base_url, e, own_bizno, fetch)
         log.set_result(e["id"], res)
-        if res.get("status") == "개찰 전" and not e.get("openingAt"):
-            found = lookup(client, e)
-            if found:
-                log.set_opening(e["id"], found)
-    # 결과를 다시 받을 때가 아니어도 '개찰 전'인데 개찰 일시가 빈 예전 기록은 바로 채움(공고 조회 한 번씩)
+        if _needs_times(e, res.get("status")):
+            log.set_times(e["id"], lookup(client, e))
     done_ids = {e["id"] for e in done}
-    pending = [e for e in entries if e.get("id") not in done_ids and not e.get("openingAt")
-               and (e.get("result") or {}).get("status") == "개찰 전" and (not ids or e.get("id") in ids)]
+    pending = [e for e in entries if e.get("id") not in done_ids and (not ids or e.get("id") in ids)
+               and _needs_times(e, (e.get("result") or {}).get("status"))]
     for e in pending[:MAX_PER_CALL]:
-        found = lookup(client, e)
-        if found:
-            log.set_opening(e["id"], found)
+        log.set_times(e["id"], lookup(client, e))
     return {"fetched": len(done), "left": max(0, len(targets) - len(done))}

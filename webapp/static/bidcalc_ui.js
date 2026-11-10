@@ -637,7 +637,10 @@
     const res = r.result;
     if (!res || res.status !== "완료" || res.assessmentRate == null) return "-";
     const d = res.rateDiff;
-    return `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap ${d >= 0 ? "ok" : "ng"}">기준 ${signed(d, "%p")} · ${d >= 0 ? "하한선 통과" : "하한선 미달"}</span>` : ""}`;
+    // 지일 등수(11/10) — 하한선 위면 N등, 미달이면 투찰 업체 표와 같은 -N등
+    const o = res.own, place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
+    return `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap ${d >= 0 ? "ok" : "ng"}">기준 ${signed(d, "%p")} · ${d >= 0 ? "하한선 통과" : "하한선 미달"}</span>` : ""}`
+      + (place ? `<span class="sub nowrap ${o.rank != null ? "ok" : "ng"}">지일 ${place}</span>` : "");
   }
   function detailRow(r) {
     const res = r.result || {}, o = res.own, w = res.winner;

@@ -140,6 +140,17 @@ class BidLog:
             row["result"] = result
             self._write(rows)
 
+    def set_own_field(self, entry_id: str, key: str, value: Any) -> None:
+        """결과의 지일 칸(result.own)에 값 하나를 더함(예전 결과 채우기)."""
+        with self._lock:
+            rows = self._read()
+            row = next((r for r in rows if r.get("id") == entry_id), None)
+            own = ((row or {}).get("result") or {}).get("own")
+            if own is None:
+                return
+            own[key] = value
+            self._write(rows)
+
     def _bidders_path(self, entry_id: str) -> Path:
         return self.bidders_dir / f"{re.sub(r'[^0-9A-Za-z]', '', entry_id)}.json"
 

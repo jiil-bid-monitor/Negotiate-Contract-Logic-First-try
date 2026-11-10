@@ -42,6 +42,18 @@ def needs_fetch(entry: dict[str, Any], now: datetime | None = None) -> bool:
     return (now or _now()) - fetched >= RETRY_AFTER
 
 
+def under_rank(bidders: list[dict[str, Any]], own: dict[str, Any] | None) -> int | None:
+    """지일이 낙찰하한선 미달이면 미달 업체 중 하한선에 가까운(금액이 큰) 순서로 -1, -2, …(투찰 업체 표와 같은 등수, 11/10)."""
+    if not own or own.get("rank") is not None or own.get("amount") is None:
+        return None
+    under = sorted((b for b in bidders if b.get("rank") is None and "미달" in (b.get("remark") or "") and b.get("amount") is not None),
+                   key=lambda b: -b["amount"])
+    for i, b in enumerate(under):
+        if b.get("own"):
+            return -(i + 1)
+    return None
+
+
 def summarize(result: BidResult, entry: dict[str, Any], own_bizno: str, now: datetime | None = None) -> dict[str, Any]:
     """개찰 결과 → 화면·저장용 요약. 참가업체가 하나도 없으면 '개찰 전'."""
     out: dict[str, Any] = {"fetchedAt": (now or _now()).isoformat(timespec="seconds")}
@@ -69,6 +81,8 @@ def summarize(result: BidResult, entry: dict[str, Any], own_bizno: str, now: dat
         bidders=[{"rank": b.rank, "name": b.name, "ceo": b.ceo, "bizno": b.bizno, "amount": b.amount, "rate": b.rate,
                   "draws": b.draws, "remark": b.remark, **({"own": True} if b is own else {})} for b in result.bidders],
     )
+    if out["own"] is not None:
+        out["own"]["underRank"] = under_rank(out["bidders"], out["own"])
     # 기록한 기준 사정률 − 실제 사정률(양수 = 실제보다 높게 잡음 → 하한선 통과 쪽), 지일 금액 − 1위 금액
     if rate is not None and entry.get("rate") is not None:
         out["rateDiff"] = round(float(entry["rate"]) - rate, 4)
@@ -127,6 +141,14 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
         log.set_result(e["id"], res)
         if _needs_times(e, res.get("status")):
             log.set_times(e["id"], lookup(client, e))
+    # 11/10 전에 받은 '완료' 결과 — 지일 미달 등수(-N)를 저장된 투찰 업체 목록으로 채움(목록이 없으면 '결과 다시 받기' 때)
+    for e in entries:
+        res = e.get("result") or {}
+        own = res.get("own")
+        if res.get("status") == "완료" and own and own.get("rank") is None and "underRank" not in own:
+            bidders = log.bidders(e["id"])
+            if bidders is not None:
+                log.set_own_field(e["id"], "underRank", under_rank(bidders, own))
     done_ids = {e["id"] for e in done}
     pending = [e for e in entries if e.get("id") not in done_ids and (not ids or e.get("id") in ids)
                and _needs_times(e, (e.get("result") or {}).get("status"))]

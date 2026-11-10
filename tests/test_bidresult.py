@@ -125,6 +125,15 @@ class TestFill(unittest.TestCase):
         log.delete(a["id"])
         self.assertIsNone(log.bidders(a["id"]))
 
+    def test_own_under_rank(self):
+        """지일이 미달이면 미달 업체 중 금액이 큰 순서로 -N등(11/10)."""
+        bidders = BIDDERS[:2] + [Bidder(None, "갑", "9", 171_000_000, 88.5, "낙찰하한선미달"),
+                                 Bidder(None, "(주)지일", "2068636338", 170_500_000, 88.4, "낙찰하한선미달"),
+                                 Bidder(None, "을", "8", 169_000_000, 88.0, "낙찰하한선미달")]
+        s = summarize(result(bidders), {}, OWN)
+        self.assertEqual((s["own"]["rank"], s["own"]["underRank"]), (None, -2))
+        self.assertIsNone(summarize(result(BIDDERS), {}, OWN)["own"]["underRank"])   # 순위 있으면 없음
+
 
 if __name__ == "__main__":
     unittest.main()

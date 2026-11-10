@@ -451,6 +451,8 @@ def make_handler(app: App):
                         if not config.api.service_key:
                             return self._error(HTTPStatus.CONFLICT, "서버에 나라장터 인증키(NARA_SERVICE_KEY)가 없습니다")
                         base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
+                        if getattr(app, "bidlog_pull", None):
+                            app.bidlog_pull.pull()
                         app.postaward.sync_bidlog()
                         keys = [str(k) for k in data.get("keys") or []] or None
                         done = app.postaward.check(bidcalc.make_client(config.api), base, keys)
@@ -572,7 +574,9 @@ def start_nightly(app: App) -> None:
         base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
         return bidcalc.make_client(config.api), base
 
-    Nightly(app.store.path.parent, app.bidlog, app.latest_run, make_client, default_own_bizno(), postaward=app.postaward).start()
+    pull = getattr(app, "bidlog_pull", None)
+    Nightly(app.store.path.parent, app.bidlog, app.latest_run, make_client, default_own_bizno(), postaward=app.postaward,
+            before=pull.pull if pull else None).start()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -615,6 +619,15 @@ def main(argv: list[str] | None = None) -> int:
 
     ReportSync(on_report).start()
     # 매일 22시 투찰 이력 자동 수집 — 투찰내역 결과·입찰 공고 개찰 결과(추천 보정 자료)·투찰이력.xlsx·주간 성적표 (webapp/bidnightly.py)
+    # 서버 PC 투찰 기록 받아 오기(NAS, 11/10) — 평일 8~19시 1시간마다, 사본은 data/bidlog_서버PC/ (webapp/bidlogpull.py)
+    pull_url = os.environ.get("BIDLOG_PULL_URL", "").strip()
+    if pull_url:
+        from .bidlogpull import MIRROR_DIR, BidLogPull, CombinedLog, MirrorLog
+        mirror = MirrorLog(app.store.path.parent / MIRROR_DIR)
+        app.bidlog = CombinedLog(app.bidlog, mirror)
+        app.postaward.bidlog = app.bidlog
+        app.bidlog_pull = BidLogPull(mirror, pull_url, os.environ.get("BIDLOG_PULL_TOKEN", "").strip() or token or "")
+        app.bidlog_pull.start()
     if not app.viewer and os.environ.get("BID_NIGHTLY", "1").strip() != "0":
         start_nightly(app)
     # 텔레그램 명령어(/notice·/deadline) — TELEGRAM_COMMANDS=1인 곳(NAS)에서만 (webapp/telegrambot.py)

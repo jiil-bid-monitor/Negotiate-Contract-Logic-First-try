@@ -33,6 +33,7 @@ from nego.http_client import ApiError
 from . import mview
 from .autorestart import RestartAfterCollect
 from .bidlog import BidLog
+from .postaward import PostAward
 from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
 from .docscan import DocScan
 from .mstore import TeamStore
@@ -86,6 +87,9 @@ class App:
         self.team = team or TeamStore(store.path.parent, legacy_db=store.path, titles=self._titles, backup_dir=backup_dir)
         # 투찰 내역 — 투찰 계산기 '2. 투찰내역' 화면(2026-11-06 사용자 요청), data/bid_log.json
         self.bidlog = BidLog(store.path.parent, backup_dir=backup_dir)
+        # 낙찰 후 서류 — 낙찰 여부 확인 목록(2026-11-10), data/postaward.json
+        from nego.bidrecommend import default_own_bizno
+        self.postaward = PostAward(store.path.parent, self.bidlog, default_own_bizno())
         self._run_cache: tuple[int | None, dict[str, Any] | None] = (None, None)
         self._held_raw: dict[str, Any] | None = None
         # 결과 보기 전용(NAS, WEBAPP_ROLE=viewer) — 수집 버튼을 숨기고 서버 PC가 보낸 결과를 받는다
@@ -314,6 +318,8 @@ def make_handler(app: App):
                 return self._json({"decisions": app.store.decisions()})
             if url.path == "/api/bidlog":
                 return self._json({"entries": app.bidlog.entries()})
+            if url.path == "/api/postaward":
+                return self._json({"items": app.postaward.items()})
             if url.path == "/api/bidlog/bidders":
                 # 투찰 업체 전부(11/10) — 없으면 bidders=null(화면이 '결과 다시 받기' 뒤 다시 부름)
                 return self._json({"bidders": app.bidlog.bidders(q.get("id", [""])[0])})
@@ -426,6 +432,32 @@ def make_handler(app: App):
                 if url.path == "/api/bidlog":
                     entry = app.bidlog.add(data)
                     return self._json({"ok": True, "entry": entry, "entries": app.bidlog.entries()})
+                if url.path == "/api/postaward":
+                    app.postaward.add(str(data.get("no") or ""), str(data.get("title") or ""), str(data.get("work") or ""))
+                    return self._json({"ok": True, "items": app.postaward.items()})
+                if url.path == "/api/postaward/folder":
+                    # 폴더는 공유 폴더 맨 위 '낙찰후서류'(NAS: \\jiilserver\jiil-webapp\낙찰후서류), POSTAWARD_DIR로 바꿈
+                    root = Path(os.environ.get("POSTAWARD_DIR", "").strip() or app.store.path.resolve().parents[2] / "낙찰후서류")
+                    folder, _ = app.postaward.prepare(str(data.get("key") or ""), root)
+                    return self._json({"ok": True, "folder": str(folder), "items": app.postaward.items()})
+                if url.path == "/api/postaward/delete":
+                    app.postaward.remove(str(data.get("key") or ""))
+                    return self._json({"ok": True, "items": app.postaward.items()})
+                if url.path == "/api/postaward/check":
+                    # 지금 낙찰자 확인 — keys를 주면 그 공고만(다시), 없으면 '대기' 전부
+                    from nego import fields as F
+                    try:
+                        config = load_config()
+                        if not config.api.service_key:
+                            return self._error(HTTPStatus.CONFLICT, "서버에 나라장터 인증키(NARA_SERVICE_KEY)가 없습니다")
+                        base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
+                        app.postaward.sync_bidlog()
+                        keys = [str(k) for k in data.get("keys") or []] or None
+                        done = app.postaward.check(bidcalc.make_client(config.api), base, keys)
+                    except (ConfigError, ApiError) as err:
+                        key = os.environ.get("NARA_SERVICE_KEY", "")
+                        return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
+                    return self._json({"ok": True, **done, "items": app.postaward.items()})
                 if url.path == "/api/bidlog/update":
                     app.bidlog.update(str(data.get("id") or ""), data)
                     return self._json({"ok": True, "entries": app.bidlog.entries()})
@@ -540,7 +572,7 @@ def start_nightly(app: App) -> None:
         base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
         return bidcalc.make_client(config.api), base
 
-    Nightly(app.store.path.parent, app.bidlog, app.latest_run, make_client, default_own_bizno()).start()
+    Nightly(app.store.path.parent, app.bidlog, app.latest_run, make_client, default_own_bizno(), postaward=app.postaward).start()
 
 
 def main(argv: list[str] | None = None) -> int:

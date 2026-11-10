@@ -183,7 +183,7 @@ class Nightly:
     def __init__(self, data_dir: Path, bidlog, latest_run: Callable[[], dict | None],
                  make_client: Callable[[], tuple[Any, str] | None], own_bizno: str,
                  history_dir: Path | None = None, archive_dir: Path | None = None,
-                 fetch_one: Callable[..., dict] | None = None, fill_results: Callable[..., dict] | None = None,
+                 fetch_one: Callable[..., dict] | None = None, fill_results: Callable[..., dict] | None = None, postaward=None,
                  now: Callable[[], datetime] = _now):
         h, a = default_dirs()
         self.state_path = Path(data_dir) / STATE_FILE
@@ -195,6 +195,7 @@ class Nightly:
         self.archive_dir = Path(archive_dir or a)
         self._fetch_one = fetch_one
         self._fill_results = fill_results
+        self.postaward = postaward  # 낙찰 후 서류 목록(webapp/postaward.py) — 투찰 기록을 올리고 낙찰자 확인
         self.now = now
         self._lock = threading.Lock()
 
@@ -392,6 +393,9 @@ class Nightly:
                 client, base = made
                 try:
                     out["bidlog"] = self.fill_bidlog(client, base)
+                    if self.postaward is not None:
+                        self.postaward.sync_bidlog()
+                        out["postaward"] = self.postaward.check(client, base)
                     out.update(self.collect(state, client, base, now))
                 except Exception as err:  # noqa: BLE001 — 받기가 실패해도 엑셀·성적표는 씀
                     log.exception("개찰 결과 받기 실패")

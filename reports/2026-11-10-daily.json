@@ -1,0 +1,103 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-10",
+ "reportedAt": "2026-11-09T23:59:05+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01800823",
+   "title": "매직센터 시뮬레이터실 LED 전광판 제작 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "건양대학교 산학협력단",
+    "budgetAmount": 185030964.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "안내전광판"
+    ],
+    "score": 51,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01800823&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01815877",
+   "title": "탑정호 안전홍보용 LED 전광판 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "충청남도 논산시",
+    "budgetAmount": 104545454.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "안내전광판"
+    ],
+    "score": 53,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01815877&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01818789",
+   "title": "[LP17-1-16] 박물관 소장 희귀자료 영인 해제 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "숭실대학교",
+    "budgetAmount": null,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "score": 58,
+    "deadline": "2026-11-17T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01818789&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01785403",
+   "title": "국회 통합디지털센터 건립사업(통신공사)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "국회 국회사무처",
+    "budgetAmount": 1413000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 44,
+    "deadline": "2026-11-26T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01785403&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01816373",
+   "title": "무반사 챔버 조달 요청의 건",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "위너콤(주)",
+    "budgetAmount": 181818182.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 46,
+    "deadline": "2026-12-08T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01816373&bidPbancOrd=000"
+   }
+  }
+ ]
+}

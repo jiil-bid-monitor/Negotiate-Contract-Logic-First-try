@@ -637,7 +637,7 @@
     const res = r.result;
     if (!res || res.status !== "완료" || res.assessmentRate == null) return "-";
     const d = res.rateDiff;
-    return `${pct3(res.assessmentRate)}${d != null ? `<span class="sub ${d >= 0 ? "ok" : "ng"}">기준 ${signed(d, "%p")}${d >= 0 ? " · 하한선 통과 쪽" : " · 미달 쪽"}</span>` : ""}`;
+    return `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap ${d >= 0 ? "ok" : "ng"}">기준 ${signed(d, "%p")} · ${d >= 0 ? "하한선 통과" : "하한선 미달"}</span>` : ""}`;
   }
   function detailRow(r) {
     const res = r.result || {}, o = res.own, w = res.winner;

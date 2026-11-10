@@ -662,10 +662,17 @@
     if (!got || got === "loading") body = `<p class="why">투찰 업체를 불러오는 중…</p>`;
     else if (got.error) body = `<p class="why">투찰 업체를 불러오지 못했습니다: ${esc(got.error)}</p>`;
     else if (!got.length) body = `<p class="why">투찰 업체 정보가 없습니다.</p>`;
-    else body = `<div class="bidders-wrap"><table class="bidders"><thead><tr><th class="num">순위</th><th>업체명</th><th class="num">투찰금액</th><th class="num">투찰률</th><th>비고</th></tr></thead><tbody>${
-      got.map((b) => `<tr class="${b.own ? "own" : ""}${b.rank == null ? " unranked" : ""}"><td class="num">${b.rank ?? "-"}</td><td>${esc(b.name || "-")}</td>`
+    else {
+      // 낙찰하한선 미달 업체는 하한선에 가까운(금액이 큰) 업체부터 -1, -2, …(11/10 사용자 요청)
+      const under = got.filter((b) => b.rank == null && /미달/.test(b.remark || "") && b.amount != null)
+        .sort((a, b) => b.amount - a.amount);
+      const neg = new Map(under.map((b, i) => [b, -(i + 1)]));
+      const shown = [...got.filter((b) => !neg.has(b)), ...under];   // 순위 있는 업체 → 그 밖 → 미달(-1부터)
+      body = `<div class="bidders-wrap"><table class="bidders"><thead><tr><th class="num">순위</th><th>업체명</th><th class="num">투찰금액</th><th class="num">투찰률</th><th>비고</th></tr></thead><tbody>${
+      shown.map((b) => `<tr class="${b.own ? "own" : ""}${b.rank == null ? " unranked" : ""}"><td class="num">${b.rank ?? neg.get(b) ?? "-"}</td><td>${esc(b.name || "-")}</td>`
         + `<td class="num">${b.amount != null ? `${won(b.amount)}원` : "-"}</td><td class="num">${b.rate != null ? pct3(b.rate) : "-"}</td><td>${esc(b.remark || "")}</td></tr>`).join("")
     }</tbody></table></div>`;
+    }
     return `<tr class="bidlog-detail bidlog-bidders" data-id="${esc(r.id)}"><td colspan="7"><div class="bidders-head">투찰 업체 ${got && got.length ? `${got.length}곳` : ""}</div>${body}</td></tr>`;
   }
   async function loadBidders(id) {

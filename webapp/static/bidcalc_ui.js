@@ -621,17 +621,16 @@
     const res = r.result;
     if (FETCHING.has(r.id)) return `<span class="res-wait">결과 받는 중…</span>`;
     if (!res) return `<span class="res-wait">아직 안 받음</span>`;
-    // 개찰 전이면 확인 시각 대신 투찰 마감·개찰 일시를 붉게(11/10 사용자 요청) — 둘 다 모르면 예전처럼 확인 시각
-    if (res.status === "개찰 전") return `<span class="res-wait">개찰 전</span>${r.closingAt || r.openingAt
-      ? (r.closingAt ? `<span class="sub res-close">마감 ${esc(day(r.closingAt))}</span>` : "")
-        + (r.openingAt ? `<span class="sub res-open">개찰 ${esc(day(r.openingAt))}</span>` : "")
-      : `<span class="sub">${esc(day(res.fetchedAt))} 확인</span>`}`;
+    // 개찰 전이면 개찰 시각만 붉게(11/10 사용자 요청) — 모르면 예전처럼 '개찰 전' + 확인 시각
+    if (res.status === "개찰 전") return r.openingAt
+      ? `<span class="res-open nowrap">개찰 ${esc(day(r.openingAt))}</span>`
+      : `<span class="res-wait">개찰 전</span><span class="sub">${esc(day(res.fetchedAt))} 확인</span>`;
     if (res.status === "오류") return `<span class="res-bad">받지 못함</span><span class="sub">${esc((res.error || "").slice(0, 40))}</span>`;
     const o = res.own, n = res.bidderCount;
     if (!o) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${n}곳</span>`;
-    if (o.rank == null) return `<b class="res-bad">${esc(o.remark || "순위 없음")}</b><span class="sub">참가 ${n}곳</span>`;
-    return `<b class="${o.rank === 1 ? "res-win" : o.rank <= 5 ? "res-top" : ""}">${o.rank}위</b> <span class="res-of">/ ${n}곳</span>`
-      + (res.gapToWinner ? `<span class="sub">1위보다 ${signed(res.gapToWinner, "원")}</span>` : o.rank === 1 ? `<span class="sub">1순위</span>` : "");
+    // 개찰 결과는 '낙찰'(지일 1순위) / '탈락'(그 밖 — 하한선 미달 포함)으로(11/10 사용자 요청), 등수는 옆 칸
+    return o.rank === 1 ? `<b class="res-win">낙찰</b><span class="sub">참가 ${n}곳</span>`
+      : `<b class="res-bad">탈락</b><span class="sub">${o.rank == null ? esc((o.remark || "순위 없음").replace("낙찰하한선미달", "하한선 미달")) + " · " : ""}참가 ${n}곳</span>`;
   }
   function rateCell(r) {
     const res = r.result;
@@ -741,9 +740,9 @@
       const open = OPEN_ROWS.has(r.id);
       return `<tr data-id="${esc(r.id)}" class="${open ? "is-open" : ""}">
         <td class="when" data-l="기록일">${esc(day(r.recordedAt))}</td>
-        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a>${r.institution ? ` · ${esc(r.institution)}` : ""}${r.workType ? ` · ${esc(r.workType)}` : ""}</span></td>
-        <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub">기초 ${won(r.basis)}${r.lowerRate != null ? ` · 하한율 ${r.lowerRate}%` : ""}</span></td>
-        <td class="num" data-l="기준 사정률">${pct3(r.rate)}<span class="sub">${esc(r.method || "-")}</span></td>
+        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType ? `<span class="sub nowrap">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}</span>` : ""}</td>
+        <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub nowrap">기초 ${won(r.basis)}</span>${r.lowerRate != null ? `<span class="sub nowrap">하한율 ${r.lowerRate}%</span>` : ""}</td>
+        <td class="num" data-l="기준 사정률">${pct3(r.rate)}</td>
         <td class="res" data-l="개찰 결과"><div>${resultCell(r)}</div></td>
         <td class="num" data-l="등수 · 사정률">${rateCell(r)}</td>
         <td class="act">${edit

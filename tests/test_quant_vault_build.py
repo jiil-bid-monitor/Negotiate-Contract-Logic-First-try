@@ -2022,3 +2022,44 @@ def test_multi_label_lines_and_sign_only_company(tmp_path: Path):
     fill_hwpx(src2, tmp_path / "o2.hwpx", v, sign_only=True)
     text2 = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()))
     assert "회사명 : (주)가상" in text2 and "대표자 : 홍길동" in text2
+
+
+def test_birth_and_proposal_notice_label():
+    """11/10 경남교육청 입찰참가신청서: '입찰(제안)공고번호' 칸, 대표자 줄 '생년월일' 칸(대표자 주민번호 앞 6자리)."""
+    from quantdocs.fill import _birth, _label_key
+    assert _label_key("입찰(제안)공고번호") == "_notice_no" and _label_key("입찰공고번호") == "_notice_no"
+    assert _birth("800101-1******") == "1980. 01. 01." and _birth("050302-3******") == "2005. 03. 02."
+    assert _birth("") == "" and _birth("801301-1******") == ""
+
+
+def test_applicant_signature_line(tmp_path: Path):
+    """11/10 경남교육청 입찰참가신청서 끝 '신 청 인 :          (인)' — 대표자 이름. (인) 없는 '신청인 :'은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "t.hwpx", p("입찰참가신청서") + p("2026 .   .   .") + p("   신 청 인 :                      (인)") + p("   신청인 :"))
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    text = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    lines = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", m)).strip() for m in re.findall(r"<hp:p\b.*?</hp:p>", text, re.S)]
+    assert lines[2] == "신 청 인 : 홍길동 (인)" and lines[3] == "신청인 :"
+
+
+def test_slash_signature_and_bid_rep_group():
+    """11/10 경남교육청: 서약서 '업체명      / 대표자 :      (인)', 위임장 묶음 머리 '입찰 대표자', 'E-Mail' 이름표."""
+    from quantdocs.fill import _label_key, _row_group, Cell
+    assert _label_key("E-Mail") == "이메일"
+    head = Cell(start=0, end=0, row=0, col=0, colspan=1, text="입찰 대표자", rowspan=3)
+    name = Cell(start=0, end=0, row=1, col=1, colspan=1, text="성  명")
+    assert _row_group([head, name], name) == "대표자"
+
+
+def test_credit_labels_and_applicant_group():
+    """11/10 경남교육청: 신용평가등급 확인서 칸 이름표, 실적증명서 '신청인' 묶음(직접 기입 서식이어도 채움)."""
+    from quantdocs.fill import _label_key, _row_group, _value, Cell
+    assert _label_key("등급평가일") == "신용평가 평가일" and _label_key("등급 유효기간") == "신용평가 유효기간"
+    assert _label_key("기업신용 평가등급") == "신용평가등급"
+    v = vault.Vault({}, info={"신용평가 평가일": "2026-06-16"})
+    assert _value("신용평가 평가일", v) == "2026. 06. 16."
+    head = Cell(start=0, end=0, row=0, col=0, colspan=1, text="신 청 인", rowspan=4)
+    lab = Cell(start=0, end=0, row=1, col=1, colspan=1, text="대 표 자")
+    assert _row_group([head, lab], lab) == "신청인"

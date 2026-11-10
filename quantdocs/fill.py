@@ -140,13 +140,17 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("전화",), "전화번호"),
     (("팩스", "FAX"), "팩스번호"),
     (("홈페이지",), "홈페이지"),
-    (("E-mail", "이메일", "전자우편"), "이메일"),
+    (("E-mail", "E-Mail", "e-mail", "Email", "EMAIL", "E-MAIL", "이메일", "전자우편"), "이메일"),
     (("회사설립", "설립년", "설립연", "설립일", "개업"), "설립일"),
     (("자본금",), "자본금"),
     (("총직원수", "총종업원수", "종업원수", "직원수", "상시근로자수"), "종업원 수"),  # '총직원수 | 명'(11/05 사용자 요청)
     (("사업분야", "업태"), "사업분야"),
     (("면허/허가/등록증", "면허보유", "등록증보유"), "_licenses"),
-    (("입찰명", "입찰건명", "공고명"), "_title"),  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
+    (("입찰명", "입찰건명", "공고명"), "_title"),
+    # 신용평가등급 확인서(11/10 경남교육청 서식 19) — 신용평가 확인서 PDF에서 읽은 값(importer.read_credit)
+    (("기업신용평가등급", "기업신용등급", "신용평가등급", "신용등급"), "신용평가등급"),
+    (("등급평가일", "신용평가일", "평가일자"), "신용평가 평가일"),
+    (("등급유효기간", "신용등급유효기간", "신용평가유효기간"), "신용평가 유효기간"),  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
 ]
 _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
 
@@ -197,11 +201,21 @@ def _masked(v: str) -> str:
     return f"{m.group(1)}-*******" if m else ""
 
 
+def _birth(v: str) -> str:
+    """주민등록번호 앞 6자리 → '1965. 03. 12.'(올해 두 자리보다 크면 1900년대). 번호가 없으면 빈 글자."""
+    m = re.search(r"(\d{2})(\d{2})(\d{2})\s*-?\s*[\d*Xx]{7}", v or "")
+    if not m or not (1 <= int(m.group(2)) <= 12 and 1 <= int(m.group(3)) <= 31):
+        return ""
+    yy = int(m.group(1))
+    century = 2000 if yy <= date.today().year % 100 else 1900
+    return f"{century + yy}. {m.group(2)}. {m.group(3)}."
+
+
 def _label_key(text: str) -> str | None:
     t = _sq(text).strip(":：")
     if not t or len(t) > 16 or _SKIP_LABEL.search(t):
         return None
-    if re.fullmatch(r"(?:입찰)?공고(?:\(지명\))?번호", t):  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)
+    if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호", t):  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
         return "_notice_no"
     if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
         return "전화번호"
@@ -239,6 +253,10 @@ def _value(key: str, vault) -> str:
         return ", ".join(dict.fromkeys(names))
     if key == "사업분야":
         return vault.info.get("사업분야") or vault.info.get("종목") or vault.info.get("업태") or ""
+    if key in ("신용평가 평가일", "신용평가 유효기간"):  # '2026-06-16' → '2026. 06. 16.'
+        d = str(vault.info.get(key) or "")
+        m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", d)
+        return f"{m.group(1)}. {m.group(2)}. {m.group(3)}." if m else d
     v = vault.info.get(key, "")
     if not v and key in ("전화번호", "팩스번호"):  # 회사정보 시트 항목 이름이 '대표전화'·'TEL'·'FAX' 등이어도
         words = ("전화", "TEL", "연락처") if key == "전화번호" else ("팩스", "FAX")
@@ -394,10 +412,12 @@ def _row_group(cells: list[Cell], c: Cell) -> str | None:
         if o is c or o.rowspan < 2 or o.col >= c.col or not (o.row <= c.row < o.row + o.rowspan):
             continue
         t = _sq(o.text)
-        if re.fullmatch(r"대표자|대표이사|위임자|위임인", t):
+        if re.fullmatch(r"(?:입찰|신청|제안|응모)?(?:대표자|대표이사)|위임자|위임인", t):  # '입찰 대표자'(11/10 경남교육청 위임장)
             return "대표자"
         if re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", t):
             return "대리인"
+        if re.fullmatch(r"신청인|신청자|증명신청인|제출자", t):
+            return "신청인"
     return None
 
 
@@ -580,14 +600,14 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|회\s*사\s*명|주\s*소", text):
             continue
         # 한 줄에 회사 이름표와 대표자 이름표가 같이 — '업체명 :      대표자 :      (인)'·'제안업체 :      대표자 :'(11/06 과거 제안요청서 검사)
-        two = re.fullmatch(rf"\s*(?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：]\s{{2,}}대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL}|[(（])?\s*", text)
+        two = re.fullmatch(rf"\s*(?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*(?:[:：]\s{{2,}}|\s{{2,}}/\s*)대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL}|[(（])?\s*", text)  # '업체명      / 대표자 :   (인)'도(11/10 경남교육청 서약서)
         if two and _value("회사명", vault) and _value("대표자", vault):
             company, name = _value("회사명", vault), _value("대표자", vault)
 
             def put_two(mm, state={"c": False, "n": False}):
                 body = mm.group(2)
                 if not state["c"]:
-                    body, k = re.subn(r"((?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：])( {2,})",
+                    body, k = re.subn(r"((?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：]?)( {2,})(?=\S)",
                                       lambda m2: f"{m2.group(1)} {_mark(company)}" + " " * max(2, len(m2.group(2)) - len(company) - 1), body, count=1)
                     state["c"] = bool(k)
                 if not state["n"]:
@@ -689,6 +709,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         if not key and _sq(label) == "기관명" and re.search(r"각\s*서|확\s*약\s*서|서\s*약\s*서", _text(xml)) \
                 and not any(cs <= s and e <= ce for cs, ce in single):
             key = "회사명"  # 각서·확약서 끝 '기관명 :  / 대표자 : (인)' = 입찰자(11/05 창업진흥원 서식 7) — 증명서 발급기관 칸(한 줄 칸)은 아님
+        if not key and seal and re.fullmatch(r"신청(?:인|자)|제안(?:자|인)|입찰(?:자|인)|응모(?:자|인)", _sq(label)):
+            key = "대표자"  # 서명 줄 '신 청 인 :        (인)'(11/10 경남교육청 입찰참가신청서) — (인)이 붙은 줄만, 대표자 이름
         value = _value(key, vault) if key else ""
         if not value:
             continue
@@ -1377,7 +1399,7 @@ _BID_NAME = r"입\s*찰\s*건\s*명"
 
 
 _P_END = re.compile(r"</(?:[\w.-]+:)?p>")
-_NOTICE_NO_LABEL = r"(?:입\s*찰\s*)?공\s*고\s*(?:\(\s*지\s*명\s*\)\s*)?번\s*호"
+_NOTICE_NO_LABEL = r"(?:입\s*찰\s*)?(?:\(\s*제\s*안\s*\)\s*|제\s*안\s*)?공\s*고\s*(?:\(\s*지\s*명\s*\)\s*)?번\s*호"
 
 
 def _rest_of_para(xml: str, pos: int) -> str:
@@ -1547,8 +1569,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             none_rule = re.search(r"(?:없을|없는)\s*(?:경우|때).{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
-            for tbl in ([] if sign_only else _spans(xml, "tbl")):
+            for tbl in _spans(xml, "tbl"):
                 cells = _cells(xml, tbl)
+                # 직접 기입 서식(실적증명서 등)은 표 안을 건드리지 않음 — 단 '신청인' 묶음 줄(업체명·대표자·사업자번호·소재지·전화)은 채움
+                # (11/10 경남교육청 사업이행 실적증명서 — 증명 내용은 발주처가, 신청인 칸은 지일이)
+                if sign_only and not any(_row_group(cells, x) == "신청인" for x in cells):
+                    continue
                 by_pos = {(c.row, c.col): c for c in cells}
                 other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
@@ -1558,6 +1584,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if self_scores:
                     edits += _self_score_edits(cells, self_scores, rep)
                 for c in cells:
+                    if sign_only and _row_group(cells, c) != "신청인":
+                        continue
                     key = _label_key(c.text)
                     # 왼쪽 세로 묶음 칸('대 표 자' | 성명 / 주소 / 연락처)의 사람 칸(11/06 제보: 청주 위임장 대표자 성명·연락처가 빔)
                     group = _row_group(cells, c)
@@ -1573,11 +1601,24 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if "연혁" in core and len(core) <= 8 and vault.history:
                         lines = [f"{_fmt_ymd(h.get('연월일'))}  {h.get('내용') or ''}".strip() for h in vault.history]
                         right = by_pos.get((c.row, c.col + c.colspan))
+                        below = by_pos.get((c.row + c.rowspan, c.col))
                         if right is not None and right.blank:
                             edits.append((right, lines, False))
+                        elif below is not None and below.blank and below.colspan == c.colspan:
+                            # 이름표 칸 바로 아래 같은 너비의 빈 칸 = 답 칸(11/10 경남교육청 서식 14 — 이름표 칸에 붙여 상자 밖에 적혔음)
+                            edits.append((below, lines, False))
                         else:  # 한 줄 전체 칸 — 이름표 아래에 붙임
                             edits.append((c, lines, True))
                         rep.filled.append(f"연혁 → {len(lines)}줄")
+                        continue
+                    if not key and _sq(c.text) == "생년월일" and c.row not in agent_rows and (group == "대표자" or any(
+                            o.row == c.row and _sq(o.text).startswith("대표자") for o in cells)):
+                        # 신청인 '대 표 자 | 이름 | 생년월일 | __'(11/10 경남교육청 입찰참가신청서) — 대표자 주민등록번호 앞 6자리로, 대리인 줄은 비움
+                        birth = _birth(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
+                        target = by_pos.get((c.row, c.col + c.colspan))
+                        if birth and target is not None and target.blank:
+                            edits.append((target, [birth], False))
+                            rep.filled.append(f"대표자 생년월일 → {birth}")
                         continue
                     if not key and "주민등록번호" in _sq(c.text):
                         # 대표자 줄의 주민등록번호만(위임장 '대 표 자 | 이름 | 주민등록번호 | __') — 대리인 줄은 비움, 뒷자리는 '*'
@@ -1593,6 +1634,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if key == "주소" and c.row in agent_rows:
                         continue
                     target = by_pos.get((c.row, c.col + c.colspan))
+                    if target is None and key == "신용평가등급":
+                        # 머리 칸 '기업신용 평가등급' 아래 빈 칸이 값 칸(11/10 경남교육청 서식 19)
+                        below = by_pos.get((c.row + c.rowspan, c.col))
+                        target = below if below is not None and below.blank and below.colspan == c.colspan else None
                     value = _value(key, vault)
                     if key == "전화번호" and re.search(r"FAX|Fax|팩스", c.text) and _value("팩스번호", vault) and value:
                         value = f"{value} / {_value('팩스번호', vault)}"  # '전화번호(FAX번호)' 한 칸(11/05 국민안전체험관 서식 2)

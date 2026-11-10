@@ -90,6 +90,7 @@ def _verify_one_notice(client, config, scsbid_url: str, notice_no: str | None) -
     checks = [
         ("참가업체 전체", F.OPENING_BIDDERS_OPERATION, 3),
         ("예비가격/공사(공고 지정)", F.SCSBID_OPERATIONS["예비가격/공사"], 20),
+        ("낙찰현황/공사(공고 지정)", F.SCSBID_OPERATIONS["낙찰현황/공사"], 3),
     ]
     for label, operation, show in checks:
         print(f"\n── {label} ({operation}, 공고 {notice_no}) " + "─" * 20)

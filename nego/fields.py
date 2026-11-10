@@ -72,6 +72,7 @@ SCSBID_OPERATIONS = {
     "예비가격/공사": "getOpengResultListInfoCnstwkPreparPcDetail",
     "낙찰현황/용역": "getScsbidListSttusServc",
     "낙찰현황/공사": "getScsbidListSttusCnstwk",
+    "낙찰현황/물품": "getScsbidListSttusThng",  # 2026-11-10 실측 — 공고 하나는 inqryDiv=4 + bidNtceNo, 기간 조회는 하루 단위(7일은 resultCode 07)
 }
 # 공고 하나의 참가 업체 전체(순위·투찰금액·투찰률) — 공고번호로 조회
 OPENING_BIDDERS_OPERATION = "getOpengResultListInfoOpengCompt"

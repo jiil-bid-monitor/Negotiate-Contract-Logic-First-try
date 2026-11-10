@@ -159,6 +159,14 @@ def _squash(s: str) -> str:
     return re.sub(r"\s+", "", s)
 
 
+def _unspace(name: str) -> str:
+    """'입 찰 참 가 신 청 서'처럼 칸에 맞춰 글자를 벌린 이름 → '입찰참가신청서'(낱자가 대부분일 때만)."""
+    toks = name.split()
+    if len(toks) >= 3 and sum(len(t) == 1 for t in toks) / len(toks) >= 0.6:
+        return "".join(toks)
+    return name
+
+
 def _clean_name(name: str) -> str:
     name = _LIST_MARK.sub("", name.strip())
     head = re.split(rf"\s*[{_CIRCLED}]", name)[0]  # "참가자격을 입증할 서류 ① 사업자등록증 사본, …" → 앞 이름만(11/04 필암서원)
@@ -351,9 +359,63 @@ def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
     for n, names in subs.items():
         if n not in found:
             add_one(n, " · ".join(names) + f" ({n}-1~{n}-{len(names)})" if len(names) > 1 else names[0], 0)
+    # ⑦ '구 분 | 번호 | 서 식 명 | 제 출 서 류' 표 — 번호 칸이 숫자뿐('서식'이라는 말이 없음, 11/10 경남교육청 학생안전체험원
+    # R26BK01809838 제안요청서 'VI 제출 서식'). 위 방법들로 못 찾은 번호만 채움(본문 서식 머리가 있는 문서는 그대로).
+    for n, name, i in _number_table(lines):
+        if n not in found:
+            add_one(n, name, i)
     for n in weak:
         found[n].weak = True
     return sorted(found.values(), key=lambda f: f.no)
+
+
+_NO_CELL = re.compile(r"\s*(\d{1,2})(?:\s*-\s*(\d{1,2}))?\s*")
+
+
+def _number_table(lines: list[str]) -> list[tuple[int, str, int]]:
+    """머리에 '번호'와 '서식명' 칸이 있는 서식 목록 표 → [(번호, 이름, 줄)]. 한글(.hwp)은 칸마다 한 줄('번호' / '서식명' / … / '1' /
+    '입찰참가신청서' / '입찰참가자격 증빙서류 포함' / '2' / …), 다른 것은 한 줄에 ' | '로 이어 나옴 — 둘 다 읽음.
+    하위 번호('4-1'·'17-2')는 본 번호로, 괄호 꼬리는 떼고. 이름은 칸에 맞춰 벌린 글자를 붙임('위 임 장' → '위임장')."""
+    out: list[tuple[int, str, int]] = []
+    seen: set[int] = set()
+
+    def put(no: str, name: str, i: int) -> None:
+        m = _NO_CELL.fullmatch(no)
+        name = _unspace(name.strip())
+        if not m or not name or _NO_CELL.fullmatch(name) or len(_squash(name)) < 2:
+            return
+        n = int(m.group(1))
+        if n in seen:
+            return
+        seen.add(n)
+        out.append((n, re.sub(r"\s*\([^)]*\)\s*$", "", name) if m.group(2) else name, i))
+
+    is_no = lambda c: _squash(c) in ("번호", "연번", "서식번호")
+    is_name = lambda c: re.fullmatch(r"서식(?:명|이름|명칭)", _squash(c)) is not None
+    for j, ln in enumerate(lines):
+        if "|" in ln:  # 한 줄에 칸이 이어진 표
+            cells = ln.split("|")
+            if not (any(is_no(c) for c in cells) and any(is_name(c) for c in cells)):
+                continue
+            k = j + 1
+            while k < len(lines) and "|" in lines[k]:
+                cells = [c.strip() for c in lines[k].split("|")]
+                idx = next((p for p, c in enumerate(cells) if _NO_CELL.fullmatch(c)), None)
+                if idx is not None and idx + 1 < len(cells):
+                    put(cells[idx], cells[idx + 1], k)
+                k += 1
+        elif is_no(ln) and j + 1 < len(lines) and is_name(lines[j + 1]):  # 칸마다 한 줄인 표
+            k, idle = j + 2, 0
+            while k < len(lines) and idle < 12:
+                cur = lines[k].strip()
+                if _FORM_HEAD.match(lines[k]) or len(cur) > 80:  # 본문 서식 머리·긴 문장 = 표 끝
+                    break
+                if _NO_CELL.fullmatch(cur) and k + 1 < len(lines):
+                    put(cur, lines[k + 1], k)
+                    k, idle = k + 2, 0
+                    continue
+                k, idle = k + 1, idle + 1
+    return out
 
 
 def _undouble(s: str) -> str:

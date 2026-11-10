@@ -54,6 +54,22 @@ def _latest(rows: list[dict], notice_no: str) -> dict | None:
     return max(same, key=lambda r: str(r.get("bidNtceOrd") or ""))
 
 
+def opening_at(client: DataGoKrClient, notice_no: str, work_type: str = "") -> str:
+    """공고번호 → 개찰 일시 문자열(나라장터 opengDt, 마지막 차수). 못 찾으면 빈 글자 — 투찰내역 예전 기록 채우기용."""
+    works = [work_type] if work_type in WORK_TYPES else list(WORK_TYPES)
+    for wt in works:
+        try:
+            rows = client.fetch_all_pages(F.BID_NOTICE_BASE_URL, F.BID_NOTICE_OPERATIONS[wt],
+                                          {"inqryDiv": "2", "bidNtceNo": notice_no}, f"개찰일 {notice_no}")
+        except ApiError as err:
+            log.info("개찰일 조회 실패 %s %s: %s", wt, notice_no, err)
+            continue
+        row = _latest(rows, notice_no)
+        if row:
+            return str(row.get("opengDt") or "").strip()
+    return ""
+
+
 def a_value(row: dict) -> tuple[float, list[dict]]:
     """기초금액 행 → (A값 합계, 항목 목록[{name, field, amount}])."""
     items = []
@@ -354,6 +370,8 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
     if notice:
         out.update({
             "notice_ord": str(notice.get("bidNtceOrd") or ""),
+            # 개찰 일시(11/10 사용자 요청 — 투찰내역 '개찰 전' 줄에 붉게)
+            "opening_at": str(notice.get("opengDt") or "").strip(),
             "title": str(notice.get("bidNtceNm") or ""),
             "institution": str(notice.get("dminsttNm") or notice.get("ntceInsttNm") or ""),
             "notice_institution": str(notice.get("ntceInsttNm") or ""),

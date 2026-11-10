@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from pypdf import PdfReader
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -63,6 +64,26 @@ class PdfFormTest(unittest.TestCase):
                                     head("[별지 제1호 서식] 일반현황 및 연혁"), head("[별지 제2호 서식] 위 임 장")])
         names = split_pdf(src, self.dir / "out")
         self.assertEqual(names, ["별지01_일반현황 및 연혁.pdf", "별지02_위임장.pdf"])
+
+    def test_pdf_forms_go_into_one_file(self):
+        from types import SimpleNamespace
+
+        from under100m.__main__ import MERGED_PDF, build_forms
+
+        def head(text):
+            return lambda pdf: pdf.drawString(60, 780, text)
+
+        src = self.make("공고문.pdf", [head("본문"), head("[별지 제1호 서식] 일반현황 및 연혁"), head("[별지 제2호 서식] 위 임 장")])
+        candidate = SimpleNamespace(notice=SimpleNamespace(title="시험 공고", notice_no="R26BK00000001", notice_ord="000"),
+                                    schedule=SimpleNamespace(bid_deadline=None))
+        out = self.dir / "서식자동분리"
+        work = self.dir / "work"
+        work.mkdir()
+        checklist, _, _, names = build_forms([src], COMPANY, candidate, out, work)
+        self.assertEqual(sorted(p.name for p in out.iterdir()), [MERGED_PDF])  # 서식별 파일 없이 한 파일
+        self.assertEqual(len(PdfReader(out / MERGED_PDF).pages), 2)
+        self.assertIn("[ ] 2. 별지02_위임장 — ", "\n".join(checklist))
+        self.assertEqual(names, ["별지01_일반현황 및 연혁", "별지02_위임장"])
 
     def test_fills_right_cell_only_when_empty(self):
         src = self.make("a.pdf", [lambda pdf: draw_table(pdf, [["업체명(상호)", ""], ["대표자", "(인)"], ["주소", "이미 적힘"]])])

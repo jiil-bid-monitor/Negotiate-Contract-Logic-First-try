@@ -24,7 +24,13 @@ def money_rows(candidate, amount: float | None, source: str) -> list[tuple[str, 
     n = candidate.notice
     raw = getattr(n, "raw", None) or {}
     rate = raw.get("sucsfbidLwltRate")
-    rows = [("추정가격", won(n.estimated_price)), ("배정예산", won(n.assigned_budget)),
+    from nego.models import PLACEHOLDER_AMOUNT
+
+    def api(value: float | None) -> str:  # 1원 같은 자리 표시 값 = 발주처가 금액을 안 올림
+        return f"비공개 (나라장터에 {value:,.0f}원으로 등록)" if value and value < PLACEHOLDER_AMOUNT else won(value)
+
+    hidden = any(v and v < PLACEHOLDER_AMOUNT for v in (n.estimated_price, n.assigned_budget))
+    rows = [("추정가격", api(n.estimated_price)), ("배정예산", api(n.assigned_budget)),
             ("기초금액", won(getattr(candidate, "basis", None))), ("낙찰하한율", f"{rate}%" if rate else "-"),
             ("예가방법", getattr(n, "estimate_price_method", None) or "-")]
     seen = set()
@@ -41,6 +47,8 @@ def money_rows(candidate, amount: float | None, source: str) -> list[tuple[str, 
             rows[hit] = (kind, won(value) + " — 공고문")
     if amount:
         rows.insert(0, ("사업금액", f"{won(amount)} — {source} · {'1억 미만' if amount < LIMIT else '1억 이상'}"))
+    elif hidden:
+        rows.insert(0, ("사업금액", "비공개 — 나라장터 금액이 자리 표시 값이고 공고문에도 없음, 발주처·공고문 확인"))
     return rows
 
 

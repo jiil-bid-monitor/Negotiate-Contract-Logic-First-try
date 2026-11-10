@@ -669,7 +669,7 @@
       const neg = new Map(under.map((b, i) => [b, -(i + 1)]));
       const shown = [...got.filter((b) => !neg.has(b)), ...under];   // 순위 있는 업체 → 그 밖 → 미달(-1부터)
       body = `<div class="bidders-wrap"><table class="bidders"><thead><tr><th class="num">순위</th><th>업체명</th><th class="num">투찰금액</th><th class="num">투찰률</th><th>비고</th></tr></thead><tbody>${
-      shown.map((b) => `<tr class="${b.own ? "own" : ""}${b.rank == null ? " unranked" : ""}"><td class="num">${b.rank ?? neg.get(b) ?? "-"}</td><td>${esc(b.name || "-")}</td>`
+      shown.map((b) => `<tr class="${b.own ? "own" : ""}${b.rank == null ? " unranked" : ""}"><td class="num${neg.has(b) ? " under" : ""}">${b.rank ?? neg.get(b) ?? "-"}</td><td>${esc(b.name || "-")}</td>`
         + `<td class="num">${b.amount != null ? `${won(b.amount)}원` : "-"}</td><td class="num">${b.rate != null ? pct3(b.rate) : "-"}</td><td>${esc(b.remark || "")}</td></tr>`).join("")
     }</tbody></table></div>`;
     }

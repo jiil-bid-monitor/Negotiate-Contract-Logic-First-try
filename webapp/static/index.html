@@ -1063,6 +1063,7 @@ table.bidders { width: 100%; border-collapse: collapse; font-size: 12px; }
 #tab-calc .bidlog-table td.act button.bidders-btn { display: block; margin-top: 4px; }
 table.bidders tr.own td { font-weight: 700; color: var(--brand); }
 table.bidders tr.unranked td { color: var(--muted); }
+#tab-calc table.bidders td.under { color: var(--urgent); }  /* 미달 순위 -1, -2 … 붉게(11/10) */
 #tab-calc .res-foot button, #tab-calc .bidlog-table td.act button.more { padding: 3px 8px; font-size: 12px; }
 #tab-calc .bidlog-table td.act button.more { color: var(--brand); border-color: var(--brand); }
 @media (max-width: 760px) { .res-grid { grid-template-columns: 1fr 1fr; } .calc-form.bidlog-table tr.bidlog-detail td { display: block; } .calc-form.bidlog-table tr.bidlog-detail td::before { content: none; } }

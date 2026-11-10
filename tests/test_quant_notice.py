@@ -353,3 +353,17 @@ def test_read_forms_number_column_table():
     forms2 = {f.no: f.name for f in read_forms("\n".join(lines), "y", [])}
     assert forms2 == {1: "서면질의서", 2: "입찰참가신청서", 3: "사용인감계", 4: "공동수급표준협정서", 5: "위임장",
                       21: "제안서 정량평가 자체평가표", 22: "제안서발표자명단"}
+
+
+def test_byeolji_form_heads():
+    import re
+    """11/10 경남교육청 학생안전체험원(R26BK01809838): 본문 서식 머리가 '【별지서식 1】 서면질의서'·'【별지서식 4-1】…' —
+    '별지'가 끼어 서식을 하나도 못 잘랐음. '[별지 제1호 서식]' 모양도."""
+    from quantdocs.forms_cut import _HEAD
+    from quantdocs.notice import _FORM_HEAD
+    sq = lambda s: re.sub(r"\s+", "", s)
+    for text, want in [("【별지서식 1】 서면질의서", ("1", None)), ("【별지서식 4-1】공동수급표준협정서", ("4", "1")),
+                       ("[별지 제3호 서식] 사용인감계", ("3", None)), ("[서식 2] 입찰참가신청서", ("2", None))]:
+        m = _HEAD.match(sq(text))
+        assert m and ((m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))) == want, text
+    assert _FORM_HEAD.match("【별지서식 6】 재직증명서").group(1) == "6"

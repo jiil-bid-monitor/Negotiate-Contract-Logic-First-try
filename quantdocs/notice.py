@@ -142,7 +142,7 @@ _NO = r"서식\s*(?:제\s*)?\d+\s*호?(?:\s*-\s*\d+)?(?:\s*[~∼,]\s*(?:서식\s
 _SYM = r"[^\w\s|]"  # 서식 번호를 감싸는 특수기호 하나 — 괄호 모양을 가리지 않음(11/04 사용자 요청: 〈서식 11〉 등)
 _FORM_CELL = re.compile(rf"^\s*(?:{_SYM}\s*)?(?P<nos>{_NO})\s*(?:{_SYM})?\s*$")
 _FORM_INLINE = re.compile(rf"{_SYM}\s*(?P<nos>{_NO})\s*{_SYM}")
-_FORM_HEAD = re.compile(rf"^\s*{_SYM}\s*서\s*식\s*(?:제\s*)?(\d+)\s*호?(?P<sub>\s*-\s*\d+)?\s*{_SYM}\s*(?P<rest>.*)$")
+_FORM_HEAD = re.compile(rf"^\s*{_SYM}\s*(?:별\s*지\s*)?서\s*식\s*(?:제\s*)?(\d+)\s*호?(?P<sub>\s*-\s*\d+)?\s*{_SYM}\s*(?P<rest>.*)$")
 _LIST_MARK = re.compile(rf"^\s*(?:\d+\s*[).]|[{_CIRCLED}]|[-·∙•▪]|[가-하]\.)\s*")
 
 

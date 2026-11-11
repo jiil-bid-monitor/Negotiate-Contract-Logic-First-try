@@ -451,7 +451,7 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
         res.notes.append("배점기준 표(등급별 점수)를 읽지 못함 — 제안요청서 확인")
         return res
     staff = getattr(vault, "staff", []) or []
-    if not staff:
+    if not staff and not getattr(vault, "staff_pick_from_screen", False):  # 화면에서 0명을 고른 건 0명으로 채점(11/11 사용자 제보)
         res.notes.append("자료 없음 — 회사자료 '인력목록' 시트(이름·입사일·재직·등급) 또는 jiil-quant-docs 폴더의 기술인력 엑셀")
         return res
     people = staff_status(c, vault, ref)
@@ -466,7 +466,8 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
         band = _band(c, raw)
         res.score = band.score if band else None
         counts0 = {g: sum(1 for gg, _ in best.values() if gg == g) for g in GRADES}
-        res.basis = ", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts0.items() if n) + f" = {raw:g}점 → '{band.text if band else '구간 없음'}'"
+        res.basis = (", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts0.items() if n) or "고른 인원 0명") \
+            + f" = {raw:g}점 → '{band.text if band else '구간 없음'}'"
         res.notes += [f"뺀 인원 {k} {n}명" for k, n in {p['why']: sum(1 for q in people if not q['counted'] and q['why'] == p['why']) for p in people if not p['counted']}.items()]
         field = re.search(r"대상\s*기술\s*인력[^\n]*", c.note)
         if field:
@@ -482,7 +483,7 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
         res.score = min(float(floor.group(1)), c.points)
         res.notes.append(f"최저 {floor.group(1)}점 적용")
     counts = {g: sum(1 for gg, _ in best.values() if gg == g) for g in GRADES}
-    res.basis = ", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts.items() if n) + f" = {raw:g}점" + (
+    res.basis = (", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts.items() if n) or "고른 인원 0명") + f" = {raw:g}점" + (
         f" → 최고 {c.points:g}점" if raw > c.points else "")
     res.notes += [f"뺀 인원 {k} {n}명" for k, n in skipped.items() if n]
     if re.search(r"분야\s*인력", c.note):

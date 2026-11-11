@@ -339,6 +339,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
     if staff_pick is not None:
         picked = set(staff_pick)
         vault.staff = [r for r in vault.staff if str(r.get("이름") or "").strip() in picked]
+        vault.staff_pick_from_screen = True  # 0명을 고른 것도 '자료 없음'이 아니라 0명으로 채점(11/11 — 30점 미만 구간 2.0점)
     if patent_pick is not None:
         vault.patent_pick = set(patent_pick)
         vault.patent_pick_from_screen = True

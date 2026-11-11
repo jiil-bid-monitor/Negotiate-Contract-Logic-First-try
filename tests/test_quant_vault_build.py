@@ -1293,6 +1293,22 @@ def test_staff_excel_in_folder_and_pick(tmp_path: Path):
     assert score([c], v, dt.date(2026, 11, 5))[0].score == 1.0
 
 
+def test_staff_zero_picked_gets_lowest_band():
+    """11/11 사용자 제보: 화면에서 0명을 고르면 '자료 없음'으로 점수가 비었음 — 0명 = 0점 → '점수 30점 미만' 구간 2.0점이어야 함.
+    (화면에서 고르지 않았는데 인력 자료가 없으면 예전처럼 '자료 없음')"""
+    from quantdocs.selfscore import Band, Criterion, score
+
+    c = Criterion("참여기술자", 5, "staff", per_grade={"특급": 10.0, "고급": 8.0, "중급": 6.0, "초급": 4.0})
+    c.unit = "점"
+    c.bands = [Band(50, None, 5.0, "점수 50점 이상"), Band(40, 50, 4.0, "점수 50점 미만 40점 이상"),
+               Band(30, 40, 3.0, "점수 40점 미만 30점 이상"), Band(None, 30, 2.0, "점수 30점 미만")]
+    v = vault.Vault({}, staff=[])
+    assert score([c], v, dt.date(2026, 11, 11))[0].score is None  # 자료 없음
+    v.staff_pick_from_screen = True  # build(staff_pick=[])가 하는 일
+    got = score([c], v, dt.date(2026, 11, 11))[0]
+    assert got.score == 2.0 and "0명" in got.basis and "30점 미만" in got.basis
+
+
 def test_signature_lines_without_colon_and_manual_form(tmp_path: Path):
     """11/05 사용자 요청: 대표자 서명이 있는 서식엔 자동 기재 — 쌍점 없는 '서 약 자      (인) (사용인감)'(보안서약서),
     직접 기입 서식(재직증명서)은 표는 그대로 두고 표 밖 서명 줄만(sign_only)."""

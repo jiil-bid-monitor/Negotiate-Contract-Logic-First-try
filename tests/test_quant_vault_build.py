@@ -2297,3 +2297,18 @@ def test_seal_on_next_line_moves_up(tmp_path: Path):
     paras = [re.sub(r"<[^>]+>", "", m) for m in re.findall(r"<hp:p\b[^>]*>(.*?)</hp:p>", xml, re.S)]
     i = next(k for k, t in enumerate(paras) if "서  약  자" in t)
     assert re.search(r"서  약  자 : 이윤봉 +\(인\)", paras[i]) and paras[i + 1].strip() == "" and paras[i + 2] == "본문 끝"
+
+
+def test_office_address_with_paren_label(tmp_path: Path):
+    """11/11 필암 서식 17 실적증명서 — 두 줄 이름표 '영 업 소 재 지 / ( 주    소 )' 옆 칸이 비었음(괄호까지 붙여 9자라 이름표로 못 봄)."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    two = ('<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>영 업 소 재 지</hp:t></hp:run></hp:p>'
+           '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>(  주          소  )</hp:t></hp:run></hp:p></hp:subList>'
+           '<hp:cellAddr colAddr="0" rowAddr="1"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    body = _tbl([[_c(0, 0, "업 체 명 ( 상 호 )"), _c(1, 0, "")], [two, _c(1, 1, "")]])
+    fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "o.hwpx",
+              vault.Vault({}, info={"회사명": "(주)가상", "주소": "가상시 가상로 1"}))
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
+    assert got[(0, 1)] == "(주)가상" and got[(1, 1)] == "가상시 가상로 1"

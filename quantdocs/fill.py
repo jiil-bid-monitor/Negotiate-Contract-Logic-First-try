@@ -236,6 +236,10 @@ def _label_key(text: str) -> str | None:
     for words, key in LABELS:
         if len(t) <= 8 and any(w in t for w in words):
             return key
+    # 괄호로 같은 뜻을 덧붙인 이름표 '영업소재지(주소)'(11/11 필암 서식 17 실적증명서) — 괄호 앞 이름으로, 안 되면 괄호 안 이름으로
+    pm = re.fullmatch(r"([^()]{2,})\(([^()]{2,})\)", t)
+    if pm:
+        return _label_key(pm.group(1)) or _label_key(pm.group(2))
     return None
 
 

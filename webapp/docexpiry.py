@@ -50,7 +50,10 @@ def read_cert(path: Path) -> list[tuple[str, date]]:
     import openpyxl
 
     out, grida_cols = [], False
-    for row in openpyxl.load_workbook(path, read_only=True, data_only=True).worksheets[0].iter_rows(values_only=True):
+    book = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    rows = list(book.worksheets[0].iter_rows(values_only=True))
+    book.close()  # read_only는 파일을 열어 둠 — 공유 폴더 파일을 잠그지 않게
+    for row in rows:
         row = (list(row) + [None] * 4)[:4]
         name = " ".join(str(row[0] or "").split())
         if str(row[2] or "").strip() == GRIDA:  # 직접생산 머리 줄 '지일 | 만료일 | 그리다 | 만료일' — 아래 C·D열은 그리다

@@ -102,6 +102,26 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(list(prep.glob("*_인감증명서")), [])
         self.assertIn("서식 파일로 이미 있는 것(서식자동분리): 인감증명서", (prep / "준비서류_체크리스트.txt").read_text(encoding="utf-8"))
 
+    def test_cert_table_date_comes_first(self):
+        import openpyxl
+
+        self.records += [rec("신용평가등급확인서", "2026-02-20", "2026-06-16"), rec("국세 납세증명서", "2026-11-01", "2026-12-01")]
+        for record in self.records:
+            (self.docs / LATEST / record["파일"]).write_bytes(b"%PDF")
+        (self.docs / LIST_JSON).write_text(json.dumps(self.records, ensure_ascii=False), encoding="utf-8")
+        book = openpyxl.Workbook()
+        book.active.append(["신용평가", "27.6.15"])
+        book.active.append(["신용평가", "27.6.1", None, "그리다"])  # 그리다 줄은 지일 서류에 안 씀
+        book.save(self.docs / "인증서갱신.xlsx")
+        self.text = ["신용평가등급확인서 1부", "국세 납세증명서 1부"]
+        prep = self.dir / "회사준비서류"
+        need, _ = self.run_prepare(prep)
+        text = (prep / "준비서류_체크리스트.txt").read_text(encoding="utf-8")
+        self.assertIn("유효 ~2027-06-15", text)  # 폴더 파일은 06-16 만료지만 표엔 갱신
+        self.assertIn("인증서갱신.xlsx엔 2027-06-15까지 — 폴더 파일은 예전 발급본(유효 2026-06-16)", text)
+        self.assertFalse(any("신용평가" in name and "재발급" in why for _, name, why in need))
+        self.assertIn("유효 ~2026-12-01", text)  # 표에 없는 서류는 파일 날짜 그대로
+
     def test_none_only_judges(self):
         need, _ = self.run_prepare(None)
         self.assertTrue(need)

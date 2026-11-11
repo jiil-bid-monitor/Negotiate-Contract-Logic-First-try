@@ -98,6 +98,7 @@ PERMANENT_KINDS = {"사업자등록증", "경쟁입찰참가자격등록증", "�
                    "산업디자인전문회사 신고확인증", "공공디자인전문회사 신고증", "소프트웨어사업자 신고확인서", "비디오물제작업 신고증",
                    "정보통신공사업 등록증", "업종 등록증"}
 USE, RENEW, CHECK = "그대로 사용", "재발급 필요", "확인 필요"
+CERT_FILE = "인증서갱신.xlsx"
 
 _SUBMIT_CTX = re.compile(r"제출|구비|첨부|사본|1\s*부|원본|증빙|발급")
 _NOT_REQ = re.compile(r"제출\s*하지\s*않|첨부\s*하지\s*않|생략|면제|대체할\s*수|해당\s*(없|자에\s*한)|요구\s*하지|갈음|확약|포함되어")
@@ -275,6 +276,27 @@ def checklist_rows(texts: list[str], form_names: list[str], listed: list[str] | 
     return rows, has_form
 
 
+def cert_dates(docs_root: Path) -> list[tuple[str, str]]:
+    """회사서류_최신/인증서갱신.xlsx의 지일 서류 (정리한 이름, 만료일) — 표가 없거나 못 읽으면 빈 목록(서류 파일 날짜만 씀)."""
+    from webapp.docexpiry import CERT_ALIASES, GRIDA, _norm, read_cert
+
+    if not (docs_root / CERT_FILE).exists():
+        return []
+    try:
+        return [(CERT_ALIASES.get(_norm(k), _norm(k)), d.isoformat()) for k, d in read_cert(docs_root / CERT_FILE) if not k.startswith(GRIDA)]
+    except Exception as err:  # noqa: BLE001 — 표를 못 읽어도 체크리스트는 만든다
+        log.warning("%s 읽기 실패: %s", CERT_FILE, err)
+        return []
+
+
+def cert_end(kind: str, cert: list[tuple[str, str]]) -> str | None:
+    """서류 종류에 든 표 이름 중 가장 긴 것의 만료일(웹앱 만료 알림과 같은 대조 — 표 이름이 서류 이름 안에 들어 있으면 같은 서류)."""
+    from webapp.docexpiry import _norm
+
+    hits = [(len(name), end) for name, end in cert if name and name in _norm(kind)]
+    return max(hits)[1] if hits else None
+
+
 def prepare(prep: Path | None, texts: list[str], form_names: list[str], docs_root: Path, deadline: str | None,
             posted: str | None, today: date, rule: dict | None = None, listed: list[str] | None = None) -> tuple[list[tuple[str, str, str]], str]:
     """체크리스트를 만들고 쓸 수 있는 회사 서류를 복사한다. `prep`이 None이면 판단만 — 재공고 때 담당자가 넣은 파일을 안 건드리려고.
@@ -287,6 +309,11 @@ def prepare(prep: Path | None, texts: list[str], form_names: list[str], docs_roo
     for record in records:
         if record["종류"] not in latest or record["발급일"] > latest[record["종류"]]["발급일"]:
             latest[record["종류"]] = record
+    cert = cert_dates(docs_root)
+    for kind, record in list(latest.items()):
+        end = cert_end(kind, cert)
+        if end and end != record.get("유효기간"):  # 인증서갱신.xlsx(차장님 관리표) 날짜가 우선(2026-11-11 사용자 결정)
+            latest[kind] = {**record, "유효기간": end, "폴더유효": record.get("유효기간") or ""}
     rows, has_form = checklist_rows(texts, form_names, listed)
     after_all = issue_after_all(texts)
     if prep is not None:
@@ -327,6 +354,9 @@ def prepare(prep: Path | None, texts: list[str], form_names: list[str], docs_roo
             lines.append("        → 회사 서류에 없음 — 직접 준비")
         for record in docs:
             state, why = judge(record, line, ref, posted, rule)
+            old_end = record.get("폴더유효")
+            if state != RENEW and old_end and old_end < record["유효기간"]:  # 표엔 갱신됐는데 폴더 파일은 예전 것
+                state, why = CHECK, f"{CERT_FILE}엔 {record['유효기간']}까지 — 폴더 파일은 예전 발급본(유효 {old_end}), 새 파일을 회사서류_최신에 넣어 주세요"
             label = category(record["종류"], line)
             name = record["파일"]
             if state == RENEW:

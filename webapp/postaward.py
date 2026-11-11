@@ -153,8 +153,19 @@ def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
             continue
         if ws.cell(r, 2).value in (None, ""):
             todo.append(str(ws.cell(r, 1).value))
-    if ws.cell(24, 2).value in (None, ""):
-        todo.append(f"인력 {ws.cell(24, 1).value or '1번'} 성명")
+    # 인력(24~29행) — 표준틀의 빨간 칸과 같은 규칙: 필수 사람은 성명, 이름을 넣은 사람은 담당업무·직책, 선임되는 사람은 자격~입사일
+    people, appointed = ((1, 2, 3, 4, 5, 6), (1, 5, 6)) if gong else ((1, 3, 4, 5, 6), (1, 2))
+    heads = {c: str(ws.cell(23, c).value or "") for c in range(2, 11)}
+    for n in range(1, 7):
+        r, label = 23 + n, str(ws.cell(23 + n, 1).value or f"{n}번")
+        if ws.cell(r, 2).value in (None, ""):
+            if n in people:
+                todo.append(f"{label} 성명")
+            continue
+        cols = (3, 4, 6, 7, 8, 9, 10) if n in appointed else (3, 4)
+        empty = [heads[c] or str(c) for c in cols if ws.cell(r, c).value in (None, "")]
+        if empty:
+            todo.append(f"{label}: " + "·".join(empty))
     for r in range(4, 22):
         if str(ws.cell(r, 3).value or "").startswith("[자동]") and ws.cell(r, 2).value not in (None, ""):
             value = ws.cell(r, 2).value

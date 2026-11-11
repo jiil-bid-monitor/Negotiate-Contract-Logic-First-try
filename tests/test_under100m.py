@@ -494,6 +494,32 @@ class TestWordForms(unittest.TestCase):
                 z.writestr("word/document.xml", xml)
             self.assertEqual(word_forms(f), ["서식01 공기 준수 서약서", "서식02 청렴서약서"])
 
+    def test_cut_and_fill_docx(self):
+        import tempfile, zipfile
+        from under100m import word_forms as W
+        body = "".join(f"<w:p><w:r><w:t xml:space=\"preserve\">{t}</w:t></w:r></w:p>" for t in
+                       ["1) 공기 준수 서약서 [서식1]", "본문", "[서식 1]", "공기 준수 서약서", "3. 공사업체명 : ", "회 사 명 :",
+                        "대표이사 :                   (인)", "[서식 2] 청렴서약서"])
+        body += ("<w:tbl><w:tr><w:tc><w:p><w:r><w:t>주소</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>"
+                 "<w:sectPr><w:pgSz w:w=\"11906\"/></w:sectPr>")
+        xml = ('<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+               f"<w:body>{body}</w:body></w:document>")
+        company = {"회사": {"name": "(주)지일", "ceo": "이운봉", "addr": "강원 정선"}, "칸": {}}
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = Path(d) / "공고서.docx", Path(d) / "out.docx"
+            with zipfile.ZipFile(src, "w") as z:
+                z.writestr("word/document.xml", xml)
+            names, log = W.build(src, dst, company)
+            doc = zipfile.ZipFile(dst).read("word/document.xml").decode()
+        self.assertEqual(names, ["서식01 공기 준수 서약서", "서식02 청렴서약서"])
+        self.assertNotIn("본문", doc, "서식 앞 공고문 내용은 뺌")
+        self.assertIn("공사업체명 : (주)지일", doc)
+        self.assertIn("회 사 명 : (주)지일", doc)
+        self.assertRegex(doc, r"대표이사 : 이운봉 +\(인\)")
+        self.assertIn("강원 정선", doc)  # 표 '주소 | 빈 칸'
+        self.assertIn('w:type="page"', doc)  # 서식 사이 새 쪽
+        self.assertTrue(doc.index("<w:sectPr") > doc.index("청렴서약서"))
+
 
 class RunAlertTest(unittest.TestCase):
     def test_start_and_end_alerts(self):

@@ -184,7 +184,7 @@ def fetch_result(client: DataGoKrClient, base_url: str, notice) -> BidResult:
         institution=notice.demand_institution or notice.notice_institution or "",
         opened_at=notice.opening_at,
         lower_limit_rate=_num(notice.raw.get("sucsfbidLwltRate")),
-        contract_method=notice.contract_method or "",
+        contract_method=getattr(notice, "contract_method", None) or "",  # 투찰내역 결과 받기는 칸이 적은 SimpleNamespace를 넘김
     )
     try:
         operation = PREPARE_PRICE_OPERATIONS.get(notice.work_type)

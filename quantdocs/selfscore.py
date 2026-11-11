@@ -25,7 +25,7 @@ from pathlib import Path
 from .fill import _cells, _spans, _sq, _text
 from .forms_cut import _top_paragraphs
 
-KINDS = [("track", re.compile(r"실적")), ("staff", re.compile(r"인력|기술자")),
+KINDS = [("track", re.compile(r"실적")), ("staff", re.compile(r"인력|기술자|기술\s*능력")),
          ("patent", re.compile(r"특허|보유\s*기술|전문\s*기술|기술\s*보유")), ("credit", re.compile(r"경영|신용")),
          ("sanction", re.compile(r"신인도|제재"))]
 _START = re.compile(r"정량\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
@@ -35,6 +35,8 @@ _HEAD = re.compile(r"^\s*(?:\d+\)|\(\d+\)|[가-하]\.|[가-하]\))\s*([^:：\n]{
 _MULT = {"억": 1e8, "천만": 1e7, "백만": 1e6, "만": 1e4}
 _QTY = r"([\d]+(?:[.,]\d+)*)\s*(억|천만|백만|만)?\s*(원|건)?"
 _NUM = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*점?\s*$")
+# 1인당 점수 — '0.5점'·'각 0.5점'·'각0.5점'·'1인당 0.5점'·'0.5점/인'(11/11 사용자 제보: '각 0.5점'을 못 읽어 기술인력 칸이 안 보였음)
+_EACH = re.compile(r"^\s*(?:각|1\s*인\s*당|인\s*당)?\s*(\d+(?:\.\d+)?)\s*점?\s*(?:/\s*인)?\s*$")
 GRADES = ["기술사", "특급", "고급", "중급", "초급"]
 # 신용등급 차례(앞이 좋음) — 회사채·기업신용평가등급 / 기업어음
 _BOND = ["AAA", "AA+", "AA0", "AA-", "A+", "A0", "A-", "BBB+", "BBB0", "BBB-", "BB+", "BB0", "BB-",
@@ -111,6 +113,11 @@ def _rows(cells) -> dict[int, dict[int, str]]:
     return out
 
 
+def _each(text: str) -> float | None:
+    m = _EACH.match(text or "")
+    return float(m.group(1)) if m else None
+
+
 def _num(text: str) -> float | None:
     m = _NUM.match(text or "")
     return float(m.group(1)) if m else None
@@ -123,14 +130,14 @@ def _read_table(c: Criterion, xml: str, tbl: tuple[int, int]) -> None:
     for r, cols in rows.items():
         for col, text in cols.items():
             g = next((g for g in GRADES if g in _sq(text)), None)
-            below = _num(rows.get(r + 1, {}).get(col, ""))
+            below = _each(rows.get(r + 1, {}).get(col, ""))
             if g and below is not None and "기술" in _sq(text) and len(_sq(text)) <= 8:
                 c.per_grade.setdefault(g, below)
     # 등급별 계수가 같은 줄 맨 오른쪽('특 급 기술자 | 자격 기준 | 학력 기준 | 10.0', 11/10 경남교육청)
     for r, cols in rows.items():
         first = _sq(cols.get(min(cols), "")) if cols else ""
         g = next((g for g in GRADES if first.startswith(g)), None)
-        last = _num(cols[max(cols)]) if cols else None
+        last = _each(cols[max(cols)]) if cols else None
         if g and last is not None and len(cols) >= 2 and re.fullmatch(rf"{g}(?:기술자)?", first):
             c.per_grade.setdefault(g, last)
     # 기술인력 점수 구간('점수 50점 이상' | 5.0) — 등급별 계수 합으로 구간을 고름
@@ -223,6 +230,7 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
     out: list[Criterion] = []
     cur: Criterion | None = None
     summary: dict[str, tuple[str, float]] = {}
+    summary_tbl: dict[str, tuple[str, tuple[int, int]]] = {}  # 요약표 항목이 든 표 — 기준(등급별 점수)이 같은 표에 있으면 읽음(11/11)
     for i in range(start, len(items)):
         text, _, tbls = items[i]
         if i > start and _STOP.search(text) and not _HEAD.match(text):
@@ -251,11 +259,17 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
                     if name and pts is not None:
                         k = next(k for k, rx in KINDS if rx.search(name))
                         summary.setdefault(k, (name, pts))
+                        summary_tbl.setdefault(k, (xml, tbl))
                 continue
             cur.note += re.sub(r"\s+", " ", _text(xml[tbl[0]:tbl[1]])) + "\n"
             _read_table(cur, xml, tbl)
-    if not out:  # 항목 머리가 없으면 요약표의 항목·배점만(기준 표는 못 읽음)
+    if not out:  # 항목 머리가 없으면 요약표의 항목·배점 — 기술인력은 같은 표 안의 등급별 점수도('전문인력 | 3.0 | 특급기술자 각 0.5점 …', 11/11)
         out = [Criterion(name, pts, k) for k, (name, pts) in summary.items()]
+        for c in out:
+            if c.kind == "staff" and c.kind in summary_tbl:
+                xml, tbl = summary_tbl[c.kind]
+                c.note += re.sub(r"\s+", " ", _text(xml[tbl[0]:tbl[1]])) + "\n"
+                _read_table(c, xml, tbl)
     return out
 
 
@@ -288,13 +302,15 @@ def _read_doc_nopoints(items: list) -> list[Criterion]:
     cur: Criterion | None = None
     for i in range(start + 1, len(items)):
         text, _, tbls = items[i]
-        if text and mark and _mark_style(text) == mark:
-            break
+        sib = _HEAD_NOPTS.match(text) if text and mark and _mark_style(text) == mark else None
+        if text and mark and _mark_style(text) == mark and not (
+                sib and (re.search(r"기술\s*능력", sib.group(1)) or any(rx.search(sib.group(1)) for _, rx in KINDS))):
+            break  # 같은 차례 머리 — 단 '나. 기술능력 평가'처럼 정량 항목이 같은 차례로 이어지면 계속(11/11)
         if re.search(r"정성\S{0,3}\s*평가|기술\s*제안서\s*평가", text) and _HEAD_NOPTS.match(text):
             break
         head = _HEAD_NOPTS.match(text)
         kind = next((k for k, rx in KINDS if head and rx.search(head.group(1))), "") if head else ""
-        if head and re.fullmatch(r"기술\s*능력", head.group(1).strip()):
+        if head and re.fullmatch(r"기술\s*능력(?:\s*평가)?", head.group(1).strip()):
             kind = "staff"  # '나) 기술 능력' = 참여기술자 점수(11/10 경남교육청)
         if head and kind:
             cur = Criterion(head.group(1).strip(), 0.0, kind)
@@ -679,7 +695,9 @@ class FormRow:
 
 
 def _per_person(text: str) -> float | None:
-    m = re.fullmatch(r"\s*([\d.]+)\s*점?\s*/\s*인\s*", text or "")
+    """서식 줄의 1인당 점수 — '0.5점/인'·'각0.5점'·'1인당 0.5점'(11/11). 그냥 '0.5'는 배점이라 아님."""
+    m = re.fullmatch(r"\s*([\d.]+)\s*점?\s*/\s*인\s*", text or "") or \
+        re.fullmatch(r"\s*(?:각|1\s*인\s*당|인\s*당)\s*([\d.]+)\s*점?\s*", text or "")
     return float(m.group(1)) if m else None
 
 

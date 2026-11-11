@@ -759,7 +759,7 @@ def test_other_party_zone_and_placeholder_signature(tmp_path: Path):
     assert "<hp:t>상호 :</hp:t>" in out and "<hp:t>전화 :</hp:t>" in out  # 발행자 칸은 그대로
     # 11/05 사용자 요청: 표 밖 서명 줄은 서식 28 '발행자 상호 :'·'대표자 : (인)'도 채움(표 안 발행자 칸은 그대로 비움)
     assert "<hp:t>발행자   상호 : (주)가상</hp:t>" in out and re.search(r"<hp:t>대표자 : 홍길동 +\(인\)</hp:t>", out)
-    assert re.search(r"\(주\)가상 대표자 : +홍길동 \(인\)", out)
+    assert re.search(r"\(주\)가상 대표자 : 홍길동 +\(인\)", out)  # 이름은 쌍점 바로 옆(11/11 사용자 요청)
     assert "대표이사 ○○○     (인)" in out
     assert out.count("(주)가상") == 3  # 제안업체 칸 + 서식 28 서명 줄 + 서식 19 줄
 
@@ -1111,7 +1111,7 @@ def test_inline_phone_fax_paragraph_and_company_seal_cell(tmp_path: Path):
 
 
 def test_bond_pledge_signature_agent_and_corp_numbers(tmp_path: Path):
-    """11/05 사용자 요청 묶음 — ③ 입찰보증금 확약서: 입찰 금액 = 제안요청서 기초금액(숫자 + 괄호 안 한글), 보증금 = × 1.05
+    """11/05 사용자 요청 묶음 — ③ 입찰보증금 확약서: 입찰 금액 = 제안요청서 기초금액(숫자 + 괄호 안 한글), 보증금 = × 0.05(11/11 사용자 요청)
     ② 청렴계약 '서 약 자 : (인)' = 대표자 ④ 위임장 대리인 주소는 비움 ⑧ '생년월일(사업자등록번호)' = 법인등록번호 (사업자등록번호)."""
     from quantdocs.fill import _cells, _spans, basis_amount, fill_hwpx, kor_money
 
@@ -1134,7 +1134,7 @@ def test_bond_pledge_signature_agent_and_corp_numbers(tmp_path: Path):
     rep = fill_hwpx(src, tmp_path / "o.hwpx", v, basis=400_000_000)
     xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     flat = re.sub(r"<[^>]+>", "", xml)
-    assert "입 찰 금 액 : 금 400,000,000원(금 사억원)" in flat and "입찰 보증금 : 금 420,000,000원(금 사억이천만원)" in flat
+    assert "입 찰 금 액 : 금 400,000,000원(금 사억원)" in flat and "입찰 보증금 : 금 20,000,000원(금 이천만원)" in flat
     assert "서 약 자 : 홍길동" in flat
     got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
     assert got[(1, 2)] == "" and got[(2, 1)] == "가상시 가상로 1"  # 대리인 묶음의 주소는 비움, 회사 주소 줄은 채움
@@ -1867,7 +1867,7 @@ def test_proxy_groups_bond_won_sign_and_notice_no_paragraph(tmp_path: Path):
     assert "성 명 홍길동 연 락 처 033-111-2222 대 리 인 성 명 연 락 처" in text
     assert "공 고 번 호 : R26BK00000001-000" in text
     assert text.count("가상 전시관 조성") == 1
-    assert "금 사억이천만 원 (￦ 420,000,000 )" in text
+    assert "금 이천만 원 (￦ 20,000,000 )" in text
 
 
 def test_plain_font_title_and_seal_glyph_signature(tmp_path: Path):
@@ -2268,3 +2268,32 @@ def test_selfscore_nopoints_layout_pieces():
     """11/10 경남교육청 자체평가표: '3건 ~ 2건' 구간, '배점(점)' 머리."""
     from quantdocs.selfscore import parse_range
     assert parse_range("3건 ~ 2건") == (2.0, 4.0, "건") and parse_range("0건") == (0.0, 1.0, "건")
+
+
+def test_spaced_rep_label_not_party_head(tmp_path: Path):
+    """11/11 사용인감계 '대    표    자 :' — 글자를 띄운 '대 표'를 묶음 머리로 떼어 '자 :'만 남아 비었음(표 칸 안·표 밖 서명 줄 둘 다)."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    cell = ('<hp:tc><hp:subList>' + p("주          소 :") + p("상호또는법인명 :") + p("대    표    자 :")
+            + '</hp:subList><hp:cellAddr colAddr="1" rowAddr="1"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    tbl = "<hp:p><hp:run><hp:tbl><hp:tr>" + _c(0, 0, "사 용 인 감") + cell + "</hp:tr></hp:tbl></hp:run></hp:p>"
+    body = (p("사 용 인 감 계") + tbl + p("2026년      월      일") + p("            주          소 : ")
+            + p("            상호또는법인명 : ") + p("            대    표    자 :                     (인)"))
+    fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "o.hwpx",
+              vault.Vault({}, info={"회사명": "(주)가상", "대표자": "이윤봉", "주소": "강원 정선"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert text.count("이윤봉") == 2 and re.search(r"이윤봉 +\(인\)", text)
+
+
+def test_seal_on_next_line_moves_up(tmp_path: Path):
+    """11/11 청렴계약 이행서약서 — '서  약  자 :' 아래 문단이 '(인)'뿐(원본 서식). 이름 줄로 올리고 아래 줄은 빈 줄로(사용자 결정)."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = p("청렴계약 이행서약서") + p("2026.    .    .") + p("                서  약  자 : ") + p(" " * 54 + "(인)") + p("본문 끝")
+    fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "이윤봉"}))
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    paras = [re.sub(r"<[^>]+>", "", m) for m in re.findall(r"<hp:p\b[^>]*>(.*?)</hp:p>", xml, re.S)]
+    i = next(k for k, t in enumerate(paras) if "서  약  자" in t)
+    assert re.search(r"서  약  자 : 이윤봉 +\(인\)", paras[i]) and paras[i + 1].strip() == "" and paras[i + 2] == "본문 끝"

@@ -594,7 +594,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     sign_at: set[int] = set()  # 쌍점 없는 서명 줄('대표자      ㉿') 문단 순번 — 바로 위 '신청인 업체명' 줄도 서명 묶음으로 봄
     # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
     # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
-    for n, (s, e) in enumerate(sorted(paras)):
+    order = sorted(paras)
+    for n, (s, e) in enumerate(order):
         if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single + other):
             continue
         if sign_only:
@@ -726,7 +727,10 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             company, name = _value("회사명", vault), _value("대표자", vault)
             if company and name:
                 seg = re.sub(r"○{2,}(\s*)(?=업체|회사)(?:업체|회사)", lambda mm: _mark(company) + mm.group(1), xml[s:e], count=1)
-                seg = re.sub(r"([:：]\s*)○{2,}", lambda mm: f"{mm.group(1)}{_mark(name)}", seg, count=1)
+                # 이름은 쌍점 바로 옆에(11/11 사용자 요청 — 예전엔 자리표시 앞 빈칸을 그대로 둬서 '대표자 :         이운봉 (인)'),
+                # 쌍점 뒤 빈칸은 이름 뒤로 옮겨 줄 길이·(인) 자리 유지
+                seg = re.sub(r"([:：])(\s*)○{2,}", lambda mm: f"{mm.group(1)} {_mark(name)}" + " " * max(0, len(mm.group(2)) - 1),
+                             seg, count=1)
                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                 edits.append((s, e, seg))
                 rep.filled.append(f"서명 줄 자리표시 → {company} 대표자 {name}")
@@ -765,6 +769,16 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             continue
         if bare:  # 쌍점 없는 서식은 쌍점 없이 — ' : 값'을 '   값'으로
             seg = seg.replace(f" : {_mark(value)}", f"   {_mark(value)}", 1)
+        if key == "대표자" and not seal and n + 1 < len(order):
+            # 서명 줄 바로 아래 문단이 '(인)'뿐이면(청렴계약 이행서약서 '서 약 자 :' / 다음 줄 '      (인)') 이름 줄로 올림 —
+            # 아래 문단은 글만 지우고 빈 줄로 남겨 쪽 배치는 그대로(11/11 사용자 결정)
+            ns, ne = order[n + 1]
+            seal_m = re.fullmatch(rf"\s*({_SEAL_TAIL})\s*", _text(xml[ns:ne]))
+            if seal_m and ns >= e and _VE in seg:
+                seg = seg.replace(_VE, _VE + " " * 8 + seal_m.group(1), 1)
+                below = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>).*?(</(?:[\w.-]+:)?t>)", r"\1\2", xml[ns:ne], flags=re.S)
+                edits.append((ns, ne, re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", below, flags=re.S)))
+                rep.filled.append(f"{_sq(label)} 아래 줄 {seal_m.group(1)} → 이름 줄로")
         edits.append((s, e, _hang(seg, chars)))
         rep.filled.append(f"{_sq(label)} → {value[:40]}")
     for s, e, seg in sorted(edits, key=lambda x: x[0], reverse=True):  # 뒤에서부터 — 문단 순서대로 모이지 않은 고침도 있어 정렬(11/05 서식 3 줄 겹침)
@@ -786,7 +800,7 @@ def _party_head(text: str) -> tuple[str | None, str] | None:
     """묶음 머리가 앞에 붙은 줄 → (묶음 'own'/'other'/None, 머리 뗀 나머지). 머리가 없으면 None.
     '○ 대 표 사      업 체 명 :'·'○ 공동참여자'·'서 약 자   업 체 명 :'·'공동수급체 구성원  상 호 :'(11/06 청주·과거 제안요청서 검사)."""
     hm = re.fullmatch(r"\s*[○●◦□■▪·\-]\s*(\S(?:.{0,14}?\S)?)(?:\s{3,}(.*))?", text, re.S) or re.fullmatch(
-        r"\s*((?:공\s*동\s*수\s*급\s*체\s*)?(?:대\s*표|구\s*성\s*원)|서\s*약\s*자|제\s*출\s*자|신\s*청\s*(?:자|인)(?:\s*\([^)]{0,20}\))?|"
+        r"\s*((?:공\s*동\s*수\s*급\s*체\s*)?(?:대\s*표(?!\s*(?:자|이\s*사))|구\s*성\s*원)|서\s*약\s*자|제\s*출\s*자|신\s*청\s*(?:자|인)(?:\s*\([^)]{0,20}\))?|"
         r"입\s*찰\s*자|제\s*안\s*자|확\s*약\s*자|대\s*표\s*자)\s{2,}(\S.*[:：].*)", text, re.S)
     if not hm or re.search(r"[:：]", hm.group(1)):
         return None
@@ -1465,8 +1479,8 @@ def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:
 
 
 # ── 입찰보증금 지급 확약서(11/05 사용자 요청) ─────────────────────────
-# 입찰 금액 = 제안요청서의 기초금액(없으면 사업비·사업예산 — 공고문), 보증금 = 그 금액 × BOND_RATE, '금 420,000,000원(금 사억이천만원)'
-BOND_RATE = 1.05  # 기초금액 × 1.05(11/05 사용자 확인 — 4억이면 4억 2천만원)
+# 입찰 금액 = 제안요청서의 기초금액(없으면 사업비·사업예산 — 공고문), 보증금 = 그 금액 × BOND_RATE, '금 20,000,000원(금 이천만원)'
+BOND_RATE = 0.05  # 기초금액 × 0.05(11/11 사용자 요청 — 4억이면 2천만원; 11/05의 × 1.05를 대체)
 _BASIS = re.compile(r"(?:기초\s*금액|사\s*업\s*비|사업\s*예산|사업\s*금액|소요\s*예산|배정\s*예산)(?:\([^)]{0,12}\))?[^\d\n]{0,60}?([\d]{1,3}(?:,\d{3}){2,})\s*원")
 
 

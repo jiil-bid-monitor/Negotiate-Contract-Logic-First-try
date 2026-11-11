@@ -1192,6 +1192,34 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 @media print {
   .topbar, .tabbar, .me-note, footer, #jumpNav, .side-links, .calc-lookup, .calc-btns { display: none !important; }
 }
+/* 낙찰 후 서류 — 서류 현황 펼침(11/11) */
+.award-table td { vertical-align: top; }
+.award-act { white-space: nowrap; }
+.award-act button { margin: 0 4px 4px 0; }
+.award-act button.award-main { background: var(--brand); color: var(--on-brand); border-color: var(--brand); font-weight: 600; }
+.award-act button:disabled { opacity: .45; cursor: not-allowed; }
+.award-detail > td { background: var(--bg); padding: 12px 14px 16px; }
+.award-panel { display: grid; gap: 12px; min-width: 0; }
+.award-path { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.award-path > span:first-child { font-weight: 600; }
+.award-path code { background: var(--panel); border: 1px solid var(--line); padding: 3px 8px; font-size: 12px; word-break: break-all; }
+.award-stages { display: flex; flex-wrap: wrap; gap: 6px 14px; list-style: none; margin: 0; padding: 0; }
+.award-stages li { display: flex; gap: 6px; align-items: center; }
+.badge.award-wait { border-style: dashed; }
+.award-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.award-box { background: var(--panel); border: 1px solid var(--line); padding: 10px 12px; min-width: 0; }
+.award-box.todo { border-color: var(--warn); background: var(--warn-tint); }
+.award-box h4 { margin: 0 0 6px; font-size: 13px; }
+.award-box h4 + * { margin-top: 0; }
+.award-box ul { margin: 0; padding-left: 18px; }
+.award-chips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0 !important; margin: 0 0 8px !important; }
+.award-chips li { border: 1px solid var(--warn); color: var(--warn); background: var(--panel); padding: 2px 8px; font-size: 12px; font-weight: 600; }
+.award-auto { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; font-size: 12px; }
+.award-auto dt { color: var(--muted); }
+.award-auto dd { margin: 0; min-width: 0; word-break: break-all; }
+.award-docs li.ok { color: var(--brand); }
+.award-docs li.no { color: var(--urgent); }
+.award-files li { margin-bottom: 4px; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -3702,26 +3730,71 @@ async function awardPost(path, body) {
   if (data.error) throw new Error(data.error);
   return data;
 }
+// 서류 현황(11/11) — 폴더를 만든 공고는 줄 아래로 펼쳐 단계별 서류·담당자가 채울 칸·첨부 제출서류·파일 내려받기를 봄
+const AWARD_OPEN = new Set();
 function renderAward(items) {
   const groups = ["공사", "물품·용역", "업무 미확인"];
   const row = (v) => {
     const key = v.no + (v.ord ? "-" + v.ord : "");
     const w = v.winner || {};
-    const result = v.status === "낙찰" ? `<b class="good">낙찰</b> ${esc(w.date || "")}`
-      : v.status === "다른 업체 낙찰" ? `다른 업체 낙찰 — ${esc(w.name || "")}` : esc(v.status || "");
+    const won = v.status === "낙찰";
+    const result = won ? `<span class="badge okb">낙찰</span><div class="sub">${esc(w.date || "")}${w.amount ? " · " + Number(w.amount).toLocaleString() + "원" : ""}</div>`
+      : v.status === "다른 업체 낙찰" ? `<span class="badge">다른 업체 낙찰</span><div class="sub">${esc(w.name || "")}</div>`
+      : v.status === "대기" ? `<span class="badge warn">대기</span><div class="sub">낙찰자 확정 전</div>` : `<span class="badge">${esc(v.status || "")}</span>`;
+    // 폴더 만들기는 낙찰 뒤에만(11/11 사용자 요청) — 빼기는 다른 업체 낙찰·잘못 넣은 공고 정리용이라 늘 씀
+    const act = v.folder
+      ? `<button type="button" class="award-toggle" data-award-open="${esc(key)}" aria-expanded="${AWARD_OPEN.has(key)}">서류 현황 ${AWARD_OPEN.has(key) ? "▴" : "▾"}</button>
+         <button type="button" data-award-folder="${esc(key)}" title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀(담당자가 고친 파일은 안 덮어씀)">첨부 다시 받기</button>`
+      : won ? `<button type="button" class="award-main" data-award-folder="${esc(key)}">폴더 만들기</button>`
+      : `<button type="button" disabled title="나라장터 낙찰현황에서 지일 낙찰이 확인되면 켜집니다">폴더 만들기</button><div class="sub">낙찰 확인 뒤 만들 수 있음</div>`;
+    const detail = AWARD_OPEN.has(key) ? `<tr class="award-detail"><td colspan="5"><div id="awardDetail-${esc(key)}" class="award-panel">불러오는 중…</div></td></tr>` : "";
     return `<tr><td><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener">${esc(key)}</a><div>${esc(v.title || "")}</div><div class="sub">${esc(v.institution || "")}</div></td>
       <td>${esc(v.work || "—")}</td><td>${result}</td><td class="sub">${esc(v.source || "")}<br>${esc((v.checkedAt || "").slice(0, 16).replace("T", " "))}</td>
-      <td>${v.folder ? `<div class="sub">${esc(v.folder)}</div>` : ""}${v.docs ? `<div>첨부 ${v.docs.files}개 · 제출서류 ${v.docs.found}개 중 <b>틀에 없음 ${v.docs.missing}</b> (공고문서\서류_확인.txt)</div>` : ""}
-      <button type="button" data-award-folder="${esc(key)}">${v.folder ? "첨부 다시 확인" : "폴더 만들기 · 첨부 확인"}</button>
-      <button type="button" data-award-del="${esc(key)}">빼기</button></td></tr>`;
+      <td class="award-act">${act} <button type="button" data-award-del="${esc(key)}">빼기</button></td></tr>${detail}`;
   };
   $("awardList").innerHTML = groups.map((g) => {
     const rows = items.filter((v) => v.group === g);
     if (!rows.length && g === "업무 미확인") return "";
     return `<h3>${g} ${rows.length}건</h3>` + (rows.length
-      ? `<div class="scroll"><table><thead><tr><th>공고</th><th>업무</th><th>낙찰 결과</th><th>들어온 곳 · 확인</th><th></th></tr></thead><tbody>${rows.map(row).join("")}</tbody></table></div>`
+      ? `<div class="scroll"><table class="award-table"><thead><tr><th>공고</th><th>업무</th><th>낙찰 결과</th><th>들어온 곳 · 확인</th><th></th></tr></thead><tbody>${rows.map(row).join("")}</tbody></table></div>`
       : `<p class="sub">없음</p>`);
   }).join("");
+  AWARD_OPEN.forEach(loadAwardDetail);
+}
+async function loadAwardDetail(key) {
+  const box = document.getElementById("awardDetail-" + key);
+  if (!box) return;
+  try { box.innerHTML = awardDetailHtml(key, await getJson("/api/postaward/status?key=" + encodeURIComponent(key))); }
+  catch (err) { box.textContent = err.message; }
+}
+function awardDetailHtml(key, s) {
+  if (!s.folder) return `<p class="sub">폴더가 없습니다 — '첨부 다시 받기'로 다시 만드세요.</p>`;
+  const link = (rel, name) => `<a href="/api/postaward/file?key=${encodeURIComponent(key)}&path=${encodeURIComponent(rel)}">${esc(name)}</a>`;
+  const local = !s.folder.startsWith("\\\\");
+  const stages = s.stages.map((st) => {
+    const state = st.doc ? (st.todo.length ? `<span class="badge warn">채울 칸 ${st.todo.length}</span>` : `<span class="badge okb">모두 채움</span>`)
+      : st.error ? `<span class="badge warn">읽지 못함</span>`
+      : st.files.length ? `<span class="badge">파일 ${st.files.length}개</span>`
+      : st.ready ? `<span class="badge warn">틀 없음</span>` : `<span class="badge award-wait">틀 준비 중</span>`;
+    return `<li><b>${esc(st.name)}</b> ${state}</li>`;
+  }).join("");
+  const doc = s.stages.find((st) => st.doc || st.error);
+  const todo = doc && doc.doc ? `
+    <div class="award-box todo"><h4>담당자가 채울 칸 <span class="sub">${esc(doc.dir)}/${esc(doc.doc)} · 기본사항</span></h4>
+      ${doc.todo.length ? `<ul class="award-chips">${doc.todo.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p>필수 칸을 모두 채웠습니다.</p>`}
+      ${doc.auto.length ? `<h4>자동으로 채운 칸 <span class="sub">계약서와 대조</span></h4><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl>` : ""}
+    </div>` : doc && doc.error ? `<div class="award-box todo"><p>${esc(doc.error)}</p></div>` : "";
+  const notes = s.notes.length ? `<div class="award-box"><h4>확인할 것</h4><ul>${s.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>` : "";
+  const docs = `<div class="award-box"><h4>공고문 제출서류</h4>${s.docList.length ? `<ul class="award-docs">${s.docList.map((d) =>
+      `<li class="${d.covered ? "ok" : "no"}">${d.covered ? "✓ 틀에 있음" : "✗ 따로 준비"} — ${esc(d.text)}</li>`).join("")}</ul>` : `<p class="sub">첨부에서 제출서류 목록을 찾지 못함 — 공고문 확인</p>`}</div>`;
+  const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")}</li>`),
+    s.attach.length ? `<li><b>공고문서</b> ${s.attach.map((f) => link("공고문서/" + f, f)).join(" · ")}</li>` : ""].join("");
+  return `<div class="award-path"><span>폴더</span><code>${esc(s.folder)}</code>
+      <button type="button" data-award-copy="${esc(s.folder)}">경로 복사</button>
+      <span class="sub">${local ? "서버 PC 안 폴더라 다른 PC에서는 열리지 않습니다 — 아래 파일을 내려받으세요." : "탐색기 주소창에 붙여 넣으면 열립니다."}</span></div>
+    <ul class="award-stages">${stages}</ul>
+    <div class="award-grid">${todo}${notes}${docs}</div>
+    ${files ? `<div class="award-box"><h4>파일 내려받기</h4><ul class="award-files">${files}</ul></div>` : ""}`;
 }
 async function loadAward() {
   try { renderAward((await getJson("/api/postaward")).items || []); } catch (err) { $("awardMsg").textContent = err.message; }
@@ -3739,8 +3812,23 @@ async function awardAct(btn, path, body, done) {
 $("awardAdd").onclick = (e) => awardAct(e.target, "/api/postaward", { no: $("awardNo").value }, () => { $("awardNo").value = ""; return "넣었습니다 — '지금 낙찰자 확인'을 누르면 바로 확인합니다."; });
 $("awardCheck").onclick = (e) => awardAct(e.target, "/api/postaward/check", {}, (d) => `낙찰 ${d.won} · 다른 업체 ${d.lost} · 아직 없음 ${d.waiting}`);
 $("awardList").onclick = (e) => {
+  const open = e.target.closest("[data-award-open]");
+  if (open) {
+    const k = open.dataset.awardOpen;
+    AWARD_OPEN.has(k) ? AWARD_OPEN.delete(k) : AWARD_OPEN.add(k);
+    return loadAward();
+  }
+  const copy = e.target.closest("[data-award-copy]");
+  if (copy) {
+    navigator.clipboard.writeText(copy.dataset.awardCopy).then(() => { copy.textContent = "복사됨"; },
+      () => { $("awardMsg").textContent = "복사하지 못했습니다 — 경로를 직접 선택해 복사하세요."; });
+    return;
+  }
   const f = e.target.closest("[data-award-folder]");
-  if (f) return awardAct(f, "/api/postaward/folder", { key: f.dataset.awardFolder }, (d) => "폴더를 만들고 첨부를 받았습니다: " + d.folder);
+  if (f) return awardAct(f, "/api/postaward/folder", { key: f.dataset.awardFolder }, () => {
+    AWARD_OPEN.add(f.dataset.awardFolder); loadAward();
+    return "폴더를 만들고 첨부를 받았습니다 — 아래 '서류 현황'에서 채울 칸을 확인하세요.";
+  });
   const del = e.target.closest("[data-award-del]");
   if (del && confirm("목록에서 뺄까요? (만든 폴더는 지우지 않습니다)")) awardAct(del, "/api/postaward/delete", { key: del.dataset.awardDel });
 };

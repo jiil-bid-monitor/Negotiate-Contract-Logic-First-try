@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 from datetime import datetime, timedelta, timezone
@@ -73,7 +74,22 @@ def required_docs(files: list[Path]) -> list[dict]:
     return out
 
 
-# 착공·착수 표준틀 v5(차장님 확인 11/11) — 회사 정보가 들어 있어 저장소 밖 공유 폴더 '낙찰후서류/_표준틀'(POSTAWARD_TEMPLATE_DIR)에 둠
+# 착공·착수 표준틀 v5(차장님 확인 11/11) — 회사 정보가 들어 있어 저장소 밖 NAS 공유 폴더 '낙찰후서류/_표준틀' 한 곳에 둠
+NAS_TEMPLATES = Path(r"\\jiilserver\jiil-webapp\낙찰후서류\_표준틀")
+
+
+def template_dir(root: Path) -> Path:
+    """표준틀 폴더 — POSTAWARD_TEMPLATE_DIR > NAS 공유 폴더(서버 PC도 여기서 읽어 틀을 따로 복사하지 않음, 11/11) > root/_표준틀(NAS 컨테이너 안)."""
+    env = os.environ.get("POSTAWARD_TEMPLATE_DIR", "").strip()
+    for d in ([Path(env)] if env else []) + [NAS_TEMPLATES]:
+        try:
+            if d.is_dir():
+                return d
+        except OSError:  # 공유 폴더가 안 닿으면 다음 후보로
+            pass
+    return Path(root) / "_표준틀"
+
+
 TEMPLATES = {"공사": ("표준틀_착공서류(공사).xlsx", "2_착공", "착공서류.xlsx"),
              "물품·용역": ("표준틀_착수서류(물품·용역).xlsx", "2_착수", "착수서류.xlsx")}
 _SITE = re.compile(r"공\s*사\s*(?:위\s*치|장\s*소|현\s*장)\s*[:：]\s*([^\n]{4,60})")
@@ -287,7 +303,7 @@ class PostAward:
                 target = folder / "공고문서" / f.name
                 if not target.exists():  # 담당자가 고쳤을 수 있어 덮어쓰지 않음
                     shutil.copyfile(f, target)
-            basic = self._fill_template(key, folder, nf, Path(templates) if templates else Path(root) / "_표준틀")
+            basic = self._fill_template(key, folder, nf, Path(templates) if templates else template_dir(root))
         lines = [f"{key} {v.get('title') or nf.title} — 첨부에서 읽은 제출서류 (자동, 원문과 대조하세요)", ""]
         lines += basic + [""]
         if not nf.title:

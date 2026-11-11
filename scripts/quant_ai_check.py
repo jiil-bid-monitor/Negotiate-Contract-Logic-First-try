@@ -44,6 +44,9 @@ def crit_brief(c) -> str:
         parts.append(" · ".join(f"{g} {v:g}" for g, v in c.per_grade.items()))
     if c.bands:
         parts.append("구간: " + " / ".join(f"{b.text}→{b.score:g}" for b in c.bands[:6]) + (" …" if len(c.bands) > 6 else ""))
+    if c.credit_rows:  # 경영상태 — 줄마다 종류별 등급 글 → 점수(11/11: 예전엔 안 적어 빈 줄로 보였음)
+        parts.append("등급: " + " / ".join(
+            "·".join(f"{k} {v}" for k, v in rules.items()) + f"→{score:g}" for rules, score in c.credit_rows[:6]))
     return " ".join(parts)
 
 

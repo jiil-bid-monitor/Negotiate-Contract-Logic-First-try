@@ -32,6 +32,7 @@ from .pdf_forms import fill_pdf, split_pdf
 from .prep import CHECKLIST as PREP_CHECKLIST, PREP_DIR, listed_items, prepare
 from .sections import find_sections
 from .summary import write_summary_pdf
+from .word_forms import build as word_build
 
 log = logging.getLogger("under100m")
 
@@ -232,19 +233,28 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
                 shutil.copyfile(p, kept)
                 checklist.append(f"[ ] {kept.name}")
         form_names += [p.stem for p in hwpx]
-    words = []  # 워드 공고서 안 서식 — 자르고 채우는 도구가 없어 파일째 넣고 서식 이름만 적는다(2026-11-11 사용자 요청)
+    # 워드 공고서 안 서식 — 한글처럼 서식마다 잘라 채워 문서마다 한 파일(2026-11-11 사용자 요청).
+    # 자르지 못하면 예전처럼 파일째 넣고 서식 이름만 적는다
     for f in files:
-        if f.suffix.lower() == ".docx":
+        if f.suffix.lower() != ".docx":
+            continue
+        kept = _unique(out / f"워드서식_통합_{doc_label(f, 40)}.docx")
+        try:
+            names, filled = word_build(f, kept, company, bid_date, n.title, notice_key(n))
+            if names:
+                notes.append(f"{kept.name}: " + (", ".join(filled) if filled else "채운 칸 없음"))
+                checklist += ["", f"워드 서식은 '{kept.name}' 한 파일에 아래 순서대로(서식마다 새 쪽):"]
+                checklist += [f"[ ] {k}. {name}" for k, name in enumerate(names, 1)]
+        except Exception as err:  # noqa: BLE001
+            log.warning("워드 서식 자르기 실패 %s: %s", f.name, err)
+            kept.unlink(missing_ok=True)
             names = word_forms(f)
             if names:
                 kept = _unique(out / f"워드서식_{doc_label(f, 40)}.docx")
                 shutil.copyfile(f, kept)
-                words.append((kept, names))
-                form_names += names
-    if words:
-        checklist += ["", "워드(.docx) 문서 안의 서식 — 자동으로 자르거나 채우지 못함, 아래 파일에서 직접 작성:"]
-        for kept, names in words:
-            checklist += [f"[ ] {name} — {kept.name}" for name in names]
+                checklist += ["", f"워드 서식 — 자르지 못해 파일째 넣음, '{kept.name}'에서 직접 작성:"]
+                checklist += [f"[ ] {name}" for name in names]
+        form_names += names
     stems = {f.stem for f in files if f.suffix.lower() in (".hwp", ".hwpx")}
     pdfs: list[tuple[Path, str]] = []  # (채운 서식, 체크리스트 안내) — 끝에 서식_통합.pdf 한 파일로
     for number, f in enumerate(files):  # 같은 이름의 한글 파일이 있으면 한글 쪽을 씀 — PDF로만 있는 서식만(한글 통합본에 못 넣어 따로)

@@ -1,7 +1,7 @@
 """회사 서류 유효기간 — 텔레그램 /docs 와 만료 7일 전 알림 (2026-11-09 사용자 요청).
 
-공유 폴더 `회사서류_최신/인증서갱신.xlsx`(차장님 관리표, 2026-11-11 사용자 결정 — 이게 기준)가 있으면 그 표의 지일 만료일,
-없으면 `서류목록.xlsx`의 '유효기간(기준)' 칸. 날짜가 적힌 서류만 본다.
+공유 폴더 `회사서류_최신/인증서갱신.xlsx`(차장님 관리표)의 지일 만료일이 우선(2026-11-11 사용자 결정), 그 표에 없는 서류는
+`서류목록.xlsx`의 '유효기간(기준)' 칸. 날짜가 적힌 서류만 본다.
 '발급 후 3개월'·'없음' 같은 글은 날짜가 아니라 알리지 않는다. 같은 서류(종류 + 유효기간)는 한 번만 알린다 —
 새 서류로 바꿔 날짜가 바뀌면 다시 알린다. 이미 지난 서류는 알리지 않고 /docs에만 보인다(11/05 결정과 같음).
 """
@@ -55,12 +55,26 @@ def read_cert(path: Path) -> list[tuple[str, date]]:
     return sorted(out, key=lambda d: d[1])
 
 
+# 차장님 표 이름 → 서류목록 이름이 글자로 안 겹치는 것만 (나머지는 표 이름이 서류목록 이름 안에 들어 있으면 같은 서류)
+CERT_ALIASES = {"중소기업확인서": "중소기업소상공인확인서"}
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"[\W_]+", "", text or "")
+
+
 def read_docs(folder: Path) -> list[tuple[str, date]]:
-    """(종류, 유효기간 끝) — 날짜가 적힌 줄만. 파일이 없으면 빈 목록."""
+    """(종류, 유효기간 끝) — 인증서갱신.xlsx 날짜가 우선(2026-11-11 사용자 결정), 그 표에 없는 서류는 서류목록.xlsx 날짜."""
+    cert = read_cert(folder / CERT_FILE) if (folder / CERT_FILE).exists() else []
+    names = [CERT_ALIASES.get(_norm(k), _norm(k)) for k, _ in cert]
+    rest = [(k, d) for k, d in read_list(folder) if not any(n in _norm(k) for n in names)]
+    return sorted(cert + rest, key=lambda d: d[1])
+
+
+def read_list(folder: Path) -> list[tuple[str, date]]:
+    """서류목록.xlsx '유효기간(기준)' 칸에 날짜가 적힌 줄. 파일이 없으면 빈 목록."""
     import openpyxl
 
-    if (folder / CERT_FILE).exists():
-        return read_cert(folder / CERT_FILE)
     path = folder / "서류목록.xlsx"
     if not path.exists():
         return []
@@ -91,7 +105,7 @@ def docs_reply(docs: list[tuple[str, date]], today: date) -> str:
     expired = [(k, d) for k, d in docs if d < today]
     soon = [(k, d) for k, d in docs if 0 <= (d - today).days <= 30]
     later = [(k, d) for k, d in docs if (d - today).days > 30]
-    out = ["<b>회사 서류 유효기간</b> (인증서갱신.xlsx 기준)"]
+    out = ["<b>회사 서류 유효기간</b> (인증서갱신.xlsx 우선, 없는 서류는 서류목록.xlsx)"]
     for title, rows, fmt in (("30일 안 만료", soon, lambda d: f"D-{(d - today).days}"),
                              ("유효기간 지남 — 재발급 필요", expired, lambda d: "지남"),
                              ("그 뒤", later, lambda d: "")):

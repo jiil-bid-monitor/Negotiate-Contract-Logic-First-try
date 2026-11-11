@@ -55,6 +55,7 @@ class Health:
     forms: list[tuple[str, str, int]] = field(default_factory=list)  # (번호, 이름, 채운 수)
     issues: list[Issue] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)  # 변환 실패 등 검사 자체의 알림
+    texts: dict[str, str] = field(default_factory=dict)  # 한글 첨부 이름 → 글(제안요청서 먼저) — Claude 시험(aiassist)이 씀
 
     @property
     def ok(self) -> bool:
@@ -138,9 +139,52 @@ def unknown_labels(xml: str) -> list[str]:
     return out
 
 
+def doc_text(xml: str) -> str:
+    """구역 XML → 글. 표 밖 문단은 한 줄씩, 표는 줄마다 칸을 ' | '로 이음(칸 안 문단은 빈칸으로) — 표 모양(항목 | 배점 | 기준)이 남게."""
+    from .fill import _text
+
+    lines: list[str] = []
+    row: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    for tok in re.split(r"(</?(?:[\w.-]+:)?(?:tc|p|tr)\b[^>]*>)", xml):
+        tag = re.match(r"<(/?)(?:[\w.-]+:)?(tc|p|tr)\b", tok)
+        if not tag:
+            if tok:
+                buf.append(_text(tok))
+            continue
+        close, name = tag.group(1), tag.group(2)
+        if name == "tc" and not close:
+            depth += 1
+            if depth == 1:
+                buf = []
+        elif name == "tc":
+            depth = max(0, depth - 1)
+            if depth == 0:
+                row.append(re.sub(r"\s+", " ", "".join(buf)).strip())
+                buf = []
+        elif name in ("p", "tr") and not close:
+            continue
+        elif name == "p":
+            if depth:
+                buf.append(" ")
+            else:
+                line = re.sub(r"\s+", " ", "".join(buf)).strip()
+                if line:
+                    lines.append(line)
+                buf = []
+        elif name == "tr" and depth == 0:
+            line = " | ".join(c for c in row if c)
+            if line:
+                lines.append(line)
+            row = []
+    return "\n".join(lines)
+
+
 def check(files: list[Path], work: Path, convert=None, title: str = "가상 전시관 조성 사업",
-          g2b_no: str = "R26BK00000000-000", ref: date | None = None) -> Health:
-    """공고 첨부(files) 하나 묶음 검사. work: 임시 폴더(부르는 쪽이 지움). convert: .hwp → HWPX 함수(src, work) → Path|None."""
+          g2b_no: str = "R26BK00000000-000", ref: date | None = None, criteria=None) -> Health:
+    """공고 첨부(files) 하나 묶음 검사. work: 임시 폴더(부르는 쪽이 지움). convert: .hwp → HWPX 함수(src, work) → Path|None.
+    criteria: 배점기준을 규칙으로 읽지 않고 이것을 씀(Claude가 읽은 기준으로 다시 검사 — 11/11 시험)."""
     from . import vault as vault_mod
     from .build import _BLANK_FORM, is_manual
     from .fill import fill_hwpx, unfilled_slots
@@ -167,10 +211,17 @@ def check(files: list[Path], work: Path, convert=None, title: str = "가상 전�
     except Exception as err:  # noqa: BLE001
         h.notes.append(f"공고 읽기 실패: {str(err)[:80]}")
     hwpx.sort(key=lambda p: (0 if "제안요청" in p.name else 1 if "과업" in p.name else 2))
-    try:
-        criteria = read_criteria(hwpx)
-    except Exception:  # noqa: BLE001
-        criteria = []
+    for hx in hwpx:
+        try:
+            from .selfscore import _sections
+            h.texts[hx.name] = "\n".join(doc_text(x) for x in _sections(hx))
+        except Exception:  # noqa: BLE001
+            pass
+    if criteria is None:
+        try:
+            criteria = read_criteria(hwpx)
+        except Exception:  # noqa: BLE001
+            criteria = []
     v = vault_mod.Vault({}, info=dict(FAKE))
     ctx = SelfScore(criteria, v, ref or date.today())
     seen: set[str] = set()

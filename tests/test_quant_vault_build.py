@@ -452,12 +452,12 @@ def test_filled_digits_use_hangul_font():
               '<hh:charPr id="1" height="1000"><hh:fontRef hangul="0" latin="1" symbol="0"/></hh:charPr></hh:charProperties>')
     chars = _Chars(header)
     new = chars.variant("0")
-    assert new == "2" and chars.variant("1") == "1"  # 1번은 이미 같은 글꼴(기호 목록엔 휴먼명조가 없어 그대로)
+    assert new == "2" and chars.variant("1") == "3"  # 11/11: 기호 목록에도 휴먼명조를 더해 기호까지 휴먼명조
     small = chars.variant("0", 900)
     out = chars.finish()
-    assert re.search(r'<hh:charPr id="2" height="1300"><hh:fontRef hangul="0" latin="1" hanja="0" symbol="0"/>', out)
+    assert re.search(r'<hh:charPr id="2" height="1300"><hh:fontRef hangul="0" latin="1" hanja="0" symbol="1"/>', out)
     assert re.search(rf'<hh:charPr id="{small}" height="900"><hh:fontRef hangul="0" latin="1"', out)
-    assert 'itemCnt="4"' in out and out.count("<hh:font ") == 4  # 글꼴 목록은 그대로
+    assert 'itemCnt="5"' in out and out.count("<hh:font ") == 5  # 기호 목록에만 휴먼명조 하나 더함(이미 있는 언어는 그대로)
 
 
 def test_read_history_formats():
@@ -1989,7 +1989,7 @@ def test_fill_face_unified_and_big_label_size(tmp_path: Path):
 
     rep = fill_hwpx(src, tmp_path / "a.hwpx", v)               # 글꼴을 정하지 않으면 그 줄 글꼴 그대로
     big = char_of(tmp_path / "a.hwpx", "홍길동")
-    assert 'height="1500"' in big and "bold" not in big and 'hangul="1"' in big   # 이름표 15pt → 값 15pt, 굵게 뺌
+    assert 'height="1500"' in big and "bold" not in big and 'hangul="0"' in big   # 이름표 15pt → 값 15pt, 굵게 뺌, 글꼴은 늘 휴먼명조(11/11)
     assert 'height="1100"' in char_of(tmp_path / "a.hwpx", "(주)가상")          # 10pt 이름표 → 11pt
     assert rep.face == "휴먼명조"                                                  # 첫 값의 글꼴
     fill_hwpx(src, tmp_path / "b.hwpx", v, face="휴먼명조")    # 통합서식 첫 서식 글꼴로
@@ -2156,6 +2156,32 @@ def test_track_rows_share_header_font(tmp_path: Path):
         block = re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
         faces.add(re.search(r'hangul="(\d+)"', block).group(1))
     assert faces == {"1"}, faces
+
+
+def test_filled_value_always_plain_humanmyeongjo(tmp_path: Path):
+    """11/11 사용자 결정: 값을 기입할 때는 일반 명조체(휴먼명조, 보통 굵기)로 고정 — 이름표가 굵은 굴림이어도.
+    문서 글꼴 목록에 휴먼명조가 없으면 언어마다 끝 번호로 더함(두 번 더하지 않음)."""
+    from quantdocs.fill import ensure_font, fill_hwpx
+
+    fonts = ('<hh:fontfaces><hh:fontface lang="HANGUL" fontCnt="1"><hh:font id="0" face="굴림" type="TTF"/></hh:fontface>'
+             '<hh:fontface lang="LATIN" fontCnt="1"><hh:font id="0" face="굴림" type="TTF"/></hh:fontface></hh:fontfaces>')
+    header = ('<hh:head>' + fonts + '<hh:charProperties itemCnt="2">'
+              '<hh:charPr id="0" height="1000" textColor="#000000"><hh:fontRef hangul="0" latin="0"/></hh:charPr>'
+              '<hh:charPr id="3" height="1000" textColor="#000000"><hh:fontRef hangul="0" latin="0"/><hh:bold/></hh:charPr></hh:charProperties></hh:head>')
+    assert ensure_font(ensure_font(header)) == ensure_font(header) and ensure_font(header).count('face="휴먼명조"') == 2
+    cell = lambda c, t, cid: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="{cid}"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                              f'<hp:cellAddr colAddr="{c}" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    body = '<hp:p><hp:run><hp:tbl><hp:tr>' + cell(0, "상호", "3") + cell(1, "", "3") + '</hp:tr></hp:tbl></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "t.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    assert '<hh:font id="1" face="휴먼명조"' in head and 'fontCnt="2"' in head
+    cid = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>\(주\)가상</hp:t>', out).group(1)
+    block = re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
+    assert 'hangul="1"' in block and 'latin="1"' in block and "bold" not in block
 
 
 def test_selfscore_nopoints_layout_pieces():

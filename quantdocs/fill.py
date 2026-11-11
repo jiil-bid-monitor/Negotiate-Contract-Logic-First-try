@@ -860,11 +860,30 @@ def unfilled_slots(xml: str, sign_only: bool = False) -> list[str]:
 # 칸에 한 줄로 안 들어가면 11pt 그대로 두 줄로(칸이 늘어남). 줄 간격이 100% 미만·고정값인 칸만 두 줄이면 글이 겹쳐서(11/04 필암서원 주소 칸)
 # 한 줄에 들어가게 같은 글꼴에서 크기만 줄인 글자 모양을 header.xml에 더해 씀(최소 7pt). 글꼴·장평·색은 칸의 원래 글자 모양 그대로.
 FILL_HEIGHT = 1100  # 11pt
+# 채운 값의 글꼴 — 늘 휴먼명조 보통 굵기(11/11 사용자 결정: '값을 기입할 때는 일반 명조체로 고정' — 11/10의 '이름표 글꼴 따르기'를 대체).
+# 문서 글꼴 목록에 없으면 언어마다 끝 번호로 더함(같은 원본에서 자른 서식은 같은 번호가 되어 통합서식에서도 맞음 — forms_cut.merge도 더함).
+FILL_FACE = "휴먼명조"
+
+
+def ensure_font(header: str, face: str = FILL_FACE) -> str:
+    """header.xml 글꼴 목록(fontface 언어마다)에 face가 없으면 끝 번호로 더하고 fontCnt를 올림."""
+    def add(m):
+        open_tag, body, close = m.group(1), m.group(2), m.group(3)
+        fonts = re.findall(r'<((?:[\w.-]+:)?)font\b[^>]*\bid="(\d+)"[^>]*\bface="([^"]*)"', body)
+        if any(f == face for _, _, f in fonts):
+            return m.group(0)
+        pre = fonts[0][0] if fonts else re.match(r"<((?:[\w.-]+:)?)", open_tag).group(1)
+        nid = max([int(i) for _, i, _ in fonts] or [-1]) + 1
+        open_tag = re.sub(r'\bfontCnt="(\d+)"', lambda c: f'fontCnt="{int(c.group(1)) + 1}"', open_tag, count=1)
+        return f'{open_tag}{body}<{pre}font id="{nid}" face="{face}" type="TTF" isEmbedded="0"/>{close}'
+    return re.sub(r'(<(?:[\w.-]+:)?fontface\b[^>]*>)(.*?)(</(?:[\w.-]+:)?fontface>)', add, header, flags=re.S)
 MIN_HEIGHT = 700  # 7pt
 
 
 class _Chars:
     def __init__(self, header: str, face: str = ""):
+        self.font_added = ensure_font(header) != header  # 채운 값 글꼴(휴먼명조)을 글꼴 목록에 더했는지
+        header = ensure_font(header)
         self.header = header
         self.face = face          # 채운 글에 쓸 한글 글꼴 이름(통합서식 첫 서식의 채운 글 글꼴, 11/10) — 비면 그 글 조각의 글꼴
         self.used_face = ""       # 이 서식에서 처음 채운 글의 글꼴 이름
@@ -1010,6 +1029,8 @@ class _Chars:
     def _target_face(self, cid: str) -> str:
         """채운 글의 한글 글꼴 — 칸 옆 이름표 글꼴(cur_face) → 통합서식 글꼴(self.face) → 그 글 조각의 글꼴 순(문서 글꼴 목록에 있을 때만)."""
         known = self.faces.get("HANGUL", {}).values()
+        if FILL_FACE in known:  # 11/11 사용자 결정: 채운 값은 늘 휴먼명조
+            return FILL_FACE
         for f in (self.cur_face, self.face):
             if f and f in known:
                 return f
@@ -1055,7 +1076,7 @@ class _Chars:
 
     @property
     def changed(self) -> bool:
-        return bool(self.added or self.added_para or self.added_hang or self.added_left)
+        return bool(self.added or self.added_para or self.added_hang or self.added_left or self.font_added)
 
     def finish(self) -> str:
         header = self.header

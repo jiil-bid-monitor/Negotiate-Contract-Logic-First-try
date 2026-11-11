@@ -115,7 +115,7 @@
     <details class="card fold" id="staffBox">  <!-- 11/05 사용자 요청 (나): 자기평점 기술인력 점수에 넣을 사람 고르기 -->
       <summary><h2>기술인력 (자기평점) <span id="staffN" class="fprog"></span></h2><span class="tog"></span></summary>
       <p id="staffRule" class="muted"></p>
-      <p class="muted">체크한 사람만 자기평점 기술인력 점수에 넣습니다(처음엔 공고 조건에 맞는 사람 모두 체크). 회색 줄은 조건(퇴사·재직 기간·등급)에 안 맞아 빠지는 사람.</p>
+      <p class="muted">체크한 사람만 자기평점 기술인력 점수에 넣습니다(처음엔 모두 해제 — 넣을 사람을 직접 체크). 회색 줄은 조건(퇴사·재직 기간·등급)에 안 맞아 빠지는 사람.</p>
       <div class="row" style="margin-bottom:6px"><button type="button" id="staffAll" class="ghost">모두 체크</button><button type="button" id="staffNone" class="ghost">모두 해제</button></div>
       <div class="scroll"><table id="staff"></table></div>
     </details>
@@ -302,7 +302,7 @@ function renderStaff(list, rule, ok) {
   $("#staff").innerHTML = !ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
     : !list.length ? '<tr><td class="muted">인력목록이 비어 있습니다 — jiil-quant-docs 폴더에 기술인력 엑셀(이름·입사일·등급)을 두거나 회사자료 인력목록에 적으세요</td></tr>'
     : '<tr><th class="chk">넣기</th><th>이름</th><th>등급</th><th>입사일</th><th>비고</th></tr>' + list.map(p =>
-      `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="sp" data-name="${esc(p.name)}" data-grade="${esc(p.grade)}" ${p.ok ? "checked" : ""}></td>
+      `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="sp" data-name="${esc(p.name)}" data-grade="${esc(p.grade)}"></td>
        <td>${esc(p.name)}</td><td>${esc(p.grade)}</td><td>${esc(p.joined)}</td><td class="muted">${esc(p.why)}</td></tr>`).join("");
   $("#staff").onchange = staffCount;
   $("#staffAll").onclick = () => { document.querySelectorAll("#staff input.sp").forEach(c => c.checked = true); staffCount(); };
@@ -329,7 +329,7 @@ function renderPatents(list, rule, ok, on) {
   $("#patents").innerHTML = !ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
     : !list.length ? '<tr><td class="muted">특허 자료가 없습니다 — jiil-quant-docs 폴더 \'특허\' 하위 폴더에 특허증을 두거나 회사자료 특허목록에 적으세요</td></tr>'
     : '<tr><th class="chk">넣기</th><th>특허</th><th>비고</th></tr>' + list.map(p =>
-      `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="pp" data-key="${esc(p.key)}" ${p.ok ? "checked" : ""}></td>
+      `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="pp" data-key="${esc(p.key)}"></td>
        <td>${esc(p.name)}</td><td class="muted">${esc(p.why)}</td></tr>`).join("");
   $("#patents").onchange = patentCount;
   $("#patentAll").onclick = () => { document.querySelectorAll("#patents input.pp").forEach(c => c.checked = true); patentCount(); };

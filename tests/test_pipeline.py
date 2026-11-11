@@ -1297,3 +1297,20 @@ class TestOverlappingLicenseGroups(unittest.TestCase):
         self.assertEqual(qualify.evaluate(groups, [], {"0003", "0004"}).missing_count, 0)
         self.assertEqual(qualify.evaluate(groups, [], {"0001", "0003"}).missing_count, 1)
         self.assertEqual(qualify.evaluate(groups, [], set()).summary, "자격 미달(A(0001) + B(0002)/C(0003) + D(0004))")
+
+
+class TestApiWindowSevenDays(unittest.TestCase):
+    """'최근 N일' = 오늘 포함 N일, 00:00부터 — 7일이어도 조회기간 한도(7일)를 넘지 않는다."""
+
+    def test_seven_days_starts_six_days_ago_midnight(self):
+        from datetime import datetime, timedelta
+        from nego.pipeline import _api_window
+        begin, end = _api_window(datetime(2026, 11, 11, 9, 37), 7)
+        self.assertEqual((begin, end), ("202611050000", "202611110937"))
+        fmt = "%Y%m%d%H%M"
+        self.assertLess(datetime.strptime(end, fmt) - datetime.strptime(begin, fmt), timedelta(days=7))
+
+    def test_one_day_is_today(self):
+        from datetime import datetime
+        from nego.pipeline import _api_window
+        self.assertEqual(_api_window(datetime(2026, 11, 11, 9, 37), 1), ("202611110000", "202611110937"))

@@ -169,19 +169,13 @@ def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
             continue
         if ws.cell(r, 2).value in (None, ""):
             todo.append(str(ws.cell(r, 1).value))
-    # 인력(24~29행) — 표준틀의 빨간 칸과 같은 규칙: 필수 사람은 성명, 이름을 넣은 사람은 담당업무·직책, 선임되는 사람은 자격~입사일
-    people, appointed = ((1, 2, 3, 4, 5, 6), (1, 5, 6)) if gong else ((1, 3, 4, 5, 6), (1, 2))
+    # 인력 — 표준틀의 빨간 칸과 같은 규칙(11/11 사용자 결정 '선임 대상만 필수'): 1번(공사 현장대리인·착수 용역 책임자)의
+    # 선임신고서·재직증명서에 들어가는 칸만. 나머지 줄은 쓰는 사람만 채우면 됨
     heads = {c: str(ws.cell(23, c).value or "") for c in range(2, 11)}
-    for n in range(1, 7):
-        r, label = 23 + n, str(ws.cell(23 + n, 1).value or f"{n}번")
-        if ws.cell(r, 2).value in (None, ""):
-            if n in people:
-                todo.append(f"{label} 성명")
-            continue
-        cols = (3, 4, 6, 7, 8, 9, 10) if n in appointed else (3, 4)
-        empty = [heads[c] or str(c) for c in cols if ws.cell(r, c).value in (None, "")]
-        if empty:
-            todo.append(f"{label}: " + "·".join(empty))
+    label = str(ws.cell(24, 1).value or "1번")
+    empty = [heads[c] or str(c) for c in (2, 3, 4, 6, 7, 8, 9, 10) if ws.cell(24, c).value in (None, "")]
+    if empty:
+        todo.append(f"{label}: " + "·".join(empty))
     for r in range(4, 22):
         if str(ws.cell(r, 3).value or "").startswith("[자동]") and ws.cell(r, 2).value not in (None, ""):
             value = ws.cell(r, 2).value

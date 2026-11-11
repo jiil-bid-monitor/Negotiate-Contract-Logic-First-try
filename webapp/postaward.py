@@ -129,6 +129,39 @@ def fill_basic(template: Path, target: Path, values: dict) -> None:
     wb.save(target)
 
 
+# 서류 현황(화면 '서류 현황' 칸) — 단계 폴더마다 무엇이 만들어졌는지. 표준틀은 착공·착수만, 나머지는 샘플을 받은 뒤(11/11)
+STAGE_NAME = {"0_적격심사": "적격심사", "1_계약": "계약", "2_착공": "착공", "2_착수": "착수", "3_준공": "준공", "4_청구": "청구"}
+READY_STAGES = {"2_착공", "2_착수"}
+# 기본사항에서 담당자가 꼭 넣을 칸(행 번호 — 이름은 A열에서 읽어 틀 이름이 바뀌어도 맞음). 공사는 21행 공사위치도
+REQUIRED_ROWS = (6, 8, 9, 10, 12, 15, 16, 17, 18, 19, 20)
+
+
+def share_path(path: Path | str) -> str:
+    """화면에 보일 폴더 주소 — NAS 컨테이너(/work = \\\\jiilserver\\jiil-webapp)면 윈도우 탐색기에 붙여 넣을 수 있는 주소로."""
+    s = str(path)
+    return "\\\\jiilserver\\jiil-webapp\\" + s[len("/work/"):].replace("/", "\\") if s.startswith("/work/") else s
+
+
+def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
+    """착공·착수서류 기본사항에서 (아직 빈 필수 칸 이름, [자동으로 채운 칸 이름, 값]). 숨긴 줄은 안 봄."""
+    from openpyxl import load_workbook
+
+    ws = load_workbook(xlsx)["기본사항"]
+    todo, auto = [], []
+    for r in REQUIRED_ROWS + ((21,) if gong else ()):
+        if ws.row_dimensions[r].hidden or not ws.cell(r, 1).value:
+            continue
+        if ws.cell(r, 2).value in (None, ""):
+            todo.append(str(ws.cell(r, 1).value))
+    if ws.cell(24, 2).value in (None, ""):
+        todo.append(f"인력 {ws.cell(24, 1).value or '1번'} 성명")
+    for r in range(4, 22):
+        if str(ws.cell(r, 3).value or "").startswith("[자동]") and ws.cell(r, 2).value not in (None, ""):
+            value = ws.cell(r, 2).value
+            auto.append([str(ws.cell(r, 1).value), f"{value:,}" if isinstance(value, int) else str(value)])
+    return todo, auto
+
+
 def lookup(client: Any, base_url: str, no: str, ord_: str, work: str) -> tuple[str, dict | None]:
     """낙찰현황에서 공고 하나의 낙찰자. (확인한 업무, 줄 또는 None). 업무를 모르면 공사·용역·물품 순으로."""
     for w in ([work] if work in WORKS else list(WORKS)):
@@ -257,8 +290,46 @@ class PostAward:
         with self._lock:
             items = self._read()
             items[key]["docs"] = {"found": len(docs), "missing": sum(not d["covered"] for d in docs), "files": len(nf.files)}
+            # 서류 현황 화면용 — 첨부 제출서류(틀에 있음/없음)와 기본사항 안내(공고문 기간·해당 시 서류)
+            items[key]["docList"] = [{"text": d["text"][:120], "covered": d["covered"]} for d in docs][:40]
+            items[key]["notes"] = [n.strip() for n in basic if n.startswith("  ") and "직접 넣으세요" not in n]
             self._write(items)
         return folder, docs
+
+    def status(self, key: str) -> dict:
+        """서류 현황 — 단계 폴더마다 파일, 착공·착수서류의 빈 필수 칸·자동 칸, 첨부 제출서류, 확인할 것."""
+        v = self._read().get(key) or {}
+        folder = Path(v["folder"]) if v.get("folder") else None
+        if folder is None or not folder.is_dir():
+            return {"folder": None}
+        gong = v.get("work") == "공사"
+        stages = []
+        for d in sorted(p for p in folder.iterdir() if p.is_dir() and p.name in STAGE_NAME):
+            files = sorted(f.name for f in d.iterdir() if f.is_file() and not f.name.startswith("~$"))
+            stage = {"dir": d.name, "name": STAGE_NAME[d.name], "files": files, "ready": d.name in READY_STAGES}
+            doc = d / TEMPLATES["공사" if gong else "물품·용역"][2]
+            if d.name in READY_STAGES and doc.exists():
+                try:
+                    stage["todo"], stage["auto"] = sheet_todo(doc, gong)
+                    stage["doc"] = doc.name
+                except Exception as err:  # noqa: BLE001 — 엑셀이 열려 있거나 깨졌어도 나머지는 보임
+                    stage["error"] = f"{doc.name}을 읽지 못함({err.__class__.__name__}) — 엑셀에서 닫고 다시 보세요"
+            stages.append(stage)
+        notice = folder / "공고문서"
+        attach = sorted(f.name for f in notice.iterdir() if f.is_file()) if notice.is_dir() else []
+        return {"folder": share_path(folder), "stages": stages, "attach": attach,
+                "docList": v.get("docList") or [], "notes": v.get("notes") or []}
+
+    def file(self, key: str, rel: str) -> Path:
+        """공고 폴더 안 파일 하나(내려받기용). 폴더 밖을 가리키면 오류."""
+        v = self._read().get(key) or {}
+        if not v.get("folder"):
+            raise ValueError("폴더를 아직 만들지 않은 공고입니다")
+        folder = Path(v["folder"]).resolve()
+        target = (folder / rel).resolve()
+        if folder not in target.parents or not target.is_file():
+            raise ValueError("파일을 찾지 못했습니다")
+        return target
 
     def _fill_template(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
         """착공(공사)·착수(물품·용역)서류를 단계 폴더에 복사하고 기본사항을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
@@ -364,6 +435,7 @@ def selfcheck() -> None:
         for name, _, _ in TEMPLATES.values():
             wb = Workbook()
             wb.active.title = "기본사항"
+            wb.active["A6"], wb.active["A8"] = "수신", "공사명"
             wb.save(tpl / name)
 
         class _NF:
@@ -376,6 +448,21 @@ def selfcheck() -> None:
         assert "자동으로 채운 칸" in (folder / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
         _, _ = pa.prepare("R26BK00000001-000", Path(d) / "out", fetch=lambda k, t: _NF(), templates=tpl)  # 두 번째는 담당자 파일이라 그대로
         assert "이미 있어 그대로" in (folder / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
+
+        # 서류 현황 — 착공 단계는 채울 칸(비어 있는 '수신', 인력 1번)과 자동 칸, 준공은 아직 틀 없음
+        st = pa.status("R26BK00000001-000")
+        by_dir = {s["dir"]: s for s in st["stages"]}
+        assert by_dir["2_착공"]["doc"] == "착공서류.xlsx" and "수신" in by_dir["2_착공"]["todo"], by_dir["2_착공"]
+        assert "공사명" not in by_dir["2_착공"]["todo"] and ["공사명", "A 공사"] in by_dir["2_착공"]["auto"]
+        assert by_dir["3_준공"]["ready"] is False and by_dir["3_준공"]["files"] == []
+        assert pa.file("R26BK00000001-000", "2_착공/착공서류.xlsx").name == "착공서류.xlsx"
+        for bad in ("../../postaward.json", "공고문서/없는파일.hwp"):
+            try:
+                pa.file("R26BK00000001-000", bad)
+                raise AssertionError("폴더 밖·없는 파일은 막아야 함: " + bad)
+            except ValueError:
+                pass
+        assert share_path("/work/낙찰후서류/공사/A") == "\\\\jiilserver\\jiil-webapp\\낙찰후서류\\공사\\A"
 
 
 if __name__ == "__main__":

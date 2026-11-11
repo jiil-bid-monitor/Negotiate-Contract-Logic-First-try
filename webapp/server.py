@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from datetime import datetime
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from nego import bidcalc, bidrecommend, feedback_sheet, scope
 from nego.config import ConfigError, load_config, redact
@@ -320,6 +320,24 @@ def make_handler(app: App):
                 return self._json({"entries": app.bidlog.entries()})
             if url.path == "/api/postaward":
                 return self._json({"items": app.postaward.items()})
+            if url.path == "/api/postaward/status":
+                # 서류 현황(11/11) — 단계별 파일·담당자가 채울 칸·첨부 제출서류
+                return self._json(app.postaward.status(q.get("key", [""])[0]))
+            if url.path == "/api/postaward/file":
+                # 공고 폴더 안 파일 내려받기 — 브라우저는 윈도우 폴더를 열 수 없고 다른 PC는 서버 PC 디스크에 못 들어가서
+                try:
+                    target = app.postaward.file(q.get("key", [""])[0], q.get("path", [""])[0])
+                except ValueError as err:
+                    return self._json({"error": str(err)}, 404)
+                body = target.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", mimetypes.guess_type(target.name)[0] or "application/octet-stream")
+                self.send_header("Content-Disposition", "attachment; filename*=UTF-8''" + quote(target.name))
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return None
             if url.path == "/api/bidlog/bidders":
                 # 투찰 업체 전부(11/10) — 없으면 bidders=null(화면이 '결과 다시 받기' 뒤 다시 부름)
                 return self._json({"bidders": app.bidlog.bidders(q.get("id", [""])[0])})

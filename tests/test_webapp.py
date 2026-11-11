@@ -485,7 +485,7 @@ class TestServer(unittest.TestCase):
         store = Store(Path(tempfile.mkdtemp()) / "t.sqlite3")
         past = FakePast()
         self.collector = Collector(store, past, runner=fixture_run, config_loader=config_with_key)
-        app = App(store, past, self.collector, token="secret-token")
+        self.app = app = App(store, past, self.collector, token="secret-token")
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app))
         self.base = f"http://127.0.0.1:{self.httpd.server_address[1]}"
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
@@ -523,6 +523,25 @@ class TestServer(unittest.TestCase):
         self.assertEqual(self.call("/api/bidlog", {"noticeNo": "", "bid": 1})[0], 400)
         self.assertEqual(self.call("/api/bidlog", token="wrong")[0], 401)
         self.assertEqual(self.call("/api/bidlog/delete", {"id": entry_id})[1]["entries"], [])
+
+    def test_postaward_status_and_file(self):
+        """낙찰 후 서류 '서류 현황'(11/11): 단계별 파일 목록, 파일 내려받기, 폴더 밖 경로는 막힘."""
+        import urllib.parse
+
+        pa = self.app.postaward
+        pa.add("R26BK00000009-000", "가 공사", "공사")
+        folder = pa.make_folder("R26BK00000009-000", Path(tempfile.mkdtemp()))
+        (folder / "공고문서" / "공고문.hwp").write_bytes(b"HWP")
+        status = self.call("/api/postaward/status?key=R26BK00000009-000")[1]
+        self.assertEqual(status["attach"], ["공고문.hwp"])
+        self.assertIn("3_준공", [s["dir"] for s in status["stages"]])
+        req = urllib.request.Request(self.base + "/api/postaward/file?key=R26BK00000009-000&path=" + urllib.parse.quote("공고문서/공고문.hwp"),
+                                     headers={"X-App-Token": "secret-token"})
+        with urllib.request.urlopen(req) as res:
+            self.assertEqual(res.read(), b"HWP")
+            self.assertIn("attachment", res.headers["Content-Disposition"])
+        self.assertEqual(self.call("/api/postaward/file?key=R26BK00000009-000&path=../../x")[0], 404)
+        self.assertEqual(self.call("/api/postaward/status?key=R26BK00000009-000", token="wrong")[0], 401)
 
     def test_participation_goes_to_nas(self):
         """서버 PC(team_remote 있음)의 판단 기록 읽기·쓰기는 NAS 한 곳으로(2026-11-09) — 이 PC엔 안 쌓인다."""

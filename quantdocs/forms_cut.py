@@ -360,6 +360,10 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path, fit_pages: b
     sections = {n: zin.read(n).decode("utf-8") for n in sec_names}
     bodies: dict[str, list[tuple[CutForm, str]]] = {}
     header = zin.read("Contents/header.xml").decode("utf-8") if "Contents/header.xml" in entries else ""
+    orig_header = header
+    if header:  # 채운 값 글꼴(휴먼명조, 11/11) — 채울 때 각 서식 머리에 더한 것과 같은 번호로 통합 머리에도
+        from .fill import ensure_font
+        header = ensure_font(header)
     # 채울 때 더한 글자 모양(charPr)·문단 모양(paraPr, 가운데 정렬 사본) — 원본 머리에 없는 id는 새 번호로 옮겨 더함
     kinds = {}
     for tag, ref, group in (("charPr", "charPrIDRef", "charProperties"), ("paraPr", "paraPrIDRef", "paraProperties")):
@@ -410,7 +414,7 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path, fit_pages: b
 
     out.parent.mkdir(parents=True, exist_ok=True)
     replace = {"Preview/PrvText.txt": " ".join(preview)[:1000].encode("utf-8")}
-    if header and any(k["extra"] for k in kinds.values()):
+    if header and (any(k["extra"] for k in kinds.values()) or header != orig_header):
         h = header
         for k in kinds.values():
             if not k["extra"]:

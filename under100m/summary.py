@@ -24,7 +24,13 @@ def money_rows(candidate, amount: float | None, source: str) -> list[tuple[str, 
     n = candidate.notice
     raw = getattr(n, "raw", None) or {}
     rate = raw.get("sucsfbidLwltRate")
-    rows = [("추정가격", won(n.estimated_price)), ("배정예산", won(n.assigned_budget)),
+    from nego.models import PLACEHOLDER_AMOUNT
+
+    def api(value: float | None) -> str:  # 1원 같은 자리 표시 값 = 발주처가 금액을 안 올림
+        return f"비공개 (나라장터에 {value:,.0f}원으로 등록)" if value and value < PLACEHOLDER_AMOUNT else won(value)
+
+    hidden = any(v and v < PLACEHOLDER_AMOUNT for v in (n.estimated_price, n.assigned_budget))
+    rows = [("추정가격", api(n.estimated_price)), ("배정예산", api(n.assigned_budget)),
             ("기초금액", won(getattr(candidate, "basis", None))), ("낙찰하한율", f"{rate}%" if rate else "-"),
             ("예가방법", getattr(n, "estimate_price_method", None) or "-")]
     seen = set()
@@ -41,6 +47,8 @@ def money_rows(candidate, amount: float | None, source: str) -> list[tuple[str, 
             rows[hit] = (kind, won(value) + " — 공고문")
     if amount:
         rows.insert(0, ("사업금액", f"{won(amount)} — {source} · {'1억 미만' if amount < LIMIT else '1억 이상'}"))
+    elif hidden:
+        rows.insert(0, ("사업금액", "비공개 — 나라장터 금액이 자리 표시 값이고 공고문에도 없음, 발주처·공고문 확인"))
     return rows
 
 
@@ -72,7 +80,7 @@ def req_lines(reqs: list[dict], mark: dict) -> list[tuple[str, list[str]]]:
 
 
 def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, key: str, need: list[tuple[str, str, str]],
-                      ref: str, deadline: str | None, files: list[str], now: datetime, ai: dict | None = None) -> bool:
+                      ref: str, deadline: str | None, files: list[str], now: datetime, sections: dict | None = None) -> bool:
     """한글 글꼴이 없으면 False — 나머지 자료는 그대로 만든다."""
     from nego.text_requirements import summarize_flag
     from quantdocs.bundle import _FONTS
@@ -169,17 +177,14 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
                   Paragraph("유효기간이 지났거나 재발급이 필요한 서류는 회사준비서류 폴더에 넣지 않았습니다.", small)]
     else:
         story.append(Paragraph("없음 — 체크리스트의 증명서류는 회사 서류에서 모두 넣음", base))
-    if ai:
-        story += [Paragraph("AI가 읽은 업체 조건·제출 서류 — 공고문과 대조", h2)]
-        if ai.get("truncated"):
-            story.append(Paragraph("문서가 길어 앞부분만 읽음", small))
-        if ai.get("overview"):
-            story.append(Paragraph(esc(ai["overview"]), base))
-        for title, key in (("업체 조건", "conditions"), ("제출 서류", "documents")):
-            story.append(Paragraph(f"<b>{title}</b>", base))
-            for item in ai.get(key) or []:
-                story += [Paragraph("&nbsp;&nbsp;- " + esc(item["text"]), base), Paragraph("&nbsp;&nbsp;&nbsp;&nbsp;원문: " + esc(item["quote"][:200]), small)]
-        story += [Paragraph("&nbsp;&nbsp;※ " + esc(n), base) for n in ai.get("notes") or []]
+    for topic in ("참가 자격", "제출 서류", "유의사항·기타"):  # 공고 문서 원문 그대로(sections.find_sections)
+        story.append(Paragraph(f"{topic} — 공고문 원문", h2))
+        items = (sections or {}).get(topic) or []
+        if not items:
+            story.append(Paragraph("공고 문서에서 이 절을 찾지 못함 — 공고문 확인", base))
+        for name, head, lines in items:
+            story.append(Paragraph(f"<b>{esc(head)}</b> &nbsp;<font size=7 color='#777777'>({esc(name)})</font>", base))
+            story += [Paragraph("&nbsp;&nbsp;" + esc(line), base) for line in lines]
     story += [Spacer(1, 6), Paragraph("읽은 문서: " + esc(" / ".join(files) or "-"), small)]
     SimpleDocTemplate(str(path), pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=24 * mm, bottomMargin=16 * mm,
                       title="공고정보 요약", author="㈜지일").build(story, onFirstPage=frame, onLaterPages=frame)

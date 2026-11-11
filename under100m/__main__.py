@@ -25,12 +25,12 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
-from .ai_summary import lines as ai_lines, summarize as summarize_docs
 from .docs import _unique, issue_lines
 from .form_fill import fill_form, load_company
 from .form_split import merge_forms, split_forms
 from .pdf_forms import fill_pdf, split_pdf
-from .prep import PREP_DIR, prepare
+from .prep import PREP_DIR, listed_items, prepare
+from .sections import find_sections
 from .summary import write_summary_pdf
 
 log = logging.getLogger("under100m")
@@ -42,6 +42,7 @@ PREV_DIR = "이전공고"
 SUMMARY = "공고정보_요약.pdf"
 FORMS_LIST = "제출서류_체크리스트.txt"
 MERGED_FORMS = "서식_통합.hwpx"
+MERGED_PDF = "서식_통합.pdf"
 SAME_TITLE_DAYS = 180  # 공고명·기관이 같아도 이보다 오래되면 다른 해의 사업으로 본다
 COMPANY_DOCS = Path(os.environ.get("COMPANY_DOCS_DIR") or "/work/회사서류_최신")
 COMPANY_PROFILE = Path(os.environ.get("COMPANY_PROFILE") or "/work/under100m/회사프로필.json")
@@ -232,6 +233,7 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
                 checklist.append(f"[ ] {kept.name}")
         form_names += [p.stem for p in hwpx]
     stems = {f.stem for f in files if f.suffix.lower() in (".hwp", ".hwpx")}
+    pdfs: list[tuple[Path, str]] = []  # (채운 서식, 체크리스트 안내) — 끝에 서식_통합.pdf 한 파일로
     for number, f in enumerate(files):  # 같은 이름의 한글 파일이 있으면 한글 쪽을 씀 — PDF로만 있는 서식만(한글 통합본에 못 넣어 따로)
         if f.suffix.lower() != ".pdf" or f.stem in stems:
             continue
@@ -239,14 +241,33 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
         try:
             names = split_pdf(f, cut_dir)
             for name in names:
-                target = target_for(name, f, out)
+                target = target_for(name, f, filled_dir)
                 filled, why = fill_pdf(cut_dir / name, target, company, n.title)
-                checklist.append(f"[ ] {target.name} — " + ("PDF 자동 입력, 칸 위치 확인 필요" if filled else "PDF 서식, 직접 작성"))
+                pdfs.append((target, "PDF 자동 입력, 칸 위치 확인 필요" if filled else "PDF 서식, 직접 작성"))
                 notes.append(f"{target.name}: " + (", ".join(filled) if filled else why or "채운 칸 없음"))
                 form_names.append(target.stem)
         except Exception as err:  # noqa: BLE001 — PDF 하나를 못 나눠도 나머지 자료는 만든다
             log.warning("PDF 서식 나누기 실패 %s: %s", f.name, err)
             notes.append(f"{f.name}: PDF 서식을 나누지 못함({err})")
+    if pdfs:
+        from pypdf import PdfWriter
+
+        try:
+            writer = PdfWriter()
+            for target, _ in pdfs:
+                writer.append(str(target))
+            with open(out / MERGED_PDF, "wb") as fh:
+                writer.write(fh)
+            checklist += ["", f"PDF로만 있는 서식은 '{MERGED_PDF}' 한 파일에 아래 순서대로:"]
+            checklist += [f"[ ] {k}. {target.stem} — {how}" for k, (target, how) in enumerate(pdfs, 1)]
+        except Exception as err:  # noqa: BLE001 — 합치지 못하면 서식별 파일로라도 남긴다
+            log.warning("PDF 서식 합치기 실패: %s", err)
+            (out / MERGED_PDF).unlink(missing_ok=True)
+            notes.append(f"PDF 서식을 한 파일로 합치지 못해 서식별 파일로 둠({err})")
+            for target, how in pdfs:
+                kept = _unique(out / target.name)
+                shutil.copyfile(target, kept)
+                checklist.append(f"[ ] {kept.name} — {how}")
     return checklist, notes, converted, form_names
 
 
@@ -336,11 +357,13 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
         deadline = submit_deadline(candidate.schedule)
         posted = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:]}" if posted_digits else None
         keep_prep = bool(old and (old / PREP_DIR).exists())  # 담당자가 넣은 파일이 있어 재공고 때는 건드리지 않음
-        ai = summarize_docs([(f.name, text) for f, text in docs])
-        if ai:
-            notes += ai_lines(ai)
-        need, ref = prepare(None if keep_prep else tmp / PREP_DIR, [text for _, text in docs], form_names, COMPANY_DOCS, deadline, posted, now.date(), company)
-        if not write_summary_pdf(candidate, amount, source, tmp / SUMMARY, notice_key(n), need, ref, deadline, [placed[f].name for f, _ in docs], now, ai):
+        sections = find_sections([(placed[f].name, text) for f, text in docs])
+        listed = [item for _, head, lines in sections.get("제출 서류", []) if not re.search(r"낙찰자|계약", head)
+                  for item in listed_items(lines)]  # 낙찰·계약 뒤에 내는 서류 목록은 빼고
+        need, ref = prepare(None if keep_prep else tmp / PREP_DIR, [text for _, text in docs], form_names, COMPANY_DOCS, deadline, posted,
+                            now.date(), company, listed)
+        if not write_summary_pdf(candidate, amount, source, tmp / SUMMARY, notice_key(n), need, ref, deadline, [placed[f].name for f, _ in docs], now,
+                                 sections):
             notes.append("한글 글꼴이 없어 요약 PDF를 만들지 못함")
         if keep_prep:
             notes.append(f"재공고: {PREP_DIR}는 그대로 둠 — 바뀐 제출서류가 있는지 공고문과 대조하세요.")

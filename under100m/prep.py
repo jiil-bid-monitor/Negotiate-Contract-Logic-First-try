@@ -77,8 +77,6 @@ DESC = {
     "입찰·계약 보증서": "보증기관 발급",
     "인지세·수입인지": "전자수입인지",
 }
-# 공고문에 없어도 늘 넣는 작성서류 — 사용자 지정 3종 + 지일 과거 1억 미만 폴더에서 자주 만든 2종(표본과 같음)
-USUAL = ("설계내역서·산출내역서", "견적서", "단가조사서·비교견적", "제안 발표 자료", "제안서(정성)")
 # 체크리스트 항목 → 회사 서류 종류(여러 개면 모두)
 DOC_KINDS = {
     "사업자등록증": ["사업자등록증"],
@@ -222,22 +220,63 @@ def _load(path: Path, default):
         return default
 
 
-def checklist_rows(texts: list[str], form_names: list[str]) -> tuple[list[tuple[str, str, str]], set[str]]:
-    """(항목, 분류, 근거 문장) 목록과 서식 파일로 이미 있는 항목."""
+# 제출 서류 절의 항목 머리 — 위에서부터 2줄 이상 있는 첫 종류를 항목으로
+# (시설안전팀: '가. 제출기한·나. 제출방법·다. 제출서류' 아래 '1)'이 진짜 목록)
+_ITEM_MARKS = [r"\d{1,2}(?:-\d{1,2})?\)", r"\d{1,2}\.(?!\d)", r"[①-⑳]", r"[가-하]\.", r"-", r"[○●▪·o]"]  # '9-1)'도 한 항목
+_OTHER_LINE = re.compile(r"^(※|\*|□|■|[①-⑳]|\d{1,2}(-\d{1,2})?[.)]|[가-하][.)]|[-○●▪·o]\s)")
+
+
+def listed_items(lines: list[str]) -> list[str]:
+    """공고문 '제출 서류' 절 본문 줄 → 서류 항목(번호 뗀 글, 다음 줄로 넘어간 글은 이어 붙임)."""
+    for mark in _ITEM_MARKS:
+        head = re.compile(r"^(?:" + mark + r")\s*")
+        if sum(bool(head.match(line)) for line in lines) < 2:
+            continue
+        items: list[str] = []
+        inside = False
+        for line in lines:
+            if head.match(line):
+                items.append(head.sub("", line))
+                inside = True
+            elif inside and not _OTHER_LINE.match(line):
+                items[-1] += " " + line  # PDF 줄바꿈으로 잘린 항목
+            else:
+                inside = False
+        return items
+    return []
+
+
+def folder_label(item: str) -> str:
+    """'사업자등록증 사본(원본대조필), 법인등기부등본(해당 시) 각 1부' → '사업자등록증 사본, 법인등기부등본'."""
+    text = re.sub(r"\([^)]*\)?|\[[^\]]*\]?", "", item)
+    text = re.split(r"\s*(?:각\s*)?\d+\s*부(?![가-힣])", text)[0]
+    text = re.sub(r'[\\/:*?"<>|.]+', " ", text)
+    return re.sub(r"\s+", " ", text).strip(" ,")[:40].strip() or "서류"
+
+
+def checklist_rows(texts: list[str], form_names: list[str], listed: list[str] | None = None) -> tuple[list[tuple[str, str, str, list[str]]], set[str]]:
+    """(폴더 이름, 분류, 근거 문장, 연결할 회사 서류 항목) 목록과 서식 파일로 이미 있는 항목.
+    공고문에 제출 서류 목록(`listed`)이 있으면 그 순서·이름 그대로, 없으면 문장에서 찾은 서류.
+    공고에 없는 서류(예전엔 늘 넣던 견적서·제안서 등)는 넣지 않음(11/10 사용자 요청)."""
+    if listed:
+        rows = []
+        for item in listed:
+            keys = [name for name, pattern, _ in CATALOG if re.search(pattern, item)]
+            kind = next((k for name, _, k in CATALOG if name in keys), "작성서류")
+            rows.append((folder_label(item), kind, item, keys))
+        return rows, set()
     items = find_items(texts)
     forms = [re.sub(r"\s", "", name) for name in form_names]
     key = lambda item: re.sub(r"[·()\s]|확인서$|증명서$", "", item)[:4]  # noqa: E731
     has_form = {item for item in items if any(key(item) in form for form in forms)}
-    rows = [(item, kind, sentence) for item, (kind, sentence) in items.items() if item not in has_form]
-    have = {row[0] for row in rows} | has_form
-    rows += [(item, "작성서류", "") for item in USUAL if item not in have]
+    rows = [(item, kind, sentence, [item]) for item, (kind, sentence) in items.items() if item not in has_form]
     order = {"작성서류": 0, "증명서류": 1, "보증·납부": 2}
     rows.sort(key=lambda row: (order.get(row[1].split(" (")[0], 3), row[0]))
     return rows, has_form
 
 
 def prepare(prep: Path | None, texts: list[str], form_names: list[str], docs_root: Path, deadline: str | None,
-            posted: str | None, today: date, rule: dict | None = None) -> tuple[list[tuple[str, str, str]], str]:
+            posted: str | None, today: date, rule: dict | None = None, listed: list[str] | None = None) -> tuple[list[tuple[str, str, str]], str]:
     """체크리스트를 만들고 쓸 수 있는 회사 서류를 복사한다. `prep`이 None이면 판단만 — 재공고 때 담당자가 넣은 파일을 안 건드리려고.
     돌려주는 값: (새로 준비할 것 [(항목, 파일, 사유)], 판단 기준일)."""
     ref = max(deadline or today.isoformat(), today.isoformat())
@@ -248,7 +287,7 @@ def prepare(prep: Path | None, texts: list[str], form_names: list[str], docs_roo
     for record in records:
         if record["종류"] not in latest or record["발급일"] > latest[record["종류"]]["발급일"]:
             latest[record["종류"]] = record
-    rows, has_form = checklist_rows(texts, form_names)
+    rows, has_form = checklist_rows(texts, form_names, listed)
     after_all = issue_after_all(texts)
     if prep is not None:
         prep.mkdir(parents=True, exist_ok=True)
@@ -256,27 +295,31 @@ def prepare(prep: Path | None, texts: list[str], form_names: list[str], docs_roo
     today_text = today.isoformat()
     note = f" (제출 마감 {deadline})" if deadline and deadline >= today_text else f" (마감 {deadline} 지난 공고 — 오늘 기준)" if deadline else " (마감일 못 찾음 — 오늘 기준)"
     lines = ["회사 준비 서류 체크리스트 (자동 생성 — 별지 서식 말고 회사가 따로 만들거나 발급받을 것)", f"※ 서류 판단 기준일 {ref}{note}", "",
-             "공고문 제출서류 목록과 꼭 대조하세요.", ""]
+             "공고문 제출 서류 목록 순서대로 만들었습니다." if listed else "공고문 제출서류 목록과 꼭 대조하세요.", ""]
     need: list[tuple[str, str, str]] = []
     group_now = None
-    for no, (item, kind, sentence) in enumerate(rows, 1):
+    for no, (item, kind, sentence, keys) in enumerate(rows, 1):
         sub = prep / f"{no:02d}_{item}".replace("/", "·") if prep is not None else None
         if sub is not None:
             sub.mkdir(exist_ok=True)
         group = kind.split(" (")[0]
-        if group != group_now:
+        if not listed and group != group_now:
             lines += ([""] if group_now else []) + [f"■ {group}"]
             group_now = group
-        hint = hints(sentence)
+        hint = [] if listed else hints(sentence)  # 공고 목록이면 원문 문장을 그대로 보여 줌
         if "대리인" in kind:
             hint.insert(0, "대리인 접수 시")
         if after_all and group == "증명서류" and AFTER_NOTICE not in hint:
             hint.append(AFTER_NOTICE)
-        line = f"[ ] {no:02d}. {item}" + (f" — {DESC[item]}" if DESC.get(item) else "") + (f" ({', '.join(hint)})" if hint else "")
+        text = f"{item} — 공고: {sentence}" if listed else item + (f" — {DESC[item]}" if DESC.get(item) else "")
+        line = f"[ ] {no:02d}. {text}" + (f" ({', '.join(hint)})" if hint else "")
         lines.append(line)
-        if item not in DOC_KINDS:
+        wants = [want for name in keys for want in DOC_KINDS.get(name, [])]
+        if not wants:
+            if listed:
+                lines.append("        → 회사 서류에서 자동으로 찾지 않는 서류 — 직접 준비")
             continue
-        docs = [latest[k] for want in DOC_KINDS[item] for k in sorted(latest) if base_kind(k) == want]
+        docs = [latest[k] for want in wants for k in sorted(latest) if base_kind(k) == want]
         if any(r["종류"].startswith("직접생산확인증명서(") for r in docs):  # 품목을 못 읽은 예전 증명서는 품목별 것이 있으면 뺌
             docs = [r for r in docs if r["종류"] != "직접생산확인증명서"]
         if not docs:

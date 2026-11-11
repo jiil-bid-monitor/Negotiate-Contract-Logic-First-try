@@ -25,6 +25,16 @@
   ③ `_read_doc_nopoints`: '가. 사업수행능력 평가' 다음 같은 차례 '나. 기술능력 평가'에서 끝냈음 → 같은 차례라도 정량 항목(KINDS·기술능력)이면 계속,
   ④ KINDS staff에 '기술능력'(서식 줄 이름). 시험 3모양(예전 코드로는 등급별 점수 빈손). 실제 공고 파일로는 확인 못 함.
 
+## 2026-11-11 — 개발팀 오피스 현황판 `docs/team/index.html` (브랜치 `claude/team-office`, 사용자 요청 — 개발자용)
+
+- 계기: VS Code 안 Claude Code 대화는 팀원이 못 봐서 누가 무엇을 하는지 모름 → **GitHub 기록만으로** 보이는 한 파일짜리 픽셀 오피스 페이지.
+  lazyowen 가이드의 AI 오피스 도구들(먼더 디플린·PixelOffice·Star Office UI·bit-office)은 **한 PC의 에이전트 세션**만 그려서 안 씀(설치 안 함).
+- 자료(브라우저에서 GitHub API 직접 호출, 서버 없음): 저장소 events 3쪽(push·브랜치 생성 — **Claude Code 웹 세션의 커밋(작성자 "Claude")도 밀어 넣은 사람(actor)으로 붙임**),
+  pulls 40건, main 커밋 7일. 사람 = `PEOPLE`(iamhiki 히키·kdh-007 HJE, 모르는 로그인은 자동 추가). 상태 = 마지막 활동 30분 안 '작업 중'(책상·모니터 켜짐)·3시간 안 '조금 전까지'·그 밖 '자리 비움'(돌아다님).
+  말풍선 = 이름 · 지금 브랜치(main에 올렸으면 '→ main'). 아래 카드: 사람별 브랜치·마지막 커밋·열린 PR, 7일 활동 목록.
+- 조회 한도: 토큰 없이 시간당 60회(같은 사무실 IP 공유) — 10분마다 갱신, 한 번에 5~7회. 한도 넘으면 안내가 뜨고 '토큰' 버튼(읽기 전용 PAT, localStorage)으로 5,000회.
+- 보는 법: GitHub Pages(Settings → Pages → main · /docs)를 켜면 `https://jiil-bid-monitor.github.io/Negotiate-Contract-Logic-First-try/team/` — **Pages 켜기는 권한 검사에 막혀 사용자가 직접**. 파일을 그냥 열어도(file://) 동작.
+
 ## 2026-11-11 — 정량평가서 만들기가 엑셀 제어 문자로 멈춤 (브랜치 `claude/quant-xlsx-ctrlchar`, 사용자 제보)
 
 - 제보: 만들기 결과 '소프트웨어사업자일반현황관리확인서(구(舊)소프트웨어사업자신고확인서)1부(해당업체에한함) cannot be used in worksheets.' — 한글 문서에서 읽은 서류 이름에

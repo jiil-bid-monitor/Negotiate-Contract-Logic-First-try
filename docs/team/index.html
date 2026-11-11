@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개발팀 오피스</title>
+<link rel="icon" href="data:,">
+<meta name="description" content="GitHub 커밋·브랜치·PR 기록으로 개발자가 지금 무엇을 하는지 픽셀 오피스로 보여주는 현황판">
+<style>
+:root{
+  --bg:#f3f1ea;--panel:#fffdf7;--line:#e2ddd0;--ink:#1f2320;--ink2:#6b6f68;--accent:#1b6e43;
+  --chip:#ece8dc;--good:#2d8a4e;--warn:#c47d12;--away:#9a9d98;--link:#1b5e9e;
+  --floor:#d9d2c0;--floor2:#d1c9b4;--wall:#efe9d8;--wallb:#c9bf9f;--desk:#8a6a44;--desk2:#6f5436;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#17191b;--panel:#1f2224;--line:#30353a;--ink:#e8e6df;--ink2:#9ba09a;--accent:#4fae7c;
+  --chip:#2a2f33;--good:#4fae7c;--warn:#e0a53a;--away:#6c716d;--link:#6fb1ea;
+  --floor:#2b2e30;--floor2:#262a2c;--wall:#33383b;--wallb:#45494c;--desk:#6d5235;--desk2:#55402a;
+}}
+:root[data-theme="dark"]{
+  --bg:#17191b;--panel:#1f2224;--line:#30353a;--ink:#e8e6df;--ink2:#9ba09a;--accent:#4fae7c;
+  --chip:#2a2f33;--good:#4fae7c;--warn:#e0a53a;--away:#6c716d;--link:#6fb1ea;
+  --floor:#2b2e30;--floor2:#262a2c;--wall:#33383b;--wallb:#45494c;--desk:#6d5235;--desk2:#55402a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+header h1{font-size:18px;margin:0;letter-spacing:-.2px}
+header .repo{color:var(--ink2);font-size:13px}
+header .sp{flex:1}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit;font-size:13px}
+.btn:hover{border-color:var(--accent)}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:120px}
+.stat b{display:block;font-size:20px;line-height:1.2}.stat span{color:var(--ink2);font-size:12px}
+.office{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated;image-rendering:crisp-edges}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h2{font-size:14px;margin:0 0 10px;color:var(--ink2);font-weight:600}
+.people{display:grid;gap:10px}
+.person{display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:8px}
+.person img{width:40px;height:40px;border-radius:8px;background:var(--chip)}
+.person .nm{font-weight:700}
+.person .st{font-size:12px;padding:1px 7px;border-radius:999px;color:#fff;margin-left:6px;vertical-align:1px}
+.person .meta{color:var(--ink2);font-size:12px;margin-top:2px}
+.chip{display:inline-block;background:var(--chip);border-radius:5px;padding:0 6px;font-size:12px;font-family:ui-monospace,Consolas,monospace}
+.msg{margin-top:4px;word-break:break-all}
+.tl{list-style:none;margin:0;padding:0 6px 0 0;max-height:640px;overflow:auto}
+.tl .day{font-size:12px;color:var(--ink2);margin:10px 0 4px;font-weight:600}
+.tl li.ev{display:grid;grid-template-columns:44px 10px 1fr;gap:8px;padding:4px 0;border-top:1px dashed var(--line);font-size:13px}
+.tl li.ev .t{color:var(--ink2);font-variant-numeric:tabular-nums}
+.tl li.ev .dot{width:10px;height:10px;border-radius:50%;margin-top:5px}
+.tl li.ev .who{font-weight:600;margin-right:4px}
+.pr{padding:6px 0;border-top:1px dashed var(--line);font-size:13px}
+.pr .n{color:var(--ink2);font-family:ui-monospace,Consolas,monospace;margin-right:6px}
+.note{color:var(--ink2);font-size:12px;margin-top:8px}
+.err{background:#fde8e8;color:#8a1f1f;border-radius:8px;padding:10px 14px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>개발팀 오피스</h1>
+  <span class="repo" id="repoName"></span>
+  <span class="sp"></span>
+  <span class="repo" id="updated"></span>
+  <button class="btn" id="btnRefresh">새로 고침</button>
+  <button class="btn" id="btnToken" title="GitHub 토큰(읽기 전용)을 넣으면 조회 한도가 시간당 60회에서 5,000회로 늘어납니다">토큰</button>
+  <button class="btn" id="btnTheme">테마</button>
+</header>
+<div id="err" class="err" hidden></div>
+<div class="stats">
+  <div class="stat"><b id="sActive">-</b><span>지금 작업 중</span></div>
+  <div class="stat"><b id="sToday">-</b><span>오늘 커밋</span></div>
+  <div class="stat"><b id="sOpen">-</b><span>열린 PR</span></div>
+  <div class="stat"><b id="sMerged">-</b><span>오늘 병합</span></div>
+</div>
+<div class="office"><canvas id="office" width="960" height="330"></canvas></div>
+<div class="grid">
+  <div class="card"><h2>누가 무엇을</h2><div class="people" id="people"></div>
+    <h2 style="margin-top:14px">열린 PR</h2><div id="prs"></div></div>
+  <div class="card"><h2>최근 활동 (7일)</h2><ul class="tl" id="tl"></ul>
+    <p class="note">push 기록으로 사람을 붙입니다. Claude Code 웹 세션의 커밋(작성자 "Claude")도 밀어 넣은 사람 이름으로 보입니다. 10분마다 새로 고침.</p></div>
+</div>
+</div>
+<script>
+'use strict';
+const REPO = 'jiil-bid-monitor/Negotiate-Contract-Logic-First-try';
+// 로그인 이름 → 보일 이름·색. 모르는 사람은 로그인 이름 그대로 자동 추가.
+const PEOPLE = {
+  'iamhiki': {name: '히키', color: '#3b82f6'},
+  'kdh-007': {name: 'HJE', color: '#e0a53a'},
+};
+const BOTS = /\[bot\]$/;
+const POLL_MS = 10 * 60 * 1000;
+const ACTIVE_MIN = 30, RECENT_H = 3;
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const token = () => { try { return localStorage.getItem('gh_token') || ''; } catch { return ''; } };
+const api = async (path) => {
+  const h = {Accept: 'application/vnd.github+json'};
+  if (token()) h.Authorization = 'Bearer ' + token();
+  const r = await fetch('https://api.github.com' + path, {headers: h});
+  if (!r.ok) throw new Error(r.status === 403 ? '조회 한도 초과 — "토큰" 버튼으로 GitHub 토큰을 넣으면 됩니다' : `GitHub ${r.status}`);
+  return r.json();
+};
+const kst = (iso) => new Date(new Date(iso).getTime() + 9 * 3600e3);
+const dayKey = (iso) => kst(iso).toISOString().slice(0, 10);
+const hhmm = (iso) => kst(iso).toISOString().slice(11, 16);
+const ago = (iso) => {
+  const m = Math.max(0, (Date.now() - new Date(iso)) / 60e3);
+  if (m < 1) return '방금'; if (m < 60) return `${Math.floor(m)}분 전`;
+  if (m < 60 * 24) return `${Math.floor(m / 60)}시간 전`; return `${Math.floor(m / 1440)}일 전`;
+};
+const short = (ref) => (ref || '').replace(/^refs\/heads\//, '');
+const firstLine = (m) => (m || '').split('\n')[0];
+
+const people = {};  // login → {login,name,color,avatar,last,lastType,branch,sha,msg,url,today,prs}
+function person(login, avatar) {
+  if (!people[login]) {
+    const p = PEOPLE[login] || {name: login, color: '#8b5cf6'};
+    people[login] = {login, ...p, avatar: avatar || `https://github.com/${login}.png?size=80`, today: 0, prs: [], last: null};
+  }
+  if (avatar) people[login].avatar = avatar;
+  return people[login];
+}
+
+async function load() {
+  $('#err').hidden = true;
+  try {
+    const [e1, e2, e3, pulls, mainCommits] = await Promise.all([
+      api(`/repos/${REPO}/events?per_page=100&page=1`),
+      api(`/repos/${REPO}/events?per_page=100&page=2`),
+      api(`/repos/${REPO}/events?per_page=100&page=3`),
+      api(`/repos/${REPO}/pulls?state=all&sort=updated&direction=desc&per_page=40`),
+      api(`/repos/${REPO}/commits?per_page=100&since=${new Date(Date.now() - 7 * 864e5).toISOString()}`),
+    ]);
+    render(await assemble([...e1, ...e2, ...e3], pulls, mainCommits));
+  } catch (err) {
+    $('#err').textContent = err.message; $('#err').hidden = false;
+  }
+}
+
+async function assemble(events, pulls, mainCommits) {
+  const todayKey = dayKey(new Date().toISOString());
+  const since = Date.now() - 7 * 864e5;
+  const branchOwner = {};   // 브랜치 → 만든/밀어 넣은 사람
+  const mainPushes = [];    // main에 밀어 넣은 기록 (작성자 "Claude" 커밋을 사람에게 붙일 때)
+  const pushes = [];
+  for (const ev of events.slice().reverse()) {   // 오래된 것부터 — 나중 push가 덮어쓰게
+    const who = ev.actor.login; if (BOTS.test(who)) continue;
+    const p = person(who, ev.actor.avatar_url);
+    const t = ev.created_at;
+    if (!p.last || t > p.last) { p.last = t; p.lastType = ev.type; }
+    if (ev.type === 'CreateEvent' && ev.payload.ref_type === 'branch') branchOwner[ev.payload.ref] ??= who;
+    if (ev.type === 'PushEvent') {
+      const ref = short(ev.payload.ref);
+      if (ref === 'main') mainPushes.push({who, t});
+      else { branchOwner[ref] ??= who; pushes.push({who, ref, sha: ev.payload.head, t}); }
+    }
+  }
+  for (const pr of pulls) branchOwner[pr.head.ref] ??= pr.user.login;
+  mainPushes.sort((a, b) => a.t < b.t ? -1 : 1);
+  const ownerOfMainCommit = (c) => {
+    const login = c.author?.login;
+    if (login && login !== 'claude' && !BOTS.test(login)) return login;
+    const branchOf = (x) => firstLine(x.commit.message).match(/Merge (?:branch '|pull request #\d+ from [^/]+\/)([^'\s]+)/)?.[1];
+    const own = branchOf(c); if (own && branchOwner[own]) return branchOwner[own];
+    // 그 뒤에 온 첫 병합 커밋이 가리키는 브랜치의 주인 (main 커밋 목록은 최신순)
+    for (let i = mainCommits.indexOf(c) - 1; i >= 0; i--) {
+      const b = mainCommits[i].parents.length > 1 && branchOf(mainCommits[i]);
+      if (b && branchOwner[b]) return branchOwner[b];
+    }
+    const push = mainPushes.find((x) => x.t >= c.commit.committer.date);   // 그 커밋을 main에 올린 push의 주인
+    return push ? push.who : null;
+  };
+
+  // 사람별 현재 브랜치 = 가장 최근 push(브랜치)
+  const latest = {};
+  for (const x of pushes) if (!latest[x.who] || x.t > latest[x.who].t) latest[x.who] = x;
+  const mainBySha = Object.fromEntries(mainCommits.map((c) => [c.sha, c]));
+  await Promise.all(Object.values(latest).map(async (x) => {
+    const p = person(x.who);
+    p.branch = x.ref; p.sha = x.sha; p.branchAt = x.t;
+    let c = mainBySha[x.sha];
+    if (!c) { try { c = await api(`/repos/${REPO}/commits/${x.sha}`); } catch { c = null; } }   // 아직 main에 없는 커밋 — 한 번 더 조회
+    if (c) { p.msg = firstLine(c.commit.message); p.url = c.html_url; }
+  }));
+
+  // 타임라인: main 커밋(병합 커밋 제외) + PR 열림/병합
+  const items = [];
+  for (const c of mainCommits) {
+    if (c.parents.length > 1 || BOTS.test(c.author?.login || '')) continue;
+    const who = ownerOfMainCommit(c); if (!who) continue;
+    const t = c.commit.committer.date;
+    items.push({t, who, kind: 'commit', text: firstLine(c.commit.message), url: c.html_url});
+    if (dayKey(t) === todayKey) person(who).today++;
+  }
+  let openPRs = [], mergedToday = 0;
+  for (const pr of pulls) {
+    const who = pr.user.login; person(who, pr.user.avatar_url);
+    if (pr.state === 'open') { openPRs.push(pr); person(who).prs.push(pr); }
+    if (pr.merged_at) {
+      if (dayKey(pr.merged_at) === todayKey) mergedToday++;
+      if (new Date(pr.merged_at) > since) items.push({t: pr.merged_at, who, kind: 'merge', text: `PR #${pr.number} 병합 — ${pr.title}`, url: pr.html_url});
+    }
+    if (new Date(pr.created_at) > since) items.push({t: pr.created_at, who, kind: 'pr', text: `PR #${pr.number} 열림 — ${pr.title}`, url: pr.html_url});
+  }
+  items.sort((a, b) => a.t < b.t ? 1 : -1);
+  // 사람 상태
+  for (const p of Object.values(people)) {
+    const m = p.last ? (Date.now() - new Date(p.last)) / 60e3 : Infinity;
+    p.state = m < ACTIVE_MIN ? 'active' : m < RECENT_H * 60 ? 'recent' : 'away';
+    // 마지막 활동이 main push(병합)이고 브랜치 push보다 나중이면 "main에 병합" 표시
+    if (p.branch && p.lastType === 'PushEvent' && p.last > (p.branchAt || '')) {
+      const lastMain = mainPushes.filter((x) => x.who === p.login).pop();
+      if (lastMain && lastMain.t > p.branchAt) p.mergedNow = true;
+    }
+  }
+  return {items, openPRs, mergedToday};
+}
+
+function render({items, openPRs, mergedToday}) {
+  const ps = Object.values(people).sort((a, b) => (b.last || '') < (a.last || '') ? -1 : 1);
+  $('#sActive').textContent = ps.filter((p) => p.state === 'active').length + '명';
+  $('#sToday').textContent = ps.reduce((n, p) => n + p.today, 0) + '건';
+  $('#sOpen').textContent = openPRs.length + '건';
+  $('#sMerged').textContent = mergedToday + '건';
+  $('#updated').textContent = '갱신 ' + hhmm(new Date().toISOString());
+  const stLabel = {active: '작업 중', recent: '조금 전까지', away: '자리 비움'};
+  const stColor = {active: 'var(--good)', recent: 'var(--warn)', away: 'var(--away)'};
+  $('#people').innerHTML = ps.map((p) => `
+    <div class="person">
+      <img src="${esc(p.avatar)}" alt="">
+      <div>
+        <span class="nm">${esc(p.name)}</span><span class="st" style="background:${stColor[p.state]}">${stLabel[p.state]}</span>
+        <div class="meta">${p.last ? `마지막 활동 ${ago(p.last)} · 오늘 커밋 ${p.today}건` : '7일 안 활동 없음'}</div>
+        ${p.branch ? `<div class="msg"><span class="chip">${esc(p.branch)}</span>${p.mergedNow ? ' <span class="chip">main에 병합함</span>' : ''}<br>${p.url ? `<a href="${esc(p.url)}" target="_blank">${esc(p.msg || '(커밋 메시지 조회 못 함)')}</a>` : esc(p.msg || '')}</div>` : ''}
+        ${p.prs.length ? `<div class="meta">열린 PR ${p.prs.map((pr) => `<a href="${esc(pr.html_url)}" target="_blank">#${pr.number}</a>`).join(' ')}</div>` : ''}
+      </div>
+    </div>`).join('');
+  $('#prs').innerHTML = openPRs.length ? openPRs.map((pr) => `<div class="pr"><span class="n">#${pr.number}</span><a href="${esc(pr.html_url)}" target="_blank">${esc(pr.title)}</a> <span class="meta" style="color:var(--ink2)">· ${esc(person(pr.user.login).name)} · ${ago(pr.updated_at)}</span></div>`).join('') : '<div class="note">없음</div>';
+  let html = '', day = '';
+  for (const it of items) {
+    const k = dayKey(it.t);
+    if (k !== day) { day = k; html += `<li class="day">${k}</li>`; }
+    const p = person(it.who);
+    html += `<li class="ev"><span class="t">${hhmm(it.t)}</span><span class="dot" style="background:${p.color}"></span><span><span class="who">${esc(p.name)}</span><a href="${esc(it.url)}" target="_blank">${esc(it.text)}</a></span></li>`;
+  }
+  $('#tl').innerHTML = html || '<li class="note">기록 없음</li>';
+  scene.sync(ps);
+}
+
+// ── 픽셀 오피스 ──────────────────────────────────────────
+const scene = (() => {
+  const cv = $('#office'), ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, S = 3;
+  const chars = [];   // {p, x, y, tx, ty, seat, at, dir, step, wait}
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const COFFEE = {x: W - 110, y: H - 70}, PLANT = {x: 70, y: H - 60};
+  function sync(ps) {
+    const n = Math.min(ps.length, 6), gap = Math.min(260, (W - 200) / Math.max(n, 1)), x0 = (W - (n - 1) * gap) / 2;
+    ps.slice(0, n).forEach((p, i) => {
+      let c = chars.find((c) => c.p.login === p.login);
+      const seat = {x: x0 + i * gap, y: 232};
+      if (!c) { c = {p, x: seat.x, y: seat.y, seat, tx: seat.x, ty: seat.y, dir: 1, step: 0, wait: 0}; chars.push(c); }
+      c.p = p; c.seat = seat;
+      if (p.state !== 'away') { c.tx = seat.x; c.ty = seat.y; }
+    });
+  }
+  function px(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), w, h); }
+  function drawRoom() {
+    px(0, 0, W, H, css('--floor'));
+    ctx.fillStyle = css('--floor2');
+    for (let y = 120; y < H; y += 24) for (let x = (y / 24 % 2) * 24; x < W; x += 48) ctx.fillRect(x, y, 24, 24);
+    px(0, 0, W, 120, css('--wall')); px(0, 118, W, 4, css('--wallb'));
+    // 창문
+    for (const wx of [60, W - 200]) { px(wx, 24, 140, 70, '#9fc4de'); px(wx, 24, 140, 70, 'rgba(255,255,255,.15)'); px(wx + 68, 24, 4, 70, css('--wallb')); px(wx, 56, 140, 4, css('--wallb')); ctx.strokeStyle = css('--wallb'); ctx.lineWidth = 4; ctx.strokeRect(wx, 24, 140, 70); }
+    // 벽 안내판
+    px(W / 2 - 110, 14, 220, 40, '#2f5d44'); ctx.fillStyle = '#e8f3ea'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(REPO.split('/')[1].slice(0, 30), W / 2, 40);
+    // 화분·커피
+    px(PLANT.x - 10, PLANT.y, 20, 22, '#9a6a3a'); px(PLANT.x - 16, PLANT.y - 26, 32, 28, '#3f8a4f'); px(PLANT.x - 8, PLANT.y - 38, 16, 16, '#4fa35d');
+    px(COFFEE.x - 24, COFFEE.y - 6, 60, 30, css('--desk')); px(COFFEE.x - 10, COFFEE.y - 32, 26, 28, '#444a50'); px(COFFEE.x - 5, COFFEE.y - 24, 16, 8, '#c93d3d');
+    ctx.fillStyle = css('--ink2'); ctx.font = '11px sans-serif'; ctx.fillText('커피', COFFEE.x + 6, COFFEE.y + 40);
+  }
+  const K = 1.5;   // 책상·사람 확대 배율
+  function drawDesk(c, t) {
+    const active = c.p.state === 'active';
+    ctx.save(); ctx.translate(c.seat.x, c.seat.y); ctx.scale(K, K);
+    const x = 0, y = -22;
+    px(x - 36, y - 54, 72, 30, css('--desk')); px(x - 36, y - 26, 72, 4, css('--desk2'));
+    px(x - 34, y - 24, 4, 20, css('--desk2')); px(x + 30, y - 24, 4, 20, css('--desk2'));
+    px(x - 16, y - 80, 32, 24, '#2c3136');
+    px(x - 13, y - 77, 26, 18, active ? (Math.floor(t / 400) % 2 ? '#8be1a0' : '#6fd38a') : c.p.state === 'recent' ? '#4a6b86' : '#1d2124');
+    px(x - 4, y - 56, 8, 4, '#2c3136');
+    ctx.restore();
+  }
+  function drawChar(c, t) {
+    const walking = Math.abs(c.x - c.tx) + Math.abs(c.y - c.ty) > 1;
+    const bob = walking ? (Math.floor(t / 150) % 2) : (c.p.state === 'active' ? Math.floor(t / 300) % 2 : 0);
+    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(K, K);
+    const x = 0, y = 0, col = c.p.color, skin = '#f1c9a5', hair = '#2b2b2b';
+    px(x - 9, y - 30 - bob, 18, 10, hair); px(x - 9, y - 22 - bob, 18, 12, skin);   // 머리
+    px(x - 6 + (c.dir > 0 ? 2 : -2), y - 17 - bob, 3, 3, '#222'); px(x + 2 + (c.dir > 0 ? 2 : -2), y - 17 - bob, 3, 3, '#222');
+    px(x - 10, y - 10 - bob, 20, 16, col);   // 몸
+    px(x - 14, y - 8 - bob + (c.p.state === 'active' && !walking ? bob * 2 : 0), 4, 10, skin); px(x + 10, y - 8 - bob + (c.p.state === 'active' && !walking ? (1 - bob) * 2 : 0), 4, 10, skin);
+    const l = walking ? (Math.floor(t / 150) % 2 ? 3 : -3) : 0;
+    px(x - 8, y + 6, 6, 8 + l, '#33475f'); px(x + 2, y + 6, 6, 8 - l, '#33475f');   // 다리
+    if (!walking && c.p.state === 'away' && c.at === 'coffee') px(x + 12, y - 12, 7, 8, '#fff'), px(x + 13, y - 11, 5, 4, '#6b3e1e');
+    ctx.restore();
+  }
+  function bubble(c) {
+    const br = (c.p.branch || '').replace(/^claude\//, '');
+    const what = br ? (c.p.mergedNow ? `${br} → main` : br) : (c.p.state === 'away' ? '자리 비움' : '대기');
+    const text = `${c.p.name} · ${what.length > 30 ? what.slice(0, 29) + '…' : what}`;
+    ctx.font = '12px ui-monospace, Consolas, monospace'; ctx.textAlign = 'center';
+    const atDesk = Math.abs(c.x - c.seat.x) + Math.abs(c.y - c.seat.y) <= 1;
+    const w = Math.min(260, ctx.measureText(text).width + 16), x = Math.max(w / 2 + 4, Math.min(W - w / 2 - 4, c.x)), y = atDesk ? c.y - 168 : c.y - 56;
+    px(x - w / 2, y - 16, w, 20, css('--panel')); ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.strokeRect(x - w / 2 + .5, y - 15.5, w, 20);
+    px(x - 3, y + 4, 6, 4, css('--panel'));
+    ctx.fillStyle = css('--ink'); ctx.fillText(text, x, y - 2);
+  }
+  function tick(t) {
+    for (const c of chars) {
+      if (c.p.state === 'away' && Math.abs(c.x - c.tx) + Math.abs(c.y - c.ty) <= 1) {
+        if (c.wait <= 0) { const spots = [COFFEE, PLANT, c.seat, {x: 200 + Math.random() * (W - 400), y: 230 + Math.random() * 60}]; const s = spots[Math.floor(Math.random() * spots.length)]; c.tx = s.x + (s === COFFEE ? -34 : s === PLANT ? 26 : 0); c.ty = s.y + (s === c.seat ? 0 : 6); c.at = s === COFFEE ? 'coffee' : ''; c.wait = 3000 + Math.random() * 5000; }
+        else c.wait -= 16;
+      }
+      const dx = c.tx - c.x, dy = c.ty - c.y, d = Math.hypot(dx, dy);
+      if (d > 1) { const v = Math.min(d, 1.1); c.x += dx / d * v; c.y += dy / d * v; c.dir = dx >= 0 ? 1 : -1; }
+    }
+    drawRoom();
+    for (const c of chars) drawDesk(c, t);
+    for (const c of chars.slice().sort((a, b) => a.y - b.y)) { drawChar(c, t); bubble(c); }
+    requestAnimationFrame(tick);
+  }
+  drawRoom(); requestAnimationFrame(tick);
+  return {sync};
+})();
+
+$('#repoName').textContent = REPO;
+$('#btnRefresh').onclick = load;
+$('#btnToken').onclick = () => { const v = prompt('GitHub 토큰(읽기 전용, public_repo면 충분). 비우면 삭제', token()); if (v !== null) { try { v ? localStorage.setItem('gh_token', v.trim()) : localStorage.removeItem('gh_token'); } catch {} load(); } };
+$('#btnTheme').onclick = () => { const r = document.documentElement; const cur = r.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); r.dataset.theme = cur === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('theme', r.dataset.theme); } catch {} };
+try { const th = localStorage.getItem('theme'); if (th) document.documentElement.dataset.theme = th; } catch {}
+load(); setInterval(load, POLL_MS);
+</script>
+</body>
+</html>

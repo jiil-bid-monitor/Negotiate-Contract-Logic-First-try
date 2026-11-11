@@ -2063,6 +2063,22 @@ def test_applicant_signature_line_keeps_width(tmp_path: Path):
         assert _span(after) <= _span(before), (before, after)
 
 
+def test_pledge_line_with_preset_ceo_word(tmp_path: Path):
+    """11/11 '서 약 자 : 업체 대표          (인)' — 대표 성명이 비었음. '업체 대표' 뒤에 이름, 줄 너비는 그대로."""
+    from html import unescape
+
+    from quantdocs.fill import _span, fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    line = "     서 약 자 : 업체 대표                    (인)"
+    src = _mini_hwpx(tmp_path / "t.hwpx", p("청렴계약 이행서약서") + p("2026년      월      일") + p(line))
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "이윤봉"}))
+    text = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    lines = [unescape(re.sub(r"<[^>]+>", "", m)) for m in re.findall(r"<hp:p\b.*?</hp:p>", text, re.S)]
+    assert re.sub(r"\s+", " ", lines[2]).strip() == "서 약 자 : 업체 대표 이윤봉 (인)"
+    assert _span(lines[2]) <= _span(line)
+
+
 def test_slash_signature_and_bid_rep_group():
     """11/10 경남교육청: 서약서 '업체명      / 대표자 :      (인)', 위임장 묶음 머리 '입찰 대표자', 'E-Mail' 이름표."""
     from quantdocs.fill import _label_key, _row_group, Cell

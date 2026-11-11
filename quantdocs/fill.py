@@ -673,6 +673,33 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 rep.filled.append(f"서명 줄 {_sq(bare.group(1))} → {name}")
             del gap
             continue
+        # 쌍점 뒤에 '업체 대표'·'대표이사'가 미리 적힌 서명 줄 '서 약 자 : 업체 대표          (인)'(11/11 사용자 제보 — 성명이 비었음)
+        # → 그 글 뒤 빈칸에 대표자 이름(빈칸은 이름 너비만큼 뺌, 모자라면 줄 앞 들여쓰기를 줄임)
+        pre = re.fullmatch(rf"\s*(?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)"
+                           rf"\s*[:：]\s*((?:업\s*체|회\s*사)?\s*대\s*표(?:\s*자|\s*이\s*사)?)\s{{3,}}{_SEAL_TAIL}.*", text)
+        if pre and _value("대표자", vault):
+            name = _value("대표자", vault)
+
+            def put_pre(mm, done=[]):
+                body = mm.group(2)
+                m2 = None if done else re.search(r"((?:업\s*체|회\s*사)?\s*대\s*표(?:\s*자|\s*이\s*사)?)( {3,})", body)
+                if not m2:
+                    return mm.group(0)
+                done.append(1)
+                need = _span(name) + 1 + -(-_span(name) // 10)
+                room = len(m2.group(2))
+                body = body[:m2.end(1)] + " " + _mark(name) + " " * max(2, room - need) + body[m2.end():]
+                cut = max(0, need + 2 - room)
+                if cut:
+                    lead = len(body) - len(body.lstrip(" "))
+                    body = body[min(lead, cut):]
+                return mm.group(1) + body + mm.group(3)
+            seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", put_pre, xml[s:e], flags=re.S)
+            if seg != xml[s:e]:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 {_sq(pre.group(1))} → {name}")
+                continue
         # '신청인 : 대표자 (주)        대표자 성명 :        (인)' — '(주)' 뒤·'성명 :' 뒤가 빈 서명 줄(11/04 서식 2)
         if re.search(r"\(주\)\s{3,}", text) and re.search(rf"성\s*명\s*[:：]\s{{3,}}(?:{_SEAL_TAIL})?\s*$", text) \
                 and re.match(r"\s*(?:신청인|제안자|입찰자|신청자|대표자)", text):

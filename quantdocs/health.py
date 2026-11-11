@@ -10,8 +10,8 @@
   기준 없음        — 자동 채점 항목(기술인력·신용·신인도·특허)인데 본문에 그 항목 기준이 없음
   빈 칸            — 회사 정보 이름표인데 채운 뒤에도 빈 칸(`fill.unfilled_slots`)
   모르는 이름표    — 회사 정보로 보이는 낱말이 든 이름표 옆이 빈 칸인데 규칙이 그 이름표를 모름
-회사 값은 가짜(FAKE)로 채움 — 결과엔 회사 정보가 없음. 과거 제안요청서 검사(scripts/quant_fill_check.py)와
-새 공고 미리 검사(webapp/quantprecheck.py)가 같이 씀.
+회사 값은 가짜(FAKE)로 채움 — 결과엔 회사 정보가 없음. 과거 제안요청서 검사(scripts/quant_fill_check.py)가 씀
+(새 공고 미리 검사·개발자 방 알림은 11/11 사용자 결정으로 삭제).
 """
 
 from __future__ import annotations

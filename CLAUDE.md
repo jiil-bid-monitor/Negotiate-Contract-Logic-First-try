@@ -16,6 +16,12 @@
 병합 안 한 브랜치, 서버 PC 반영 여부) ③ 다음에 할 일(우선순위 순, 결정 대기 항목은 "사용자 결정 대기"로) ④ 지켜야 할 것(한국어 답변, 요청 전엔 고치지 않기 등).
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 
+## 2026-11-11 — 정량평가서 새 공고 미리 검사·개발자 방 알림 삭제 (브랜치 `claude/remove-quant-precheck`, 사용자 결정 "알림 기능은 필요없어")
+
+- 사용자 선택: 알림만 끄기·기본값 끄기가 아니라 **미리 검사 통째로 삭제** — `webapp/quantprecheck.py`, `server.py`의 시작 코드, 관련 시험을 지움. 다시 만들지 말 것.
+- 남긴 것: 넓힌 검사 `quantdocs/health.py`·`scripts/quant_fill_check.py`(과거 제안요청서 검사 — 규칙 보강용), `nego.telegram.send_dev_alert`(1억 미만·회사 서류 알림이 씀).
+- 서버 PC에 남은 `data/quant_precheck.json`·`.env` `QUANT_PRECHECK`는 이제 안 씀(지워도 됨).
+
 ## 2026-11-11 — 나라장터 조회기간 한도 7일 대응 (브랜치 `claude/query-7days`, 사용자 요청 "00시 기준으로 정확히 7일")
 
 - 계기: 웹앱 '최근 7일' 수집이 resultCode=07(입력범위값 초과). 공공데이터포털 입찰공고정보서비스 공지(11/10): **전체 오퍼레이션 조회기간 1개월 → 7일**(부하 절감).
@@ -40,7 +46,7 @@
   기준 없음(자동 채점 항목인데 본문 기준 없음)·빈 칸(`unfilled_slots`)·**모르는 이름표**(`unknown_labels` — 회사 정보 낱말(`_HINT`)이 든 표 이름표 옆이 빈 칸인데 `_label_key`가 모름,
   일자·담당·휴대·서명 등 `_INTENDED_BLANK`·대리인·발행자 줄은 뺌). `scripts/quant_fill_check.py`는 이제 **사업 폴더(docs/raw/<연도>/<사업>) 단위**로 이 검사를 돌려
   문제 종류별 건수 / 걸린 사업 수를 보임(결과 `output/quant_fill_check.csv` — 공개 금지), 사업마다 임시 폴더를 지움(끊긴 검사가 /tmp에 11GB 남긴 일).
-- ② **`webapp/quantprecheck.py` `Precheck`**(서버 PC만 — viewer·`QUANT_PRECHECK=0`·나라장터 인증키 없으면 끔): 10분마다, 수집·정량평가서 작업 중이 아니면 최신 수집 결과의
+- ② **(11/11 사용자 결정으로 삭제 — 아래는 기록만)** **`webapp/quantprecheck.py` `Precheck`**(서버 PC만 — viewer·`QUANT_PRECHECK=0`·나라장터 인증키 없으면 끔): 10분마다, 수집·정량평가서 작업 중이 아니면 최신 수집 결과의
   **협상·규격가격동시입찰 본공고 후보**를 한 번에 8건까지 첨부를 받아(`g2b.fetch_notice` → `build.main_docs`, 서식이 없으면 나머지 첨부까지) `health.check`, 문제가 있으면
   **개발자 방(`TELEGRAM_DEV_CHAT_ID`)에 공고마다 한 통**(`nego.telegram.send_dev_alert`). 기록 `data/quant_precheck.json`(공고번호-차수당 한 번, 차수 바뀌면 다시, 검사 실패는 3번까지 다시,
   120일 지난 기록 지움), 받은 첨부는 바로 지움. 알림 설정(`TELEGRAM_BOT_TOKEN`·`TELEGRAM_DEV_CHAT_ID`)이 서버 PC `.env`에 없으면 서버 기록에만 남김.

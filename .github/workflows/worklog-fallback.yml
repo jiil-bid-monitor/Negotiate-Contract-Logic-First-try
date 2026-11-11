@@ -1,0 +1,46 @@
+name: 작업 기록 자동 정리
+run-name: >-
+  작업 기록 자동 정리 (${{ github.event_name == 'schedule' && '예약' || format('수동 · {0}', inputs.date || '날짜 자동') }})
+
+# 평일 18:30(KST)이 지나도 그날 작업 기록(docs/worklog/날짜*.md)이 없으면, GitHub 기록으로 대신 정리해 PR로 올린다.
+#  · 이미 main에 있거나 열린 PR에 들어 있으면 아무것도 하지 않는다.
+#  · 그날 병합된 PR·main에 바로 올린 커밋·손댄 열린 PR을 사람별로 모은 초안이다 (AI 요약 아님).
+#    무엇을 왜 했는지·결정·내일 할 일은 사람이 채우고 병합한다.
+#  · main에 바로 넣지 않고 `worklog-auto/날짜` 브랜치 + PR로 올린다.
+#  · GitHub 예약 실행은 이 저장소에서 1~3시간 늦게 시작하곤 한다(daily.yml 설명 참고). "18:30 이후"면 되므로 그대로 둔다.
+#    정시에 돌리고 싶으면 daily.yml처럼 외부 예약(cron-job.org)이 workflow_dispatch를 부르게 하면 된다.
+#  · 수동: Actions 탭 → 이 워크플로 → "Run workflow". date에 지난 날짜를 넣으면 그날 것을 만든다.
+#  · 저장소 설정 Actions → General → "Allow GitHub Actions to create and approve pull requests"가 켜져 있어야 PR을 연다.
+on:
+  schedule:
+    - cron: "30 9 * * 1-5"   # 09:30 UTC = 18:30 KST — 평일
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "정리할 날짜 (YYYY-MM-DD). 비우면 가장 최근에 18:30이 지난 날 (18:30 전에 돌리면 어제)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: worklog-fallback
+  cancel-in-progress: false
+
+jobs:
+  worklog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 저장소 받기 (커밋 기록 전체, 파일 내용은 필요할 때만)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - name: 작업 기록이 없으면 대신 정리해 PR로 올림
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKLOG_DATE: ${{ inputs.date }}
+        run: python3 .github/scripts/worklog_fallback.py

@@ -992,12 +992,17 @@ def write_sheet(sheet: NoticeSheet, out_dir: Path, company: Path | None = None, 
     ref = ref or date.today()
     head_fill, head_font = PatternFill("solid", fgColor="1B6E43"), Font(bold=True, color="FFFFFF")
 
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
+    def clean(v):  # 한글 문서에서 읽은 글에 섞인 제어 문자(엑셀이 못 받음)는 지움 — '…(구(舊)…)…' 서류 이름(11/11 사용자 제보)
+        return ILLEGAL_CHARACTERS_RE.sub("", v) if isinstance(v, str) else v
+
     def table(ws, heads: list[str], rows: list[list], widths: list[int]):
-        ws.append(heads)
+        ws.append([clean(h) for h in heads])
         for c in ws[1]:
             c.fill, c.font = head_fill, head_font
         for r in rows:
-            ws.append(r)
+            ws.append([clean(v) for v in r])
         for i, w in enumerate(widths):
             ws.column_dimensions[chr(65 + i)].width = w
         for row in ws.iter_rows(min_row=2):

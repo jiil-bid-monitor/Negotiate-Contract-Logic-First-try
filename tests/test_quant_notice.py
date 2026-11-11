@@ -367,3 +367,15 @@ def test_byeolji_form_heads():
         m = _HEAD.match(sq(text))
         assert m and ((m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))) == want, text
     assert _FORM_HEAD.match("【별지서식 6】 재직증명서").group(1) == "6"
+
+
+def test_write_sheet_drops_control_characters(tmp_path: Path):
+    """11/11 사용자 제보: 서류 이름 '소프트웨어사업자일반현황관리확인서(구(舊)…)'에 제어 문자가 섞여
+    엑셀(openpyxl)이 'cannot be used in worksheets'로 멈추고 정량평가서 만들기가 실패 — 엑셀에 쓸 때 제어 문자는 지움."""
+    from quantdocs.notice import NoticeSheet, write_sheet
+
+    name = "소프트웨어사업자일반현황관리확인서(구(\x0b舊)소프트웨어사업자신고확인서)1부\x02.hwp"
+    sheet = NoticeSheet(files=[name], forms=[], submit_items=[], track_reqs=[], deadlines=[])
+    out = write_sheet(sheet, tmp_path, ref=dt.date(2026, 11, 11))
+    got = load_workbook(out)["공고정보"]["B2"].value
+    assert got == "소프트웨어사업자일반현황관리확인서(구(舊)소프트웨어사업자신고확인서)1부.hwp"

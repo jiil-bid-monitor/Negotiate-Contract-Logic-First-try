@@ -237,8 +237,9 @@ class Uploader:
                 moved += 1
         self.pending.pop(chat, None)
         docs.run(folder, self.today(), lambda text: None, settle=0, alert_due=False)
-        self._say(chat, f"<b>{html.escape(kind)}</b> 뺐습니다 — 파일 {moved}개를 [이전 서류]로 옮김. "
-                        "다시 필요하면 /upload 로 넣으면 됩니다.")
+        cert = self._cert(kind, "사용 안 함")
+        self._say(chat, f"<b>{html.escape(kind)}</b> 뺐습니다 — 파일 {moved}개를 [이전 서류]로 옮김." + cert
+                        + "\n다시 필요하면 /upload 로 넣으면 됩니다.")
 
     def _save(self, chat: str, state: dict, end: date | None, reply_to: int | None) -> None:
         from under100m import docs
@@ -250,6 +251,17 @@ class Uploader:
         self.pending.pop(chat, None)
         notes: list[str] = []
         docs.run(folder, self.today(), notes.append, settle=0, alert_due=False)
-        self._say(chat, f"저장했습니다: <code>{html.escape(target.name)}</code>"
+        cert = self._cert(state["kind"], end) if end else ""
+        self._say(chat, f"저장했습니다: <code>{html.escape(target.name)}</code>" + cert
                         + ("\n\n" + html.escape("\n".join(notes)) if notes else "")
-                        + "\n/docs 로 유효기간을 확인할 수 있습니다.", reply_to)
+                        + "\n\n/docs 로 유효기간을 확인할 수 있습니다.", reply_to)
+
+    def _cert(self, kind: str, value: date | str) -> str:
+        """인증서갱신.xlsx(차장님 표)의 그 서류 만료일 칸도 고친다 — 알림·/docs가 이 표를 먼저 보므로(11/11 사용자 요청)."""
+        try:
+            hit = docexpiry.set_cert(self.folder() / docexpiry.CERT_FILE, kind, value)
+        except OSError:
+            return "\n⚠ 인증서갱신.xlsx가 열려 있어 못 고쳤습니다 — 엑셀을 닫고 직접 고쳐 주세요."
+        if not hit:
+            return ""
+        return "\n인증서갱신.xlsx 만료일도 " + (f"{value}로 고쳤습니다." if isinstance(value, date) else f"'{value}'로 바꿨습니다.")

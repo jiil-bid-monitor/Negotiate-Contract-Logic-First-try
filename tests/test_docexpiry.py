@@ -48,6 +48,13 @@ class DocExpiryTest(unittest.TestCase):
                                                  ("직접생산(전시)", date(2026, 11, 11)), ("(그리다) 가구-책장", date(2026, 11, 20)),
                                                  ("데이터처리서비스", date(2027, 1, 2)), ("중소기업확인서", date(2027, 3, 31)),
                                                  ("(그리다) 조형물", date(2027, 6, 1)), ("조형물", date(2027, 6, 17))])
+        # /upload·/remove가 표 만료일 칸을 고친다 — 지일 조형물만, 그리다 조형물은 그대로
+        self.assertTrue(D.set_cert(self.dir / D.CERT_FILE, "직접생산확인증명서(조형물)", date(2029, 1, 5)))
+        self.assertTrue(D.set_cert(self.dir / D.CERT_FILE, "(그리다) 여성기업", "사용 안 함"))
+        self.assertFalse(D.set_cert(self.dir / D.CERT_FILE, "없는서류", date(2029, 1, 5)))
+        got = dict(D.read_cert(self.dir / D.CERT_FILE))
+        self.assertEqual((got["조형물"], got["(그리다) 조형물"]), (date(2029, 1, 5), date(2027, 6, 1)))
+        self.assertNotIn("(그리다) 여성기업", got)
 
     def test_alert_once(self):
         docs = D.read_docs(self.dir)
@@ -57,7 +64,7 @@ class DocExpiryTest(unittest.TestCase):
         self.assertEqual(D.due_alert(docs, date(2026, 11, 9), set(keys)), (None, []))
         self.assertEqual(D.due_alert(docs, date(2026, 11, 1), set())[0], None, "8일 남으면 아직")
         text, again = D.due_alert(docs, date(2026, 11, 11), set(keys))
-        self.assertIn("직접생산(전시) — 2026-11-11 (오늘 만료)", text, "당일에도 그대로면 한 번 더")
+        self.assertIn("2026-11-11 · 오늘 만료", text, "당일에도 그대로면 한 번 더")
         self.assertIn("/remove", text)
         self.assertEqual(D.due_alert(docs, date(2026, 11, 11), set(keys) | set(again)), (None, []))
 

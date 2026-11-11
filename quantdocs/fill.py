@@ -1297,7 +1297,8 @@ def _align_numbers(xml: str, edits: list, chars: "_Chars", override: dict[int, s
     (11/04 사용자 요청: 서식 1에서 FAX만 가운데, 법인등록번호·전화는 왼쪽이라 어긋나 보임)."""
     by_col: dict[int, list[tuple[Cell, str]]] = {}
     for cell, lines, _keep in edits:
-        if not lines or len(lines) != 1 or not _NUMBER.fullmatch(lines[0].strip()):
+        # '031-000-0000 (mail@…)'(전화(전자우편) 칸, 11/11)도 번호 칸으로 — 같은 열 FAX가 가운데면 같이 가운데
+        if not lines or len(lines) != 1 or not _NUMBER.fullmatch(re.sub(r"\s*\([^()]*@[^()]*\)$", "", lines[0].strip())):
             continue
         m = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[cell.start:cell.end])
         if m:

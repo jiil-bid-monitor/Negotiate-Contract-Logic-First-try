@@ -715,6 +715,15 @@ def test_number_cells_follow_centered_sibling(tmp_path: Path):
             for t in ("110111-1234567", "강원 정선", "033-111-2222", "033-111-3333")}
     # 주소(글)는 가운데로 안 바꿈 — 원래 양쪽 정렬이라 왼쪽 정렬 사본(11/05: 넘친 줄 글자 사이 벌어짐 방지)
     assert para == {"110111-1234567": "7", "강원 정선": "8", "033-111-2222": "7", "033-111-3333": "7"}
+    # 11/11 '접수자전화(전자우편)' = '전화 (이메일)'도 번호 칸처럼 가운데
+    body = _tbl([[_c(0, 0, "FAX"), fax.replace('rowAddr="3"', 'rowAddr="0"')], [_c(0, 1, "접수자전화(전자우편)"), _c(1, 1, "")]])
+    src = _mini_hwpx(tmp_path / "b.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v.info["이메일"] = "a@b.kr"
+    fill_hwpx(src, tmp_path / "bo.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "bo.hwpx").read("Contents/section0.xml").decode()
+    assert re.search(r'paraPrIDRef="7"(?:(?!paraPrIDRef).)*?033-111-2222 \(a@b\.kr\)', out, re.S)
 
 
 def test_seal_cell_name_centered(tmp_path: Path):

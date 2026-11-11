@@ -2184,6 +2184,36 @@ def test_filled_value_always_plain_humanmyeongjo(tmp_path: Path):
     assert 'hangul="1"' in block and 'latin="1"' in block and "bold" not in block
 
 
+def test_history_cell_left_aligned_with_hanging_indent(tmp_path: Path):
+    """11/11 사용자 요청: 연혁 칸이 양식 문단(가운데 정렬)을 따라 날짜가 들쭉날쭉 — 왼쪽 정렬, 둘째 줄은 날짜 뒤 내용 시작에 맞춰 내어쓰기.
+    이름표 문단('2. 주요 연혁')의 모양은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:fontfaces><hh:fontface lang="HANGUL" fontCnt="1"><hh:font id="0" face="휴먼명조" type="TTF"/></hh:fontface></hh:fontfaces>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1100" textColor="#000000"><hh:fontRef hangul="0"/></hh:charPr></hh:charProperties>'
+              '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="CENTER" vertical="BASELINE"/>'
+              '<hh:margin><hh:intent value="0" unit="HWPUNIT"/><hh:left value="0" unit="HWPUNIT"/><hh:right value="0" unit="HWPUNIT"/>'
+              '<hh:prev value="0" unit="HWPUNIT"/><hh:next value="0" unit="HWPUNIT"/></hh:margin></hh:paraPr></hh:paraProperties></hh:head>')
+    cell = lambda c, r, t: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                            f'<hp:cellAddr colAddr="{c}" rowAddr="{r}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    body = "<hp:p><hp:run><hp:tbl><hp:tr>" + cell(0, 0, "2. 주요 연혁(요약)") + "</hp:tr><hp:tr>" + cell(0, 1, "") + "</hp:tr></hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "t.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상"}, history=[{"연월일": "2009.09", "내용": "(주)가상 법인설립"},
+                                                            {"연월일": "2020.06", "내용": "아주 긴 정부 과제 선정"}])
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    pid = re.search(r'<hp:p paraPrIDRef="(\d+)"><hp:run charPrIDRef="\d+"><hp:t>2009\.09  ', out).group(1)
+    assert re.search(r'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>2\. 주요 연혁', out)  # 이름표 문단은 그대로
+    block = re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)
+    assert pid != "0" and 'horizontal="LEFT"' in block
+    intent = int(re.search(r'<hh:intent value="(-?\d+)"', block).group(1))
+    left = int(re.search(r'<hh:left value="(-?\d+)"', block).group(1))
+    assert intent < 0 and left == 0  # 한글 내어쓰기(음수 intent) — 첫 줄은 그대로, 둘째 줄부터 날짜 너비만큼 들어감(11/05 '주 소 :'와 같은 방식)
+
+
 def test_selfscore_nopoints_layout_pieces():
     """11/10 경남교육청 자체평가표: '3건 ~ 2건' 구간, '배점(점)' 머리."""
     from quantdocs.selfscore import parse_range

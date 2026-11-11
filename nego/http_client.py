@@ -350,7 +350,11 @@ class DataGoKrClient:
 
 
 def chunk_date_range(begin: str, end: str, days: int) -> Iterator[tuple[str, str]]:
-    """조회 기간을 days 단위로 쪼갠다. 형식은 API가 요구하는 'YYYYMMDDHHMM'."""
+    """조회 기간을 날짜 days개씩 쪼갠다. 형식은 API가 요구하는 'YYYYMMDDHHMM'.
+
+    청크 끝은 시작 날짜 + (days-1)일의 23:59 — 나라장터 한도는 시간이 아니라 날짜 수로 센다
+    (11/11 실측: 11/03 00:00~11/09 23:59 통과, 11/04 11:26~11/11 11:25처럼 7일 - 1분이어도 날짜 8개면 resultCode=07).
+    """
     from datetime import datetime, timedelta
 
     fmt = "%Y%m%d%H%M"
@@ -359,6 +363,7 @@ def chunk_date_range(begin: str, end: str, days: int) -> Iterator[tuple[str, str
 
     cursor = start_dt
     while cursor <= end_dt:
-        chunk_end = min(cursor + timedelta(days=days) - timedelta(minutes=1), end_dt)
+        day0 = cursor.replace(hour=0, minute=0)
+        chunk_end = min(day0 + timedelta(days=days) - timedelta(minutes=1), end_dt)
         yield cursor.strftime(fmt), chunk_end.strftime(fmt)
         cursor = chunk_end + timedelta(minutes=1)

@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 COMMANDS = [("notice", "공고번호로 공고 요약 — /notice R26BK01234567"),
             ("deadline", "N일 안에 마감하는 공고 — /deadline 3"),
             ("today", "가장 최근 매일 보고 다시 받기"),
-            ("docs", "회사 서류 유효기간 (서류목록.xlsx)"),
+            ("docs", "회사 서류 유효기간 (인증서갱신.xlsx)"),
             ("upload", "회사 서류 PDF 넣기 (봇 메시지에 답장으로)"),
             ("remove", "필요 없는 서류를 목록·알림에서 빼기"),
             ("help", "명령어 목록")]

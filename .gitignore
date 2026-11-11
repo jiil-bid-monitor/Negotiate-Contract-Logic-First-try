@@ -25,3 +25,6 @@ exclusion/
 tools/hwp2hwpx/build/
 # 회사 자료 잠금 묶음은 비공개 레포 jiil-quant-docs에 둠(공개 레포라 올리지 않음 — quantdocs.vault.sealed_path가 옆 폴더에서 읽음)
 vault/
+
+# 차장님이 주신 회사 자료(인증서 만료일 등) — 공개 저장소에 올리지 않음
+자료/

@@ -228,6 +228,8 @@ def _label_key(text: str) -> str | None:
         return "_corp_biz"
     if t in ("서약자", "서약인", "각서인", "확약자"):  # 청렴계약 이행서약서 '서 약 자 :   (인)' = 대표자 이름(11/05)
         return "대표자"
+    if "전화" in t and re.search(r"전자우편|이메일|e-?mail", t, re.I):
+        return "_tel_mail"  # '접수자전화(전자우편)' = 전화 + 이메일(11/11 사용자 요청 — 전화만 들어갔음)
     for words, key in LABELS:  # 앞머리가 맞는 것 먼저('홈페이지주소'는 주소가 아니라 홈페이지)
         if any(t.startswith(w) for w in words):
             return key
@@ -259,6 +261,9 @@ def _value(key: str, vault) -> str:
                  if d.get("서류 이름") and str(d.get("상태") or "") != "재발급"
                  and re.search(r"자격|직접생산|면허|등록|신고", str(d.get("서류 종류") or "") + str(d.get("서류 이름") or ""))]
         return ", ".join(dict.fromkeys(names))
+    if key == "_tel_mail":  # '031-000-0000 (mail@…)', 이메일이 없으면 전화만
+        tel, mail = _value("전화번호", vault), _value("이메일", vault)
+        return f"{tel} ({mail})" if tel and mail else tel or mail
     if key == "사업분야":
         return vault.info.get("사업분야") or vault.info.get("종목") or vault.info.get("업태") or ""
     if key in ("신용평가 평가일", "신용평가 유효기간"):  # '2026-06-16' → '2026. 06. 16.'

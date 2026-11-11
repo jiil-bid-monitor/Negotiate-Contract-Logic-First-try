@@ -1162,9 +1162,12 @@ def test_main_docs_blank_forms_and_fax_override(tmp_path: Path, monkeypatch):
     assert not is_manual("입찰보증금 지급 확약서") and not is_manual("사업수행능력 자기평가 심사표")
     monkeypatch.setattr(vault, "ENV_FILE", tmp_path / "none.env")
     monkeypatch.setenv("QUANT_FAX", "000-000-0000")
+    monkeypatch.setenv("QUANT_EMAIL", "mail@example.com")  # 11/11 이메일·홈페이지도 .env로
+    monkeypatch.setenv("QUANT_HOMEPAGE", "https://example.com/")
     v = vault.Vault({}, info={"팩스번호": "111-111-1111"})
     importer.enrich_vault(v)
     assert v.info["팩스번호"] == "000-000-0000"
+    assert v.info["이메일"] == "mail@example.com" and v.info["홈페이지"] == "https://example.com/"
 
 
 def test_track_form_delivery_amount_and_total_cells(tmp_path: Path):
@@ -2312,3 +2315,19 @@ def test_office_address_with_paren_label(tmp_path: Path):
     xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
     assert got[(0, 1)] == "(주)가상" and got[(1, 1)] == "가상시 가상로 1"
+
+
+def test_tel_with_email_label(tmp_path: Path):
+    """11/11 '접수자전화(전자우편)' 칸에 전화만 들어갔음 — 전화 + (이메일), 이메일이 없으면 전화만."""
+    from quantdocs.fill import _cells, _spans, _label_key, fill_hwpx
+
+    assert _label_key("접수자전화(전자우편)") == "_tel_mail" and _label_key("전화(E-mail)") == "_tel_mail"
+    assert _label_key("전자우편") == "이메일" and _label_key("전화번호") == "전화번호"
+    body = _tbl([[_c(0, 0, "접수자전화"), _c(1, 0, "")], [_c(0, 1, "(전자우편)"), _c(1, 1, "")],
+                 [_c(0, 2, "접수자전화(전자우편)"), _c(1, 2, "")]])
+    for info, want in (({"전화번호": "033-111-2222", "이메일": "a@b.kr"}, "033-111-2222 (a@b.kr)"),
+                       ({"전화번호": "033-111-2222"}, "033-111-2222")):
+        fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "o.hwpx", vault.Vault({}, info=info))
+        xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+        got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
+        assert got[(2, 1)] == want

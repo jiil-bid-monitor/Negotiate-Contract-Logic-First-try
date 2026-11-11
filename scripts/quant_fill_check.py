@@ -1,13 +1,13 @@
 """정량평가서 서식 채우기 검사 — 과거 제안요청서 묶음으로 '못 채운 칸'을 센다(2026-11-06 사용자 결정: 규칙 + 검사 묶음).
 
 비공개 레포 jiil-past-contracts의 docs/raw 원본(제안요청서·과업지시서·공고문, .hwp는 python-hwpx로 HWPX로 바꿈)에서
-서식을 잘라(forms_cut.cut) 가짜 회사 정보로 채우고(fill_hwpx — 만들기와 같은 규칙: 직접 기입 서식은 서명 줄만, 질의서·공동수급 서식은 뺌),
-채운 뒤에도 회사 정보 이름표가 빈 자리(fill.unfilled_slots)를 센다. 규칙을 고칠 때마다 돌려 숫자가 나빠지지 않는지 본다.
+사업 폴더마다 `quantdocs.health.check`(새 공고 미리 검사와 같은 검사)로 서식 목록 ↔ 잘린 서식, 자기평가표·배점기준,
+가짜 회사 정보로 채운 뒤 빈 칸·모르는 이름표를 센다(11/10 — 예전엔 빈 칸만). 규칙을 고칠 때마다 돌려 숫자가 나빠지지 않는지 본다.
 
     py scripts/quant_fill_check.py --jiil ../jiil-past-contracts            # 전부
     py scripts/quant_fill_check.py --jiil ../jiil-past-contracts --limit 20 # 시험
 
-결과: output/quant_fill_check.csv(서식마다 한 줄 — 공개 금지 폴더), 화면에 요약(빈 자리 종류별 건수·자주 놓치는 서식).
+결과: output/quant_fill_check.csv(문제마다 한 줄 — 공개 금지 폴더), 화면에 요약(문제 종류별 건수·걸린 사업 수).
 회사 값은 가짜라 결과 파일에 회사 정보는 없다.
 """
 
@@ -19,32 +19,19 @@ import re
 import sys
 import tempfile
 import time
-import zipfile
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from quantdocs import vault as vault_mod  # noqa: E402
-from quantdocs.build import _BLANK_FORM, is_manual  # noqa: E402
-from quantdocs.fill import fill_hwpx, unfilled_slots  # noqa: E402
-from quantdocs.forms_cut import cut  # noqa: E402
+from quantdocs import health  # noqa: E402
 
 DOC_NAME = re.compile(r"제\s*안\s*요\s*청|과\s*업\s*지\s*시|공\s*고")
-FAKE = {"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원특별자치도 정선군 가상로 1", "전화번호": "033-000-0000",
-        "팩스번호": "033-000-0001", "사업자등록번호": "000-00-00000", "법인등록번호": "000000-0000000", "이메일": "a@example.com",
-        "설립일": "2009-09-23", "대표자 주민등록번호": "800101-1******", "업태": "제조업", "종목": "전시물"}
 
 
 def to_hwpx(path: Path, work: Path) -> Path | None:
-    """원본 → HWPX 경로. .hwp는 python-hwpx로 바꿈(서버 PC 자바 변환기 없이도)."""
-    if path.suffix.lower() == ".hwpx":
-        try:
-            with zipfile.ZipFile(path) as z:
-                return path if any(n.startswith("Contents/section") for n in z.namelist()) else None
-        except zipfile.BadZipFile:
-            pass
+    """옛 한글(.hwp) → HWPX(python-hwpx — 서버 PC 자바 변환기 없이도). health.check의 convert로 씀."""
     try:
         from hwpx.hwp5.package import convert, to_hwpx_bytes
     except ImportError:
@@ -57,8 +44,9 @@ def to_hwpx(path: Path, work: Path) -> Path | None:
         return None
 
 
-def docs(raw: Path) -> list[Path]:
-    """사업 폴더마다 서식이 든 문서(제안요청서·과업지시서·공고문) — 같은 이름이면 .hwpx 먼저."""
+def projects(raw: Path) -> list[list[Path]]:
+    """사업 폴더마다 서식이 든 문서(제안요청서·과업지시서·공고문) 묶음 — 같은 이름이면 .hwpx 먼저.
+    공고문이 적은 서식 목록이 제안요청서에 있는 경우가 많아 폴더 단위로 검사(실제 만들기와 같게)."""
     found: dict[tuple[str, str], Path] = {}
     for p in sorted(raw.rglob("*")):
         if not p.is_file() or p.suffix.lower() not in (".hwp", ".hwpx") or not DOC_NAME.search(p.name):
@@ -66,7 +54,10 @@ def docs(raw: Path) -> list[Path]:
         key = (str(p.parent), p.stem)
         if key not in found or p.suffix.lower() == ".hwpx":
             found[key] = p
-    return list(found.values())
+    groups: dict[tuple[str, ...], list[Path]] = {}
+    for _, p in sorted(found.items()):  # docs/raw/<연도>/<사업>/<제안요청서·공고문…>/파일
+        groups.setdefault(p.relative_to(raw).parts[:2], []).append(p)
+    return list(groups.values())
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -76,67 +67,50 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default=str(ROOT / "output" / "quant_fill_check.csv"))
     args = ap.parse_args(argv)
     raw = Path(args.jiil) / "docs" / "raw"
-    files = docs(raw)
+    groups = projects(raw)
     if args.limit:
-        files = files[: args.limit]
-    v = vault_mod.Vault({}, info=dict(FAKE))
-    rows, kinds, by_form, skipped = [], Counter(), Counter(), Counter()
+        groups = groups[: args.limit]
+    rows, kinds, slot_kinds, by_form, notes = [], Counter(), Counter(), Counter(), Counter()
+    projects_hit: dict[str, set[str]] = {}
+    forms_n = filled_forms = 0
     started = time.time()
-    with tempfile.TemporaryDirectory() as tmp:
-        work = Path(tmp)
-        for i, path in enumerate(files, 1):
-            src = to_hwpx(path, work)
-            if src is None:
-                skipped["열지 못함"] += 1
-                continue
-            try:
-                forms = cut(src, work / f"cut{i}")
-            except Exception:  # noqa: BLE001
-                skipped["서식 자르기 실패"] += 1
-                continue
-            if not forms:
-                skipped["서식 없음"] += 1
-                continue
-            for f in forms:
-                if _BLANK_FORM.search(f.title):
-                    continue
-                manual = is_manual(f.title)
-                out = work / f"filled{i}_{f.file}"
-                try:
-                    rep = fill_hwpx(work / f"cut{i}" / f.file, out, v, title="가상 전시관 조성 사업",
-                                    g2b_no="R26BK00000000-000", basis=100_000_000, sign_only=manual)
-                    with zipfile.ZipFile(out) as z:
-                        slots = []
-                        for n in z.namelist():
-                            if re.fullmatch(r"Contents/section\d+\.xml", n):
-                                slots += unfilled_slots(z.read(n).decode("utf-8"), manual)
-                except Exception as err:  # noqa: BLE001
-                    rows.append([path.parent.name, path.name, f.no, f.title, "오류", 0, str(err)[:120]])
-                    continue
-                kinds.update(re.sub(r"\s+", "", s) for s in slots)
-                if slots:
-                    by_form[re.sub(r"\s+", "", f.title)[:20]] += 1
-                rows.append([path.parent.name, path.name, f.no, f.title, "직접 기입" if manual else "채움",
-                             len(rep.filled), " · ".join(slots)])
-            if i % 20 == 0:
-                print(f"  {i}/{len(files)} 문서 · {time.time() - started:.0f}초", flush=True)
+    for i, group in enumerate(groups, 1):
+        folder = "/".join(group[0].relative_to(raw).parts[:2])
+        with tempfile.TemporaryDirectory() as tmp:  # 사업마다 지움(11/10 — 끊긴 검사가 /tmp에 11GB를 남겼음)
+            h = health.check(group, Path(tmp), convert=to_hwpx)
+        forms_n += len(h.forms)
+        filled_forms += sum(1 for f in h.forms if f[2])
+        for n in h.notes:
+            notes[re.sub(r"^.*?: ", "", n)[:30]] += 1
+        for it in h.issues:
+            kinds[it.kind] += 1
+            projects_hit.setdefault(it.kind, set()).add(folder)
+            if it.kind in ("빈 칸", "모르는 이름표"):
+                slot_kinds[f"{it.kind} · {re.sub(r'\s+', '', it.detail)}"] += 1
+                by_form[re.sub(r"\s+", "", it.form)[:24]] += 1
+            rows.append([folder, " · ".join(p.name for p in group), it.kind, it.form, it.detail])
+        if not h.issues:
+            rows.append([folder, " · ".join(p.name for p in group), "이상 없음", "", f"서식 {len(h.forms)}개"])
+        if i % 20 == 0:
+            print(f"  {i}/{len(groups)} 사업 · {time.time() - started:.0f}초", flush=True)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8-sig", newline="") as fh:
         w = csv.writer(fh)
-        w.writerow(["사업 폴더", "문서", "서식 번호", "서식 이름", "구분", "채운 수", "못 채운 칸"])
+        w.writerow(["사업 폴더", "문서", "검사", "서식", "내용"])
         w.writerows(rows)
-    forms_n = len(rows)
-    missed = sum(1 for r in rows if r[6] and r[4] != "오류")
-    errors = sum(1 for r in rows if r[4] == "오류")
-    print(f"\n문서 {len(files)}개(못 씀 {sum(skipped.values())}: {dict(skipped)}) · 서식 {forms_n}개 · "
-          f"못 채운 칸이 있는 서식 {missed}개({missed / max(1, forms_n):.0%}) · 채우다 오류 {errors}개")
-    print("못 채운 칸 종류(상위 15):")
-    for k, n in kinds.most_common(15):
+    print(f"\n사업 {len(groups)}개 · 서식 {forms_n}개(값을 넣은 서식 {filled_forms}개) · {time.time() - started:.0f}초")
+    print("문제 종류(건수 / 걸린 사업 수):")
+    for k in health.KINDS:
+        print(f"  {kinds.get(k, 0):5d} / {len(projects_hit.get(k, ())):3d}  {k}")
+    print("빈 칸·모르는 이름표(상위 20):")
+    for k, n in slot_kinds.most_common(20):
         print(f"  {n:4d}  {k}")
-    print("자주 놓치는 서식(상위 15):")
-    for k, n in by_form.most_common(15):
+    print("자주 걸리는 서식(상위 10):")
+    for k, n in by_form.most_common(10):
         print(f"  {n:4d}  {k}")
+    if notes:
+        print("검사 알림(변환 실패 등):", dict(notes.most_common(8)))
     print(f"자세히: {out}")
     return 0
 

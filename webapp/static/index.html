@@ -1053,6 +1053,7 @@ footer b { color: var(--muted); }
 .res-grid div { display: flex; flex-direction: column; gap: 2px; }
 .res-grid span { color: var(--muted); font-size: 12px; }
 .res-grid b { font-variant-numeric: tabular-nums; color: var(--ink-strong); }
+.res-grid em.res-floor { font-style: normal; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .res-foot { margin-top: 10px; font-size: 12px; color: var(--muted); }
 .bidders-head { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 /* 투찰 업체 표는 결과 칸 폭 안에서만(좌우로 넘기지 않게, 11/10 사용자 요청) — width:0 + min-width:100%로 바깥 표를 넓히지 않음 */
@@ -1231,6 +1232,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <button role="tab" aria-selected="false" data-tab="log">판단 기록</button>
       <button role="tab" aria-selected="false" data-tab="calc">투찰 계산기</button>
       <button role="tab" aria-selected="false" data-tab="quant">정량평가서</button>
+      <button role="tab" aria-selected="false" data-tab="award">낙찰 후 서류</button>
     </div>
     <input id="liveQ" class="tab-search" type="search" placeholder="공고명·수요기관·공고기관·공고번호 검색" autocomplete="off" aria-label="실제 공고 목록에서 찾기">
   </div>
@@ -1331,6 +1333,18 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <div id="logList"></div>
     <div class="log-empty" id="logEmpty" hidden>아직 판단 기록이 없습니다. 텔레그램으로 보고된 공고가 '미판단'으로 쌓이고, 실제 공고 카드에서 참가·보류·불참을 고르면 사유와 함께 남습니다.</div>
     <div id="logAgg"></div>
+  </section>
+
+  <!-- 낙찰 후 서류(2026-11-10) — 투찰 기록·직접 넣은 공고의 낙찰자 확인(webapp/postaward.py), 공사 / 물품·용역 구분, 공고 폴더 만들기 -->
+  <section id="tab-award" hidden>
+    <p class="sub">투찰 기록에 있는 공고는 저절로 올라오고, 매일 22시에 나라장터 낙찰현황으로 낙찰자를 확인합니다. 협상처럼 투찰 기록이 없는 공고는 공고번호를 넣으세요. 개찰 1순위가 아니라 심사가 끝난 뒤의 낙찰자만 봅니다.</p>
+    <div class="search">
+      <input id="awardNo" type="search" placeholder="공고번호 — 예: R26BK01800345-000" autocomplete="off" aria-label="공고번호">
+      <button type="button" id="awardAdd">목록에 넣기</button>
+      <button type="button" id="awardCheck">지금 낙찰자 확인</button>
+      <span class="sub" id="awardMsg"></span>
+    </div>
+    <div id="awardList"></div>
   </section>
 
   <!-- 정량평가서 준비(11/03 jiil-quant-docs를 합침) — 화면은 quantdocs/static/index.html을 /quant/로 띄움(iframe), API는 /api/quant/… -->
@@ -1455,7 +1469,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="calc-lookup bidlog-bar">
         <label>찾기 <input id="bidlogQ" type="search" placeholder="공고명·공고번호·발주처"></label>
         <span id="bidlogSummary" class="job"></span>
-        <span class="bidlog-actions"><button type="button" id="bidlogReload">새로 보기</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
+        <span class="bidlog-actions"><button type="button" id="bidlogReload">결과 새로 고침</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
       </div>
       <div class="bidlog-wrap"><table class="calc-form bidlog-table">
         <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>투찰금액</th><th>기준 사정률</th><th>개찰 결과</th><th>지일 등수 · 사정률</th><th></th></tr></thead>
@@ -3681,6 +3695,55 @@ $("corpusRows").onclick = (ev) => {
   const btn = ev.target.closest("[data-proj]");
   if (btn) toggleProject(btn);
 };
+// ── 낙찰 후 서류 탭 ──
+async function awardPost(path, body) {
+  const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+function renderAward(items) {
+  const groups = ["공사", "물품·용역", "업무 미확인"];
+  const row = (v) => {
+    const key = v.no + (v.ord ? "-" + v.ord : "");
+    const w = v.winner || {};
+    const result = v.status === "낙찰" ? `<b class="good">낙찰</b> ${esc(w.date || "")}`
+      : v.status === "다른 업체 낙찰" ? `다른 업체 낙찰 — ${esc(w.name || "")}` : esc(v.status || "");
+    return `<tr><td><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener">${esc(key)}</a><div>${esc(v.title || "")}</div><div class="sub">${esc(v.institution || "")}</div></td>
+      <td>${esc(v.work || "—")}</td><td>${result}</td><td class="sub">${esc(v.source || "")}<br>${esc((v.checkedAt || "").slice(0, 16).replace("T", " "))}</td>
+      <td>${v.folder ? `<div class="sub">${esc(v.folder)}</div>` : ""}${v.docs ? `<div>첨부 ${v.docs.files}개 · 제출서류 ${v.docs.found}개 중 <b>틀에 없음 ${v.docs.missing}</b> (공고문서\서류_확인.txt)</div>` : ""}
+      <button type="button" data-award-folder="${esc(key)}">${v.folder ? "첨부 다시 확인" : "폴더 만들기 · 첨부 확인"}</button>
+      <button type="button" data-award-del="${esc(key)}">빼기</button></td></tr>`;
+  };
+  $("awardList").innerHTML = groups.map((g) => {
+    const rows = items.filter((v) => v.group === g);
+    if (!rows.length && g === "업무 미확인") return "";
+    return `<h3>${g} ${rows.length}건</h3>` + (rows.length
+      ? `<div class="scroll"><table><thead><tr><th>공고</th><th>업무</th><th>낙찰 결과</th><th>들어온 곳 · 확인</th><th></th></tr></thead><tbody>${rows.map(row).join("")}</tbody></table></div>`
+      : `<p class="sub">없음</p>`);
+  }).join("");
+}
+async function loadAward() {
+  try { renderAward((await getJson("/api/postaward")).items || []); } catch (err) { $("awardMsg").textContent = err.message; }
+}
+async function awardAct(btn, path, body, done) {
+  btn.disabled = true;
+  $("awardMsg").textContent = "";
+  try {
+    const data = await awardPost(path, body);
+    renderAward(data.items || []);
+    if (done) $("awardMsg").textContent = done(data);
+  } catch (err) { $("awardMsg").textContent = err.message; }
+  btn.disabled = false;
+}
+$("awardAdd").onclick = (e) => awardAct(e.target, "/api/postaward", { no: $("awardNo").value }, () => { $("awardNo").value = ""; return "넣었습니다 — '지금 낙찰자 확인'을 누르면 바로 확인합니다."; });
+$("awardCheck").onclick = (e) => awardAct(e.target, "/api/postaward/check", {}, (d) => `낙찰 ${d.won} · 다른 업체 ${d.lost} · 아직 없음 ${d.waiting}`);
+$("awardList").onclick = (e) => {
+  const f = e.target.closest("[data-award-folder]");
+  if (f) return awardAct(f, "/api/postaward/folder", { key: f.dataset.awardFolder }, (d) => "폴더를 만들고 첨부를 받았습니다: " + d.folder);
+  const del = e.target.closest("[data-award-del]");
+  if (del && confirm("목록에서 뺄까요? (만든 폴더는 지우지 않습니다)")) awardAct(del, "/api/postaward/delete", { key: del.dataset.awardDel });
+};
 // 정량평가서 탭: 페이지 전체 스크롤을 끄고 iframe을 화면 아래 끝까지 — 스크롤은 iframe 안 하나만(11/04 사용자 요청: 스크롤 2개 불편)
 function fitQuant(on) {
   document.documentElement.style.overflow = on ? "hidden" : "";
@@ -3693,13 +3756,14 @@ window.addEventListener("resize", () => { if (!$("tab-quant").hidden) fitQuant(t
 // 기간은 '나라장터에서 불러오기'를 누를 때 쓴다 (바꾸기만 해서는 다시 조회하지 않는다 — 수집이 몇 분 걸려서)
 function showTab(tab) {
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
-  for (const name of ["live", "excluded", "corpus", "log", "calc", "quant"]) $("tab-" + name).hidden = tab !== name;
+  for (const name of ["live", "excluded", "corpus", "log", "calc", "quant", "award"]) $("tab-" + name).hidden = tab !== name;
   if (tab === "quant" && !$("quantFrame").getAttribute("src")) $("quantFrame").setAttribute("src", "/quant/");
   fitQuant(tab === "quant");
   // 탭 줄 오른쪽 찾기 칸은 실제 공고·제외된 공고 탭에서만
   $("liveQ").hidden = !(tab === "live" || tab === "excluded");
   if (tab === "excluded") exData ? renderExcluded() : loadExcluded();
   if (tab === "log") renderLog();
+  if (tab === "award") loadAward();
 }
 document.querySelector(".tabs").onclick = (e) => {
   const btn = e.target.closest("button[data-tab]");

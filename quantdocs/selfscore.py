@@ -92,6 +92,10 @@ def parse_range(text: str) -> tuple[float | None, float | None, str] | None:
         hi = _qty(m2.group(1), m2.group(2)) + (1e-9 if m2.group(4) == "이하" else 0)
         unit = unit or ("원" if m2.group(2) or m2.group(3) == "원" else (m2.group(3) or ""))
     if lo is None and hi is None:
+        m4 = re.fullmatch(r"(\d+)\s*건\s*[~∼\-]\s*(\d+)\s*건", t)  # '3건 ~ 2건'(11/10 경남교육청 연관기술)
+        if m4:
+            a, b = sorted((float(m4.group(1)), float(m4.group(2))))
+            return a, b + 1, "건"
         m3 = re.fullmatch(r"(\d+)\s*건", t)
         if not m3:
             return None
@@ -122,6 +126,25 @@ def _read_table(c: Criterion, xml: str, tbl: tuple[int, int]) -> None:
             below = _num(rows.get(r + 1, {}).get(col, ""))
             if g and below is not None and "기술" in _sq(text) and len(_sq(text)) <= 8:
                 c.per_grade.setdefault(g, below)
+    # 등급별 계수가 같은 줄 맨 오른쪽('특 급 기술자 | 자격 기준 | 학력 기준 | 10.0', 11/10 경남교육청)
+    for r, cols in rows.items():
+        first = _sq(cols.get(min(cols), "")) if cols else ""
+        g = next((g for g in GRADES if first.startswith(g)), None)
+        last = _num(cols[max(cols)]) if cols else None
+        if g and last is not None and len(cols) >= 2 and re.fullmatch(rf"{g}(?:기술자)?", first):
+            c.per_grade.setdefault(g, last)
+    # 기술인력 점수 구간('점수 50점 이상' | 5.0) — 등급별 계수 합으로 구간을 고름
+    if c.kind == "staff":
+        for r, cols in sorted(rows.items()):
+            for col, text in sorted(cols.items()):
+                lo = re.search(r"(\d+(?:\.\d+)?)\s*점\s*(이상|초과)", text)
+                hi = re.search(r"(\d+(?:\.\d+)?)\s*점\s*(미만|이하)", text)
+                if not (lo or hi) or len(_sq(text)) > 20:
+                    continue
+                score = next((_num(t) for cc, t in sorted(cols.items()) if cc > col and _num(t) is not None), None)
+                if score is not None:
+                    c.bands.append(Band(float(lo.group(1)) if lo else None, float(hi.group(1)) + (1e-9 if hi.group(2) == "이하" else 0) if hi else None, score, text))
+                    c.unit = "점"
     # 제재처분: '해당없음' · '해당' 칸 아래 점수
     for r, cols in rows.items():
         for col, text in cols.items():
@@ -195,7 +218,7 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
     if start is None:
         start = next((i for i, (t, _, _) in enumerate(items) if _START.search(t)), None)
     if start is None:
-        return []
+        return _read_doc_nopoints(items)
     start_mark = _mark_style(items[start][0])
     out: list[Criterion] = []
     cur: Criterion | None = None
@@ -234,6 +257,61 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
     if not out:  # 항목 머리가 없으면 요약표의 항목·배점만(기준 표는 못 읽음)
         out = [Criterion(name, pts, k) for k, (name, pts) in summary.items()]
     return out
+
+
+_HEAD_NOPTS = re.compile(r"^\s*(?:\d+\)|\(\d+\)|[가-하]\.|[가-하]\))\s*([^:：\n]{2,20}?)\s*$")
+
+
+def _table_points(xml: str, tbl: tuple[int, int]) -> float:
+    """'평가항목 | 배점 | 평점' 표 — 머리 '배점' 칸 아래 첫 숫자."""
+    rows = _rows(_cells(xml, tbl))
+    for r, cols in sorted(rows.items()):
+        col = next((cc for cc, t in cols.items() if _sq(t) == "배점"), None)
+        if col is None:
+            continue
+        for rr in sorted(k for k in rows if k > r):
+            v = _num(rows[rr].get(col, ""))
+            if v is not None:
+                return v
+    return 0.0
+
+
+def _read_doc_nopoints(items: list) -> list[Criterion]:
+    """배점이 항목 머리가 아니라 아래 표 '배점' 칸에 있는 모양(11/10 경남교육청 학생안전체험원):
+    '1) 사업 수행 능력 평가' 아래 '가) 사업 수행 실적' + 표(평가항목 | 배점 | 평점) … '2) 기술제안서 평가'에서 끝."""
+    start = next((i for i, (t, _, _) in enumerate(items)
+                  if re.fullmatch(r"\s*(?:\d+\)|\(\d+\)|\d+\.|[가-하]\.)?\s*(?:사업\s*수행\s*능력|정량\S{0,3})\s*평가(?:\s*\(정량\))?\s*", t)), None)
+    if start is None:
+        return []
+    mark = _mark_style(items[start][0])
+    out: list[Criterion] = []
+    cur: Criterion | None = None
+    for i in range(start + 1, len(items)):
+        text, _, tbls = items[i]
+        if text and mark and _mark_style(text) == mark:
+            break
+        if re.search(r"정성\S{0,3}\s*평가|기술\s*제안서\s*평가", text) and _HEAD_NOPTS.match(text):
+            break
+        head = _HEAD_NOPTS.match(text)
+        kind = next((k for k, rx in KINDS if head and rx.search(head.group(1))), "") if head else ""
+        if head and re.fullmatch(r"기술\s*능력", head.group(1).strip()):
+            kind = "staff"  # '나) 기술 능력' = 참여기술자 점수(11/10 경남교육청)
+        if head and kind:
+            cur = Criterion(head.group(1).strip(), 0.0, kind)
+            out.append(cur)
+        elif cur is not None and text:
+            cur.note += text + "\n"
+        for xml, tbl in tbls:
+            if cur is None:
+                continue
+            cur.note += re.sub(r"\s+", " ", _text(xml[tbl[0]:tbl[1]])) + "\n"
+            _read_table(cur, xml, tbl)
+            if not cur.points:
+                cur.points = _table_points(xml, tbl)
+    for c in out:  # 표에 '배점' 칸이 없으면(경영상태 표) 가장 높은 점수를 배점으로
+        if not c.points:
+            c.points = max([b.score for b in c.bands] + [sc for _, sc in c.credit_rows] + list(c.sanction.values()) + [0.0])
+    return [c for c in out if c.points]
 
 
 # ── 점수 ────────────────────────────────────────────────────────────
@@ -373,7 +451,7 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
         res.notes.append("배점기준 표(등급별 점수)를 읽지 못함 — 제안요청서 확인")
         return res
     staff = getattr(vault, "staff", []) or []
-    if not staff:
+    if not staff and not getattr(vault, "staff_pick_from_screen", False):  # 화면에서 0명을 고른 건 0명으로 채점(11/11 사용자 제보)
         res.notes.append("자료 없음 — 회사자료 '인력목록' 시트(이름·입사일·재직·등급) 또는 jiil-quant-docs 폴더의 기술인력 엑셀")
         return res
     people = staff_status(c, vault, ref)
@@ -384,6 +462,17 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
             skipped[p["why"]] = skipped.get(p["why"], 0) + 1
     raw = sum(p for _, p in best.values())
     res.score = min(raw, c.points)
+    if c.unit == "점" and c.bands:  # 등급별 계수 합 → 점수 구간(11/10 경남교육청 '점수 50점 이상 5.0')
+        band = _band(c, raw)
+        res.score = band.score if band else None
+        counts0 = {g: sum(1 for gg, _ in best.values() if gg == g) for g in GRADES}
+        res.basis = (", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts0.items() if n) or "고른 인원 0명") \
+            + f" = {raw:g}점 → '{band.text if band else '구간 없음'}'"
+        res.notes += [f"뺀 인원 {k} {n}명" for k, n in {p['why']: sum(1 for q in people if not q['counted'] and q['why'] == p['why']) for p in people if not p['counted']}.items()]
+        field = re.search(r"대상\s*기술\s*인력[^\n]*", c.note)
+        if field:
+            res.notes.append("공고가 인정하는 분야·참여 인력인지 확인(" + re.sub(r"\s+", " ", field.group(0))[:60] + ")")
+        return res
     # '평점 = 4.2 + ∑(점수×인원)'(본문)·'미보유 시 4.2점'(서식)처럼 기본 점수가 있으면 — 식끼리 다르면 유리한 쪽(11/05 사용자 결정)
     base = re.search(r"평점\s*=\s*([\d.]+)\s*\+", c.note)
     floor = re.search(r"(?:미보유\s*시|최저)\s*([\d.]+)\s*점", c.note)
@@ -394,7 +483,7 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
         res.score = min(float(floor.group(1)), c.points)
         res.notes.append(f"최저 {floor.group(1)}점 적용")
     counts = {g: sum(1 for gg, _ in best.values() if gg == g) for g in GRADES}
-    res.basis = ", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts.items() if n) + f" = {raw:g}점" + (
+    res.basis = (", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts.items() if n) or "고른 인원 0명") + f" = {raw:g}점" + (
         f" → 최고 {c.points:g}점" if raw > c.points else "")
     res.notes += [f"뺀 인원 {k} {n}명" for k, n in skipped.items() if n]
     if re.search(r"분야\s*인력", c.note):
@@ -586,6 +675,7 @@ class FormRow:
     cell: object  # 점수를 넣을 칸(fill.Cell)
     crit: Criterion | None = None  # 서식 표 안의 기준(구간·등급) — 없으면 본문 기준
     total: bool = False
+    by_points: dict = field(default_factory=dict)  # 구간 줄마다 평점 칸이 따로인 표 — {그 줄 배점: 평점 칸}(11/10 경남교육청)
 
 
 def _per_person(text: str) -> float | None:
@@ -595,8 +685,9 @@ def _per_person(text: str) -> float | None:
 
 def read_form(cells) -> list[FormRow]:
     """자기평가표 표 칸들 → 점수 줄. '배점' 칸과 '자기평점'(또는 '평점') 칸이 있는 표만."""
-    head = next((c for c in cells if _sq(c.text) in _SCORE_HEAD), None)
-    pts_head = next((c for c in cells if _sq(c.text) == "배점"), None)
+    plain = lambda t: re.sub(r"\([^)]*\)", "", _sq(t))  # '배점(점)'·'평점(점)'(11/10 경남교육청)
+    head = next((c for c in cells if plain(c.text) in _SCORE_HEAD), None)
+    pts_head = next((c for c in cells if plain(c.text) == "배점"), None)
     if head is None or pts_head is None or head.row != pts_head.row:
         return []
     rows: dict[int, list] = {}
@@ -610,11 +701,33 @@ def read_form(cells) -> list[FormRow]:
             blocks.append([r])
         elif blocks:
             blocks[-1].append(r)
+    # 구간 줄마다 평점 칸이 따로 있는 표 — 맨 왼쪽 항목 칸(세로로 합친 칸)이 같은 줄들은 한 항목으로 묶음(11/10 경남교육청 서식 21)
+    def item_cell(r):
+        return next((c for c in cells if c.col == 0 and c.row <= r < c.row + c.rowspan and c.rowspan > 1), None)
+    merged: list[list[int]] = []
+    split_cells: dict[int, dict] = {}
+    for rs in blocks:
+        ic = item_cell(rs[0])
+        if merged and ic is not None and item_cell(merged[-1][0]) is ic:
+            merged[-1] += rs
+            split_cells.setdefault(merged[-1][0], {})
+        else:
+            merged.append(list(rs))
+    blocks = merged
     out = []
     for rs in blocks:
         first = sorted(rows[rs[0]], key=lambda c: c.col)
-        target = next(c for c in first if c.col <= scol < c.col + c.colspan)
-        if not target.blank:
+        target = next((c for c in first if c.col <= scol < c.col + c.colspan), None)
+        by_points: dict = {}
+        if rs[0] in split_cells:  # 줄마다 평점 칸 — {그 줄 배점: 평점 칸}
+            for r in rs:
+                line = rows[r]
+                sc = next((c for c in line if c.col <= scol < c.col + c.colspan), None)
+                pv = _num(next((c.text for c in line if c.col <= pcol < c.col + c.colspan), ""))
+                if sc is not None and pv is not None and sc.blank:
+                    by_points.setdefault(pv, sc)
+            target = target if target is not None and target.blank else next(iter(by_points.values()), None)
+        if target is None or not target.blank:
             continue
         def is_label(t: str) -> bool:  # 줄 이름 — 구간('70억 이상')·등급·해당없음 칸은 뺌
             q = _sq(t)
@@ -666,7 +779,7 @@ def read_form(cells) -> list[FormRow]:
         points = cap if cap is not None else (max(nums) if nums else None)
         crit.points = points or 0.0
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
-        out.append(FormRow(label, points, target, crit if has else None))
+        out.append(FormRow(label, points, target, crit if has else None, by_points=by_points))
     return out
 
 

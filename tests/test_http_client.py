@@ -145,3 +145,8 @@ class TestSevenDayLimit(unittest.TestCase):
         for b, e in chunk_date_range("202610120000", "202611110937", days=MAX_QUERY_DAYS):
             span = datetime.strptime(e, fmt) - datetime.strptime(b, fmt)
             self.assertLess(span, timedelta(days=7))
+
+    def test_mid_day_start_stays_within_seven_dates(self):
+        # 1억 미만처럼 '지금 - 7일'(11:26 시작)이어도 청크 하나가 날짜 7개를 넘지 않아야 한다
+        chunks = list(chunk_date_range("202611041126", "202611111126", days=MAX_QUERY_DAYS))
+        self.assertEqual(chunks, [("202611041126", "202611102359"), ("202611110000", "202611111126")])

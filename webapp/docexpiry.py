@@ -42,16 +42,26 @@ def _cert_date(value) -> date | None:
         return None
 
 
+GRIDA = "그리다"  # 지일 직원 자회사 — 같이 챙김(2026-11-11 사용자), 이름 앞에 '그리다 · '
+
+
 def read_cert(path: Path) -> list[tuple[str, date]]:
-    """인증서갱신.xlsx — A열 이름·B열 지일 만료일. D열이 '그리다'인 줄(자매 회사)과 C·D열(그리다 직접생산)은 뺌."""
+    """인증서갱신.xlsx — A열 이름·B열 지일 만료일. D열이 '그리다'인 줄과 직접생산 표의 C·D열(그리다)은 '그리다 · 이름'."""
     import openpyxl
 
-    out = []
+    out, grida_cols = [], False
     for row in openpyxl.load_workbook(path, read_only=True, data_only=True).worksheets[0].iter_rows(values_only=True):
         row = (list(row) + [None] * 4)[:4]
+        name = " ".join(str(row[0] or "").split())
+        if str(row[2] or "").strip() == GRIDA:  # 직접생산 머리 줄 '지일 | 만료일 | 그리다 | 만료일' — 아래 C·D열은 그리다
+            grida_cols = True
+            continue
         end = _cert_date(row[1])
-        if row[0] and end and str(row[3] or "").strip() != "그리다":
-            out.append((" ".join(str(row[0]).split()), end))
+        if name and end:
+            out.append((f"{GRIDA} · {name}" if str(row[3] or "").strip() == GRIDA else name, end))
+        end = _cert_date(row[3]) if grida_cols else None
+        if row[2] and end:
+            out.append((f"{GRIDA} · " + " ".join(str(row[2]).split()), end))
     return sorted(out, key=lambda d: d[1])
 
 
@@ -66,7 +76,7 @@ def _norm(text: str) -> str:
 def read_docs(folder: Path) -> list[tuple[str, date]]:
     """(종류, 유효기간 끝) — 인증서갱신.xlsx 날짜가 우선(2026-11-11 사용자 결정), 그 표에 없는 서류는 서류목록.xlsx 날짜."""
     cert = read_cert(folder / CERT_FILE) if (folder / CERT_FILE).exists() else []
-    names = [CERT_ALIASES.get(_norm(k), _norm(k)) for k, _ in cert]
+    names = [CERT_ALIASES.get(_norm(k), _norm(k)) for k, _ in cert if not k.startswith(GRIDA)]  # 서류목록은 지일 것
     rest = [(k, d) for k, d in read_list(folder) if not any(n in _norm(k) for n in names)]
     return sorted(cert + rest, key=lambda d: d[1])
 

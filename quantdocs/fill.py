@@ -115,8 +115,9 @@ def _paragraph(template: str, line: str, char_id: str | None = None) -> str:
     return f"{open_tag}{run}</{prefix}p>"
 
 
-def _set_cell(cell_xml: str, lines: list[str], keep_first: bool = False, char_id: str | None = None) -> str:
-    """칸의 문단을 lines로 바꿈. keep_first면 첫 문단(이름표)은 두고 그 뒤에 붙임."""
+def _set_cell(cell_xml: str, lines: list[str], keep_first: bool = False, char_id: str | None = None,
+              para_id: str | None = None) -> str:
+    """칸의 문단을 lines로 바꿈. keep_first면 첫 문단(이름표)은 두고 그 뒤에 붙임. para_id: 새 문단에 쓸 문단 모양(연혁 칸)."""
     sub = _spans(cell_xml, "subList")
     if not sub:
         return cell_xml
@@ -125,6 +126,8 @@ def _set_cell(cell_xml: str, lines: list[str], keep_first: bool = False, char_id
     if not paras:
         return cell_xml
     first = cell_xml[paras[0][0]:paras[0][1]]
+    if para_id is not None:
+        first = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")\d+(")', rf"\g<1>{para_id}\2", first, count=1)
     new = "".join(_paragraph(first, ln, char_id) for ln in lines)
     if keep_first:
         return cell_xml[:paras[0][1]] + new + cell_xml[paras[-1][1]:]
@@ -897,6 +900,7 @@ class _Chars:
         self.added_para: dict[str, str] = {}  # 문단 모양 id → 가운데 정렬로 바꾼 사본 id
         self.added_left: dict[str, str] = {}  # 문단 모양 id → 왼쪽 정렬로 바꾼 사본 id(양쪽·배분 정렬 칸)
         self.added_hang: dict[tuple[str, int], str] = {}  # (문단 모양 id, 내어쓰기 너비) → 사본 id
+        self.added_left_hang: dict[tuple[str, int], str] = {}  # (문단 모양 id, 내어쓰기 너비) → 왼쪽 정렬 + 내어쓰기 사본 id(연혁 칸, 11/11)
         # 언어별 글꼴 목록 {LATIN: {id: 이름}} — 채운 글의 숫자·영문을 한글과 같은 글꼴로(11/04 사용자 제보: 숫자 글꼴이 다름)
         self.faces = {m.group(1).upper(): dict(re.findall(r'<(?:[\w.-]+:)?font\b[^>]*\bid="(\d+)"[^>]*\bface="([^"]*)"', m.group(2)))
                       for m in re.finditer(r'<(?:[\w.-]+:)?fontface\b[^>]*\blang="(\w+)"[^>]*>(.*?)</(?:[\w.-]+:)?fontface>', header, re.S)}
@@ -921,7 +925,7 @@ class _Chars:
 
     def _next_para_id(self) -> str:
         ids = [int(x) for x in self.paras] + [int(x) for x in self.added_para.values()] + [int(x) for x in self.added_hang.values()] \
-            + [int(x) for x in self.added_left.values()]
+            + [int(x) for x in self.added_left.values()] + [int(x) for x in self.added_left_hang.values()]
         return str(max(ids) + 1)
 
     def centered(self, pid: str) -> str:
@@ -966,6 +970,16 @@ class _Chars:
             self.added_hang[key] = self._next_para_id()
         return self.added_hang[key]
 
+    def left_hang(self, pid: str, width: int) -> str:
+        """pid 문단 모양을 왼쪽 정렬 + 내어쓰기 width로 바꾼 사본 id — 연혁 칸(11/11 사용자 요청: 가운데 정렬이라 날짜가 들쭉날쭉,
+        둘째 줄은 날짜 뒤 내용 시작 위치에 맞춰). 모르는 모양이면 pid 그대로."""
+        if pid not in self.paras:
+            return pid
+        key = (pid, width)
+        if key not in self.added_left_hang:
+            self.added_left_hang[key] = self._next_para_id()
+        return self.added_left_hang[key]
+
     def _hang_block(self, pid: str, width: int, new: str) -> str:
         block = re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1)
         intent, left = self.margins(pid)
@@ -1005,7 +1019,7 @@ class _Chars:
         for orig, new in list(self.added_para.items()) + list(self.added_left.items()):
             if new == pid:
                 return self.paras.get(orig, "")
-        for (orig, _w), new in self.added_hang.items():
+        for (orig, _w), new in list(self.added_hang.items()) + list(self.added_left_hang.items()):
             if new == pid:
                 return self.paras.get(orig, "")
         return ""
@@ -1076,17 +1090,19 @@ class _Chars:
 
     @property
     def changed(self) -> bool:
-        return bool(self.added or self.added_para or self.added_hang or self.added_left or self.font_added)
+        return bool(self.added or self.added_para or self.added_hang or self.added_left or self.added_left_hang or self.font_added)
 
     def finish(self) -> str:
         header = self.header
-        if self.added_para or self.added_hang or self.added_left:
+        if self.added_para or self.added_hang or self.added_left or self.added_left_hang:
             def aligned(pid, new, how):
                 return re.sub(r'\bhorizontal="\w+"', f'horizontal="{how}"', re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1))
             extra = "".join(aligned(pid, new, "CENTER") for pid, new in self.added_para.items())
             extra += "".join(aligned(pid, new, "LEFT") for pid, new in self.added_left.items())
             extra += "".join(self._hang_block(pid, w, new) for (pid, w), new in self.added_hang.items())
-            n = len(self.added_para) + len(self.added_hang) + len(self.added_left)
+            extra += "".join(re.sub(r'\bhorizontal="\w+"', 'horizontal="LEFT"', self._hang_block(pid, w, new), count=1)
+                             for (pid, w), new in self.added_left_hang.items())
+            n = len(self.added_para) + len(self.added_hang) + len(self.added_left) + len(self.added_left_hang)
             header = re.sub(r"(</(?:[\w.-]+:)?paraProperties>)", lambda m: extra + m.group(1), header, count=1)
             header = re.sub(r'(<(?:[\w.-]+:)?paraProperties\b[^>]*\bitemCnt=")(\d+)"',
                             lambda m: f'{m.group(1)}{int(m.group(2)) + n}"', header, count=1)
@@ -1660,6 +1676,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             edits: list[tuple[Cell, list[str], bool]] = []
             para_override: dict[int, str] = {}  # 칸 시작 위치 → 쓸 문단 모양(번호 칸 가운데 정렬 맞춤)
             base_char: dict[int, str] = {}  # 칸 시작 위치 → 쓸 글자 모양(안내 글 칸은 이름표 칸 모양으로)
+            hist_at: set[int] = set()  # 연혁을 넣은 칸 시작 위치 — 왼쪽 정렬 + 날짜 뒤에 맞춘 내어쓰기(11/11)
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
                 for i in range(len(_spans(xml, "tbl"))):
                     xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
@@ -1701,11 +1718,14 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         below = by_pos.get((c.row + c.rowspan, c.col))
                         if right is not None and right.blank:
                             edits.append((right, lines, False))
+                            hist_at.add(right.start)
                         elif below is not None and below.blank and below.colspan == c.colspan:
                             # 이름표 칸 바로 아래 같은 너비의 빈 칸 = 답 칸(11/10 경남교육청 서식 14 — 이름표 칸에 붙여 상자 밖에 적혔음)
                             edits.append((below, lines, False))
+                            hist_at.add(below.start)
                         else:  # 한 줄 전체 칸 — 이름표 아래에 붙임
                             edits.append((c, lines, True))
+                            hist_at.add(c.start)
                         rep.filled.append(f"연혁 → {len(lines)}줄")
                         continue
                     if not key and _sq(c.text) == "생년월일" and c.row not in agent_rows and (group == "대표자" or any(
@@ -1822,9 +1842,19 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 elif chars is not None:  # 여러 줄(연혁 등)도 11pt, 숫자·영문은 한글 글꼴로
                     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', seg)
                     char_id = _fill_variant(chars, run.group(1) if run else "0")
+                hist_para = None
+                if chars is not None and cell.start in hist_at and lines:
+                    # 연혁: 왼쪽 정렬, 둘째 줄은 날짜('2020.06  ') 뒤 내용 시작 위치에 맞춰 내어쓰기(11/11 사용자 요청)
+                    sub = _spans(seg, "subList")
+                    ps = _spans(seg, "p", *sub[0]) if sub else []
+                    pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', seg[ps[0][0]:ps[0][1]]) if ps else None
+                    dm = re.match(r"\S+\s+", lines[0])
+                    if pm and dm:
+                        width = int(round(sum(chars.char_width(char_id or "0", ch) for ch in dm.group(0))))
+                        hist_para = chars.left_hang(pm.group(1), width)
                 if chars is not None:
                     chars.cur_face, chars.cur_height = "", 0
-                xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id) + xml[cell.end:]
+                xml = xml[:cell.start] + _set_cell(seg, lines, keep, char_id, hist_para) + xml[cell.end:]
             xml = _fill_bond(xml, basis, rep, title)
             xml = _fill_notice_no_para(xml, no_text, rep)
             xml = _plain_title(xml, title)

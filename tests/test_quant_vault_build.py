@@ -717,15 +717,17 @@ def test_number_cells_follow_centered_sibling(tmp_path: Path):
     assert para == {"110111-1234567": "7", "강원 정선": "8", "033-111-2222": "7", "033-111-3333": "7"}
 
 
-def test_seal_cell_name_centered(tmp_path: Path):
-    """11/04 사용자 요청(서식 1): '(인)'이 오른쪽 정렬이던 칸에 '(주)가상 홍길동   (인)'을 넣으면 가운데 정렬 사본 문단 모양으로."""
+def test_seal_cell_name_left_seal_right(tmp_path: Path):
+    """'(인)'이 오른쪽 정렬이던 칸에 이름을 넣을 때 — 11/11 사용자 요청: 이름은 다른 값 칸처럼 왼쪽(앞쪽), '(인)'은 칸 오른쪽 끝
+    (11/04의 '가운데 정렬'을 대체). 왼쪽 정렬 사본 문단 모양 + 칸 너비만큼 빈칸."""
     from quantdocs.fill import fill_hwpx
 
     header = ('<hh:head><hh:paraProperties itemCnt="2"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/></hh:paraPr>'
               '<hh:paraPr id="5"><hh:align horizontal="RIGHT"/><hh:margin left="1"/></hh:paraPr></hh:paraProperties>'
               '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
     seal = ('<hp:tc><hp:subList><hp:p paraPrIDRef="5"><hp:run charPrIDRef="0"><hp:t>(인)</hp:t></hp:run></hp:p></hp:subList>'
-            '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+            '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="20000" height="2000"/>'
+            '<hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
     src = _mini_hwpx(tmp_path / "s.hwpx", _tbl([[_c(0, 0, "상호·법인명(대표성명)"), seal]]))
     with zipfile.ZipFile(src, "a") as z:
         z.writestr("Contents/header.xml", header)
@@ -735,7 +737,10 @@ def test_seal_cell_name_centered(tmp_path: Path):
     pid = re.search(r'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?\(주\)가상 홍길동', out, re.S).group(1)
     assert pid == "6" and 'paraProperties itemCnt="3"' in head
     block = re.search(r'<hh:paraPr id="6".*?</hh:paraPr>', head, re.S).group(0)
-    assert 'horizontal="CENTER"' in block and '<hh:margin left="1"/>' in block  # 여백 등은 원래 모양 그대로
+    assert 'horizontal="LEFT"' in block and '<hh:margin left="1"/>' in block  # 여백 등은 원래 모양 그대로
+    text = re.sub(r"<[^>]+>", "", out).replace("\ue000", "").replace("\ue001", "")
+    gap = re.search(r"\(주\)가상 홍길동( +)\(인\)", text).group(1)
+    assert len(gap) > 10  # 20000 칸이면 (인)이 오른쪽 끝 가까이 — 빈칸이 넉넉히
 
 
 def test_other_party_zone_and_placeholder_signature(tmp_path: Path):

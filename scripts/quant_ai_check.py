@@ -9,6 +9,7 @@
 
     py scripts/quant_ai_check.py --jiil ../jiil-past-contracts --dry-run      # Claude 안 부르고 물을 곳·글 길이만
     py scripts/quant_ai_check.py --jiil ../jiil-past-contracts --limit 5      # 5개 사업만 시험
+    py scripts/quant_ai_check.py --jiil ../jiil-past-contracts --only-criteria --limit 3   # 배점기준 못 읽은 사업 3개만
     py scripts/quant_ai_check.py --jiil ../jiil-past-contracts                # 전부(Max 사용량을 씀)
 
 Claude 부르는 횟수는 --max-calls(기본 200)까지. 한 번에 수십 초 걸릴 수 있음.
@@ -54,7 +55,9 @@ def rfp_text(h: health.Health) -> str:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--jiil", default=str(ROOT.parent / "jiil-past-contracts"))
-    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--limit", type=int, default=0, help="사업 N개까지(--only-criteria면 배점기준을 물을 사업 N개까지)")
+    ap.add_argument("--only-criteria", action="store_true",
+                    help="배점기준을 못 읽은 사업만 Claude에 묻고 이름표는 안 물음 — 다른 사업은 건너뛰고 셈에서도 뺌")
     ap.add_argument("--max-calls", type=int, default=200)
     ap.add_argument("--model", default=None, help="claude 모델(기본 .env CLAUDE_MODEL 또는 sonnet)")
     ap.add_argument("--dry-run", action="store_true", help="Claude를 부르지 않고 물을 곳·보낼 글 길이만 셈")
@@ -62,8 +65,9 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     raw = Path(args.jiil) / "docs" / "raw"
     groups = projects(raw)
-    if args.limit:
+    if args.limit and not args.only_criteria:
         groups = groups[: args.limit]
+    found = 0  # --only-criteria: 배점기준을 물을 사업 수
     rows: list[list] = []
     calls = 0
     before, after = Counter(), Counter()
@@ -78,6 +82,12 @@ def main(argv: list[str] | None = None) -> int:
         kinds = h.counts()
         need_crit = kinds.get("배점기준 못 읽음", 0) > 0
         labels = list(dict.fromkeys(it.detail for it in h.issues if it.kind == "모르는 이름표"))
+        if args.only_criteria:
+            if not need_crit:
+                print(f"  {i}/{len(groups)} {folder} · 배점기준 문제 없음 — 건너뜀", flush=True)
+                continue
+            labels = []
+            found += 1
         for k in CRIT_KINDS:
             before[k] += kinds.get(k, 0)
         if need_crit:
@@ -134,12 +144,17 @@ def main(argv: list[str] | None = None) -> int:
                     asked["이름표 항목 받음"] += f not in ("none", "(답 없음)")
                     rows.append([folder, "이름표", "받음", lab, f])
         print(f"  {i}/{len(groups)} {folder} · Claude {calls}회 · {time.time() - started:.0f}초", flush=True)
+        if args.only_criteria and args.limit and found >= args.limit:
+            print(f"  배점기준 사업 {found}개를 채워 멈춤(훑은 사업 {i}개)", flush=True)
+            break
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8-sig", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["사업 폴더", "물은 것", "결과", "내용(기준·이름표)", "다시 검사 / 받은 항목"])
         w.writerows(rows)
+    if args.only_criteria:
+        print(f"\n(배점기준만) 배점기준을 물은 사업 {found}개 — 다른 사업은 건너뛰고 셈에서도 뺌")
     print(f"\n사업 {len(groups)}개 · Claude {calls}회{' (부르지 않음 — dry-run)' if args.dry_run else ''} · 보낸 글 약 {sent_chars:,}자 · "
           f"{time.time() - started:.0f}초")
     print(json.dumps(asked, ensure_ascii=False))

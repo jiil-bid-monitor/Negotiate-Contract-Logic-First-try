@@ -968,6 +968,14 @@ class _Chars:
             self.added_left[pid] = self._next_para_id()
         return self.added_left[pid]
 
+    def left_any(self, pid: str) -> str:
+        """어떤 정렬이든 왼쪽 정렬 사본 id(이미 왼쪽이거나 모르면 pid 그대로) — 표 칸 '이름 … (인)'(11/11)."""
+        if pid not in self.paras or self.align(pid) in ("LEFT", ""):
+            return pid
+        if pid not in self.added_left:
+            self.added_left[pid] = self._next_para_id()
+        return self.added_left[pid]
+
     def para_gap(self, pid: str) -> int:
         """문단 위·아래 간격(prev + next) HWPUNIT — 첫 margin 묶음(hp:case가 있으면 그것). 연혁 줄마다 붙는 '문단 위 1000' 등."""
         block = self._para(pid)
@@ -1310,6 +1318,29 @@ def _align_numbers(xml: str, edits: list, chars: "_Chars", override: dict[int, s
         for cell, pid in group:
             if chars.align(pid) != "CENTER":
                 override[cell.start] = center
+
+
+def _seal_gap(cell: str, name: str, seal: str, chars: "_Chars") -> int | None:
+    """'이름 + 빈칸 + (인)'이 칸 한 줄을 꽉 채우게 할 빈칸 수(이름은 왼쪽, (인)은 오른쪽 끝). 채운 글은 11pt라 그 크기로 어림,
+    줄이 넘치지 않게 조금 덜 둠. 칸 너비·글자 모양을 모르면 None."""
+    size = re.search(r'<(?:[\w.-]+:)?cellSz\b[^>]*width="(\d+)"', cell)
+    run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', cell)
+    if not size or not run:
+        return None
+    tag = re.search(r'<(?:[\w.-]+:)?cellMargin\b[^>]*>', cell)
+    mg = dict(re.findall(r'\b(left|right)="(\d+)"', tag.group(0) if tag else ""))
+    pm = re.search(r'paraPrIDRef="(\d+)"', cell)
+    block = chars._para(pm.group(1)) if pm else ""
+    ind = sum(int(x) for x in re.findall(r'<(?:[\w.-]+:)?(?:left|right)\b[^>]*\bvalue="(\d+)"', block)[:2])
+    avail = int(size.group(1)) - int(mg.get("left", 141)) - int(mg.get("right", 141)) - ind
+    cid = run.group(1)
+    scale = max(1.0, FILL_HEIGHT / max(1, chars.height(cid)))
+    used = sum(chars.char_width(cid, ch) for ch in name + seal) * scale
+    space = chars.char_width(cid, " ") * scale
+    if avail <= 0 or space <= 0:
+        return None
+    n = int((avail * 0.95 - used) // space) - 2  # 어림 오차로 줄이 넘치지 않게 5% + 빈칸 둘 덜
+    return n if n >= 3 else None
 
 
 def _cell_need(cell: str, chars: "_Chars") -> int | None:
@@ -1816,10 +1847,14 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if not target.blank:
                         if not _SEAL_ONLY.match(seal):
                             continue
-                        value = f"{value}   {target.text.strip()}"  # '(인)' 자리 — 이름 뒤에 그대로 남김(11/04 제보)
+                        seal_text = target.text.strip()
                         pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[target.start:target.end])
-                        if chars is not None and pm:  # '(인)'이 오른쪽 정렬이던 칸 — 이름까지 넣으면 가운데로(11/04 사용자 요청)
-                            para_override[target.start] = chars.centered(pm.group(1))
+                        gap = _seal_gap(xml[target.start:target.end], value, seal_text, chars) if chars is not None else None
+                        # 11/11 사용자 요청: 표 칸 안 이름은 다른 값 칸처럼 앞쪽(왼쪽)에, '(인)'은 칸 오른쪽 끝에
+                        # (11/04의 '이름 + (인)을 가운데 정렬'을 대체). 칸 너비를 모르면 예전처럼 이름 뒤 빈칸 셋.
+                        value = f"{value}{' ' * (gap or 3)}{seal_text}"
+                        if chars is not None and pm:
+                            para_override[target.start] = chars.left_any(pm.group(1))
                     edits.append((target, [value], False))
                     if _GUIDE_TEXT.fullmatch(_sq(target.text)):
                         # 회색·기울임 안내 글이 있던 칸 — 그 글자 모양 대신 이름표 칸 글자 모양으로(11/06 사용자 요청: 기본 폰트와 같게)

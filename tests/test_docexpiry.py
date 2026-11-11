@@ -33,6 +33,22 @@ class DocExpiryTest(unittest.TestCase):
         self.assertIn("신용평가 — 2026-06-16 (지남)", text)
         self.assertEqual(D.read_docs(Path(tempfile.mkdtemp())), [])
 
+    def test_cert_file_wins(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for row in [("인증서갱신", None, None, None), (None, "만료일", "갱신주기", None), ("중소기업확인서", "27.3.31", "1년", None),
+                    ("기업부설연구소", 4.3, "매년", "연구개발 실적제출"), ("실적신고", "2월,4월", "1년", None),
+                    ("여성기업", "26.10.22", "3년", "그리다"), ("지일", "만료일", "그리다", "만료일"),
+                    ("조형물", "27.6.17", "조형물", "27.06.01"), ("데이터처리서비스", "27.01.02", "가구-책장", "26.11.20")]:
+            ws.append(row)
+        wb.save(self.dir / D.CERT_FILE)
+        # 서류목록의 '직접생산(전시)'·'신용평가'는 표에 없어 그대로, '조형물'(2027-06-17)은 표 날짜가 우선
+        # 그리다(지일 직원 자회사)는 '그리다 · 이름'으로 함께
+        self.assertEqual(D.read_docs(self.dir), [("신용평가", date(2026, 6, 16)), ("그리다 · 여성기업", date(2026, 10, 22)),
+                                                 ("직접생산(전시)", date(2026, 11, 11)), ("그리다 · 가구-책장", date(2026, 11, 20)),
+                                                 ("데이터처리서비스", date(2027, 1, 2)), ("중소기업확인서", date(2027, 3, 31)),
+                                                 ("그리다 · 조형물", date(2027, 6, 1)), ("조형물", date(2027, 6, 17))])
+
     def test_alert_once(self):
         docs = D.read_docs(self.dir)
         text, keys = D.due_alert(docs, date(2026, 11, 9), set())

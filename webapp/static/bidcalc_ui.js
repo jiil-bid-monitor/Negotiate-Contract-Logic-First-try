@@ -657,11 +657,14 @@
       ${item("1순위 업체", w ? esc(w.name) : "-")}
       ${item("1순위 투찰금액", w && w.amount != null ? `${won(w.amount)}원` : "-")}
       ${item("1순위 투찰률", w && w.rate != null ? pct3(w.rate) : "-")}
-      ${item("지일 투찰금액", o && o.amount != null ? `${won(o.amount)}원` : `${won(r.bid)}원 (기록)`)}
+      ${(() => {  // 지일 투찰금액 칸 아래에 낙찰하한가와 하한가 대비 차이(11/11 사용자 요청 — 칸 수는 그대로 9칸)
+        const amt = o && o.amount != null ? o.amount : r.bid, fl = floorPrice(r);
+        const sub = fl != null ? `<em class="res-floor">낙찰하한가 ${won(fl)}원 (${amt - fl >= 0 ? "+" : "−"}${won(Math.abs(amt - fl))})</em>` : "";
+        return `<div><span>지일 투찰금액</span><b>${won(amt)}원${o && o.amount != null ? "" : " (기록)"}</b>${sub}</div>`;
+      })()}
       ${item("지일 투찰률", o && o.rate != null ? pct3(o.rate) : "-")}
       ${item("지일 순위", o ? (o.rank != null ? `${o.rank}위 / ${res.bidderCount}곳` : esc(o.remark || "순위 없음")) : "참가 기록 없음")}
       ${item("예정가격 (실제)", res.plannedPrice != null ? `${won(res.plannedPrice)}원` : "-")}
-      ${item("낙찰하한가", floorPrice(r) != null ? `${won(floorPrice(r))}원` : "-")}
       ${item("실제 사정률", pct3(res.assessmentRate))}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
       </div>${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;

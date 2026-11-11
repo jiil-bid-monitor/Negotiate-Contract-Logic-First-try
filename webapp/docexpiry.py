@@ -132,14 +132,20 @@ def docs_reply(docs: list[tuple[str, date]], today: date) -> str:
 
 
 def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str]) -> tuple[str | None, list[str]]:
-    """7일 안에 만료되는데 아직 안 알린 서류 → (알림 글, 새로 알린 키). 없으면 (None, [])."""
-    rows = [(k, d) for k, d in docs if 0 <= (d - today).days <= ALERT_DAYS and f"{k}|{d}" not in sent]
+    """7일 안에 만료되는데 아직 안 알린 서류 → (알림 글, 새로 알린 키). 없으면 (None, []).
+    만료일 당일에도 날짜가 그대로면 한 번 더 알린다 — 키 '종류|날짜|당일' (2026-11-11 사용자 요청)."""
+    def key(k, d):
+        return f"{k}|{d}|당일" if d == today else f"{k}|{d}"
+
+    rows = [(k, d) for k, d in docs if 0 <= (d - today).days <= ALERT_DAYS and key(k, d) not in sent]
     if not rows:
         return None, []
-    lines = ["<b>회사 서류 갱신 알림</b> — 7일 안에 유효기간이 끝납니다"]
-    lines += [f"· {html.escape(k)} — {d} (D-{(d - today).days})" for k, d in rows]
-    lines.append("갱신하면 회사서류_최신 폴더의 인증서갱신.xlsx 만료일을 고쳐 주세요.")
-    return "\n".join(lines), [f"{k}|{d}" for k, d in rows]
+    head = "오늘 유효기간이 끝납니다" if all(d == today for _, d in rows) else "7일 안에 유효기간이 끝납니다"
+    lines = [f"<b>회사 서류 갱신 알림</b> — {head}"]
+    lines += [f"· {html.escape(k)} — {d} ({'오늘 만료' if d == today else f'D-{(d - today).days}'})" for k, d in rows]
+    lines.append("갱신하면 회사서류_최신 폴더의 인증서갱신.xlsx 만료일을 고쳐 주세요.\n"
+                 "더 쓰지 않는 서류면 /remove 로 빼 주세요 — 그 뒤로는 알리지 않습니다.")
+    return "\n".join(lines), [key(k, d) for k, d in rows]
 
 
 def load_sent(path: Path) -> set[str]:

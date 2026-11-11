@@ -56,6 +56,10 @@ class DocExpiryTest(unittest.TestCase):
         self.assertNotIn("신용평가", text, "이미 지난 서류는 알리지 않는다")
         self.assertEqual(D.due_alert(docs, date(2026, 11, 9), set(keys)), (None, []))
         self.assertEqual(D.due_alert(docs, date(2026, 11, 1), set())[0], None, "8일 남으면 아직")
+        text, again = D.due_alert(docs, date(2026, 11, 11), set(keys))
+        self.assertIn("직접생산(전시) — 2026-11-11 (오늘 만료)", text, "당일에도 그대로면 한 번 더")
+        self.assertIn("/remove", text)
+        self.assertEqual(D.due_alert(docs, date(2026, 11, 11), set(keys) | set(again)), (None, []))
 
     def test_bot_checks_once_a_day_after_9(self):
         sent = []

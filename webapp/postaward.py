@@ -169,13 +169,14 @@ def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
             continue
         if ws.cell(r, 2).value in (None, ""):
             todo.append(str(ws.cell(r, 1).value))
-    # 인력 — 표준틀의 빨간 칸과 같은 규칙(11/11 사용자 결정 '선임 대상만 필수'): 1번(공사 현장대리인·착수 용역 책임자)의
-    # 선임신고서·재직증명서에 들어가는 칸만. 나머지 줄은 쓰는 사람만 채우면 됨
+    # 인력 — 표준틀의 빨간 칸과 같은 규칙(11/11 사용자 결정): 필수 줄(공사 1~4, 착수 1·3~6)은 명단 칸(성명·담당업무·직책·경력·기술자격),
+    # 1번은 선임신고서·재직증명서 칸(자격증번호~입사일)까지. 해당 시 줄(공사 5·6 안전·품질관리자, 착수 2 현장대리인)은 빼고
     heads = {c: str(ws.cell(23, c).value or "") for c in range(2, 11)}
-    label = str(ws.cell(24, 1).value or "1번")
-    empty = [heads[c] or str(c) for c in (2, 3, 4, 6, 7, 8, 9, 10) if ws.cell(24, c).value in (None, "")]
-    if empty:
-        todo.append(f"{label}: " + "·".join(empty))
+    for n in ((1, 2, 3, 4) if gong else (1, 3, 4, 5, 6)):
+        r = 23 + n
+        empty = [heads[c] or str(c) for c in (range(2, 11) if n == 1 else range(2, 7)) if ws.cell(r, c).value in (None, "")]
+        if empty:
+            todo.append(f"{ws.cell(r, 1).value or f'{n}번'}: " + "·".join(empty))
     for r in range(4, 22):
         if str(ws.cell(r, 3).value or "").startswith("[자동]") and ws.cell(r, 2).value not in (None, ""):
             value = ws.cell(r, 2).value

@@ -138,7 +138,8 @@ def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str]) -> tupl
         return None, []
     lines = ["<b>회사 서류 갱신 알림</b> — 7일 안에 유효기간이 끝납니다"]
     lines += [f"· {html.escape(k)} — {d} (D-{(d - today).days})" for k, d in rows]
-    lines.append("갱신하면 회사서류_최신 폴더의 인증서갱신.xlsx 만료일을 고쳐 주세요.")
+    lines.append("갱신하면 회사서류_최신 폴더의 인증서갱신.xlsx 만료일을 고쳐 주세요.\n"
+                 "더 쓰지 않는 서류면 /remove 로 빼 주세요 — 그 뒤로는 알리지 않습니다.")
     return "\n".join(lines), [f"{k}|{d}" for k, d in rows]
 
 

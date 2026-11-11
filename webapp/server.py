@@ -646,7 +646,8 @@ def main(argv: list[str] | None = None) -> int:
         app.postaward.bidlog = app.bidlog
         app.bidlog_pull = BidLogPull(mirror, pull_url, os.environ.get("BIDLOG_PULL_TOKEN", "").strip() or token or "")
         app.bidlog_pull.start()
-    if not app.viewer and os.environ.get("BID_NIGHTLY", "1").strip() != "0":
+    # 보기 전용(NAS)은 기본 끔 — 낙찰 후 서류 확인이 이 밤 작업에 있어 NAS는 BID_NIGHTLY=1로 켠다
+    if os.environ.get("BID_NIGHTLY", "0" if app.viewer else "1").strip() != "0":
         start_nightly(app)
     # 텔레그램 명령어(/notice·/deadline) — TELEGRAM_COMMANDS=1인 곳(NAS)에서만 (webapp/telegrambot.py)
     bot = TelegramBot.from_env(app.latest_run, lambda: app.reports)

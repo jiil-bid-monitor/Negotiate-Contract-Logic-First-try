@@ -81,7 +81,7 @@ CRITERIA_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["items"],
     "properties": {"items": {"type": "array", "items": {
         "type": "object", "additionalProperties": False,
-        "required": ["name", "kind", "points", "per_grade", "bands", "note"],
+        "required": ["name", "kind", "points", "per_grade", "bands", "credit_rows", "note"],
         "properties": {
             "name": {"type": "string"},
             "kind": {"type": "string", "enum": KINDS},
@@ -92,6 +92,10 @@ CRITERIA_SCHEMA = {
                 "type": "object", "additionalProperties": False, "required": ["text", "lo", "hi", "unit", "score"],
                 "properties": {"text": {"type": "string"}, "lo": {"type": ["number", "null"]}, "hi": {"type": ["number", "null"]},
                                "unit": {"type": "string", "enum": ["원", "건", "점", ""]}, "score": {"type": "number"}}}},
+            "credit_rows": {"type": "array", "items": {
+                "type": "object", "additionalProperties": False, "required": ["회사채", "기업어음", "기업신용평가등급", "score"],
+                "properties": {"회사채": {"type": "string"}, "기업어음": {"type": "string"}, "기업신용평가등급": {"type": "string"},
+                               "score": {"type": "number"}}}},
             "note": {"type": "string"}}}}}}
 
 CRITERIA_PROMPT = """아래는 한국 공공 입찰 제안요청서(공개 문서)의 글이다. '정량적 평가'(정량평가, 사업수행능력 평가 등) 배점기준만 뽑아라.
@@ -101,6 +105,9 @@ CRITERIA_PROMPT = """아래는 한국 공공 입찰 제안요청서(공개 문�
 - per_grade: 기술인력이 '1인당 등급별 점수'(특급 각 0.5점 등)면 등급별 점수(기술사·특급·고급·중급·초급 중 문서에 있는 것만). 아니면 {}
 - bands: 금액·건수·점수 구간표면 구간마다 {text: 문서 글 그대로, lo: 이상(포함) 값 또는 null, hi: 미만(제외) 값 또는 null,
   unit: 원/건/점, score}. 금액은 원 단위 숫자(5억 = 500000000). '이하'면 hi = 그 값 + 1(건) 또는 + 0.000001.
+- credit_rows: 경영상태(신용평가등급) 표면 줄마다 {회사채, 기업어음, 기업신용평가등급: 그 줄의 등급 글(예: "BBB- 이상", "BB+, BB0, BB-",
+  "CCC+ 이하"), score}. 종류 구분 없이 '신용등급'만 적혔으면 회사채·기업신용평가등급 칸에 같은 글, 기업어음은 "". 신용등급 표가 아니면 [].
+  신용등급 표는 bands에 넣지 마라.
 - note: 인정 기준·기간·주석 등 채점에 필요한 문장을 짧게.
 문서에 없는 값은 만들지 말고 비워라. 글:
 """
@@ -125,9 +132,33 @@ def to_criteria(data: dict) -> list[Criterion]:
             c.unit = c.unit or ("" if b.get("unit") == "점" else str(b.get("unit") or ""))
         if any(b.get("unit") == "점" for b in it.get("bands") or []):
             c.unit = "점"
+        c.credit_rows = _credit_rows(it)
+        if kind == "credit" and c.credit_rows:
+            c.bands, c.unit = [], ""  # 신용등급은 credit_rows로 채점(selfscore._credit)
         if c.name and c.points > 0:
             out.append(c)
     return out
+
+
+_GRADE = re.compile(r"\b[A-D][A-D0-9+\-]*")
+
+
+def _credit_rows(it: dict) -> list[tuple[dict[str, str], float]]:
+    """신용등급 표 → selfscore.Criterion.credit_rows [({종류: 등급 글}, 점수)]. 예전 답처럼 bands 글에 등급이 섞여 오면(종류 없는 '신용등급 BBB- 이상')
+    회사채·기업신용평가등급 같은 글로."""
+    rows = []
+    for r in it.get("credit_rows") or []:
+        rules = {k: str(r.get(k) or "").strip() for k in ("회사채", "기업어음", "기업신용평가등급") if str(r.get(k) or "").strip()}
+        if rules:
+            rows.append((rules, float(r.get("score") or 0)))
+    if rows or it.get("kind") != "credit":
+        return rows
+    for b in it.get("bands") or []:
+        text = str(b.get("text") or "")
+        if _GRADE.search(text.upper()):
+            rule = re.sub(r"^\s*(?:신용\s*등급|신용\s*평가\s*등급)\s*", "", text).strip()
+            rows.append(({"회사채": rule, "기업신용평가등급": rule}, float(b.get("score") or 0)))
+    return rows
 
 
 def criteria_from_text(text: str, **kw) -> list[Criterion]:

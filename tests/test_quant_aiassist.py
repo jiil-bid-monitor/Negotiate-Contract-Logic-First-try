@@ -68,3 +68,23 @@ def test_doc_text_keeps_table_rows():
     xml = ("<hp:p><hp:run><hp:t>나. 기술능력 평가</hp:t></hp:run></hp:p><hp:p><hp:run><hp:tbl><hp:tr>" + c("항목평가") + c("배점")
            + "</hp:tr><hp:tr>" + c("전문인력") + c("3.0") + "</hp:tr></hp:tbl></hp:run></hp:p>")
     assert doc_text(xml) == "나. 기술능력 평가\n항목평가 | 배점\n전문인력 | 3.0"
+
+
+def test_credit_rows_become_scoreable():
+    """11/11 시험 결과: 경영상태 표를 bands 글로 받아 점수 계산(credit_rows)에 못 썼음 — 종류별 줄로 받고, 예전 모양(bands)도 바꿔 씀."""
+    import datetime as dt
+
+    from quantdocs import vault
+    from quantdocs.selfscore import score
+
+    new = {"name": "경영상태", "kind": "credit", "points": 3, "per_grade": {}, "bands": [], "note": "", "credit_rows": [
+        {"회사채": "BB- 이상", "기업어음": "B0 이상", "기업신용평가등급": "BB- 이상", "score": 3},
+        {"회사채": "B+, B0, B-", "기업어음": "", "기업신용평가등급": "B+, B0, B-", "score": 2}]}
+    old = {"name": "경영상태평가", "kind": "credit", "points": 5, "per_grade": {}, "note": "", "bands": [
+        {"text": "신용등급 BBB- 이상", "lo": None, "hi": None, "unit": "", "score": 5},
+        {"text": "BB+, BB0, BB-", "lo": None, "hi": None, "unit": "", "score": 4}]}
+    a, b = aiassist.to_criteria({"items": [new, old]})
+    assert a.credit_rows[0] == ({"회사채": "BB- 이상", "기업어음": "B0 이상", "기업신용평가등급": "BB- 이상"}, 3.0) and not a.bands
+    assert b.credit_rows[0] == ({"회사채": "BBB- 이상", "기업신용평가등급": "BBB- 이상"}, 5.0) and not b.bands
+    v = vault.Vault({}, info={"신용평가등급": "BB0", "신용평가 종류": "기업신용평가등급"})
+    assert [s.score for s in score([a, b], v, dt.date(2026, 11, 11))] == [3.0, 4.0]

@@ -2268,3 +2268,19 @@ def test_selfscore_nopoints_layout_pieces():
     """11/10 경남교육청 자체평가표: '3건 ~ 2건' 구간, '배점(점)' 머리."""
     from quantdocs.selfscore import parse_range
     assert parse_range("3건 ~ 2건") == (2.0, 4.0, "건") and parse_range("0건") == (0.0, 1.0, "건")
+
+
+def test_spaced_rep_label_not_party_head(tmp_path: Path):
+    """11/11 사용인감계 '대    표    자 :' — 글자를 띄운 '대 표'를 묶음 머리로 떼어 '자 :'만 남아 비었음(표 칸 안·표 밖 서명 줄 둘 다)."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    cell = ('<hp:tc><hp:subList>' + p("주          소 :") + p("상호또는법인명 :") + p("대    표    자 :")
+            + '</hp:subList><hp:cellAddr colAddr="1" rowAddr="1"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    tbl = "<hp:p><hp:run><hp:tbl><hp:tr>" + _c(0, 0, "사 용 인 감") + cell + "</hp:tr></hp:tbl></hp:run></hp:p>"
+    body = (p("사 용 인 감 계") + tbl + p("2026년      월      일") + p("            주          소 : ")
+            + p("            상호또는법인명 : ") + p("            대    표    자 :                     (인)"))
+    fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "o.hwpx",
+              vault.Vault({}, info={"회사명": "(주)가상", "대표자": "이윤봉", "주소": "강원 정선"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert text.count("이윤봉") == 2 and re.search(r"이윤봉 +\(인\)", text)

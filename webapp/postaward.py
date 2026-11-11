@@ -175,6 +175,8 @@ def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
     for n in ((1, 2, 3, 4) if gong else (1, 3, 4, 5, 6)):
         r = 23 + n
         empty = [heads[c] or str(c) for c in (range(2, 11) if n == 1 else range(2, 7)) if ws.cell(r, c).value in (None, "")]
+        if n != 1 and ws.cell(r, 6).value not in (None, "") and ws.cell(r, 7).value in (None, ""):
+            empty.append(heads[7] or "자격증번호")  # 기술자격을 적었으면 자격증번호도(11/11)
         if empty:
             todo.append(f"{ws.cell(r, 1).value or f'{n}번'}: " + "·".join(empty))
     for r in range(4, 22):

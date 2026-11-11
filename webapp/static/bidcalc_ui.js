@@ -809,7 +809,25 @@
     }
   });
   $("#bidlogQ").addEventListener("input", renderLog);
-  $("#bidlogReload").addEventListener("click", () => loadLog(true));
+  // '결과 새로 고침'(11/11 사용자 요청) — 줄마다 있는 '결과 다시 받기'를 모든 기록에: 목록을 다시 받고, 완료된 결과도 나라장터에서 다시 받음.
+  // 서버는 한 번에 8건(MAX_PER_CALL)까지라 8건씩 나눠 보냄.
+  async function refetchAll() {
+    const btn = $("#bidlogReload");
+    btn.disabled = true;
+    try {
+      await loadLog(false);
+      const ids = LOG.map((r) => r.id);
+      BIDDERS.clear();
+      for (let i = 0; i < ids.length; i += 8) await fetchResults(ids.slice(i, i + 8), true);
+      OPEN_ROWS.forEach((id) => {
+        const r = LOG.find((x) => x.id === id);
+        if (r && r.result && r.result.status === "완료") loadBidders(id);
+      });
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  $("#bidlogReload").addEventListener("click", refetchAll);
   // 두 쪽 전환 — 투찰내역 쪽으로 가면 목록을 새로 받음(다른 사람이 기록했을 수 있어서)
   function showPage(page) {
     document.querySelectorAll("[data-calcpage]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.calcpage === page)));

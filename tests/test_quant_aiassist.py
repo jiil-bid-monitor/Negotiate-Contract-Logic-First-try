@@ -88,3 +88,12 @@ def test_credit_rows_become_scoreable():
     assert b.credit_rows[0] == ({"회사채": "BBB- 이상", "기업신용평가등급": "BBB- 이상"}, 5.0) and not b.bands
     v = vault.Vault({}, info={"신용평가등급": "BB0", "신용평가 종류": "기업신용평가등급"})
     assert [s.score for s in score([a, b], v, dt.date(2026, 11, 11))] == [3.0, 4.0]
+
+
+def test_trim_picks_real_scoring_table_not_toc():
+    """11/11: 6만 자를 보내 Max 사용량이 컸음 — 정량평가 부분(목차 말고 '점'이 많은 실제 배점표)만 1만 2천 자."""
+    toc = "목차\n1. 사업개요\n2. 정량평가 기준\n3. 제출서류\n"
+    body = "가" * 30000 + "\n2. 정량평가 기준\n" + "실적 5억 이상 5점 / 3억 이상 4점 / 기술사 3점 / " * 50 + "나" * 30000
+    out = aiassist._trim(toc + body, limit=12000)
+    assert len(out) == 12000 and "5억 이상 5점" in out and "목차" not in out
+    assert aiassist._trim("짧은 글", limit=12000) == "짧은 글"

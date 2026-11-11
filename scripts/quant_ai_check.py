@@ -60,15 +60,25 @@ def main(argv: list[str] | None = None) -> int:
                     help="배점기준을 못 읽은 사업만 Claude에 묻고 이름표는 안 물음 — 다른 사업은 건너뛰고 셈에서도 뺌")
     ap.add_argument("--max-calls", type=int, default=200)
     ap.add_argument("--model", default=None, help="claude 모델(기본 .env CLAUDE_MODEL 또는 sonnet)")
+    ap.add_argument("--max-chars", type=int, default=0, help="Claude에 보낼 글 최대 글자 수(기본 12,000 — 정량평가 부분만)")
     ap.add_argument("--dry-run", action="store_true", help="Claude를 부르지 않고 물을 곳·보낼 글 길이만 셈")
     ap.add_argument("--out", default=str(ROOT / "output" / "quant_ai_check.csv"))
     args = ap.parse_args(argv)
+    if args.max_chars:
+        import os
+        os.environ["CLAUDE_MAX_CHARS"] = str(args.max_chars)
     raw = Path(args.jiil) / "docs" / "raw"
     groups = projects(raw)
     if args.limit and not args.only_criteria:
         groups = groups[: args.limit]
     found = 0  # --only-criteria: 배점기준을 물을 사업 수
     rows: list[list] = []
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fh = out.open("w", encoding="utf-8-sig", newline="")  # 사업마다 바로 씀 — 중간에 멈춰도(Ctrl+C) 받은 답이 남게(11/11)
+    writer = csv.writer(fh)
+    writer.writerow(["사업 폴더", "물은 것", "결과", "내용(기준·이름표)", "다시 검사 / 받은 항목"])
+    written = 0
     calls = 0
     before, after = Counter(), Counter()
     asked = {"배점기준": 0, "배점기준 받음": 0, "이름표 사업": 0, "이름표": 0, "이름표 항목 받음": 0, "실패": 0}
@@ -77,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     started = time.time()
     for i, group in enumerate(groups, 1):
         folder = "/".join(group[0].relative_to(raw).parts[:2])
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:  # Windows가 파일을 잡고 있어도 멈추지 않게
             h = health.check(group, Path(tmp), convert=to_hwpx)
         kinds = h.counts()
         need_crit = kinds.get("배점기준 못 읽음", 0) > 0
@@ -108,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
                     crit = []
                 if crit:
                     asked["배점기준 받음"] += 1
-                    with tempfile.TemporaryDirectory() as tmp:
+                    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:  # Windows가 파일을 잡고 있어도 멈추지 않게
                         h2 = health.check(group, Path(tmp), convert=to_hwpx, criteria=crit)
                     k2 = h2.counts()
                     for k in CRIT_KINDS:
@@ -143,16 +153,15 @@ def main(argv: list[str] | None = None) -> int:
                     fields[f] += 1
                     asked["이름표 항목 받음"] += f not in ("none", "(답 없음)")
                     rows.append([folder, "이름표", "받음", lab, f])
+        writer.writerows(rows[written:])
+        written = len(rows)
+        fh.flush()
         print(f"  {i}/{len(groups)} {folder} · Claude {calls}회 · {time.time() - started:.0f}초", flush=True)
         if args.only_criteria and args.limit and found >= args.limit:
             print(f"  배점기준 사업 {found}개를 채워 멈춤(훑은 사업 {i}개)", flush=True)
             break
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("w", encoding="utf-8-sig", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(["사업 폴더", "물은 것", "결과", "내용(기준·이름표)", "다시 검사 / 받은 항목"])
-        w.writerows(rows)
+    writer.writerows(rows[written:])
+    fh.close()
     if args.only_criteria:
         print(f"\n(배점기준만) 배점기준을 물은 사업 {found}개 — 다른 사업은 건너뛰고 셈에서도 뺌")
     print(f"\n사업 {len(groups)}개 · Claude {calls}회{' (부르지 않음 — dry-run)' if args.dry_run else ''} · 보낸 글 약 {sent_chars:,}자 · "

@@ -26,7 +26,7 @@ from .selfscore import GRADES, Band, Criterion
 FIELDS = ["회사명", "대표자", "주소", "전화번호", "팩스번호", "사업자등록번호", "법인등록번호", "이메일", "홈페이지",
           "설립일", "자본금", "종업원 수", "업태", "종목", "대표자 생년월일", "공고번호", "공고명", "none"]
 KINDS = ["track", "staff", "patent", "credit", "sanction", "other"]
-MAX_CHARS = 60_000  # 제안요청서 글이 길면 정량평가 부분 앞뒤로만(사용량 아끼기)
+MAX_CHARS = 12_000  # 정량평가 부분만 보냄(11/11 — 6만 자로 10사업 시험 중 Max 사용량이 너무 커서 멈춤). .env CLAUDE_MAX_CHARS로 바꿈
 
 
 class AiError(RuntimeError):
@@ -113,11 +113,22 @@ CRITERIA_PROMPT = """아래는 한국 공공 입찰 제안요청서(공개 문�
 """
 
 
-def _trim(text: str) -> str:
-    if len(text) <= MAX_CHARS:
+_QUANT_HEAD = re.compile(r"정\s*량\S{0,4}\s*평\s*가|사업\s*수행\s*능력\s*평가|평\s*가\s*항\s*목|배\s*점\s*기\s*준")
+
+
+def _trim(text: str, limit: int | None = None) -> str:
+    """보낼 글을 정량평가 부분으로 줄임 — '정량평가'·'평가항목'·'배점기준'이 나오는 곳 중 뒤 3천 자에 '점'이 가장 많은 곳(목차가 아니라 실제 배점표)
+    500자 앞부터 limit자. 그런 곳이 없으면 앞에서부터 limit자."""
+    limit = limit or int(os.environ.get("CLAUDE_MAX_CHARS", "") or MAX_CHARS)
+    if len(text) <= limit:
         return text
-    i = max(0, (re.search(r"정\s*량\S{0,4}\s*평\s*가|사업\s*수행\s*능력\s*평가", text) or re.match("", text)).start() - 2000)
-    return text[i:i + MAX_CHARS]
+    best, score = 0, -1
+    for m in _QUANT_HEAD.finditer(text):
+        n = len(re.findall(r"\d\s*점", text[m.start():m.start() + 3000]))
+        if n > score:
+            best, score = m.start(), n
+    i = max(0, best - 500)
+    return text[i:i + limit]
 
 
 def to_criteria(data: dict) -> list[Criterion]:

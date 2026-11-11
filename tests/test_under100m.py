@@ -495,5 +495,36 @@ class TestWordForms(unittest.TestCase):
             self.assertEqual(word_forms(f), ["서식01 공기 준수 서약서", "서식02 청렴서약서"])
 
 
+class RunAlertTest(unittest.TestCase):
+    def test_start_and_end_alerts(self):
+        from unittest import mock
+
+        import under100m.__main__ as m
+
+        sent = []
+        with tempfile.TemporaryDirectory() as d, mock.patch("nego.telegram.send_dev_alert", lambda text: sent.append(text) or []),                 mock.patch.object(m, "run_once", lambda *a, **k: {"made": ["[1억미만] A"], "over": 1, "failed": [], "seen": 5, "done_before": 3}):
+            self.assertEqual(m.main(["--out", d, "--days", "7"]), 0)
+        self.assertEqual(len(sent), 2)
+        self.assertIn("수집 시작", sent[0])
+        self.assertIn("새 폴더 1건", sent[1])
+        self.assertIn("대상 5건 중 이미 만든 공고 3건", sent[1])
+        self.assertIn("[1억미만] A", sent[1])
+
+    def test_failure_alert(self):
+        from unittest import mock
+
+        import under100m.__main__ as m
+
+        sent = []
+
+        def boom(*a, **k):
+            raise RuntimeError("resultCode=07")
+
+        with tempfile.TemporaryDirectory() as d, mock.patch("nego.telegram.send_dev_alert", lambda text: sent.append(text) or []),                 mock.patch.object(m, "run_once", boom):
+            self.assertEqual(m.main(["--out", d]), 1)
+        self.assertIn("수집 실패", sent[-1])
+        self.assertIn("resultCode=07", sent[-1])
+
+
 if __name__ == "__main__":
     unittest.main()

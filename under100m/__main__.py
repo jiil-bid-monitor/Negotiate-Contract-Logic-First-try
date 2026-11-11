@@ -540,11 +540,13 @@ def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None
     now = now or datetime.now()
     state = load_state(state_path)
     done = state.setdefault("notices", {})
-    result = {"made": [], "over": 0, "failed": []}
+    result = {"made": [], "over": 0, "failed": [], "seen": 0, "done_before": 0}
     todo = []
     for candidate in collect_fn(now, days, out):
+        result["seen"] += 1
         record = done.get(notice_key(candidate.notice), {})
         if record.get("status") in ("made", "over") or record.get("tries", 0) >= MAX_TRIES:
+            result["done_before"] += 1
             continue
         amount, source = business_amount(candidate.notice, candidate.attachment_text)
         if amount is not None and amount >= LIMIT:
@@ -608,22 +610,33 @@ def main(argv: list[str] | None = None) -> int:
         elif errors:
             log.warning("텔레그램 알림 실패: %s", html.escape(str(errors))[:200])
 
+    # 시작·끝 알림(11/11 사용자 요청 — 수집이 돌았는지 개발자 방에서 바로 보이게)
+    started = datetime.now()
+    notify(f"[1억 미만] 수집 시작 — 최근 {args.days}일 게시분 ({started:%m/%d %H:%M})")
     try:
         result = run_once(out, state_path, args.days, notify=notify)
-    except Exception as err:  # noqa: BLE001 — 같은 오류를 1시간마다 알리지 않는다
+    except Exception as err:  # noqa: BLE001
         log.exception("실행 실패")
-        state = load_state(state_path)
-        message = str(err)[:300]
-        if state.get("last_error") != message:
-            state["last_error"] = message
-            save_state(state_path, state)
-            notify(f"[1억 미만 시험] 실행 실패\n{message}")
+        notify(f"[1억 미만] 수집 실패 ({_took(started)}) — 다음 시간에 다시 돎\n{str(err)[:300]}")
         return 1
-    state = load_state(state_path)
-    if state.pop("last_error", None) is not None:
-        save_state(state_path, state)
     log.info("끝 — 새 폴더 %d건, 1억 이상 %d건, 실패 %d건", len(result["made"]), result["over"], len(result["failed"]))
+    notify(end_text(result, _took(started)))
     return 1 if result["failed"] else 0
+
+
+def _took(started: datetime) -> str:
+    secs = int((datetime.now() - started).total_seconds())
+    return f"{secs // 60}분 {secs % 60}초"
+
+
+def end_text(result: dict, took: str) -> str:
+    """끝 알림 — 새로 만든 폴더 이름과 건수(마감·지역으로 뺀 공고는 대상에 안 셈)."""
+    lines = [f"[1억 미만] 수집 끝 ({took}) — 새 폴더 {len(result['made'])}건",
+             f"대상 {result.get('seen', 0)}건 중 이미 만든 공고 {result.get('done_before', 0)}건 · 1억 이상 {result['over']}건 · 실패 {len(result['failed'])}건"]
+    lines += [f"· {name}" for name in result["made"][:15]]
+    if len(result["made"]) > 15:
+        lines.append(f"· 외 {len(result['made']) - 15}건")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

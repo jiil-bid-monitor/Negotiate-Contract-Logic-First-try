@@ -1639,6 +1639,13 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cel
         if item.score is None:
             rep.filled.append(f"자기평점 '{name}' 비움 — " + "; ".join(item.notes[:2]))
             continue
+        if row.by_grade and item.parts:  # 기술자 등급 줄마다 평점 칸 — 등급별 '인원 × 1인당 점수'(11/11 사용자 제보: 합계가 특급 줄에만 들어감)
+            for g, gcell in row.by_grade.items():
+                out.append((gcell, [fmt(item.parts.get(g, 0))], False))
+            parts = " · ".join(f"{g} {fmt(item.parts.get(g, 0))}" for g in row.by_grade)
+            over = sum(item.parts.get(g, 0) for g in row.by_grade) - (item.score or 0)
+            rep.filled.append(f"자기평점 '{name}' → 등급별 {parts} (합 {fmt(item.score)}점{' — 상한을 넘어 합계는 상한으로' if over > 1e-9 else ''})")
+            continue
         cell = row.by_points.get(item.score, row.cell) if row.by_points else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
         out.append((cell, [fmt(item.score)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")

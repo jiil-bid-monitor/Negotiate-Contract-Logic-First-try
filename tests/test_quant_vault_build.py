@@ -2264,6 +2264,33 @@ def test_staff_each_points_layouts(tmp_path: Path):
     assert row.points == 3.0 and row.crit is not None and row.crit.kind == "staff" and row.crit.per_grade == want
 
 
+def test_staff_score_per_grade_rows(tmp_path: Path):
+    """11/11 사용자 제보: 서식 '기술능력 | 특급기술자 | 각0.5점 | (평점)' 줄마다 평점 칸이 따로인데 합계 1.6이 특급 줄에만 들어감 —
+    등급 줄마다 '인원 × 1인당 점수'(특급 2명 1 · 고급 1명 0.4 · 중급 0 · 초급 1명 0.2)."""
+    from types import SimpleNamespace
+
+    from quantdocs.fill import FillReport, _cells, _self_score_edits
+
+    def c(col, row, t, cs=1, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/></hp:tc>')
+    form = _tbl([[c(0, 0, "평가항목"), c(1, 0, "평가요소"), c(2, 0, "배점"), c(3, 0, "자기평점"), c(4, 0, "비고")],
+                 [c(0, 1, "기술능력", 1, 5), c(1, 1, "특급기술자"), c(2, 1, "각0.5점"), c(3, 1, ""), c(4, 1, "")],
+                 [c(1, 2, "고급기술자"), c(2, 2, "각0.4점"), c(3, 2, ""), c(4, 2, "")],
+                 [c(1, 3, "중급기술자"), c(2, 3, "각0.3점"), c(3, 3, ""), c(4, 3, "")],
+                 [c(1, 4, "초급기술자"), c(2, 4, "각0.2점"), c(3, 4, ""), c(4, 4, "")],
+                 [c(1, 5, "상 한 점 수"), c(2, 5, "3점"), c(3, 5, ""), c(4, 5, "")]])
+    xml = f"<hs:sec>{form}</hs:sec>"
+    staff = [{"이름": n, "등급": g, "입사일": dt.date(2015, 1, 1)} for n, g in
+             (("(가)갑", "특급"), ("(가)을", "특급"), ("(가)병", "고급"), ("(가)정", "초급"))]
+    ctx = SimpleNamespace(criteria=[], vault=vault.Vault({}, staff=staff), ref=dt.date(2026, 11, 11))
+    rep = FillReport("t.hwpx")
+    edits = _self_score_edits(_cells(xml, (0, len(xml))), ctx, rep)
+    got = {next(o.text for o in _cells(xml, (0, len(xml))) if o.row == cell.row and o.col == 1): lines[0] for cell, lines, _ in edits}
+    assert got == {"특급기술자": "1", "고급기술자": "0.4", "중급기술자": "0", "초급기술자": "0.2"}, got
+    assert any("합 1.6점" in x for x in rep.filled), rep.filled
+
+
 def test_selfscore_nopoints_layout_pieces():
     """11/10 경남교육청 자체평가표: '3건 ~ 2건' 구간, '배점(점)' 머리."""
     from quantdocs.selfscore import parse_range

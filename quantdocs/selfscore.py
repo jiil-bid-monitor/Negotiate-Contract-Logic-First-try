@@ -73,6 +73,7 @@ class ItemScore:
     score: float | None
     basis: str = ""
     notes: list[str] = field(default_factory=list)
+    parts: dict = field(default_factory=dict)  # 기술인력 등급별 점수 {등급: 인원 × 1인당 점수} — 서식에 등급별 평점 칸이 따로인 표(11/11)
 
 
 # ── 읽기 ────────────────────────────────────────────────────────────
@@ -478,6 +479,7 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
             skipped[p["why"]] = skipped.get(p["why"], 0) + 1
     raw = sum(p for _, p in best.values())
     res.score = min(raw, c.points)
+    res.parts = {g: round(sum(p for gg, p in best.values() if gg == g), 2) for g in c.per_grade}
     if c.unit == "점" and c.bands:  # 등급별 계수 합 → 점수 구간(11/10 경남교육청 '점수 50점 이상 5.0')
         band = _band(c, raw)
         res.score = band.score if band else None
@@ -692,6 +694,7 @@ class FormRow:
     crit: Criterion | None = None  # 서식 표 안의 기준(구간·등급) — 없으면 본문 기준
     total: bool = False
     by_points: dict = field(default_factory=dict)  # 구간 줄마다 평점 칸이 따로인 표 — {그 줄 배점: 평점 칸}(11/10 경남교육청)
+    by_grade: dict = field(default_factory=dict)  # 기술자 등급 줄마다 평점 칸이 따로인 표 — {등급: 평점 칸}(11/11 '특급기술자 | 각0.5점 | 평점')
 
 
 def _per_person(text: str) -> float | None:
@@ -737,13 +740,18 @@ def read_form(cells) -> list[FormRow]:
         first = sorted(rows[rs[0]], key=lambda c: c.col)
         target = next((c for c in first if c.col <= scol < c.col + c.colspan), None)
         by_points: dict = {}
+        by_grade: dict = {}
         if rs[0] in split_cells:  # 줄마다 평점 칸 — {그 줄 배점: 평점 칸}
             for r in rs:
                 line = rows[r]
                 sc = next((c for c in line if c.col <= scol < c.col + c.colspan), None)
-                pv = _num(next((c.text for c in line if c.col <= pcol < c.col + c.colspan), ""))
+                ptext = next((c.text for c in line if c.col <= pcol < c.col + c.colspan), "")
+                pv = _num(ptext)
                 if sc is not None and pv is not None and sc.blank:
                     by_points.setdefault(pv, sc)
+                g = next((g for g in GRADES for c in line if c.col < min(pcol, scol) and g in _sq(c.text)), None)
+                if sc is not None and sc.blank and g and _per_person(ptext) is not None:
+                    by_grade.setdefault(g, sc)  # 등급 줄마다 평점 칸(11/11)
             target = target if target is not None and target.blank else next(iter(by_points.values()), None)
         if target is None or not target.blank:
             continue
@@ -797,7 +805,7 @@ def read_form(cells) -> list[FormRow]:
         points = cap if cap is not None else (max(nums) if nums else None)
         crit.points = points or 0.0
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
-        out.append(FormRow(label, points, target, crit if has else None, by_points=by_points))
+        out.append(FormRow(label, points, target, crit if has else None, by_points=by_points, by_grade=by_grade))
     return out
 
 
@@ -807,7 +815,8 @@ def _scaled(item: ItemScore, points: float | None) -> ItemScore:
         return item
     v = round(item.score * points / item.points, 2)
     return ItemScore(item.name, points, item.kind, v, item.basis + f" → 서식 배점 {points:g}점에 맞춰 ×{points:g}/{item.points:g}",
-                     item.notes + [f"본문 배점 {item.points:g}점과 서식 배점 {points:g}점이 달라 서식 기준으로 환산"])
+                     item.notes + [f"본문 배점 {item.points:g}점과 서식 배점 {points:g}점이 달라 서식 기준으로 환산"],
+                     {g: round(x * points / item.points, 2) for g, x in item.parts.items()})
 
 
 def score_form(rows: list[FormRow], criteria: list[Criterion], vault, ref: date) -> list[tuple[FormRow, ItemScore]]:

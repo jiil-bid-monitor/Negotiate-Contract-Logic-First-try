@@ -191,9 +191,9 @@ def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
         if ws.cell(r, 2).value in (None, ""):
             todo.append(str(ws.cell(r, 1).value))
     # 인력 — 이름을 적은 사람은 9칸 전부(성명~주민등록번호·주소·입사일·연락처, 11/11 사용자 결정 — '빨간 칸만'·'주민번호·주소는 틀에 안 적음'(11/09)을 대체).
-    # 필수 줄(공사 1~4, 착수 1·3~6)은 이름이 비어도 셈, 해당 시 줄(공사 5·6 안전·품질관리자, 착수 2 현장대리인)은 이름을 적었을 때만
+    # 필수 줄(공사 1, 착수 1·3~5)은 이름이 비어도 셈, 나머지(참여기술자·안전·품질관리자·현장대리인(해당 시))는 이름을 적었을 때만
     heads = {c: str(ws.cell(23, c).value or "") for c in range(2, 11)}
-    required = (1, 2, 3, 4) if gong else (1, 3, 4, 5, 6)
+    required = (1,) if gong else (1, 3, 4, 5)  # 참여기술자 줄은 인원이 공고마다 달라 이름을 적었을 때만(11/11 사용자)
     for n in range(1, 7):
         r = 23 + n
         if n not in required and ws.cell(r, 2).value in (None, ""):
@@ -506,8 +506,9 @@ def selfcheck() -> None:
         by_dir = {s["dir"]: s for s in st["stages"]}
         assert by_dir["2_착공"]["doc"] == "착공서류.xlsx" and "수신" in by_dir["2_착공"]["todo"], by_dir["2_착공"]
         assert "공사명" not in by_dir["2_착공"]["todo"] and ["공사명", "A 공사"] in by_dir["2_착공"]["auto"]
-        todo = by_dir["2_착공"]["todo"]   # 인력: 필수 줄 2번은 이름이 없어도 9칸 전부, 해당 시 줄 5번은 이름이 없으면 안 셈
-        assert any(t.startswith("2번: ") and t.count("·") == 8 for t in todo) and not any(t.startswith("5번") for t in todo), todo
+        todo = by_dir["2_착공"]["todo"]   # 인력: 필수 줄 1번은 이름이 없어도 9칸 전부, 참여기술자 2번·해당 시 5번은 이름이 없으면 안 셈
+        assert any(t.startswith("1번: ") and t.count("·") == 8 for t in todo), todo
+        assert not any(t.startswith(("2번", "5번")) for t in todo), todo
         assert by_dir["3_준공"]["ready"] is False and by_dir["3_준공"]["files"] == []
         assert pa.file("R26BK00000001-000", "2_착공/착공서류.xlsx").name == "착공서류.xlsx"
         for bad in ("../../postaward.json", "공고문서/없는파일.hwp"):

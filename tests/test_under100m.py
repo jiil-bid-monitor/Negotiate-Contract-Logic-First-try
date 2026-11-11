@@ -133,8 +133,10 @@ class RunOnceTest(unittest.TestCase):
         self.assertEqual(result["made"], [folder.name])
         self.assertTrue(folder.name.startswith("[1억미만] "))
         self.assertTrue((folder / "20261104_공고문_v1.pdf").exists())
-        self.assertTrue((folder / "서식자동분리" / "제출서류_체크리스트.txt").exists())
-        self.assertTrue((folder / "회사준비서류" / "준비서류_체크리스트.txt").exists())
+        self.assertFalse((folder / "서식자동분리").exists())  # 서식 없는 공고 — 빈 폴더 대신 안내를 준비서류 체크리스트 맨 위에
+        prep = (folder / "회사준비서류" / "준비서류_체크리스트.txt").read_text(encoding="utf-8")
+        self.assertTrue(prep.startswith("■ 서식 안내"))
+        self.assertIn("정해진 서식이 없음", prep.split("\n\n\n")[0])
         self.assertFalse((folder / ".받은 공고").exists())
         self.assertEqual(len(self.sent), 1)
         self.assertEqual(self.go([c])["made"], [])
@@ -146,6 +148,7 @@ class RunOnceTest(unittest.TestCase):
         folder = self.out / folder_name(first.notice)
         mine = folder / "회사준비서류" / "담당자가_넣은_파일.pdf"
         mine.write_bytes(b"mine")
+        (folder / "서식자동분리").mkdir(exist_ok=True)
         (folder / "서식자동분리" / "서식01_고친것.hwpx").write_bytes(b"edited")
         result = self.go([new])
         self.assertEqual(len(result["made"]), 1)

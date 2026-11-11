@@ -29,7 +29,7 @@ from .docs import _unique, issue_lines
 from .form_fill import fill_form, load_company
 from .form_split import merge_forms, split_forms
 from .pdf_forms import fill_pdf, split_pdf
-from .prep import PREP_DIR, listed_items, prepare
+from .prep import CHECKLIST as PREP_CHECKLIST, PREP_DIR, listed_items, prepare
 from .sections import find_sections
 from .summary import write_summary_pdf
 
@@ -435,9 +435,15 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
         if not form_names and not outside:
             outside = ["이 공고는 첨부에 정해진 서식이 없음 — 제출서류는 회사가 직접 작성·발급(회사준비서류 체크리스트 참고)."]
         notes[:0] = outside
-        (tmp / FORMS_DIR / FORMS_LIST).write_text(
-            "\n".join(checklist + ["", f"공고 유형: {candidate.category}", "", "자동으로 채운 칸과 안내 — 제출 전 원문과 대조하세요."] + notes) + "\n",
-            encoding="utf-8")
+        prep_list = tmp / PREP_DIR / PREP_CHECKLIST
+        if not form_names and prep_list.exists():  # 서식이 없으면 빈 폴더 대신 안내를 회사준비서류 체크리스트 맨 위에(2026-11-11 사용자 요청)
+            shutil.rmtree(tmp / FORMS_DIR, ignore_errors=True)
+            head = ["■ 서식 안내 (이 공고는 서식자동분리 폴더 없음)"] + notes + ["", ""]
+            prep_list.write_text("\n".join(head) + prep_list.read_text(encoding="utf-8"), encoding="utf-8")
+        else:
+            (tmp / FORMS_DIR / FORMS_LIST).write_text(
+                "\n".join(checklist + ["", f"공고 유형: {candidate.category}", "", "자동으로 채운 칸과 안내 — 제출 전 원문과 대조하세요."] + notes) + "\n",
+                encoding="utf-8")
         if old:
             merge_into(old, tmp, final, previous)
         else:

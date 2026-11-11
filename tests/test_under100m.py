@@ -461,5 +461,21 @@ class FormSampleRuleTest(unittest.TestCase):
                 self.assertIsNone(z.testzip())
 
 
+class TestOutsideNotes(unittest.TestCase):
+    def test_homepage_forms_and_other_site(self):
+        from under100m.__main__ import outside_notes
+        text = ("1) 입찰참가신청서(본교 소정양식, 홈페이지 구매 게시판 참조) 1부\n"
+                "라. 전자입찰서 제출 기간: 2026.11.20.(금) 10:00 (ebiz4u에 투찰)\n"
+                "- 사업자등록증 1부(원본과 같음을 명기하고 인감으로 날인)\n")
+        out = outside_notes([text])
+        self.assertIn("  - 1) 입찰참가신청서(본교 소정양식, 홈페이지 구매 게시판 참조) 1부", out)
+        self.assertTrue(any("ebiz4u" in l for l in out))
+        self.assertFalse(any("사업자등록증" in l for l in out))
+
+    def test_plain_notice_has_no_notes(self):
+        from under100m.__main__ import outside_notes
+        self.assertEqual(outside_notes(["○ 제출서류 : 이행(입찰)보증보험증권\n※ 나라장터를 통한 전자 제출"]), [])
+
+
 if __name__ == "__main__":
     unittest.main()

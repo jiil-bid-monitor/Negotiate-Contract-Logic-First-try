@@ -305,6 +305,33 @@ def place_notice_files(files: list[Path], converted: dict[Path, Path], folder: P
     return placed
 
 
+# 서식을 첨부 대신 밖에서 받으라는 안내, 나라장터 말고 다른 곳에서 투찰하라는 안내 — 자동으로 못 받으니 담당자에게 그대로 알린다
+_OUTSIDE_FORM = re.compile(r"(양식|서식|별지).{0,40}(홈페이지|누리집|게시판|사이트|www\.|https?://)|(홈페이지|누리집|게시판|www\.|https?://).{0,40}(양식|서식|별지)")
+_OTHER_SITE = re.compile(r"ebiz4u|이비즈포유|학교장터|s2b|국방전자조달|d2b\.go\.kr|kepco|한전\s*전자조달", re.I)
+
+
+def outside_notes(texts: list[str]) -> list[str]:
+    """공고 글에서 '서식은 홈페이지에서'·'다른 입찰 사이트에서 투찰' 문장을 찾아 안내 줄로."""
+    forms, sites, seen = [], [], set()
+    for line in (l.strip() for t in texts for l in t.splitlines()):
+        line, key = re.sub(r"\s+", " ", line)[:150], re.sub(r"\s", "", line)[:120]
+        if key in seen:  # 한글·PDF 판에 같은 문장이 띄어쓰기만 달리 나옴
+            continue
+        if _OUTSIDE_FORM.search(line):
+            forms.append(line)
+        elif _OTHER_SITE.search(line):
+            sites.append(line)
+        else:
+            continue
+        seen.add(key)
+    out = []
+    if forms:
+        out += ["서식을 첨부하지 않고 외부(기관 홈페이지 등)에서 받으라고 안내함 — 직접 받으세요:"] + [f"  - {l}" for l in forms[:5]]
+    if sites:
+        out += ["나라장터가 아닌 다른 입찰 사이트 안내가 있음 — 그 사이트의 서식·제출 방법을 확인하세요:"] + [f"  - {l}" for l in sites[:5]]
+    return out
+
+
 def submit_deadline(schedule) -> str | None:
     """서류 판단 기준이 되는 제출 마감 — 공동수급협정·의견등록·게시·개찰 빼고 가장 늦은 마감."""
     days = [when.strftime("%Y-%m-%d") for name, when in schedule.all_deadlines
@@ -367,8 +394,10 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
             notes.append("한글 글꼴이 없어 요약 PDF를 만들지 못함")
         if keep_prep:
             notes.append(f"재공고: {PREP_DIR}는 그대로 둠 — 바뀐 제출서류가 있는지 공고문과 대조하세요.")
-        if not form_names:
-            notes.insert(0, "공고 문서에서 서식을 찾지 못함 — 공고문을 확인하세요.")
+        outside = outside_notes([text for _, text in docs])
+        if not form_names and not outside:
+            outside = ["이 공고는 첨부에 정해진 서식이 없음 — 제출서류는 회사가 직접 작성·발급(회사준비서류 체크리스트 참고)."]
+        notes[:0] = outside
         (tmp / FORMS_DIR / FORMS_LIST).write_text(
             "\n".join(checklist + ["", f"공고 유형: {candidate.category}", "", "자동으로 채운 칸과 안내 — 제출 전 원문과 대조하세요."] + notes) + "\n",
             encoding="utf-8")

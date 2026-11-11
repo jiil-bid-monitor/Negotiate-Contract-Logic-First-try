@@ -1111,7 +1111,7 @@ def test_inline_phone_fax_paragraph_and_company_seal_cell(tmp_path: Path):
 
 
 def test_bond_pledge_signature_agent_and_corp_numbers(tmp_path: Path):
-    """11/05 사용자 요청 묶음 — ③ 입찰보증금 확약서: 입찰 금액 = 제안요청서 기초금액(숫자 + 괄호 안 한글), 보증금 = × 1.05
+    """11/05 사용자 요청 묶음 — ③ 입찰보증금 확약서: 입찰 금액 = 제안요청서 기초금액(숫자 + 괄호 안 한글), 보증금 = × 0.05(11/11 사용자 요청)
     ② 청렴계약 '서 약 자 : (인)' = 대표자 ④ 위임장 대리인 주소는 비움 ⑧ '생년월일(사업자등록번호)' = 법인등록번호 (사업자등록번호)."""
     from quantdocs.fill import _cells, _spans, basis_amount, fill_hwpx, kor_money
 
@@ -1134,7 +1134,7 @@ def test_bond_pledge_signature_agent_and_corp_numbers(tmp_path: Path):
     rep = fill_hwpx(src, tmp_path / "o.hwpx", v, basis=400_000_000)
     xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     flat = re.sub(r"<[^>]+>", "", xml)
-    assert "입 찰 금 액 : 금 400,000,000원(금 사억원)" in flat and "입찰 보증금 : 금 420,000,000원(금 사억이천만원)" in flat
+    assert "입 찰 금 액 : 금 400,000,000원(금 사억원)" in flat and "입찰 보증금 : 금 20,000,000원(금 이천만원)" in flat
     assert "서 약 자 : 홍길동" in flat
     got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
     assert got[(1, 2)] == "" and got[(2, 1)] == "가상시 가상로 1"  # 대리인 묶음의 주소는 비움, 회사 주소 줄은 채움
@@ -1867,7 +1867,7 @@ def test_proxy_groups_bond_won_sign_and_notice_no_paragraph(tmp_path: Path):
     assert "성 명 홍길동 연 락 처 033-111-2222 대 리 인 성 명 연 락 처" in text
     assert "공 고 번 호 : R26BK00000001-000" in text
     assert text.count("가상 전시관 조성") == 1
-    assert "금 사억이천만 원 (￦ 420,000,000 )" in text
+    assert "금 이천만 원 (￦ 20,000,000 )" in text
 
 
 def test_plain_font_title_and_seal_glyph_signature(tmp_path: Path):

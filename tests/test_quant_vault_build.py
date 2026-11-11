@@ -2284,3 +2284,16 @@ def test_spaced_rep_label_not_party_head(tmp_path: Path):
               vault.Vault({}, info={"회사명": "(주)가상", "대표자": "이윤봉", "주소": "강원 정선"}))
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert text.count("이윤봉") == 2 and re.search(r"이윤봉 +\(인\)", text)
+
+
+def test_seal_on_next_line_moves_up(tmp_path: Path):
+    """11/11 청렴계약 이행서약서 — '서  약  자 :' 아래 문단이 '(인)'뿐(원본 서식). 이름 줄로 올리고 아래 줄은 빈 줄로(사용자 결정)."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = p("청렴계약 이행서약서") + p("2026.    .    .") + p("                서  약  자 : ") + p(" " * 54 + "(인)") + p("본문 끝")
+    fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "이윤봉"}))
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    paras = [re.sub(r"<[^>]+>", "", m) for m in re.findall(r"<hp:p\b[^>]*>(.*?)</hp:p>", xml, re.S)]
+    i = next(k for k, t in enumerate(paras) if "서  약  자" in t)
+    assert re.search(r"서  약  자 : 이윤봉 +\(인\)", paras[i]) and paras[i + 1].strip() == "" and paras[i + 2] == "본문 끝"

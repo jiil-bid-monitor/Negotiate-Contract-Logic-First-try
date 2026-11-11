@@ -594,7 +594,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     sign_at: set[int] = set()  # 쌍점 없는 서명 줄('대표자      ㉿') 문단 순번 — 바로 위 '신청인 업체명' 줄도 서명 묶음으로 봄
     # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
     # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
-    for n, (s, e) in enumerate(sorted(paras)):
+    order = sorted(paras)
+    for n, (s, e) in enumerate(order):
         if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single + other):
             continue
         if sign_only:
@@ -768,6 +769,16 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             continue
         if bare:  # 쌍점 없는 서식은 쌍점 없이 — ' : 값'을 '   값'으로
             seg = seg.replace(f" : {_mark(value)}", f"   {_mark(value)}", 1)
+        if key == "대표자" and not seal and n + 1 < len(order):
+            # 서명 줄 바로 아래 문단이 '(인)'뿐이면(청렴계약 이행서약서 '서 약 자 :' / 다음 줄 '      (인)') 이름 줄로 올림 —
+            # 아래 문단은 글만 지우고 빈 줄로 남겨 쪽 배치는 그대로(11/11 사용자 결정)
+            ns, ne = order[n + 1]
+            seal_m = re.fullmatch(rf"\s*({_SEAL_TAIL})\s*", _text(xml[ns:ne]))
+            if seal_m and ns >= e and _VE in seg:
+                seg = seg.replace(_VE, _VE + " " * 8 + seal_m.group(1), 1)
+                below = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>).*?(</(?:[\w.-]+:)?t>)", r"\1\2", xml[ns:ne], flags=re.S)
+                edits.append((ns, ne, re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", below, flags=re.S)))
+                rep.filled.append(f"{_sq(label)} 아래 줄 {seal_m.group(1)} → 이름 줄로")
         edits.append((s, e, _hang(seg, chars)))
         rep.filled.append(f"{_sq(label)} → {value[:40]}")
     for s, e, seg in sorted(edits, key=lambda x: x[0], reverse=True):  # 뒤에서부터 — 문단 순서대로 모이지 않은 고침도 있어 정렬(11/05 서식 3 줄 겹침)

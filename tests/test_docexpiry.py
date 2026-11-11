@@ -43,11 +43,11 @@ class DocExpiryTest(unittest.TestCase):
             ws.append(row)
         wb.save(self.dir / D.CERT_FILE)
         # 서류목록의 '직접생산(전시)'·'신용평가'는 표에 없어 그대로, '조형물'(2027-06-17)은 표 날짜가 우선
-        # 그리다(지일 직원 자회사)는 '그리다 · 이름'으로 함께
-        self.assertEqual(D.read_docs(self.dir), [("신용평가", date(2026, 6, 16)), ("그리다 · 여성기업", date(2026, 10, 22)),
-                                                 ("직접생산(전시)", date(2026, 11, 11)), ("그리다 · 가구-책장", date(2026, 11, 20)),
+        # 그리다(지일 직원 자회사)는 '(그리다) 이름'으로 함께
+        self.assertEqual(D.read_docs(self.dir), [("신용평가", date(2026, 6, 16)), ("(그리다) 여성기업", date(2026, 10, 22)),
+                                                 ("직접생산(전시)", date(2026, 11, 11)), ("(그리다) 가구-책장", date(2026, 11, 20)),
                                                  ("데이터처리서비스", date(2027, 1, 2)), ("중소기업확인서", date(2027, 3, 31)),
-                                                 ("그리다 · 조형물", date(2027, 6, 1)), ("조형물", date(2027, 6, 17))])
+                                                 ("(그리다) 조형물", date(2027, 6, 1)), ("조형물", date(2027, 6, 17))])
 
     def test_alert_once(self):
         docs = D.read_docs(self.dir)

@@ -645,6 +645,11 @@
     return main ? `<span class="rate-main nowrap ${pass ? "ok" : "ng"}">${main}</span><span class="sub nowrap">${sub}</span>`
       : `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap">기준 ${signed(d, "%p")}</span>` : ""}`;
   }
+  // 낙찰하한가 = A값 + (실제 예정가격 − A값) × 하한율, 원 미만 올림(11/11 사용자 요청 — 투찰 계산기 하한선 금액과 같은 식)
+  function floorPrice(r) {
+    const res = r.result || {};
+    return C.bidAmount({ planned: res.plannedPrice, lowerRate: r.lowerRate, a: res.aValue ?? r.aValue ?? 0, how: "ceil", unit: 1 });
+  }
   function detailRow(r) {
     const res = r.result || {}, o = res.own, w = res.winner;
     const item = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
@@ -656,6 +661,7 @@
       ${item("지일 투찰률", o && o.rate != null ? pct3(o.rate) : "-")}
       ${item("지일 순위", o ? (o.rank != null ? `${o.rank}위 / ${res.bidderCount}곳` : esc(o.remark || "순위 없음")) : "참가 기록 없음")}
       ${item("예정가격 (실제)", res.plannedPrice != null ? `${won(res.plannedPrice)}원` : "-")}
+      ${item("낙찰하한가", floorPrice(r) != null ? `${won(floorPrice(r))}원` : "-")}
       ${item("실제 사정률", pct3(res.assessmentRate))}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
       </div>${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;

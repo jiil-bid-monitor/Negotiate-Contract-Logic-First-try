@@ -11,6 +11,17 @@
 
 ---
 
+## 11/11 저녁 — 세션 종료 시점 (다음 세션은 여기부터)
+
+- main 마지막: `734e2b5`(#324 투찰내역 결과 받기 오류 고침). 오늘 정리: `docs/worklog/2026-11-11.md`.
+- 병합 안 한 브랜치: `claude/quant-staff-by-grade`(기술인력 등급별 평점 — 사용자 결정 대기), `claude/quant-ai-pilot`(Claude Max로 서식 읽기 시험 — 사용량 때문에 보류).
+- 서버 PC: 오늘 오후 병합분(#309~#324) 반영 여부 확인 안 됨. `.env`에 `QUANT_EMAIL`·`QUANT_HOMEPAGE` 추가 안내함. `bid_results.jsonl` 계약 방식 채움 완료(지명경쟁 49건),
+  `bid_results_others.jsonl`·`bid_results_recent.jsonl`은 확인 필요.
+- 다음 할 일: ① 나머지 결과 파일 `--fill-method` → `py -m nego.bidbacktest --pick` ② 필암 R26BK01806620 통합서식 확인 ③ by-grade 병합 결정
+  ④ (사용량 여유) Claude 시험 ⑤ `scripts/quant_fill_check.py` 회귀 검사.
+- 오늘 결정: 입찰보증금 = 기초금액 × 0.05, 표 칸 서명은 이름 앞쪽·'(인)' 오른쪽 끝, 확인자(사업총괄책임자) 칸 비움, 지명경쟁만 투찰 경향 표본에서 뺌(수의계약은 그대로),
+  지일 투찰 실전 기록이 쌓이기 전엔 추천 기준값 안 바꿈.
+
 ## 11/10 저녁 — 세션 종료 시점 (다음 세션은 여기부터)
 
 - main 마지막: `4c4930f`(정량평가서 서식 읽기 검사 넓힘 + 새 협상 공고 미리 검사). 병합 안 한 작업 브랜치 없음(이 정리는 `claude/worklog-1110`).

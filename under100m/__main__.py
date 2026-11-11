@@ -187,8 +187,7 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
         elif _WHOLE_FORM.search(f.stem) and not _NOT_WHOLE_FORM.search(f.stem) and is_short_doc(src):
             whole_candidates.append((f, src))
     out.mkdir(parents=True, exist_ok=True)
-    checklist = ["제출서류 체크리스트 — 공고 문서 안의 서식을 모두 만들었습니다 (자동 생성)", "공고문의 제출서류 목록과 대조해 필요 없는 서식은 빼 주세요.",
-                 f"한글 서식은 '{MERGED_FORMS}' 한 파일에 아래 순서대로 들어 있습니다(서식마다 새 쪽).", ""]
+    checklist = ["제출서류 체크리스트 — 공고 문서 안의 서식을 모두 만들었습니다 (자동 생성)", "공고문의 제출서류 목록과 대조해 필요 없는 서식은 빼 주세요."]
     filled_dir = work / "채움"
     filled_dir.mkdir(exist_ok=True)
     used: set[str] = set()
@@ -223,6 +222,7 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
         merged = out / MERGED_FORMS
         try:
             merge_forms(hwpx, merged)
+            checklist += ["", f"한글 서식은 '{MERGED_FORMS}' 한 파일에 아래 순서대로 들어 있습니다(서식마다 새 쪽)."]  # 한글 서식이 있을 때만
             checklist += [f"[ ] {k}. {p.stem}" for k, p in enumerate(hwpx, 1)]
         except Exception as err:  # noqa: BLE001 — 합치지 못하면 서식별 파일로라도 남긴다
             log.warning("서식 합치기 실패: %s", err)

@@ -2044,6 +2044,25 @@ def test_applicant_signature_line(tmp_path: Path):
     assert lines[2] == "신 청 인 : 홍길동 (인)" and lines[3] == "신청인 :"
 
 
+def test_applicant_signature_line_keeps_width(tmp_path: Path):
+    """11/11 '신 청 인 : 이윤봉' 뒤 (인)이 다음 줄로 — 이름을 넣어도 줄 너비(빈칸 단위)가 원래보다 늘지 않게.
+    빈칸이 모자라면 앞 들여쓰기를 줄임."""
+    from html import unescape
+
+    from quantdocs.fill import _span, fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    roomy = "        신 청 인 :              (인)"
+    tight = "                    신 청 인 :     (인)"
+    src = _mini_hwpx(tmp_path / "t.hwpx", p("입찰참가신청서") + p(roomy) + p(tight))
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "이윤봉"}))
+    text = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    lines = [unescape(re.sub(r"<[^>]+>", "", m)) for m in re.findall(r"<hp:p\b.*?</hp:p>", text, re.S)]
+    for before, after in ((roomy, lines[1]), (tight, lines[2])):
+        assert re.sub(r"\s+", " ", after).strip() == "신 청 인 : 이윤봉 (인)"
+        assert _span(after) <= _span(before), (before, after)
+
+
 def test_slash_signature_and_bid_rep_group():
     """11/10 경남교육청: 서약서 '업체명      / 대표자 :      (인)', 위임장 묶음 머리 '입찰 대표자', 'E-Mail' 이름표."""
     from quantdocs.fill import _label_key, _row_group, Cell

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import html
 import re
+import unicodedata
 import zipfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -456,6 +457,11 @@ def _bare_label(text: str) -> str | None:
     return t2 if t2 != t and t2 in _BARE_LABELS else None
 
 
+def _span(text: str) -> int:
+    """글 너비를 빈칸 개수로 어림 — 한글·한자·전각 글자는 2, 나머지는 1."""
+    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+
+
 def _after_colon(seg: str, value: str, seal: bool) -> str | None:
     """문단(또는 한 문단짜리 칸) 글 속 첫 쌍점 뒤에 값. 쌍점이 없으면 맨 끝 글 뒤에 ' : 값'. 못 넣으면 None."""
     ts = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", seg, re.S))
@@ -468,13 +474,23 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
     else:
         used = []
 
+        short = []
+
         def put(mm):  # 글 속 첫 쌍점에만 — 태그 이름의 쌍점(<hp:tab/>)은 건드리지 않음
             if mm.group(1) or used:
                 return mm.group(0)
             used.append(1)
-            return f"{mm.group(2)} {_mark(value)}" + " " * max(2 if seal else 0, len(mm.group(3)) - len(value) - 1)
+            # 빈칸은 이름의 '너비'만큼 뺌 — 한글은 빈칸 두 칸 너비, 채운 글은 11pt로 커지니 10%쯤 더(11/11 '신 청 인 : 이윤봉'
+            # 뒤 (인)이 다음 줄로 넘어감 — 예전엔 글자 수만큼만 빼서 줄이 넘쳤음)
+            need = _span(value) + 1 + -(-_span(value) // 10)
+            room = len(mm.group(3))
+            short.append(max(0, need + (2 if seal else 0) - room) if seal else 0)
+            return f"{mm.group(2)} {_mark(value)}" + " " * max(2 if seal else 0, room - need)
         last = hit
         body = re.sub(r"(<[^>]*>)|([:：])( *)", put, hit.group(2))
+        if short and short[0]:  # 빈칸이 모자라면 서명 줄 앞 들여쓰기 빈칸을 그만큼 줄여 (인)이 같은 줄에 남게
+            lead = len(body) - len(body.lstrip(" "))
+            body = body[min(lead, short[0]):]
     seg = seg[:last.start(2)] + body + seg[last.end(2):]
     return re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
 

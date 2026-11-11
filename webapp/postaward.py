@@ -73,6 +73,62 @@ def required_docs(files: list[Path]) -> list[dict]:
     return out
 
 
+# 착공·착수 표준틀 v5(차장님 확인 11/11) — 회사 정보가 들어 있어 저장소 밖 공유 폴더 '낙찰후서류/_표준틀'(POSTAWARD_TEMPLATE_DIR)에 둠
+TEMPLATES = {"공사": ("표준틀_착공서류(공사).xlsx", "2_착공", "착공서류.xlsx"),
+             "물품·용역": ("표준틀_착수서류(물품·용역).xlsx", "2_착수", "착수서류.xlsx")}
+_SITE = re.compile(r"공\s*사\s*(?:위\s*치|장\s*소|현\s*장)\s*[:：]\s*([^\n]{4,60})")
+_PERIOD = re.compile(r"(?:착\s*공|착\s*수|계\s*약)\s*일\s*(?:로\s*)?부\s*터\s*(\d{1,4})\s*일")
+_LONG = re.compile(r"장\s*기\s*계\s*속\s*(?:계\s*약|공\s*사)")
+
+
+def basic_values(v: dict, title: str, institution: str, contract_method: str, texts: list[str]) -> tuple[dict, list[str]]:
+    """기본사항 행 → (값, 출처) — 표준틀 v5 칸 위치(4 업무·5 발주기관·8 건명·11 계약 형태·12 금액·17 준공예정일 메모·21 공사위치).
+    계약번호·계약일·수신·문서번호·인력은 계약 뒤에 정해지거나 사람이 고르는 값이라 비움. 돌려주는 줄 = 서류_확인.txt 안내."""
+    work, gong = v.get("work", ""), v.get("work") == "공사"
+    joined = "\n".join(texts)
+    out: dict[int, tuple[Any, str]] = {}
+    if work in WORKS:
+        out[4] = (work, "나라장터 업무")
+    if institution:
+        out[5] = (institution, "나라장터 수요기관")
+    if title:
+        out[8] = (title, "나라장터 공고명 — 계약서 건명과 대조")
+    amount = _digits(str((v.get("winner") or {}).get("amount") or "").split(".")[0])
+    if amount:
+        out[12] = (int(amount), "나라장터 낙찰금액 — 계약금액과 대조")
+    if not gong and ("장기" in contract_method or _LONG.search(joined)):
+        out[11] = ("장기계속", "계약방법·공고문의 '장기계속' — 차수 금액 확인")
+    site = _SITE.search(joined) if gong else None
+    if site:
+        out[21] = (site.group(1).strip(" ,."), "공고문 공사위치")
+    notes = []
+    period = _PERIOD.search(joined)
+    if period:
+        notes.append(f"준공예정일: 공고문에 '{re.sub(chr(10), ' ', period.group(0))}' — 계약일·착수일을 넣고 계산하세요")
+    if not amount:
+        notes.append("낙찰금액을 아직 모름 — 낙찰 확인 뒤 다시 만들거나 직접 넣으세요")
+    for word, tab in (("안전관리자", "안전관리자 선임계"), ("품질관리자", "품질관리자 선임계")) if gong else (("현장대리인", "현장대리인 서류(해당시)"),):
+        if re.search(r"\s*".join(word), joined):
+            notes.append(f"공고문에 '{word}'가 있음 — {tab} 탭도 제출할지 확인")
+    return out, notes
+
+
+def fill_basic(template: Path, target: Path, values: dict) -> None:
+    """표준틀을 복사해 기본사항 B열에 값, C열에 '[자동] 출처'. 채운 칸은 하늘색(사람이 넣는 노란 칸과 구분)."""
+    from openpyxl import load_workbook
+    from openpyxl.styles import PatternFill
+
+    wb = load_workbook(template)
+    ws = wb["기본사항"]
+    blue = PatternFill("solid", fgColor="FFDDEBF7")
+    for row, (value, source) in values.items():
+        ws.cell(row, 2).value = value
+        ws.cell(row, 2).fill = blue
+        ws.cell(row, 3).value = f"[자동] {source}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(target)
+
+
 def lookup(client: Any, base_url: str, no: str, ord_: str, work: str) -> tuple[str, dict | None]:
     """낙찰현황에서 공고 하나의 낙찰자. (확인한 업무, 줄 또는 None). 업무를 모르면 공사·용역·물품 순으로."""
     for w in ([work] if work in WORKS else list(WORKS)):
@@ -161,9 +217,10 @@ class PostAward:
             self._write(items)
         return folder
 
-    def prepare(self, key: str, root: Path, fetch=None) -> tuple[Path, list[dict]]:
+    def prepare(self, key: str, root: Path, fetch=None, templates: Path | None = None) -> tuple[Path, list[dict]]:
         """공고 폴더 만들기 — 나라장터에서 공고 정보·첨부를 받아(정량평가서와 같은 quantdocs.g2b.fetch_notice) 업무를 정하고,
-        첨부는 공고문서/에 두고, 첨부가 요구하는 제출서류를 읽어 표준틀에 없는 것을 '서류_확인.txt'에 적는다."""
+        첨부는 공고문서/에 두고, 첨부가 요구하는 제출서류를 읽어 표준틀에 없는 것을 '서류_확인.txt'에 적는다.
+        표준틀(templates, 기본 root/_표준틀)이 있으면 착공·착수서류를 복사해 기본사항을 채운다(시험판 11/11)."""
         import shutil
         import tempfile
 
@@ -186,7 +243,9 @@ class PostAward:
                 target = folder / "공고문서" / f.name
                 if not target.exists():  # 담당자가 고쳤을 수 있어 덮어쓰지 않음
                     shutil.copyfile(f, target)
+            basic = self._fill_template(key, folder, nf, Path(templates) if templates else Path(root) / "_표준틀")
         lines = [f"{key} {v.get('title') or nf.title} — 첨부에서 읽은 제출서류 (자동, 원문과 대조하세요)", ""]
+        lines += basic + [""]
         if not nf.title:
             lines.append("나라장터에서 공고를 찾지 못해 첨부를 받지 못했습니다.")
         elif not docs:
@@ -200,6 +259,33 @@ class PostAward:
             items[key]["docs"] = {"found": len(docs), "missing": sum(not d["covered"] for d in docs), "files": len(nf.files)}
             self._write(items)
         return folder, docs
+
+    def _fill_template(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
+        """착공(공사)·착수(물품·용역)서류를 단계 폴더에 복사하고 기본사항을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
+        v = self._read().get(key) or {}
+        group = group_of(v.get("work", ""))
+        if group not in TEMPLATES:
+            return ["[기본사항] 업무(공사/물품/용역)를 몰라 착공·착수서류를 만들지 않음"]
+        name, stage, doc = TEMPLATES[group]
+        target = folder / stage / doc
+        if target.exists():
+            return [f"[기본사항] {stage}/{doc}가 이미 있어 그대로 둠(다시 채우려면 그 파일을 지우고 폴더 만들기)"]
+        if not (templates / name).exists():
+            return [f"[기본사항] 표준틀 '{name}'이 {templates}에 없어 만들지 않음"]
+        from quantdocs.notice import doc_text
+
+        texts = []
+        for f in nf.files:
+            if f.suffix.lower() in (".hwp", ".hwpx", ".pdf", ".docx"):
+                try:
+                    texts.append(doc_text(f))
+                except Exception:  # noqa: BLE001 — 한 첨부를 못 읽어도 나머지로
+                    pass
+        values, notes = basic_values(v, nf.title or v.get("title", ""), nf.institution or v.get("institution", ""),
+                                     nf.contract_method, texts)
+        fill_basic(templates / name, target, values)
+        return ([f"[기본사항] {stage}/{doc} — 자동으로 채운 칸(하늘색): " + ", ".join(src.split(" — ")[0] for _, src in values.values()),
+                 "  계약번호·계약일·착수일·수신·문서번호·제출일·인력은 직접 넣으세요"] + [f"  {n}" for n in notes])
 
     def check(self, client: Any, base_url: str, keys: list[str] | None = None) -> dict[str, int]:
         """'대기' 공고의 낙찰자를 확인. keys를 주면 그 공고만(상태와 상관없이 다시)."""
@@ -262,6 +348,34 @@ def selfcheck() -> None:
         assert f.parent.name == "공사" and (f / "2_착공").is_dir(), f
         f = pa.make_folder("R26BK00000003-000", Path(d) / "out")
         assert f.parent.name == "물품·용역" and (f / "2_착수").is_dir(), f
+
+        # 기본사항 채우기(시험판) — 공고문 글에서 공사위치·기간·안전관리자, 낙찰금액은 낙찰현황 값
+        vals, notes = basic_values({"work": "공사", "winner": {"amount": "184131570"}}, "A 공사", "정선군", "",
+                                   ["3. 공사위치 : 강원특별자치도 정선군 고한읍 1\n착공일로부터 60일 이내\n안전관리자 선임"])
+        assert vals[12][0] == 184131570 and vals[21][0] == "강원특별자치도 정선군 고한읍 1" and 11 not in vals, vals
+        assert any("60일" in n for n in notes) and any("안전관리자 선임계" in n for n in notes), notes
+        vals, notes = basic_values({"work": "용역"}, "B 용역", "아산시", "장기계속계약", ["현장대리인을 선임"])
+        assert vals[11][0] == "장기계속" and 12 not in vals and any("현장대리인 서류" in n for n in notes), (vals, notes)
+
+        from openpyxl import Workbook, load_workbook
+
+        tpl = Path(d) / "tpl"
+        tpl.mkdir()
+        for name, _, _ in TEMPLATES.values():
+            wb = Workbook()
+            wb.active.title = "기본사항"
+            wb.save(tpl / name)
+
+        class _NF:
+            title, institution, contract_method, files = "A 공사", "정선군", "", []
+            work_type, award_method, skipped = "공사", "", []
+
+        folder, _ = pa.prepare("R26BK00000001-000", Path(d) / "out", fetch=lambda k, t: _NF(), templates=tpl)
+        ws = load_workbook(folder / "2_착공" / "착공서류.xlsx")["기본사항"]
+        assert ws["B8"].value == "A 공사" and ws["B5"].value == "정선군" and ws["C8"].value.startswith("[자동]"), ws["C8"].value
+        assert "자동으로 채운 칸" in (folder / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
+        _, _ = pa.prepare("R26BK00000001-000", Path(d) / "out", fetch=lambda k, t: _NF(), templates=tpl)  # 두 번째는 담당자 파일이라 그대로
+        assert "이미 있어 그대로" in (folder / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
 
 
 if __name__ == "__main__":

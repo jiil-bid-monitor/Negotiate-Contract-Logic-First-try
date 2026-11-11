@@ -77,13 +77,46 @@ def _norm(text: str) -> str:
     return re.sub(r"[\W_]+", "", text or "")
 
 
+def same_doc(cert_name: str, kind: str) -> bool:
+    """차장님 표 이름(cert_name)과 서류 종류(kind)가 같은 서류인지 — 지일은 지일끼리, (그리다)는 그리다끼리."""
+    if cert_name.startswith(GRIDA_TAG) != kind.startswith(GRIDA_TAG):
+        return False
+    return CERT_ALIASES.get(_norm(cert_name), _norm(cert_name)) in _norm(kind)
+
+
+def set_cert(path: Path, kind: str, value: date | str) -> bool:
+    """인증서갱신.xlsx에서 kind 줄의 만료일 칸을 바꾼다 — /upload(새 날짜)·/remove('사용 안 함') (2026-11-11 사용자 요청).
+    날짜는 표와 같은 '27.3.31' 모양. 맞는 줄이 없으면 False. 표가 엑셀에서 열려 있어 못 쓰면 OSError."""
+    import openpyxl
+
+    if not path.exists():
+        return False
+    text = f"{value.year % 100}.{value.month}.{value.day}" if isinstance(value, date) else value
+    book = openpyxl.load_workbook(path)
+    ws, grida_cols, hit = book.worksheets[0], False, False
+    for row in ws.iter_rows(max_col=4):
+        a, b, c, d = (list(row) + [None] * 4)[:4]
+        if c is not None and str(c.value or "").strip() == GRIDA:
+            grida_cols = True
+            continue
+        name = " ".join(str(a.value or "").split())
+        if name and b is not None and _cert_date(b.value):
+            tagged = GRIDA_TAG + name if d is not None and str(d.value or "").strip() == GRIDA else name
+            if same_doc(tagged, kind):
+                b.value, hit = text, True
+        if grida_cols and c is not None and c.value and d is not None and _cert_date(d.value):
+            if same_doc(GRIDA_TAG + " ".join(str(c.value).split()), kind):
+                d.value, hit = text, True
+    if hit:
+        book.save(path)
+    book.close()
+    return hit
+
+
 def read_docs(folder: Path) -> list[tuple[str, date]]:
     """(종류, 유효기간 끝) — 인증서갱신.xlsx 날짜가 우선(2026-11-11 사용자 결정), 그 표에 없는 서류는 서류목록.xlsx 날짜."""
     cert = read_cert(folder / CERT_FILE) if (folder / CERT_FILE).exists() else []
-    names = [(CERT_ALIASES.get(_norm(k), _norm(k)), k.startswith(GRIDA_TAG)) for k, _ in cert]
-    # 지일 줄은 지일 표 이름으로만, (그리다) 줄은 그리다 표 이름으로만 같은 서류를 가림
-    rest = [(k, d) for k, d in read_list(folder)
-            if not any(g == k.startswith(GRIDA_TAG) and n in _norm(k) for n, g in names)]
+    rest = [(k, d) for k, d in read_list(folder) if not any(same_doc(c, k) for c, _ in cert)]
     return sorted(cert + rest, key=lambda d: d[1])
 
 
@@ -141,10 +174,12 @@ def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str]) -> tupl
     if not rows:
         return None, []
     head = "오늘 유효기간이 끝납니다" if all(d == today for _, d in rows) else "7일 안에 유효기간이 끝납니다"
-    lines = [f"<b>회사 서류 갱신 알림</b> — {head}"]
-    lines += [f"· {html.escape(k)} — {d} ({'오늘 만료' if d == today else f'D-{(d - today).days}'})" for k, d in rows]
-    lines.append("갱신하면 회사서류_최신 폴더의 인증서갱신.xlsx 만료일을 고쳐 주세요.\n"
-                 "더 쓰지 않는 서류면 /remove 로 빼 주세요 — 그 뒤로는 알리지 않습니다.")
+    lines = [f"<b>📄 회사 서류 갱신 알림</b>", head, ""]
+    for k, d in rows:
+        lines += [f"• <b>{html.escape(k)}</b>", f"   {d} · {'오늘 만료' if d == today else f'D-{(d - today).days}'}"]
+    lines += ["", "갱신했으면 → /upload 로 새 서류를 보내 주세요",
+              "   (만료일을 물어보고 인증서갱신.xlsx도 고칩니다)",
+              "안 쓰는 서류면 → /remove 로 빼 주세요"]
     return "\n".join(lines), [key(k, d) for k, d in rows]
 
 

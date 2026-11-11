@@ -1162,9 +1162,12 @@ def test_main_docs_blank_forms_and_fax_override(tmp_path: Path, monkeypatch):
     assert not is_manual("입찰보증금 지급 확약서") and not is_manual("사업수행능력 자기평가 심사표")
     monkeypatch.setattr(vault, "ENV_FILE", tmp_path / "none.env")
     monkeypatch.setenv("QUANT_FAX", "000-000-0000")
+    monkeypatch.setenv("QUANT_EMAIL", "mail@example.com")  # 11/11 이메일·홈페이지도 .env로
+    monkeypatch.setenv("QUANT_HOMEPAGE", "https://example.com/")
     v = vault.Vault({}, info={"팩스번호": "111-111-1111"})
     importer.enrich_vault(v)
     assert v.info["팩스번호"] == "000-000-0000"
+    assert v.info["이메일"] == "mail@example.com" and v.info["홈페이지"] == "https://example.com/"
 
 
 def test_track_form_delivery_amount_and_total_cells(tmp_path: Path):

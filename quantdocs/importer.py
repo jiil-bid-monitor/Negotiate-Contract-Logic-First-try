@@ -535,9 +535,10 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     '연혁 pdf·입찰참가등록증 pdf 확인해서 기입 가능한 건 바로 작성'). 회사정보 시트에 적힌 값이 늘 먼저. 돌려줌: 알림 줄."""
     notes: list[str] = []
     # 회사정보 값 바로잡기 — 서버 PC .env의 QUANT_FAX·QUANT_TEL이 묶음 값보다 먼저(11/05 사용자 요청: FAX 번호 수정).
-    # 번호는 공개 저장소에 적지 않고 .env에만.
+    # 번호는 공개 저장소에 적지 않고 .env에만. 이메일·홈페이지도 같은 방식(11/11 사용자 — QUANT_EMAIL·QUANT_HOMEPAGE).
     from .vault import read_env
-    for env_key, item in (("QUANT_FAX", "팩스번호"), ("QUANT_TEL", "전화번호")):
+    for env_key, item in (("QUANT_FAX", "팩스번호"), ("QUANT_TEL", "전화번호"), ("QUANT_EMAIL", "이메일"),
+                          ("QUANT_HOMEPAGE", "홈페이지")):
         v = read_env(env_key).strip()
         if v:
             vault.info[item] = v

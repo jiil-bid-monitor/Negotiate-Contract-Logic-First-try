@@ -133,6 +133,7 @@ cd "<jiil-quant-docs 폴더>" && bash start_web.sh
 
 회사 자료(회사정보 시트·등록증 PDF)의 FAX·전화 번호가 틀렸으면 묶음을 다시 잠그지 않고 서버 PC 저장소 `.env`에 한 줄씩 넣는다 —
 `QUANT_FAX=번호`, `QUANT_TEL=번호`. 이 값이 묶음 값보다 먼저 쓰인다. 번호는 공개 저장소(이 레포)에 적지 않는다.
+이메일·홈페이지도 같은 방식 — `QUANT_EMAIL=주소`, `QUANT_HOMEPAGE=주소`(11/11).
 
 ## 기술인력 엑셀 (11/05)
 

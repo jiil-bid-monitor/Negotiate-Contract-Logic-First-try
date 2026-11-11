@@ -642,7 +642,8 @@
     // 하한선 통과/미달은 옆 개찰 결과 칸(낙찰·탈락 아래)과 겹쳐 등수만(11/10) — 지일이 참가 안 한 공고만 기준 대비 통과/미달
     const main = place ? `지일 ${place}` : pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
     const sub = `실제 ${pct3(res.assessmentRate)}${d != null ? ` · 기준 ${signed(d, "%p")}` : ""}`;
-    return main ? `<span class="rate-main nowrap ${pass ? "ok" : "ng"}">${main}</span><span class="sub nowrap">${sub}</span>`
+    // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색
+    return main ? `<span class="rate-main nowrap ${place ? "rank" : pass ? "ok" : "ng"}">${main}</span><span class="sub nowrap">${sub}</span>`
       : `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap">기준 ${signed(d, "%p")}</span>` : ""}`;
   }
   // 낙찰하한가 = A값 + (실제 예정가격 − A값) × 하한율, 원 미만 올림(11/11 사용자 요청 — 투찰 계산기 하한선 금액과 같은 식)

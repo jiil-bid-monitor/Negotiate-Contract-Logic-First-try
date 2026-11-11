@@ -521,6 +521,17 @@ class TestWordForms(unittest.TestCase):
         self.assertTrue(doc.index("<w:sectPr") > doc.index("청렴서약서"))
 
 
+class SummaryShortTest(unittest.TestCase):
+    def test_original_sections_are_short(self):
+        from under100m.summary import _short
+        lines = ["○ 투찰은 단가에 수량을 곱한 총액으로", "○ 모든 사항을 숙지하지 못한 책임은", "입찰자에게 있음", "○ 입찰관련 문의 : 운영지원처",
+                 "○ 낙찰자는 10일 이내 사용방법을 제출"]
+        self.assertEqual(_short("유의사항·기타", lines)[0], ["○ 투찰은 단가에 수량을 곱한 총액으로", "○ 낙찰자는 10일 이내 사용방법을 제출"])
+        shown, cut = _short("제출 서류", [f"- 서류 {i} " + "가" * 80 for i in range(14)])
+        self.assertEqual((len(shown), cut), (10, 4))
+        self.assertTrue(all(len(x) <= 60 and x.endswith("…") for x in shown))
+
+
 class RunAlertTest(unittest.TestCase):
     def test_start_and_end_alerts(self):
         from unittest import mock

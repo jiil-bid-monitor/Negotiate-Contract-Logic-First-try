@@ -138,17 +138,50 @@ def _kit(now: datetime):
     return SimpleNamespace(base=base, small=small, h1=h1, h2=h2, table=table, build=build, P=Paragraph, Spacer=Spacer)
 
 
+# 요약 PDF의 원문 절은 '요약' — 줄 수·길이를 줄이고, 유의사항은 입찰에 직접 걸리는 줄만(2026-11-11 사용자: 원문을 빼곡히 옮기면 요약이 아님)
+SHORT = {"참가 자격": (8, 90), "제출 서류": (10, 60), "유의사항·기타": (6, 70)}  # 절마다 (최대 줄 수, 줄 최대 글자)
+_KEEP = re.compile(r"마감|기한|이내|제출|보증|지체|하자|실적|자격|공동|현장|설명회|무효|불가|금지|필수|반드시|한함|한정|"
+                   r"단가|총액|낙찰|계약|기간|납품|배송|위약|감점|제한|등록|투찰")
+_SKIP = re.compile(r"숙지|준용|문의|신고|책임은\s*(입찰|계약)|해석|협의하여|저작권|특허|보안|소유|연락처")
+_ITEM = re.compile(r"^\s*(?:[○●◦ㅇo\-·※□■▶]|\d{1,2}[.)]|[가-하][.)]|\(\d{1,2}\)|[①-⑳])")
+
+
+def _short(topic: str, lines: list[str]) -> tuple[list[str], int]:
+    """(보여 줄 줄, 뺀 줄 수). 넘어간 줄은 앞 줄에 붙이고, 항목 줄만 남기고, 길면 자름."""
+    rows: list[str] = []
+    for line in lines:
+        t = line.strip()
+        if not t:
+            continue
+        if rows and not _ITEM.match(t):  # PDF·한글 줄바꿈으로 잘린 줄은 앞 항목에 붙임
+            rows[-1] += " " + t
+        else:
+            rows.append(t)
+    if topic == "유의사항·기타":
+        rows = [r for r in rows if _KEEP.search(r) and not _SKIP.search(r)]
+    limit, width = SHORT[topic]
+    shown = [r if len(r) <= width else r[:width - 1] + "…" for r in rows[:limit]]
+    return shown, len(rows) - len(shown)
+
+
 def _original(k, sections: dict | None) -> list:
-    """공고 문서 원문 그대로(sections.find_sections) — 참가 자격·제출 서류·유의사항."""
+    """공고 문서의 참가 자격·제출 서류·유의사항 — 핵심 줄만 짧게(전문은 공고문)."""
     story = []
     for topic in ("참가 자격", "제출 서류", "유의사항·기타"):
-        story.append(k.P(f"{topic} — 공고문 원문", k.h2))
+        story.append(k.P(f"{topic} — 공고문 요약", k.h2))
         items = (sections or {}).get(topic) or []
+        if topic == "유의사항·기타":  # 공고문 쪽만 — 과업지시서 일반 조항까지 넣으면 길어짐
+            items = [it for it in items if "공고" in it[0]] or items[:1]
         if not items:
             story.append(k.P("공고 문서에서 이 절을 찾지 못함 — 공고문 확인", k.base))
         for name, head, lines in items:
+            shown, cut = _short(topic, lines)
             story.append(k.P(f"<b>{esc(head)}</b> &nbsp;<font size=7 color='#777777'>({esc(name)})</font>", k.base))
-            story += [k.P("&nbsp;&nbsp;" + esc(line), k.base) for line in lines]
+            story += [k.P("&nbsp;&nbsp;" + esc(line), k.base) for line in shown]
+            if cut:
+                story.append(k.P(f"&nbsp;&nbsp;… 외 {cut}줄 — 전문은 공고문 참고", k.small))
+            elif not shown:
+                story.append(k.P("&nbsp;&nbsp;입찰에 직접 걸리는 내용 없음 — 전문은 공고문 참고", k.small))
     return story
 
 

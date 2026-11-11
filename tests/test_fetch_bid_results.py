@@ -154,6 +154,24 @@ class FillNoticeTest(unittest.TestCase):
             self.assertEqual(fb.fill_notices(FakeClient(responses), path, sleep=0, only_region=True)[1], 0)
         self.assertNotIn(F.BASIS_AMOUNT_OPERATIONS["공사"], client.calls)  # 기초금액은 안 부름
 
+    def test_fill_method_only_notice_row(self):
+        """--fill-method(11/11): 공고 행 하나만 조회해 계약체결방법(지명경쟁 여부)을 채움."""
+        responses = self._client().responses
+        responses[F.BID_NOTICE_OPERATIONS["공사"]] = [
+            {"bidNtceNo": "D", "bidNtceOrd": "000", "sucsfbidLwltRate": "87.745", "cntrctCnclsMthdNm": "지명경쟁"},
+            {"bidNtceNo": "E", "bidNtceOrd": "000", "sucsfbidLwltRate": "87.745", "cntrctCnclsMthdNm": "제한경쟁"}]
+        lines = [self.LINES[3], {**self.LINES[3], "no": "E"}]
+        client = FakeClient(responses)
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "bid_results.jsonl"
+            path.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in lines), encoding="utf-8")
+            filled, tried, _ = fb.fill_notices(client, path, sleep=0, only_method=True)
+            self.assertEqual((filled, tried), (2, 2))
+            recs = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([r["notice"]["contract_method"] for r in recs], ["지명경쟁", "제한경쟁"])
+            self.assertEqual(fb.fill_notices(FakeClient(responses), path, sleep=0, only_method=True)[1], 0)
+        self.assertNotIn(F.BASIS_AMOUNT_OPERATIONS["공사"], client.calls)
+
     def test_quota_stops_and_saves(self):
         class Quota(FakeClient):
             def fetch_all_pages(self, base_url, operation, params, label):

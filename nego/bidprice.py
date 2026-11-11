@@ -104,6 +104,7 @@ class BidResult:
     a_value: float | None = None
     bidders: list[Bidder] = field(default_factory=list)
     error: str | None = None
+    contract_method: str = ""  # 계약체결방법(일반·제한·지명경쟁) — 지명경쟁은 투찰 경향 표본에서 뺌(2026-11-11 사용자 요청)
 
     @property
     def assessment_rate(self) -> float | None:
@@ -183,6 +184,7 @@ def fetch_result(client: DataGoKrClient, base_url: str, notice) -> BidResult:
         institution=notice.demand_institution or notice.notice_institution or "",
         opened_at=notice.opening_at,
         lower_limit_rate=_num(notice.raw.get("sucsfbidLwltRate")),
+        contract_method=notice.contract_method or "",
     )
     try:
         operation = PREPARE_PRICE_OPERATIONS.get(notice.work_type)

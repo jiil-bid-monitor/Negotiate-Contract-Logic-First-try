@@ -252,6 +252,33 @@ class LoadHistoryTest(unittest.TestCase):
         self.assertIn("과거 개찰 자료가 없습니다", out["notes"][0])
 
 
+class DesignatedTest(unittest.TestCase):
+    """11/11 사용자 요청: 지명경쟁 공고는 투찰 경향 표본(추천·검증·경향)에서 뺌."""
+
+    LINE = {"no": "1", "prices": [{"plnprc": "100000000", "bssamt": "100000000"}],
+            "bidders": [{"opengRank": "1", "bidprcAmt": "88000000"}], "notice": {"lower_rate": "87.745"}}
+
+    def test_contract_method_or_title(self):
+        self.assertTrue(br.is_designated("지명경쟁"))
+        self.assertTrue(br.is_designated("", "○○ 정비공사(지명 경쟁)"))
+        self.assertTrue(br.is_designated("", "○○사업 지명입찰 공고"))
+        self.assertFalse(br.is_designated("제한경쟁", "○○ 전시물 제작"))
+        self.assertFalse(br.is_designated("", "지명도 높은 작가 전시"))
+
+    def test_result_line_and_history_are_skipped(self):
+        self.assertIsNotNone(br.from_result_record(self.LINE))
+        line = {**self.LINE, "notice": {"lower_rate": "87.745", "contract_method": "지명경쟁"}}
+        self.assertIsNone(br.from_result_record(line))
+        self.assertEqual(br.skip_reason(line), br.DESIGNATED_REASON)
+        old = {**self.LINE, "notice": {"lower_rate": "87.745", "title": "봉암서원 보수공사(지명경쟁)"}}  # 계약 방식 칸이 없는 예전 줄
+        self.assertIsNone(br.from_result_record(old))
+        item = {"notice_no": "2", "work_type": "공사", "basis_amount": 100_000_000, "planned_price": 100_000_000,
+                "lower_limit_rate": 87.745, "contract_method": "지명경쟁",
+                "bidders": [{"rank": 1, "name": "갑", "bizno": "1", "amount": 88_000_000, "rate": 88.0, "remark": ""}]}
+        self.assertIsNone(br.from_bid_history(item))
+        self.assertIsNotNone(br.from_bid_history({**item, "contract_method": "제한경쟁"}))
+
+
 class OutlierTest(unittest.TestCase):
     """10/29: 하한율 0.01 같은 값(하한선 없는 입찰)과 변동폭 밖 사정률(입력 오류)은 못 쓴 공고로."""
 

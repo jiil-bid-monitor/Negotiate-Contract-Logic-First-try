@@ -302,10 +302,22 @@ def _make(notice_no: str, work: str, basis, planned, lower, bidders: list, price
     return rec
 
 
+_DESIGNATED = re.compile(r"지\s*명\s*(?:경\s*쟁|입\s*찰)")
+DESIGNATED_REASON = "지명경쟁(투찰 경향 표본에서 뺌)"
+
+
+def is_designated(contract_method: str = "", title: str = "") -> bool:
+    """지명경쟁 입찰 — 발주처가 고른 몇 곳만 참가해 사정률·투찰가가 일반·제한경쟁과 달라 투찰 경향 표본에서 뺀다(2026-11-11 사용자 요청).
+    계약체결방법(cntrctCnclsMthdNm)에 '지명'이 있거나, 그 칸이 없는 예전 자료는 공고명에 '지명경쟁·지명입찰'이 있으면."""
+    return "지명" in (contract_method or "") or bool(_DESIGNATED.search(title or ""))
+
+
 def from_bid_history(item: dict, source: str = "", own_bizno: str = "") -> PastBid | None:
     """`bidprice` 결과(`BidResult.to_dict`) 1건."""
     from .bidprice import Bidder
 
+    if is_designated(item.get("contract_method", ""), item.get("title", "")):
+        return None
     bidders = [Bidder(**b) for b in item.get("bidders") or []]
     prices = list(item.get("prepared_prices") or item.get("drawn_prices") or [])
     return _make(item.get("notice_no", ""), item.get("work_type", ""), item.get("basis_amount"), item.get("planned_price"),
@@ -352,6 +364,9 @@ def skip_reason(rec: dict) -> str:
     """`from_result_record`가 못 쓴 줄의 이유(검증 화면에 건수로 보임)."""
     if rec.get("error"):
         return "개찰 결과 없음(조회 오류)"
+    info = rec.get("notice") or {}
+    if is_designated(info.get("contract_method", ""), info.get("title", "")):
+        return DESIGNATED_REASON
     prices_rows, bidder_rows = rec.get("prices") or [], rec.get("bidders") or []
     planned, basis, _ = parse_prepare_prices(prices_rows)
     if not bidder_rows:
@@ -375,9 +390,11 @@ def from_result_record(rec: dict, source: str = "", own_bizno: str = "") -> Past
     """`scripts/fetch_bid_results.py` 결과 1줄(원본 행). 하한율·A값은 rec["notice"]에(10/28부터 함께 받음), 예전 줄이면 원본 행에서 찾는다."""
     if rec.get("error"):
         return None
+    info = rec.get("notice") or {}
+    if is_designated(info.get("contract_method", ""), info.get("title", "")):
+        return None
     prices_rows, bidder_rows = rec.get("prices") or [], rec.get("bidders") or []
     planned, basis, _drawn = parse_prepare_prices(prices_rows)
-    info = rec.get("notice") or {}
     lower = info.get("lower_rate") or _row_value(prices_rows + bidder_rows, "sucsfbidLwltRate")
     prices = [p for r in prices_rows if (p := _num(r.get("bsisPlnprc")))]
     return _make(rec.get("no", ""), rec.get("work", ""), basis, planned, lower, parse_bidders(bidder_rows), prices,

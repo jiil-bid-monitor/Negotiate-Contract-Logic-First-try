@@ -16,6 +16,14 @@
 병합 안 한 브랜치, 서버 PC 반영 여부) ③ 다음에 할 일(우선순위 순, 결정 대기 항목은 "사용자 결정 대기"로) ④ 지켜야 할 것(한국어 답변, 요청 전엔 고치지 않기 등).
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 
+## 2026-11-11 — 투찰 경향 표본에서 지명경쟁 뺌 (브랜치 `claude/bid-exclude-designated`, 사용자 요청)
+
+- 지명경쟁 공고의 투찰가·사정률은 추천 사정률·검증(백테스트)·투찰 경향 표본에서 뺌(`bidrecommend.is_designated` — 계약체결방법 `cntrctCnclsMthdNm`에 '지명',
+  그 칸이 없는 예전 줄은 공고명에 '지명경쟁·지명입찰'). `load_history`가 읽을 때 빼므로 웹앱 추천·`nego.bidbacktest`·`nego.bidtrend` 모두 같이, 못 쓴 이유 '지명경쟁(투찰 경향 표본에서 뺌)'.
+- 앞으로 받는 줄은 계약체결방법도 저장(`fetch_bid_results.notice_info` → `notice.contract_method`, 밤 작업 `bid_results_live.jsonl`도 같음, `bidprice` 결과 `contract_method`).
+  **예전에 받은 줄은 서버 PC에서 `py scripts/fetch_bid_results.py --fill-method --out output/<파일>.jsonl`**(공고 행 조회 1번, `method_checked`로 한 번만) — 채우기 전엔 공고명으로만 거름.
+- 투찰내역(지일 기록)의 개찰 결과 표시는 그대로(표본이 아님).
+
 ## 2026-11-11 — 1억 미만 '서식을 찾지 못함' 문구 정리 (브랜치 `claude/under100m-noform-note`, 사용자 요청)
 
 - 계기: 한국정보통신공사협회 장례식장 일회용품(R26BK01809661) — 첨부에 서식이 원래 없음(제출서류는 산출내역서·보증증권·등록증 등 회사가 작성·발급)인데 '찾지 못함'이라 놓친 것처럼 읽힘.

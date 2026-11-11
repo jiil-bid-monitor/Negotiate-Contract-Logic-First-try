@@ -131,9 +131,18 @@ class RunStats:
     prespec_error: str | None = None
 
 
+def window_begin(now: datetime, lookback_days: int) -> datetime:
+    """'최근 N일' 조회의 시작 = 오늘 포함 N일 전 00:00 (예: 11/11 09:37에 7일 → 11/05 00:00).
+
+    2026-11-10 나라장터 입찰공고정보서비스 조회기간 한도가 1개월 → 7일로 줄었다(공공데이터포털 공지).
+    예전처럼 'N일 전 00:00 ~ 지금'으로 잡으면 7일 + 오늘 지난 시간이 되어 resultCode=07로 거부된다.
+    """
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return today - timedelta(days=max(lookback_days, 1) - 1)
+
+
 def _api_window(now: datetime, lookback_days: int) -> tuple[str, str]:
-    begin = now - timedelta(days=lookback_days)
-    return begin.strftime("%Y%m%d0000"), now.strftime("%Y%m%d%H%M")
+    return window_begin(now, lookback_days).strftime("%Y%m%d%H%M"), now.strftime("%Y%m%d%H%M")
 
 
 def complete_days_window(now: datetime, days: int) -> tuple[datetime, datetime]:
@@ -402,7 +411,7 @@ def run(
         stats.period_begin, stats.period_end = period_begin, period_end
     else:
         begin, end = _api_window(now, config.lookback_days)
-        stats.period_begin = now - timedelta(days=config.lookback_days)
+        stats.period_begin = window_begin(now, config.lookback_days)
         stats.period_end = now
     log.info("조회 기간: %s ~ %s", begin, end)
 

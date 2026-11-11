@@ -200,9 +200,9 @@ def parse_response_body(text: str, label: str) -> Envelope:
     return _extract_envelope({root.tag: parsed} if isinstance(parsed, dict) else {})
 
 
-# 실측: 30일은 통과, 180일은(오늘은 ~100일도) resultCode=07로 거부된다 —
-# 정확한 상한은 모른다. 확인된 30일을 안전한 청크 크기로 쓴다.
-MAX_QUERY_DAYS = 30
+# 2026-11-10 공공데이터포털 공지: 입찰공고정보서비스 전체 오퍼레이션 조회기간 1개월 → 7일
+# (11/11 실측: 7일 9시간 요청은 resultCode=07, 1일은 통과). 청크 하나 = 7일 - 1분.
+MAX_QUERY_DAYS = 7
 
 
 @dataclass
@@ -332,8 +332,8 @@ class DataGoKrClient:
         """조회기간이 길면 `chunk_date_range`로 나눠 여러 번 호출해 합친다.
 
         본공고 3종·면허제한정보·참가가능지역 전부 조회기간이 너무 길면
-        resultCode=07(입력범위값 초과)로 거부한다(실측: 30일은 통과, ~100일은
-        거부 — 정확한 상한은 모른다). LOOKBACK_DAYS를 그 이상으로 잡아도
+        resultCode=07(입력범위값 초과)로 거부한다(2026-11-10부터 한도 7일 —
+        그 전엔 1개월). LOOKBACK_DAYS를 그 이상으로 잡아도
         되도록, 확인된 안전 범위(`MAX_QUERY_DAYS`) 단위로 쪼개 순서대로
         호출한다. 청크 하나가 실패하면 그 구간만 조용히 빠지지 않고 전체를
         실패로 올린다 — 일부만 수집해놓고 전체를 수집한 것처럼 보이면 안

@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import requests  # noqa: E402
 
-from nego.http_client import ApiConfig, ApiError, DataGoKrClient, chunk_date_range  # noqa: E402
+from nego.http_client import MAX_QUERY_DAYS, ApiConfig, ApiError, DataGoKrClient, chunk_date_range  # noqa: E402
 
 
 class TestServiceKeyMasked(unittest.TestCase):
@@ -127,7 +127,7 @@ class TestFetchAllPagesChunked(unittest.TestCase):
         client = DataGoKrClient(ApiConfig(service_key="key", max_retries=0), session=session)
 
         client.fetch_all_pages_chunked(
-            "https://example.com", "op", {"inqryDiv": "1"}, "202609010000", "202609150000", "테스트"
+            "https://example.com", "op", {"inqryDiv": "1"}, "202609010000", "202609050000", "테스트"
         )
 
         self.assertEqual(len(session.requested_ranges), 1)
@@ -135,3 +135,13 @@ class TestFetchAllPagesChunked(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSevenDayLimit(unittest.TestCase):
+    """2026-11-10부터 조회기간 한도 7일 — 기본 청크는 7일을 넘지 않아야 한다."""
+
+    def test_default_chunks_never_exceed_seven_days(self):
+        fmt = "%Y%m%d%H%M"
+        for b, e in chunk_date_range("202610120000", "202611110937", days=MAX_QUERY_DAYS):
+            span = datetime.strptime(e, fmt) - datetime.strptime(b, fmt)
+            self.assertLess(span, timedelta(days=7))

@@ -2230,6 +2230,40 @@ def test_history_cell_left_aligned_with_hanging_indent(tmp_path: Path):
     assert intent < 0 and left == 0  # 한글 내어쓰기(음수 intent) — 첫 줄은 그대로, 둘째 줄부터 날짜 너비만큼 들어감(11/05 '주 소 :'와 같은 방식)
 
 
+def test_staff_each_points_layouts(tmp_path: Path):
+    """11/11 사용자 제보: '특급기술자 | 각 0.5점'(칸 아래), 서식 '특급기술자 | 각0.5점 … 상한 점수 | 3점'을 못 읽어 기술인력 칸이 안 보였음.
+    ① 본문 요약표 안 기준 ② '가. 사업수행능력 평가' 다음 같은 차례 '나. 기술능력 평가' ③ 자기평가표 서식 줄."""
+    from quantdocs.fill import _cells
+    from quantdocs.selfscore import read_criteria, read_form
+
+    def c(col, row, t, cs=1, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/></hp:tc>')
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    staff = _tbl([[c(0, 0, "항목평가"), c(1, 0, "배점"), c(2, 0, "평가방법", 4)],
+                  [c(0, 1, "전문인력", 1, 3), c(1, 1, "3.0", 1, 3), c(2, 1, "특급기술자"), c(3, 1, "고급기술자"), c(4, 1, "중급기술자"), c(5, 1, "초급기술자")],
+                  [c(2, 2, "각 0.5점"), c(3, 2, "각 0.4점"), c(4, 2, "각 0.3점"), c(5, 2, "각 0.2점")],
+                  [c(2, 3, "* 평점 = 인원×기술자별 점수 * 최고 배점 3점을 초과할 수 없음", 4)]])
+    want = {"특급": 0.5, "고급": 0.4, "중급": 0.3, "초급": 0.2}
+    for i, lead in enumerate((para("1. 정량적 평가 : 20점") + para("나. 기술능력 평가"),
+                              para("가. 사업수행능력 평가") + para("나. 기술능력 평가"))):
+        doc = _mini_hwpx(tmp_path / f"r{i}.hwpx", lead + staff)
+        crit = [x for x in read_criteria([doc]) if x.kind == "staff"]
+        assert crit and crit[0].per_grade == want and crit[0].points == 3.0, (i, crit)
+    form = _tbl([[c(0, 0, "평가항목"), c(1, 0, "평가요소"), c(2, 0, "배점"), c(3, 0, "자기평점"), c(4, 0, "비고")],
+                 [c(0, 1, "기술능력", 1, 5), c(1, 1, "특급기술자"), c(2, 1, "각0.5점"), c(3, 1, ""), c(4, 1, "")],
+                 [c(1, 2, "고급기술자"), c(2, 2, "각0.4점"), c(3, 2, ""), c(4, 2, "")],
+                 [c(1, 3, "중급기술자"), c(2, 3, "각0.3점"), c(3, 3, ""), c(4, 3, "")],
+                 [c(1, 4, "초급기술자"), c(2, 4, "각0.2점"), c(3, 4, ""), c(4, 4, "")],
+                 [c(1, 5, "상 한 점 수"), c(2, 5, "3점"), c(3, 5, ""), c(4, 5, "")]])
+    xml = f"<hs:sec>{form}</hs:sec>"
+    rows = read_form(_cells(xml, (0, len(xml))))
+    row = next(r for r in rows if r.label == "기술능력")
+    assert row.points == 3.0 and row.crit is not None and row.crit.kind == "staff" and row.crit.per_grade == want
+
+
 def test_selfscore_nopoints_layout_pieces():
     """11/10 경남교육청 자체평가표: '3건 ~ 2건' 구간, '배점(점)' 머리."""
     from quantdocs.selfscore import parse_range

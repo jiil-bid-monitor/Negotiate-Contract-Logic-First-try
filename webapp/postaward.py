@@ -97,6 +97,27 @@ _PERIOD = re.compile(r"(?:착\s*공|착\s*수|계\s*약)\s*일\s*(?:로\s*)?부\
 _LONG = re.compile(r"장\s*기\s*계\s*속\s*(?:계\s*약|공\s*사)")
 
 
+SUMMARY = "공고정보_요약.pdf"
+
+
+def write_summary(path: Path, key: str, v: dict, nf) -> bool:
+    """공고문서/공고정보_요약.pdf — 1억 미만 폴더와 같은 모양(기본 정보 + 참가 자격·제출 서류·유의사항 원문, 11/11 사용자)."""
+    from under100m.__main__ import read_docs
+    from under100m.sections import find_sections
+    from under100m.summary import won, write_award_summary_pdf
+
+    win = v.get("winner") or {}
+    amount = _digits(str(win.get("amount") or "").split(".")[0])
+    rows = [("공고기관·수요기관", nf.institution or v.get("institution")), ("업무", nf.work_type or v.get("work")),
+            ("계약방법", nf.contract_method), ("낙찰방법", nf.award_method), ("공고일", nf.posted),
+            ("배정예산", won(nf.budget) if nf.budget and nf.budget >= 1000 else "비공개 또는 찾지 못함 — 공고문 확인"),
+            ("면허제한", " / ".join(nf.licenses)),
+            ("낙찰", f"{win.get('name') or '-'} · {won(int(amount))}" if amount else "아직 모름(낙찰 확인 전)")]
+    docs = read_docs(nf.files)
+    sections = find_sections([(f.name, text) for f, text in docs])
+    return write_award_summary_pdf(path, key, nf.title, rows, sections, [f.name for f, _ in docs], datetime.now())
+
+
 def basic_values(v: dict, title: str, institution: str, contract_method: str, texts: list[str]) -> tuple[dict, list[str]]:
     """기본사항 행 → (값, 출처) — 표준틀 v5 칸 위치(4 업무·5 발주기관·8 건명·11 계약 형태·12 금액·17 준공예정일 메모·21 공사위치).
     계약번호·계약일·수신·문서번호·인력은 계약 뒤에 정해지거나 사람이 고르는 값이라 비움. 돌려주는 줄 = 서류_확인.txt 안내."""
@@ -302,6 +323,12 @@ class PostAward:
                 if not target.exists():  # 담당자가 고쳤을 수 있어 덮어쓰지 않음
                     shutil.copyfile(f, target)
             basic = self._fill_template(key, folder, nf, Path(templates) if templates else template_dir(root))
+            summary = folder / "공고문서" / SUMMARY
+            if nf.title and not summary.exists():
+                try:
+                    write_summary(summary, key, v, nf)
+                except Exception as err:  # noqa: BLE001 — 요약을 못 만들어도 폴더·서류는 그대로
+                    basic.append(f"[공고요약] {SUMMARY}를 만들지 못함({err.__class__.__name__})")
         lines = [f"{key} {v.get('title') or nf.title} — 첨부에서 읽은 제출서류 (자동, 원문과 대조하세요)", ""]
         lines += basic + [""]
         if not nf.title:

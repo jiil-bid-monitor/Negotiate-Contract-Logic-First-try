@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from xml.sax.saxutils import escape as esc
 
 LOGO = Path(__file__).resolve().parent / "jiil_logo.png"
@@ -79,10 +80,8 @@ def req_lines(reqs: list[dict], mark: dict) -> list[tuple[str, list[str]]]:
     return out
 
 
-def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, key: str, need: list[tuple[str, str, str]],
-                      ref: str, deadline: str | None, files: list[str], now: datetime, sections: dict | None = None) -> bool:
-    """한글 글꼴이 없으면 False — 나머지 자료는 그대로 만든다."""
-    from nego.text_requirements import summarize_flag
+def _kit(now: datetime):
+    """요약 PDF 공통(글꼴·글 모양·표·쪽 띠). 한글 글꼴이 없으면 None."""
     from quantdocs.bundle import _FONTS
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -94,7 +93,7 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
 
     font = next((f for f in _FONTS if Path(f).exists()), None)
     if not font:
-        return False
+        return None
     bold = next((b for b in (font.replace("malgun.ttf", "malgunbd.ttf"), font.replace("NanumGothic.ttf", "NanumGothicBold.ttf"))
                  if b != font and Path(b).exists()), font)  # 굵은 글꼴이 없으면(NAS) 보통 글꼴로
     pdfmetrics.registerFont(TTFont("KR", font, subfontIndex=0) if font.endswith(".ttc") else TTFont("KR", font))
@@ -105,9 +104,6 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
     h1 = ParagraphStyle("h1", parent=base, fontName="KRB", fontSize=14, leading=19)
     h2 = ParagraphStyle("h2", parent=base, fontName="KRB", fontSize=10.5, leading=14, spaceBefore=6, spaceAfter=2,
                         textColor=colors.HexColor("#1b6e43"))
-    mark = {True: '<font color="#1b6e43"><b>[보유]</b></font>', False: '<font color="#c0392b"><b>[미보유]</b></font>',
-            None: '<font color="#888888">[없어도 됨]</font>'}
-
     def table(rows) -> Table:
         data = [[Paragraph(esc(str(k)), base), Paragraph(esc(str(v if v not in (None, "") else "-")), base)] for k, v in rows]
         t = Table(data, colWidths=[32 * mm, 140 * mm])
@@ -134,6 +130,53 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
         canvas.drawString(18 * mm, 8.5 * mm, f"㈜지일  ·  작성 {now:%Y.%m.%d}  ·  공고문 원문과 대조 후 사용")
         canvas.drawRightString(w - 18 * mm, 8.5 * mm, f"{doc.page}")
         canvas.restoreState()
+
+    def build(path: Path, story: list) -> None:
+        SimpleDocTemplate(str(path), pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=24 * mm, bottomMargin=16 * mm,
+                          title="공고정보 요약", author="㈜지일").build(story, onFirstPage=frame, onLaterPages=frame)
+
+    return SimpleNamespace(base=base, small=small, h1=h1, h2=h2, table=table, build=build, P=Paragraph, Spacer=Spacer)
+
+
+def _original(k, sections: dict | None) -> list:
+    """공고 문서 원문 그대로(sections.find_sections) — 참가 자격·제출 서류·유의사항."""
+    story = []
+    for topic in ("참가 자격", "제출 서류", "유의사항·기타"):
+        story.append(k.P(f"{topic} — 공고문 원문", k.h2))
+        items = (sections or {}).get(topic) or []
+        if not items:
+            story.append(k.P("공고 문서에서 이 절을 찾지 못함 — 공고문 확인", k.base))
+        for name, head, lines in items:
+            story.append(k.P(f"<b>{esc(head)}</b> &nbsp;<font size=7 color='#777777'>({esc(name)})</font>", k.base))
+            story += [k.P("&nbsp;&nbsp;" + esc(line), k.base) for line in lines]
+    return story
+
+
+def write_award_summary_pdf(path: Path, key: str, title: str, rows: list[tuple[str, str]], sections: dict | None,
+                            files: list[str], now: datetime) -> bool:
+    """낙찰 후 서류 공고문서/ 요약 — 1억 미만 요약과 같은 모양(기본 정보 + 공고문 원문 절). 글꼴이 없으면 False."""
+    k = _kit(now)
+    if k is None:
+        return False
+    story = [k.P(esc(title or ""), k.h1), k.P(esc(f"공고번호 {key}"), k.small), k.P("기본 정보", k.h2), k.table(rows)]
+    story += _original(k, sections)
+    story += [k.Spacer(1, 6), k.P("읽은 문서: " + esc(" / ".join(files) or "-"), k.small)]
+    k.build(path, story)
+    return True
+
+
+def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, key: str, need: list[tuple[str, str, str]],
+                      ref: str, deadline: str | None, files: list[str], now: datetime, sections: dict | None = None) -> bool:
+    """한글 글꼴이 없으면 False — 나머지 자료는 그대로 만든다."""
+    from nego.text_requirements import summarize_flag
+    from reportlab.lib import colors
+
+    k = _kit(now)
+    if k is None:
+        return False
+    base, small, h1, h2, table, Paragraph, Spacer = k.base, k.small, k.h1, k.h2, k.table, k.P, k.Spacer
+    mark = {True: '<font color="#1b6e43"><b>[보유]</b></font>', False: '<font color="#c0392b"><b>[미보유]</b></font>',
+            None: '<font color="#888888">[없어도 됨]</font>'}
 
     n = candidate.notice
     q = candidate.qualification
@@ -177,15 +220,7 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
                   Paragraph("유효기간이 지났거나 재발급이 필요한 서류는 회사준비서류 폴더에 넣지 않았습니다.", small)]
     else:
         story.append(Paragraph("없음 — 체크리스트의 증명서류는 회사 서류에서 모두 넣음", base))
-    for topic in ("참가 자격", "제출 서류", "유의사항·기타"):  # 공고 문서 원문 그대로(sections.find_sections)
-        story.append(Paragraph(f"{topic} — 공고문 원문", h2))
-        items = (sections or {}).get(topic) or []
-        if not items:
-            story.append(Paragraph("공고 문서에서 이 절을 찾지 못함 — 공고문 확인", base))
-        for name, head, lines in items:
-            story.append(Paragraph(f"<b>{esc(head)}</b> &nbsp;<font size=7 color='#777777'>({esc(name)})</font>", base))
-            story += [Paragraph("&nbsp;&nbsp;" + esc(line), base) for line in lines]
+    story += _original(k, sections)
     story += [Spacer(1, 6), Paragraph("읽은 문서: " + esc(" / ".join(files) or "-"), small)]
-    SimpleDocTemplate(str(path), pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=24 * mm, bottomMargin=16 * mm,
-                      title="공고정보 요약", author="㈜지일").build(story, onFirstPage=frame, onLaterPages=frame)
+    k.build(path, story)
     return True

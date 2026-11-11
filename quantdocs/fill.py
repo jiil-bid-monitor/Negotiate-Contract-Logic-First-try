@@ -726,7 +726,10 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             company, name = _value("회사명", vault), _value("대표자", vault)
             if company and name:
                 seg = re.sub(r"○{2,}(\s*)(?=업체|회사)(?:업체|회사)", lambda mm: _mark(company) + mm.group(1), xml[s:e], count=1)
-                seg = re.sub(r"([:：]\s*)○{2,}", lambda mm: f"{mm.group(1)}{_mark(name)}", seg, count=1)
+                # 이름은 쌍점 바로 옆에(11/11 사용자 요청 — 예전엔 자리표시 앞 빈칸을 그대로 둬서 '대표자 :         이운봉 (인)'),
+                # 쌍점 뒤 빈칸은 이름 뒤로 옮겨 줄 길이·(인) 자리 유지
+                seg = re.sub(r"([:：])(\s*)○{2,}", lambda mm: f"{mm.group(1)} {_mark(name)}" + " " * max(0, len(mm.group(2)) - 1),
+                             seg, count=1)
                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                 edits.append((s, e, seg))
                 rep.filled.append(f"서명 줄 자리표시 → {company} 대표자 {name}")

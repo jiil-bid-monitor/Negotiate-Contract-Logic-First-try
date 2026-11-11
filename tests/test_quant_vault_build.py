@@ -759,7 +759,7 @@ def test_other_party_zone_and_placeholder_signature(tmp_path: Path):
     assert "<hp:t>상호 :</hp:t>" in out and "<hp:t>전화 :</hp:t>" in out  # 발행자 칸은 그대로
     # 11/05 사용자 요청: 표 밖 서명 줄은 서식 28 '발행자 상호 :'·'대표자 : (인)'도 채움(표 안 발행자 칸은 그대로 비움)
     assert "<hp:t>발행자   상호 : (주)가상</hp:t>" in out and re.search(r"<hp:t>대표자 : 홍길동 +\(인\)</hp:t>", out)
-    assert re.search(r"\(주\)가상 대표자 : +홍길동 \(인\)", out)
+    assert re.search(r"\(주\)가상 대표자 : 홍길동 +\(인\)", out)  # 이름은 쌍점 바로 옆(11/11 사용자 요청)
     assert "대표이사 ○○○     (인)" in out
     assert out.count("(주)가상") == 3  # 제안업체 칸 + 서식 28 서명 줄 + 서식 19 줄
 

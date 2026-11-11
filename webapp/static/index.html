@@ -1719,6 +1719,8 @@ async function loadNotices(refresh) {
     // 결과 보기 전용 서버(NAS)엔 수집 버튼이 없다 — 수집은 서버 PC 화면에서 (webapp/resultpush.py)
     const viewer = data.canCollect === false;
     $("refresh").style.display = $("days").style.display = $("load").style.display = viewer ? "none" : "";  // 판단은 10초마다 저절로 받음
+    // 투찰 계산기·정량평가서는 서버 PC에서만 — 투찰 기록이 두 곳에 쌓이지 않게, 정량평가서는 NAS에 OCR이 없어서 (11/11 사용자 결정)
+    document.querySelectorAll('.tabs [data-tab="calc"], .tabs [data-tab="quant"]').forEach((b) => { b.hidden = viewer; });
     if (data.empty) {
       $("loadState").textContent = "";
       $("liveMeta").innerHTML = viewer ? "아직 받은 수집 결과가 없습니다. 서버 PC 화면에서 수집하면 끝난 뒤 여기에 나타납니다."

@@ -137,3 +137,21 @@ class TestFill(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealFetchNoticeTest(unittest.TestCase):
+    """11/11 서버 오류: 투찰내역 결과 받기가 넘기는 SimpleNamespace엔 contract_method가 없어 fetch_result가 멈췄음."""
+
+    def test_fetch_result_accepts_minimal_notice(self):
+        from types import SimpleNamespace
+
+        from nego.bidprice import fetch_result
+
+        class Client:
+            def fetch_all_pages(self, *a, **k):
+                return []
+
+        notice = SimpleNamespace(notice_no="R26BK00000001", notice_ord="000", title="가상", work_type="공사",
+                                 demand_institution="", notice_institution="", opening_at=None, raw={})
+        res = fetch_result(Client(), "u", notice)
+        self.assertEqual((res.notice_no, res.contract_method), ("R26BK00000001", ""))

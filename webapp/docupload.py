@@ -26,8 +26,13 @@ def kinds(folder: Path) -> list[str]:
     try:
         rows = json.loads((folder / "_목록.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return []
-    return sorted({r["종류"] for r in rows if r.get("종류")})
+        rows = []
+    out = {r["종류"] for r in rows if r.get("종류")}
+    # 인증서갱신.xlsx의 그리다 서류도 '(그리다) 이름'으로 고를 수 있게 — 지일 자격과 헷갈리지 않게(11/11 사용자)
+    cert = folder / docexpiry.CERT_FILE
+    if cert.exists():
+        out |= {k for k, _ in docexpiry.read_cert(cert) if k.startswith(docexpiry.GRIDA_TAG)}
+    return sorted(out)
 
 
 def parse_expiry(text: str) -> date | None | str:

@@ -4,7 +4,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from webapp.docupload import Uploader, guess_kind, parse_expiry
+from webapp.docupload import Uploader, guess_kind, kinds, parse_expiry
 
 CHAT = "-5"
 
@@ -28,6 +28,17 @@ class UploadFlowTest(unittest.TestCase):
 
         self.up = Uploader(api, lambda fid: b"%PDF new " + fid.encode(), {CHAT}, folder=lambda: self.dir,
                            today=lambda: date(2026, 11, 9))
+
+    def test_kinds_include_grida_tagged(self):
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        for row in [("여성기업", "26.10.22", "3년", "그리다"), ("지일", "만료일", "그리다", "만료일"),
+                    ("조형물", "27.6.17", "조형물", "27.06.01")]:
+            wb.active.append(row)
+        wb.save(self.dir / "인증서갱신.xlsx")
+        # 지일 조형물은 메뉴에 그리다 것만 '(그리다)'로 더함 — 지일 자격과 헷갈리지 않게
+        self.assertEqual(kinds(self.dir), ["(그리다) 여성기업", "(그리다) 조형물", "신용평가등급확인서"])
 
     def msg(self, mid, text="", reply_to=None, doc=None):
         m = {"message_id": mid, "chat": {"id": int(CHAT)}, "text": text}

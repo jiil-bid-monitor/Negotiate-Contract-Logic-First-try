@@ -476,6 +476,20 @@ class TestOutsideNotes(unittest.TestCase):
         from under100m.__main__ import outside_notes
         self.assertEqual(outside_notes(["○ 제출서류 : 이행(입찰)보증보험증권\n※ 나라장터를 통한 전자 제출"]), [])
 
+class TestWordForms(unittest.TestCase):
+    def test_form_heads_in_docx(self):
+        import tempfile, zipfile
+        from under100m.__main__ import word_forms
+        body = "".join(f"<w:p><w:r><w:t>{t}</w:t></w:r></w:p>" for t in
+                       ["라. 입찰 서류제출", "1) 공기 준수 서약서 [서식1]", "[서식 1]", "공기 준수 서약서", "본인은 …", "[서식 2] 청렴서약서"])
+        xml = ('<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+               f"<w:body>{body}</w:body></w:document>")
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "공고서.docx"
+            with zipfile.ZipFile(f, "w") as z:
+                z.writestr("word/document.xml", xml)
+            self.assertEqual(word_forms(f), ["서식01 공기 준수 서약서", "서식02 청렴서약서"])
+
 
 if __name__ == "__main__":
     unittest.main()

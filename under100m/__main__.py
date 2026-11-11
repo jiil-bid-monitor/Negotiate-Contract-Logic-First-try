@@ -232,6 +232,19 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
                 shutil.copyfile(p, kept)
                 checklist.append(f"[ ] {kept.name}")
         form_names += [p.stem for p in hwpx]
+    words = []  # 워드 공고서 안 서식 — 자르고 채우는 도구가 없어 파일째 넣고 서식 이름만 적는다(2026-11-11 사용자 요청)
+    for f in files:
+        if f.suffix.lower() == ".docx":
+            names = word_forms(f)
+            if names:
+                kept = _unique(out / f"워드서식_{doc_label(f, 40)}.docx")
+                shutil.copyfile(f, kept)
+                words.append((kept, names))
+                form_names += names
+    if words:
+        checklist += ["", "워드(.docx) 문서 안의 서식 — 자동으로 자르거나 채우지 못함, 아래 파일에서 직접 작성:"]
+        for kept, names in words:
+            checklist += [f"[ ] {name} — {kept.name}" for name in names]
     stems = {f.stem for f in files if f.suffix.lower() in (".hwp", ".hwpx")}
     pdfs: list[tuple[Path, str]] = []  # (채운 서식, 체크리스트 안내) — 끝에 서식_통합.pdf 한 파일로
     for number, f in enumerate(files):  # 같은 이름의 한글 파일이 있으면 한글 쪽을 씀 — PDF로만 있는 서식만(한글 통합본에 못 넣어 따로)
@@ -269,6 +282,30 @@ def build_forms(files: list[Path], company: dict, candidate, out: Path, work: Pa
                 shutil.copyfile(target, kept)
                 checklist.append(f"[ ] {kept.name} — {how}")
     return checklist, notes, converted, form_names
+
+
+def word_forms(f: Path) -> list[str]:
+    """워드 문서에서 '[서식 1] 공기 준수 서약서'(제목이 다음 줄이어도) 같은 서식 머리를 찾아 '서식01 제목' 목록으로."""
+    from nego.attachments import extract_text
+    from .form_split import label_of, mark_match
+
+    try:
+        lines = [l.strip() for l in extract_text(f.read_bytes(), "docx").splitlines() if l.strip()]
+    except Exception as err:  # noqa: BLE001 — 못 읽으면 서식 없음으로
+        log.warning("워드 문서를 읽지 못함 %s: %s", f.name, err)
+        return []
+    out, seen = [], set()
+    for k, line in enumerate(lines):
+        m = mark_match(line)
+        if not m:
+            continue
+        kind, number, rest = m
+        title = rest.strip() or (lines[k + 1] if k + 1 < len(lines) and len(lines[k + 1]) <= 40 and not mark_match(lines[k + 1]) else "")
+        label = label_of(re.sub(r"\s", "", kind), re.sub(r"\s", "", number))
+        if label not in seen:
+            seen.add(label)
+            out.append(f"{label} {title}".strip())
+    return out
 
 
 def read_docs(files: list[Path]) -> list[tuple[Path, str]]:

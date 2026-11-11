@@ -3125,7 +3125,7 @@ function renderLog() {
         <h3>${title}${noticeNoTag(p.noticeNo)}</h3>
         ${inList ? `<button type="button" class="linkish" data-goto="${esc(p.noticeNo)}">${undecided ? "판단하러 가기" : "목록에서 보기"}</button>` : ""}
         ${!undecided && p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단으로 되돌립니다">되돌리기</button>` : ""}
-        ${inList ? "" : `<span class="log-judge">${DECISIONS.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p.status === s ? "on" : ""}" data-pstatus="${s}">${s}</button>`).join("")}</span>`}
+        ${inList || st !== "미판단" ? "" : `<span class="log-judge">${DECISIONS.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p.status === s ? "on" : ""}" data-pstatus="${s}">${s}</button>`).join("")}</span>`}
       </div>
       ${metaLine}
       ${!undecided && !p.reason && !(p.tags || []).length ? decisionRow(p) : ""}

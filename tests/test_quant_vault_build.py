@@ -2123,6 +2123,41 @@ def test_table_value_follows_label_font(tmp_path: Path):
     assert 'hangul="1"' in block and 'height="1200"' in block
 
 
+def test_track_rows_share_header_font(tmp_path: Path):
+    """11/11 사용자 제보: 실적 표 사업명 글꼴이 줄마다 다름 — 연번 '1'이 미리 적힌 줄은 연번 칸 글꼴, 빈 줄은 다른 글꼴.
+    모든 줄이 열 머리('사업명') 글꼴을 따라야 함."""
+    from quantdocs.fill import fill_hwpx
+
+    fonts = ('<hh:fontfaces><hh:fontface lang="HANGUL" fontCnt="3"><hh:font id="0" face="굴림" type="TTF"/><hh:font id="1" face="휴먼명조" type="TTF"/>'
+             '<hh:font id="2" face="돋움" type="TTF"/></hh:fontface>'
+             '<hh:fontface lang="LATIN" fontCnt="3"><hh:font id="0" face="굴림" type="TTF"/><hh:font id="1" face="휴먼명조" type="TTF"/>'
+             '<hh:font id="2" face="돋움" type="TTF"/></hh:fontface></hh:fontfaces>')
+    header = ('<hh:head>' + fonts + '<hh:charProperties itemCnt="3">'
+              '<hh:charPr id="0" height="1000" textColor="#000000"><hh:fontRef hangul="0" latin="0"/></hh:charPr>'
+              '<hh:charPr id="3" height="1000" textColor="#000000"><hh:fontRef hangul="1" latin="1"/></hh:charPr>'
+              '<hh:charPr id="4" height="1000" textColor="#000000"><hh:fontRef hangul="2" latin="2"/></hh:charPr></hh:charProperties></hh:head>')
+    cell = lambda c, r, t, cid: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="{cid}"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                 f'<hp:cellAddr colAddr="{c}" rowAddr="{r}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    rows = [[cell(0, 0, "연번", "3"), cell(1, 0, "1. 사업명", "3"), cell(2, 0, "계약금액", "3")]]
+    for r in range(1, 4):
+        rows.append([cell(0, r, "1" if r == 1 else "", "4"), cell(1, r, "", "0"), cell(2, r, "", "0")])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(x) + "</hp:tr>" for x in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "t.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    import datetime as _dt
+    tracks = [{"사업명": f"가상 전시관 {i}", "준공일": _dt.date(2025, 1, i), "계약금액(원)": 100_000_000} for i in range(1, 4)]
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}), tracks=tracks)
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    faces = set()
+    for i in range(1, 4):
+        cid = re.search(rf'<hp:run charPrIDRef="(\d+)"><hp:t>가상 전시관 {i}</hp:t>', out).group(1)
+        block = re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
+        faces.add(re.search(r'hangul="(\d+)"', block).group(1))
+    assert faces == {"1"}, faces
+
+
 def test_selfscore_nopoints_layout_pieces():
     """11/10 경남교육청 자체평가표: '3건 ~ 2건' 구간, '배점(점)' 머리."""
     from quantdocs.selfscore import parse_range

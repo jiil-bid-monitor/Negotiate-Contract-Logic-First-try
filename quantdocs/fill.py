@@ -1112,7 +1112,15 @@ def _label_face(xml: str, cell: "Cell", chars: "_Chars") -> tuple[str, int]:
         return "", 0
     cells = [c for c in _cells(xml, tbl) if not (c.start == cell.start)]
     left = next((o for o in cells if o.col + o.colspan == cell.col and o.row <= cell.row < o.row + o.rowspan), None)
-    above = next((o for o in cells if o.col == cell.col and o.row + o.rowspan == cell.row), None)
+    # 왼쪽이 연번 숫자('1')뿐이거나 비었으면 이름표가 아님 — 같은 열 위로 올라가 처음 글이 있는 칸(실적 표의 '사업명' 머리)
+    # (11/11 사용자 제보: 실적 표 사업명 글꼴이 줄마다 다름 — 연번이 미리 적힌 줄은 연번 칸 글꼴, 빈 줄은 다른 글꼴을 따랐음)
+    if left is not None and re.fullmatch(r"\d*\.?", _sq(left.text)):
+        left = None
+    above = None
+    for o in sorted((o for o in cells if o.col == cell.col and o.row + o.rowspan <= cell.row), key=lambda o: -o.row):
+        if _sq(o.text) and not re.fullmatch(r"\d+\.?", _sq(o.text)):
+            above = o
+            break
     for o in (left, above):
         if o is not None and _sq(o.text):
             run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', xml[o.start:o.end])

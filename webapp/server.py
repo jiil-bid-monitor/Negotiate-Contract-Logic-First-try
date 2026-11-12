@@ -277,9 +277,12 @@ def make_handler(app: App):
                         return self._error(HTTPStatus.CONFLICT, VIEWER_MESSAGE)
                     # 나라장터 조회 + 첨부 읽기는 몇 분 걸려서 응답을 붙잡지 않는다 — 수집을 시작하고 화면이 /api/job을 본다
                     days = int(q.get("days", ["7"])[0]) if q.get("days", ["7"])[0].isdigit() else 7
+                    begin, end = q.get("begin", [""])[0], q.get("end", [""])[0]  # 직접 지정 기간 (YYYY-MM-DD)
                     try:
                         app.collector.start(days=days if days in PERIODS else 7, attachments=True, ai=False,
-                                            categories=None, prespec=True)
+                                            categories=None, prespec=True, begin=begin or None, end=end or None)
+                    except ValueError as exc:
+                        return self._json({"error": str(exc)})  # 날짜 형식·순서·92일 초과 — 화면이 그대로 보임
                     except RuntimeError:
                         pass  # 이미 누가 수집 중 — 그 진행을 같이 본다
                     return self._json({"running": True, "job": app.collector.job.snapshot()})

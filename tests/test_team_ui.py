@@ -235,6 +235,22 @@ class TestServerRoutes(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(json.loads(body)["empty"], "아직 수집 전")
 
+    def test_refresh_custom_period(self):
+        """직접 지정 기간 — 잘못된 기간은 오류 글, 맞는 기간은 수집 시작 (2026-11-12)."""
+        _, _, body = self.get("/api/notices?begin=2026-11-10&end=2026-11-01&refresh=1", cookie="app_token=secret-token")
+        self.assertIn("시작일", json.loads(body)["error"])
+        _, _, body = self.get("/api/notices?begin=2026-01-01&end=2026-06-30&refresh=1", cookie="app_token=secret-token")
+        self.assertIn("92일", json.loads(body)["error"])
+        today = time.strftime("%Y-%m-%d")
+        _, _, body = self.get(f"/api/notices?begin={today}&end={today}&refresh=1", cookie="app_token=secret-token")
+        self.assertTrue(json.loads(body)["running"])
+        for _ in range(100):
+            _, _, raw = self.get("/api/job", cookie="app_token=secret-token")
+            if not json.loads(raw)["running"]:
+                break
+            time.sleep(0.05)
+        self.assertEqual(json.loads(raw)["params"]["begin"], today)
+
     def test_refresh_collects_then_lists(self):
         status, _, body = self.get("/api/notices?days=7&refresh=1", cookie="app_token=secret-token")
         self.assertTrue(json.loads(body)["running"])

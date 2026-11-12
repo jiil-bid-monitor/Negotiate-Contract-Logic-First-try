@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .bundle import Pick, merge, pick
 from .catalog import load_catalog
-from .selfscore import AUTO_KINDS, SelfScore, fmt, patent_scope, patent_status, read_criteria, score as score_items, staff_status
+from .selfscore import AUTO_KINDS, Criterion as SelfCriterion, SelfScore, fmt, form_staff_grades, patent_scope, patent_status, read_criteria, score as score_items, staff_status
 from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx, unfilled_slots
 from .forms_cut import cut, merge as merge_forms, page_titles
 from .g2b import qualification_rows
@@ -218,6 +218,13 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
                     if k not in have and (k in chosen or (k not in sheet_files and not sheet_files))]
     # 기술인력 고르기(11/05 사용자 요청 (나)) — 이 공고 배점 기준으로 인력목록 사람마다 들어가는지
     crit = next((c for c in crits if c.kind == "staff"), None)
+    # 자기평가표 서식의 등급별 점수가 먼저(11/12 사용자 — 서식은 '특급기술자 | 1.0점/인'으로 잘 나뉘어 있음, 채점도 서식 기준),
+    # 본문 표에서 읽은 등급은 서식에 없는 것만 보탬
+    form_grades, form_points = form_staff_grades(_rfp_first(files, converted))
+    if form_grades:
+        if crit is None:
+            crit = SelfCriterion("기술인력", form_points, "staff")
+        crit.per_grade = {**form_grades, **{g: p for g, p in crit.per_grade.items() if g not in form_grades}}
     a.staff = staff_status(crit, vault, ref)
     a.staff_on = bool(crit is not None and crit.per_grade)
     if crit is not None:

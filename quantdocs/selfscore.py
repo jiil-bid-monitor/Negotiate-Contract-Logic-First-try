@@ -134,12 +134,19 @@ def _read_table(c: Criterion, xml: str, tbl: tuple[int, int]) -> None:
             if g and below is not None and "기술" in _sq(text) and len(_sq(text)) <= 8:
                 c.per_grade.setdefault(g, below)
     # 등급별 계수가 같은 줄 맨 오른쪽('특 급 기술자 | 자격 기준 | 학력 기준 | 10.0', 11/10 경남교육청)
+    # 등급 칸이 줄 맨 앞이 아니어도(11/12 당진 서식 4호: 세로로 합친 '기술인력 | 인력 보유현황' 칸이 첫 줄(특급)에만 걸려
+    # 특급 줄은 '기술인력 | 인력보유현황 | 특급기술자 | 1.0점/인'이라 특급만 못 읽어 '등급 없음') — 등급 칸 오른쪽에서 처음 읽히는 점수
     for r, cols in rows.items():
-        first = _sq(cols.get(min(cols), "")) if cols else ""
-        g = next((g for g in GRADES if first.startswith(g)), None)
-        last = _each(cols[max(cols)]) if cols else None
-        if g and last is not None and len(cols) >= 2 and re.fullmatch(rf"{g}(?:기술자)?", first):
-            c.per_grade.setdefault(g, last)
+        order = sorted(cols)
+        for i, col in enumerate(order):
+            t = _sq(cols[col])
+            g = next((g for g in GRADES if t.startswith(g)), None)
+            if not g or not re.fullmatch(rf"{g}(?:기술자)?", t):
+                continue
+            per = next((v for v in (_each(cols[k]) for k in order[i + 1:]) if v is not None), None)
+            if per is not None:
+                c.per_grade.setdefault(g, per)
+            break
     # 기술인력 점수 구간('점수 50점 이상' | 5.0) — 등급별 계수 합으로 구간을 고름
     if c.kind == "staff":
         for r, cols in sorted(rows.items()):
@@ -202,6 +209,22 @@ def read_criteria(paths: list[Path]) -> list[Criterion]:
         if crit:
             return crit
     return []
+
+
+def form_staff_grades(paths: list[Path]) -> tuple[dict[str, float], float]:
+    """자기평가표 서식의 기술인력 (등급별 1인당 점수, 배점) — 첫 번째로 찾은 것. 화면 기술인력 목록이 서식 기준을 먼저 쓰게
+    (11/12 사용자: '서식에서는 잘 나뉘어져 있잖아' — 서식 '특급기술자 | 1.0점/인', 채점도 서식 기준)."""
+    for path in paths:
+        try:
+            xmls = _sections(Path(path))
+        except (zipfile.BadZipFile, KeyError, OSError):
+            continue
+        for xml in xmls:
+            for tbl in _spans(xml, "tbl"):
+                for row in read_form(_cells(xml, tbl)):
+                    if row.crit is not None and row.crit.kind == "staff" and row.crit.per_grade:
+                        return dict(row.crit.per_grade), float(row.points or 0)
+    return {}, 0.0
 
 
 def _mark_style(text: str) -> str:

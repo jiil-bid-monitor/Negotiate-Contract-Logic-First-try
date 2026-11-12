@@ -596,20 +596,6 @@ def start_nightly(app: App) -> None:
     Nightly(app.store.path.parent, app.bidlog, app.latest_run, make_client, default_own_bizno(), postaward=app.postaward,
             before=pull.pull if pull else None).start()
 
-    def postaward_loop() -> None:
-        """낙찰 여부는 22시 밤 작업을 기다리지 않고 1시간마다 확인 — '대기' 공고마다 조회 1번 (11/11 사용자 요청)."""
-        while True:
-            threading.Event().wait(3600)
-            try:
-                made = make_client()
-                if made is not None:
-                    app.postaward.sync_bidlog()
-                    app.postaward.check(*made)
-            except Exception:  # noqa: BLE001 — 조회가 실패해도 웹앱은 그대로
-                logging.exception("낙찰 후 서류 확인 오류")
-
-    threading.Thread(target=postaward_loop, name="postaward-hourly", daemon=True).start()
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="webapp", description="입찰 공고 싱크로율 탐색기 (사내 웹앱)")

@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -65,8 +65,8 @@ class NightlyTest(unittest.TestCase):
         self.assertIn("1등건설", row)
         self.assertIn(3, row)  # 지일 순위
         self.assertTrue((self.tmp / "arch" / "성적표" / "성적표_2026-11-09.txt").exists())
-        # 같은 날 다시는 안 돌고, 받은 공고는 다시 안 받음
-        self.assertFalse(self.night.due(now))
+        # 1시간 안엔 다시 안 돌고, 받은 공고는 다시 안 받음
+        self.assertFalse(self.night.due(now + timedelta(minutes=59)))
         self.night.run_once(datetime(2026, 11, 10, 22, 0, tzinfo=KST))
         self.assertEqual(self.calls, ["R26BK00000001-000"])
 
@@ -78,11 +78,18 @@ class NightlyTest(unittest.TestCase):
         self.assertEqual(self.night.state()["watch"]["R26BK00000009-000"]["status"], "결과 없음")
 
     def test_due(self):
-        self.assertFalse(self.night.due(datetime(2026, 11, 6, 21, 59, tzinfo=KST)))  # 처음엔 22시까지 기다림
-        self.assertTrue(self.night.due(datetime(2026, 11, 6, 22, 0, tzinfo=KST)))
-        self.night.run_once(datetime(2026, 11, 6, 22, 0, tzinfo=KST))
-        self.assertFalse(self.night.due(datetime(2026, 11, 7, 9, 0, tzinfo=KST)))
-        self.assertTrue(self.night.due(datetime(2026, 11, 8, 9, 0, tzinfo=KST)))  # 11/07 밤을 놓침 → 따라잡기
+        self.assertTrue(self.night.due(datetime(2026, 11, 6, 9, 0, tzinfo=KST)))  # 처음이면 바로
+        self.night.run_once(datetime(2026, 11, 6, 9, 0, tzinfo=KST))
+        self.assertFalse(self.night.due(datetime(2026, 11, 6, 9, 59, tzinfo=KST)))
+        self.assertTrue(self.night.due(datetime(2026, 11, 6, 10, 0, tzinfo=KST)))  # 1시간마다
+
+    def test_no_result_retried_once_a_day(self):
+        self.run = run_with(cand("R26BK00000009"))
+        self.night.run_once(datetime(2026, 11, 6, 9, 0, tzinfo=KST))
+        self.night.run_once(datetime(2026, 11, 6, 10, 0, tzinfo=KST))  # 결과 없는 공고를 1시간 뒤 또 묻지 않음
+        self.assertEqual(self.night.state()["watch"]["R26BK00000009-000"]["tries"], 1)
+        self.night.run_once(datetime(2026, 11, 7, 9, 0, tzinfo=KST))
+        self.assertEqual(self.night.state()["watch"]["R26BK00000009-000"]["tries"], 2)
 
     def test_bidlog_notices_watched(self):
         self.run = run_with()

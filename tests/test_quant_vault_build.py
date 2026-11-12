@@ -2521,3 +2521,18 @@ def test_none_rule_fills_each_labeled_row(tmp_path: Path):
     from quantdocs.fill import _cells, _spans
     got = {(x.row, x.col) for x in _cells(xml, _spans(xml, "tbl")[0]) if "해당 없음" in x.text}
     assert got == {(1, 2), (2, 2), (3, 2)}
+def test_label_with_paren_slot_line(tmp_path: Path):
+    """11/12 당진 서식 — 표 밖 '업 체 명:          (전화번호)'(두 run으로 나뉨)가 비었음 → 쌍점 뒤 회사명, 괄호 안 전화번호.
+    괄호 안이 회사 정보 이름표가 아니면('(인)' 등) 이 규칙은 안 씀."""
+    from quantdocs.fill import fill_hwpx
+
+    body = ('<hp:p><hp:run charPrIDRef="0"><hp:t>            업 체 명:                  </hp:t></hp:run>'
+            '<hp:run charPrIDRef="0"><hp:t> (전화번호)</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>대 표 자:          (인)</hp:t></hp:run></hp:p>')
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "대표전화": "033-111-2222"})
+    rep = fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", body), tmp_path / "ao.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"<[^>]+>", "", xml)
+    assert re.search(r"업 체 명: \(주\)가상\s+\(033-111-2222\)", text), text
+    assert "홍길동" in text and "(인)" in text
+    assert any("괄호 자리" in f for f in rep.filled)

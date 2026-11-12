@@ -764,6 +764,32 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 edits.append((s, e, seg))
                 rep.filled += done
             continue
+        # '업 체 명:          (전화번호)'처럼 쌍점 뒤 빈칸 끝에 다른 항목 이름을 괄호로 적어 둔 줄(11/12 당진 서식 — 업체명·전화 둘 다 비었음)
+        # → 쌍점 뒤에 앞 항목 값, 괄호 안에 괄호 항목 값('(031-…)'). 두 항목 다 회사 정보로 알아볼 때만.
+        slot = re.fullmatch(r"\s*(.{2,16}?)\s*[:：]\s{2,}[(（]\s*([^()（）:：]{2,12}?)\s*[)）]\s*", text)
+        if slot:
+            k1, k2 = _label_key(slot.group(1)), _label_key(slot.group(2))
+            v1, v2 = (_value(k1, vault) if k1 else ""), (_value(k2, vault) if k2 else "")
+            if v1 and v2 and k1 != k2:
+                inner = r"\s*".join(re.escape(ch) for ch in re.sub(r"\s+", "", slot.group(2)))
+
+                def put_slot(mm, st={"a": False, "b": False}):
+                    body = mm.group(2)
+                    if not st["a"]:
+                        body, k = re.subn(r"([:：])( {2,})", lambda m2: f"{m2.group(1)} {_mark(v1)}"
+                                          + " " * max(2, len(m2.group(2)) - _span(v1) - 1), body, count=1)
+                        st["a"] = bool(k)
+                    if not st["b"]:
+                        body, k = re.subn(rf"([(（])\s*{inner}\s*([)）])", lambda m2: f"{m2.group(1)}{_mark(v2)}{m2.group(2)}", body, count=1)
+                        st["b"] = bool(k)
+                    return mm.group(1) + body + mm.group(3)
+                seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", lambda mm, st={"a": False, "b": False}: put_slot(mm, st),
+                             xml[s:e], flags=re.S)
+                if seg != xml[s:e]:
+                    seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                    edits.append((s, e, seg))
+                    rep.filled.append(f"이름표 + 괄호 자리 → {_sq(slot.group(1))} {v1[:20]} · {_sq(slot.group(2))} {v2[:20]}")
+                    continue
         # '업 체 명 :' 또는 서명 줄 '대표자 :          (인)'(11/04 서식 8·9) · '신청인(대표자) :      (인 또는 서명)'(서식 1)
         m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL})?\s*", text)
         if m:

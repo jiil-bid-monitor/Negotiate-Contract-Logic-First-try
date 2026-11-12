@@ -34,3 +34,11 @@ class SectionsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MethodTailHeadingTest(unittest.TestCase):
+    def test_heading_with_submit_method_after_colon(self):  # 마곡 어린이집 R26BK01812866 (워드 공고문)
+        text = ("5. 입찰서 제출 및 개찰\n다. 개찰일시 및 장소: 2026년 11월 12일(목) 16:00\n라. 입찰 서류제출 : 나라장터 전자입찰서로 제출\n"
+                "1) 공기 준수 서약서 [서식1]\n2) 입찰 내역서\n마. 입찰서의 제출확인은 조달청 전자입찰시스템 웹 송신함에서 반드시 확인하시기 바랍니다.\n")
+        lines = find_sections([("공고서.docx", text)])["제출 서류"][0][2]
+        self.assertEqual(lines, ["1) 공기 준수 서약서 [서식1]", "2) 입찰 내역서"])

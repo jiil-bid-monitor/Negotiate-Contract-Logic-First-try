@@ -55,7 +55,7 @@ _UNSAFE = re.compile(r'[\\/:*?"<>|\r\n\t]')
 _RE_NOTICE = re.compile(r"[(\[【<]?\s*(재\s*공고|재\s*입찰|정정|변경|긴급|\d+\s*차)\s*(공고)?\s*[)\]】>]?")
 _DOC_FILE = re.compile(r"공고|제안요청|과업|입찰안내|제출서류")
 # 파일 전체가 서식 하나인 첨부(안에 서식 표시 없음) — 입찰서·서약서 등. 짧은 문서만(2026-11-05 인하대·암센터)
-_WHOLE_FORM = re.compile(r"서약서|각서|입찰서|신청서|위임장|확인서|동의서|협정서|인감계|증명서")
+_WHOLE_FORM = re.compile(r"서약서|확약서|각서|입찰서|신청서|위임장|확인서|동의서|협정서|인감계|증명서")
 _NOT_WHOLE_FORM = re.compile(r"공고|제안요청|과업|규격|시방|유의서|조건|기준|사유서|내역|명세|안내|설명")
 WHOLE_FORM_CHARS = 6000
 
@@ -437,7 +437,7 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
         need, ref = prepare(None if keep_prep else tmp / PREP_DIR, [text for _, text in docs], form_names, COMPANY_DOCS, deadline, posted,
                             now.date(), company, listed)
         if not write_summary_pdf(candidate, amount, source, tmp / SUMMARY, notice_key(n), need, ref, deadline, [placed[f].name for f, _ in docs], now,
-                                 sections):
+                                 sections, form_names, any("전자입찰" in text for _, text in docs)):
             notes.append("한글 글꼴이 없어 요약 PDF를 만들지 못함")
         if keep_prep:
             notes.append(f"재공고: {PREP_DIR}는 그대로 둠 — 바뀐 제출서류가 있는지 공고문과 대조하세요.")

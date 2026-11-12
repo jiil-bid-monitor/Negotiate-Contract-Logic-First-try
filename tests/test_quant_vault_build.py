@@ -2605,3 +2605,18 @@ def test_track_amount_widens_first_period_shrinks(tmp_path: Path):
                                       head).group(1))
     assert size("3,610,090,000") == 1100  # 금액은 11pt 그대로
     assert size("2023.11.23~") < 1100  # 사업기간을 줄여 한 줄에
+
+
+def test_birth_line_under_rep_signature(tmp_path: Path):
+    """11/12 당진 서식: 표 밖 서명 묶음 '대 표 자:  (인)' 아래 '생 년 월 일:'이 비었음(띄어쓰기 문제 아님 — 표 밖 줄엔 생년월일 규칙이 없었음)
+    → 대표자 주민등록번호 앞 6자리로 생년월일. 대표자 줄과 떨어진 혼자 있는 '생년월일 :'은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (p("업      체      명:") + p("대      표      자:                        (인)") + p("생   년   월   일:")
+            + p("본문 한 줄") + p("본문 둘") + p("본문 셋") + p("본문 넷") + p("생년월일 :"))
+    src = _mini_hwpx(tmp_path / "b.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "대표자 주민등록번호": "650312-1******"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert "1965. 03. 12." in out and out.count("1965. 03. 12.") == 1

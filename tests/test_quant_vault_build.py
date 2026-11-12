@@ -2536,3 +2536,42 @@ def test_label_with_paren_slot_line(tmp_path: Path):
     assert re.search(r"업 체 명: \(주\)가상\s+\(033-111-2222\)", text), text
     assert "홍길동" in text and "(인)" in text
     assert any("괄호 자리" in f for f in rep.filled)
+
+
+def test_long_track_table_splits_across_pages(tmp_path: Path):
+    """11/12 사용자 제보: 실적 표가 쪽 끝에서 잘림 — 원본이 '글자처럼 취급' + 나누지 않음(NONE)이라 한 쪽을 넘는 부분이 안 보임.
+    실적을 넣은 표가 한 쪽보다 길면 쪽에서 나뉘게, 한 쪽 안에 들면 그대로."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head xmlns:hh="h"><hh:refList><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/>'
+              '</hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="LEFT"/>'
+              '<hh:lineSpacing type="PERCENT" value="160"/></hh:paraPr></hh:paraProperties></hh:refList></hh:head>')
+    page = ('<hp:p><hp:run><hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin header="2834" footer="2834" left="5669" '
+            'right="5669" top="5669" bottom="5669"/></hp:pagePr></hp:secPr></hp:run></hp:p>')
+    cell = lambda c, r, t, w: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                               f'<hp:cellAddr colAddr="{c}" rowAddr="{r}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                               f'<hp:cellSz width="{w}" height="3000"/></hp:tc>')
+
+    def run(n):
+        widths = [3000, 6000, 8000]
+        rows = [[cell(i, 0, h, widths[i]) for i, h in enumerate(["연번", "사업명", "계약금액"])]]
+        rows += [[cell(i, r, "", widths[i]) for i in range(3)] for r in range(1, n + 1)]
+        body = page + ('<hp:p><hp:run><hp:tbl pageBreak="NONE" repeatHeader="1"><hp:sz width="17000" height="9000"/>'
+                       '<hp:pos treatAsChar="1" affectLSpacing="0"/>'
+                       + "".join("<hp:tr>" + "".join(x) + "</hp:tr>" for x in rows)
+                       + '</hp:tbl></hp:run><hp:linesegarray><hp:lineseg/></hp:linesegarray></hp:p>')
+        src = _mini_hwpx(tmp_path / f"t{n}.hwpx", body)
+        with zipfile.ZipFile(src, "a") as z:
+            z.writestr("Contents/header.xml", header)
+        tracks = [{"사업명": f"가상 전시관 전시물 제작 설치 사업 {i}", "준공일": _dt.date(2025, 1, i), "계약금액(원)": 100_000_000}
+                  for i in range(1, n + 1)]
+        rep = fill_hwpx(src, tmp_path / f"o{n}.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}), tracks=tracks)
+        return zipfile.ZipFile(tmp_path / f"o{n}.hwpx").read("Contents/section0.xml").decode(), rep
+
+    sec, rep = run(12)
+    assert 'pageBreak="TABLE"' in sec and 'treatAsChar="0"' in sec, sec[:400]
+    assert any("실적 표가 한 쪽보다 길어" in x for x in rep.filled)
+    sec, rep = run(2)
+    assert 'pageBreak="NONE"' in sec and 'treatAsChar="1"' in sec
+    assert not any("실적 표가 한 쪽보다 길어" in x for x in rep.filled)

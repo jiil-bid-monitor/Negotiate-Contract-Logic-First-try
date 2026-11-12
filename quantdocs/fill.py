@@ -1578,6 +1578,56 @@ def _page_slack(xml: str, tbl_end: int) -> int | None:
     return body - vp - vs
 
 
+def _make_breakable(xml: str, ts: int, te: int) -> str:
+    """표(xml[ts:te])를 쪽 경계에서 나뉘게 — '글자처럼 취급'을 풀고 '나눔'(TABLE), 표가 든 문단 줄 배치는 지워 한글이 다시 계산."""
+    tbl = xml[ts:te]
+    head = re.match(r"<[^>]+>", tbl).group(0)
+    new_head = re.sub(r'\bpageBreak="\w+"', 'pageBreak="TABLE"', head) if "pageBreak=" in head else head[:-1] + ' pageBreak="TABLE">'
+    tbl = new_head + tbl[len(head):]
+    tbl = re.sub(r'(<(?:[\w.-]+:)?pos\b[^>]*\btreatAsChar=")1(")', r"\g<1>0\2", tbl, count=1)
+    tbl = re.sub(r'(<(?:[\w.-]+:)?pos\b[^>]*\baffectLSpacing=")1(")', r"\g<1>0\2", tbl, count=1)  # 한글이 쓰는 '나눔' 표 모양 그대로
+    xml = xml[:ts] + tbl + xml[te:]
+    pe = xml.find("</hp:p>", ts + len(tbl))
+    if pe > 0:
+        tail = xml[ts + len(tbl):pe]
+        tail = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", tail, flags=re.S)
+        xml = xml[:ts + len(tbl)] + tail + xml[pe:]
+    return xml
+
+
+def _page_body(xml: str) -> int | None:
+    """쪽 본문 높이(HWPUNIT) = 용지 높이 − 머리말·꼬리말·위·아래 여백. 모르면 None."""
+    page = re.search(r'<(?:[\w.-]+:)?pagePr\b[^>]*\bheight="(\d+)".*?<(?:[\w.-]+:)?margin\b([^>]*)>', xml, re.S)
+    if not page:
+        return None
+    mg = dict(re.findall(r'\b(header|footer|top|bottom)="(\d+)"', page.group(2)))
+    return int(page.group(1)) - sum(int(v) for v in mg.values()) if len(mg) == 4 else None
+
+
+def _split_track_tables(xml: str, chars: "_Chars", rep: FillReport, markers: list[str]) -> str:
+    """실적을 넣은 표가 한 쪽보다 길면 쪽에서 나뉘게(11/12 사용자 제보: 실적 표가 쪽 끝에서 잘림 — 원본 표가 '글자처럼 취급' +
+    '나누지 않음'이라 한 쪽을 넘는 부분이 안 보였음). 한 쪽 안에 드는 표는 그대로(쪽 배치를 안 바꿈)."""
+    body = _page_body(xml)
+    if not body or not markers:
+        return xml
+    for ts, te in reversed(_spans(xml, "tbl")):
+        tbl = xml[ts:te]
+        if re.search(r"<(?:[\w.-]+:)?tbl\b", tbl[4:]) or not any(m in tbl for m in markers):
+            continue
+        head = re.match(r"<[^>]+>", tbl).group(0)
+        if 'pageBreak="TABLE"' in head or 'pageBreak="CELL"' in head:
+            continue
+        rows = _row_info(tbl, chars)
+        if rows is None:
+            continue
+        height = sum(max(h, n) for h, n in rows)
+        if height < body * 0.9:  # 글자 너비 어림 오차를 생각해 쪽 높이의 90%부터
+            continue
+        xml = _make_breakable(xml, ts, te)
+        rep.filled.append(f"실적 표가 한 쪽보다 길어(약 {height / 2834.6:.0f}cm) 쪽에서 나뉘게 함 — 한글에서 확인")
+    return xml
+
+
 def _split_long_tables(xml: str, chars: "_Chars", rep: FillReport, marker: str) -> str:
     """채운 글(연혁 등)이 칸 높이보다 1cm 넘게 길면 그 표를 쪽에서 나뉘게 — '글자처럼 취급'을 풀고 쪽 경계에서 '나눔'(11/05 사용자 요청:
     연혁이 길어 쪽 끝에서 잘림 — 쪽을 넘겨 모두 보이게). marker: 채운 글 중 한 줄(그 글이 든 표만)."""
@@ -1596,18 +1646,7 @@ def _split_long_tables(xml: str, chars: "_Chars", rep: FillReport, marker: str) 
                 over = max(over, need - int(h.group(1)))
         if over < 2835:
             continue
-        head = re.match(r"<[^>]+>", tbl).group(0)
-        new_head = re.sub(r'\bpageBreak="\w+"', 'pageBreak="TABLE"', head) if "pageBreak=" in head else head[:-1] + ' pageBreak="TABLE">'
-        tbl = new_head + tbl[len(head):]
-        tbl = re.sub(r'(<(?:[\w.-]+:)?pos\b[^>]*\btreatAsChar=")1(")', r"\g<1>0\2", tbl, count=1)
-        tbl = re.sub(r'(<(?:[\w.-]+:)?pos\b[^>]*\baffectLSpacing=")1(")', r"\g<1>0\2", tbl, count=1)  # 한글이 쓰는 '나눔' 표 모양 그대로
-        xml = xml[:ts] + tbl + xml[te:]
-        # 표가 든 문단의 줄 배치 정보는 지워 한글이 다시 계산하게
-        pe = xml.find("</hp:p>", ts + len(tbl))
-        if pe > 0:
-            tail = xml[ts + len(tbl):pe]
-            tail = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", tail, flags=re.S)
-            xml = xml[:ts + len(tbl)] + tail + xml[pe:]
+        xml = _make_breakable(xml, ts, te)
         rep.filled.append(f"연혁이 칸보다 {over / 2834.6:.1f}cm 길어 표가 쪽에서 나뉘게 함(글자처럼 취급 풀고 '나눔') — 한글에서 확인")
     return xml
 
@@ -1887,6 +1926,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             edits: list[tuple[Cell, list[str], bool]] = []
             para_override: dict[int, str] = {}  # 칸 시작 위치 → 쓸 문단 모양(번호 칸 가운데 정렬 맞춤)
             base_char: dict[int, str] = {}  # 칸 시작 위치 → 쓸 글자 모양(안내 글 칸은 이름표 칸 모양으로)
+            track_marks: list[str] = []  # 실적을 넣은 칸의 글 — 그 표가 한 쪽보다 길면 쪽에서 나뉘게(11/12)
             hist_at: set[int] = set()  # 연혁을 넣은 칸 시작 위치 — 왼쪽 정렬 + 날짜 뒤에 맞춘 내어쓰기(11/11)
             rep.one_line.clear()  # 칸 위치는 구역마다 다름
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
@@ -1909,7 +1949,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
                 agent_rows = _agent_rows(xml, cells)  # 위임장 '대리인' 칸이 세로로 묶은 줄 — 주소는 비움(11/05 사용자 요청)
                 if tracks:
-                    edits += _fill_tracks(xml, cells, tracks, rep)
+                    track_edits = _fill_tracks(xml, cells, tracks, rep)
+                    edits += track_edits
+                    track_marks += [escape(lines[0]) for _c, lines, _k in track_edits if lines and len(lines[0]) >= 4]
                 if self_scores:
                     edits += _self_score_edits(cells, self_scores, rep)
                 for c in cells:
@@ -2108,6 +2150,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if vault.history:
                     first = f"{_fmt_ymd(vault.history[0].get('연월일'))}  {vault.history[0].get('내용') or ''}".strip()
                     xml = _split_long_tables(xml, chars, rep, escape(first))
+                xml = _split_track_tables(xml, chars, rep, track_marks)
                 xml = _keep_table_heights(before_fill, xml, chars, rep)
             data = xml.encode("utf-8")
         out_entries[name] = data

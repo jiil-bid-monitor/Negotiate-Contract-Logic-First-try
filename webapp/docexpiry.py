@@ -1,8 +1,8 @@
-"""회사 서류 유효기간 — 텔레그램 /docs 와 만료 7일 전 알림 (2026-11-09 사용자 요청).
+"""회사 서류 유효기간 — 텔레그램 /docs 와 만료 한 달 전·7일 전 알림 (2026-11-09 사용자 요청, 한 달 전은 11/12).
 
 공유 폴더 `회사서류_최신/인증서갱신.xlsx`(차장님 관리표)의 지일 만료일이 우선(2026-11-11 사용자 결정), 그 표에 없는 서류는
 `서류목록.xlsx`의 '유효기간(기준)' 칸. 날짜가 적힌 서류만 본다.
-'발급 후 3개월'·'없음' 같은 글은 날짜가 아니라 알리지 않는다. 같은 서류(종류 + 유효기간)는 한 번만 알린다 —
+'발급 후 3개월'·'없음' 같은 글은 날짜가 아니라 알리지 않는다. 같은 서류(종류 + 유효기간)는 단계(한 달 전·7일 전·당일)마다 한 번만 알린다 —
 새 서류로 바꿔 날짜가 바뀌면 다시 알린다. 이미 지난 서류는 알리지 않고 /docs에만 보인다(11/05 결정과 같음).
 """
 
@@ -16,6 +16,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 ALERT_DAYS = 7
+ALERT_MONTH = 30  # 한 달 전에도 한 번 (2026-11-12 사용자 요청)
 ALERT_HOUR = 9  # 아침 9시 넘어서 하루 한 번
 
 
@@ -165,15 +166,18 @@ def docs_reply(docs: list[tuple[str, date]], today: date) -> str:
 
 
 def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str]) -> tuple[str | None, list[str]]:
-    """7일 안에 만료되는데 아직 안 알린 서류 → (알림 글, 새로 알린 키). 없으면 (None, []).
-    만료일 당일에도 날짜가 그대로면 한 번 더 알린다 — 키 '종류|날짜|당일' (2026-11-11 사용자 요청)."""
+    """만료 한 달 전(30일)·일주일 전(7일) 두 번 알린다(2026-11-12 사용자 요청) → (알림 글, 새로 알린 키). 없으면 (None, []).
+    만료일 당일에도 날짜가 그대로면 한 번 더 — 키 '종류|날짜|당일' (2026-11-11 사용자 요청).
+    7일 전 키는 예전 그대로 '종류|날짜'(이미 보낸 기록과 맞게), 한 달 전은 '종류|날짜|30일'."""
     def key(k, d):
-        return f"{k}|{d}|당일" if d == today else f"{k}|{d}"
+        left = (d - today).days
+        return f"{k}|{d}|당일" if left == 0 else f"{k}|{d}" if left <= ALERT_DAYS else f"{k}|{d}|30일"
 
-    rows = [(k, d) for k, d in docs if 0 <= (d - today).days <= ALERT_DAYS and key(k, d) not in sent]
+    rows = [(k, d) for k, d in docs if 0 <= (d - today).days <= ALERT_MONTH and key(k, d) not in sent]
     if not rows:
         return None, []
-    head = "오늘 유효기간이 끝납니다" if all(d == today for _, d in rows) else "7일 안에 유효기간이 끝납니다"
+    far = max((d - today).days for _, d in rows)
+    head = "오늘 유효기간이 끝납니다" if far == 0 else f"{ALERT_DAYS if far <= ALERT_DAYS else ALERT_MONTH}일 안에 유효기간이 끝납니다"
     lines = [f"<b>📄 회사 서류 갱신 알림</b>", head, ""]
     for k, d in rows:
         lines += [f"• <b>{html.escape(k)}</b>", f"   {d} · {'오늘 만료' if d == today else f'D-{(d - today).days}'}"]

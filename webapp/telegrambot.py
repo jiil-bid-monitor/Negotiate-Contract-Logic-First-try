@@ -197,7 +197,7 @@ class TelegramBot:
         docs.run(folder, datetime.now().date(), send_dev_alert, alert_due=False)
 
     def check_docs(self, now: datetime) -> int:
-        """아침 9시가 지나면 하루 한 번 — 7일 안에 끝나는 회사 서류를 담당자 방에 알린다. 보낸 방 수."""
+        """아침 9시가 지나면 하루 한 번 — 한 달·7일 안에 끝나는 회사 서류를 담당자 방에 알린다. 보낸 방 수."""
         if self.checked_day == now.date() or now.hour < docexpiry.ALERT_HOUR:
             return 0
         self.checked_day = now.date()

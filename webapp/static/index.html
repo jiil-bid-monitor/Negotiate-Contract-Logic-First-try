@@ -3746,6 +3746,8 @@ function awardWaiting(o) {
   if (!o) return `<span class="badge warn">대기</span><div class="sub">낙찰자 확정 전</div>`;
   const n = o.bidders != null ? ` / ${o.bidders}곳` : "";
   if (o.rank == null) return `<span class="badge">탈락</span><div class="sub">개찰 ${esc((o.remark || "순위 없음").replace("낙찰하한선", "하한선"))}${o.underRank != null ? ` (${o.underRank}등)` : ""}</div>`;
+  // 5등 밖은 차례가 올 일이 사실상 없어 '탈락'(11/12 사용자 결정 — 투찰내역 '5위 안'과 같은 기준)
+  if (o.rank > 5) return `<span class="badge">탈락</span><div class="sub">개찰 ${o.rank}등${n}</div>`;
   return `<span class="badge warn">대기</span><div class="sub">개찰 ${o.rank}등${n} · 낙찰자 확정 전</div>`;
 }
 function renderAward(items) {

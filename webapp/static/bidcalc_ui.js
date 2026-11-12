@@ -301,7 +301,7 @@
       if (d.found === false) { clearForm(); badNo(`공고번호 ${d.notice_no || no}를 나라장터에서 찾지 못했습니다 — 공고번호를 확인해 다시 입력하세요`); return; }
       const text = (id, v) => { $(id).textContent = v || "-"; };
       LAST_NOTICE = { noticeNo: d.notice_no || no.replace(/-\d+$/, ""), noticeOrd: d.notice_ord || "", title: d.title || "",
-        institution: d.institution || "", workType: d.work_type || "", openingAt: d.opening_at || "", closingAt: d.closing_at || "" };
+        institution: d.institution || "", workType: d.work_type || "", contractMethod: d.contract_method || "", openingAt: d.opening_at || "", closingAt: d.closing_at || "" };
       REC_BID_EDITED = false; recordMsg("");
       text("#cTitle", d.title);
       text("#cInst", d.institution);

@@ -30,6 +30,7 @@ class FillReport:
     overflow_names: list[str] = field(default_factory=list)  # 그 실적 이름(금액이 작아 빠진 것)
     self_rows: list[list[str]] = field(default_factory=list)  # 자기평가표에 넣은 점수(항목·배점·점수·근거·확인할 것)
     face: str = ""  # 이 서식에 채운 글의 한글 글꼴 이름(첫 값 기준) — 다음 서식들도 이 글꼴로(11/10 통합서식 글꼴 통일)
+    one_line: set[int] = field(default_factory=set)  # 한 줄에 맞춰 글자를 줄일 칸(cell.start) — 실적 금액(11/12 사용자 요청)
 
 
 def _spans(xml: str, tag: str, start: int = 0, end: int | None = None) -> list[tuple[int, int]]:
@@ -163,15 +164,18 @@ _SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|
 _INLINE_LABELS = {"TEL": "전화번호", "Tel": "전화번호", "전화": "전화번호", "전화번호": "전화번호",
                   "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일",
                   "업태": "업태", "종목": "종목"}
-_INLINE_RE = re.compile(r"(?P<lab>TEL|Tel|FAX|Fax|E-?mail|전화번호|전화|팩스|이메일|업태|종목)(?P<colon>\s*[:：])(?P<sp>[ \u00a0\u3000]*)"
-                        r"(?=(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|$)")
+# 이름표는 글자 사이 띄어쓰기를 무시하고 읽음 — '전    화 :'·'팩 스 :'(11/12 필암 — 같은 줄 '(팩스: …)'만 채우고 전화가 비었음,
+# 사용자 요청 "요청서 읽을 때 띄어쓰기 제외하고 단어 읽기")
+_SPACED = lambda w: r"[  　]*".join(w)
+_INLINE_LABS = "|".join(["TEL", "Tel", "FAX", "Fax", r"E-?mail", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스"), _SPACED("이메일"),
+                         _SPACED("업태"), _SPACED("종목")])
+_INLINE_RE = re.compile(rf"(?P<lab>{_INLINE_LABS})(?P<colon>\s*[:：])(?P<sp>[  　]*)(?=(?:{_INLINE_LABS})|$)")
 
 
 # 표 밖 문단용 — 다음 이름표 앞 '(' · 끝의 ')'도 빈자리로 봄('전화번호 :      (FAX :      )', 11/05 국민안전체험관 서식 12).
 # 표 칸엔 쓰지 않음 — 증명서 발급기관 칸 '기관 명 : (인) (전화 : )'처럼 다른 쪽이 적는 칸이 같은 모양이라.
-_INLINE_LOOSE = re.compile(_INLINE_RE.pattern.replace(
-    r"(?=(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|$)",
-    r"(?=[(（]?\s*(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|\s*[)）]?\s*$)"))
+_INLINE_LOOSE = re.compile(rf"(?P<lab>{_INLINE_LABS})(?P<colon>\s*[:：])(?P<sp>[  　]*)"
+                           rf"(?=[(（]?\s*(?:{_INLINE_LABS})|\s*[)）]?\s*$)")
 
 
 def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
@@ -184,7 +188,7 @@ def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
         body = m.group(2)
 
         def rep(mm):
-            key = _INLINE_LABELS.get(mm.group("lab").replace("-", "-"), "")
+            key = _INLINE_LABELS.get(re.sub(r"[  　]", "", mm.group("lab")), "")
             value = _value(key, vault) if key else ""
             if not value:
                 return mm.group(0)
@@ -327,7 +331,7 @@ def _alone(t: dict) -> str:
 _TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값(t, 머리글)
     (("연번", "순번"), None),  # 줄 번호 — 따로 채움
     (("사업명", "용역명", "공사명", "건명"), lambda t, h: str(t.get("사업명") or "")),
-    (("수행기간", "계약기간", "사업기간", "기간"), lambda t, h: _period(t)),
+    (("수행기간", "계약기간", "사업기간", "기간"), lambda t, h: _period(t).replace("~", "~\n", 1)),
     (("사업개요", "내용", "분야"), lambda t, h: str(t.get("분야") or "")),
     (("계약금액", "금액", "실적액", "도급액", "도급)액", "납품액"), _amount),
     (("준공", "완료일", "년월일"), lambda t, h: _fmt_ymd(t.get("준공일"))),  # '납품(준공)년 월 일'(11/05 국민안전체험관 서식 7)
@@ -393,7 +397,10 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                 if c.col == no_col and c.blank:
                     edits.append((c, [str(n)], False))
                 elif c.col in colmap and (v := colmap[c.col](t, headtext.get(c.col, ""))):
-                    edits.append((c, [v], False))
+                    # 사업기간 '2021.01.15~2021.12.15'은 '~' 뒤에서 줄을 나눔 — 좁은 칸에서 연도 중간이 잘리지 않게(11/12 사용자 요청)
+                    edits.append((c, v.split("\n"), False))
+                    if colmap[c.col] is _amount:  # 원 단위 전체 금액이 좁은 칸에서 두 줄로 잘리지 않게(11/12)
+                        rep.one_line.add(c.start)
             rep.rows += 1
         total = sum(float(t.get("인정 금액(원)") or t.get("계약금액(원)") or 0) for t in tracks[:n])
         unit = "원"  # 금액은 늘 원 단위 전체(11/05)
@@ -404,12 +411,14 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                     edits.append((c, [f"총 실적 금액 : {_in_unit(total, amount_head)} {unit}"], False))
                 elif _sq(c.text) == "건":  # '실적 누계 | 건 | 천원' 줄(11/05 국민안전체험관 서식 7)
                     edits.append((c, [f"{n}건"], False))
-                elif _sq(c.text) in ("원", "천원", "백만원"):
-                    edits.append((c, [_in_unit(total, amount_head) + "원"], False))
+                elif _sq(c.text) in ("원", "천원", "백만원"):  # 합계도 숫자만 — 다른 줄과 같게(11/12 사용자 요청)
+                    edits.append((c, [_in_unit(total, amount_head)], False))
+                    rep.one_line.add(c.start)
                 elif "기간" in h and c.blank:
                     edits.append((c, [f"{n}건"], False))
                 elif "금액" in h and c.blank:
-                    edits.append((c, [_in_unit(total, amount_head) + "원"], False))
+                    edits.append((c, [_in_unit(total, amount_head)], False))
+                    rep.one_line.add(c.start)
         rep.overflow += len(queue)
         break  # 표 하나에 한 번
     return edits
@@ -1210,14 +1219,15 @@ def _label_variant(chars: "_Chars", cid: str) -> str:
     return chars.variant(cid, None if h >= FILL_HEIGHT else FILL_HEIGHT)
 
 
-def _fit_char(cell_xml: str, line: str, chars: "_Chars") -> tuple[str | None, str]:
-    """(채운 글에 쓸 글자 모양 id, 알림). 늘 11pt — 줄 간격이 100% 미만·고정값인 칸에서 한 줄에 안 들어갈 때만 줄임."""
+def _fit_char(cell_xml: str, line: str, chars: "_Chars", one_line: bool = False) -> tuple[str | None, str]:
+    """(채운 글에 쓸 글자 모양 id, 알림). 늘 11pt — 줄 간격이 100% 미만·고정값인 칸에서 한 줄에 안 들어갈 때만 줄임.
+    one_line이면 줄 간격과 상관없이 한 줄에 들어가게 줄임(실적 금액 — 11/12 사용자 요청: 숫자가 두 줄로 잘려 읽기 어려움)."""
     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', cell_xml)
     cid = run.group(1) if run else "0"
     first_p = re.search(r'<(?:[\w.-]+:)?p\b[^>]*paraPrIDRef="(\d+)"', cell_xml)
     spacing = chars.spacing(first_p.group(1)) if first_p else 1.6
     size = re.search(r'<(?:[\w.-]+:)?cellSz\b[^>]*width="(\d+)"[^>]*height="(\d+)"', cell_xml)
-    if spacing is not None and spacing >= 1.0 or not size:  # 두 줄로 넘어가도 되는 칸
+    if not size or (spacing is not None and spacing >= 1.0 and not one_line):  # 두 줄로 넘어가도 되는 칸
         return _fill_variant(chars, cid), ""
     tag = re.search(r'<(?:[\w.-]+:)?cellMargin\b[^>]*>', cell_xml)
     mg = dict(re.findall(r'\b(left|right|top|bottom)="(\d+)"', tag.group(0) if tag else ""))
@@ -1230,7 +1240,8 @@ def _fit_char(cell_xml: str, line: str, chars: "_Chars") -> tuple[str | None, st
     if width <= 0 or fits(max(FILL_HEIGHT, chars.cur_height or 0)):
         return _fill_variant(chars, cid), ""
     new_h = next((h for h in range(FILL_HEIGHT - 10, MIN_HEIGHT - 1, -10) if fits(h)), MIN_HEIGHT)
-    note = f"줄 간격이 좁은 칸이라 글자 11→{new_h / 100:g}pt로 줄여 한 줄에 맞춤"
+    why = "금액이 칸보다 길어" if one_line else "줄 간격이 좁은 칸이라"
+    note = f"{why} 글자 11→{new_h / 100:g}pt로 줄여 한 줄에 맞춤"
     if not fits(new_h):
         note += "(7pt로도 넘쳐 글이 겹칠 수 있음 — 확인)"
     return chars.smaller(cid, new_h), note
@@ -1732,6 +1743,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             para_override: dict[int, str] = {}  # 칸 시작 위치 → 쓸 문단 모양(번호 칸 가운데 정렬 맞춤)
             base_char: dict[int, str] = {}  # 칸 시작 위치 → 쓸 글자 모양(안내 글 칸은 이름표 칸 모양으로)
             hist_at: set[int] = set()  # 연혁을 넣은 칸 시작 위치 — 왼쪽 정렬 + 날짜 뒤에 맞춘 내어쓰기(11/11)
+            rep.one_line.clear()  # 칸 위치는 구역마다 다름
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
                 for i in range(len(_spans(xml, "tbl"))):
                     xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
@@ -1863,9 +1875,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             base_char[target.start] = lm.group(1)
                     rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
                 targets = {e[0].start for e in edits}
+                filled_at = {(e[0].row, e[0].col) for e in edits}
                 for c in cells:  # 'TEL :      FAX :'처럼 칸 안에 이름표와 빈자리가 같이 있는 칸
                     if c.start in targets or ":" not in c.text and "：" not in c.text:
                         continue
+                    if _INLINE_RE.fullmatch(c.text.strip()) and (c.row, c.col + 1) in filled_at:
+                        continue  # '전 화 :' 이름표만 있는 칸 — 값은 이미 오른쪽 칸에(같은 번호가 두 번 들어가지 않게)
                     new_seg, done = _fill_inline(xml[c.start:c.end], vault)
                     if done:
                         edits.append((c, None, new_seg))
@@ -1895,7 +1910,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if chars is not None:
                     chars.cur_face, chars.cur_height = _label_face(xml, cell, chars)
                 if chars is not None and len(lines) == 1 and not keep:
-                    char_id, note = _fit_char(seg, lines[0], chars)
+                    char_id, note = _fit_char(seg, lines[0], chars, one_line=cell.start in rep.one_line)
                     if note:
                         rep.filled.append(f"  ↳ '{lines[0][:20]}' {note}")
                 elif chars is not None:  # 여러 줄(연혁 등)도 11pt, 숫자·영문은 한글 글꼴로

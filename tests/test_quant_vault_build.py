@@ -265,9 +265,10 @@ def test_track_form_dangjin_shape(tmp_path: Path):
         fill_mod._value = orig
     assert rep.rows == 2
     # 11/05 사용자 요청: 금액은 머리글 단위(백만원)와 상관없이 원 단위 전체 — 단위는 담당자가 고침
-    for want in ("가상 전시물 제작 설치", "123,400,000", "2024.01.01~2024.06.30", "단독", "공동(60%)", ">2<",
+    for want in ("가상 전시물 제작 설치", "123,400,000", "2024.01.01~<", ">2024.06.30<", "단독", "공동(60%)", ">2<",
                  "총 실적 금액 : 173,400,000 원", "업 체 명 : (주)가상회사"):
         assert want in xml, want
+    assert "2024.01.01~2024.06.30" not in xml  # 사업기간은 '~' 뒤에서 줄을 나눔(11/12 사용자 요청)
 
 
 def test_form_tracks_by_title(monkeypatch):
@@ -331,7 +332,7 @@ def test_tall_track_row_is_split_and_text_fits():
                for c in cells if c.col == 0) == 3000 + 3000 + 30000  # 표 높이 그대로
     rep = FillReport("x")
     vals = {(c.row, c.col): l[0] for c, l, _ in _fill_tracks(xml, cells, tracks, rep)}
-    assert rep.rows == 3 and vals[(2, 1)] == "가상 사업 0" and vals[(4, 2)] == "30,000,000" and vals[(1, 2)] == "60,000,000원"
+    assert rep.rows == 3 and vals[(2, 1)] == "가상 사업 0" and vals[(4, 2)] == "30,000,000" and vals[(1, 2)] == "60,000,000"
 
     header = ('<hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr>'
               '<hh:charPr id="1" height="1300"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties>')
@@ -420,6 +421,25 @@ def test_fit_one_line_when_line_spacing_below_100():
     tall = _sz_cell(1, 0, "", 19477, 1500).replace('paraPrIDRef="0"', 'paraPrIDRef="1"')
     cid2, note2 = _fit_char(tall, addr, chars)
     assert note2 == "" and re.search(rf'<hh:charPr id="{cid2}" height="1100"', chars.finish())
+
+
+def test_amount_cell_shrinks_to_one_line_even_with_normal_spacing():
+    """11/12 필암 실적 표 '계약금액(천원)' 칸 — 원 단위 금액 '1,210,000,000'이 좁은 칸에서 두 줄로 잘림 →
+    금액 칸만 줄 간격이 보통(160%)이어도 한 줄에 들어가게 글자를 줄임(사용자 결정: 원 단위는 그대로)."""
+    from quantdocs.fill import _Chars, _fit_char, _text_width
+
+    amount, width = "1,210,000,000", 7000
+    header = ('<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties>'
+              '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hh:paraPr>'
+              '</hh:paraProperties>')
+    chars = _Chars(header)
+    assert _text_width(amount, 1100, 1.0) > (width - 282) * 0.95  # 11pt면 넘침
+    cell = _sz_cell(1, 0, "", width, 1600, run='<hp:run charPrIDRef="0">')
+    _cid, note = _fit_char(cell, amount, chars)
+    assert note == ""  # 보통 칸은 예전처럼 줄이지 않음
+    cid, note = _fit_char(cell, amount, chars, one_line=True)
+    h = int(re.search(rf'<hh:charPr id="{cid}" height="(\d+)"', chars.finish()).group(1))
+    assert "줄여" in note and "겹칠" not in note and h < 1100 and _text_width(amount, h, 1.0) <= (width - 282) * 0.95
 
 
 def test_unfinished_tracks_are_never_counted(monkeypatch):
@@ -1198,7 +1218,10 @@ def test_track_form_delivery_amount_and_total_cells(tmp_path: Path):
     rep = FillReport("x")
     vals = {(c.row, c.col): l[0] for c, l, _ in _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, rep)}
     assert vals[(2, 0)] == "2024.07.01" and vals[(2, 1)] == "가상 A" and vals[(2, 3)] == "345,678,912"
-    assert vals[(1, 1)] == "2건" and vals[(1, 3)] == "2,445,678,912원"
+    assert vals[(1, 1)] == "2건" and vals[(1, 3)] == "2,445,678,912"  # 합계도 숫자만(11/12)
+    # 금액 칸은 한 줄에 맞춰 글자를 줄이는 칸으로 표시(11/12 사용자 요청)
+    amount_cells = {c.start for c in _cells(xml, _spans(xml, "tbl")[0]) if c.col == 3 and c.row >= 1}
+    assert amount_cells <= rep.one_line
 
 
 def test_hangul_history_table_date_line_then_content(tmp_path: Path, monkeypatch):
@@ -2345,3 +2368,33 @@ def test_tel_with_email_label(tmp_path: Path):
         xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
         got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
         assert got[(2, 1)] == want
+
+
+def test_spaced_phone_label_beside_fax_outside_table():
+    """11/12 필암 서약서 끝 '전    화:            (팩스: 031-… )' — 글자를 띄운 '전    화'를 몰라 팩스만 채우고 전화가 비었음."""
+    from quantdocs import fill as fill_mod
+    from quantdocs.fill import _fill_inline
+
+    vals = {"전화번호": "033-000-0000", "팩스번호": "033-000-0001"}
+    orig = fill_mod._value
+    fill_mod._value = lambda key, vault: vals.get(key, "")
+    try:
+        seg = "<hp:p><hp:run><hp:t>          전    화:            (팩스:            )</hp:t></hp:run></hp:p>"
+        new, done = _fill_inline(seg, None, loose=True)
+    finally:
+        fill_mod._value = orig
+    text = re.sub(r"<[^>]+>|[\ue000-\uf8ff]", "", new)
+    assert "전    화: 033-000-0000" in re.sub(r"[^\S ]", "", text) and "033-000-0001" in text and len(done) == 2
+
+
+def test_spaced_labels_in_table_cells_no_double(tmp_path: Path):
+    """11/12 사용자 요청 '요청서 낱말은 띄어쓰기 빼고 읽기' — 칸 안 '전 화 :      팩 스 :' 빈자리도 채움.
+    '전 화 :' 이름표 칸 옆 값 칸이 있는 표는 값 칸에만(이름표 칸에 한 번 더 넣지 않음)."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표전화": "033-111-2222", "FAX": "033-111-3333"})
+    body = _tbl([[_c(0, 0, "연 락 처"), _c(1, 0, "전 화 :         팩 스 :         ")],
+                 [_c(0, 1, "전    화 :"), _c(1, 1, "")]])
+    fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "to.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "to.hwpx").read("Contents/section0.xml").decode()
+    assert xml.count("033-111-2222") == 2 and xml.count("033-111-3333") == 1

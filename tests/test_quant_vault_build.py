@@ -2620,3 +2620,23 @@ def test_birth_line_under_rep_signature(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", v)
     out = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     assert "1965. 03. 12." in out and out.count("1965. 03. 12.") == 1
+
+
+def test_staff_grade_row_under_merged_item_cells(tmp_path: Path):
+    """11/12 당진 제안요청서 '나) 기술인력(배점 5점)' — 세로로 합친 '기술인력보유 | 인원수 | 5.0' 칸이 첫 줄(특급)에만 걸려
+    특급 줄이 '기술인력보유 | 인원수 | 5.0 | 특급기술자 | 1.0점/인'이라 특급만 못 읽음 → 화면 '등급 없음'."""
+    from quantdocs.selfscore import read_criteria
+
+    def c(col, row, t, cs=1, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/></hp:tc>')
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    tbl = _tbl([[c(0, 0, "심 사 항 목"), c(1, 0, "평가요소"), c(2, 0, "배점한도"), c(3, 0, "등급별 보유기술자 평가방법", 2)],
+                [c(0, 1, "기술인력보유", 1, 4), c(1, 1, "인원수", 1, 4), c(2, 1, "5.0", 1, 4), c(3, 1, "특급기술자"), c(4, 1, "1.0점/인")],
+                [c(3, 2, "고급기술자"), c(4, 2, "0.8점/인")], [c(3, 3, "중급기술자"), c(4, 3, "0.6점/인")],
+                [c(3, 4, "초급기술자"), c(4, 4, "0.4점/인")]])
+    doc = _mini_hwpx(tmp_path / "d.hwpx", para("1. 정량적 평가 : 20점") + para("나) 기술인력(배점 5점)") + tbl)
+    crit = [x for x in read_criteria([doc]) if x.kind == "staff"]
+    assert crit and crit[0].per_grade == {"특급": 1.0, "고급": 0.8, "중급": 0.6, "초급": 0.4}, crit

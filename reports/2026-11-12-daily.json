@@ -1,0 +1,142 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-12",
+ "reportedAt": "2026-11-11T23:59:13+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01825309",
+   "title": "단양군보건의료원 건강검진센터 설립사업 통신공사(긴급)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "충청북도 단양군 보건의료원",
+    "budgetAmount": 209230000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 48,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01825309&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01825070",
+   "title": "일자리원정센터 조성사업(통신)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도 양구군",
+    "budgetAmount": 412683636.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 42,
+    "deadline": "2026-11-16T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01825070&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01821211",
+   "title": "경산시 이산화탄소 포집시설 설치공사 기본 및 실시설계용역(PQ)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경상북도 경산시",
+    "budgetAmount": 1052636364.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": 56,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01821211&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01824917",
+   "title": "속초 반다비체육센터 건립공사(통신)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도 속초시",
+    "budgetAmount": 263500000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 34,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01824917&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01823823",
+   "title": "속초시립박물관 증축 및 리모델링사업(통신)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도 속초시",
+    "budgetAmount": 267299090.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "박물관",
+     "통신"
+    ],
+    "products": [],
+    "score": 42,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01823823&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01824029",
+   "title": "2027년 독립지역 열수송관공사 설계용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "한국지역난방공사",
+    "budgetAmount": 235640000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "score": 47,
+    "deadline": "2026-12-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01824029&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01822597",
+   "title": "경민대학교 기숙사 신축 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "경민대학교",
+    "budgetAmount": 508507272.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 39,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01822597&bidPbancOrd=000"
+   }
+  }
+ ]
+}

@@ -2435,3 +2435,27 @@ def test_track_period_and_amount_columns_widen(tmp_path: Path):
     assert got[(1, 2)] > 4000 and got[(1, 3)] > 4500 and got[(1, 1)] < 20000  # 기간·금액 넓어지고 사업명 좁아짐
     assert sum(got[(1, k)] for k in range(4)) == sum(widths) and got[(0, 0)] == sum(widths)  # 표 너비·합친 머리 칸 그대로
     assert got[(2, 2)] == got[(1, 2)] and got[(3, 3)] == got[(1, 3)]  # 같은 열은 줄마다 같은 너비
+def test_credit_grade_beside_merged_kind_cell_and_penalty_only_item(tmp_path: Path):
+    """11/12 당진 서식 4호 — ① '경영상태 | 기업신용평가등급(세로 합친 칸) | BBB0 이상 등급 | 5.0점' 모양 배점표를 못 읽어 평점이 비었음
+    ② '사회적 책임 및 성실성'(임금체불 -2점 …, 감점만 있는 항목)을 신인도로 못 알아봐 비었음 → 감점 사유 없음 = 0점."""
+    import datetime as _dt
+    from quantdocs import selfscore
+    from quantdocs.fill import _cells, _spans
+
+    def cell(col, row, text, cs=1, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p><hp:run><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[cell(0, 0, "항 목"), cell(1, 0, "세 부 항 목", 2), cell(3, 0, "배 점"), cell(4, 0, "평 점"), cell(5, 0, "비  고")],
+            [cell(0, 1, "경영상태", rs=5), cell(1, 1, "기업신용평가등급", rs=5), cell(2, 1, "BBB0 이상 등급"), cell(3, 1, "5.0점"),
+             cell(4, 1, "", rs=5), cell(5, 1, "최저점 3.5점", rs=5)],
+            [cell(2, 2, "BBB-, BB+, BB0, BB-"), cell(3, 2, "4.75점")], [cell(2, 3, "B+, B0, B-"), cell(3, 3, "4.5점")],
+            [cell(2, 4, "CCC+ 이하"), cell(3, 4, "3.5점")], [cell(2, 5, "상한 점수"), cell(3, 5, "5.0점")],
+            [cell(0, 6, "사회적 책임 및 성실성", rs=3), cell(1, 6, "사회적책임", rs=2), cell(2, 6, "임금체불"), cell(3, 6, "-2점"),
+             cell(4, 6, "", rs=3), cell(5, 6, "감점이 배점한도(5점)를 초과하지 못함", rs=3)],
+            [cell(2, 7, "고용개선조치 미이행"), cell(3, 7, "-2점")],
+            [cell(1, 8, "부정당업자제재"), cell(2, 8, "제재기간 2년이상"), cell(3, 8, "-2점")]]
+    xml = "<hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    form = selfscore.read_form(_cells(xml, _spans(xml, "tbl")[0]))
+    v = vault.Vault({}, info={"신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"})
+    got = {r.label.split()[0]: it.score for r, it in selfscore.score_form(form, [], v, _dt.date(2026, 11, 1))}
+    assert got == {"경영상태": 4.75, "사회적": 0.0}

@@ -27,7 +27,7 @@ from .forms_cut import _top_paragraphs
 
 KINDS = [("track", re.compile(r"실적")), ("staff", re.compile(r"인력|기술자|기술\s*능력")),
          ("patent", re.compile(r"특허|보유\s*기술|전문\s*기술|기술\s*보유")), ("credit", re.compile(r"경영|신용")),
-         ("sanction", re.compile(r"신인도|제재"))]
+         ("sanction", re.compile(r"신인도|제재|성실성|사회적\s*책임"))]  # '사회적 책임 및 성실성'(11/12 당진 서식 4호)
 _START = re.compile(r"정량\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
 _STOP = re.compile(r"^\s*주\s*\d+\s*\)|정성\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
 _MARK = re.compile(r"^\s*(\d+\)|\(\d+\)|[가-하]\.|[가-하]\)|\d+\.)")
@@ -639,8 +639,12 @@ def _credit(c: Criterion, vault) -> ItemScore:
 
 
 def _sanction(c: Criterion, vault) -> ItemScore:
-    """신인도 = 늘 배점 만점(11/05 사용자 결정 '신인도는 2점으로 고정') — 회사정보에 제재처분이 적혀 있으면 알림만."""
-    res = ItemScore(c.name, c.points, c.kind, c.points, "신인도는 배점 만점으로 고정 기재")
+    """신인도 = 늘 배점 만점(11/05 사용자 결정 '신인도는 2점으로 고정') — 회사정보에 제재처분이 적혀 있으면 알림만.
+    감점만 있는 항목('사회적 책임 및 성실성' 임금체불 -2점 등, 배점이 0 이하)은 감점 사유가 없으니 0점(11/12 당진 서식 4호)."""
+    if c.points <= 0:
+        res = ItemScore(c.name, 0.0, c.kind, 0.0, "감점 항목 — 해당 사유 없음 → 0점(감점 없음)")
+    else:
+        res = ItemScore(c.name, c.points, c.kind, c.points, "신인도는 배점 만점으로 고정 기재")
     v = _sq(str(vault.info.get("부정당업자 제재처분") or ""))
     if v and not re.fullmatch(r"없음|해당없음|무|해당사항없음|-", v):
         res.notes.append(f"⚠ 회사정보 '부정당업자 제재처분'이 '{vault.info.get('부정당업자 제재처분')}' — 처분 기간 안이면 고칠 것")
@@ -781,6 +785,10 @@ def read_form(cells) -> list[FormRow]:
                 continue
             nums.append(pts)
             rules = {kinds[col]: t for col, t in texts if col in kinds and re.search(r"[A-D]", t)}
+            if not rules and len(set(kinds.values())) == 1:
+                # 종류 이름 칸('기업신용평가등급')이 왼쪽에 세로로 합쳐져 있고 등급은 옆 칸('BBB0 이상 등급')(11/12 당진 서식 4호)
+                only = next(iter(kinds.values()))
+                rules = {only: t for col, t in texts if col not in kinds and re.search(r"(?<![가-힣])[A-D]{1,3}[0+\-]?", t)}
             if rules:
                 crit.credit_rows.append((rules, pts))
                 continue

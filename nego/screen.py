@@ -90,11 +90,13 @@ class ScreenResult:
     # 미매칭 근거를 문장 대신 항목으로(2026-10-13 요청: 문장이 길어 읽기 어려움) — 화면이 짧은 표로 그린다.
     # 키워드 목록 자체는 공고마다 같아서 넣지 않는다(웹앱은 결과에 한 번만 담음)
     match_detail: dict = field(default_factory=dict)
+    # 키워드·품명코드 대신 지일 공사 면허로 참가 조건을 다 채워 수집한 공고 — 그 면허 이름(2026-11-12 '보유 면허' 경로)
+    license_match: list[str] = field(default_factory=list)
 
     @property
     def section(self) -> str | None:
         """보고·화면 구역 — 관심 키워드가 맞으면 "관심", 키워드 없이 보유 세부품명만 맞으면 "세부품명"
-        (2026-10-16 통합 결정 10·12번). 매칭 안 된 공고는 None."""
+        (2026-10-16 통합 결정 10·12번). 매칭 안 된 공고는 None. 보유 면허로만 고른 공고도 "관심"(표시만 '보유 면허')."""
         if not self.matched:
             return None
         return "관심" if self.matched_keywords or not self.matched_product_codes else "세부품명"
@@ -346,6 +348,25 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
         overseas_suspect=None if overseas_booth or mongolia_word(notice.title) else _overseas_suspect(notice),
         mongolia=(f"{overseas_evidence} · 몽골" if mongolia else
                   (f"공고명에 '{mongolia_word(notice.title)}'" if mongolia_word(notice.title) else None)),
+    )
+
+
+def license_route(notice: Notice, config: ScreenConfig, licenses: list[str], missed: ScreenResult) -> ScreenResult | None:
+    """키워드·품명코드로 안 걸렸지만(미매칭·조건부 제외 키워드) 지일 공사 면허로 참가 조건을 다 채우는 공고를 후보로(2026-11-12).
+    무조건 제외 키워드(특별전·보수공사 등)와 해외 개최는 그대로 뺀다. 조건부 제외 키워드('정비' 등)는 이 경로에선 안 봄 —
+    외주 추천 낙석방지책 '정비'공사가 그 낱말로 빠졌었음."""
+    if not licenses or missed.excluded_by not in ("미매칭", "제외키워드"):
+        return None
+    if _match_exclude(notice, config.hard_exclude_keywords, config.exclude_exceptions):
+        return None
+    evidence = _overseas_exhibition_evidence(notice)
+    if evidence is not None and not _is_mongolia(notice):
+        return None
+    return ScreenResult(
+        matched=True,
+        confidence="참고용",
+        license_match=list(licenses),
+        overseas_suspect=_overseas_suspect(notice),
     )
 
 

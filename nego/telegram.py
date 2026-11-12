@@ -66,7 +66,7 @@ MAX_ATTEMPTS = 3
 URGENT_DAYS = 10
 
 # 주간 보고에서 공고명 앞에 붙이는 유형 표시
-_KIND_TAG = {"협상": "협상", "규격가격동시입찰": "규격가격", "입찰": "입찰", "사전규격": "사전규격"}
+_KIND_TAG = {"협상": "협상", "규격가격동시입찰": "규격가격", "입찰": "입찰", "수의계약": "수의", "사전규격": "사전규격"}
 
 
 @dataclass
@@ -126,6 +126,8 @@ class Row:
             notes.append("해외 의심")
         if getattr(c, "region_suspect", None):
             notes.append("지역 제한 의심")
+        if getattr(sr, "license_match", None):  # 키워드 없이 지일 공사 면허로 수집(2026-11-12)
+            notes.append("보유 면허(" + ", ".join(re.sub(r"\s*[/(]\s*\d{4,}\)?\s*$", "", n) for n in sr.license_match[:2]) + ")")
         return cls(c.notice.title or "", c.notice.detail_url, kind, c.notice.budget, c.days_left, qual,
                    linked["name"] if linked else None,
                    section=getattr(sr, "section", None) or "관심",

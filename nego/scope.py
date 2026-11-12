@@ -35,7 +35,10 @@ DESIGN_CONTEST_MARK = "설계공모"
 CATEGORY_NEGOTIATED = "협상"
 CATEGORY_SPEC_PRICE = "규격가격동시입찰"
 CATEGORY_BID = "입찰"
-CATEGORIES = (CATEGORY_NEGOTIATED, CATEGORY_SPEC_PRICE, CATEGORY_BID)
+# 수의계약(소액수의 견적 등) — 적격심사 없이 바로 계약하는 공고. 2026-11-12 사용자 결정으로 수집 범위에 넣음
+# (외주 추천 공고 R26BK01815406 낙석방지책 정비공사 — 지일 보유 금속창호(4991) 공사, 예전엔 수의계약이라 처음부터 빠졌음).
+CATEGORY_PRIVATE = "수의계약"
+CATEGORIES = (CATEGORY_NEGOTIATED, CATEGORY_SPEC_PRICE, CATEGORY_BID, CATEGORY_PRIVATE)
 # 사전규격은 낙찰방법이 정해지기 전 단계라 위 세 유형으로 나눌 수 없다 — 따로 분류한다.
 # `--categories`(발송 주기용 유형 선택)와는 무관하게, 사전규격을 수집한 실행이면 항상 남는다.
 CATEGORY_PRESPEC = "사전규격"
@@ -75,11 +78,14 @@ def is_design_contest(notice: Notice) -> bool:
 
 
 def bid_category(notice: Notice) -> str | None:
-    """공고 유형. 수의계약·설계공모면 None(수집 범위 밖). 순서: 수의 → 설계공모 → 협상 → 규격가격동시 → 입찰."""
+    """공고 유형. 설계공모면 None(수집 범위 밖). 순서: 설계공모 → 수의계약 → 협상 → 규격가격동시 → 입찰.
+    설계공모는 당선자와 수의계약을 맺어 계약방법 칸이 '수의계약'인 경우가 많아 먼저 본다."""
     if notice.kind == CATEGORY_PRESPEC:
         return CATEGORY_PRESPEC
-    if is_private_contract(notice) or is_design_contest(notice):
+    if is_design_contest(notice):
         return None
+    if is_private_contract(notice):
+        return CATEGORY_PRIVATE
     award = _normalize(notice.award_method)
     if award.startswith(NEGOTIATED_PREFIX):
         return CATEGORY_NEGOTIATED
@@ -89,13 +95,17 @@ def bid_category(notice: Notice) -> str | None:
 
 
 def parse_categories(text: str | None) -> set[str] | None:
-    """"입찰,협상" 같은 쉼표 목록 → 유형 집합. 비어 있으면 None(전 유형)."""
+    """"입찰,협상" 같은 쉼표 목록 → 유형 집합. 비어 있으면 None(전 유형).
+    '입찰'을 고르면 수의계약도 함께(2026-11-12) — 매일 입찰 보고(외부 예약이 categories=입찰로 부름)에 수의계약이
+    같이 나가게. 외부 예약 값을 바꾸면 실행 이름이 달라져 중복 발송되므로 이쪽에서 넓힌다."""
     if not text or not text.strip():
         return None
     chosen = {part.strip() for part in text.split(",") if part.strip()}
     unknown = chosen - set(CATEGORIES)
     if unknown:
         raise ValueError(f"알 수 없는 공고 유형: {', '.join(sorted(unknown))} (가능: {', '.join(CATEGORIES)})")
+    if CATEGORY_BID in chosen:
+        chosen.add(CATEGORY_PRIVATE)
     return chosen
 
 
@@ -152,7 +162,7 @@ class ScopeResult:
 
 
 def apply_scope(notices: list[Notice], categories: set[str] | None = None) -> ScopeResult:
-    """수집된 전체 공고에서 수집 범위(수의계약 제외 경쟁입찰)만 남긴다.
+    """수집된 전체 공고에서 수집 범위(설계공모·취소공고 제외 — 수의계약은 2026-11-12부터 포함)만 남긴다.
     `categories`를 주면 그 유형만 남긴다 (None이면 전 유형).
 
     **순서가 중요하다. 최신 차수를 먼저 고르고, 그 다음에 취소 여부를 본다.**

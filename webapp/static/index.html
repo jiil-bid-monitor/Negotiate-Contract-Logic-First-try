@@ -1785,6 +1785,7 @@ const filters = { cat: "all", prod: "all", kind: "all", grade: "all", method: "a
 const CATEGORIES = [
   ["용역", "업무 구분이 용역인 공고 (낙찰방법 무관)"],
   ["입찰", "물품·공사의 일반 입찰"],
+  ["수의계약", "물품·공사 수의계약 — 적격심사 없이 견적 등으로 바로 계약 (2026-11-12부터 수집)"],
   ["협상", "물품·공사 중 협상에 의한 계약·규격가격동시입찰"],
   ["사전규격", "용역이 아닌 사전규격 — 낙찰방법이 아직 정해지지 않음"],
 ];
@@ -1792,6 +1793,7 @@ function categoryOf(n) {
   if (n.businessType === "용역") return "용역";
   if (n.sourceType === "사전규격") return "사전규격";
   const m = bidMethodOf(n);
+  if (m === "수의") return "수의계약";
   return m === "협상" || m === "규격가격동시" ? "협상" : "입찰";
 }
 
@@ -2111,7 +2113,7 @@ function applyFilters() {
     ], filters.grade === "강력추천" ? "urgent" : ""),
     dropdown("method", "낙찰방법", [
       ["all", "전체", items.length],
-      ...["협상", "규격가격동시", "입찰"].map((m) => [m, m, count((n) => n.bidMethodCategory === m)]),
+      ...["협상", "규격가격동시", "입찰", "수의"].map((m) => [m, m === "수의" ? "수의계약" : m, count((n) => n.bidMethodCategory === m)]),
     ]),
     dropdown("part", "참가여부", [
       ["all", "전체", items.length],
@@ -2353,6 +2355,7 @@ function renderNotice(n) {
           ${businessTypeBadge(n)}
           ${n.reNotice ? reNoticeBadge() : ""}
           ${productOnly(n) ? productOnlyBadge(n) : ""}
+          ${(n.licenseMatch || []).length ? licenseBadge(n) : ""}
           ${overseasBadges(n)}
         </div>
         <h3>${title}${n.detailUrl ? `<span class="ext" aria-hidden="true">↗</span>` : ""}${noticeNoTag(n.noticeNo)}</h3>
@@ -2370,6 +2373,13 @@ function renderNotice(n) {
  * 화면에서는 본공고·사전규격 목록이 아니라 '세부품명 공고' 탭에 모은다 (2026-10-16 요청). 매일 보고에 나가는지는 배지 설명에 적는다.
  */
 const productOnly = (n) => !!n.matchedBy?.products?.length && !n.matchedBy?.keywords?.length;
+/** 제목 키워드 없이 지일 공사 면허로 참가 조건을 다 채워 수집한 공고 (2026-11-12 — 외주 추천 낙석방지책 4991 공고) */
+function licenseBadge(n) {
+  const names = n.licenseMatch.map((x) => esc(x)).join(", ");
+  return tipBadge("warn", "보유 면허로 수집", "보유 면허로 수집한 공고",
+    `<p>제목에 관심 키워드가 없지만, 나라장터 면허제한을 지일 공사 면허 <b>${names}</b>로 모두 채워 수집한 공고입니다.</p>` +
+      `<p>쓰는 면허: 실내건축공사업·정보통신공사업·금속구조물·창호·온실공사업·금속창호·지붕건축물조립공사업. 제목의 조건부 제외 키워드('정비' 등)는 이 경로에선 보지 않습니다.</p>`);
+}
 function productOnlyBadge(n) {
   const names = n.matchedBy.products.map((x) => `${esc(x.name)}(${esc(x.code)})`).join(", ");
   // 공고문 참가자격에서 찾은 세부품명 — 나라장터 분류(용역분류)에는 없어 공고문을 읽고 찾은 공고 (서버 webapp/docscan.py)
@@ -2693,7 +2703,7 @@ function gradeBadge(n) {
 /** 낙찰 방식 분류(협상·수의·규격가격동시·입찰). 나라장터 원문 값과 뜻을 함께 */
 const BID_METHOD_NOTE = {
   협상: "제안서를 평가해 협상 순위를 정하고,<br>순위대로 협상해 계약 상대를 정합니다.",
-  수의: "경쟁입찰 없이 특정 업체와 계약합니다.",
+  수의: "적격심사 없이 견적 등으로 바로 계약 상대를 정합니다(소액 수의 견적 포함).",
   규격가격동시: "규격 입찰서와 가격 입찰서를 함께 받아,<br>규격에 맞는 업체 가운데 가격으로 정합니다.",
 };
 function bidMethodBadge(n) {

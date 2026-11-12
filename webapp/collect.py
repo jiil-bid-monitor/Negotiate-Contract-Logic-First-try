@@ -120,6 +120,8 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "interest_keywords": (candidate.screen_result.matched_keywords or (interest(n) if interest else [])),
         # 관심 / 세부품명 (키워드 없이 등록 품목만 맞은 공고) — 2026-10-19 통합 결정 10·12번
         "section": candidate.screen_result.section,
+        # 키워드 없이 지일 공사 면허로 수집한 공고의 그 면허(2026-11-12)
+        "license_match": list(getattr(candidate.screen_result, "license_match", None) or []),
         "overseas_suspect": candidate.screen_result.overseas_suspect,
         # 첨부 장소가 몽골이면 "해외 개최 (첨부)" 대신 "몽골 공고 유력"으로만
         "overseas_attachment": None if getattr(candidate, "mongolia", None) else getattr(candidate, "overseas_attachment", None),

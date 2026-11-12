@@ -102,7 +102,8 @@ class RunStats:
     fetched: int = 0
     failed_operations: list[str] = field(default_factory=list)
     cancelled: int = 0
-    private_contract: int = 0  # 수의계약이라 뺀 공고
+    private_contract: int = 0  # 수집 범위 안 수의계약 공고 수(2026-11-12부터 수집 — 예전엔 뺀 수)
+    license_route: int = 0  # 키워드 없이 지일 공사 면허로 수집한 공고 수(2026-11-12)
     design_contest: int = 0  # 설계공모라 뺀 공고 (2026-10-16 통합 결정 5번)
     other_category: int = 0  # 이번 실행 유형(--categories) 밖이라 뺀 공고
     old_ordinal: int = 0
@@ -253,7 +254,9 @@ def build_candidates(
     stats.in_scope = len(scope_result.kept)
     stats.categories = sorted(categories, key=scope.CATEGORIES.index) if categories else None
     # 웹앱 수집 로그에도 보이게 — 설계공모는 제외된 공고 탭에 안 실려 여기서만 건수를 볼 수 있다(통합 결정 5번)
-    log.info("수집 범위 밖: 수의계약 %d건 · 설계공모 %d건 · 취소공고 %d건", stats.private_contract, stats.design_contest, stats.cancelled)
+    stats.private_contract = sum(1 for n in scope_result.kept if scope.bid_category(n) == scope.CATEGORY_PRIVATE)
+    log.info("수집 범위 밖: 설계공모 %d건 · 취소공고 %d건 (수의계약 %d건은 2026-11-12부터 수집)", stats.design_contest, stats.cancelled,
+             stats.private_contract)
     # [진단] 공고명에 '설계공모'가 든 공고의 낙찰방법·계약방법 — 설계공모 판별 칸이 맞는지 실응답으로 보려고(10/19)
     named = [n for n in notices if "설계공모" in re.sub(r"\s", "", n.title or "")]
     if named:
@@ -297,6 +300,14 @@ def build_candidates(
             stats.rejected.append(record)
             continue
 
+        if not screen_result.matched:
+            # 키워드로 안 걸렸어도 지일 공사 면허로 참가 조건을 다 채우면 '보유 면허' 공고로 남긴다(2026-11-12 사용자 결정)
+            licenses = qualify.construction_license_match(license_groups.get(notice.notice_no, []), config.held_names, held_codes)
+            routed = screen.license_route(notice, config.screen, licenses, screen_result) if licenses else None
+            if routed is not None:
+                screen_result = routed
+                record.screen_result = routed
+                stats.license_route += 1
         if not screen_result.matched:
             reason = screen_result.excluded_by or "미매칭"
             detail = screen_result.excluded_reason or ""

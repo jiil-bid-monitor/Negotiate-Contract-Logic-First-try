@@ -343,8 +343,9 @@ def render_console(candidates: list[Candidate], stats: RunStats) -> str:
     )
     other = f" / 다른 유형 {stats.other_category}" if stats.other_category else ""
     lines.append(
-        f"  (취소공고 제외 {stats.cancelled} / 수의계약 {stats.private_contract} / 설계공모 {stats.design_contest}{other} / "
-        f"이전 차수 {stats.old_ordinal})"
+        f"  (취소공고 제외 {stats.cancelled} / 설계공모 제외 {stats.design_contest}{other} / "
+        f"이전 차수 {stats.old_ordinal} · 수의계약 수집 {stats.private_contract}"
+        f"{f' · 보유 면허로 수집 {stats.license_route}' if getattr(stats, 'license_route', 0) else ''})"
     )
     if stats.qualification_flagged:
         lines.append(f"  후보 중 자격 미달 표시 {stats.qualification_flagged}건 (제외하지 않음 — 공동수급 확인)")

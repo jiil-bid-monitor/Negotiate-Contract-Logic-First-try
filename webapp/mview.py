@@ -31,7 +31,7 @@ STAGE_OF = {
 HIDDEN_STAGES = {"키워드·품목", "마감"}
 # 세부품명 공고 탭(목록 밖)에 안 싣는 단계 — 금액·마감·본공고 게시는 품목이 맞아도 그대로 거른다(팀원 화면 10/16 규칙)
 HELD_SKIP_STAGES = {"최소예산", "마감", "본공고 게시"}
-METHOD = {"협상": "협상", "규격가격동시입찰": "규격가격동시", "입찰": "입찰"}
+METHOD = {"협상": "협상", "규격가격동시입찰": "규격가격동시", "입찰": "입찰", "수의계약": "수의"}
 
 
 def stage_of(reason: str | None) -> tuple[str, str]:
@@ -127,6 +127,7 @@ def item(c: dict[str, Any], held_names: dict[str, str], promoted: dict[str, Any]
         "reNotice": bool(c.get("is_re_notice")),
         "confidence": c.get("confidence") or "참고용",
         "section": c.get("section") or "관심",
+        "licenseMatch": c.get("license_match") or [],
         "matchedBy": {"products": matched_products, "industries": [], "keywords": c.get("matched_keywords") or [],
                       "classes": []},
         "interestKeywords": c.get("interest_keywords") or [],

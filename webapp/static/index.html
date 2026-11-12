@@ -396,10 +396,12 @@ body {
 
 /* 실제 공고 도구 줄 */
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-.toolbar select {
+.toolbar select, .toolbar input[type=date] {
   height: 36px; padding: 4px 10px; font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: 4px;
   background: var(--panel); color: var(--ink);
 }
+.toolbar .custom-range { display: inline-flex; align-items: center; gap: 6px; }
+.toolbar .custom-range[hidden] { display: none; }
 .toolbar .check { display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; color: var(--ink); cursor: pointer; }
 .toolbar .check input { width: 15px; height: 15px; accent-color: var(--brand); margin: 0; }
 .toolbar button {
@@ -1289,7 +1291,14 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         <option value="7" selected>최근 7일</option>
         <option value="14">최근 14일</option>
         <option value="30">최근 30일</option>
+        <option value="custom">직접 지정</option>
       </select>
+      <!-- 직접 지정: 게시일 시작일 00:00 ~ 종료일 23:59 (종료일이 오늘이면 지금까지), 최대 92일 — 2026-11-12 사용자 요청 -->
+      <span id="customRange" class="custom-range" hidden>
+        <input type="date" id="fromDate" aria-label="시작일" title="게시일 시작일 (이날 00:00부터)">
+        <span>~</span>
+        <input type="date" id="toDate" aria-label="종료일" title="게시일 종료일 (이날 23:59까지, 오늘이면 지금까지)">
+      </span>
       <label class="check" title="끄면 사전규격(공고 전 단계)은 목록에서 숨깁니다"><input type="checkbox" id="incPre" checked> 사전규격 포함</label>
       <button type="button" id="refresh" title="고른 기간의 공고를 나라장터에서 새로 받고 첨부(공고문·과업지시서)까지 읽습니다 — 몇 분 걸립니다">나라장터에서 불러오기</button>
       <button type="button" id="load" class="ghost" title="서버에 저장된 마지막 수집 결과와 팀원의 참가여부·대화를 다시 받아옵니다 (나라장터에 다시 묻지 않습니다)">판단 갱신</button>
@@ -1703,9 +1712,15 @@ async function loadNotices(refresh) {
     setBusy(true);
     $("loadState").classList.remove("err");
     $("loadState").textContent = "나라장터에서 받는 중…";
-    $("liveMeta").textContent = `최근 ${$("days").value}일 게시 공고를 받고 첨부(공고문·과업지시서)까지 읽습니다 — 기간에 따라 몇 분 걸립니다. 그동안 지난 결과를 그대로 볼 수 있습니다.`;
+    const custom = $("days").value === "custom";
+    const span = custom ? `${$("fromDate").value} ~ ${$("toDate").value}` : `최근 ${$("days").value}일`;
+    $("liveMeta").textContent = `${span} 게시 공고를 받고 첨부(공고문·과업지시서)까지 읽습니다 — 기간에 따라 몇 분 걸립니다. 그동안 지난 결과를 그대로 볼 수 있습니다.`;
     try {
-      const data = await getJson(`/api/notices?days=${encodeURIComponent($("days").value)}&refresh=1`);
+      if (custom && (!$("fromDate").value || !$("toDate").value)) throw new Error("시작일·종료일을 고르세요");
+      const query = custom
+        ? `begin=${encodeURIComponent($("fromDate").value)}&end=${encodeURIComponent($("toDate").value)}`
+        : `days=${encodeURIComponent($("days").value)}`;
+      const data = await getJson(`/api/notices?${query}&refresh=1`);
       if (data.error) throw new Error(data.error);
       watchJob(data.job, true);
     } catch (err) {
@@ -1730,7 +1745,8 @@ async function loadNotices(refresh) {
     if (data.job?.running && !jobTimer) watchJob(data.job, false);
     // 결과 보기 전용 서버(NAS)엔 수집 버튼이 없다 — 수집은 서버 PC 화면에서 (webapp/resultpush.py)
     const viewer = data.canCollect === false;
-    $("refresh").style.display = $("days").style.display = $("load").style.display = viewer ? "none" : "";  // 판단은 10초마다 저절로 받음
+    $("refresh").style.display = $("days").style.display = $("load").style.display = viewer ? "none" : "";
+    $("customRange").hidden = viewer || $("days").value !== "custom";  // 판단은 10초마다 저절로 받음
     // 투찰 계산기·정량평가서는 서버 PC에서만 — 투찰 기록이 두 곳에 쌓이지 않게, 정량평가서는 NAS에 OCR이 없어서 (11/11 사용자 결정)
     document.querySelectorAll('.tabs [data-tab="calc"], .tabs [data-tab="quant"]').forEach((b) => { b.hidden = viewer; });
     if (data.empty) {
@@ -3740,6 +3756,15 @@ document.addEventListener("focusin", placeTip);
 
 $("load").onclick = () => { loadParticipation(); loadNotices(false); };
 $("refresh").onclick = () => loadNotices(true);
+// 직접 지정 기간 — 날짜 칸은 열 때마다 오늘(10/1 사용자 요청과 같게), 오늘 뒤는 못 고름
+(() => {
+  const d = new Date(), today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  $("fromDate").value = $("toDate").value = today;
+  $("fromDate").max = $("toDate").max = today;
+  $("days").addEventListener("change", () => { $("customRange").hidden = $("days").value !== "custom"; });
+  $("fromDate").addEventListener("change", () => { if ($("toDate").value < $("fromDate").value) $("toDate").value = $("fromDate").value; });
+  $("toDate").addEventListener("change", () => { if ($("fromDate").value > $("toDate").value) $("fromDate").value = $("toDate").value; });
+})();
 // 탭 줄 오른쪽 검색은 실제 공고·제외된 공고 목록을 거른다 — 다른 탭에서 치면 실제 공고 탭으로 옮긴다
 $("liveQ").oninput = () => {
   if (!$("tab-excluded").hidden) {

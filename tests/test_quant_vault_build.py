@@ -2411,3 +2411,27 @@ def test_staff_composition_label_is_total_employees(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "so.hwpx", v)
     xml = zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode()
     assert xml.count("18명") == 1
+
+
+def test_track_period_and_amount_columns_widen(tmp_path: Path):
+    """11/12 필암 실적 표 — 사업기간 '2023.06.' / '23~'처럼 좁은 칸에서 잘림 → 기간·금액 열을 넓히고 가장 넓은 열(사업명)을 좁힘.
+    표 전체 너비는 그대로, 두 열을 다 덮는 머리 칸은 그대로."""
+    from quantdocs.fill import _cells, _spans, _widen_track_cols
+
+    def cell(col, row, text, w, span=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/>'
+                f'<hp:cellSz width="{w}" height="1500"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+    widths = [2000, 20000, 4000, 4500]
+    rows = [[cell(0, 0, "실적 현황", sum(widths), 4)],
+            [cell(i, 1, h, widths[i]) for i, h in enumerate(["연번", "사업명", "사업기간", "계약금액(천원)"])]]
+    rows += [[cell(i, r, "", widths[i]) for i in range(4)] for r in (2, 3)]
+    xml = "<hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    tracks = [{"사업명": "가상 사업", "계약일": dt.date(2023, 6, 23), "준공일": dt.date(2024, 2, 8), "계약금액(원)": 1_210_000_000}]
+    out = _widen_track_cols(xml, _spans(xml, "tbl")[0], tracks)
+    got = {}
+    for c in _cells(out, _spans(out, "tbl")[0]):
+        got.setdefault((c.row, c.col), int(re.findall(r'width="(\d+)"', out[c.start:c.end])[-1]))
+    assert got[(1, 2)] > 4000 and got[(1, 3)] > 4500 and got[(1, 1)] < 20000  # 기간·금액 넓어지고 사업명 좁아짐
+    assert sum(got[(1, k)] for k in range(4)) == sum(widths) and got[(0, 0)] == sum(widths)  # 표 너비·합친 머리 칸 그대로
+    assert got[(2, 2)] == got[(1, 2)] and got[(3, 3)] == got[(1, 3)]  # 같은 열은 줄마다 같은 너비

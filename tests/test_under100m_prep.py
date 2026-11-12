@@ -130,3 +130,12 @@ class PrepareTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ContractBondNotPrepTest(unittest.TestCase):
+    def test_contract_bond_is_after_award(self):
+        from under100m.prep import find_items
+
+        after = find_items(["계약보증금은 계약금액의 100분의 10이상에 해당하는 금액을 계약이행 보증보험증권으로 제출해야 합니다."])
+        self.assertNotIn("입찰·계약 보증서", after)  # 낙찰 뒤에 내는 것 — 입찰 준비 서류 아님
+        self.assertIn("입찰·계약 보증서", find_items(["입찰참가 등록 및 입찰보증서 제출"]))

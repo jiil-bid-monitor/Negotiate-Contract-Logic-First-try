@@ -336,7 +336,8 @@ _TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값(t, 머리글)
     (("연번", "순번"), None),  # 줄 번호 — 따로 채움
     (("사업명", "용역명", "공사명", "건명"), lambda t, h: str(t.get("사업명") or "")),
     (("수행기간", "계약기간", "사업기간", "기간"), lambda t, h: _period(t).replace("~", "~\n", 1)),
-    (("사업개요", "내용", "분야"), lambda t, h: str(t.get("분야") or "")),
+    # 분야 '전시·체험'은 '·' 뒤에서 줄을 나눔 — 좁은 칸에서 '전시·체' / '험'처럼 낱말 가운데가 잘리지 않게(11/12 사용자 요청)
+    (("사업개요", "내용", "분야"), lambda t, h: re.sub(r"\s*·\s*", "·\n", str(t.get("분야") or "")).strip()),
     (("계약금액", "금액", "실적액", "도급액", "도급)액", "납품액"), _amount),
     (("준공", "완료일", "년월일"), lambda t, h: _fmt_ymd(t.get("준공일"))),  # '납품(준공)년 월 일'(11/05 국민안전체험관 서식 7)
     (("발주기관", "발주처", "발주자"), lambda t, h: str(t.get("발주기관") or "")),
@@ -404,7 +405,7 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                     # 사업기간 '2021.01.15~2021.12.15'은 '~' 뒤에서 줄을 나눔 — 좁은 칸에서 연도 중간이 잘리지 않게(11/12 사용자 요청)
                     edits.append((c, v.split("\n"), False))
                     # 금액·사업기간은 줄마다 한 줄에 — 칸이 좁으면 글자를 줄임. 넓힐 땐 금액 열이 먼저라 줄어드는 건 사업기간 쪽(11/12 사용자 요청)
-                    if colmap[c.col] is _amount or "\n" in v:  # 원 단위 전체 금액이 좁은 칸에서 두 줄로 잘리지 않게(11/12)
+                    if colmap[c.col] is _amount or "~\n" in v:  # 원 단위 전체 금액이 좁은 칸에서 두 줄로 잘리지 않게(11/12)
                         rep.one_line.add(c.start)
             rep.rows += 1
         total = sum(float(t.get("인정 금액(원)") or t.get("계약금액(원)") or 0) for t in tracks[:n])
@@ -1330,38 +1331,18 @@ _NUMERIC_LINE = re.compile(r"[\d,.\-~]+")
 
 
 def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str:
-    """실적 표 값이 11pt로 읽기 좋게 들어가도록 열을 넓히고, 같은 표에서 가장 넓은 열(보통 사업명)을 그만큼 좁힘 — 표 전체 너비는 그대로.
-    ① 사업기간·금액·전화처럼 숫자뿐인 줄은 한 줄에(11/12 '2023.06.' / '23~'처럼 잘림) ② '단독'·'공동'처럼 짧은 낱말(6자 이하)은
-    한 줄에 — 한글이 칸보다 넓으면 글자가 겹쳐 보임(11/12 비고 '단독') ③ 그 밖의 글('실내건축·인테리어')은 두 줄 안에.
-    여러 열을 합친 칸은 두 열을 다 덮으면 그대로, 한쪽만 덮으면 그만큼만 바꿈. 받는 열은 원래 너비의 60% 밑으로는 안 줄임
-    (앞 순서 — 숫자 → 짧은 낱말 → 글 — 부터 그 안에서 나눠 씀)."""
+    """실적 표 값이 11pt로 읽기 좋게 들어가도록 열 너비를 다시 나눔 — 표 전체 너비는 그대로.
+    받는 열(먼저 받는 순서): ① 금액(한 줄 — 11/12 사용자: 줄일 거면 연도를 줄이고 금액은 크게) ② '단독'·'전시·체험'처럼 짧은 낱말
+    (낱말이 칸보다 넓으면 글자가 겹쳐 보임) ③ 사업명 같은 글(두 줄 안에) ④ 사업기간(남는 몫만 — 모자라면 글자를 줄여 한 줄에, `rep.one_line`).
+    내주는 열: 실적을 넣지 않아 비는 열(발주처 기관명·주소·전화번호 등 — 머리글이 들어갈 만큼, 원래 너비의 절반까지, 11/12 당진)
+    → 그다음 가장 넓은 열의 남는 너비(원래 너비의 60% 밑으로는 안 줄임). 여러 열을 합친 칸은 덮는 열의 증감을 더함."""
     cells = _cells(xml, tbl)
     probe = FillReport("x")
     edits = _fill_tracks(xml, cells, tracks, probe)
-    need: dict[int, tuple[int, float]] = {}  # 열 → (순서, 필요한 글 너비)
 
-    def tw(x: str) -> float:
-        return _text_width(x, FILL_HEIGHT, 1.0)
+    def tw(x: str, h: int = FILL_HEIGHT) -> float:
+        return _text_width(x, h, 1.0)
 
-    for c, lines, _keep in edits:
-        lines = [x.strip() for x in lines if x and x.strip()]
-        if c.colspan != 1 or not lines:
-            continue
-        if all(_NUMERIC_LINE.fullmatch(x) for x in lines):
-            # 금액 열을 가장 먼저 넓힘 — 넓힐 몫이 모자라면 사업기간 쪽 글자가 줄어듦(11/12 사용자 요청: 연도를 줄이고 금액은 크게)
-            want = (-1 if c.start in probe.one_line and len(lines) == 1 else 0, max(tw(x) for x in lines))
-        else:
-            words = [w for x in lines for w in x.split()]
-            short = [w for w in words if len(w) <= 6]
-            longest = max(tw(x) for x in lines)
-            if all(len(w) <= 6 for w in words):
-                want = (1, longest if len(lines) == 1 and len(lines[0]) <= 8 else max(tw(w) for w in short))
-            else:
-                want = (2, max(longest / 2, max((tw(w) for w in short), default=0.0)))
-        old_want = need.get(c.col)
-        need[c.col] = want if old_want is None else (min(old_want[0], want[0]), max(old_want[1], want[1]))
-    if not need:
-        return xml
     def width(seg: str) -> int | None:
         m = re.findall(r'<(?:[\w.-]+:)?cellSz\b[^>]*\bwidth="(\d+)"', seg)
         return int(m[-1]) if m else None
@@ -1371,54 +1352,95 @@ def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str
         mg = dict(re.findall(r'\b(left|right)="(\d+)"', tag[-1] if tag else ""))
         return int(mg.get("left", 141)) + int(mg.get("right", 141))
 
-    first = _cells(xml, tbl)
+    need: dict[int, tuple[int, float]] = {}  # 열 → (받는 순서, 필요한 글 너비)
+    filled: set[int] = set()
+    rows_filled: set[int] = set()
+    for c, lines, _keep in edits:
+        lines = [x.strip() for x in lines if x and x.strip()]
+        if c.colspan != 1 or not lines:
+            continue
+        filled.add(c.col)
+        rows_filled.add(c.row)
+        if all(_NUMERIC_LINE.fullmatch(x) for x in lines):
+            # 금액 먼저, 사업기간('~' 두 줄)은 맨 뒤, 연번 같은 숫자는 그 사이
+            rank = -1 if c.start in probe.one_line and len(lines) == 1 else 3 if len(lines) > 1 else 0
+            want = (rank, max(tw(x) for x in lines))
+        else:
+            words = [w for x in lines for w in x.split()]
+            short = [w for w in words if len(w) <= 6]
+            longest = max(tw(x) for x in lines)
+            # 짧은 낱말 몇 개('단독'·'전시·/체험')만 낱말 단위로 — 사업명처럼 긴 글은 두 줄 안에(11/12: 사업명이 4~5글자씩 줄바꿈)
+            if all(len(w) <= 6 for w in words) and sum(len(x) for x in lines) <= 10:
+                want = (1, max(tw(w) for w in words))
+            else:
+                want = (2, max(longest / 2, max((tw(w) for w in short), default=0.0)))
+        old_want = need.get(c.col)
+        need[c.col] = want if old_want is None else (min(old_want[0], want[0]), max(old_want[1], want[1]))
+    if not need:
+        return xml
     base: dict[int, int] = {}
-    for c in first:
-        w = width(xml[c.start:c.end])
+    marg: dict[int, int] = {}
+    head_need: dict[int, float] = {}  # 비는 열이 머리글은 들어갈 만큼 남김
+    for c in cells:
+        seg = xml[c.start:c.end]
+        w = width(seg)
         if c.colspan == 1 and w:
             base[c.col] = min(base.get(c.col, w), w)
+            marg[c.col] = max(marg.get(c.col, 0), margin(seg))
+            if c.row not in rows_filled and c.text.strip():
+                word = max((tw(x, 1000) for x in re.split(r"\s+", c.text.strip()) if x), default=0.0)
+                # 머리글의 긴 낱말('고(단독/공동)')은 줄이 나뉘어도 됨 — 4글자 너비까지만 지킴('연번'·'전화번호'는 한 줄에)
+                head_need[c.col] = max(head_need.get(c.col, 0.0), min(word, 4000.0))
     if not base:
         return xml
-    donor = max(base, key=lambda k: base[k])  # 가장 넓은 열이 내줌(사업명) — 그 열은 넓히지 않음
-    budget = int(base[donor] * 0.4)
-    for col in sorted((k for k in need if k != donor), key=lambda k: (need[k][0], k)):
-        cells = _cells(xml, tbl)
-        singles = {}  # 열 → 그 열 하나만 덮는 칸들의 (너비, 여백)
-        for c in cells:
-            w = width(xml[c.start:c.end])
-            if c.colspan == 1 and w:
-                singles.setdefault(c.col, []).append((w, margin(xml[c.start:c.end])))
-        if col not in singles or donor not in singles:
+    def want_w(col: int, h: int = FILL_HEIGHT) -> int:
+        return int(need[col][1] * h / FILL_HEIGHT * 1.06) + marg.get(col, 282)
+    # 내주는 열과 내줄 수 있는 너비: ① 비는 열(머리글이 들어갈 만큼, 절반까지) ② 값이 칸보다 좁은 열의 남는 너비(원래 너비의 60%는 남김)
+    # ③ 사업기간 — 9pt로 한 줄에 들어갈 만큼까지(남는 몫이 모자라면 글자를 줄여 한 줄에)
+    cap: dict[int, int] = {}
+    order: dict[int, int] = {}
+    for col, w in base.items():
+        if col not in filled:
+            cap[col], order[col] = max(0, min(int(w * 0.5), int(w - head_need.get(col, 0.0) * 1.06 - marg.get(col, 282)))), 0
+        elif col in need:
+            keep = max(int(w * 0.6), int(head_need.get(col, 0.0) * 1.06) + marg.get(col, 282))  # 머리글('연번')은 한 줄에
+            if need[col][0] == 3:
+                cap[col], order[col] = max(0, w - max(want_w(col, 900), keep)), 2
+            elif want_w(col) < w:
+                cap[col], order[col] = max(0, w - max(want_w(col), keep)), 1
+    delta: dict[int, int] = {}
+    for col in sorted(need, key=lambda k: (need[k][0], k)):
+        if col not in base or delta.get(col, 0) < 0:  # 이미 내준 열(사업기간)은 다시 받지 않음
             continue
-        cur = min(w for w, _m in singles[col])
-        want = int(need[col][1] * 1.06) + max(m for _w, m in singles[col])
-        d = min(want - cur, budget)
+        d = want_w(col) - base[col]
         if d <= 0:
             continue
-        budget -= d
+        got = 0
+        for k in sorted(cap, key=lambda k: (order[k], -cap[k])):
+            take = min(cap[k], d - got)
+            if k == col or take <= 0 or (need[col][0] == 3 and order[k] == 2):
+                continue
+            cap[k] -= take
+            delta[k] = delta.get(k, 0) - take
+            got += take
+            if got >= d:
+                break
+        if got:
+            delta[col] = delta.get(col, 0) + got
+    if not any(delta.values()):
+        return xml
 
-        def shift(seg: str, abs_start: int) -> str:
-            c = next((x for x in cells if x.start == abs_start), None)
-            if c is None:
-                return seg
-            cover = range(c.col, c.col + c.colspan)
-            delta = (d if col in cover else 0) - (d if donor in cover else 0)
-            if not delta:
-                return seg
-            sizes = list(re.finditer(r'(<(?:[\w.-]+:)?cellSz\b[^>]*\bwidth=")(\d+)(")', seg))
-            last = sizes[-1]  # 칸 안 표가 있어도 맨 마지막 cellSz가 이 칸 것
-            return seg[:last.start(2)] + str(int(last.group(2)) + delta) + seg[last.end(2):]
-        seg = xml[tbl[0]:tbl[1]]
-        out, pos = [], 0
-        for s, e in _spans(xml, "tc", tbl[0] + 1, tbl[1]):
-            ls, le = s - tbl[0], e - tbl[0]
-            out.append(seg[pos:ls])
-            out.append(shift(seg[ls:le], s))
-            pos = le
-        out.append(seg[pos:])
-        new_seg = "".join(out)
-        xml = xml[:tbl[0]] + new_seg + xml[tbl[1]:]
-        tbl = (tbl[0], tbl[0] + len(new_seg))
+    def shift(seg: str, c) -> str:
+        dd = sum(delta.get(k, 0) for k in range(c.col, c.col + c.colspan))
+        if not dd:
+            return seg
+        sizes = list(re.finditer(r'(<(?:[\w.-]+:)?cellSz\b[^>]*\bwidth=")(\d+)(")', seg))
+        if not sizes:
+            return seg
+        last = sizes[-1]  # 칸 안 표가 있어도 맨 마지막 cellSz가 이 칸 것
+        return seg[:last.start(2)] + str(int(last.group(2)) + dd) + seg[last.end(2):]
+    for c in sorted(_cells(xml, tbl), key=lambda c: c.start, reverse=True):
+        xml = xml[:c.start] + shift(xml[c.start:c.end], c) + xml[c.end:]
     return xml
 
 

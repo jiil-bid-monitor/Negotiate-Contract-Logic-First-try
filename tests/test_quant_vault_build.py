@@ -2657,3 +2657,28 @@ def test_form_staff_grades_dangjin_layout(tmp_path: Path):
                  [c(2, 4, "초급기술자"), c(3, 4, "0.4점/인")], [c(2, 5, "상한 점수"), c(3, 5, "5.0점")]])
     grades, points = form_staff_grades([_mini_hwpx(tmp_path / "f.hwpx", form)])
     assert grades == {"특급": 1.0, "고급": 0.8, "중급": 0.6, "초급": 0.4} and points == 5.0
+def test_track_cols_empty_columns_donate(tmp_path: Path):
+    """11/12 당진 실적 표 — 사업명이 4~5글자씩 줄바꿈, 금액은 7pt, 분야 '전시·체'/'험'. 비는 발주처(기관명·주소·전화번호) 칸이 너비를 내주고
+    금액 → 짧은 낱말 → 사업명 순으로 받음, 사업기간은 9pt까지 줄여 내줌, 분야는 '·' 뒤에서 줄바꿈."""
+    import datetime as _dt
+    from quantdocs.fill import FILL_HEIGHT, _cells, _fill_tracks, _spans, _text_width, _widen_track_cols, FillReport
+
+    def cell(col, row, text, w, cs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="1"/>'
+                f'<hp:cellSz width="{w}" height="1500"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+    w = [2780, 5974, 6811, 4874, 4768, 5622, 3064, 5336, 6745]
+    heads = ["연번", "① 사업명", "사업기간", "②계약금액", "기관명", "주 소", "전화번호", "분야", "비 고(단독/공동)"]
+    rows = [[cell(i, 0, h, w[i]) for i, h in enumerate(heads)]] + [[cell(i, r, "", w[i]) for i in range(9)] for r in (1, 2)]
+    xml = "<hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    tracks = [{"사업명": "진동폐터널 관광상품 개발사업 전시분야 제작설치", "계약일": _dt.date(2023, 11, 23), "준공일": _dt.date(2026, 5, 30),
+               "계약금액(원)": 3_610_090_000, "분야": "전시·체험"}]
+    out = _widen_track_cols(xml, _spans(xml, "tbl")[0], tracks)
+    got = {c.col: int(re.findall(r'width="(\d+)"', out[c.start:c.end])[-1]) for c in _cells(out, _spans(out, "tbl")[0]) if c.row == 0}
+    assert sum(got.values()) == sum(w)  # 표 너비 그대로
+    assert got[3] - 282 >= _text_width("3,610,090,000", FILL_HEIGHT, 1.0)  # 금액은 11pt 한 줄
+    assert got[1] - 282 >= _text_width(tracks[0]["사업명"], FILL_HEIGHT, 1.0) / 2 * 0.95  # 사업명 두 줄 안
+    assert got[4] < w[4] and got[5] < w[5]  # 비는 칸이 내줌
+    assert got[2] < w[2]  # 사업기간도 내줌(글자를 줄여 한 줄에)
+    edits = _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, FillReport("x"))
+    assert ["전시·", "체험"] in [lines for _c, lines, _k in edits]

@@ -331,7 +331,7 @@ def test_tall_track_row_is_split_and_text_fits():
                for c in cells if c.col == 0) == 3000 + 3000 + 30000  # 표 높이 그대로
     rep = FillReport("x")
     vals = {(c.row, c.col): l[0] for c, l, _ in _fill_tracks(xml, cells, tracks, rep)}
-    assert rep.rows == 3 and vals[(2, 1)] == "가상 사업 0" and vals[(4, 2)] == "30,000,000" and vals[(1, 2)] == "60,000,000원"
+    assert rep.rows == 3 and vals[(2, 1)] == "가상 사업 0" and vals[(4, 2)] == "30,000,000" and vals[(1, 2)] == "60,000,000"
 
     header = ('<hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr>'
               '<hh:charPr id="1" height="1300"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties>')
@@ -420,6 +420,24 @@ def test_fit_one_line_when_line_spacing_below_100():
     tall = _sz_cell(1, 0, "", 19477, 1500).replace('paraPrIDRef="0"', 'paraPrIDRef="1"')
     cid2, note2 = _fit_char(tall, addr, chars)
     assert note2 == "" and re.search(rf'<hh:charPr id="{cid2}" height="1100"', chars.finish())
+
+
+def test_amount_cell_shrinks_to_one_line_even_with_normal_spacing():
+    """11/12 필암 실적 표 '계약금액(천원)' 칸 — 원 단위 금액 '1,210,000,000'이 좁은 칸에서 두 줄로 잘림 →
+    금액 칸만 줄 간격이 보통(160%)이어도 한 줄에 들어가게 글자를 줄임(사용자 결정: 원 단위는 그대로)."""
+    from quantdocs.fill import _Chars, _fit_char, _text_width
+
+    amount, width = "1,210,000,000", 5000
+    header = ('<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties>'
+              '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hh:paraPr>'
+              '</hh:paraProperties>')
+    chars = _Chars(header)
+    assert _text_width(amount, 1100, 1.0) > (width - 282) * 0.95  # 11pt면 넘침
+    cid, _ = _fit_char(_sz_cell(1, 0, "", width, 1600), amount, chars)
+    assert re.search(rf'<hh:charPr id="{cid}" height="1100"', chars.finish())  # 보통 칸은 예전처럼 11pt
+    cid, note = _fit_char(_sz_cell(1, 0, "", width, 1600), amount, chars, one_line=True)
+    h = int(re.search(rf'<hh:charPr id="{cid}" height="(\d+)"', chars.finish()).group(1))
+    assert "줄여" in note and h < 1100 and _text_width(amount, h, 1.0) <= (width - 282) * 0.95
 
 
 def test_unfinished_tracks_are_never_counted(monkeypatch):
@@ -1198,7 +1216,10 @@ def test_track_form_delivery_amount_and_total_cells(tmp_path: Path):
     rep = FillReport("x")
     vals = {(c.row, c.col): l[0] for c, l, _ in _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, rep)}
     assert vals[(2, 0)] == "2024.07.01" and vals[(2, 1)] == "가상 A" and vals[(2, 3)] == "345,678,912"
-    assert vals[(1, 1)] == "2건" and vals[(1, 3)] == "2,445,678,912원"
+    assert vals[(1, 1)] == "2건" and vals[(1, 3)] == "2,445,678,912"  # 합계도 숫자만(11/12)
+    # 금액 칸은 한 줄에 맞춰 글자를 줄이는 칸으로 표시(11/12 사용자 요청)
+    amount_cells = {c.start for c in _cells(xml, _spans(xml, "tbl")[0]) if c.col == 3 and c.row >= 1}
+    assert amount_cells <= rep.one_line
 
 
 def test_hangul_history_table_date_line_then_content(tmp_path: Path, monkeypatch):

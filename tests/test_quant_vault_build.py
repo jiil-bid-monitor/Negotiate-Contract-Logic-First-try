@@ -2682,3 +2682,29 @@ def test_track_cols_empty_columns_donate(tmp_path: Path):
     assert got[2] < w[2]  # 사업기간도 내줌(글자를 줄여 한 줄에)
     edits = _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, FillReport("x"))
     assert ["전시·", "체험"] in [lines for _c, lines, _k in edits]
+
+
+def test_track_text_wraps_by_word():
+    """11/12 사용자: 실적 표 사업명이 '공간디자' / '인 및'처럼 낱말 가운데서 줄이 바뀜, 업무수행 '실내건' / '축·' —
+    칸 너비에 들어가는 만큼 낱말 단위로 줄을 나눔, 낱말 하나가 칸보다 넓으면 그 칸 글자를 줄여 한 줄에(one_line)."""
+    from quantdocs.fill import FillReport, _cells, _spans, _wrap_track_cell
+
+    def tbl(w):
+        return ('<hp:tbl><hp:tr><hp:tc><hp:subList><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:subList>'
+                '<hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                f'<hp:cellSz width="{w}" height="1500"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc></hp:tr></hp:tbl>')
+    xml = tbl(9000)
+    c = _cells(xml, _spans(xml, "tbl")[0])[0]
+    rep = FillReport("x")
+    _c, lines, _k = _wrap_track_cell(xml, c, ["정선인재발전소 공간디자인 및 시설가구 제작설치"], False, rep)
+    assert lines == ["정선인재발전소", "공간디자인 및", "시설가구", "제작설치"], lines
+    assert c.start not in rep.one_line
+    xml = tbl(5300)
+    c = _cells(xml, _spans(xml, "tbl")[0])[0]
+    _c, lines, _k = _wrap_track_cell(xml, c, ["실내건축·", "인테리어"], False, rep)
+    assert lines == ["실내건축·", "인테리어"] and c.start in rep.one_line  # '실내건축·'가 칸보다 조금 넓어 글자를 줄임
+    rep2 = FillReport("x")
+    _c, lines, _k = _wrap_track_cell(xml, c, ["관광상품개발사업전시분야제작설치"], False, rep2)
+    assert c.start not in rep2.one_line  # 9pt로도 안 들어가는 긴 낱말은 줄이지 않음(칸 끝에서 넘어감)
+    _c, lines, _k = _wrap_track_cell(xml, c, ["3,610,090,000"], False, FillReport("x"))
+    assert lines == ["3,610,090,000"]  # 숫자 칸은 그대로

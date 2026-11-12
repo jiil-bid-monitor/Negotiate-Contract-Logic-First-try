@@ -1330,6 +1330,45 @@ def _apply_marks(xml: str, chars: "_Chars | None") -> str:
 _NUMERIC_LINE = re.compile(r"[\d,.\-~]+")
 
 
+def _wrap_track_cell(xml: str, c, lines: list[str], keep: bool, rep: FillReport, chars: "_Chars | None" = None) -> tuple:
+    """실적 표 글 칸(사업명·업무수행 내용)을 낱말 단위로 줄을 나눠 넣음 — 한글은 칸 끝에서 글자 단위로 잘려
+    '공간디자' / '인 및'처럼 낱말 가운데가 갈렸음(11/12 사용자). 칸 너비(열 넓히기 뒤)에 11pt로 들어가는 만큼 낱말을 이어 붙이고,
+    낱말 하나가 칸보다 넓으면('실내건축·') 그 칸 글자를 줄여 한 줄에(`rep.one_line`)."""
+    if keep or not lines or all(_NUMERIC_LINE.fullmatch(x.strip() or "0") for x in lines):
+        return c, lines, keep
+    seg = xml[c.start:c.end]
+    sizes = re.findall(r'<(?:[\w.-]+:)?cellSz\b[^>]*\bwidth="(\d+)"', seg)
+    tag = re.findall(r'<(?:[\w.-]+:)?cellMargin\b[^>]*>', seg)
+    mg = dict(re.findall(r'\b(left|right)="(\d+)"', tag[-1] if tag else ""))
+    if not sizes:
+        return c, lines, keep
+    room = (int(sizes[-1]) - int(mg.get("left", 141)) - int(mg.get("right", 141))) * 0.95
+    height = FILL_HEIGHT
+    if chars is not None:  # 이름표(머리글) 글자가 11pt보다 크면 값도 그 크기로 들어감(11/10) — 그 크기로 셈
+        height = max(FILL_HEIGHT, _label_face(xml, c, chars)[1] or 0)
+    out: list[str] = []
+    too_wide = False
+    for line in lines:
+        cur = ""
+        for word in line.split():
+            w = _text_width(word, height, 1.0)
+            # 낱말이 칸보다 조금 넓으면('실내건축·') 글자를 줄여 한 줄에 — 9pt로도 안 들어가는 긴 낱말(띄어쓰기 없는 사업명)은
+            # 줄이지 않고 칸 끝에서 넘어가게 둠(7pt까지 작아져 못 읽음)
+            if w > room and _text_width(word, 900, 1.0) <= room:
+                too_wide = True
+            trial = f"{cur} {word}" if cur else word
+            if cur and _text_width(trial, height, 1.0) > room:
+                out.append(cur)
+                cur = word
+            else:
+                cur = trial
+        if cur:
+            out.append(cur)
+    if too_wide:
+        rep.one_line.add(c.start)
+    return c, out or lines, keep
+
+
 def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str:
     """실적 표 값이 11pt로 읽기 좋게 들어가도록 열 너비를 다시 나눔 — 표 전체 너비는 그대로.
     받는 열(먼저 받는 순서): ① 금액(한 줄 — 11/12 사용자: 줄일 거면 연도를 줄이고 금액은 크게) ② '단독'·'전시·체험'처럼 짧은 낱말
@@ -1979,7 +2018,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
                 agent_rows = _agent_rows(xml, cells)  # 위임장 '대리인' 칸이 세로로 묶은 줄 — 주소는 비움(11/05 사용자 요청)
                 if tracks:
-                    track_edits = _fill_tracks(xml, cells, tracks, rep)
+                    track_edits = [_wrap_track_cell(xml, c, lines, keep, rep, chars)
+                                   for c, lines, keep in _fill_tracks(xml, cells, tracks, rep)]
                     edits += track_edits
                     track_marks += [escape(lines[0]) for _c, lines, _k in track_edits if lines and len(lines[0]) >= 4]
                 if self_scores:

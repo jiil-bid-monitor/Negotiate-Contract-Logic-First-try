@@ -2677,7 +2677,7 @@ def test_track_cols_empty_columns_donate(tmp_path: Path):
     got = {c.col: int(re.findall(r'width="(\d+)"', out[c.start:c.end])[-1]) for c in _cells(out, _spans(out, "tbl")[0]) if c.row == 0}
     assert sum(got.values()) == sum(w)  # 표 너비 그대로
     assert got[3] - 282 >= _text_width("3,610,090,000", FILL_HEIGHT, 1.0)  # 금액은 11pt 한 줄
-    assert got[1] - 282 >= _text_width(tracks[0]["사업명"], FILL_HEIGHT, 1.0) / 2 * 0.95  # 사업명 두 줄 안
+    assert got[1] - 282 >= _text_width(tracks[0]["사업명"], FILL_HEIGHT, 1.0) / 2 * 0.9  # 사업명 두 줄 남짓(분야 '전시·'도 한 줄에 들어갈 만큼 먼저 받음)
     assert got[4] < w[4] and got[5] < w[5]  # 비는 칸이 내줌
     assert got[2] < w[2]  # 사업기간도 내줌(글자를 줄여 한 줄에)
     edits = _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, FillReport("x"))

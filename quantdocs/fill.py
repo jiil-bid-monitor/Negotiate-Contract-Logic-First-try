@@ -30,6 +30,7 @@ class FillReport:
     overflow_names: list[str] = field(default_factory=list)  # 그 실적 이름(금액이 작아 빠진 것)
     self_rows: list[list[str]] = field(default_factory=list)  # 자기평가표에 넣은 점수(항목·배점·점수·근거·확인할 것)
     face: str = ""  # 이 서식에 채운 글의 한글 글꼴 이름(첫 값 기준) — 다음 서식들도 이 글꼴로(11/10 통합서식 글꼴 통일)
+    word_cells: set[int] = field(default_factory=set)  # 실적 표 글 칸 — 내어쓰기 없는 문단 모양으로(11/12 당진: 넘친 줄이 1.9cm 안쪽에서 시작)
     one_line: set[int] = field(default_factory=set)  # 한 줄에 맞춰 글자를 줄일 칸(cell.start) — 실적 금액(11/12 사용자 요청)
 
 
@@ -1047,6 +1048,22 @@ class _Chars:
             self.added_hang[key] = self._next_para_id()
         return self.added_hang[key]
 
+    def no_indent(self, pid: str) -> str:
+        """pid 문단 모양에서 들여쓰기·내어쓰기를 뺀(정렬은 그대로) 어절 단위 줄바꿈 사본 id — 실적 표 글 칸(11/12). 이미 둘 다 없으면 pid."""
+        base = self._para(pid) and pid if pid in self.paras else next(
+            (o for o, n in list(self.added_para.items()) + list(self.added_left.items()) if n == pid), None)
+        if base is None:
+            return pid
+        intent, _left = self.margins(base)
+        if not intent and 'breakNonLatinWord="BREAK_WORD"' not in self.paras[base]:
+            return pid
+        if pid != base:  # 가운데·왼쪽 정렬로 바꾼 사본이면 그 정렬은 사본 쪽 — 원래 모양에서 다시 만들지 않고 그대로 둠
+            return pid
+        key = (pid, 0)
+        if key not in self.added_hang:
+            self.added_hang[key] = self._next_para_id()
+        return self.added_hang[key]
+
     def left_hang(self, pid: str, width: int) -> str:
         """pid 문단 모양을 왼쪽 정렬 + 내어쓰기 width로 바꾼 사본 id — 연혁 칸(11/11 사용자 요청: 가운데 정렬이라 날짜가 들쭉날쭉,
         둘째 줄은 날짜 뒤 내용 시작 위치에 맞춰). 모르는 모양이면 pid 그대로."""
@@ -1176,7 +1193,9 @@ class _Chars:
                 return re.sub(r'\bhorizontal="\w+"', f'horizontal="{how}"', re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1))
             extra = "".join(aligned(pid, new, "CENTER") for pid, new in self.added_para.items())
             extra += "".join(aligned(pid, new, "LEFT") for pid, new in self.added_left.items())
-            extra += "".join(self._hang_block(pid, w, new) for (pid, w), new in self.added_hang.items())
+            extra += "".join((self._hang_block(pid, w, new) if w else
+                              self._hang_block(pid, w, new).replace('breakNonLatinWord="BREAK_WORD"', 'breakNonLatinWord="KEEP_WORD"'))
+                             for (pid, w), new in self.added_hang.items())
             extra += "".join(re.sub(r'\bhorizontal="\w+"', 'horizontal="LEFT"', self._hang_block(pid, w, new), count=1)
                              for (pid, w), new in self.added_left_hang.items())
             n = len(self.added_para) + len(self.added_hang) + len(self.added_left) + len(self.added_left_hang)
@@ -1234,6 +1253,22 @@ def _text_width(text: str, height: int, ratio: float) -> float:
             w += 0.55
         else:
             w += 0.4
+    return w * height
+
+
+def _cjk_width(text: str, height: int) -> float:
+    """실적 표 줄 나눔용 너비 어림 — 휴먼명조 기준으로 넉넉히: 한글·가운뎃점(·)·전각 1, 빈칸 0.5(글꼴 빈칸 꺼짐 = 글자 크기의 절반),
+    숫자·영문 0.55, 그 밖의 부호 0.5. `_text_width`는 '·'를 0.4로 봐서 '실내건축·'가 들어간다고 셈 → 한글에선 '실내건/축·'(11/12)."""
+    w = 0.0
+    for ch in text:
+        if "가" <= ch <= "힣" or "一" <= ch <= "鿿" or "　" <= ch <= "ヿ" or "＀" <= ch <= "￯" or ch in "·ㆍ•∙":
+            w += 1.0
+        elif ch == " ":
+            w += 0.5
+        elif ch.isalnum():
+            w += 0.55
+        else:
+            w += 0.5
     return w * height
 
 
@@ -1351,13 +1386,13 @@ def _wrap_track_cell(xml: str, c, lines: list[str], keep: bool, rep: FillReport,
     for line in lines:
         cur = ""
         for word in line.split():
-            w = _text_width(word, height, 1.0)
+            w = _cjk_width(word, height)
             # 낱말이 칸보다 조금 넓으면('실내건축·') 글자를 줄여 한 줄에 — 9pt로도 안 들어가는 긴 낱말(띄어쓰기 없는 사업명)은
             # 줄이지 않고 칸 끝에서 넘어가게 둠(7pt까지 작아져 못 읽음)
-            if w > room and _text_width(word, 900, 1.0) <= room:
+            if w > room and _cjk_width(word, 900) <= room:
                 too_wide = True
             trial = f"{cur} {word}" if cur else word
-            if cur and _text_width(trial, height, 1.0) > room:
+            if cur and _cjk_width(trial, height) > room:
                 out.append(cur)
                 cur = word
             else:
@@ -1366,10 +1401,11 @@ def _wrap_track_cell(xml: str, c, lines: list[str], keep: bool, rep: FillReport,
             out.append(cur)
     if too_wide:
         rep.one_line.add(c.start)
+    rep.word_cells.add(c.start)
     return c, out or lines, keep
 
 
-def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str:
+def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict], chars: "_Chars | None" = None) -> str:
     """실적 표 값이 11pt로 읽기 좋게 들어가도록 열 너비를 다시 나눔 — 표 전체 너비는 그대로.
     받는 열(먼저 받는 순서): ① 금액(한 줄 — 11/12 사용자: 줄일 거면 연도를 줄이고 금액은 크게) ② '단독'·'전시·체험'처럼 짧은 낱말
     (낱말이 칸보다 넓으면 글자가 겹쳐 보임) ③ 사업명 같은 글(두 줄 안에) ④ 사업기간(남는 몫만 — 모자라면 글자를 줄여 한 줄에, `rep.one_line`).
@@ -1378,9 +1414,13 @@ def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str
     cells = _cells(xml, tbl)
     probe = FillReport("x")
     edits = _fill_tracks(xml, cells, tracks, probe)
+    value_h = FILL_HEIGHT  # 머리글이 11pt보다 크면 값도 그 크기로 들어감(11/10) — 그 크기로 셈(11/12 당진: 12pt)
+    if chars is not None:
+        for c, _l, _k in edits[:12]:
+            value_h = max(value_h, _label_face(xml, c, chars)[1] or 0)
 
-    def tw(x: str, h: int = FILL_HEIGHT) -> float:
-        return _text_width(x, h, 1.0)
+    def tw(x: str, h: int | None = None) -> float:
+        return _cjk_width(x, h or value_h)
 
     def width(seg: str) -> int | None:
         m = re.findall(r'<(?:[\w.-]+:)?cellSz\b[^>]*\bwidth="(\d+)"', seg)
@@ -1428,16 +1468,20 @@ def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str
             marg[c.col] = max(marg.get(c.col, 0), margin(seg))
             if c.row not in rows_filled and c.text.strip():
                 word = max((tw(x, 1000) for x in re.split(r"\s+", c.text.strip()) if x), default=0.0)
-                # 머리글의 긴 낱말('고(단독/공동)')은 줄이 나뉘어도 됨 — 4글자 너비까지만 지킴('연번'·'전화번호'는 한 줄에)
-                head_need[c.col] = max(head_need.get(c.col, 0.0), min(word, 4000.0))
+                # 머리글의 긴 낱말('고(단독/공동)'·'전화번호')은 두 줄로 나뉘어도 됨 — 3글자 너비까지만 지킴, 비는 열은 2글자(11/12 당진:
+                # 값이 12pt라 금액·분야가 더 넓어야 해서 사업명 몫이 모자랐음)
+                head_need[c.col] = max(head_need.get(c.col, 0.0), word)
     if not base:
         return xml
-    def want_w(col: int, h: int = FILL_HEIGHT) -> int:
-        return int(need[col][1] * h / FILL_HEIGHT * 1.06) + marg.get(col, 282)
+    def want_w(col: int, h: int = 0) -> int:
+        h = h or value_h
+        return int(need[col][1] * h / value_h * 1.06) + marg.get(col, 282)
     # 내주는 열과 내줄 수 있는 너비: ① 비는 열(머리글이 들어갈 만큼, 절반까지) ② 값이 칸보다 좁은 열의 남는 너비(원래 너비의 60%는 남김)
     # ③ 사업기간 — 9pt로 한 줄에 들어갈 만큼까지(남는 몫이 모자라면 글자를 줄여 한 줄에)
     cap: dict[int, int] = {}
     order: dict[int, int] = {}
+    for col in head_need:
+        head_need[col] = min(head_need[col], 3000.0 if col in filled else 2000.0)
     for col, w in base.items():
         if col not in filled:
             cap[col], order[col] = max(0, min(int(w * 0.5), int(w - head_need.get(col, 0.0) * 1.06 - marg.get(col, 282)))), 0
@@ -1998,11 +2042,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             track_marks: list[str] = []  # 실적을 넣은 칸의 글 — 그 표가 한 쪽보다 길면 쪽에서 나뉘게(11/12)
             hist_at: set[int] = set()  # 연혁을 넣은 칸 시작 위치 — 왼쪽 정렬 + 날짜 뒤에 맞춘 내어쓰기(11/11)
             rep.one_line.clear()  # 칸 위치는 구역마다 다름
+            rep.word_cells.clear()
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
                 for i in range(len(_spans(xml, "tbl"))):
                     xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
                 for i in range(len(_spans(xml, "tbl"))):  # 사업기간·금액 열이 좁으면 가장 넓은 열에서 너비를 받아 옴(11/12)
-                    xml = _widen_track_cols(xml, _spans(xml, "tbl")[i], tracks)
+                    xml = _widen_track_cols(xml, _spans(xml, "tbl")[i], tracks, chars)
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
@@ -2183,6 +2228,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     continue
                 if cell.start in para_override:
                     seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")\d+(")', rf"\g<1>{para_override[cell.start]}\2", seg, count=1)
+                elif chars is not None and cell.start in rep.word_cells:
+                    # 실적 표 글 칸 — 원래 문단의 내어쓰기(당진 −1.9cm)를 빼고 어절 단위 줄바꿈인 사본(넘친 줄이 안쪽에서 시작하지 않게, 11/12)
+                    seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")(\d+)(")',
+                                 lambda m: m.group(1) + chars.no_indent(chars.left(m.group(2))) + m.group(3), seg, count=1)
                 elif chars is not None:  # 양쪽·배분 정렬 칸은 왼쪽 정렬 사본으로 — 넘친 줄의 글자 사이가 벌어지지 않게
                     seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")(\d+)(")', lambda m: m.group(1) + chars.left(m.group(2)) + m.group(3),
                                  seg, count=1)

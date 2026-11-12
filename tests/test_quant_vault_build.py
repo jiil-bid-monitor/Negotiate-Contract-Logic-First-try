@@ -2459,3 +2459,44 @@ def test_credit_grade_beside_merged_kind_cell_and_penalty_only_item(tmp_path: Pa
     v = vault.Vault({}, info={"신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"})
     got = {r.label.split()[0]: it.score for r, it in selfscore.score_form(form, [], v, _dt.date(2026, 11, 1))}
     assert got == {"경영상태": 4.75, "사회적": 0.0}
+
+
+def test_filled_value_drops_tight_letter_spacing():
+    """11/12 당진 실적 표 첫 줄 '단독'이 원래 칸 글자 모양의 자간 -34%를 물려받아 글자가 겹쳐 보임(다른 줄은 자간 0이라 정상)
+    → 채운 값의 글자 모양은 자간이 -10%보다 좁으면 0으로. 조금 좁힌 자간(-5%)은 그대로."""
+    from quantdocs.fill import _Chars
+
+    def shape(i, sp):
+        return (f'<hh:charPr id="{i}" height="1000" textColor="#000000"><hh:fontRef hangul="0" latin="0"/>'
+                f'<hh:spacing hangul="{sp}" latin="{sp}" hanja="{sp}"/></hh:charPr>')
+    header = ('<hh:head><hh:fontfaces><hh:fontface lang="HANGUL"><hh:font id="0" face="휴먼명조"/></hh:fontface>'
+              '<hh:fontface lang="LATIN"><hh:font id="0" face="휴먼명조"/></hh:fontface></hh:fontfaces>'
+              f'<hh:charProperties itemCnt="2">{shape(0, -34)}{shape(1, -5)}</hh:charProperties></hh:head>')
+    chars = _Chars(header)
+    tight, mild = chars.variant("0", 1100), chars.variant("1", 1100)
+    out = chars.finish()
+    block = lambda cid: re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', out, re.S).group(0)
+    assert 'hangul="0" latin="0" hanja="0"/>' in block(tight).split("<hh:spacing")[1]
+    assert 'hangul="-5"' in block(mild)
+    assert 'hangul="-34"' in block("0")  # 원래 모양(서식 글자)은 그대로
+
+
+def test_track_text_columns_widen_for_readability():
+    """11/12 당진 실적 표 — '실내건축·인테리어'가 좁은 칸에서 세 줄로 잘림 → 글은 두 줄 안에, '단독' 같은 짧은 낱말은 한 줄에 들어가게
+    열을 넓히고 가장 넓은 열(사업명)을 좁힘. 표 전체 너비는 그대로."""
+    from quantdocs.fill import FILL_HEIGHT, _cells, _spans, _text_width, _widen_track_cols
+
+    def cell(col, row, text, w):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                f'<hp:cellSz width="{w}" height="1500"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+    heads = ["연번", "사업명", "계약금액(원)", "내용", "비고(단독/공동)"]
+    widths = [2000, 24000, 9000, 3000, 1500]
+    rows = [[cell(i, 0, h, widths[i]) for i, h in enumerate(heads)]] + [[cell(i, r, "", widths[i]) for i in range(5)] for r in (1, 2)]
+    xml = "<hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    tracks = [{"사업명": "가상 사업", "분야": "실내건축·인테리어", "계약금액(원)": 100_000_000}]
+    out = _widen_track_cols(xml, _spans(xml, "tbl")[0], tracks)
+    got = {c.col: int(re.findall(r'width="(\d+)"', out[c.start:c.end])[-1]) for c in _cells(out, _spans(out, "tbl")[0]) if c.row == 0}
+    assert got[3] - 282 >= _text_width("실내건축·인테리어", FILL_HEIGHT, 1.0) / 2  # 두 줄 안
+    assert got[4] - 282 >= _text_width("단독", FILL_HEIGHT, 1.0)  # 한 줄
+    assert got[1] < 24000 and sum(got.values()) == sum(widths)

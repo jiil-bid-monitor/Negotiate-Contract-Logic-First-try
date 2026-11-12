@@ -811,6 +811,11 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         if not key and seal and re.fullmatch(r"신청(?:인|자)|제안(?:자|인)|입찰(?:자|인)|응모(?:자|인)", _sq(label)):
             key = "대표자"  # 서명 줄 '신 청 인 :        (인)'(11/10 경남교육청 입찰참가신청서) — (인)이 붙은 줄만, 대표자 이름
         value = _value(key, vault) if key else ""
+        if not key and _sq(label) == "생년월일" and any(
+                n - 3 <= n2 < n and (_label_key(l2) == "대표자" or _BARE_LABELS.get(l2) == "대표자") for _s2, _e2, l2, _sl, _b2, n2 in cands):
+            # 서명 묶음 '대 표 자 :  (인)' 바로 아래 '생 년 월 일 :'(11/12 당진 서식) = 대표자 생년월일 — 주민등록번호 앞 6자리로(표 칸 규칙과 같게)
+            value = _birth(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
+            key = "생년월일"
         if not value:
             continue
         seg = _after_colon(xml[s:e], value, seal)

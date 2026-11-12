@@ -1214,7 +1214,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .award-act button.award-main { background: var(--brand); color: var(--on-brand); border-color: var(--brand); font-weight: 600; }
 .award-act button:disabled { opacity: .45; cursor: not-allowed; }
 .award-act .qual button:disabled { pointer-events: none; } /* 꺼진 버튼 위에서도 설명 상자가 뜨게 */
-.award-act .qtip { white-space: normal; }
+/* 표가 가로 스크롤 틀(.scroll) 안이라 설명 상자가 틀 밖으로 나가면 스크롤 막대가 생겼다 사라지며 화면이 흔들림 → 화면 기준(fixed)으로 띄움(placeAwardTip) */
+.award-act .qtip { position: fixed; white-space: normal; word-break: keep-all; }
+.award-act .qtip p.lead { margin: 0; }
 .award-detail > td { background: var(--bg); padding: 12px 14px 16px; }
 .award-panel { display: grid; gap: 12px; min-width: 0; }
 .award-path { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -3729,7 +3731,7 @@ $("incPre").onchange = () => { saveLiveOpts(); applyFilters(); };
 function placeTip(ev) {
   const badge = ev.target.closest?.(".qual");
   const tip = badge?.querySelector(".qtip");
-  if (!tip || badge.contains(ev.relatedTarget)) return; // 배지 안에서 움직일 때마다 다시 재면 깜빡인다
+  if (!tip || badge.contains(ev.relatedTarget) || badge.closest(".award-act")) return; // 배지 안에서 움직일 때마다 다시 재면 깜빡인다
   tip.classList.remove("up");
   requestAnimationFrame(() => {
     const b = badge.getBoundingClientRect();
@@ -3739,6 +3741,17 @@ function placeTip(ev) {
 }
 document.addEventListener("mouseover", placeTip);
 document.addEventListener("focusin", placeTip);
+/** 낙찰 후 서류 버튼의 설명 상자 — 화면 기준 위치(버튼 오른쪽 끝에 맞추고, 아래가 모자라면 위로). 그리기 전에 바로 잡아 깜빡이지 않게 */
+function placeAwardTip(ev) {
+  const badge = ev.target.closest?.(".award-act .qual");
+  const tip = badge?.querySelector(".qtip");
+  if (!tip || badge.contains(ev.relatedTarget)) return;
+  const b = badge.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(8, Math.min(b.right - w, innerWidth - w - 8)) + "px";
+  tip.style.top = (b.bottom + 6 + h > innerHeight && b.top - 6 - h > 0 ? b.top - 6 - h : b.bottom + 6) + "px";
+}
+document.addEventListener("mouseover", placeAwardTip);
+document.addEventListener("focusin", placeAwardTip);
 
 $("load").onclick = () => { loadParticipation(); loadNotices(false); };
 $("refresh").onclick = () => loadNotices(true);
@@ -3791,7 +3804,7 @@ function renderAward(items) {
     // 빼기는 다른 업체 낙찰·잘못 넣은 공고 정리용이라 늘 씀
     const rank = v.status === "대기" && v.opening ? v.opening.rank : null;
     const stage = v.qualOnly ? ` data-award-stage="qual"` : "";
-    const off = (label, why) => `<span class="qual" tabindex="0"><button type="button" disabled>${label}</button>${qtip(label, `<p class="lead">${why}</p>`).replace('class="qtip"', 'class="qtip right"')}</span>`;
+    const off = (label, why) => `<span class="qual" tabindex="0"><button type="button" disabled>${label}</button>${qtip(label, `<p class="lead">${why.replace(/\. /g, ".<br>")}</p>`)}</span>`;
     const qualWhy = v.private ? "수의계약 공고 — 적격심사 없이 바로 계약합니다. 낙찰이 확인되면 '낙찰 서류 만들기'를 쓰세요."
       : v.folder ? "이미 폴더를 만들었습니다 — '서류 현황'에서 확인하세요."
       : won ? "이미 낙찰이 확인됐습니다 — '낙찰 서류 만들기'가 적격심사 폴더까지 함께 만듭니다."

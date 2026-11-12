@@ -1208,6 +1208,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   .topbar, .tabbar, .me-note, footer, #jumpNav, .side-links, .calc-lookup, .calc-btns { display: none !important; }
 }
 /* 낙찰 후 서류 — 서류 현황 펼침(11/11) */
+/* 결과 글이 버튼 옆에 생겼다 사라지면 입력 칸·버튼이 좌우로 밀림 → 아래 줄에 자리 고정(11/12) */
+#awardMsg { flex: 0 0 100%; min-height: 1.5em; }
 .award-table td { vertical-align: top; }
 .award-act { white-space: nowrap; }
 .award-act button { margin: 0 4px 4px 0; }

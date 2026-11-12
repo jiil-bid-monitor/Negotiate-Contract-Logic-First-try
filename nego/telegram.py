@@ -382,16 +382,17 @@ def send_report(
     return send_messages(config, messages, html_path if has_open else None, session)
 
 
-def send_dev_alert(text: str, session: requests.Session | None = None) -> list[str] | None:
-    """개발자 알림 방(TELEGRAM_DEV_CHAT_ID)에 글자 그대로 보낸다. 설정이 없으면 None(보내지 않음)."""
-    config = TelegramConfig.from_env("TELEGRAM_DEV_CHAT_ID")
+def send_dev_alert(text: str, session: requests.Session | None = None, chat_env: str = "TELEGRAM_DEV_CHAT_ID") -> list[str] | None:
+    """개발자 알림 방(TELEGRAM_DEV_CHAT_ID)에 글자 그대로 보낸다. 설정이 없으면 None(보내지 않음).
+    chat_env="TELEGRAM_CHAT_ID"면 담당자 방으로(1억 미만 아침 안내)."""
+    config = TelegramConfig.from_env(chat_env)
     if config is None:
         return None
     from .http_client import mask_service_key
 
     body = html.escape(mask_service_key(text))[:MESSAGE_LIMIT]
     errors = send_messages(config, [body], session=session)
-    for note in migration_notes(config, "TELEGRAM_DEV_CHAT_ID"):
+    for note in migration_notes(config, chat_env):
         print(f"::warning::{note}")
     return errors
 

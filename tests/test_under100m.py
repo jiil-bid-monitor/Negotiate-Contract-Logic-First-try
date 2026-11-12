@@ -565,3 +565,22 @@ class RunAlertTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AnnounceTextTest(unittest.TestCase):
+    def test_only_todays_made_folders(self):
+        from under100m.__main__ import announce_text
+
+        state = {"notices": {
+            "R1-000": {"status": "made", "at": "2026-11-12T08:03:00", "folder": "[1억미만] R1-000_가", "name": "가 공사", "institution": "정선군",
+                       "amount": 85000000, "deadline": "2026-11-18 18:00 (입찰 마감)"},
+            "R2-000": {"status": "made", "at": "2026-11-11T08:03:00", "folder": "[1억미만] R2-000_나"},
+            "R3-000": {"status": "over", "at": "2026-11-12T08:03:00"},
+            "R4-000": {"status": "made", "at": "2026-11-12T08:03:00", "folder": "x", "replaced_by": "R4-001"}}}
+        text = announce_text(state, "2026-11-12", "공유 폴더")
+        self.assertIn("새 공고 폴더 1건 (11/12)", text)
+        self.assertIn("가 공사", text)
+        self.assertIn("85,000,000원", text)
+        self.assertNotIn("R2-000", text)
+        self.assertNotIn("R4-000", text)
+        self.assertEqual(announce_text(state, "2026-11-13"), "")

@@ -587,6 +587,7 @@ def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None
             done[previous["key"]] = {**done[previous["key"]], "folder": folder.name, "replaced_by": key}
         done[key] = {"status": "made", "folder": folder.name, "amount": amount, "source": source, "files": files,
                      "title": title_key(candidate.notice), "institution": candidate.notice.demand_institution or candidate.notice.notice_institution,
+                     "name": candidate.notice.title, "deadline": deadline_of(candidate),  # 담당자 방 아침 안내용(announce_text)
                      "at": now.isoformat(timespec="seconds")}
         result["made"].append(folder.name)
         save_state(state_path, state)  # 알림이 실패해도 같은 폴더를 또 만들지 않게 먼저 저장
@@ -601,8 +602,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state", default=os.environ.get("UNDER100M_STATE", ""), help="처리 기록 파일")
     parser.add_argument("--days", type=int, default=3, help="최근 며칠 게시분을 볼지")
     parser.add_argument("--no-notify", action="store_true", help="텔레그램 알림 안 보냄")
+    parser.add_argument("--announce", action="store_true", help="수집하지 않고, 오늘 만든 폴더를 담당자 방(TELEGRAM_CHAT_ID)에 알림")
+    parser.add_argument("--where", default="", help="--announce 글에 적을 폴더 위치")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%m-%d %H:%M")
+    if args.announce:
+        return announce(Path(args.state), args.where)
     if not args.out:
         print("결과 폴더가 없습니다 — --out 또는 UNDER100M_OUT", file=sys.stderr)
         return 2
@@ -632,6 +637,37 @@ def main(argv: list[str] | None = None) -> int:
     log.info("끝 — 새 폴더 %d건, 1억 이상 %d건, 실패 %d건", len(result["made"]), result["over"], len(result["failed"]))
     notify(end_text(result, _took(started)))
     return 1 if result["failed"] else 0
+
+
+def announce_text(state: dict, today: str, where: str = "") -> str:
+    """오늘 만든(갱신한) 1억 미만 공고 폴더 안내 글 — 없으면 빈 글(보내지 않음)."""
+    made = [(key, v) for key, v in sorted(state.get("notices", {}).items())
+            if v.get("status") == "made" and str(v.get("at", "")).startswith(today) and not v.get("replaced_by")]
+    if not made:
+        return ""
+    lines = [f"[1억 미만] 오늘 새 공고 폴더 {len(made)}건 ({today[5:7]}/{today[8:10]})"]
+    for i, (key, v) in enumerate(made, 1):
+        lines += ["", f"{i}. {v.get('name') or v.get('folder')}",
+                  " · ".join(x for x in (v.get("institution"), f"사업금액 {won(v.get('amount'))}", f"마감 {v['deadline']}" if v.get("deadline") else "") if x),
+                  f"공고번호 {key} · 폴더: {v.get('folder')}"]
+    if where:
+        lines += ["", f"폴더 위치: {where}"]
+    return "\n".join(lines)
+
+
+def announce(state_path: Path, where: str) -> int:
+    from nego.telegram import send_dev_alert
+
+    text = announce_text(load_state(state_path), f"{datetime.now():%Y-%m-%d}", where)
+    if not text:
+        log.info("오늘 새 폴더 없음 — 담당자 방 안내 안 보냄")
+        return 0
+    errors = send_dev_alert(text, chat_env="TELEGRAM_CHAT_ID")
+    if errors is None or errors:
+        log.warning("담당자 방 안내 실패: %s", "TELEGRAM_BOT_TOKEN·TELEGRAM_CHAT_ID 없음" if errors is None else html.escape(str(errors))[:200])
+        return 1
+    log.info("담당자 방에 안내 보냄")
+    return 0
 
 
 def _took(started: datetime) -> str:

@@ -1870,7 +1870,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     xml = _widen_track_cols(xml, _spans(xml, "tbl")[i], tracks)
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
-            none_rule = re.search(r"(?:없을|없는)\s*(?:경우|때).{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
+            # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
+            none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
             for tbl in _spans(xml, "tbl"):
                 cells = _cells(xml, tbl)
                 # 직접 기입 서식(실적증명서 등)은 표 안을 건드리지 않음 — 단 '신청인' 묶음 줄(업체명·대표자·사업자번호·소재지·전화)은 채움
@@ -2015,6 +2016,28 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         first = min(body, key=lambda c: (c.row, c.col))
                         edits.append((first, ["해당 없음"], False))
                         rep.filled.append("표가 비어 '해당 없음' 기재 — 해당 사항이 있으면 고칠 것")
+                    elif head and any(_sq(c.text) for c in head) and body:
+                        # 줄 이름표(임금체불·제재처분 …) 뒤 값 칸이 모두 빈 표 — 줄마다 첫 빈 칸에 '해당 없음'(11/12 당진 서식 10호 행정처분 확인서)
+                        rows: dict[int, list[Cell]] = {}
+                        for c in body:
+                            rows.setdefault(c.row, []).append(c)
+                        picks = []
+                        for r in sorted(rows):
+                            line = sorted(rows[r], key=lambda c: c.col)
+                            blanks = [c for c in line if c.blank]
+                            labels = [c for c in line if not c.blank]
+                            if not blanks:
+                                continue  # 머리글 줄
+                            if not labels and r not in {c2.row + k for c2 in body if not c2.blank for k in range(c2.rowspan)}:
+                                picks = []
+                                break  # 이름표 없는 빈 줄 — 목록 표로 보고 손대지 않음
+                            if labels and max(c.col for c in labels) > min(c.col for c in blanks):
+                                picks = []
+                                break  # 값이 이미 적힌 줄
+                            picks.append(blanks[0])
+                        if picks:
+                            edits += [(c, ["해당 없음"], False) for c in picks]
+                            rep.filled.append(f"표 {len(picks)}줄에 '해당 없음' 기재 — 해당 사항이 있으면 고칠 것")
             for cell, lines, keep in sorted(edits, key=lambda e: e[0].start, reverse=True):
                 seg = xml[cell.start:cell.end]
                 if lines is None:  # 칸 안 빈자리 채우기 — 바꾼 칸 그대로

@@ -160,7 +160,8 @@ def reply(text: str, run: dict | None, now: datetime, reports: dict[str, dict] |
     if cmd == "today":
         return today_reply(reports or {}, now)
     if cmd == "docs":
-        return docexpiry.docs_reply(docexpiry.read_docs(docexpiry.docs_dir()), now.date())
+        return docexpiry.docs_reply(docexpiry.read_docs(docexpiry.docs_dir()), now.date(),
+                                    docexpiry.load_states())
     if cmd in ("help", "start"):
         return "\n".join(f"/{name} — {desc}" for name, desc in COMMANDS)
     return None
@@ -202,13 +203,26 @@ class TelegramBot:
             return 0
         self.checked_day = now.date()
         sent = docexpiry.load_sent(self.sent_path)
-        text, keys = docexpiry.due_alert(docexpiry.read_docs(docexpiry.docs_dir()), now.date(), sent)
+        docs, applying = docexpiry.read_docs(docexpiry.docs_dir()), docexpiry.load_states()
+        text, keys = docexpiry.due_alert(docs, now.date(), sent, applying)
         if not text:
             return 0
+        markup = docexpiry.apply_buttons(docs, now.date(), applying)
         for chat in self.alert_chats:
-            self._api("sendMessage", chat_id=chat, text=text, parse_mode="HTML")
+            self._api("sendMessage", chat_id=chat, text=text, parse_mode="HTML", **({"reply_markup": markup} if markup else {}))
         docexpiry.save_sent(self.sent_path, sent | set(keys))
         return len(self.alert_chats)
+
+    def handle_apply(self, cb: dict) -> bool:
+        """서류 '상태 표시' 버튼 — 신청해야 함·신청 중·지우기를 묻고 적는다(2026-11-12 사용자 요청)."""
+        chat = str(((cb.get("message") or {}).get("chat") or {}).get("id", ""))
+        if not re.match(r"^[as]:[0-9a-f]{12}", cb.get("data") or "") or chat not in self.chats:
+            return False
+        self._api("answerCallbackQuery", callback_query_id=cb["id"])
+        text, markup = docexpiry.apply_callback(docexpiry.read_docs(docexpiry.docs_dir()), cb["data"]) or (
+            "그 서류는 이미 새 서류로 바뀌었습니다 — /docs 로 확인해 주세요.", None)
+        self._api("sendMessage", chat_id=chat, text=text, parse_mode="HTML", **({"reply_markup": markup} if markup else {}))
+        return True
 
     @classmethod
     def from_env(cls, latest_run: Callable[[], dict | None], reports: Callable[[], dict] = dict) -> "TelegramBot | None":
@@ -240,7 +254,7 @@ class TelegramBot:
         for u in updates or []:
             self.offset = max(self.offset, u["update_id"] + 1)
             if u.get("callback_query"):
-                answered += self.uploader.handle_callback(u["callback_query"])
+                answered += self.handle_apply(u["callback_query"]) or self.uploader.handle_callback(u["callback_query"])
                 continue
             msg = u.get("message") or {}
             if self.uploader.handle_message(msg):
@@ -252,8 +266,13 @@ class TelegramBot:
                 # 등록 안 된 방 — 공고 내용 대신 방 ID만 알려 준다(NAS .env TELEGRAM_CHAT_ID에 넣으면 답함)
                 text = f"이 대화방은 명령어가 꺼져 있습니다.\n대화방 ID: <code>{html.escape(chat)}</code> — 관리자에게 알려 주세요."
             if text:
+                extra = {}
+                if chat in self.chats and re.match(r"^/docs\b", (msg.get("text") or "").strip()):  # /docs엔 '상태 표시' 버튼도
+                    markup = docexpiry.apply_buttons(docexpiry.read_docs(docexpiry.docs_dir()), datetime.now().date(),
+                                                     docexpiry.load_states())
+                    extra = {"reply_markup": markup} if markup else {}
                 self._api("sendMessage", chat_id=chat, text=text, parse_mode="HTML",
-                          disable_web_page_preview=True, reply_to_message_id=msg.get("message_id"))
+                          disable_web_page_preview=True, reply_to_message_id=msg.get("message_id"), **extra)
                 answered += 1
         return answered
 

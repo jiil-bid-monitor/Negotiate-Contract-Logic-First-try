@@ -96,6 +96,36 @@ class DocExpiryTest(unittest.TestCase):
             bot.checked_day = None
             self.assertEqual(bot.check_docs(datetime(2026, 11, 9, 10, 0)), 0, "같은 서류는 한 번만")
             self.assertIn("회사 서류 유효기간", tb.reply("/docs", None, datetime(2026, 11, 9)))
+            # 상태 표시 버튼 (11/12 사용자 요청): 알림 버튼 → 상태 묻기 → 신청해야 함/신청 중 → 알림·/docs에 안내, 지우기
+            button = sent[0]["reply_markup"]["inline_keyboard"][0][0]
+            self.assertEqual(button["text"], "상태 표시: 직접생산(전시)")
+            with mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "applying.json"):
+                def press(data):
+                    self.assertTrue(bot.handle_apply({"id": "1", "data": data, "message": {"chat": {"id": -1}}}))
+                    return sent[-1]
+
+                need, doing, clear = [b["callback_data"] for row in press(button["callback_data"])["reply_markup"]["inline_keyboard"]
+                                      for b in row]
+                docs = D.read_docs(self.dir)
+                self.assertIn("'신청해야 함'으로 표시", press(need)["text"])
+                self.assertIn("(D-2) · 신청해야 함", tb.reply("/docs", None, datetime(2026, 11, 9)))
+                self.assertIn("갱신 신청을 해 주세요", D.due_alert(docs, date(2026, 11, 11), set(), D.load_states())[0])
+                self.assertIn("/upload", press(doing)["text"])
+                marked = D.load_states()
+                self.assertIn(D.STATES["p"][1], D.due_alert(docs, date(2026, 11, 11), set(), marked)[0])
+                self.assertIn("(신청 중)", D.apply_buttons(docs, date(2026, 11, 9), marked)["inline_keyboard"][0][0]["text"])
+                # 만료 뒤에도 표시해 둔 서류는 7일마다 다시(표시 안 한 지난 서류는 그대로 안 알림), 버튼도 남음
+                self.assertEqual(D.due_alert(docs, date(2026, 11, 17), set(), marked), (None, []))
+                late, keys = D.due_alert(docs, date(2026, 11, 18), set(), marked)
+                self.assertIn("만료 뒤 7일", late)
+                self.assertNotIn("신용평가", late)
+                self.assertEqual(D.due_alert(docs, date(2026, 11, 20), set(keys), marked), (None, []))
+                self.assertIn("만료 뒤 14일", D.due_alert(docs, date(2026, 11, 25), set(keys), marked)[0])
+                self.assertEqual(len(D.apply_buttons(docs, date(2026, 11, 18), marked)["inline_keyboard"]), 1)
+                self.assertIn("지웠습니다", press(clear)["text"])
+                self.assertEqual(D.load_states(), {})
+                self.assertIsNone(D.apply_buttons(docs, date(2026, 11, 18), {}))
+            self.assertFalse(bot.handle_apply({"id": "2", "data": "k:0", "message": {"chat": {"id": -1}}}), "/upload 버튼은 그대로")
 
 
 if __name__ == "__main__":

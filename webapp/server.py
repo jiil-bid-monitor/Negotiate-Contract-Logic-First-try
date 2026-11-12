@@ -246,6 +246,13 @@ def make_handler(app: App):
                     title=q.get("title", [""])[0], institution=q.get("inst", [""])[0], method=q.get("method", [""])[0],
                     net_cost=num("net"), net_rate=num("netrate"),
                     region_limited={"1": True, "0": False}.get(q.get("rl", [""])[0])))
+            if url.path == "/api/negodist":
+                # 협상 공고 '다른 업체 최저가' 분포(11/12) — 계산기 협상 가격 점수표 열. 서버 PC 과거 개찰 자료로(나라장터는 안 부름)
+                from nego import negodist
+
+                directory = Path(os.environ.get("BID_HISTORY_DIR") or os.environ.get("OUTPUT_DIR") or "output")
+                return self._json(negodist.summarize(negodist.from_dir(directory), work=q.get("work", [""])[0] or None,
+                                                     title=q.get("title", [""])[0]))
             if url.path == "/api/results":
                 # ?run=번호 — 그 브라우저가 보고 있는(직접 불러온) 결과. 없거나 지워진 번호면 최신 결과(missing=True)
                 wanted = q.get("run", [""])[0]

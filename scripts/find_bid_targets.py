@@ -7,6 +7,13 @@
     py scripts/find_bid_targets.py --from 2024-01-01 --to 2026-10-27          # 목록 만들기 → output/bid_targets_others.csv
     py scripts/fetch_bid_results.py output/bid_targets_others.csv --out output/bid_results_others.jsonl   # 개찰 결과 받기
 
+**협상 공고**(2026-11-12, 계산기 협상 가격 점수표의 '다른 업체 최저가' 근거 — `nego.negodist`)는 `--nego`: 개찰 결과 목록엔 낙찰방법이 없어
+입찰공고 목록(게시일 기준)에서 낙찰방법 '협상에의한계약'·개찰일 지난 공고를 고른다(참가 수는 모름 — 상한 안 봄).
+
+    py scripts/find_bid_targets.py --nego --from 2025-01-01 --out output/bid_targets_nego.csv
+    py scripts/fetch_bid_results.py output/bid_targets_nego.csv --out output/nego_results.jsonl
+    py -m nego.negodist
+
 받은 `bid_results_others.jsonl`은 이름이 bid_results*.jsonl이라 추천·검증(`nego.bidbacktest`·`nego.bidtrend`)·웹앱이 그대로 같이 읽는다.
 이미 받은 공고(output/의 bid_results*.jsonl에 있는 공고번호)는 목록에서 뺀다. 하루 호출 한도(resultCode=22)에 걸리면 모은 데까지 저장하고 멈춘다.
 """
@@ -75,6 +82,58 @@ def pick(rows: list[dict], work: str, max_bidders: int, fields: set[str] | None)
     return out
 
 
+def pick_nego(rows: list[dict], work: str, fields: set[str] | None, now: str, all_fields: bool = False) -> dict[str, dict]:
+    """입찰공고 목록 행 → 협상에의한계약(수의계약 아님)·개찰일이 now(YYYY-MM-DD HH:MM) 전인 공고. 같은 공고는 마지막 차수만.
+    분야는 기본 기타·공고명 없음을 뺌(all_fields면 전부)."""
+    out: dict[str, dict] = {}
+    for row in rows:
+        no, title = str(row.get("bidNtceNo") or "").strip(), str(row.get("bidNtceNm") or "").strip()
+        award = "".join(str(row.get("sucsfbidMthdNm") or "").split())
+        method = str(row.get("cntrctCnclsMthdNm") or "")
+        opened = str(row.get("opengDt") or "").strip()
+        if not no or not award.startswith("협상에의한계약") or "수의" in method or not opened or opened[:16] >= now:
+            continue
+        field = classify(title)
+        if not all_fields and field in (OTHER, NO_TITLE):
+            continue
+        if fields and field not in fields:
+            continue
+        ord_ = str(row.get("bidNtceOrd") or "").strip()
+        old = out.get(no)
+        if old and old["차수"] >= ord_:
+            continue
+        out[no] = {"공고번호": f"{no}-{ord_}" if ord_ else no, "업무": work, "분야": field, "참가": "",
+                   "개찰일": opened[:10], "공고명": title, "차수": ord_}
+    return out
+
+
+def collect_nego(client: DataGoKrClient, works: list[str], begin: date, end: date, days: int,
+                 fields: set[str] | None, all_fields: bool) -> tuple[dict[str, dict], bool, Counter]:
+    """기간·업무별 입찰공고 목록에서 협상 공고를 고른다. (고른 공고, 한도에 걸려 멈췄나, 업무별 받은 행 수)."""
+    found: dict[str, dict] = {}
+    seen: Counter = Counter()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    for work in works:
+        for a, b in windows(begin, end, days):
+            try:
+                rows = client.fetch_all_pages(F.BID_NOTICE_BASE_URL, F.BID_NOTICE_OPERATIONS[work],
+                                              {"inqryDiv": "1", "inqryBgnDt": a, "inqryEndDt": b}, f"입찰공고 {work} {a[:8]}")
+            except ApiResultError as err:
+                if err.result_code == QUOTA_CODE:
+                    return found, True, seen
+                print(f"  {work} {a[:8]}~{b[:8]} 실패: {str(err)[:200]}")
+                continue
+            except ApiError as err:
+                print(f"  {work} {a[:8]}~{b[:8]} 실패: {str(err)[:200]}")
+                continue
+            seen[work] += len(rows)
+            for no, item in pick_nego(rows, work, fields, now, all_fields).items():
+                if no not in found or found[no]["차수"] < item["차수"]:
+                    found[no] = item
+            print(f"  {work} {a[:8]}~{b[:8]}: 공고 {len(rows)}건 · 지금까지 고른 협상 공고 {len(found)}건")
+    return found, False, seen
+
+
 def already_fetched(directory: Path) -> set[str]:
     """output/의 bid_results*.jsonl에 이미 있는(오류 없이 받은) 공고번호."""
     done: set[str] = set()
@@ -123,6 +182,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-bidders", type=int, default=99, help="참가업체 수 상한(기본 99 — 100곳 미만)")
     parser.add_argument("--fields", default="", help="이 분야만(쉼표로, config/bid_fields.json 이름) — 기본: 기타 빼고 전부")
     parser.add_argument("--days", type=int, default=7, help="한 번에 조회할 날 수(기본 7 — 조회기간 오류가 나면 줄이기)")
+    parser.add_argument("--nego", action="store_true",
+                        help="협상 공고만(입찰공고 목록에서 낙찰방법으로 고름 — 협상 가격 점수표 '다른 업체 최저가' 분포용)")
+    parser.add_argument("--all-fields", action="store_true", help="--nego에서 분야 '기타'도 넣기(표본을 늘릴 때)")
     parser.add_argument("--dir", default=str(ROOT / "output"), help="이미 받은 개찰 자료 폴더(기본 output)")
     parser.add_argument("--out", default="", help="목록 CSV(기본 <dir>/bid_targets_others.csv)")
     args = parser.parse_args(argv)
@@ -139,13 +201,18 @@ def main(argv: list[str] | None = None) -> int:
     works = [w.strip() for w in args.works.split(",") if w.strip() in LIST_OPS]
     fields = {f.strip() for f in args.fields.split(",") if f.strip()} or None
     directory = Path(args.dir)
-    out = Path(args.out) if args.out else directory / "bid_targets_others.csv"
+    out = Path(args.out) if args.out else directory / ("bid_targets_nego.csv" if args.nego else "bid_targets_others.csv")
 
     client = DataGoKrClient(ApiConfig(service_key=key, timeout_sec=30.0, max_retries=3))
     client.config.num_of_rows = 999
     base_url = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
-    print(f"개찰 결과 목록 {begin} ~ {end} · {', '.join(works)} · 참가 {args.max_bidders}곳 이하 · 분야 {', '.join(sorted(fields)) if fields else '기타 빼고 전부'}")
-    found, stopped, seen = collect(client, base_url, works, begin, end, args.days, args.max_bidders, fields)
+    if args.nego:
+        print(f"입찰공고 목록 {begin} ~ {end} · {', '.join(works)} · 협상에의한계약 · 분야 "
+              f"{', '.join(sorted(fields)) if fields else '전부' if args.all_fields else '기타 빼고 전부'}")
+        found, stopped, seen = collect_nego(client, works, begin, end, args.days, fields, args.all_fields)
+    else:
+        print(f"개찰 결과 목록 {begin} ~ {end} · {', '.join(works)} · 참가 {args.max_bidders}곳 이하 · 분야 {', '.join(sorted(fields)) if fields else '기타 빼고 전부'}")
+        found, stopped, seen = collect(client, base_url, works, begin, end, args.days, args.max_bidders, fields)
 
     done = already_fetched(directory)
     rows = sorted((r for no, r in found.items() if no not in done), key=lambda r: r["개찰일"])
@@ -160,7 +227,7 @@ def main(argv: list[str] | None = None) -> int:
     print("분야별: " + " · ".join(f"{k} {n}" for k, n in Counter(r["분야"] for r in rows).most_common()))
     if stopped:
         print("\n오늘 호출 한도에 걸려 목록을 다 못 만들었습니다 — 내일 같은 명령을 다시 실행하세요(목록은 새로 만듦).")
-    print(f"\n다음: py scripts/fetch_bid_results.py {out} --out {directory / 'bid_results_others.jsonl'}")
+    print(f"\n다음: py scripts/fetch_bid_results.py {out} --out {directory / ('nego_results.jsonl' if args.nego else 'bid_results_others.jsonl')}")
     return 0
 
 

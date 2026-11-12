@@ -108,6 +108,14 @@ def fetch_one(client: DataGoKrClient, base_url: str, notice_input: str, work: st
     return rec
 
 
+def _amount(value) -> float | None:
+    try:
+        num = float(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    return num if num > 0 else None
+
+
 def region_fields(row: dict) -> dict:
     """공고 행의 지역제한 — '지역제한 입찰 소재지 판단기준'(rgnLmtBidLocplcJdgmBssNm) 칸이 차 있으면 지역제한 입찰(10/29, 경쟁 규모 가늠용)."""
     basis = str(row.get("rgnLmtBidLocplcJdgmBssNm") or "").strip()
@@ -127,14 +135,18 @@ def notice_info(client: DataGoKrClient, no: str, work: str, region_only: bool = 
             info.update(title=str(row.get("bidNtceNm") or ""), lower_rate=row.get("sucsfbidLwltRate"),
                         opened_at=str(row.get("opengDt") or ""),
                         institution=str(row.get("dminsttNm") or row.get("ntceInsttNm") or ""),
-                        contract_method=str(row.get("cntrctCnclsMthdNm") or ""), **region_fields(row))
+                        contract_method=str(row.get("cntrctCnclsMthdNm") or ""),
+                        # 낙찰방법·금액(2026-11-12 — 협상 공고 '다른 업체 최저가' 분포용, `nego.negodist`)
+                        award_method=str(row.get("sucsfbidMthdNm") or ""),
+                        est_price=_amount(row.get("presmptPrce")), budget=_amount(row.get("asignBdgtAmt")),
+                        **region_fields(row))
         if region_only:  # --fill-region: 공고 행 하나만(기초금액 조회는 안 함)
             return info
         op = F.BASIS_AMOUNT_OPERATIONS.get(work)
         row = _latest(client.fetch_all_pages(F.BID_NOTICE_BASE_URL, op, params, f"기초금액 {no}"), no) if op else None
         if row:
             basis = parse_basis(row)
-            info.update(range_lo=basis["range_lo"], range_hi=basis["range_hi"], a_value=basis["a_value"],
+            info.update(basis=basis["basis"], range_lo=basis["range_lo"], range_hi=basis["range_hi"], a_value=basis["a_value"],
                         a_applies=basis["a_applies"])
     except ApiResultError as err:
         if err.result_code == QUOTA_CODE:
@@ -177,6 +189,14 @@ def needs_method(rec: dict) -> bool:
     return "contract_method" not in info and not info.get("method_checked")
 
 
+def needs_award(rec: dict) -> bool:
+    """낙찰방법·기초금액을 아직 안 찾아본 줄(--fill-award, 2026-11-12 — 협상 공고 투찰률 분포용)."""
+    if rec.get("error") or not (rec.get("prices") or rec.get("bidders")):
+        return False
+    info = rec.get("notice") or {}
+    return "award_method" not in info and not info.get("award_checked")
+
+
 def notice_info_any(client: DataGoKrClient, no: str, work: str, region_only: bool = False) -> dict:
     """업무를 모르면(목록에 비어 있던 줄) 공사·용역·물품 순으로 공고를 찾아본다."""
     info: dict = {}
@@ -195,7 +215,8 @@ def _write_lines(path: Path, lines: list[str]) -> None:
 
 
 def fill_notices(client: DataGoKrClient, path: Path, limit: int = 0, sleep: float = 0.3,
-                 only_a: bool = False, only_region: bool = False, only_method: bool = False) -> tuple[int, int, bool]:
+                 only_a: bool = False, only_region: bool = False, only_method: bool = False,
+                 only_award: bool = False) -> tuple[int, int, bool]:
     """이미 받은 결과 파일에 공고 정보(하한율·공고명·변동폭·A값·개찰일)만 채운다 — 개찰 결과는 다시 받지 않음.
     처음 한 번 원본을 `<이름>_채우기전.jsonl`로 남기고, 100건마다 파일에 저장한다. (채운 수, 찾아본 수, 한도에 걸려 멈췄나)"""
     raw = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -203,7 +224,7 @@ def fill_notices(client: DataGoKrClient, path: Path, limit: int = 0, sleep: floa
     if not backup.exists():
         backup.write_text("".join(line + "\n" for line in raw), encoding="utf-8")
     recs = [json.loads(line) for line in raw]
-    need = needs_method if only_method else needs_region if only_region else needs_a_value if only_a else needs_notice
+    need = needs_award if only_award else needs_method if only_method else needs_region if only_region else needs_a_value if only_a else needs_notice
     todo = [i for i, rec in enumerate(recs) if need(rec)]
     if limit:
         todo = todo[:limit]
@@ -232,16 +253,18 @@ def fill_notices(client: DataGoKrClient, path: Path, limit: int = 0, sleep: floa
             info["region_checked"] = info["checked"]
         if only_method:
             info["method_checked"] = info["checked"]
+        if only_award:
+            info["award_checked"] = info["checked"]
         rec["notice"] = {**(rec.get("notice") or {}), **{k: v for k, v in info.items() if v not in (None, "")}}
         raw[i] = json.dumps(rec, ensure_ascii=False)
         tried += 1
-        filled += ("contract_method" in info if only_method else "region_limited" in info if only_region else info.get("a_value") is not None if only_a
+        filled += ("award_method" in info if only_award else "contract_method" in info if only_method else "region_limited" in info if only_region else info.get("a_value") is not None if only_a
                    else bool(info.get("lower_rate")))
         if n % 100 == 0:
             _write_lines(path, raw)
         if n % 20 == 0 or n == len(todo):
             left = (time.time() - started) / n * (len(todo) - n)
-            what = "계약 방식" if only_method else "지역제한 여부" if only_region else "A값" if only_a else "하한율"
+            what = "낙찰방법" if only_award else "계약 방식" if only_method else "지역제한 여부" if only_region else "A값" if only_a else "하한율"
             print(f"  {n}/{len(todo)} · {what} 찾음 {filled} · 남은 시간 약 {left / 60:.0f}분")
         time.sleep(sleep)
     _write_lines(path, raw)
@@ -262,8 +285,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="이미 받은 결과 파일에 지역제한 여부만 채움(공고당 조회 1번 — 경쟁 규모 가늠용)")
     parser.add_argument("--fill-method", action="store_true",
                         help="이미 받은 결과 파일에 계약체결방법(지명경쟁 여부)만 채움(공고당 조회 1번 — 지명경쟁은 투찰 경향 표본에서 뺌)")
+    parser.add_argument("--fill-award", action="store_true",
+                        help="이미 받은 결과 파일에 낙찰방법·기초금액·추정가격만 채움(공고당 조회 2번 — 협상 공고 투찰률 분포 `nego.negodist`용)")
     args = parser.parse_args(argv)
-    if args.fill_a or args.fill_region or args.fill_method:
+    if args.fill_a or args.fill_region or args.fill_method or args.fill_award:
         args.fill_notice = True
     if not args.fill_notice and not args.targets:
         parser.error("공고번호 목록 CSV를 주거나 --fill-notice를 쓰세요")
@@ -280,8 +305,9 @@ def main(argv: list[str] | None = None) -> int:
         client = DataGoKrClient(ApiConfig(service_key=key, timeout_sec=30.0, max_retries=3))
         client.config.num_of_rows = 999
         filled, tried, stopped = fill_notices(client, out_path, args.limit, args.sleep, only_a=args.fill_a,
-                                              only_region=args.fill_region, only_method=args.fill_method)
-        what = "계약 방식" if args.fill_method else "지역제한 여부" if args.fill_region else "A값" if args.fill_a else "하한율"
+                                              only_region=args.fill_region, only_method=args.fill_method,
+                                              only_award=args.fill_award)
+        what = "낙찰방법" if args.fill_award else "계약 방식" if args.fill_method else "지역제한 여부" if args.fill_region else "A값" if args.fill_a else "하한율"
         print(f"끝 — 찾아본 {tried}건 중 {what} 찾음 {filled}건. 결과 파일: {out_path}")
         if not stopped and tried > filled:
             print("하한율을 못 찾은 공고는 다시 실행해도 건너뜁니다(이미 찾아봄 표시).")

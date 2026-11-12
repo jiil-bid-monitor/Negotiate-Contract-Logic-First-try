@@ -356,7 +356,8 @@
       document.querySelector(".calc-rec-bar").hidden = !!NEGO;
       document.querySelector(".calc-rec .calc-h").textContent = NEGO
         ? "가격 점수표 — 협상에 의한 계약(제안요청서 입찰가격 평정산식)" : "추천 투찰금액 — 비슷한 과거 공고의 개찰 결과 기준";
-      if (NEGO) renderNego();  // 협상 공고 — 하한율이 없어 사정률 추천 대신 가격 점수표(11/12)
+      NEGO_DIST = null;
+      if (NEGO) { renderNego(); loadNegoDist(); }  // 협상 공고 — 하한율이 없어 사정률 추천 대신 가격 점수표(11/12)
       else if (d.basis != null && d.lower_rate != null) recommend();
     } catch (err) {
       lookupMsg(`실패: ${err.message}`, true);
@@ -384,6 +385,41 @@
   let NEGO = null;
   const NEGO_MINE = [100, 98, 95, 93, 90, 88, 85, 83, 80, 78, 75, 72, 70, 69];
   const NEGO_RIVALS = [95, 90, 85, 80, 75];
+  let NEGO_DIST = null;  // 과거 협상 공고 최저가 분포(/api/negodist) — 있으면 표 열을 그 백분위로(11/12)
+  const NEGO_DIST_MIN = 5;
+  async function loadNegoDist() {
+    const title = $("#cTitle").textContent.trim();
+    const qs = new URLSearchParams({ work: WORK, title: title === "-" ? "" : title });
+    const want = NEGO;
+    try {
+      const d = await api(`/api/negodist?${qs}`);
+      if (want !== NEGO) return;  // 그 사이 다른 공고를 불러왔으면 버림
+      NEGO_DIST = d;
+    } catch (e) { NEGO_DIST = { n: 0, error: String(e.message || e) }; }
+    if (NEGO) renderNego();
+  }
+  function negoColumns() {
+    const d = NEGO_DIST;
+    if (d && d.n >= NEGO_DIST_MIN && d.columns && d.columns.length) return d.columns;
+    return NEGO_RIVALS.map((rate) => ({ rate, pct: null, median: false }));
+  }
+  function negoDistNote() {
+    const d = NEGO_DIST, f1 = (v) => Number(v).toFixed(1);
+    if (!d) return `<div class="why">과거 협상 공고의 최저가 분포를 불러오는 중…</div>`;
+    if (d.error) return `<div class="why">과거 분포를 못 불러와 예시 열(95~75%)로 보여 줍니다 — ${esc(d.error)}</div>`;
+    if (d.n < NEGO_DIST_MIN) {
+      return `<div class="why">과거 협상 공고 개찰 자료가 ${d.n}건뿐이라 예시 열(95~75%)로 보여 줍니다 — 서버 PC에서
+        <code>find_bid_targets.py --nego</code> → <code>fetch_bid_results.py</code>로 자료를 모으면 근거 있는 열로 바뀝니다.</div>`;
+    }
+    const q = d.quantiles || {};
+    return `<div class="why nego-dist">열 = 과거 협상 공고 <b>${d.n}건</b>(${esc(d.scope)}${d.first ? ` · 개찰 ${esc(d.first)} ~ ${esc(d.last)}` : ""})의
+      실제 최저 투찰가 ÷ 기준 금액 — 가운데값 <b>${f1(q[50])}%</b>(굵은 열), 10~90%는 ${f1(q[10])}~${f1(q[90])}%,
+      참가 가운데 ${d.median_bidders ?? "-"}곳. ${tip(`열 아래 'N% 이하' = 과거 공고 중 최저가가 이 값 이하였던 비율.
+      예: '25% 이하' 열은 네 번 중 한 번은 이보다 더 싼 업체가 있었다는 뜻이라 보수적으로 볼 때 씁니다.
+      최저가가 80% 미만이었던 공고 ${d.below80}건, 70% 미만 ${d.below70}건.
+      기준 금액 = 기초금액(없으면 추정가격 × 1.1, 그것도 없으면 배정예산) — 공고의 예정가격과 다를 수 있어 어림값입니다.
+      지일 투찰은 빼고 셉니다. 분야·업무로 좁힌 표본이 15건 미만이면 업무 → 전체로 넓힙니다.`)}</div>`;
+  }
   function renderNego() {
     const r = NEGO.rule, f = (v) => Number(v).toLocaleString("ko-KR", { maximumFractionDigits: 2 });
     const base = ($("#cNegoBase") && numIn("#cNegoBase")) || NEGO.base;
@@ -394,13 +430,15 @@
       ? `제안요청서 '${esc(r.file || "")}'의 입찰가격 평정산식${r.kind ? `(${r.kind}계약)` : ""}`
       : "제안요청서에서 식을 못 찾아 지방계약 기본 식으로 계산 — 제안요청서 '입찰가격 평가'를 확인하세요";
     let over = false;
+    const cols = negoColumns();
     const rows = base > 0 ? NEGO_MINE.map((m) => {
       const price = (base * m) / 100;
-      const cells = NEGO_RIVALS.map((x) => {
-        const v = C.negoScore(price, (base * x) / 100, base, r);
+      const cells = cols.map((c) => {
+        const v = C.negoScore(price, (base * c.rate) / 100, base, r);
         if (v != null && v > r.weight + 1e-9) over = true;
-        const cls = v == null ? "" : m < r.lower ? " class=\"nego-low\"" : v > r.weight + 1e-9 ? " class=\"nego-over\"" : "";
-        return `<td${cls}>${v == null ? "-" : v.toFixed(2)}</td>`;
+        const cls = [v == null ? "" : m < r.lower ? "nego-low" : v > r.weight + 1e-9 ? "nego-over" : "", c.median ? "nego-mid" : ""]
+          .filter(Boolean).join(" ");
+        return `<td${cls ? ` class="${cls}"` : ""}>${v == null ? "-" : v.toFixed(2)}</td>`;
       }).join("");
       return `<tr><th>${m}%</th><td class="num">${won(Math.round(price))}</td>${cells}</tr>`;
     }).join("") : "";
@@ -410,8 +448,10 @@
         <span class="why">${base ? `처음 값: ${esc(NEGO.base_source || "")}` : "기준 금액을 넣어 주세요"} — 실제 ${esc(r.base)}과 다를 수 있음</span></div>
       <div class="why nego-formula">${formula} ${tip(`${esc(src)}${r.quote ? `<br><br>원문: ${esc(r.quote)}` : ""}`)}</div>
       ${rows ? `<table class="nego-table"><thead><tr><th>내 제안가격</th><th>금액</th>
-          <th colspan="${NEGO_RIVALS.length}">다른 업체 최저가(${esc(r.base)} 대비)에 따른 내 가격 점수</th></tr>
-          <tr><th></th><th></th>${NEGO_RIVALS.map((x) => `<th>${x}%</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>` : ""}
+          <th colspan="${cols.length}">다른 업체 최저가(${esc(r.base)} 대비)에 따른 내 가격 점수</th></tr>
+          <tr><th></th><th></th>${cols.map((c) => `<th${c.median ? ' class="nego-mid"' : ""}>${c.rate}%${c.pct != null
+            ? `<small>${c.pct}% 이하${c.median ? " · 가운데" : ""}</small>` : ""}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>` : ""}
+      ${negoDistNote()}
       ${over ? `<div class="rec-warn">식대로 계산하면 ${f(r.upper)}% 미만 가격에서 배점(${f(r.weight)}점)을 넘는 칸이 있어요 — 배점 상한이 따로 있는지 제안요청서·발주처에 확인하세요</div>` : ""}
       <div class="why">${f(r.lower)}% 미만으로 내면 배점의 ${f(r.under)}%(${f((r.weight * r.under) / 100)}점)만 받아요(붉은 줄).</div>`;
     const inp = $("#cNegoBase");

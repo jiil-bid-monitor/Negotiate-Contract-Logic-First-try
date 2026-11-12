@@ -17,6 +17,17 @@
 병합 안 한 브랜치, 서버 PC 반영 여부) ③ 다음에 할 일(우선순위 순, 결정 대기 항목은 "사용자 결정 대기"로) ④ 지켜야 할 것(한국어 답변, 요청 전엔 고치지 않기 등).
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 
+## 2026-11-12 — 협상 가격 점수표 '다른 업체 최저가' 열 = 과거 협상 공고 분포 (브랜치 `claude/nego-rival-dist`, 사용자 요청)
+
+- 계산기 협상 가격 점수표(PR #336)의 열(예시 95~75%)을 **과거 협상 공고의 실제 최저 투찰가 ÷ 기준 금액** 백분위(90·75·50·25·10, 0.5%p 단위)로 —
+  `nego/negodist.py`(`summarize`: 분야(공고명 키워드)·업무 → 업무 → 전체로, 15건 미만이면 넓힘, 참가 2곳 이상, 지일 투찰은 뺌, 지명경쟁 뺌,
+  비율 30~130% 밖은 이상값). 기준 금액 = 기초금액 → 추정가격 × 1.1 → 배정예산(예정가격과 다를 수 있어 어림). 가운데값 열 굵게, 열 아래 'N% 이하'.
+  `/api/negodist?work=&title=`, 표본 5건 미만이면 예시 열 + 자료 모으는 법 안내. **판정·추천은 안 함 — 분포만**.
+- 자료(서버 PC): `py scripts/find_bid_targets.py --nego --from 2025-01-01`(입찰공고 목록에서 낙찰방법 협상·개찰 지난 공고 → `output/bid_targets_nego.csv`)
+  → `py scripts/fetch_bid_results.py output/bid_targets_nego.csv --out output/nego_results.jsonl`(이름이 bid_results가 아니라 추천·백테스트는 안 읽음)
+  → `py -m nego.negodist`(`output/nego_dist_날짜.txt/.csv` — 공개 금지). 이제 받는 줄엔 `notice.award_method`·`basis`·`est_price`·`budget`,
+  예전 줄은 `--fill-award`(공고당 조회 2번, `award_checked`). 실측 미확인: 협상 개찰 결과의 `bidprcAmt`가 실제 투찰가인지.
+
 ## 2026-11-11 — 투찰 경향 표본에서 지명경쟁 뺌 (브랜치 `claude/bid-exclude-designated`, 사용자 요청)
 
 - 지명경쟁 공고의 투찰가·사정률은 추천 사정률·검증(백테스트)·투찰 경향 표본에서 뺌(`bidrecommend.is_designated` — 계약체결방법 `cntrctCnclsMthdNm`에 '지명',

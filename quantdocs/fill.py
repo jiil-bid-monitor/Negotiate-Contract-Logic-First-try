@@ -1273,6 +1273,78 @@ def _apply_marks(xml: str, chars: "_Chars | None") -> str:
     return "".join(out) + xml[pos:]
 
 
+_NUMERIC_LINE = re.compile(r"[\d,.\-~]+")
+
+
+def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str:
+    """실적 표의 사업기간·금액 칸이 11pt 한 줄에 안 들어가면 그 열을 넓히고, 같은 표에서 가장 넓은 열(보통 사업명)을 그만큼 좁힘 —
+    표 전체 너비는 그대로(11/12 사용자 요청: '2023.06.' / '23~'처럼 날짜·금액이 중간에서 잘려 읽기 어려움).
+    여러 열을 합친 칸은 두 열을 다 덮으면 그대로, 한쪽만 덮으면 그만큼만 바꿈. 받는 열은 원래 너비의 60% 밑으로는 안 줄임."""
+    cells = _cells(xml, tbl)
+    edits = _fill_tracks(xml, cells, tracks, FillReport("x"))
+    need: dict[int, float] = {}
+    for c, lines, _keep in edits:
+        if c.colspan != 1 or not lines or not all(_NUMERIC_LINE.fullmatch(x.strip()) for x in lines if x.strip()):
+            continue
+        need[c.col] = max(need.get(c.col, 0.0), max(_text_width(x.strip(), FILL_HEIGHT, 1.0) for x in lines if x.strip()))
+    if not need:
+        return xml
+
+    def width(seg: str) -> int | None:
+        m = re.findall(r'<(?:[\w.-]+:)?cellSz\b[^>]*\bwidth="(\d+)"', seg)
+        return int(m[-1]) if m else None
+
+    def margin(seg: str) -> int:
+        tag = re.findall(r'<(?:[\w.-]+:)?cellMargin\b[^>]*>', seg)
+        mg = dict(re.findall(r'\b(left|right)="(\d+)"', tag[-1] if tag else ""))
+        return int(mg.get("left", 141)) + int(mg.get("right", 141))
+
+    for col in sorted(need):
+        cells = _cells(xml, tbl)
+        singles = {}  # 열 → 그 열 하나만 덮는 칸들의 (너비, 여백)
+        for c in cells:
+            w = width(xml[c.start:c.end])
+            if c.colspan == 1 and w:
+                singles.setdefault(c.col, []).append((w, margin(xml[c.start:c.end])))
+        if col not in singles:
+            continue
+        cur = min(w for w, _m in singles[col])
+        want = int(need[col] * 1.06) + max(m for _w, m in singles[col])
+        if want <= cur:
+            continue
+        donors = [(min(w for w, _m in v), k) for k, v in singles.items() if k not in need]
+        if not donors:
+            continue
+        dw, donor = max(donors)
+        d = min(want - cur, int(dw * 0.4))  # 받는 열은 원래의 60%까지만
+        if d <= 0:
+            continue
+
+        def shift(seg: str, abs_start: int) -> str:
+            c = next((x for x in cells if x.start == abs_start), None)
+            if c is None:
+                return seg
+            cover = range(c.col, c.col + c.colspan)
+            delta = (d if col in cover else 0) - (d if donor in cover else 0)
+            if not delta:
+                return seg
+            sizes = list(re.finditer(r'(<(?:[\w.-]+:)?cellSz\b[^>]*\bwidth=")(\d+)(")', seg))
+            last = sizes[-1]  # 칸 안 표가 있어도 맨 마지막 cellSz가 이 칸 것
+            return seg[:last.start(2)] + str(int(last.group(2)) + delta) + seg[last.end(2):]
+        seg = xml[tbl[0]:tbl[1]]
+        out, pos = [], 0
+        for s, e in _spans(xml, "tc", tbl[0] + 1, tbl[1]):
+            ls, le = s - tbl[0], e - tbl[0]
+            out.append(seg[pos:ls])
+            out.append(shift(seg[ls:le], s))
+            pos = le
+        out.append(seg[pos:])
+        new_seg = "".join(out)
+        xml = xml[:tbl[0]] + new_seg + xml[tbl[1]:]
+        tbl = (tbl[0], tbl[0] + len(new_seg))
+    return xml
+
+
 def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int) -> str:
     """실적표 아래가 세로로 긴 빈 칸 한 줄뿐이면(11/04 필암서원 서식16 — 17.8cm 한 줄) 그 줄을 실적 수만큼(칸 높이가 허락하는 만큼)
     같은 높이의 줄로 나눔 — 표 전체 높이는 그대로, 줄마다 실적 하나. 세로로 합친 칸이 있는 표는 건드리지 않음."""
@@ -1751,6 +1823,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
                 for i in range(len(_spans(xml, "tbl"))):
                     xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
+                for i in range(len(_spans(xml, "tbl"))):  # 사업기간·금액 열이 좁으면 가장 넓은 열에서 너비를 받아 옴(11/12)
+                    xml = _widen_track_cols(xml, _spans(xml, "tbl")[i], tracks)
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             none_rule = re.search(r"(?:없을|없는)\s*(?:경우|때).{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)

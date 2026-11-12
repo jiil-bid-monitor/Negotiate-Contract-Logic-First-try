@@ -62,7 +62,7 @@ class TargetTest(unittest.TestCase):
 
 
 class CollectTest(unittest.TestCase):
-    def test_only_bid_award_methods_are_requested(self):
+    def test_bid_and_private_contract_are_requested(self):
         seen = {}
 
         def fake_run(config, now, categories, period):
@@ -71,7 +71,7 @@ class CollectTest(unittest.TestCase):
 
         with patch("nego.config.load_config", return_value=SimpleNamespace()), patch("nego.pipeline.run", fake_run):
             self.assertEqual(collect(NOW, 7, Path("out")), [])
-        self.assertEqual(seen["categories"], {"입찰"})  # 적격심사·최저가만
+        self.assertEqual(seen["categories"], {"입찰", "수의계약"})  # 적격심사·최저가 + 수의계약(11/12), 협상·규격가격은 안 받음
         self.assertEqual(seen["period"][0], datetime(2026, 10, 28, 10, 0))
 
     def test_alert_names_the_category(self):

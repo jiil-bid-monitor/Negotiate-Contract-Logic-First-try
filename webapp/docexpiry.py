@@ -169,6 +169,9 @@ def apply_buttons(docs: list[tuple[str, date]], today: date, applying: set[str])
     """30일 안에 끝나는데 아직 '신청 중'이 아닌 서류마다 버튼 하나. 없으면 None."""
     rows = [[{"text": f"신청 중으로 표시: {k}", "callback_data": _apply_id(k, d)}]
             for k, d in docs if 0 <= (d - today).days <= ALERT_MONTH and apply_key(k, d) not in applying]
+    # 만료가 지난 신청 중 서류는 주마다 다시 알리므로 풀 수 있게
+    rows += [[{"text": f"신청 중 풀기: {k}", "callback_data": _apply_id(k, d)}]
+             for k, d in docs if d < today and apply_key(k, d) in applying]
     return {"inline_keyboard": rows} if rows else None
 
 
@@ -205,19 +208,23 @@ def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str],
               applying: set[str] = frozenset()) -> tuple[str | None, list[str]]:
     """만료 한 달 전(30일)·일주일 전(7일) 두 번 알린다(2026-11-12 사용자 요청) → (알림 글, 새로 알린 키). 없으면 (None, []).
     만료일 당일에도 날짜가 그대로면 한 번 더 — 키 '종류|날짜|당일' (2026-11-11 사용자 요청).
-    7일 전 키는 예전 그대로 '종류|날짜'(이미 보낸 기록과 맞게), 한 달 전은 '종류|날짜|30일'."""
+    7일 전 키는 예전 그대로 '종류|날짜'(이미 보낸 기록과 맞게), 한 달 전은 '종류|날짜|30일'.
+    '신청 중' 서류는 만료 뒤에도 새 서류가 올 때까지 7일마다 — 키 '종류|날짜|지남N' (2026-11-12 사용자 결정)."""
     def key(k, d):
         left = (d - today).days
+        if left < 0:
+            return f"{k}|{d}|지남{-left // 7}"
         return f"{k}|{d}|당일" if left == 0 else f"{k}|{d}" if left <= ALERT_DAYS else f"{k}|{d}|30일"
 
-    rows = [(k, d) for k, d in docs if 0 <= (d - today).days <= ALERT_MONTH and key(k, d) not in sent]
+    rows = [(k, d) for k, d in docs if key(k, d) not in sent and (
+        0 <= (d - today).days <= ALERT_MONTH or ((today - d).days >= 7 and apply_key(k, d) in applying))]
     if not rows:
         return None, []
     far = max((d - today).days for _, d in rows)
-    head = "오늘 유효기간이 끝납니다" if far == 0 else f"{ALERT_DAYS if far <= ALERT_DAYS else ALERT_MONTH}일 안에 유효기간이 끝납니다"
+    head = "신청 중인 서류가 아직 갱신되지 않았습니다" if far < 0 else "오늘 유효기간이 끝납니다" if far == 0 else f"{ALERT_DAYS if far <= ALERT_DAYS else ALERT_MONTH}일 안에 유효기간이 끝납니다"
     lines = [f"<b>📄 회사 서류 갱신 알림</b>", head, ""]
     for k, d in rows:
-        lines += [f"• <b>{html.escape(k)}</b>", f"   {d} · {'오늘 만료' if d == today else f'D-{(d - today).days}'}"]
+        lines += [f"• <b>{html.escape(k)}</b>", f"   {d} · " + ("오늘 만료" if d == today else f"D-{(d - today).days}" if d > today else f"만료 뒤 {(today - d).days}일")]
         if apply_key(k, d) in applying:
             lines.append(f"   {APPLY_NOTE}")
     lines += ["", "갱신했으면 → /upload 로 새 서류를 보내 주세요",

@@ -2699,9 +2699,12 @@ def test_track_text_wraps_by_word():
     _c, lines, _k = _wrap_track_cell(xml, c, ["정선인재발전소 공간디자인 및 시설가구 제작설치"], False, rep)
     assert lines == ["정선인재발전소", "공간디자인 및", "시설가구", "제작설치"], lines
     assert c.start not in rep.one_line
-    xml = tbl(4000)
+    xml = tbl(5300)
     c = _cells(xml, _spans(xml, "tbl")[0])[0]
     _c, lines, _k = _wrap_track_cell(xml, c, ["실내건축·", "인테리어"], False, rep)
-    assert lines == ["실내건축·", "인테리어"] and c.start in rep.one_line  # '실내건축·'가 칸보다 넓어 글자를 줄임
+    assert lines == ["실내건축·", "인테리어"] and c.start in rep.one_line  # '실내건축·'가 칸보다 조금 넓어 글자를 줄임
+    rep2 = FillReport("x")
+    _c, lines, _k = _wrap_track_cell(xml, c, ["관광상품개발사업전시분야제작설치"], False, rep2)
+    assert c.start not in rep2.one_line  # 9pt로도 안 들어가는 긴 낱말은 줄이지 않음(칸 끝에서 넘어감)
     _c, lines, _k = _wrap_track_cell(xml, c, ["3,610,090,000"], False, FillReport("x"))
     assert lines == ["3,610,090,000"]  # 숫자 칸은 그대로

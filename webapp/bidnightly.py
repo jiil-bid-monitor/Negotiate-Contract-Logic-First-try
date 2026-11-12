@@ -32,7 +32,8 @@ from typing import Any, Callable
 log = logging.getLogger(__name__)
 
 KST = timezone(timedelta(hours=9))
-RUN_HOUR = 22
+EVERY = timedelta(hours=1)        # 22시 한 번 → 1시간마다(11/12 사용자 결정 — 서버 PC는 22시에 꺼져 있음)
+RETRY_AFTER = timedelta(hours=20)  # 결과가 아직 없는 공고는 하루에 한 번만 다시 물음(1시간마다 물으면 나라장터 하루 한도)
 MAX_FETCH = 150          # 하룻밤 개찰 결과를 받는 공고 수(공고마다 나라장터를 4~5번 부름)
 GIVE_UP_DAYS = 21        # 개찰일 뒤 이만큼 지나도 결과가 없으면 그만 봄
 WATCH_KEEP_DAYS = 120    # 끝난(완료·결과 없음) 공고를 지켜볼 목록에 남겨 두는 기간
@@ -216,15 +217,10 @@ class Nightly:
         tmp.replace(self.state_path)
 
     def due(self, now: datetime | None = None) -> bool:
-        """22시가 지났고 오늘 아직 안 돌았으면. 22시 전이라도 어제 것을 놓쳤으면(밤에 꺼져 있었음) 한 번 따라잡음."""
+        """마지막으로 돈 지 1시간이 지났으면(처음이면 바로)."""
         now = now or self.now()
-        last = self.state().get("lastRun")
-        today = now.date().isoformat()
-        if last == today:
-            return False
-        if now.hour >= RUN_HOUR:
-            return True
-        return bool(last) and last < (now.date() - timedelta(days=1)).isoformat()
+        last = _parse_dt(self.state().get("lastRunAt"))
+        return last is None or now - last >= EVERY
 
     def update_watch(self, state: dict[str, Any], now: datetime) -> int:
         watch: dict[str, dict] = state.setdefault("watch", {})
@@ -268,6 +264,9 @@ class Nightly:
                     continue
                 if got + waiting + none >= MAX_FETCH:
                     break
+                tried = _parse_dt(v.get("lastTry"))
+                if tried and now - tried < RETRY_AFTER:
+                    continue
                 try:
                     rec = fetch_one(client, base_url, f"{v['no']}-{v['ord']}", v.get("work") or "")
                 except ApiResultError as err:
@@ -416,6 +415,7 @@ class Nightly:
                 log.exception("투찰 이력 엑셀·성적표 쓰기 실패")
                 out["error"] = (out.get("error", "") + " / " + str(err)[:200]).strip(" /")
             state["lastRun"] = now.date().isoformat()
+            state["lastRunAt"] = now.isoformat(timespec="seconds")
             state["lastResult"] = out
             self._save(state)
         log.info("투찰 이력 자동 수집: %s", out)

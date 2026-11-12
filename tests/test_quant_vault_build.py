@@ -2500,3 +2500,24 @@ def test_track_text_columns_widen_for_readability():
     assert got[3] - 282 >= _text_width("실내건축·인테리어", FILL_HEIGHT, 1.0) / 2  # 두 줄 안
     assert got[4] - 282 >= _text_width("단독", FILL_HEIGHT, 1.0)  # 한 줄
     assert got[1] < 24000 and sum(got.values()) == sum(widths)
+def test_none_rule_fills_each_labeled_row(tmp_path: Path):
+    """11/12 당진 서식 10호 행정처분 확인서 — 표 아래 '※ 해당사항이 없으면 “해당 없음” 표기', 표는 줄 이름표(사회적책임/임금체불·
+    고용개선조치 미이행, 입찰참가자격제한/제재처분) 뒤 값 칸이 빈 모양 → 줄마다 첫 빈 칸(처분 사유)에 '해당 없음'."""
+    from quantdocs.fill import fill_hwpx
+
+    def c(col, row, text, rs=1, cs=1):
+        return (f'<hp:tc><hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/>'
+                f'<hp:cellSz width="5000" height="2000"/></hp:tc>')
+    rows = [[c(0, 0, "구 분", cs=2), c(2, 0, "처분 사유(관련법령)"), c(3, 0, "처분일시"), c(4, 0, "처분기간"), c(5, 0, "비 고")],
+            [c(0, 1, "사회적책임", rs=2), c(1, 1, "임금체불")] + [c(i, 1, "") for i in range(2, 6)],
+            [c(1, 2, "고용개선조치 미이행")] + [c(i, 2, "") for i in range(2, 6)],
+            [c(0, 3, "입찰참가자격제한"), c(1, 3, "제재처분")] + [c(i, 3, "") for i in range(2, 6)]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    body += '<hp:p><hp:run charPrIDRef="0"><hp:t>※ 해당사항이 없으면 “해당 없음” 표기</hp:t></hp:run></hp:p>'
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", body), tmp_path / "ao.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
+    from quantdocs.fill import _cells, _spans
+    got = {(x.row, x.col) for x in _cells(xml, _spans(xml, "tbl")[0]) if "해당 없음" in x.text}
+    assert got == {(1, 2), (2, 2), (3, 2)}

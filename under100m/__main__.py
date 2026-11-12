@@ -324,7 +324,7 @@ def read_docs(files: list[Path]) -> list[tuple[Path, str]]:
 
     out = []
     for f in files:
-        if f.suffix.lower() in (".hwp", ".hwpx", ".pdf") and _DOC_FILE.search(re.sub(r"[\s_]", "", f.name)):  # "제출 서류"·"제출_서류"도
+        if f.suffix.lower() in (".hwp", ".hwpx", ".pdf", ".docx") and _DOC_FILE.search(re.sub(r"[\s_]", "", f.name)):  # "제출 서류"·"제출_서류"도
             try:
                 data = f.read_bytes()
                 out.append((f, extract_text(data, f.suffix.lower().lstrip(".") or (_sniff_ext(data) or ""))))

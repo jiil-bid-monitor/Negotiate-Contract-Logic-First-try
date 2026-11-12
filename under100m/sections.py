@@ -11,7 +11,7 @@ from difflib import SequenceMatcher
 from nego.qualification_text import _hangul_count, _join_spaced_numbering, _spaced, find_qualification_section
 
 TOPICS = {
-    "제출 서류": ("제출서류", "구비서류", "제출할서류", "입찰참가신청서류", "제출서류목록", "입찰서류"),
+    "제출 서류": ("제출서류", "구비서류", "제출할서류", "입찰참가신청서류", "제출서류목록", "입찰서류", "서류제출"),
     "유의사항·기타": ("유의사항", "주의사항", "기타사항", "참고사항", "특기사항", "기타"),
 }
 MAX_CHARS = 2500
@@ -32,7 +32,7 @@ def _heading(word: str) -> re.Pattern:
     # 제목 줄 전체: 번호·기호, 앞말(15자까지), 낱말, 꼬리(괄호 안내·쌍점 뒤 짧은 말)
     return re.compile(r"^" + _WS + r"(?P<m>" + _MARKER + r")?" + _WS + r"(?:[가-힣 ]{0,15}?)" + _spaced(word)
                       + _WS + r"(?:및" + _WS + r"[가-힣 ]{1,10})?" + _WS + r"(?:[(（\[][^\n]{0,30}[)）\]])?" + _WS
-                      + r"[:：]?" + _WS + r"$", re.MULTILINE)
+                      + r"(?:[:：][^\n]{0,25}(?:제출|접수))?[:：]?" + _WS + r"$", re.MULTILINE)  # '서류제출 : 나라장터 전자입찰서로 제출'
 
 
 def _normalize(text: str) -> str:

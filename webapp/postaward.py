@@ -291,7 +291,8 @@ class PostAward:
         with self._lock:
             items = self._read()
             added = sum(self._add(items, e["noticeNo"], (e.get("noticeOrd") or "")[:3], title=e.get("title", ""),
-                                  institution=e.get("institution", ""), work=e.get("workType", ""), source="투찰 기록")
+                                  institution=e.get("institution", ""), work=e.get("workType", ""), source="투찰 기록",
+                                  **({"private": True} if "수의" in (e.get("contractMethod") or "") else {}))
                         for e in self.bidlog.entries() if e.get("noticeNo"))
             self._write(items)
         return added
@@ -309,6 +310,8 @@ class PostAward:
             stages = ["0_적격심사", "1_계약", "2_착공" if v.get("work") == "공사" else "2_착수", "3_준공", "4_청구", "공고문서"]
             if qual_only:
                 stages = ["0_적격심사", "공고문서"]
+            elif v.get("private"):  # 수의계약 — 적격심사 없이 바로 계약(11/12 사용자 결정)
+                stages = stages[1:]
             for s in stages:
                 (folder / s).mkdir(parents=True, exist_ok=True)
             v["folder"] = str(folder)
@@ -330,6 +333,13 @@ class PostAward:
             raise ValueError("목록에 없는 공고입니다")
         with tempfile.TemporaryDirectory(prefix="postaward_") as tmp:
             nf = fetch(key, Path(tmp))
+            private = "수의" in (getattr(nf, "contract_method", "") or "")
+            with self._lock:
+                items = self._read()
+                items[key]["private"] = private
+                self._write(items)
+            if private and qual_only:
+                raise ValueError("수의계약 공고입니다 — 적격심사 없이 바로 계약하므로 낙찰이 확인되면 '낙찰 서류 만들기'를 쓰세요")
             if nf.title:
                 with self._lock:
                     items = self._read()
@@ -525,6 +535,19 @@ def selfcheck() -> None:
         assert sorted(x.name for x in q.iterdir()) == ["0_적격심사", "공고문서"] and pa._read()["R26BK00000002-000"]["qualOnly"] is True
         q, _ = pa.prepare("R26BK00000002-000", Path(d) / "out", fetch=lambda k, t: _NF2(), templates=tpl)
         assert (q / "2_착수").is_dir() and pa._read()["R26BK00000002-000"]["qualOnly"] is False
+        # 수의계약: 적격심사 폴더는 막고, 낙찰 서류엔 0_적격심사 단계가 없음
+        class _NF3(_NF):
+            title, contract_method = "C 공사", "수의계약"
+
+        pa.add("R26BK00000004-000")
+        try:
+            pa.prepare("R26BK00000004-000", Path(d) / "out", fetch=lambda k, t: _NF3(), templates=tpl, qual_only=True)
+            raise AssertionError("수의계약은 적격심사 폴더를 막아야 함")
+        except ValueError:
+            assert pa._read()["R26BK00000004-000"]["private"] is True
+        p3, _ = pa.prepare("R26BK00000004-000", Path(d) / "out", fetch=lambda k, t: _NF3(), templates=tpl)
+        assert not (p3 / "0_적격심사").exists() and (p3 / "1_계약").is_dir()
+        pa.remove("R26BK00000004-000")
         folder, _ = pa.prepare("R26BK00000001-000", Path(d) / "out", fetch=lambda k, t: _NF(), templates=tpl)
         ws = load_workbook(folder / "2_착공" / "착공서류.xlsx")["기본사항"]
         assert ws["B8"].value == "A 공사" and ws["B5"].value == "정선군" and ws["C8"].value.startswith("[자동]"), ws["C8"].value

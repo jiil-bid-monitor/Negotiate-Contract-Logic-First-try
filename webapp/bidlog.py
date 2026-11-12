@@ -27,7 +27,7 @@ FILE_NAME = "bid_log.json"
 BIDDERS_DIR = "bid_log_bidders"
 
 # 화면이 보내는 값 → 저장할 이름과 종류. 그 밖의 값은 버린다
-_TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "method": 80, "openingAt": 25, "closingAt": 25}
+_TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "contractMethod": 40, "method": 80, "openingAt": 25, "closingAt": 25}
 _NUMBER = ("basis", "lowerRate", "rangeLo", "rangeHi", "aValue", "bid", "rate", "planned", "netCost")
 _NO_RE = re.compile(r"^[A-Z0-9]{8,14}$")
 

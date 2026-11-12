@@ -211,6 +211,22 @@ def read_criteria(paths: list[Path]) -> list[Criterion]:
     return []
 
 
+def form_staff_grades(paths: list[Path]) -> tuple[dict[str, float], float]:
+    """자기평가표 서식의 기술인력 (등급별 1인당 점수, 배점) — 첫 번째로 찾은 것. 화면 기술인력 목록이 서식 기준을 먼저 쓰게
+    (11/12 사용자: '서식에서는 잘 나뉘어져 있잖아' — 서식 '특급기술자 | 1.0점/인', 채점도 서식 기준)."""
+    for path in paths:
+        try:
+            xmls = _sections(Path(path))
+        except (zipfile.BadZipFile, KeyError, OSError):
+            continue
+        for xml in xmls:
+            for tbl in _spans(xml, "tbl"):
+                for row in read_form(_cells(xml, tbl)):
+                    if row.crit is not None and row.crit.kind == "staff" and row.crit.per_grade:
+                        return dict(row.crit.per_grade), float(row.points or 0)
+    return {}, 0.0
+
+
 def _mark_style(text: str) -> str:
     """항목 머리표 종류 — '2)'·'가)'·'(1)'·'가.'·'1.' → 'n)'·'k)'·'(n)'·'k.'·'n.'."""
     m = _MARK.match(text or "")

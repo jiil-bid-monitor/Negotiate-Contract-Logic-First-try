@@ -227,6 +227,33 @@ def no_held_license(
     return names or None
 
 
+# '보유 면허' 수집 경로에 쓰는 지일 공사 면허(2026-11-12 사용자 결정 "공사 면허만") — 실내건축공사업(0006·4990), 정보통신공사업(0036),
+# 금속구조물·창호·온실공사업(1440), 금속창호·지붕건축물조립공사업(4991). 외주 추천 공고(낙석방지책 4991·정보통신설비 개량 0036)를
+# 공고명 키워드로는 못 잡아 면허로도 고르게 함.
+CONSTRUCTION_LICENSE_CODES = frozenset({"0006", "4990", "0036", "1440", "4991"})
+
+
+def construction_license_match(
+    groups: list[LicenseGroup], held_names: list[str], held_codes: set[str] | frozenset[str] = frozenset(),
+    codes: frozenset[str] = CONSTRUCTION_LICENSE_CODES,
+) -> list[str] | None:
+    """나라장터 면허제한을 지일이 **혼자 다 채우고**(미보유 요건 0) 그 요건에 지일 공사 면허가 들어 있으면 그 면허 이름 목록.
+    면허제한 정보가 없거나, 하나라도 못 채우거나, 공사 면허가 없으면 None."""
+    if not groups:
+        return None
+    if evaluate(groups, held_names, held_codes).missing_count:
+        return None
+    hits: list[str] = []
+    for group in groups:
+        rows = group.rows or [group.allowed_names]
+        names = [n for row in rows for n in row] + [n for combo in group.combos for row in combo for n in row]
+        for name in names:
+            code = _license_code(name)
+            if code in codes and code in held_codes and name not in hits:
+                hits.append(name)
+    return hits or None
+
+
 _LICENSE_CODE_RE = re.compile(r"(?:/\s*|\()(\d{4,10})\)?\s*$")
 
 

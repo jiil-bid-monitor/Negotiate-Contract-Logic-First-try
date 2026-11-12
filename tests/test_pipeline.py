@@ -87,23 +87,27 @@ class TestScope(unittest.TestCase):
             ("규격가격동시입찰-규격가격동시입찰", "제한경쟁", "규격가격동시입찰"),
             (fixtures.QUALIFY, "제한경쟁", "입찰"),
             (fixtures.DESIGN_CONTEST, "일반경쟁", None),  # 설계공모는 수집 안 함(2026-10-16 통합 결정 5번)
-            (fixtures.QUALIFY, "수의계약", None),
-            (fixtures.QUALIFY, "수의(소액)", None),
+            (fixtures.QUALIFY, "수의계약", "수의계약"),  # 2026-11-12부터 수집(사용자 결정)
+            (fixtures.QUALIFY, "수의(소액)", "수의계약"),
         ]
         for award, contract, expected in cases:
             with self.subTest(award=award, contract=contract):
                 n = notice_from_raw(fixtures.notice("X", award=award, cntrctCnclsMthdNm=contract), "용역")
                 self.assertEqual(scope.bid_category(n), expected)
 
-    def test_private_contract_dropped_competitive_bids_kept(self):
+    def test_private_contract_kept_since_20261112(self):
+        """수의계약도 수집(2026-11-12 사용자 결정 — 외주 추천 R26BK01815406 낙석방지책 정비공사가 수의계약이라 빠졌음)."""
         raws = [
             fixtures.notice("R-NEGO"),
             fixtures.notice("R-BID", award=fixtures.QUALIFY),
             fixtures.notice("R-PRIVATE", award=fixtures.QUALIFY, cntrctCnclsMthdNm="수의계약"),
         ]
         result = scope.apply_scope([notice_from_raw(r, "용역") for r in raws])
-        self.assertEqual({n.notice_no for n in result.kept}, {"R-NEGO", "R-BID"})
-        self.assertEqual(result.dropped_private, 1)
+        self.assertEqual({n.notice_no for n in result.kept}, {"R-NEGO", "R-BID", "R-PRIVATE"})
+        self.assertEqual(result.dropped_private, 0)
+        # 매일 입찰 보고(categories=입찰)에도 수의계약이 같이
+        result = scope.apply_scope([notice_from_raw(r, "용역") for r in raws], scope.parse_categories("입찰"))
+        self.assertEqual({n.notice_no for n in result.kept}, {"R-BID", "R-PRIVATE"})
 
     def test_category_filter_keeps_only_chosen(self):
         raws = [fixtures.notice("R-NEGO"), fixtures.notice("R-BID", award=fixtures.QUALIFY)]
@@ -113,9 +117,10 @@ class TestScope(unittest.TestCase):
 
     def test_parse_categories(self):
         self.assertIsNone(scope.parse_categories(""))
-        self.assertEqual(scope.parse_categories("입찰, 협상"), {"입찰", "협상"})
+        self.assertEqual(scope.parse_categories("입찰, 협상"), {"입찰", "협상", "수의계약"})
+        self.assertEqual(scope.parse_categories("협상"), {"협상"})
         with self.assertRaises(ValueError):
-            scope.parse_categories("수의계약")
+            scope.parse_categories("수의")
 
     def test_cancelled_dropped_and_latest_ordinal_kept(self):
         result = scope.apply_scope(_notices(), {"협상"})
@@ -1088,6 +1093,36 @@ class TestAnswers20261013(unittest.TestCase):
         self.assertEqual(stats.rejected[0].excluded_reason, "보유면허없음 (요구 면허 토목공사업(0001) — 지일 보유 없음, 공동수급 불가)")
         stats = RunStats()
         self.assertEqual(len(build_candidates(notices, config, {}, {}, NOW, stats)), 1)
+
+
+
+class TestLicenseRoute20261112(unittest.TestCase):
+    """2026-11-12 사용자 결정: 키워드가 없어도 지일 공사 면허(실내건축·정보통신·금속구조물·금속창호)로 면허제한을 다 채우면 수집.
+    계기: 외주 추천 R26BK01815406 '지방도411호선 강림지구 낙석방지책 정비공사'(수의계약, 4991 요구) — 키워드 없음 + 제외 키워드 '정비'."""
+
+    def _run(self, title, rows, contract="수의계약"):
+        config = load_config()
+        n = notice_from_raw(fixtures.notice("R26BK01815406", title=title, award=fixtures.QUALIFY, cntrctCnclsMthdNm=contract), "공사")
+        groups = {"R26BK01815406": [qualify.LicenseGroup("1", rows=rows)]}
+        stats = RunStats()
+        return build_candidates([n], config, groups, {}, NOW, stats), stats
+
+    def test_fall_protection_notice_collected_by_license(self):
+        got, stats = self._run("지방도411호선 강림지구 낙석방지책 정비공사", [["금속창호·지붕건축물조립공사업/4991"]])
+        self.assertEqual(len(got), 1)
+        c = got[0]
+        self.assertEqual(c.category, "수의계약")
+        self.assertEqual(c.screen_result.license_match, ["금속창호·지붕건축물조립공사업/4991"])
+        self.assertEqual(c.screen_result.section, "관심")
+        self.assertEqual(stats.license_route, 1)
+
+    def test_not_collected_when_license_not_fully_held_or_not_construction(self):
+        got, _ = self._run("○○ 낙석방지책 설치공사", [["금속창호·지붕건축물조립공사업/4991"], ["토목공사업/0001"]])
+        self.assertEqual(got, [])  # 토목은 미보유 — 혼자 못 들어감
+        got, _ = self._run("○○ 홍보 영상 제작", [["비디오물제작업/3244"]])
+        self.assertEqual(got, [])  # 공사 면허 아님
+        got, _ = self._run("○○ 낙석방지책 보수공사", [["금속창호·지붕건축물조립공사업/4991"]])
+        self.assertEqual(got, [])  # 무조건 제외 키워드(보수공사)는 그대로
 
 
 if __name__ == "__main__":

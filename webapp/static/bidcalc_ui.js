@@ -285,7 +285,7 @@
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
     LAST_NOTICE = null; REC_BID_EDITED = false;
-    WORK = ""; REC_METHOD = ""; NET_RULE = null; REGION_LIMITED = null; REC_PICK = null; REC_OPTIONS = []; $("#cRec").textContent = "";
+    WORK = ""; REC_METHOD = ""; NET_RULE = null; REGION_LIMITED = null; REC_PICK = null; REC_OPTIONS = []; NEGO = null; $("#cRec").textContent = "";
     render();
   };
   async function lookup() {
@@ -350,7 +350,14 @@
       const auto = autoRun(d.method);
       if (auto) $("#cNotes").insertAdjacentHTML("beforeend", `<div class="calc-auto">${esc(auto)}</div>`);
       WORK = d.work_type || "";
-      if (d.basis != null && d.lower_rate != null) recommend();
+      NEGO = d.nego || null;
+      $("#cRec").textContent = "";  // 앞 공고의 기준 금액 칸이 남지 않게
+      // 협상 공고면 사정률 추천 줄(경쟁 규모·추천 보기)을 숨기고 제목도 바꿈
+      document.querySelector(".calc-rec-bar").hidden = !!NEGO;
+      document.querySelector(".calc-rec .calc-h").textContent = NEGO
+        ? "가격 점수표 — 협상에 의한 계약(제안요청서 입찰가격 평정산식)" : "추천 투찰금액 — 비슷한 과거 공고의 개찰 결과 기준";
+      if (NEGO) renderNego();  // 협상 공고 — 하한율이 없어 사정률 추천 대신 가격 점수표(11/12)
+      else if (d.basis != null && d.lower_rate != null) recommend();
     } catch (err) {
       lookupMsg(`실패: ${err.message}`, true);
     } finally {
@@ -369,6 +376,47 @@
     select(AUTO);
     return `자동 계산: ${plan.name}(${plan.why}) → 무작위 번호 ${AUTO.join("·")}번 — 모의 추첨 1회라 실제 예정가격과 다름. `
       + "다시 뽑으려면 자동선택 '시작 → 적용'";
+  }
+
+  // ── 협상에 의한 계약 — 가격 점수표(11/12 사용자 요청) ──
+  // 협상 공고는 낙찰하한율이 없어 사정률 추천이 맞지 않음. 제안요청서의 입찰가격 평정산식(서버 nego/negoprice가 읽음)으로
+  // '내 제안가격 × 다른 업체 최저가' 점수표를 그림. 기준 금액(예정가격 — 기초금액, 없으면 추정가격 × 1.1)은 고칠 수 있음
+  let NEGO = null;
+  const NEGO_MINE = [100, 98, 95, 93, 90, 88, 85, 83, 80, 78, 75, 72, 70, 69];
+  const NEGO_RIVALS = [95, 90, 85, 80, 75];
+  function renderNego() {
+    const r = NEGO.rule, f = (v) => Number(v).toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+    const base = ($("#cNegoBase") && numIn("#cNegoBase")) || NEGO.base;
+    const formula = `가격 배점 <b>${f(r.weight)}점</b> · 내 가격이 ${r.base} ${f(r.upper)}% 이상: 배점 × (최저가 ÷ 내 가격)
+      · ${f(r.upper)}% 미만: 배점 × (최저가 ÷ ${f(r.upper)}% 금액) + ${f(r.bonus)} × (${f(r.upper)}% 금액 − 내 가격) ÷ (${f(r.upper)}% − ${f(r.lower)}% 금액)
+      · ${f(r.lower)}% 미만: 배점의 ${f(r.under)}% · 최저가가 ${f(r.floor)}% 미만이면 ${f(r.floor)}%로 계산`;
+    const src = NEGO.rule_found
+      ? `제안요청서 '${esc(r.file || "")}'의 입찰가격 평정산식${r.kind ? `(${r.kind}계약)` : ""}`
+      : "제안요청서에서 식을 못 찾아 지방계약 기본 식으로 계산 — 제안요청서 '입찰가격 평가'를 확인하세요";
+    let over = false;
+    const rows = base > 0 ? NEGO_MINE.map((m) => {
+      const price = (base * m) / 100;
+      const cells = NEGO_RIVALS.map((x) => {
+        const v = C.negoScore(price, (base * x) / 100, base, r);
+        if (v != null && v > r.weight + 1e-9) over = true;
+        const cls = v == null ? "" : m < r.lower ? " class=\"nego-low\"" : v > r.weight + 1e-9 ? " class=\"nego-over\"" : "";
+        return `<td${cls}>${v == null ? "-" : v.toFixed(2)}</td>`;
+      }).join("");
+      return `<tr><th>${m}%</th><td class="num">${won(Math.round(price))}</td>${cells}</tr>`;
+    }).join("") : "";
+    $("#cRec").innerHTML = `<div class="rec-flag">협상에 의한 계약 공고 — 낙찰하한율이 없어 사정률 추천 대신 <b>가격 점수표</b>를 보여 줍니다.
+        낙찰은 기술 점수 + 가격 점수 합계 순으로 협상합니다.</div>
+      <div class="nego-bar"><label>기준 금액(${esc(r.base)}) <input id="cNegoBase" inputmode="numeric" value="${base ? won(base) : ""}"> 원</label>
+        <span class="why">${base ? `처음 값: ${esc(NEGO.base_source || "")}` : "기준 금액을 넣어 주세요"} — 실제 ${esc(r.base)}과 다를 수 있음</span></div>
+      <div class="why nego-formula">${formula} ${tip(`${esc(src)}${r.quote ? `<br><br>원문: ${esc(r.quote)}` : ""}`)}</div>
+      ${rows ? `<table class="nego-table"><thead><tr><th>내 제안가격</th><th>금액</th>
+          <th colspan="${NEGO_RIVALS.length}">다른 업체 최저가(${esc(r.base)} 대비)에 따른 내 가격 점수</th></tr>
+          <tr><th></th><th></th>${NEGO_RIVALS.map((x) => `<th>${x}%</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>` : ""}
+      ${over ? `<div class="rec-warn">식대로 계산하면 ${f(r.upper)}% 미만 가격에서 배점(${f(r.weight)}점)을 넘는 칸이 있어요 — 배점 상한이 따로 있는지 제안요청서·발주처에 확인하세요</div>` : ""}
+      <div class="why">${f(r.lower)}% 미만으로 내면 배점의 ${f(r.under)}%(${f((r.weight * r.under) / 100)}점)만 받아요(붉은 줄).</div>`;
+    const inp = $("#cNegoBase");
+    inp.addEventListener("input", (e) => commaInput(e.target));
+    inp.addEventListener("change", renderNego);
   }
 
   // 추천 사정률(2026-10-28) — 위 입력칸(기초금액·하한율·변동폭·A값)과 불러온 공고의 업무로 서버에 묻는다.

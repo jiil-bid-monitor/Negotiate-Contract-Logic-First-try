@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
@@ -149,7 +150,41 @@ def read_list(folder: Path) -> list[tuple[str, date]]:
     return sorted(out, key=lambda d: d[1])
 
 
-def docs_reply(docs: list[tuple[str, date]], today: date) -> str:
+# '신청 중' 표시 (2026-11-12 사용자 요청 — 갱신 신청은 했고 서류만 아직 안 나온 상태). 키 '종류|날짜'라
+# /upload로 새 날짜가 들어오면 저절로 풀린다. 알림·/docs 메시지의 버튼으로 켜고 끈다.
+APPLY_PATH = Path("data") / "doc_applying.json"
+APPLY_NOTE = "신청 중 — 발급 받으면 /upload 로 최신 서류를 올려 주세요"
+
+
+def apply_key(kind: str, end: date) -> str:
+    return f"{kind}|{end}"
+
+
+def _apply_id(kind: str, end: date) -> str:
+    # 버튼 값은 64바이트까지라 한글 이름 대신 짧은 지문
+    return "a:" + hashlib.sha1(apply_key(kind, end).encode()).hexdigest()[:12]
+
+
+def apply_buttons(docs: list[tuple[str, date]], today: date, applying: set[str]) -> dict | None:
+    """30일 안에 끝나는데 아직 '신청 중'이 아닌 서류마다 버튼 하나. 없으면 None."""
+    rows = [[{"text": f"신청 중으로 표시: {k}", "callback_data": _apply_id(k, d)}]
+            for k, d in docs if 0 <= (d - today).days <= ALERT_MONTH and apply_key(k, d) not in applying]
+    return {"inline_keyboard": rows} if rows else None
+
+
+def toggle_applying(docs: list[tuple[str, date]], data: str, path: Path | None = None) -> tuple[str, bool] | None:
+    """버튼 값 → (서류 이름, 이제 신청 중인지). 그 서류가 목록에 없으면(새 서류로 바뀜) None."""
+    path = path or APPLY_PATH
+    for k, d in docs:
+        if _apply_id(k, d) == data:
+            marked = load_sent(path)
+            marked ^= {apply_key(k, d)}
+            save_sent(path, marked)
+            return k, apply_key(k, d) in marked
+    return None
+
+
+def docs_reply(docs: list[tuple[str, date]], today: date, applying: set[str] = frozenset()) -> str:
     if not docs:
         return "인증서갱신.xlsx·서류목록.xlsx에서 만료일이 적힌 서류를 찾지 못했습니다."
     expired = [(k, d) for k, d in docs if d < today]
@@ -161,11 +196,13 @@ def docs_reply(docs: list[tuple[str, date]], today: date) -> str:
                              ("그 뒤", later, lambda d: "")):
         if rows:
             out.append(f"\n<b>{title} {len(rows)}건</b>")
-            out += [f"· {html.escape(k)} — {d}" + (f" ({fmt(d)})" if fmt(d) else "") for k, d in rows]
+            out += [f"· {html.escape(k)} — {d}" + (f" ({fmt(d)})" if fmt(d) else "")
+                    + (" · 신청 중" if apply_key(k, d) in applying else "") for k, d in rows]
     return "\n".join(out)
 
 
-def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str]) -> tuple[str | None, list[str]]:
+def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str],
+              applying: set[str] = frozenset()) -> tuple[str | None, list[str]]:
     """만료 한 달 전(30일)·일주일 전(7일) 두 번 알린다(2026-11-12 사용자 요청) → (알림 글, 새로 알린 키). 없으면 (None, []).
     만료일 당일에도 날짜가 그대로면 한 번 더 — 키 '종류|날짜|당일' (2026-11-11 사용자 요청).
     7일 전 키는 예전 그대로 '종류|날짜'(이미 보낸 기록과 맞게), 한 달 전은 '종류|날짜|30일'."""
@@ -181,8 +218,11 @@ def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str]) -> tupl
     lines = [f"<b>📄 회사 서류 갱신 알림</b>", head, ""]
     for k, d in rows:
         lines += [f"• <b>{html.escape(k)}</b>", f"   {d} · {'오늘 만료' if d == today else f'D-{(d - today).days}'}"]
+        if apply_key(k, d) in applying:
+            lines.append(f"   {APPLY_NOTE}")
     lines += ["", "갱신했으면 → /upload 로 새 서류를 보내 주세요",
               "   (만료일을 물어보고 인증서갱신.xlsx도 고칩니다)",
+              "신청만 해 둔 서류면 → 아래 버튼으로 '신청 중' 표시",
               "안 쓰는 서류면 → /remove 로 빼 주세요"]
     return "\n".join(lines), [key(k, d) for k, d in rows]
 

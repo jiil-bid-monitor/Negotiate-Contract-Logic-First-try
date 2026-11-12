@@ -96,6 +96,21 @@ class DocExpiryTest(unittest.TestCase):
             bot.checked_day = None
             self.assertEqual(bot.check_docs(datetime(2026, 11, 9, 10, 0)), 0, "같은 서류는 한 번만")
             self.assertIn("회사 서류 유효기간", tb.reply("/docs", None, datetime(2026, 11, 9)))
+            # '신청 중' 버튼 (11/12 사용자 요청): 알림에 버튼 → 누르면 표시 → 다음 알림·/docs에 안내, 다시 누르면 풀림
+            button = sent[0]["reply_markup"]["inline_keyboard"][0][0]
+            self.assertIn("직접생산(전시)", button["text"])
+            with mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "applying.json"):
+                cb = {"id": "1", "data": button["callback_data"], "message": {"chat": {"id": -1}}}
+                self.assertTrue(bot.handle_apply(cb))
+                self.assertIn("신청 중으로 표시했습니다", sent[-1]["text"])
+                self.assertIn("(D-2) · 신청 중", tb.reply("/docs", None, datetime(2026, 11, 9)))
+                docs, marked = D.read_docs(self.dir), D.load_sent(D.APPLY_PATH)
+                self.assertIn(D.APPLY_NOTE, D.due_alert(docs, date(2026, 11, 11), set(), marked)[0])
+                self.assertIsNone(D.apply_buttons(docs, date(2026, 11, 9), marked), "표시한 서류는 버튼에서 빠짐")
+                self.assertTrue(bot.handle_apply(cb))
+                self.assertIn("풀었습니다", sent[-1]["text"])
+                self.assertEqual(D.load_sent(D.APPLY_PATH), set())
+            self.assertFalse(bot.handle_apply({"id": "2", "data": "k:0", "message": {"chat": {"id": -1}}}), "/upload 버튼은 그대로")
 
 
 if __name__ == "__main__":

@@ -199,7 +199,8 @@ def write_award_summary_pdf(path: Path, key: str, title: str, rows: list[tuple[s
 
 
 def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, key: str, need: list[tuple[str, str, str]],
-                      ref: str, deadline: str | None, files: list[str], now: datetime, sections: dict | None = None) -> bool:
+                      ref: str, deadline: str | None, files: list[str], now: datetime, sections: dict | None = None,
+                      forms: list[str] | None = None, ebid: bool = False) -> bool:
     """한글 글꼴이 없으면 False — 나머지 자료는 그대로 만든다."""
     from nego.text_requirements import summarize_flag
     from reportlab.lib import colors
@@ -246,6 +247,12 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
             story.append(Paragraph("&nbsp;&nbsp;원문: " + esc((flag.get("text") or "")[:300]), small))
     else:
         story.append(Paragraph("없음(실적·기술인력 요건 문장을 찾지 못함)", base))
+    # 제출할 서식·입찰서 — 회사 서류만 보이면 서식을 빠뜨린 것처럼 읽힘(2026-11-12 사용자 제보)
+    story.append(Paragraph("제출 서식 — 서식자동분리 폴더에 만들어 둠", h2))
+    story += [Paragraph("&nbsp;&nbsp;" + esc(re.sub(r"^별도_", "", name)), base) for name in forms or []] or [
+        Paragraph("첨부에 정해진 서식 없음", base)]
+    if ebid:
+        story.append(Paragraph("&nbsp;&nbsp;입찰서 — 나라장터 전자입찰로 제출(따로 만들 파일 없음)", base))
     story += [Paragraph("회사 서류 — 새로 준비할 것", h2),
               Paragraph(f"판단 기준일 {ref}" + (f" (제출 마감 {deadline})" if deadline and deadline >= ref else " (마감이 지났거나 못 찾음 — 오늘 기준)"), small)]
     if need:

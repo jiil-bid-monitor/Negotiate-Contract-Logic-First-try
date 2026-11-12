@@ -42,3 +42,28 @@ class MethodTailHeadingTest(unittest.TestCase):
                 "1) 공기 준수 서약서 [서식1]\n2) 입찰 내역서\n마. 입찰서의 제출확인은 조달청 전자입찰시스템 웹 송신함에서 반드시 확인하시기 바랍니다.\n")
         lines = find_sections([("공고서.docx", text)])["제출 서류"][0][2]
         self.assertEqual(lines, ["1) 공기 준수 서약서 [서식1]", "2) 입찰 내역서"])
+
+
+class SummaryFormsTest(unittest.TestCase):
+    def test_summary_lists_forms_and_ebid(self):  # 광주지점 가구 R26BK01813463 — 서식·입찰서가 요약에 안 보였음
+        import tempfile
+        from datetime import datetime
+        from pathlib import Path
+        from types import SimpleNamespace as NS
+
+        from nego.attachments import extract_text
+        from under100m.summary import write_summary_pdf
+
+        cand = NS(notice=NS(title="가구 제작설치", notice_institution="은행", demand_institution="은행", raw={}, estimated_price=None,
+                            assigned_budget=None), joint=NS(label="-"), schedule=NS(all_deadlines=[]), attachment_text="",
+                  qualification=NS(checked=False, missing_groups=[], satisfied_groups=[]), qual_parts=[], text_flags=[],
+                  region_check=NS(status="미확인", source="", required=[], company=""))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "요약.pdf"
+            if not write_summary_pdf(cand, None, "", path, "R1-000", [], "2026-11-12", None, [], datetime(2026, 11, 12), None,
+                                     ["별도_안전보건관리 준수 서약서"], True):
+                self.skipTest("한글 글꼴 없음")
+            text = extract_text(path.read_bytes(), "pdf")
+        self.assertIn("안전보건관리 준수 서약서", text)
+        self.assertNotIn("별도_", text)
+        self.assertIn("입찰서 — 나라장터 전자입찰로 제출", text)

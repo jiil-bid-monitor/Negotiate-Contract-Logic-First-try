@@ -1127,7 +1127,7 @@ class _Chars:
         b = self.blocks.get(cid, "")
         m = re.search(r'\btextColor="#([0-9A-Fa-f]{6})"', b)
         return (bool(m) and m.group(1).upper() != "000000") or bool(re.search(r"<(?:[\w.-]+:)?(?:bold|italic)\s*/>", b)) \
-            or bool(re.search(r'<(?:[\w.-]+:)?underline\b[^>]*\btype="(?!NONE)', b))
+            or bool(re.search(r'<(?:[\w.-]+:)?underline\b[^>]*\btype="(?!NONE)', b)) or _tight(b)
 
     def smaller(self, cid: str, height: int) -> str:
         return self.variant(cid, height)
@@ -1160,12 +1160,33 @@ class _Chars:
             b = re.sub(r'\btextColor="#[0-9A-Fa-f]{6}"', 'textColor="#000000"', b, count=1)  # 채운 값은 검은 글씨
             b = re.sub(r"<(?:[\w.-]+:)?(?:bold|italic)\s*/>", "", b)  # 굵게·기울임 없이(11/06)
             b = re.sub(r'(<(?:[\w.-]+:)?underline\b[^>]*\btype=")\w+(")', r"\g<1>NONE\2", b, count=1)
+            b = _untighten(b)
             ref = self._font_ref(cid)
             return b.replace(ref, self._unified_ref(cid, face), 1) if ref else b
         extra = "".join(block(cid, h, new, face) for (cid, h, face), new in self.added.items())
         h = re.sub(r"(</(?:[\w.-]+:)?charProperties>)", lambda m: extra + m.group(1), header, count=1)
         return re.sub(r'(<(?:[\w.-]+:)?charProperties\b[^>]*\bitemCnt=")(\d+)"',
                       lambda m: f'{m.group(1)}{int(m.group(2)) + len(self.added)}"', h, count=1)
+
+
+TIGHT_SPACING = -10  # 자간이 이보다 좁으면 채운 값은 자간 0 — 11/12 당진 실적 표 첫 줄 '단독'이 원래 칸의 자간 -34%를 물려받아 글자가 겹침
+
+
+def _spacing_tag(b: str) -> re.Match | None:
+    return re.search(r"<(?:[\w.-]+:)?spacing\b[^>]*/>", b)
+
+
+def _tight(b: str) -> bool:
+    tag = _spacing_tag(b)
+    return bool(tag) and any(int(v) < TIGHT_SPACING for v in re.findall(r'="(-?\d+)"', tag.group(0)))
+
+
+def _untighten(b: str) -> str:
+    tag = _spacing_tag(b)
+    if not tag:
+        return b
+    fixed = re.sub(r'="(-?\d+)"', lambda m: '="0"' if int(m.group(1)) < TIGHT_SPACING else m.group(0), tag.group(0))
+    return b[:tag.start()] + fixed + b[tag.end():]
 
 
 def _text_width(text: str, height: int, ratio: float) -> float:
@@ -1277,19 +1298,36 @@ _NUMERIC_LINE = re.compile(r"[\d,.\-~]+")
 
 
 def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str:
-    """실적 표의 사업기간·금액 칸이 11pt 한 줄에 안 들어가면 그 열을 넓히고, 같은 표에서 가장 넓은 열(보통 사업명)을 그만큼 좁힘 —
-    표 전체 너비는 그대로(11/12 사용자 요청: '2023.06.' / '23~'처럼 날짜·금액이 중간에서 잘려 읽기 어려움).
-    여러 열을 합친 칸은 두 열을 다 덮으면 그대로, 한쪽만 덮으면 그만큼만 바꿈. 받는 열은 원래 너비의 60% 밑으로는 안 줄임."""
+    """실적 표 값이 11pt로 읽기 좋게 들어가도록 열을 넓히고, 같은 표에서 가장 넓은 열(보통 사업명)을 그만큼 좁힘 — 표 전체 너비는 그대로.
+    ① 사업기간·금액·전화처럼 숫자뿐인 줄은 한 줄에(11/12 '2023.06.' / '23~'처럼 잘림) ② '단독'·'공동'처럼 짧은 낱말(6자 이하)은
+    한 줄에 — 한글이 칸보다 넓으면 글자가 겹쳐 보임(11/12 비고 '단독') ③ 그 밖의 글('실내건축·인테리어')은 두 줄 안에.
+    여러 열을 합친 칸은 두 열을 다 덮으면 그대로, 한쪽만 덮으면 그만큼만 바꿈. 받는 열은 원래 너비의 60% 밑으로는 안 줄임
+    (앞 순서 — 숫자 → 짧은 낱말 → 글 — 부터 그 안에서 나눠 씀)."""
     cells = _cells(xml, tbl)
     edits = _fill_tracks(xml, cells, tracks, FillReport("x"))
-    need: dict[int, float] = {}
+    need: dict[int, tuple[int, float]] = {}  # 열 → (순서, 필요한 글 너비)
+
+    def tw(x: str) -> float:
+        return _text_width(x, FILL_HEIGHT, 1.0)
+
     for c, lines, _keep in edits:
-        if c.colspan != 1 or not lines or not all(_NUMERIC_LINE.fullmatch(x.strip()) for x in lines if x.strip()):
+        lines = [x.strip() for x in lines if x and x.strip()]
+        if c.colspan != 1 or not lines:
             continue
-        need[c.col] = max(need.get(c.col, 0.0), max(_text_width(x.strip(), FILL_HEIGHT, 1.0) for x in lines if x.strip()))
+        if all(_NUMERIC_LINE.fullmatch(x) for x in lines):
+            want = (0, max(tw(x) for x in lines))
+        else:
+            words = [w for x in lines for w in x.split()]
+            short = [w for w in words if len(w) <= 6]
+            longest = max(tw(x) for x in lines)
+            if all(len(w) <= 6 for w in words):
+                want = (1, longest if len(lines) == 1 and len(lines[0]) <= 8 else max(tw(w) for w in short))
+            else:
+                want = (2, max(longest / 2, max((tw(w) for w in short), default=0.0)))
+        old_want = need.get(c.col)
+        need[c.col] = want if old_want is None else (min(old_want[0], want[0]), max(old_want[1], want[1]))
     if not need:
         return xml
-
     def width(seg: str) -> int | None:
         m = re.findall(r'<(?:[\w.-]+:)?cellSz\b[^>]*\bwidth="(\d+)"', seg)
         return int(m[-1]) if m else None
@@ -1299,26 +1337,31 @@ def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str
         mg = dict(re.findall(r'\b(left|right)="(\d+)"', tag[-1] if tag else ""))
         return int(mg.get("left", 141)) + int(mg.get("right", 141))
 
-    for col in sorted(need):
+    first = _cells(xml, tbl)
+    base: dict[int, int] = {}
+    for c in first:
+        w = width(xml[c.start:c.end])
+        if c.colspan == 1 and w:
+            base[c.col] = min(base.get(c.col, w), w)
+    if not base:
+        return xml
+    donor = max(base, key=lambda k: base[k])  # 가장 넓은 열이 내줌(사업명) — 그 열은 넓히지 않음
+    budget = int(base[donor] * 0.4)
+    for col in sorted((k for k in need if k != donor), key=lambda k: (need[k][0], k)):
         cells = _cells(xml, tbl)
         singles = {}  # 열 → 그 열 하나만 덮는 칸들의 (너비, 여백)
         for c in cells:
             w = width(xml[c.start:c.end])
             if c.colspan == 1 and w:
                 singles.setdefault(c.col, []).append((w, margin(xml[c.start:c.end])))
-        if col not in singles:
+        if col not in singles or donor not in singles:
             continue
         cur = min(w for w, _m in singles[col])
-        want = int(need[col] * 1.06) + max(m for _w, m in singles[col])
-        if want <= cur:
-            continue
-        donors = [(min(w for w, _m in v), k) for k, v in singles.items() if k not in need]
-        if not donors:
-            continue
-        dw, donor = max(donors)
-        d = min(want - cur, int(dw * 0.4))  # 받는 열은 원래의 60%까지만
+        want = int(need[col][1] * 1.06) + max(m for _w, m in singles[col])
+        d = min(want - cur, budget)
         if d <= 0:
             continue
+        budget -= d
 
         def shift(seg: str, abs_start: int) -> str:
             c = next((x for x in cells if x.start == abs_start), None)

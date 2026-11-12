@@ -3784,12 +3784,17 @@ function renderAward(items) {
     const result = won ? `<span class="badge okb">낙찰</span><div class="sub">${esc(w.date || "")}${w.amount ? " · " + Number(w.amount).toLocaleString() + "원" : ""}</div>`
       : v.status === "다른 업체 낙찰" ? `<span class="badge">다른 업체 낙찰</span><div class="sub">${esc(w.name || "")}</div>`
       : v.status === "대기" ? awardWaiting(v.opening) : `<span class="badge">${esc(v.status || "")}</span>`;
-    // 폴더 만들기는 낙찰 뒤에만(11/11 사용자 요청) — 빼기는 다른 업체 낙찰·잘못 넣은 공고 정리용이라 늘 씀
+    // 버튼 둘(11/12 사용자 결정): 적격심사 폴더 = 낙찰 전 개찰 5등 안(적격심사는 1순위부터 차례 — 통보받으면), 낙찰 서류 = 지일 낙찰 확인 뒤.
+    // 빼기는 다른 업체 낙찰·잘못 넣은 공고 정리용이라 늘 씀
+    const rank = v.status === "대기" && v.opening ? v.opening.rank : null;
+    const stage = v.qualOnly ? ` data-award-stage="qual"` : "";
     const act = v.folder
       ? `<button type="button" class="award-toggle" data-award-open="${esc(key)}" aria-expanded="${AWARD_OPEN.has(key)}">서류 현황 ${AWARD_OPEN.has(key) ? "▴" : "▾"}</button>
-         <button type="button" data-award-folder="${esc(key)}" title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀(담당자가 고친 파일은 안 덮어씀)">첨부 다시 받기</button>`
-      : won ? `<button type="button" class="award-main" data-award-folder="${esc(key)}">폴더 만들기</button>`
-      : `<button type="button" disabled title="나라장터 낙찰현황에서 지일 낙찰이 확인되면 켜집니다">폴더 만들기</button><div class="sub">낙찰 확인 뒤 만들 수 있음</div>`;
+         <button type="button" data-award-folder="${esc(key)}"${stage} title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀(담당자가 고친 파일은 안 덮어씀)">첨부 다시 받기</button>`
+        + (won && v.qualOnly ? ` <button type="button" class="award-main" data-award-folder="${esc(key)}" title="같은 폴더에 계약·착공(착수)·준공·청구 단계를 더함">낙찰 서류 만들기</button>` : "")
+      : won ? `<button type="button" class="award-main" data-award-folder="${esc(key)}">낙찰 서류 만들기</button>`
+      : rank != null && rank <= 5 ? `<button type="button"${rank === 1 ? ` class="award-main"` : ""} data-award-folder="${esc(key)}" data-award-stage="qual">적격심사 폴더 만들기</button><div class="sub">${rank === 1 ? "적격심사 대상 가능성 높음 — 통보 확인" : "통보받으면 만들기"}</div>`
+      : `<button type="button" disabled title="개찰 결과 지일이 5등 안이거나 낙찰이 확인되면 켜집니다">폴더 만들기</button><div class="sub">개찰 5등 안 또는 낙찰 확인 뒤 만들 수 있음</div>`;
     const detail = AWARD_OPEN.has(key) ? `<tr class="award-detail"><td colspan="5"><div id="awardDetail-${esc(key)}" class="award-panel">불러오는 중…</div></td></tr>` : "";
     return `<tr><td><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener">${esc(key)}</a><div>${esc(v.title || "")}</div><div class="sub">${esc(v.institution || "")}</div></td>
       <td>${esc(v.work || "—")}</td><td>${result}</td><td class="sub">${esc(v.source || "")}<br>${esc((v.checkedAt || "").slice(0, 16).replace("T", " "))}</td>
@@ -3868,7 +3873,7 @@ $("awardList").onclick = (e) => {
     return;
   }
   const f = e.target.closest("[data-award-folder]");
-  if (f) return awardAct(f, "/api/postaward/folder", { key: f.dataset.awardFolder }, () => {
+  if (f) return awardAct(f, "/api/postaward/folder", { key: f.dataset.awardFolder, stage: f.dataset.awardStage || "" }, () => {
     AWARD_OPEN.add(f.dataset.awardFolder); loadAward();
     return "폴더를 만들고 첨부를 받았습니다 — 아래 '서류 현황'에서 채울 칸을 확인하세요.";
   });

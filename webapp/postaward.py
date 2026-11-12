@@ -296,8 +296,9 @@ class PostAward:
             self._write(items)
         return added
 
-    def make_folder(self, key: str, root: Path) -> Path:
-        """공고 폴더 — root/공사|물품·용역/번호-차수_공고명/ 아래 단계별 폴더. 이미 있으면 빈 폴더만 채우고 파일은 안 건드림."""
+    def make_folder(self, key: str, root: Path, qual_only: bool = False) -> Path:
+        """공고 폴더 — root/공사|물품·용역/번호-차수_공고명/ 아래 단계별 폴더. 이미 있으면 빈 폴더만 채우고 파일은 안 건드림.
+        `qual_only`(낙찰 전 적격심사 단계)면 0_적격심사·공고문서만 — 나머지 단계는 낙찰 뒤에 더함."""
         with self._lock:
             items = self._read()
             v = items.get(key)
@@ -306,13 +307,16 @@ class PostAward:
             name = re.sub(r'[\\/:*?"<>|\s]+', " ", f"{key}_{v.get('title') or ''}").strip()[:90].rstrip(" ._")
             folder = Path(root) / group_of(v.get("work", "")) / name
             stages = ["0_적격심사", "1_계약", "2_착공" if v.get("work") == "공사" else "2_착수", "3_준공", "4_청구", "공고문서"]
+            if qual_only:
+                stages = ["0_적격심사", "공고문서"]
             for s in stages:
                 (folder / s).mkdir(parents=True, exist_ok=True)
             v["folder"] = str(folder)
+            v["qualOnly"] = qual_only  # 화면: 낙찰되면 '낙찰 서류 만들기'를 다시 보임
             self._write(items)
         return folder
 
-    def prepare(self, key: str, root: Path, fetch=None, templates: Path | None = None) -> tuple[Path, list[dict]]:
+    def prepare(self, key: str, root: Path, fetch=None, templates: Path | None = None, qual_only: bool = False) -> tuple[Path, list[dict]]:
         """공고 폴더 만들기 — 나라장터에서 공고 정보·첨부를 받아(정량평가서와 같은 quantdocs.g2b.fetch_notice) 업무를 정하고,
         첨부는 공고문서/에 두고, 첨부가 요구하는 제출서류를 읽어 표준틀에 없는 것을 '서류_확인.txt'에 적는다.
         표준틀(templates, 기본 root/_표준틀)이 있으면 착공·착수서류를 복사해 기본사항을 채운다(시험판 11/11)."""
@@ -332,13 +336,14 @@ class PostAward:
                     items[key].update(title=nf.title, institution=nf.institution or items[key].get("institution", ""),
                                       work=nf.work_type or items[key].get("work", ""), method=nf.award_method)
                     self._write(items)
-            folder = self.make_folder(key, root)
+            folder = self.make_folder(key, root, qual_only)
             docs = required_docs(nf.files)
             for f in nf.files:
                 target = folder / "공고문서" / f.name
                 if not target.exists():  # 담당자가 고쳤을 수 있어 덮어쓰지 않음
                     shutil.copyfile(f, target)
-            basic = self._fill_template(key, folder, nf, Path(templates) if templates else template_dir(root))
+            basic = (["[적격심사] 낙찰 전 — 0_적격심사·공고문서만 만듦(계약·착공 서류는 낙찰 뒤 '낙찰 서류 만들기')"] if qual_only
+                     else self._fill_template(key, folder, nf, Path(templates) if templates else template_dir(root)))
             summary = folder / "공고문서" / SUMMARY
             if nf.title and not summary.exists():
                 try:
@@ -512,6 +517,14 @@ def selfcheck() -> None:
             title, institution, contract_method, files = "A 공사", "정선군", "", []
             work_type, award_method, skipped = "공사", "", []
 
+        # 낙찰 전 적격심사 단계: 0_적격심사·공고문서만, 낙찰 뒤 같은 폴더에 나머지 단계를 더함
+        class _NF2(_NF):
+            title, work_type = "B 물품", "물품"
+
+        q, _ = pa.prepare("R26BK00000002-000", Path(d) / "out", fetch=lambda k, t: _NF2(), templates=tpl, qual_only=True)
+        assert sorted(x.name for x in q.iterdir()) == ["0_적격심사", "공고문서"] and pa._read()["R26BK00000002-000"]["qualOnly"] is True
+        q, _ = pa.prepare("R26BK00000002-000", Path(d) / "out", fetch=lambda k, t: _NF2(), templates=tpl)
+        assert (q / "2_착수").is_dir() and pa._read()["R26BK00000002-000"]["qualOnly"] is False
         folder, _ = pa.prepare("R26BK00000001-000", Path(d) / "out", fetch=lambda k, t: _NF(), templates=tpl)
         ws = load_workbook(folder / "2_착공" / "착공서류.xlsx")["기본사항"]
         assert ws["B8"].value == "A 공사" and ws["B5"].value == "정선군" and ws["C8"].value.startswith("[자동]"), ws["C8"].value

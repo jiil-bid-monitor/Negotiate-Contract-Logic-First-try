@@ -265,9 +265,10 @@ def test_track_form_dangjin_shape(tmp_path: Path):
         fill_mod._value = orig
     assert rep.rows == 2
     # 11/05 사용자 요청: 금액은 머리글 단위(백만원)와 상관없이 원 단위 전체 — 단위는 담당자가 고침
-    for want in ("가상 전시물 제작 설치", "123,400,000", "2024.01.01~2024.06.30", "단독", "공동(60%)", ">2<",
+    for want in ("가상 전시물 제작 설치", "123,400,000", "2024.01.01~<", ">2024.06.30<", "단독", "공동(60%)", ">2<",
                  "총 실적 금액 : 173,400,000 원", "업 체 명 : (주)가상회사"):
         assert want in xml, want
+    assert "2024.01.01~2024.06.30" not in xml  # 사업기간은 '~' 뒤에서 줄을 나눔(11/12 사용자 요청)
 
 
 def test_form_tracks_by_title(monkeypatch):
@@ -427,17 +428,18 @@ def test_amount_cell_shrinks_to_one_line_even_with_normal_spacing():
     금액 칸만 줄 간격이 보통(160%)이어도 한 줄에 들어가게 글자를 줄임(사용자 결정: 원 단위는 그대로)."""
     from quantdocs.fill import _Chars, _fit_char, _text_width
 
-    amount, width = "1,210,000,000", 5000
+    amount, width = "1,210,000,000", 7000
     header = ('<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/></hh:charPr></hh:charProperties>'
               '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hh:paraPr>'
               '</hh:paraProperties>')
     chars = _Chars(header)
     assert _text_width(amount, 1100, 1.0) > (width - 282) * 0.95  # 11pt면 넘침
-    cid, _ = _fit_char(_sz_cell(1, 0, "", width, 1600), amount, chars)
-    assert re.search(rf'<hh:charPr id="{cid}" height="1100"', chars.finish())  # 보통 칸은 예전처럼 11pt
-    cid, note = _fit_char(_sz_cell(1, 0, "", width, 1600), amount, chars, one_line=True)
+    cell = _sz_cell(1, 0, "", width, 1600, run='<hp:run charPrIDRef="0">')
+    _cid, note = _fit_char(cell, amount, chars)
+    assert note == ""  # 보통 칸은 예전처럼 줄이지 않음
+    cid, note = _fit_char(cell, amount, chars, one_line=True)
     h = int(re.search(rf'<hh:charPr id="{cid}" height="(\d+)"', chars.finish()).group(1))
-    assert "줄여" in note and h < 1100 and _text_width(amount, h, 1.0) <= (width - 282) * 0.95
+    assert "줄여" in note and "겹칠" not in note and h < 1100 and _text_width(amount, h, 1.0) <= (width - 282) * 0.95
 
 
 def test_unfinished_tracks_are_never_counted(monkeypatch):
@@ -2366,3 +2368,20 @@ def test_tel_with_email_label(tmp_path: Path):
         xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
         got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
         assert got[(2, 1)] == want
+
+
+def test_spaced_phone_label_beside_fax_outside_table():
+    """11/12 필암 서약서 끝 '전    화:            (팩스: 031-… )' — 글자를 띄운 '전    화'를 몰라 팩스만 채우고 전화가 비었음."""
+    from quantdocs import fill as fill_mod
+    from quantdocs.fill import _fill_inline
+
+    vals = {"전화번호": "033-000-0000", "팩스번호": "033-000-0001"}
+    orig = fill_mod._value
+    fill_mod._value = lambda key, vault: vals.get(key, "")
+    try:
+        seg = "<hp:p><hp:run><hp:t>          전    화:            (팩스:            )</hp:t></hp:run></hp:p>"
+        new, done = _fill_inline(seg, None, loose=True)
+    finally:
+        fill_mod._value = orig
+    text = re.sub(r"<[^>]+>|[\ue000-\uf8ff]", "", new)
+    assert "전    화: 033-000-0000" in re.sub(r"[^\S ]", "", text) and "033-000-0001" in text and len(done) == 2

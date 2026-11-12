@@ -170,9 +170,12 @@ _INLINE_RE = re.compile(r"(?P<lab>TEL|Tel|FAX|Fax|E-?mail|전화번호|전화|�
 
 # 표 밖 문단용 — 다음 이름표 앞 '(' · 끝의 ')'도 빈자리로 봄('전화번호 :      (FAX :      )', 11/05 국민안전체험관 서식 12).
 # 표 칸엔 쓰지 않음 — 증명서 발급기관 칸 '기관 명 : (인) (전화 : )'처럼 다른 쪽이 적는 칸이 같은 모양이라.
-_INLINE_LOOSE = re.compile(_INLINE_RE.pattern.replace(
-    r"(?=(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|$)",
-    r"(?=[(（]?\s*(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|\s*[)）]?\s*$)"))
+# 글자 사이를 띄운 이름표 '전    화:'도(11/12 필암 — 같은 줄 '(팩스: …)'만 채우고 전화가 비었음). 표 칸엔 안 씀(이름표 칸 옆 값 칸 규칙과 겹침).
+_SPACED = lambda w: r"[  　]*".join(w)
+_LOOSE_LABS = "|".join(["TEL", "Tel", "FAX", "Fax", r"E-?mail", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스"), _SPACED("이메일"),
+                        _SPACED("업태"), _SPACED("종목")])
+_INLINE_LOOSE = re.compile(rf"(?P<lab>{_LOOSE_LABS})(?P<colon>\s*[:：])(?P<sp>[  　]*)"
+                           rf"(?=[(（]?\s*(?:{_LOOSE_LABS})|\s*[)）]?\s*$)")
 
 
 def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
@@ -185,7 +188,7 @@ def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
         body = m.group(2)
 
         def rep(mm):
-            key = _INLINE_LABELS.get(mm.group("lab").replace("-", "-"), "")
+            key = _INLINE_LABELS.get(re.sub(r"[  　]", "", mm.group("lab")), "")
             value = _value(key, vault) if key else ""
             if not value:
                 return mm.group(0)
@@ -328,7 +331,7 @@ def _alone(t: dict) -> str:
 _TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값(t, 머리글)
     (("연번", "순번"), None),  # 줄 번호 — 따로 채움
     (("사업명", "용역명", "공사명", "건명"), lambda t, h: str(t.get("사업명") or "")),
-    (("수행기간", "계약기간", "사업기간", "기간"), lambda t, h: _period(t)),
+    (("수행기간", "계약기간", "사업기간", "기간"), lambda t, h: _period(t).replace("~", "~\n", 1)),
     (("사업개요", "내용", "분야"), lambda t, h: str(t.get("분야") or "")),
     (("계약금액", "금액", "실적액", "도급액", "도급)액", "납품액"), _amount),
     (("준공", "완료일", "년월일"), lambda t, h: _fmt_ymd(t.get("준공일"))),  # '납품(준공)년 월 일'(11/05 국민안전체험관 서식 7)
@@ -394,7 +397,8 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                 if c.col == no_col and c.blank:
                     edits.append((c, [str(n)], False))
                 elif c.col in colmap and (v := colmap[c.col](t, headtext.get(c.col, ""))):
-                    edits.append((c, [v], False))
+                    # 사업기간 '2021.01.15~2021.12.15'은 '~' 뒤에서 줄을 나눔 — 좁은 칸에서 연도 중간이 잘리지 않게(11/12 사용자 요청)
+                    edits.append((c, v.split("\n"), False))
                     if colmap[c.col] is _amount:  # 원 단위 전체 금액이 좁은 칸에서 두 줄로 잘리지 않게(11/12)
                         rep.one_line.add(c.start)
             rep.rows += 1
@@ -1236,7 +1240,8 @@ def _fit_char(cell_xml: str, line: str, chars: "_Chars", one_line: bool = False)
     if width <= 0 or fits(max(FILL_HEIGHT, chars.cur_height or 0)):
         return _fill_variant(chars, cid), ""
     new_h = next((h for h in range(FILL_HEIGHT - 10, MIN_HEIGHT - 1, -10) if fits(h)), MIN_HEIGHT)
-    note = f"줄 간격이 좁은 칸이라 글자 11→{new_h / 100:g}pt로 줄여 한 줄에 맞춤"
+    why = "금액이 칸보다 길어" if one_line else "줄 간격이 좁은 칸이라"
+    note = f"{why} 글자 11→{new_h / 100:g}pt로 줄여 한 줄에 맞춤"
     if not fits(new_h):
         note += "(7pt로도 넘쳐 글이 겹칠 수 있음 — 확인)"
     return chars.smaller(cid, new_h), note

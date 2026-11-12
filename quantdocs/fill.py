@@ -164,18 +164,18 @@ _SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|
 _INLINE_LABELS = {"TEL": "전화번호", "Tel": "전화번호", "전화": "전화번호", "전화번호": "전화번호",
                   "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일",
                   "업태": "업태", "종목": "종목"}
-_INLINE_RE = re.compile(r"(?P<lab>TEL|Tel|FAX|Fax|E-?mail|전화번호|전화|팩스|이메일|업태|종목)(?P<colon>\s*[:：])(?P<sp>[ \u00a0\u3000]*)"
-                        r"(?=(?:TEL|Tel|FAX|Fax|E-?mail|전화|팩스|이메일|업태|종목)|$)")
+# 이름표는 글자 사이 띄어쓰기를 무시하고 읽음 — '전    화 :'·'팩 스 :'(11/12 필암 — 같은 줄 '(팩스: …)'만 채우고 전화가 비었음,
+# 사용자 요청 "요청서 읽을 때 띄어쓰기 제외하고 단어 읽기")
+_SPACED = lambda w: r"[  　]*".join(w)
+_INLINE_LABS = "|".join(["TEL", "Tel", "FAX", "Fax", r"E-?mail", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스"), _SPACED("이메일"),
+                         _SPACED("업태"), _SPACED("종목")])
+_INLINE_RE = re.compile(rf"(?P<lab>{_INLINE_LABS})(?P<colon>\s*[:：])(?P<sp>[  　]*)(?=(?:{_INLINE_LABS})|$)")
 
 
 # 표 밖 문단용 — 다음 이름표 앞 '(' · 끝의 ')'도 빈자리로 봄('전화번호 :      (FAX :      )', 11/05 국민안전체험관 서식 12).
 # 표 칸엔 쓰지 않음 — 증명서 발급기관 칸 '기관 명 : (인) (전화 : )'처럼 다른 쪽이 적는 칸이 같은 모양이라.
-# 글자 사이를 띄운 이름표 '전    화:'도(11/12 필암 — 같은 줄 '(팩스: …)'만 채우고 전화가 비었음). 표 칸엔 안 씀(이름표 칸 옆 값 칸 규칙과 겹침).
-_SPACED = lambda w: r"[  　]*".join(w)
-_LOOSE_LABS = "|".join(["TEL", "Tel", "FAX", "Fax", r"E-?mail", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스"), _SPACED("이메일"),
-                        _SPACED("업태"), _SPACED("종목")])
-_INLINE_LOOSE = re.compile(rf"(?P<lab>{_LOOSE_LABS})(?P<colon>\s*[:：])(?P<sp>[  　]*)"
-                           rf"(?=[(（]?\s*(?:{_LOOSE_LABS})|\s*[)）]?\s*$)")
+_INLINE_LOOSE = re.compile(rf"(?P<lab>{_INLINE_LABS})(?P<colon>\s*[:：])(?P<sp>[  　]*)"
+                           rf"(?=[(（]?\s*(?:{_INLINE_LABS})|\s*[)）]?\s*$)")
 
 
 def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
@@ -1875,9 +1875,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             base_char[target.start] = lm.group(1)
                     rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
                 targets = {e[0].start for e in edits}
+                filled_at = {(e[0].row, e[0].col) for e in edits}
                 for c in cells:  # 'TEL :      FAX :'처럼 칸 안에 이름표와 빈자리가 같이 있는 칸
                     if c.start in targets or ":" not in c.text and "：" not in c.text:
                         continue
+                    if _INLINE_RE.fullmatch(c.text.strip()) and (c.row, c.col + 1) in filled_at:
+                        continue  # '전 화 :' 이름표만 있는 칸 — 값은 이미 오른쪽 칸에(같은 번호가 두 번 들어가지 않게)
                     new_seg, done = _fill_inline(xml[c.start:c.end], vault)
                     if done:
                         edits.append((c, None, new_seg))

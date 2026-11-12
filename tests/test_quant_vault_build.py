@@ -2385,3 +2385,16 @@ def test_spaced_phone_label_beside_fax_outside_table():
         fill_mod._value = orig
     text = re.sub(r"<[^>]+>|[\ue000-\uf8ff]", "", new)
     assert "전    화: 033-000-0000" in re.sub(r"[^\S ]", "", text) and "033-000-0001" in text and len(done) == 2
+
+
+def test_spaced_labels_in_table_cells_no_double(tmp_path: Path):
+    """11/12 사용자 요청 '요청서 낱말은 띄어쓰기 빼고 읽기' — 칸 안 '전 화 :      팩 스 :' 빈자리도 채움.
+    '전 화 :' 이름표 칸 옆 값 칸이 있는 표는 값 칸에만(이름표 칸에 한 번 더 넣지 않음)."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표전화": "033-111-2222", "FAX": "033-111-3333"})
+    body = _tbl([[_c(0, 0, "연 락 처"), _c(1, 0, "전 화 :         팩 스 :         ")],
+                 [_c(0, 1, "전    화 :"), _c(1, 1, "")]])
+    fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "to.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "to.hwpx").read("Contents/section0.xml").decode()
+    assert xml.count("033-111-2222") == 2 and xml.count("033-111-3333") == 1

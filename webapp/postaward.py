@@ -243,8 +243,24 @@ class PostAward:
     def items(self) -> list[dict]:
         """화면용 — 공사 / 물품·용역 / 업무 미확인 순, 그 안에선 최근 추가 먼저."""
         order = {"공사": 0, "물품·용역": 1}
-        rows = [{**v, "group": group_of(v.get("work", ""))} for v in self._read().values()]
+        opened = self._opened()
+        rows = [{**v, "group": group_of(v.get("work", "")),
+                 **({"opening": opened[k]} if k in opened else {})} for k, v in self._read().items()]
         return sorted(rows, key=lambda v: (order.get(v["group"], 2), v.get("added", "")), reverse=False)
+
+    def _opened(self) -> dict[str, dict]:
+        """투찰 기록의 개찰 결과 중 지일 등수 — 낙찰자 확정 전에도 탈락·등수를 보이게(11/12 사용자 요청). 표시만, 상태는 안 바꿈."""
+        out: dict[str, dict] = {}
+        for e in (self.bidlog.entries() if self.bidlog is not None else []):  # 최근 기록 먼저 — 같은 공고는 첫 것만
+            res = e.get("result") or {}
+            own = res.get("own")
+            if res.get("status") != "완료" or not own or not e.get("noticeNo"):
+                continue
+            o = {"rank": own.get("rank"), "underRank": own.get("underRank"), "bidders": res.get("bidderCount"),
+                 "remark": own.get("remark") or ""}
+            out.setdefault(f'{e["noticeNo"]}-{(e.get("noticeOrd") or "")[:3]}', o)
+            out.setdefault(e["noticeNo"], o)
+        return out
 
     def _add(self, items: dict, no: str, ord_: str, **info) -> bool:
         key = f"{no}-{ord_}" if ord_ else no
@@ -447,7 +463,8 @@ def selfcheck() -> None:
     class _Log:
         def entries(self):
             return [{"noticeNo": "R26BK00000001", "noticeOrd": "000", "title": "A 공사", "workType": "공사"},
-                    {"noticeNo": "R26BK00000002", "noticeOrd": "000", "title": "B 물품", "workType": "물품"}]
+                    {"noticeNo": "R26BK00000002", "noticeOrd": "000", "title": "B 물품", "workType": "물품",
+                     "result": {"status": "완료", "bidderCount": 422, "own": {"rank": None, "underRank": -108, "remark": "낙찰하한선 미달"}}}]
 
     class _Client:
         def fetch_all_pages(self, url, op, params, label):
@@ -467,6 +484,7 @@ def selfcheck() -> None:
         assert by["R26BK00000001"]["status"] == "낙찰" and by["R26BK00000001"]["group"] == "공사"
         assert by["R26BK00000003"]["status"] == "다른 업체 낙찰" and by["R26BK00000003"]["group"] == "물품·용역"
         assert by["R26BK00000002"]["status"] == "대기"
+        assert by["R26BK00000002"]["opening"]["underRank"] == -108 and "opening" not in by["R26BK00000001"]
         f = pa.make_folder("R26BK00000001-000", Path(d) / "out")
         assert f.parent.name == "공사" and (f / "2_착공").is_dir(), f
         f = pa.make_folder("R26BK00000003-000", Path(d) / "out")

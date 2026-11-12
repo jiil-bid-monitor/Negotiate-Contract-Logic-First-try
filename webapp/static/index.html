@@ -3741,6 +3741,13 @@ async function awardPost(path, body) {
 }
 // 서류 현황(11/11) — 폴더를 만든 공고는 줄 아래로 펼쳐 단계별 서류·담당자가 채울 칸·첨부 제출서류·파일 내려받기를 봄
 const AWARD_OPEN = new Set();
+// 낙찰자 확정 전이라도 투찰내역의 개찰 결과가 있으면 지일 등수를 보임(11/12 사용자 요청) — 순위 없음(하한선 미달 등)은 '탈락'
+function awardWaiting(o) {
+  if (!o) return `<span class="badge warn">대기</span><div class="sub">낙찰자 확정 전</div>`;
+  const n = o.bidders != null ? ` / ${o.bidders}곳` : "";
+  if (o.rank == null) return `<span class="badge">탈락</span><div class="sub">개찰 ${esc((o.remark || "순위 없음").replace("낙찰하한선", "하한선"))}${o.underRank != null ? ` (${o.underRank}등)` : ""}</div>`;
+  return `<span class="badge warn">대기</span><div class="sub">개찰 ${o.rank}등${n} · 낙찰자 확정 전</div>`;
+}
 function renderAward(items) {
   const groups = ["공사", "물품·용역", "업무 미확인"];
   const row = (v) => {
@@ -3749,7 +3756,7 @@ function renderAward(items) {
     const won = v.status === "낙찰";
     const result = won ? `<span class="badge okb">낙찰</span><div class="sub">${esc(w.date || "")}${w.amount ? " · " + Number(w.amount).toLocaleString() + "원" : ""}</div>`
       : v.status === "다른 업체 낙찰" ? `<span class="badge">다른 업체 낙찰</span><div class="sub">${esc(w.name || "")}</div>`
-      : v.status === "대기" ? `<span class="badge warn">대기</span><div class="sub">낙찰자 확정 전</div>` : `<span class="badge">${esc(v.status || "")}</span>`;
+      : v.status === "대기" ? awardWaiting(v.opening) : `<span class="badge">${esc(v.status || "")}</span>`;
     // 폴더 만들기는 낙찰 뒤에만(11/11 사용자 요청) — 빼기는 다른 업체 낙찰·잘못 넣은 공고 정리용이라 늘 씀
     const act = v.folder
       ? `<button type="button" class="award-toggle" data-award-open="${esc(key)}" aria-expanded="${AWARD_OPEN.has(key)}">서류 현황 ${AWARD_OPEN.has(key) ? "▴" : "▾"}</button>

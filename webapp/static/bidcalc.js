@@ -173,6 +173,17 @@
     return roundAmount(scaled * (rate / 100), "ceil", 1);
   }
 
+  // 협상에 의한 계약 가격 점수(11/12) — nego/negoprice.score와 같은 식. rule = {weight, upper, lower, bonus, floor, under}(%)
+  // price·lowest·base는 원. lowest는 다른 업체 최저가 — 내 가격이 더 낮으면 내 가격이 최저
+  function negoScore(price, lowest, base, rule) {
+    if (!(price > 0) || !(lowest > 0) || !(base > 0)) return null;
+    const w = rule.weight, upper = (base * rule.upper) / 100, lower = (base * rule.lower) / 100;
+    const low = Math.max(Math.min(lowest, price), (base * rule.floor) / 100);
+    if (price < lower) return (w * rule.under) / 100;
+    if (price >= upper) return (w * low) / price;
+    return (w * low) / upper + (rule.bonus * (upper - price)) / (upper - lower);
+  }
+
   // 재현 가능한 난수(테스트용) — mulberry32
   function seeded(seed) {
     let t = seed >>> 0;
@@ -184,7 +195,7 @@
     };
   }
 
-  const api = { METHODS, METHOD_NAMES, PPS_TABLE, MOIS_TABLE, roundPrice, roundAmount, rates, makePrices, shuffle, pickRandom, autoPlan, plannedPrice, bidAmount, netCostBid, seeded };
+  const api = { METHODS, METHOD_NAMES, PPS_TABLE, MOIS_TABLE, roundPrice, roundAmount, rates, makePrices, shuffle, pickRandom, autoPlan, plannedPrice, bidAmount, netCostBid, negoScore, seeded };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.BidCalc = api;
 })(typeof window !== "undefined" ? window : globalThis);

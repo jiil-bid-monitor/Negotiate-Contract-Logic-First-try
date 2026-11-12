@@ -299,6 +299,37 @@ def _read_notice_docs(notice: dict, out: dict, fetch: Callable) -> None:
         out["notes"].append(f"{_FIELD_NAMES[k]}: 나라장터 {_fmt(api)} · 첨부 '{name}' {_fmt(text)} — 서로 다름, 나라장터 값을 씀(원문 확인)")
 
 
+_RFP_FILE_RE = re.compile(r"제안\s*요청|과업\s*지시|공고")
+MAX_NEGO_FILES = 5
+
+
+def _read_nego_rule(notice: dict, out: dict, fetch: Callable) -> None:
+    """협상 공고 — 제안요청서의 입찰가격 평정산식을 읽어 가격 점수표 자료를 붙임(11/12 사용자 요청).
+    제안요청서·과업지시서·공고 이름의 첨부부터 최대 5개, 식을 찾으면 멈춤."""
+    from . import negoprice
+
+    files = F.extract_attachments(notice)
+    files.sort(key=lambda a: (not re.search(r"제안\s*요청", a.get("file_name", "")), not _RFP_FILE_RE.search(a.get("file_name", ""))))
+    session = requests.Session()
+    rule = None
+    for att in files[:MAX_NEGO_FILES]:
+        try:
+            result = fetch(session, att, timeout=30.0)
+        except Exception as err:  # 첨부 하나 못 읽어도 계속
+            log.info("계산기 협상 첨부 읽기 실패 %s: %s", att.get("file_name"), err)
+            continue
+        if result.ok and result.text and (rule := negoprice.parse_rule(result.text)):
+            rule["file"] = att.get("file_name") or "제안요청서"
+            break
+    base, base_src = out.get("basis"), "기초금액"
+    if base is None and out.get("est_price"):
+        base, base_src = round(out["est_price"] * 1.1), "추정가격 × 1.1(부가세 포함)"
+    out["nego"] = {"rule": rule or {**negoprice.DEFAULT, "found": [], "kind": "", "base": "예정가격", "quote": "", "file": ""},
+                   "rule_found": rule is not None, "base": base, "base_source": base_src if base else ""}
+    if rule is None:
+        out["notes"].append("협상 공고 — 제안요청서에서 입찰가격 평정산식을 찾지 못해 지방계약 기본 식(80%·70%)으로 점수표를 그림, 제안요청서 확인")
+
+
 def _fmt(v: float) -> str:
     return f"{v:,.0f}" if abs(v) >= 1000 else f"{v:g}"
 
@@ -418,11 +449,13 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
         out["basis_source"] = "나라장터 기초금액"
     if notice:
         _read_notice_docs(notice, out, fetch)
+        if "협상" in out.get("award_method", ""):
+            _read_nego_rule(notice, out, fetch)
     if out.get("basis") is None:
         out["notes"].append("기초금액을 나라장터·첨부 공고문에서 찾지 못함 (아직 비공개일 수 있음) — 직접 입력하세요")
-    if notice and out.get("lower_rate") is None:
+    if notice and out.get("lower_rate") is None and "nego" not in out:
         out["notes"].append("낙찰하한율을 나라장터·첨부 공고문에서 찾지 못함 — 협상·최저가 등 하한율 방식이 아닐 수 있음")
-    if notice and out.get("range_lo") is None:
+    if notice and out.get("range_lo") is None and "nego" not in out:
         out["notes"].append("변동폭을 나라장터·첨부 공고문에서 찾지 못함 — 공고문 확인 후 직접 입력하세요")
     if rule := out.get("net_rule"):
         limit = f"예정가격 {rule['limit'] / 100_000_000:g}억 원 미만이면 · " if rule.get("limit") else ""

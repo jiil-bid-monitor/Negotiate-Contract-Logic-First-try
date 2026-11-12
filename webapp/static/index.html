@@ -1177,6 +1177,17 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .calc-rec tr.below td { color: var(--faint, var(--muted)); }
 .calc-rec .rec-tag.off { background: var(--chip); color: var(--muted); border: 1px solid var(--line); }
 .calc-rec .rec-warn { color: #b45309; font-size: 12px; margin-top: 6px; }
+/* 협상 공고 가격 점수표(11/12) */
+.calc-rec .calc-rec-bar[hidden] { display: none; }
+.calc-rec .nego-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 6px; }
+.calc-rec .nego-bar input { width: 160px; text-align: right; font-variant-numeric: tabular-nums; }
+.calc-rec .nego-formula { margin: 4px 0 8px; line-height: 1.6; }
+.calc-rec .nego-table { border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.calc-rec .nego-table th, .calc-rec .nego-table td { border: 1px solid var(--line, #ddd); padding: 3px 8px; text-align: right; }
+.calc-rec .nego-table thead th { text-align: center; background: var(--soft, #f4f4f2); }
+.calc-rec .nego-table td.nego-low { color: #b91c1c; }
+.calc-rec .nego-table td.nego-over { font-style: italic; }
+@media (max-width: 640px) { .calc-rec .nego-table { display: block; overflow-x: auto; } }
 @media (max-width: 760px) {
   .calc-rec .rec-stats { grid-template-columns: 1fr 1fr; gap: 6px; }
   .calc-rec .rec-stat-v { font-size: 17px; }

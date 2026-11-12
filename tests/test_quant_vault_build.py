@@ -2398,3 +2398,16 @@ def test_spaced_labels_in_table_cells_no_double(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "to.hwpx", v)
     xml = zipfile.ZipFile(tmp_path / "to.hwpx").read("Contents/section0.xml").decode()
     assert xml.count("033-111-2222") == 2 and xml.count("033-111-3333") == 1
+
+
+def test_staff_composition_label_is_total_employees(tmp_path: Path):
+    """11/12 필암 일반현황 '인력구성현황 | 총 명' = 회사 전체 직원 수(사용자 확인). '참여인력현황'은 사업 투입 인력이라 비움."""
+    from quantdocs.fill import _label_key, fill_hwpx
+
+    assert _label_key("인 력 구 성 현 황") == "종업원 수" and _label_key("인력현황") == "종업원 수"
+    assert _label_key("참여인력현황") != "종업원 수" and _label_key("투입인력현황") != "종업원 수"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "종업원 수": "18"})
+    body = _tbl([[_c(0, 0, "인 력 구 성 현 황"), _c(1, 0, "총    명")], [_c(0, 1, "참여인력현황"), _c(1, 1, "")]])
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "so.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode()
+    assert xml.count("18명") == 1

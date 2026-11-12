@@ -234,6 +234,10 @@ def _label_key(text: str) -> str | None:
         return "대표자"
     if "전화" in t and re.search(r"전자우편|이메일|e-?mail", t, re.I):
         return "_tel_mail"  # '접수자전화(전자우편)' = 전화 + 이메일(11/11 사용자 요청 — 전화만 들어갔음)
+    if t in ("인력구성현황", "인력현황", "인력구성", "인원현황"):
+        # 업체 일반현황의 '인력구성현황 | 총 명' = 회사 전체 직원 수(11/12 사용자 확인). 이름이 딱 맞을 때만 —
+        # '참여인력현황'·'투입인력현황'·'기술인력현황'은 사업 투입 인력이라 안 채움
+        return "종업원 수"
     for words, key in LABELS:  # 앞머리가 맞는 것 먼저('홈페이지주소'는 주소가 아니라 홈페이지)
         if any(t.startswith(w) for w in words):
             return key

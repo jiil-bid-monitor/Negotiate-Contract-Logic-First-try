@@ -23,6 +23,9 @@
 - 고침: `fill._split_track_tables` — 실적을 넣은 표(채운 실적 글이 든 표)의 높이 어림(`_row_info`)이 쪽 본문(`_page_body`)의 90% 이상이면 연혁 표와 같은 방식으로
   '글자처럼 취급' 풀고 '나눔'(`_make_breakable`, 연혁 `_split_long_tables`와 같이 씀). 한 쪽 안에 드는 표는 그대로. 머리줄 반복(repeatHeader)은 원본 설정 따름.
   시험 `test_long_track_table_splits_across_pages`(예전 코드로는 실패). 제보 파일에 적용한 복구본을 사용자에게 줌 — 한글 확인 대기.
+- (같은 날 사용자 요청 "폰트 크기를 줄일 거면, 연도를 줄이고 금액 크기를 크게") 실적 표 열 넓히기(`_widen_track_cols`)는 **금액 열이 먼저**(순서 -1),
+  남은 몫으로 사업기간 — 모자라면 **사업기간 칸 글자를 줄여** 줄마다('2023.11.23~' / '2026.05.30') 한 줄에(`rep.one_line`에 기간 칸도, 여러 줄 칸은 가장 긴 줄로 `_fit_char`).
+  예전엔 기간이 먼저 넓어져 금액이 7~8pt로 줄었음. 시험 `test_track_amount_widens_first_period_shrinks`.
 
 ## 2026-11-12 — 웹앱 수집 기간 '직접 지정' (브랜치 `claude/custom-period`, 사용자 요청)
 

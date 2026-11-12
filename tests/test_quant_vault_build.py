@@ -2575,3 +2575,33 @@ def test_long_track_table_splits_across_pages(tmp_path: Path):
     sec, rep = run(2)
     assert 'pageBreak="NONE"' in sec and 'treatAsChar="1"' in sec
     assert not any("실적 표가 한 쪽보다 길어" in x for x in rep.filled)
+
+
+def test_track_amount_widens_first_period_shrinks(tmp_path: Path):
+    """11/12 사용자 요청: 칸이 모자라 글자를 줄일 거면 사업기간(연도)을 줄이고 금액은 크게 — 넓힐 몫을 금액 열에 먼저,
+    사업기간은 줄마다 한 줄에 들어가게 글자를 줄임."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head xmlns:hh="h"><hh:refList><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"><hh:ratio hangul="100"/>'
+              '</hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="LEFT"/>'
+              '<hh:lineSpacing type="PERCENT" value="160"/></hh:paraPr></hh:paraProperties></hh:refList></hh:head>')
+
+    def cell(col, row, text, w):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                f'<hp:cellSz width="{w}" height="2000"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+    widths = [2000, 16000, 3000, 3000]  # 사업명 열 40%(6,400)로는 두 열 다 넓힐 수 없음
+    rows = [[cell(i, 0, h, widths[i]) for i, h in enumerate(["연번", "사업명", "사업기간", "계약금액(원)"])]]
+    rows += [[cell(i, 1, "", widths[i]) for i in range(4)]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    tracks = [{"사업명": "가상 사업", "계약일": dt.date(2023, 11, 23), "준공일": dt.date(2026, 5, 30), "계약금액(원)": 3_610_090_000}]
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}), tracks=tracks)
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    sec, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    size = lambda text: int(re.search(rf'<hh:charPr id="{re.search(rf"charPrIDRef=\"(\d+)\"><hp:t>{text}", sec).group(1)}" height="(\d+)"',
+                                      head).group(1))
+    assert size("3,610,090,000") == 1100  # 금액은 11pt 그대로
+    assert size("2023.11.23~") < 1100  # 사업기간을 줄여 한 줄에

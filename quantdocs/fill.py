@@ -403,7 +403,8 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                 elif c.col in colmap and (v := colmap[c.col](t, headtext.get(c.col, ""))):
                     # 사업기간 '2021.01.15~2021.12.15'은 '~' 뒤에서 줄을 나눔 — 좁은 칸에서 연도 중간이 잘리지 않게(11/12 사용자 요청)
                     edits.append((c, v.split("\n"), False))
-                    if colmap[c.col] is _amount:  # 원 단위 전체 금액이 좁은 칸에서 두 줄로 잘리지 않게(11/12)
+                    # 금액·사업기간은 줄마다 한 줄에 — 칸이 좁으면 글자를 줄임. 넓힐 땐 금액 열이 먼저라 줄어드는 건 사업기간 쪽(11/12 사용자 요청)
+                    if colmap[c.col] is _amount or "\n" in v:  # 원 단위 전체 금액이 좁은 칸에서 두 줄로 잘리지 않게(11/12)
                         rep.one_line.add(c.start)
             rep.rows += 1
         total = sum(float(t.get("인정 금액(원)") or t.get("계약금액(원)") or 0) for t in tracks[:n])
@@ -1291,7 +1292,7 @@ def _fit_char(cell_xml: str, line: str, chars: "_Chars", one_line: bool = False)
     if width <= 0 or fits(max(FILL_HEIGHT, chars.cur_height or 0)):
         return _fill_variant(chars, cid), ""
     new_h = next((h for h in range(FILL_HEIGHT - 10, MIN_HEIGHT - 1, -10) if fits(h)), MIN_HEIGHT)
-    why = "금액이 칸보다 길어" if one_line else "줄 간격이 좁은 칸이라"
+    why = "칸보다 길어" if one_line else "줄 간격이 좁은 칸이라"
     note = f"{why} 글자 11→{new_h / 100:g}pt로 줄여 한 줄에 맞춤"
     if not fits(new_h):
         note += "(7pt로도 넘쳐 글이 겹칠 수 있음 — 확인)"
@@ -1330,7 +1331,8 @@ def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str
     여러 열을 합친 칸은 두 열을 다 덮으면 그대로, 한쪽만 덮으면 그만큼만 바꿈. 받는 열은 원래 너비의 60% 밑으로는 안 줄임
     (앞 순서 — 숫자 → 짧은 낱말 → 글 — 부터 그 안에서 나눠 씀)."""
     cells = _cells(xml, tbl)
-    edits = _fill_tracks(xml, cells, tracks, FillReport("x"))
+    probe = FillReport("x")
+    edits = _fill_tracks(xml, cells, tracks, probe)
     need: dict[int, tuple[int, float]] = {}  # 열 → (순서, 필요한 글 너비)
 
     def tw(x: str) -> float:
@@ -1341,7 +1343,8 @@ def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict]) -> str
         if c.colspan != 1 or not lines:
             continue
         if all(_NUMERIC_LINE.fullmatch(x) for x in lines):
-            want = (0, max(tw(x) for x in lines))
+            # 금액 열을 가장 먼저 넓힘 — 넓힐 몫이 모자라면 사업기간 쪽 글자가 줄어듦(11/12 사용자 요청: 연도를 줄이고 금액은 크게)
+            want = (-1 if c.start in probe.one_line and len(lines) == 1 else 0, max(tw(x) for x in lines))
         else:
             words = [w for x in lines for w in x.split()]
             short = [w for w in words if len(w) <= 6]
@@ -2125,6 +2128,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     char_id, note = _fit_char(seg, lines[0], chars, one_line=cell.start in rep.one_line)
                     if note:
                         rep.filled.append(f"  ↳ '{lines[0][:20]}' {note}")
+                elif chars is not None and cell.start in rep.one_line and lines and not keep:
+                    # 사업기간 '2023.11.23~' / '2026.05.30' — 가장 긴 줄이 한 줄에 들어가게(11/12 사용자 요청: 줄일 거면 연도를 줄이기)
+                    longest = max(lines, key=lambda x: _text_width(x, FILL_HEIGHT, 1.0))
+                    char_id, note = _fit_char(seg, longest, chars, one_line=True)
+                    if note:
+                        rep.filled.append(f"  ↳ '{longest[:20]}' {note}")
                 elif chars is not None:  # 여러 줄(연혁 등)도 11pt, 숫자·영문은 한글 글꼴로
                     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', seg)
                     char_id = _fill_variant(chars, run.group(1) if run else "0")

@@ -2439,6 +2439,20 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
         cell = row.by_points.get(item.score, row.cell) if row.by_points else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
         out.append((cell, [fmt(item.score)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")
+        # 기술인력 등급 줄마다 그 등급 점수 + 비고 '명 × 점 = 점'(11/13 사용자 요청: 부산 업사이클센터 '특급기술자 | 1.0점 | __ | 명 × 점 = 점')
+        if row.grade_cells and row.crit is not None and item.kind == "staff":
+            one = lambda v: (lambda t: t if "." in t else t + ".0")(f"{round(v, 2):g}")
+            for g, (sc, nc) in row.grade_cells.items():
+                per = row.crit.per_grade.get(g)
+                if per is None:
+                    continue
+                n = item.counts.get(g, 0)
+                v = n * per
+                if sc is not None:
+                    out.append((sc, [one(v)], False))
+                if nc is not None:
+                    out.append((nc, [f"{n}명 × {one(per)}점 = {one(v)}점"], False))
+                rep.filled.append(f"자기평점 '{name}' {g} {n}명 × {one(per)}점 = {one(v)}점")
     total = next((r for r in rows if r.total), None)
     if scored and all(it.score is not None for _, it in scored):
         value = round(sum(it.score for _, it in scored), 2)

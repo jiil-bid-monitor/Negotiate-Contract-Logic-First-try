@@ -42,6 +42,25 @@ class TestSummarize(unittest.TestCase):
         self.assertIsNone(s["own"])
         self.assertNotIn("rateDiff", s)
 
+    def test_recorded_amount_differs_is_comparison(self):
+        """11/13 사용자 요청: 외주 금액(미달)으로 투찰하고 계산기 추천 금액을 기록 → 비교 기록, 기록 금액이면 몇 등·하한가와 차이."""
+        own_under = [Bidder(1, "가나건설", "111-11-11111", 173_200_000, 89.81, ""),
+                     Bidder(2, "다라전기", "222-22-22222", 173_210_000, 89.82, ""),
+                     Bidder(None, "(주)지일", "2068636338", 172_000_000, 89.0, "낙찰하한선미달"),
+                     Bidder(None, "마바", "333-33-33333", 170_000_000, 88.0, "낙찰하한선미달")]
+        entry = {"bid": 173_205_000, "lowerRate": 89.745, "aValue": 0}
+        s = summarize(result(own_under), entry, OWN)
+        sim = s["recorded"]
+        floor = 173_162_978  # 192,950,000 × 89.745% = 173,162,977.5 → 올림
+        self.assertEqual(sim["floor"], floor)
+        self.assertEqual(sim["rank"], 2)                      # 가나건설(173,200,000)만 더 쌈
+        self.assertEqual(sim["gapToFloor"], 173_205_000 - floor)
+        self.assertEqual(sim["gapToWinner"], 5_000)
+        self.assertEqual(sim["ownAmount"], 172_000_000)
+        under = summarize(result(own_under), {**entry, "bid": 171_000_000}, OWN)["recorded"]
+        self.assertEqual(under["rank"], -1)                   # 하한가 아래 — 지일 실제 줄은 빼고 마바(170,000,000)보다 위라 -1
+        self.assertNotIn("recorded", summarize(result(own_under), {**entry, "bid": 172_000_000}, OWN))  # 같은 금액 = 실제 투찰 기록
+
     def test_needs_fetch(self):
         now = datetime(2026, 11, 6, 12, tzinfo=KST)
         self.assertTrue(needs_fetch({}, now))

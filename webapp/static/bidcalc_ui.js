@@ -675,10 +675,27 @@
       : `<span class="res-wait">개찰 전</span><span class="sub">${esc(day(res.fetchedAt))} 확인</span>`;
     if (res.status === "오류") return `<span class="res-bad">받지 못함</span><span class="sub">${esc((res.error || "").slice(0, 40))}</span>`;
     const o = res.own, n = res.bidderCount;
-    if (!o) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${n}곳</span>`;
+    // 기록 금액이 실제 투찰 금액과 다르면 비교 분석용 기록(11/13 사용자 요청 — 외주 금액으로 투찰하고 계산기 금액을 기록)
+    const cmp = res.recorded ? `<span class="res-cmp">비교 기록 · 기록 금액이면 ${simPlace(res.recorded)}</span>` : "";
+    if (!o) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${n}곳</span>${cmp}`;
     // 개찰 결과는 '낙찰'(지일 1순위) / '탈락'(그 밖 — 하한선 미달 포함)으로(11/10 사용자 요청), 등수는 옆 칸
-    return o.rank === 1 ? `<b class="res-win">낙찰</b><span class="sub">참가 ${n}곳</span>`
-      : `<b class="res-bad">탈락</b><span class="sub">${o.rank == null ? esc((o.remark || "순위 없음").replace("낙찰하한선미달", "하한선 미달")) + " · " : ""}참가 ${n}곳</span>`;
+    return (o.rank === 1 ? `<b class="res-win">낙찰</b><span class="sub">참가 ${n}곳</span>`
+      : `<b class="res-bad">탈락</b><span class="sub">${o.rank == null ? esc((o.remark || "순위 없음").replace("낙찰하한선미달", "하한선 미달")) + " · " : ""}참가 ${n}곳</span>`) + cmp;
+  }
+  const simPlace = (s) => (s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}등` : `하한선 미달(${s.rank}등)`);
+  // 비교 기록 펼침 칸 — 기록 금액으로 투찰했다면 순위·낙찰하한가와 차이·1순위와 차이(11/13)
+  function compareBlock(r) {
+    const res = r.result || {}, s = res.recorded;
+    if (!s) return "";
+    const gap = (v, lab) => (v == null ? "" : `<div><span>${lab}</span><b>${v >= 0 ? "+" : "−"}${won(Math.abs(v))}원</b></div>`);
+    return `<div class="res-compare"><div class="res-compare-head">비교 기록 — 기록한 금액이 실제 투찰 금액${s.ownAmount != null ? `(${won(s.ownAmount)}원)` : ""}과 달라 비교 분석용으로 봅니다</div>
+      <div class="res-grid">
+        <div><span>기록 금액</span><b>${won(s.amount)}원</b></div>
+        <div><span>기록 금액이면 순위</span><b>${simPlace(s)}${s.rank > 0 ? ` / ${s.total}곳` : ""}</b></div>
+        ${s.floor != null ? `<div><span>낙찰하한가</span><b>${won(s.floor)}원</b></div>` : ""}
+        ${gap(s.gapToFloor, "낙찰하한가와 차이")}
+        ${gap(s.gapToWinner, "실제 1순위와 차이")}
+      </div></div>`;
   }
   function rateCell(r) {
     const res = r.result;
@@ -716,7 +733,7 @@
       ${item("예정가격 (실제)", res.plannedPrice != null ? `${won(res.plannedPrice)}원` : "-")}
       ${item("실제 사정률", pct3(res.assessmentRate))}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
-      </div>${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
+      </div>${compareBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
   }
   // 투찰 업체 전부(11/10 사용자 요청) — 개찰 완료 줄의 '결과 ▼'를 펼치면 결과 아래에 보임, 펼칠 때만 서버에서 받음
   const BIDDERS = new Map();   // id → 목록 | "loading" | {error}

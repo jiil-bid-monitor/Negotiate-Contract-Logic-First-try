@@ -2951,3 +2951,32 @@ def test_self_score_total_table_below(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o2.hwpx", v2, self_scores=SelfScore([], v2, _dt.date(2026, 11, 13)))
     sec2 = zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()
     assert re.sub(r"<[^>]+>", "", sec2.rsplit("<hp:tbl>", 1)[1]).endswith("20 점")
+
+
+def test_long_label_matched_by_keyword_not_length():
+    """11/13 한국산업단지공단 양식5: '회사채(또는 기업어음)에 대한 신용평가등급 또는 기업신용평가등급'이 16자를 넘어 이름표로 안 봤음 —
+    글자 수로 거르지 않고 낱말로(여럿이면 끝 낱말). 안내 문장('※ …', '…기재')은 그대로 이름표 아님."""
+    from quantdocs.fill import _label_key
+    assert _label_key("회사채(또는 기업어음)에 대한 신용평가등급 또는 기업신용평가등급") == "신용평가등급"
+    assert _label_key("1. 회   사   명") == "회사명" and _label_key("6. 회 사 설 립    년       도") == "설립일"
+    assert _label_key("※ 주소는 본사 소재지를 기재") is None and _label_key("주소를 정확히 작성함") is None
+
+
+def test_gyeryang_credit_criteria_percent_of_points(tmp_path: Path):
+    """11/13 한국산업단지공단: '4. 계량평가 항목 평가 기준' / '□ 경영상태 : 신용평가등급에 의한 평가(5점)' + 표
+    '회사채 | 기업어음 | 기업신용 평가등급 | 평점' — 평점이 '배점의 95%', 등급이 줄바꿈으로 'AA- A+'(쉼표 없음). 예전엔 기준을 못 읽어 자가점검표가 빔."""
+    import datetime as _dt
+    from quantdocs.selfscore import read_criteria, score
+
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (p("4. 계량평가 항목 평가 기준") + p("□ 경영상태 : 신용평가등급에 의한 평가(5점)") + _tbl([
+        [_c(0, 0, "신용평가등급", 3), _c(3, 0, "평점")],
+        [_c(0, 1, "회사채"), _c(1, 1, "기업어음"), _c(2, 1, "기업신용 평가등급")],
+        [_c(0, 2, "AAA, AA- A+, BBB0"), _c(1, 2, "A1, A30"), _c(2, 2, "AAA, AA-, A+, A0, BBB+, BBB0"), _c(3, 2, "배점의 100%")],
+        [_c(0, 3, "BBB-, BB+"), _c(1, 3, "A3-, B+"), _c(2, 3, "BBB-, BB+, BB0, BB-"), _c(3, 3, "배점의 95%")],
+        [_c(0, 4, "CCC+ 이하"), _c(1, 4, "C 이하"), _c(2, 4, "CCC+ 이하"), _c(3, 4, "배점의 70%")]]) + p("[별표]"))
+    crit = read_criteria([_mini_hwpx(tmp_path / "r.hwpx", body)])
+    assert [(c.name, c.points, c.kind) for c in crit] == [("경영상태", 5.0, "credit")]
+    for grade, want in [("BBB0", 5.0), ("BB+", 4.75), ("CCC", 3.5)]:
+        v = vault.Vault({}, info={"신용평가등급": grade, "신용평가 종류": "기업신용평가등급"})
+        assert score(crit, v, _dt.date(2026, 11, 13))[0].score == want, grade

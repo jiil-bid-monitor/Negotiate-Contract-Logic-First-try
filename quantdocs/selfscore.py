@@ -28,10 +28,20 @@ from .forms_cut import _top_paragraphs
 KINDS = [("track", re.compile(r"실적")), ("staff", re.compile(r"인력|기술자|기술\s*능력")),
          ("patent", re.compile(r"특허|보유\s*기술|전문\s*기술|기술\s*보유")), ("credit", re.compile(r"경영|신용|재무\s*상태")),
          ("sanction", re.compile(r"신인도|제재|성실성|사회적\s*책임"))]  # '사회적 책임 및 성실성'(11/12 당진 서식 4호)
-_START = re.compile(r"정량\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
-_STOP = re.compile(r"^\s*주\s*\d+\s*\)|정성\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
+_START = re.compile(r"(?:정량|계량)\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
+_STOP = re.compile(r"^\s*주\s*\d+\s*\)|^\s*[\[【]\s*별\s*표|정성\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
 _MARK = re.compile(r"^\s*(\d+\)|\(\d+\)|[가-하]\.|[가-하]\)|\d+\.)")
 _HEAD = re.compile(r"^\s*(?:\d+\)|\(\d+\)|[가-하]\.|[가-하]\))\s*([^:：\n]{2,30}?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*점")
+# '□ 경영상태 : 신용평가등급에 의한 평가(5점)'(11/13 한국산업단지공단 — 기호 머리, 점수가 괄호 안 맨 끝)
+_HEAD_BOX = re.compile(r"^\s*[□■◇◆○●❍◦▪ㅇ]\s*([^:：\n]{2,30}?)\s*[:：][^\n]*?\(?\s*(\d+(?:\.\d+)?)\s*점\s*\)?\s*$")
+# 점수 표가 없는 절 제목 '4. 계량평가 항목 평가 기준'·'정량평가 항목 및 배점'
+_START_TITLE = re.compile(r"(?:정량|계량)\S{0,3}\s*평가\s*(?:항목|기준)")
+
+
+def _head(text: str):
+    return _HEAD.match(text) or _HEAD_BOX.match(text)
+
+
 _MULT = {"억": 1e8, "천만": 1e7, "백만": 1e6, "만": 1e4}
 _QTY = r"([\d]+(?:[.,]\d+)*)\s*(억|천만|백만|만)?\s*(원|건)?"
 _NUM = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*점?\s*$")
@@ -171,6 +181,9 @@ def _read_table(c: Criterion, xml: str, tbl: tuple[int, int]) -> None:
     if kinds and "등급" in flat:
         for r, cols in sorted(rows.items()):
             score = _num(cols[max(cols)]) if cols else None
+            pct = re.fullmatch(r"배점의?(\d+(?:\.\d+)?)%", _sq(cols[max(cols)])) if cols else None
+            if score is None and pct and c.points:  # '배점의 95%'(11/13) — 배점 × 비율, 소수 넷째 자리까지
+                score = round(c.points * float(pct.group(1)) / 100, 4)
             rules = {kinds[col]: text for col, text in cols.items() if col in kinds and re.search(r"[A-D]", text)}
             if score is not None and rules:
                 c.credit_rows.append((rules, score))
@@ -247,6 +260,9 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
     start = next((i for i, (t, _, _) in enumerate(items) if _HEAD.match(t) and _START.search(t)), None)
     if start is None:
         start = next((i for i, (t, _, _) in enumerate(items) if _START.search(t)), None)
+    if start is None:  # '4. 계량평가 항목 평가 기준' 아래 '□ 경영상태 : …(5점)'(11/13) — 기호 머리가 바로 이어질 때만
+        start = next((i for i, (t, _, _) in enumerate(items) if _START_TITLE.search(t) and len(t) <= 40
+                      and any(_HEAD_BOX.match(x) for x, _, _ in items[i + 1:i + 4])), None)
     if start is None:
         return _read_doc_nopoints(items)
     start_mark = _mark_style(items[start][0])
@@ -256,9 +272,9 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
     summary_tbl: dict[str, tuple[str, tuple[int, int]]] = {}  # 요약표 항목이 든 표 — 기준(등급별 점수)이 같은 표에 있으면 읽음(11/11)
     for i in range(start, len(items)):
         text, _, tbls = items[i]
-        if i > start and _STOP.search(text) and not _HEAD.match(text):
+        if i > start and _STOP.search(text) and not _head(text):
             break
-        head = _HEAD.match(text)
+        head = _head(text)
         if head and i > start and start_mark and _mark_style(text) == start_mark:
             break  # '2) 정량적 평가 지표: 20점' 다음의 '3) 입찰가격 평가: 10점' — 같은 차례 머리면 정량평가 절 끝(11/05 국민안전체험관)
         if head and i > start:
@@ -624,7 +640,8 @@ def _rule_hit(rule: str, grade: str) -> bool:
     if not got:
         return False
     scale, rank = got
-    for part in re.split(r"[,，/]", rule):
+    # 쉼표 없이 줄이 바뀐 'AA- A+'(11/13)도 나눔 — 'BB- ~ BBB-' 범위는 그대로
+    for part in re.split(r"[,，/]|(?<=[A-D0-9+\-])\s+(?=[A-D])|(?<=[+\-])(?=[A-D])", rule):
         part = part.strip().upper().replace("O", "0")
         rng = re.fullmatch(r"([A-D][A-D0-9+\-]*)\s*[~∼～\-]\s*([A-D][A-D0-9+\-]*)(?:\s*등급)?", part)
         if rng:  # 'BB- ~ BBB-' — 두 등급 사이(양 끝 포함, 11/13 서식 14호)

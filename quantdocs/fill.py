@@ -178,6 +178,7 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("등급유효기간", "신용등급유효기간", "신용평가유효기간"), "신용평가 유효기간"),
     (("재무결산기준", "재무기준일", "결산기준일", "재무결산기준일"), "신용평가 재무기준일"),  # 신용평가 확인서의 재무기준일(11/13 서식 13호)  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
 ]
+_SENTENCE = re.compile(r"^(?:[※*＊]|주\))|(?:다|함|음|요|것|바람|기재|작성|참조|첨부)\.?$")  # 안내 문장 — 이름표 아님
 _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
 
 
@@ -242,7 +243,9 @@ def _birth(v: str) -> str:
 
 def _label_key(text: str) -> str | None:
     t = _sq(text).strip(":：")
-    if not t or len(t) > 16 or _SKIP_LABEL.search(t):
+    # 글자 수로 거르지 않음(11/13 사용자 요청 — '회사채(또는기업어음)에대한신용평가등급또는기업신용평가등급'이 16자를 넘어 빠졌음).
+    # 안내 문장('※ …'·'…기재함')만 이름표가 아님
+    if not t or _SKIP_LABEL.search(t) or _SENTENCE.search(t):
         return None
     if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호", t):  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
         return "_notice_no"
@@ -272,9 +275,10 @@ def _label_key(text: str) -> str | None:
             return key
     if "사업자등록번호" in t:
         return "사업자등록번호"
-    for words, key in LABELS:
-        if len(t) <= 8 and any(w in t for w in words):
-            return key
+    # 이름표 안에 든 낱말 — 여럿이면 뒤에 나온 것(한국어 이름표는 끝말이 뜻: '…에대한신용평가등급또는기업신용평가등급')
+    hits = [(t.rfind(w) + len(w), key) for words, key in LABELS for w in words if w in t]
+    if hits:
+        return max(hits, key=lambda h: h[0])[1]
     # 괄호로 같은 뜻을 덧붙인 이름표 '영업소재지(주소)'(11/11 필암 서식 17 실적증명서) — 괄호 앞 이름으로, 안 되면 괄호 안 이름으로
     pm = re.fullmatch(r"([^()]{2,})\(([^()]{2,})\)", t)
     if pm:

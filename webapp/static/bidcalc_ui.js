@@ -682,10 +682,13 @@
     // 개찰 결과는 '낙찰'(지일 1순위) / '탈락'(그 밖 — 하한선 미달 포함)으로(11/10 사용자 요청), 등수는 옆 칸
     if (o.recorded) {   // 비교 기록 — 실제로 낸 금액이 아니라서 '낙찰·탈락' 대신 웹앱 금액으로 본 자리
       const lab = o.rank === 1 ? `<b class="res-win">1순위</b>` : o.rank != null ? `<b class="rank">${o.rank}등</b>` : `<b class="res-bad">하한선 미달</b>`;
-      return `${lab}<span class="sub">웹앱 금액 · 참가 ${n}곳</span>${cmp}`;
+      // '비교 기록' 칩은 결과 바로 아래, 그 밑에 참가 수·실제 투찰 등수만(11/13 사용자 요청 — '웹앱 금액' 글은 칩과 겹쳐 뺌)
+      // 참가 수는 등수 옆에 '등수 / 참가 수'로(11/13 사용자 요청) — 따로 줄은 뺌
+      return `${lab}<span class="res-cmp"><span class="nowrap">비교 기록 ·</span> <span class="nowrap">웹앱 금액 기준</span></span><span class="sub"><span class="nowrap">실제 투찰 ${realPlace}</span>${real && n ? ` <span class="nowrap">/ ${n}곳</span>` : ""}</span>`;
     }
-    return (o.rank === 1 ? `<b class="res-win">낙찰</b><span class="sub">참가 ${n}곳</span>`
-      : `<b class="res-bad">탈락</b><span class="sub">${o.rank == null ? esc((o.remark || "순위 없음").replace("낙찰하한선미달", "하한선 미달")) + " · " : ""}참가 ${n}곳</span>`) + cmp;
+    // 참가 수는 옆 '지일 등수' 칸에 '등수 / 참가 수'로(11/13 사용자 요청)
+    return (o.rank === 1 ? `<b class="res-win">낙찰</b>`
+      : `<b class="res-bad">탈락</b>${o.rank == null ? `<span class="sub">${esc((o.remark || "순위 없음").replace("낙찰하한선미달", "하한선 미달"))}</span>` : ""}`) + cmp;
   }
   // 비교 기록이면 표·펼침 칸의 '지일' 숫자(등수·투찰금액·투찰률)는 웹앱 기록 금액 기준, 실제(외주) 투찰은 비교 상자에(11/13 사용자 요청)
   function mine(res) {
@@ -720,13 +723,11 @@
     const o = mine(res), place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
     const pass = o && o.rank != null ? true : place ? false : d != null ? d >= 0 : null;
     // 하한선 통과/미달은 옆 개찰 결과 칸(낙찰·탈락 아래)과 겹쳐 등수만(11/10) — 지일이 참가 안 한 공고만 기준 대비 통과/미달
-    const main = place ? `${o.recorded ? "웹앱" : "지일"} ${place}` : pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
-    // 비교 기록이면 웹앱 금액의 사정률(그 금액이 하한선이 되는 사정률)도 같이
-    const own_rate = o && o.recorded && res.recorded.rate != null ? ` · 웹앱 ${pct3(res.recorded.rate)}` : "";
-    const sub = `실제 ${pct3(res.assessmentRate)}${own_rate}${d != null ? ` · 기준 ${signed(d, "%p")}` : ""}`;
+    // 오른쪽 칸은 등수만(11/13 사용자 요청 — 참가 수는 개찰 결과 칸 '실제 투찰 N등 / M곳'에만)
+    const main = place ? `<span class="nowrap">${o.recorded ? "웹앱" : "지일"} ${place}</span>` : pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
+    // 아래 줄의 실제·웹앱 사정률·기준 차이는 뺌(11/13 사용자 요청 — 펼친 결과 칸에 있음, 표가 좌우로 넘침)
     // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색
-    return main ? `<span class="rate-main nowrap ${place ? "rank" : pass ? "ok" : "ng"}">${main}</span><span class="sub nowrap">${sub}</span>`
-      : `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap">기준 ${signed(d, "%p")}</span>` : ""}`;
+    return main ? `<span class="rate-main ${place ? "rank" : pass ? "ok" : "ng"}">${main}</span>` : pct3(res.assessmentRate);
   }
   // 낙찰하한가 = A값 + (실제 예정가격 − A값) × 하한율, 원 미만 올림(11/11 사용자 요청 — 투찰 계산기 하한선 금액과 같은 식)
   function floorPrice(r) {
@@ -843,12 +844,12 @@
       const link = `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${encodeURIComponent(r.noticeNo)}&bidPbancOrd=${encodeURIComponent(r.noticeOrd || "000")}`;
       const open = OPEN_ROWS.has(r.id);
       return `<tr data-id="${esc(r.id)}" class="${open ? "is-open" : ""}">
-        <td class="when" data-l="기록일">${esc(day(r.recordedAt))}</td>
-        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType ? `<span class="sub nowrap">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}</span>` : ""}</td>
+        <td class="when" data-l="기록일">${esc(day(r.recordedAt)).split(" ").map((x) => `<span class="nowrap">${x}</span>`).join(" ")}</td>
+        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType || r.contractMethod ? `<span class="sub">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}${r.contractMethod ? ` <span class="cm${/수의|지명/.test(r.contractMethod) ? " cm-hi" : ""}">${esc(r.contractMethod)}</span>` : ""}</span>` : ""}</td>
         <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub nowrap">기초 ${won(r.basis)}</span>${r.lowerRate != null ? `<span class="sub nowrap">하한율 ${r.lowerRate}%</span>` : ""}</td>
         <td class="num" data-l="기준 사정률">${pct3(r.rate)}</td>
         <td class="res" data-l="개찰 결과"><div>${resultCell(r)}</div></td>
-        <td class="num" data-l="등수 · 사정률">${rateCell(r)}</td>
+        <td class="num rankcol" data-l="등수">${rateCell(r)}</td>
         <td class="act">${edit
           ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
           : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button><span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>

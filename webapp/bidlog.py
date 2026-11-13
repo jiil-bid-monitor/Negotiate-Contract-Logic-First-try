@@ -32,7 +32,7 @@ _NUMBER = ("basis", "lowerRate", "rangeLo", "rangeHi", "aValue", "bid", "rate", 
 _NO_RE = re.compile(r"^[A-Z0-9]{8,14}$")
 
 CSV_COLUMNS = [("recordedAt", "기록일시"), ("noticeNo", "공고번호"), ("noticeOrd", "차수"), ("title", "공고명"),
-               ("institution", "발주처"), ("workType", "업무"), ("basis", "기초금액"), ("lowerRate", "하한율(%)"),
+               ("institution", "발주처"), ("workType", "업무"), ("contractMethod", "계약방법"), ("basis", "기초금액"), ("lowerRate", "하한율(%)"),
                ("aValue", "A값"), ("bid", "투찰금액"), ("rate", "기준 사정률(%)"), ("method", "추천 방식")]
 # 개찰 결과 칸(CSV 뒤쪽) — result 안의 값
 RESULT_COLUMNS = [("status", "개찰 결과"), ("ownRank", "지일 순위"), ("bidderCount", "참가 업체 수"), ("assessmentRate", "실제 사정률(%)"),
@@ -191,9 +191,9 @@ class BidLog:
             row = next((r for r in rows if r.get("id") == entry_id), None)
             if row is None:
                 return
-            for key in ("openingAt", "closingAt"):
+            for key, size in (("openingAt", 25), ("closingAt", 25), ("contractMethod", 40)):
                 if times.get(key) or key not in row:
-                    row[key] = str(times.get(key) or "")[:25]
+                    row[key] = str(times.get(key) or "")[:size]
             self._write(rows)
 
     def delete(self, entry_id: str) -> None:

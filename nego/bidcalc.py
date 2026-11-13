@@ -55,7 +55,7 @@ def _latest(rows: list[dict], notice_no: str) -> dict | None:
 
 
 def notice_times(client: DataGoKrClient, notice_no: str, work_type: str = "") -> dict[str, str]:
-    """공고번호 → {"openingAt": 개찰 일시(opengDt), "closingAt": 투찰 마감(bidClseDt)}, 마지막 차수.
+    """공고번호 → {"openingAt": 개찰 일시(opengDt), "closingAt": 투찰 마감(bidClseDt), "contractMethod": 계약방법}, 마지막 차수.
     못 찾으면 빈 dict — 투찰내역 예전 기록 채우기용."""
     works = [work_type] if work_type in WORK_TYPES else list(WORK_TYPES)
     for wt in works:
@@ -68,7 +68,8 @@ def notice_times(client: DataGoKrClient, notice_no: str, work_type: str = "") ->
         row = _latest(rows, notice_no)
         if row:
             return {"openingAt": str(row.get("opengDt") or "").strip(),
-                    "closingAt": str(row.get("bidClseDt") or "").strip()}
+                    "closingAt": str(row.get("bidClseDt") or "").strip(),
+                    "contractMethod": str(row.get("cntrctCnclsMthdNm") or "").strip()}  # 투찰내역 '수의·지명' 표시(11/13)
     return {}
 
 

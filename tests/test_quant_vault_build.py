@@ -2923,7 +2923,7 @@ def test_deduction_cells_always_zero(tmp_path: Path):
 
 
 def test_self_score_total_table_below(tmp_path: Path):
-    """11/13 사용자 요청: 서식 14호 맨 아래 따로 놓인 '합 계 | 20 점 | __' 표에 합계 점수 — 재무상태 14.25 + 감점 0 = '14.25 점'.
+    """11/13 사용자 요청: 서식 14호 맨 아래 따로 놓인 '합 계 | 20 점 | __' 표에 합계 점수 — 재무상태 14.25 + 감점 없는 항목 배점 5.0 = '19.25 점'.
     자동 채점이 비운 줄이 있으면(담당자 직접 채점) 합계도 비움."""
     import datetime as _dt
     from quantdocs.fill import fill_hwpx
@@ -2944,7 +2944,8 @@ def test_self_score_total_table_below(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 13)))
     sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     last = sec.rsplit("<hp:tbl>", 1)[1]
-    assert re.sub(r"<[^>]+>", "", last).endswith("20 점14.25 점"), re.sub(r"<[^>]+>", "", last)
+    # 감점이 없으면 감점 항목은 배점(5.0) 만점 → 14.25 + 5.0 = 19.25(11/13 사용자 지적)
+    assert re.sub(r"<[^>]+>", "", last).endswith("20 점19.25 점"), re.sub(r"<[^>]+>", "", last)
     # 신용등급을 모르면 재무상태가 비어 합계도 비움
     v2 = vault.Vault({}, info={"회사명": "(주)가상"})
     fill_hwpx(src, tmp_path / "o2.hwpx", v2, self_scores=SelfScore([], v2, _dt.date(2026, 11, 13)))

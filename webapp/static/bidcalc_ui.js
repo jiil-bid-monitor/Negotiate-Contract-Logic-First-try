@@ -723,8 +723,8 @@
     const o = mine(res), place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
     const pass = o && o.rank != null ? true : place ? false : d != null ? d >= 0 : null;
     // 하한선 통과/미달은 옆 개찰 결과 칸(낙찰·탈락 아래)과 겹쳐 등수만(11/10) — 지일이 참가 안 한 공고만 기준 대비 통과/미달
-    const of = res.bidderCount ? ` <span class="nowrap">/ ${res.bidderCount}곳</span>` : "";  // '등수 / 참가 수'(11/13 사용자 요청)
-    const main = place ? `<span class="nowrap">${o.recorded ? "웹앱" : "지일"} ${place}</span>${of}` : pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
+    // 오른쪽 칸은 등수만(11/13 사용자 요청 — 참가 수는 개찰 결과 칸 '실제 투찰 N등 / M곳'에만)
+    const main = place ? `<span class="nowrap">${o.recorded ? "웹앱" : "지일"} ${place}</span>` : pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
     // 아래 줄의 실제·웹앱 사정률·기준 차이는 뺌(11/13 사용자 요청 — 펼친 결과 칸에 있음, 표가 좌우로 넘침)
     // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색
     return main ? `<span class="rate-main ${place ? "rank" : pass ? "ok" : "ng"}">${main}</span>` : pct3(res.assessmentRate);

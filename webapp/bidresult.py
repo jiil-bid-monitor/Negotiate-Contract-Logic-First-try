@@ -98,7 +98,25 @@ def recorded_sim(bidders: list[dict[str, Any]], entry: dict[str, Any], res: dict
     if top is not None:
         out["gapToWinner"] = bid - round(top)
     out["ownAmount"] = own.get("amount") if own else None
+    out["ownRank"] = (own.get("rank") if own.get("rank") is not None else own.get("underRank")) if own else None
+    planned, basis = res.get("plannedPrice"), res.get("basisAmount") or entry.get("basis")
+    if planned:
+        out["bidRate"] = round(bid / float(planned) * 100, 5)   # 투찰률(예정가격 대비) — 나라장터 투찰률과 같은 기준
+    lower, a = entry.get("lowerRate"), float((res.get("aValue") if res.get("aValue") is not None else entry.get("aValue")) or 0)
+    if basis and lower:   # 이 금액이 낙찰하한선이 되는 사정률(투찰 업체 표 '사정률'과 같은 식)
+        out["rate"] = round((a + (bid - a) / (float(lower) / 100)) / float(basis) * 100, 5)
     return out
+
+
+def effective_own(res: dict[str, Any]) -> dict[str, Any] | None:
+    """화면·성적표에 쓸 '지일' 줄 — 비교 기록이면 웹앱 기록 금액 기준(11/13 사용자 요청: 사정률·등수도 웹앱 투찰가 기준), 아니면 실제 투찰."""
+    sim = res.get("recorded")
+    if not sim:
+        return res.get("own")
+    rank = sim.get("rank")
+    return {"rank": rank if rank is not None and rank > 0 else None, "underRank": rank if rank is not None and rank < 0 else None,
+            "amount": sim.get("amount"), "rate": sim.get("bidRate"),
+            "remark": "낙찰하한선미달" if rank is not None and rank < 0 else "", "recorded": True}
 
 
 def summarize(result: BidResult, entry: dict[str, Any], own_bizno: str, now: datetime | None = None) -> dict[str, Any]:

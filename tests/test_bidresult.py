@@ -174,3 +174,18 @@ class RealFetchNoticeTest(unittest.TestCase):
                                  demand_institution="", notice_institution="", opening_at=None, raw={})
         res = fetch_result(Client(), "u", notice)
         self.assertEqual((res.notice_no, res.contract_method), ("R26BK00000001", ""))
+
+
+class TestEffectiveOwn(unittest.TestCase):
+    def test_comparison_record_uses_recorded_amount(self):
+        """11/13 사용자 요청: 비교 기록은 등수·투찰률도 웹앱 기록 금액 기준(성적표 등수도)."""
+        from webapp.bidnightly import _rank_text
+        from webapp.bidresult import effective_own
+        res = {"status": "완료", "bidderCount": 445, "own": {"rank": None, "underRank": -369, "amount": 104_106_058},
+               "recorded": {"amount": 105_425_350, "rank": -12, "bidRate": 89.96, "gapToWinner": -630_650}}
+        own = effective_own(res)
+        self.assertEqual((own["rank"], own["underRank"], own["amount"]), (None, -12, 105_425_350))
+        self.assertIn("웹앱 기록 금액 기준", _rank_text({"result": res}))
+        res["recorded"]["rank"] = 3
+        self.assertEqual(_rank_text({"result": res}), "3위 / 445곳 · 웹앱 기록 금액 기준")
+        self.assertEqual(effective_own({"own": {"rank": 2}})["rank"], 2)   # 비교 기록이 아니면 실제 투찰

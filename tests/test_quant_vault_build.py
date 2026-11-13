@@ -3047,6 +3047,20 @@ def test_inline_lowercase_fax_label(tmp_path: Path):
     assert "033-000-0000" in text and "033-000-0001" in text, text
 
 
+def test_count_column_not_filled_with_label_keyword(tmp_path: Path):
+    """11/13 사용자 지적(수행경험(실적) 표 '구분 | 건수 | 총 계약금액 | 비고'): 구분 칸 '최근 3년간 홈페이지(SW·HW) 유지관리 … 실적'의
+    '홈페이지' 낱말만 보고 '건수' 칸에 누리집 주소를 넣음 — 머리글이 건수·금액이면 그런 값은 안 넣음. 일반 표 '홈페이지 | __'는 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "구분"), _c(1, 0, "건수"), _c(2, 0, "총 계약금액"), _c(3, 0, "비고")],
+                 [_c(0, 1, "최근 3년간 홈페이지(SW·HW) 유지관리 또는 개발(개편) 실적"), _c(1, 1, ""), _c(2, 1, ""), _c(3, 1, "")]]) \
+        + _tbl([[_c(0, 0, "홈페이지"), _c(1, 0, "")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "홈페이지": "https://ga.example"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert text.count("https://ga.example") == 1, text
+
+
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
     """11/13 사용자 제보(운리단길): ① 입찰참가신청서 표 밖 '신청인(대표사)          (인)'에 대표자 이름이 빠짐(쌍점 없는 서명 줄 규칙에 신청인이 없었음)
     ② 위임장 '소 속 (업체명)' 칸만 원본 문단이 오른쪽 정렬이라 '(주)지일'이 오른쪽으로 치우침 — 같은 표 다른 값 칸이 가운데면 가운데로."""

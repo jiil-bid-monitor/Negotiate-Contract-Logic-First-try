@@ -2122,7 +2122,7 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
     return new
 
 
-def _deduction_edits(cells: list[Cell], rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+def _deduction_edits(cells: list[Cell], rep: FillReport, tally: dict | None = None) -> list[tuple[Cell, list[str], bool]]:
     """감점 칸 = 늘 0(11/13 사용자 결정: 사업수행능력 평가에서 지일은 감점 사유(임금체불·고용개선조치 미이행 등)가 없음).
     머리 칸이 '감점'(·'감점점수'·'감점(점)')인 열의 빈 칸마다 '0' — 합계·계 줄은 뺌."""
     plain = lambda t: re.sub(r"\([^)]*\)", "", _sq(t))
@@ -2140,6 +2140,23 @@ def _deduction_edits(cells: list[Cell], rep: FillReport) -> list[tuple[Cell, lis
         out.append((c, ["0"], False))
     if out:
         rep.filled.append(f"감점 칸 {len(out)}곳 → 0 (감점 사유 없음)")
+        # 감점이 없으면 그 항목은 배점 만점 — 따로 놓인 합계 표에 더함(11/13 사용자 지적: 14.25가 아니라 14.25 + 5.0 = 19.25)
+        pts_head = next((c for c in cells if plain(c.text) in ("배점", "총배점")), None)
+        if tally is not None and pts_head is not None:
+            rows = {e[0].row for e in out}
+            seen, pts = set(), 0.0
+            for c in cells:
+                if c.start in seen or not (c.col <= pts_head.col < c.col + c.colspan):
+                    continue
+                if any(c.row <= r < c.row + c.rowspan for r in rows):  # 세로로 합친 '5.0' 칸은 한 번만
+                    m = re.fullmatch(r"([\d.]+)\s*점?", _sq(c.text))
+                    if m:
+                        seen.add(c.start)
+                        pts += float(m.group(1))
+            if pts:
+                tally["sum"] += pts
+                tally["n"] += 1
+                tally["extra"] = tally.get("extra", 0.0) + pts
     return out
 
 
@@ -2162,7 +2179,7 @@ def _total_edits(cells: list[Cell], tally: dict, rep: FillReport) -> list[tuple[
             continue
         unit = " 점" if any(re.fullmatch(r"[\d.]+점", _sq(c.text)) for c in line[1:]) else ""
         value = round(tally["sum"], 2)
-        rep.filled.append(f"합계 → {fmt(value)}점 (자기평점 {tally['n']}줄 + 감점 0)")
+        rep.filled.append(f"합계 → {fmt(value)}점 (감점 없는 항목 배점 {fmt(tally.get('extra', 0.0))}점 포함)")
         return [(blank, [fmt(value) + unit], False)]
     return []
 
@@ -2268,7 +2285,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 scored = _self_score_edits(cells, self_scores, rep, tally) if self_scores else []
                 edits += scored
                 if not sign_only:
-                    edits += _deduction_edits(cells, rep)
+                    edits += _deduction_edits(cells, rep, tally)
                     if not scored:  # 자기평가표 아래 따로 놓인 '합 계 | 20 점 | __' 표
                         edits += _total_edits(cells, tally, rep)
                 for c in cells:

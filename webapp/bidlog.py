@@ -151,6 +151,20 @@ class BidLog:
             own[key] = value
             self._write(rows)
 
+    def set_result_field(self, entry_id: str, key: str, value: Any) -> None:
+        """결과(result)에 칸 하나를 넣거나 바꿈 — 비교 기록 모의 순위 등(11/13)."""
+        with self._lock:
+            rows = self._read()
+            row = next((r for r in rows if r.get("id") == entry_id), None)
+            res = (row or {}).get("result")
+            if res is None:
+                return
+            if value is None:
+                res.pop(key, None)
+            else:
+                res[key] = value
+            self._write(rows)
+
     def _bidders_path(self, entry_id: str) -> Path:
         return self.bidders_dir / f"{re.sub(r'[^0-9A-Za-z]', '', entry_id)}.json"
 

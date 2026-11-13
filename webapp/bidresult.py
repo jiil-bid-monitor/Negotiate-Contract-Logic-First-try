@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -54,6 +55,70 @@ def under_rank(bidders: list[dict[str, Any]], own: dict[str, Any] | None) -> int
     return None
 
 
+def floor_price(planned: float | None, lower_rate: float | None, a_value: float | None) -> int | None:
+    """낙찰하한가 = A값 + (실제 예정가격 − A값) × 하한율, 원 미만 올림(투찰내역 화면 `floorPrice`와 같은 식)."""
+    if not planned or not lower_rate:
+        return None
+    a = float(a_value or 0)
+    return int(math.ceil(a + (float(planned) - a) * float(lower_rate) / 100 - 1e-9))
+
+
+def recorded_sim(bidders: list[dict[str, Any]], entry: dict[str, Any], res: dict[str, Any]) -> dict[str, Any] | None:
+    """기록한 투찰금액이 지일이 실제로 낸 금액과 다르면(외주 금액으로 투찰하고 계산기 금액을 비교용으로 기록 — 11/13 사용자 요청)
+    그 금액으로 투찰했다면 몇 등이었는지·낙찰하한가와 차이·1순위와 차이. 같으면 None(비교 기록 아님).
+
+    순위 = 하한가 이상이면 1 + (순위 있는 다른 업체 중 그 금액보다 싼 곳 수), 하한가 아래면 미달 업체 중 하한가에 가까운 순서로 −N.
+    지일이 실제로 낸 줄은 경쟁에서 뺌. 순공사원가 같은 다른 무효 기준은 셈하지 않음."""
+    bid = entry.get("bid")
+    if bid is None or res.get("status") != "완료":
+        return None
+    bid = round(float(bid))
+    own = res.get("own")
+    if own and own.get("amount") is not None and abs(float(own["amount"]) - bid) < 1:
+        return None
+    others = [b for b in bidders if not b.get("own") and b.get("amount") is not None]
+    floor = floor_price(res.get("plannedPrice"), entry.get("lowerRate"), res.get("aValue") if res.get("aValue") is not None else entry.get("aValue"))
+    if floor is None:  # 하한가를 못 구하면 순위 있는 업체 중 가장 싼 금액을 선으로 어림
+        ranked = [b["amount"] for b in others if b.get("rank") is not None]
+        floor_est = min(ranked) if ranked else None
+        passed = None if floor_est is None else bid >= floor_est
+    else:
+        passed = bid >= floor
+    out: dict[str, Any] = {"amount": bid, "floor": floor, "total": len(bidders) - (1 if own else 0) + 1}
+    if passed is None:
+        out["rank"] = None
+    elif passed:
+        out["rank"] = 1 + sum(1 for b in others if b.get("rank") is not None and b["amount"] < bid)
+    else:
+        under = [b for b in others if b.get("rank") is None and "미달" in (b.get("remark") or "")]
+        out["rank"] = -(1 + sum(1 for b in under if b["amount"] > bid))
+    if floor is not None:
+        out["gapToFloor"] = bid - floor
+    top = min((b["amount"] for b in others if b.get("rank") is not None), default=None)
+    if top is not None:
+        out["gapToWinner"] = bid - round(top)
+    out["ownAmount"] = own.get("amount") if own else None
+    out["ownRank"] = (own.get("rank") if own.get("rank") is not None else own.get("underRank")) if own else None
+    planned, basis = res.get("plannedPrice"), res.get("basisAmount") or entry.get("basis")
+    if planned:
+        out["bidRate"] = round(bid / float(planned) * 100, 5)   # 투찰률(예정가격 대비) — 나라장터 투찰률과 같은 기준
+    lower, a = entry.get("lowerRate"), float((res.get("aValue") if res.get("aValue") is not None else entry.get("aValue")) or 0)
+    if basis and lower:   # 이 금액이 낙찰하한선이 되는 사정률(투찰 업체 표 '사정률'과 같은 식)
+        out["rate"] = round((a + (bid - a) / (float(lower) / 100)) / float(basis) * 100, 5)
+    return out
+
+
+def effective_own(res: dict[str, Any]) -> dict[str, Any] | None:
+    """화면·성적표에 쓸 '지일' 줄 — 비교 기록이면 웹앱 기록 금액 기준(11/13 사용자 요청: 사정률·등수도 웹앱 투찰가 기준), 아니면 실제 투찰."""
+    sim = res.get("recorded")
+    if not sim:
+        return res.get("own")
+    rank = sim.get("rank")
+    return {"rank": rank if rank is not None and rank > 0 else None, "underRank": rank if rank is not None and rank < 0 else None,
+            "amount": sim.get("amount"), "rate": sim.get("bidRate"),
+            "remark": "낙찰하한선미달" if rank is not None and rank < 0 else "", "recorded": True}
+
+
 def summarize(result: BidResult, entry: dict[str, Any], own_bizno: str, now: datetime | None = None) -> dict[str, Any]:
     """개찰 결과 → 화면·저장용 요약. 참가업체가 하나도 없으면 '개찰 전'."""
     out: dict[str, Any] = {"fetchedAt": (now or _now()).isoformat(timespec="seconds")}
@@ -88,6 +153,9 @@ def summarize(result: BidResult, entry: dict[str, Any], own_bizno: str, now: dat
         out["rateDiff"] = round(float(entry["rate"]) - rate, 4)
     if own and own.amount is not None and winner and winner.amount is not None:
         out["gapToWinner"] = round(own.amount - winner.amount)
+    sim = recorded_sim(out["bidders"], entry, out)
+    if sim:
+        out["recorded"] = sim
     return out
 
 
@@ -149,6 +217,20 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
             bidders = log.bidders(e["id"])
             if bidders is not None:
                 log.set_own_field(e["id"], "underRank", under_rank(bidders, own))
+    # 비교 기록(기록 금액 ≠ 실제 투찰 금액)의 모의 순위 — 예전 결과에도, 금액을 고친 기록은 다시(11/13)
+    for e in log.entries():
+        res = e.get("result") or {}
+        if res.get("status") != "완료" or e["id"] in {d["id"] for d in done}:
+            continue
+        old = res.get("recorded")
+        if old is not None and e.get("bid") is not None and round(float(e["bid"])) == old.get("amount"):
+            continue
+        bidders = log.bidders(e["id"])
+        if bidders is None:
+            continue
+        sim = recorded_sim(bidders, e, res)
+        if sim != old:
+            log.set_result_field(e["id"], "recorded", sim)
     done_ids = {e["id"] for e in done}
     pending = [e for e in entries if e.get("id") not in done_ids and (not ids or e.get("id") in ids)
                and _needs_times(e, (e.get("result") or {}).get("status"))]

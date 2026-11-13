@@ -3047,6 +3047,17 @@ def test_inline_lowercase_fax_label(tmp_path: Path):
     assert "033-000-0000" in text and "033-000-0001" in text, text
 
 
+def test_inline_fax_number_label(tmp_path: Path):
+    """11/13 사용자 제보(별지 제1호 일반 현황 및 연혁): '연 락 처 | 전화번호:        팩스번호:' — 칸 안 이름표가 '팩스'만 있고
+    '팩스번호'가 없어 전화만 들어가고 팩스는 빔."""
+    from quantdocs.fill import fill_hwpx
+
+    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl([[_c(0, 0, "연 락 처"), _c(1, 0, "전화번호:                    팩스번호:          ")]]))
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "전화번호": "033-000-0000", "팩스번호": "033-000-0001"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"전화번호: 033-000-0000\s+팩스번호: 033-000-0001", text), text
+
+
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
     """11/13 사용자 제보(운리단길): ① 입찰참가신청서 표 밖 '신청인(대표사)          (인)'에 대표자 이름이 빠짐(쌍점 없는 서명 줄 규칙에 신청인이 없었음)
     ② 위임장 '소 속 (업체명)' 칸만 원본 문단이 오른쪽 정렬이라 '(주)지일'이 오른쪽으로 치우침 — 같은 표 다른 값 칸이 가운데면 가운데로."""

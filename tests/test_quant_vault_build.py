@@ -3104,3 +3104,26 @@ def test_subcontract_self_check_fills_contractor_side_only(tmp_path: Path):
     text = re.sub(r"<[^>]+>", "|", out).replace("", "").replace("", "")
     assert "가상 전시관 조성" in text and re.search(r"\(주\)가상\s+\(전화\) 033-111-2222", text), text
     assert text.count("033-111-2222") == 1 and "(전화) :|" in text  # 하수급인 전화 칸은 그대로 빔
+
+
+def test_subcontract_application_party_rows(tmp_path: Path):
+    """11/13 사용자 제보: 하도급 계약 승인신청서 '하도급 거래 계약 당사자' — 수급인 '상호' 칸(이름표·값 한 칸, 오른쪽은 '대표자 :' 칸)은
+    이름표 뒤에, '사업자등록번호'는 아래 빈 줄에(사용자 요청), 세로로 묶은 '하수급인'·'재하수급인' 줄은 비움, '신청인 | (서명 또는 인)' = 회사명 + 대표자."""
+    from quantdocs.fill import fill_hwpx
+
+    def c2(col, row, text, cs=1, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/></hp:tc>')
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "사업자등록번호": "123-45-67890", "주소": "가상시 가상로 1"})
+    rows = []
+    for i, who in enumerate(("수급인 (공동수급체 구성원)", "하수급인", "재하수급인")):
+        r = 2 * i
+        rows.append([c2(0, r, who, 1, 2), c2(1, r, "상호"), c2(2, r, "대표자 :      ")])
+        rows.append([c2(1, r + 1, "사업자등록번호"), c2(2, r + 1, "소재지 :      ")])
+    rows.append([c2(0, 6, "신청인       "), c2(1, 6, " (서명 또는 인)", 2)])
+    fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", _tbl(rows)), tmp_path / "ao.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"<[^>]+>", "|", out).replace("", "").replace("", "")
+    assert "상호   (주)가상" in text and re.search(r"사업자등록번호\|+123-45-67890", text), text
+    assert text.count("홍길동") == 2 and text.count("가상시 가상로 1") == 1  # 수급인 대표자 + 신청인, 하수급인 줄은 비움
+    assert re.search(r"\(주\)가상 대표자 홍길동\s+\(서명 또는 인\)", text)

@@ -3103,3 +3103,71 @@ def test_checklist_table_headers_block_company_values(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "k.hwpx", body), tmp_path / "ko.hwpx", v)
     out = zipfile.ZipFile(tmp_path / "ko.hwpx").read("Contents/section0.xml").decode()
     assert out.count("099-111-2222") == 1 and "(주)가상" in out  # 보통 표의 전화 칸에만
+
+def test_subcontract_self_check_fills_contractor_side_only(tmp_path: Path):
+    """11/13 사용자 결정(2번): 하도급계약의 적정성 판단 자기평가표 — 지일 = 수급인이라 왼쪽(사업명 = 공고명, 수급인 = 회사명 + 전화)만,
+    하수급인(하도급 받는 다른 회사) 쪽 '(전화) :'·사업명은 비움(예전엔 하수급인 전화 칸에 지일 번호가 들어감)."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222"})
+    body = _tbl([[_c(0, 0, " 수급인 관련 사항", 3), _c(3, 0, " 하수급인 관련 사항", 3)],
+                 [_c(0, 1, "사 업 명"), _c(1, 1, "", 2), _c(3, 1, "하 도 급 사 업 명"), _c(5, 1, "")],
+                 [_c(0, 2, "수 급 인"), _c(1, 2, " (전화)", 2), _c(3, 2, "하수급인"), _c(5, 2, " (전화) :")]])
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "so.hwpx", v, title="가상 전시관 조성")
+    out = zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"<[^>]+>", "|", out).replace("", "").replace("", "")
+    assert "가상 전시관 조성" in text and re.search(r"\(주\)가상\s+\(전화\) 033-111-2222", text), text
+    assert text.count("033-111-2222") == 1 and "(전화) :|" in text  # 하수급인 전화 칸은 그대로 빔
+
+
+def test_subcontract_application_party_rows(tmp_path: Path):
+    """11/13 사용자 제보: 하도급 계약 승인신청서 '하도급 거래 계약 당사자' — 수급인 '상호' 칸(이름표·값 한 칸, 오른쪽은 '대표자 :' 칸)은
+    이름표 뒤에, '사업자등록번호'는 아래 빈 줄에(사용자 요청), 세로로 묶은 '하수급인'·'재하수급인' 줄은 비움, '신청인 | (서명 또는 인)' = 회사명 + 대표자."""
+    from quantdocs.fill import fill_hwpx
+
+    def c2(col, row, text, cs=1, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{text}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/></hp:tc>')
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "사업자등록번호": "123-45-67890", "주소": "가상시 가상로 1"})
+    rows = []
+    for i, who in enumerate(("수급인 (공동수급체 구성원)", "하수급인", "재하수급인")):
+        r = 2 * i
+        rows.append([c2(0, r, who, 1, 2), c2(1, r, "상호"), c2(2, r, "대표자 :      ")])
+        rows.append([c2(1, r + 1, "사업자등록번호"), c2(2, r + 1, "소재지 :      ")])
+    rows.append([c2(0, 6, "신청인       "), c2(1, 6, " (서명 또는 인)", 2)])
+    fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", _tbl(rows)), tmp_path / "ao.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"<[^>]+>", "|", out).replace("", "").replace("", "")
+    assert "상호   (주)가상" in text and re.search(r"사업자등록번호\|+123-45-67890", text), text
+    assert text.count("홍길동") == 2 and text.count("가상시 가상로 1") == 1  # 수급인 대표자 + 신청인, 하수급인 줄은 비움
+    assert re.search(r"\(주\)가상 대표자 홍길동\s+\(서명 또는 인\)", text)
+
+def test_placeholder_signer_line_without_colon(tmp_path: Path):
+    """11/13 사용자 요청: 예시 답('○○○회사 대표 ○○○')이 미리 적힌 서명 줄 '서 약 자 : ○○○회사    대표 ○○○ (서명 또는 날인)'도
+    회사명·대표자로 바꿈(대표 뒤 쌍점 없음). 회사 자리표시가 없는 봉투 예시 '대표이사 ○○○ (인)'은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    body = ('<hp:p><hp:run charPrIDRef="0"><hp:t>서 약 자 : ○○○회사     대표 ○○○ (서명 또는 날인)</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>대표이사 ○○○     (인)</hp:t></hp:run></hp:p>')
+    fill_hwpx(_mini_hwpx(tmp_path / "o.hwpx", body), tmp_path / "oo.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "oo.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"<[^>]+>", "", out).replace("", "").replace("", "")
+    assert re.search(r"서 약 자 : \(주\)가상\s+대표 홍길동 \(서명 또는 날인\)", text), text
+    assert "○○○회사" not in text and "대표이사 ○○○     (인)" in text
+
+
+def test_placeholder_signer_ascii_o_and_title_blank(tmp_path: Path):
+    """11/13 사용자 요청: 별지서식 24 근로자 권리보호 이행 서약서 — 서명 줄 자리표시가 영문 'o o o'(띄어 씀)인 것도 회사명·대표자로,
+    본문 '당사는 서울특별시에서 시행하는            계약업체로서'의 빈칸 = 공고명."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    body = ('<hp:p><hp:run charPrIDRef="0"><hp:t>당사는 서울특별시에서 시행하는            </hp:t></hp:run>'
+            '<hp:run charPrIDRef="0"><hp:t> 계약업체로서 근로자의 권리보호를 위해</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>서약자 : o o o 회사 대표 o o o (서명 또는 날인)</hp:t></hp:run></hp:p>')
+    fill_hwpx(_mini_hwpx(tmp_path / "w.hwpx", body), tmp_path / "wo.hwpx", v, title="가상 사업")
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "wo.hwpx").read("Contents/section0.xml").decode())
+    text = text.replace("", "").replace("", "")
+    assert "시행하는 가상 사업" in text and "계약업체로서" in text, text
+    assert re.search(r"서약자 : \(주\)가상\s+대표 홍길동 \(서명 또는 날인\)", text), text

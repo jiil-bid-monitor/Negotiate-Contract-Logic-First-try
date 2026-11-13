@@ -840,6 +840,9 @@ def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
     return xml
 
 
+_PH = r"[○ｏoOㅇ◯](?: ?[○ｏoOㅇ◯]){1,}"  # 서명 줄 자리표시 '○○○'·'o o o'
+
+
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None, sign_only: bool = False) -> str:
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
@@ -885,6 +888,15 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             party = None  # 이름표 아닌 글 줄('청주시장 귀하')에서 묶음이 끝남
         if party == "other":
             continue
+        # 본문 '당사는 서울특별시에서 시행하는            계약업체로서'의 빈칸 = 공고명(11/13 사용자 요청, 별지서식 24)
+        if not sign_only and _value("_title", vault) and re.search(r"(?:시행|발주)하는\s{5,}(?:계약업체|사업|용역|공사)", text):
+            title = _value("_title", vault)
+            seg, k = re.subn(r"((?:시행|발주)하는)( {5,})", lambda mm: f"{mm.group(1)} {_mark(title)} ", xml[s:e], count=1)
+            if k:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"본문 사업명 빈칸 → {title[:40]}")
+                continue
         if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|회\s*사\s*명|주\s*소", text):
             continue
         # 한 줄에 회사 이름표와 대표자 이름표가 같이 — '업체명 :      대표자 :      (인)'·'제안업체 :      대표자 :'(11/06 과거 제안요청서 검사)
@@ -991,15 +1003,17 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 rep.filled.append(f"서명 줄 → {corp} 대표자 성명 {name}")
             continue
         # 서식에 '○○○업체 대표자 :   ○○○ (인)'처럼 자리표시가 미리 적힌 서명 줄(11/04 서식 19)
-        ph = re.fullmatch(rf"\s*○{{2,}}\s*(?:업체|회사)\s*(대\s*표\s*(?:자|이\s*사))\s*[:：]\s*○{{2,}}\s*({_SEAL_TAIL})?\s*", text)
+        # (11/13 사용자 요청) 앞에 이름표가 붙고 쌍점 없는 '서 약 자 : ○○○회사    대표 ○○○ (서명 또는 날인)'도
+        # 자리표시 글자는 ○ 말고도 'o o o'(영문 o 띄어 씀 — 11/13 별지서식 24 근로자 권리보호 이행 서약서)·ｏ·ㅇ·◯
+        ph = re.fullmatch(rf"\s*(?:[^:：○]{{1,16}}[:：])?\s*{_PH}\s*(?:업체|회사)\s*(대\s*표(?:\s*자|\s*이\s*사)?)\s*[:：]?\s*{_PH}\s*({_SEAL_TAIL})?\s*", text)
         if ph:
             company, name = _value("회사명", vault), _value("대표자", vault)
             if company and name:
-                seg = re.sub(r"○{2,}(\s*)(?=업체|회사)(?:업체|회사)", lambda mm: _mark(company) + mm.group(1), xml[s:e], count=1)
+                seg = re.sub(rf"{_PH}(\s*)(?=업체|회사)(?:업체|회사)", lambda mm: _mark(company) + mm.group(1), xml[s:e], count=1)
                 # 이름은 쌍점 바로 옆에(11/11 사용자 요청 — 예전엔 자리표시 앞 빈칸을 그대로 둬서 '대표자 :         이운봉 (인)'),
                 # 쌍점 뒤 빈칸은 이름 뒤로 옮겨 줄 길이·(인) 자리 유지
-                seg = re.sub(r"([:：])(\s*)○{2,}", lambda mm: f"{mm.group(1)} {_mark(name)}" + " " * max(0, len(mm.group(2)) - 1),
-                             seg, count=1)
+                seg = re.sub(rf"(대\s*표(?:\s*자|\s*이\s*사)?(?:\s*[:：])?)(\s*){_PH}",
+                             lambda mm: f"{mm.group(1)} {_mark(name)}" + " " * max(0, len(mm.group(2)) - 1), seg, count=1)
                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                 edits.append((s, e, seg))
                 rep.filled.append(f"서명 줄 자리표시 → {company} 대표자 {name}")
@@ -2395,6 +2409,43 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
                 check_cols = _check_cols(cells)
+
+                # 하도급계약의 적정성 판단 자기평가표('수급인 관련 사항 | 하수급인 관련 사항' — 11/13 사용자 결정 2번):
+                # 지일 = 수급인이라 왼쪽만 채움(사업명 = 공고명, 수급인 = 회사명 + 전화), 하수급인(하도급 받는 다른 회사) 쪽·점수·사유는 비움
+                sub_head = next((c for c in cells if "하수급인관련" in _sq(c.text)), None)
+                if sub_head is not None:
+                    cells = [c for c in cells if c.col < sub_head.col]
+                    for c in cells:
+                        right = by_pos.get((c.row, c.col + c.colspan))
+                        if right is None or right.col >= sub_head.col:
+                            continue
+                        if _sq(c.text) == "수급인" and re.fullmatch(r"\s*(?:[(（]\s*전\s*화\s*[)）]\s*[:：]?\s*)?", right.text):
+                            company, tel = _value("회사명", vault), _value("전화번호", vault)
+                            if company:
+                                line = f"{company}   (전화) {tel}".rstrip() if right.text.strip() else company
+                                edits.append((right, [line], False))
+                                rep.filled.append(f"하도급 자기평가표 수급인 → {line}")
+                    cells = [c for c in cells if _sq(c.text) != "수급인"]
+                # 하도급 계약 승인신청서 '하도급 거래 계약 당사자'(11/13 사용자 제보) — 세로로 묶은 '하수급인'·'재하수급인' 줄은
+                # 지일이 하도급 주는 다른 회사 칸이라 비움(예전엔 '대표자 :'·'소재지 :'에 지일 정보가 들어감)
+                sub_rows = set()
+                for o in cells:
+                    if o.rowspan >= 2 and re.fullmatch(r"재?하수급인", _sq(o.text)):
+                        sub_rows.update(range(o.row, o.row + o.rowspan))
+                if sub_rows:
+                    cells = [c for c in cells if c.row not in sub_rows]
+                for c in cells:
+                    # 이름표와 값 자리가 한 칸인 '상호 | 대표자 : __' — 오른쪽 칸도 이름표 칸이라 값을 그 칸 안에.
+                    # 상호는 이름표 뒤에, 사업자등록번호는 아래 빈 줄에(11/13 사용자 요청)
+                    key = _label_key(c.text)
+                    right = by_pos.get((c.row, c.col + c.colspan))
+                    if key not in ("회사명", "사업자등록번호") or right is None or right.blank or ":" in c.text or "：" in c.text \
+                            or not re.match(r"\s*[^:：]{1,12}[:：]", right.text) or len(_spans(xml, "p", c.start, c.end)) != 1:
+                        continue
+                    value = _value(key, vault)
+                    if value:
+                        edits.append((c, [value], True) if key == "사업자등록번호" else (c, [f"{c.text.strip()}   {value}"], False))
+                        rep.filled.append(f"{_sq(c.text)} → {value}")
                 agent_rows = _agent_rows(xml, cells)  # 위임장 '대리인' 칸이 세로로 묶은 줄 — 주소는 비움(11/05 사용자 요청)
                 if tracks:
                     track_edits = [_wrap_track_cell(xml, c, lines, keep, rep, chars)
@@ -2419,9 +2470,15 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             key = "대표자"
                         elif re.fullmatch(r"연락처|전화|전화번호|연락처\(전화\)", lab):
                             key = "전화번호"
-                    if key is None and _sq(c.text) == "사업명" and any(re.match(r"서약자", _sq(x.text)) for x in cells):
+                    if key is None and _sq(c.text) == "사업명" and (sub_head is not None or any(re.match(r"서약자", _sq(x.text)) for x in cells)):
                         key = "_title"  # 보안특약 서약서 '사 업 명 | __'(11/13 사용자 요청) — 실적증명서의 '사업명'(실적 이름)과 달리 서약 표에서만 공고명
-                    elif group == "대리인" and key not in ("회사명", None):
+                    applicant = False
+                    if key is None and re.fullmatch(r"신청인|신청\(보고\)인", _sq(c.text)):
+                        # 하도급 계약 승인신청서 끝 '신청인 | (서명 또는 인)'(11/13) — 서명 칸에 회사명 + 대표자
+                        right = by_pos.get((c.row, c.col + c.colspan))
+                        if right is not None and _SEAL_ONLY.match(_sq(right.text)):
+                            key, applicant = "회사명", True
+                    if group == "대리인" and key not in ("회사명", None):
                         continue  # 대리인 줄은 업체명만(성명·주민번호·주소·연락처는 개인 정보라 비움 — 10/28·11/05 결정)
                     core = re.sub(r"\(.*?\)|[^\w]", "", c.text)  # '〈 주요연혁(요약) 〉' → '주요연혁'
                     if "연혁" in core and len(core) <= 8 and vault.history:
@@ -2474,6 +2531,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         value = f"{value} / {_value('팩스번호', vault)}"  # '전화번호(FAX번호)' 한 칸(11/05 국민안전체험관 서식 2)
                     if key == "회사명" and "대표" in _sq(c.text) and not _sq(c.text).startswith("대표사") and _value("대표자", vault):
                         value = f"{value} {_value('대표자', vault)}".strip()  # '상호·법인명(대표성명)'
+                    if applicant and _value("대표자", vault):
+                        value = f"{value} 대표자 {_value('대표자', vault)}"
                     if not value:
                         continue
                     if target is None and not any(o.row == c.row and o.col > c.col for o in cells) \

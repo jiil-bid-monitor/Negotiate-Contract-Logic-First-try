@@ -445,17 +445,26 @@ def _rank_text(e: dict[str, Any]) -> str:
     r = e.get("result") or {}
     if r.get("status") != "완료":
         return r.get("status") or "개찰 전"
-    own = r.get("own")
+    from webapp.bidresult import effective_own
+    own = effective_own(r)   # 비교 기록이면 웹앱 기록 금액 기준(11/13)
+    tag = " · 웹앱 기록 금액 기준" if own and own.get("recorded") else ""
     if not own:
         return f"참가 기록 없음 ({r.get('bidderCount', '-')}곳)"
     if own.get("rank") is None:
-        return f"하한 미달 ({r.get('bidderCount', '-')}곳)"
-    return f"{own['rank']}위 / {r.get('bidderCount', '-')}곳"
+        return f"하한 미달 ({r.get('bidderCount', '-')}곳){tag}"
+    return f"{own['rank']}위 / {r.get('bidderCount', '-')}곳{tag}"
 
 
 def direction(entries: list[dict[str, Any]]) -> list[str]:
     """개찰된 지일 투찰로 본 보정 방향 — 미달이 많으면 높이는 쪽, 통과했는데 1위보다 비쌌으면 낮추는 쪽."""
-    done = [e["result"] for e in entries if (e.get("result") or {}).get("status") == "완료" and e["result"].get("own")]
+    from webapp.bidresult import effective_own
+    done = []
+    for e in entries:   # 비교 기록은 웹앱 기록 금액으로 본 등수·1위와 차이(11/13 — 계산기 보정용)
+        r = e.get("result") or {}
+        own = effective_own(r) if r.get("status") == "완료" else None
+        if own:
+            gap = (r.get("recorded") or {}).get("gapToWinner") if own.get("recorded") else r.get("gapToWinner")
+            done.append({**r, "own": own, "gapToWinner": gap})
     if not done:
         return ["아직 개찰된 투찰이 없어 판단할 수 없음"]
     under = [r for r in done if r["own"].get("rank") is None]

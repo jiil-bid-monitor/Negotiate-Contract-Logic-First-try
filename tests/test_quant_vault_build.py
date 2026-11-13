@@ -3316,3 +3316,14 @@ def test_placeholder_signer_ascii_o_and_title_blank(tmp_path: Path):
     text = text.replace("", "").replace("", "")
     assert "시행하는 가상 사업" in text and "계약업체로서" in text, text
     assert re.search(r"서약자 : \(주\)가상\s+대표 홍길동 \(서명 또는 날인\)", text), text
+
+
+def test_placeholder_signer_digit_zero(tmp_path: Path):
+    """11/13 사용자 지적: '서약자 : 00회사 대표 000(인)' — 자리표시가 숫자 0이라 그대로 남음. 0도 자리표시 글자, '(인)'이 붙어 있으면 이름 뒤 한 칸."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    body = '<hp:p><hp:run charPrIDRef="0"><hp:t>서약자 : 00회사  대표 000(인)</hp:t></hp:run></hp:p>'
+    fill_hwpx(_mini_hwpx(tmp_path / "z.hwpx", body), tmp_path / "zo.hwpx", v)
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "zo.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"서약자 : \(주\)가상\s+대표 홍길동 \(인\)", text), text

@@ -3091,6 +3091,22 @@ def test_trustor_trustee_signature_fills_trustee_only(tmp_path: Path):
     assert "강원 정선" in right and "(주)가상" in right and re.search(r"대표자 성명 : 홍길동\s+\(인\)", right), right
 
 
+def test_pledge_signer_value_after_colon(tmp_path: Path):
+    """11/13 사용자 지적: 보안 서약서 서약자 '직 위 :' / '성 명 : (인)'이 한 문단(줄바꿈)이면 '직 위 대표이사 :'처럼 ':' 앞에 들어가고
+    성명은 비었음 — ':'가 있으면 값은 늘 ':' 오른쪽."""
+    from quantdocs.fill import fill_hwpx
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (para("서 약 자") + para("업   체   명 :          ")
+            + '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>직          위   :          </hp:t><hp:lineBreak/>'
+              '<hp:t>성          명   :                    (인)</hp:t></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"직\s+위\s+: 대표이사", text) and re.search(r"성\s+명\s+: 홍길동\s+\(인\)", text), text
+
+
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
     """11/13 사용자 제보(운리단길): ① 입찰참가신청서 표 밖 '신청인(대표사)          (인)'에 대표자 이름이 빠짐(쌍점 없는 서명 줄 규칙에 신청인이 없었음)
     ② 위임장 '소 속 (업체명)' 칸만 원본 문단이 오른쪽 정렬이라 '(주)지일'이 오른쪽으로 치우침 — 같은 표 다른 값 칸이 가운데면 가운데로."""

@@ -839,15 +839,20 @@ def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
                 for rx, key in _SIGNER_INLINE:
                     if key in done or not vals[key]:
                         continue
-                    lm = re.search(rf"({rx})( +|$)(?!\s*(?:대표|{re.escape(vals[key])}))", body)
-                    if not lm or (key != "_rank" and re.match(r"\s*[:：]", body[lm.end(1):])):
+                    # 이름표 뒤에 ':'가 있으면 값은 ':' 오른쪽에(11/13 사용자 지적 — '직 위 대표이사 :'처럼 사이에 들어갔고, '성 명 :'은 건너뛰어 비었음)
+                    lm = re.search(rf"({rx})(\s*[:：])?( +|$)", body)
+                    if not lm:
                         continue
-                    if key == "_rank" and re.match(r"\s*대표", body[lm.end(1):]):
-                        done.add(key)
+                    if re.match(rf"\s*(?:{re.escape(vals[key])}|대표)" if key == "_rank" else rf"\s*{re.escape(vals[key])}",
+                                body[lm.end():]):
+                        done.add(key)  # 이미 적힌 값('직급/직위 대표이사')은 그대로
                         continue
-                    room = len(lm.group(2))
+                    if lm.group(3) == "" and lm.end() < len(body):
+                        continue  # 이름표 뒤에 빈칸 없이 다른 글이 이어짐 — 이름표 아님
+                    room = len(lm.group(3))
                     need = _span(vals[key]) + 2
-                    body = body[:lm.end(1)] + " " + _mark(vals[key]) + " " * max(3, room - need) + body[lm.end(2):]
+                    at = lm.end(2) if lm.group(2) else lm.end(1)
+                    body = body[:at] + " " + _mark(vals[key]) + " " * max(3, room - need) + body[lm.end(3):]
                     done.add(key)
                 return tm.group(1) + body + tm.group(3)
             new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", put_t, seg, flags=re.S)

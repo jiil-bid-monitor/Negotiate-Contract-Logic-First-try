@@ -3088,3 +3088,19 @@ def test_track_table_contract_name_head():
     assert rep.rows == 1
     assert vals[1] == ["가상 전시관 조성"] and vals[4] == ["가상시"] and vals[5] == ["전시·", "체험"] and vals[6] == ["단독"]
     assert 7 not in vals and 8 not in vals  # 증빙 번호·비고는 담당자가
+
+
+def test_subcontract_self_check_fills_contractor_side_only(tmp_path: Path):
+    """11/13 사용자 결정(2번): 하도급계약의 적정성 판단 자기평가표 — 지일 = 수급인이라 왼쪽(사업명 = 공고명, 수급인 = 회사명 + 전화)만,
+    하수급인(하도급 받는 다른 회사) 쪽 '(전화) :'·사업명은 비움(예전엔 하수급인 전화 칸에 지일 번호가 들어감)."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222"})
+    body = _tbl([[_c(0, 0, " 수급인 관련 사항", 3), _c(3, 0, " 하수급인 관련 사항", 3)],
+                 [_c(0, 1, "사 업 명"), _c(1, 1, "", 2), _c(3, 1, "하 도 급 사 업 명"), _c(5, 1, "")],
+                 [_c(0, 2, "수 급 인"), _c(1, 2, " (전화)", 2), _c(3, 2, "하수급인"), _c(5, 2, " (전화) :")]])
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "so.hwpx", v, title="가상 전시관 조성")
+    out = zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"<[^>]+>", "|", out).replace("", "").replace("", "")
+    assert "가상 전시관 조성" in text and re.search(r"\(주\)가상\s+\(전화\) 033-111-2222", text), text
+    assert text.count("033-111-2222") == 1 and "(전화) :|" in text  # 하수급인 전화 칸은 그대로 빔

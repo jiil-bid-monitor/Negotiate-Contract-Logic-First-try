@@ -746,6 +746,74 @@ def _fill_multi(seg: str, multi: list[tuple[str, str]], vault) -> tuple[str, lis
     return new, done
 
 
+_LEAF_P = re.compile(r"<(?:[\w.-]+:)?p\b[^>]*>(?:(?!<(?:[\w.-]+:)?p\b).)*?</(?:[\w.-]+:)?p>", re.S)
+_PLEDGE_FOR = re.compile(r"\(\s*([^()]{1,10}?)\s*용\s*\)")  # '보안서약서(업체대표용)'·'(참여인력용)'
+_SIGNER_INLINE = [(r"소\s*속", "회사명"), (r"직급\s*/\s*직위|직\s*위", "_rank"), (r"성\s*명", "대표자")]
+
+
+def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
+    """보안 서약서 서약자 칸(11/13 사용자 요청 — 한국산업단지공단 별첨 보안 서류):
+    ① 표 칸 '서 약 자 (업체 대표) | 소 속 : / 직 위 : / 성 명 :' ② 서명 줄 '서약자  소속 ……  직급/직위 ……  성 명 …… (인)'
+    → 소속 = 회사명, 직위 = 대표이사(회사정보 '대표자 직위'가 있으면 그 값), 성명 = 대표자. 이미 적힌 값('직급/직위 대표이사')은 그대로.
+    '(참여인력용)' 서약서는 사람마다 쓰는 것이라, '확인자'(발주기관) 줄은 남의 것이라 비움."""
+    info = vault.info
+    vals = {"회사명": str(info.get("회사명") or ""), "대표자": str(info.get("대표자") or ""),
+            "_rank": str(info.get("대표자 직위") or "대표이사")}
+    paras = list(_LEAF_P.finditer(xml))
+    edits: list[tuple[int, int, str]] = []
+    mode, left, done = "", 0, set()
+    for m in paras:
+        seg = m.group(0)
+        text = _text(seg)
+        sq = _sq(text)
+        f = _PLEDGE_FOR.search(text)
+        if f:
+            mode = _sq(f.group(1))
+        if sq.startswith("확인자"):
+            left = 0
+            continue
+        if sq.startswith("서약자"):
+            left, done = 5, set()
+        if left <= 0:
+            continue
+        left -= 1
+        if re.search(r"인력|직원|개인", mode):
+            continue
+        new = seg
+        colon = re.fullmatch(r"\s*(소\s*속|직\s*위|직급\s*/\s*직위|성\s*명)\s*[:：]\s*", text)
+        if colon:  # ① 칸 안 '소 속 :' 문단
+            key = next(k for rx, k in _SIGNER_INLINE if re.fullmatch(rx, colon.group(1).strip()))
+            if key not in done and vals[key]:
+                new = _after_colon(seg, vals[key], False) or seg
+                done.add(key)
+        else:  # ② 서명 줄 — 이름표 뒤 빈칸에 값(빈칸은 값 너비만큼 줄임)
+            def put_t(tm):
+                body = tm.group(2)
+                for rx, key in _SIGNER_INLINE:
+                    if key in done or not vals[key]:
+                        continue
+                    lm = re.search(rf"({rx})( +|$)(?!\s*(?:대표|{re.escape(vals[key])}))", body)
+                    if not lm or (key != "_rank" and re.match(r"\s*[:：]", body[lm.end(1):])):
+                        continue
+                    if key == "_rank" and re.match(r"\s*대표", body[lm.end(1):]):
+                        done.add(key)
+                        continue
+                    room = len(lm.group(2))
+                    need = _span(vals[key]) + 2
+                    body = body[:lm.end(1)] + " " + _mark(vals[key]) + " " * max(3, room - need) + body[lm.end(2):]
+                    done.add(key)
+                return tm.group(1) + body + tm.group(3)
+            new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", put_t, seg, flags=re.S)
+            if new != seg:
+                new = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", new, flags=re.S)
+        if new != seg:
+            edits.append((m.start(), m.end(), new))
+            rep.filled.append(f"보안 서약서 서약자 → {_text(new).strip()[:40]}")
+    for a, b, new in reversed(edits):
+        xml = xml[:a] + new + xml[b:]
+    return xml
+
+
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None, sign_only: bool = False) -> str:
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
@@ -2521,6 +2589,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             xml = _fill_notice_no_para(xml, no_text, rep)
             xml = _plain_title(xml, title)
             xml = _fill_label_paragraphs(xml, vault, rep, chars, sign_only)
+            xml = _fill_pledge_signer(xml, vault, rep)
             xml = _apply_marks(xml, chars)
             if chars is not None:
                 if vault.history:

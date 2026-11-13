@@ -2708,3 +2708,42 @@ def test_track_text_wraps_by_word():
     assert c.start not in rep2.one_line  # 9pt로도 안 들어가는 긴 낱말은 줄이지 않음(칸 끝에서 넘어감)
     _c, lines, _k = _wrap_track_cell(xml, c, ["3,610,090,000"], False, FillReport("x"))
     assert lines == ["3,610,090,000"]  # 숫자 칸은 그대로
+
+
+def test_staff_form_fills_grade_and_name_of_picked(tmp_path: Path):
+    """11/13 사용자 요청: 당진 서식 7호 '기술인력 보유 현황(공고일 기준)' — 화면에서 체크한 기술인력의 기술자 등급·성명만 채움.
+    표는 머리줄 + 세로로 긴 빈 줄 3개 — 고른 사람이 줄보다 많으면 긴 줄을 나눠 한 줄에 한 명. 다른 칸(구분·자격종목 등)은 그대로 빈칸."""
+    from quantdocs.build import _staff_for
+    from quantdocs.fill import fill_hwpx
+
+    heads = ["구분", "일련번호", "기술자등급", "기술분야", "자격종목", "성명", "등록일(취득일)", "경력기간", "등록번호", "비고"]
+    cell = lambda c, r, t, h: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                               f'<hp:cellAddr colAddr="{c}" rowAddr="{r}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                               f'<hp:cellSz width="1700" height="{h}"/></hp:tc>')
+    rows = [[cell(i, 0, h, 3000) for i, h in enumerate(heads)]]
+    rows += [[cell(i, r, "", 14000) for i in range(len(heads))] for r in range(1, 4)]
+    body = ('<hp:p><hp:run><hp:tbl rowCnt="4" colCnt="10"><hp:sz width="17000" height="45000"/>'
+            + "".join("<hp:tr>" + "".join(x) + "</hp:tr>" for x in rows) + "</hp:tbl></hp:run></hp:p>")
+    src = _mini_hwpx(tmp_path / "f7.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    v.staff = [{"이름": "가초급", "등급": "초급", "입사일": "2018-12-10"}, {"이름": "가특급", "등급": "특급", "입사일": "2013-08-01"},
+               {"이름": "나고급", "등급": "고급", "입사일": "2014-09-01"}, {"이름": "다고급", "등급": "고급", "입사일": "2020-02-17"},
+               {"이름": "나특급", "등급": "특급", "입사일": "2011-09-01"}]
+    assert _staff_for("기술인력 보유 현황(공고일 기준)", v) is None  # 화면에서 안 골랐으면(CLI 등) 채우지 않음
+    v.staff_pick_from_screen = True
+    staff = _staff_for("기술인력 보유 현황(공고일 기준)", v)
+    assert staff and _staff_for("투입인력 현황", v) is None and _staff_for("사업수행 실적", v) is None
+    rep = fill_hwpx(src, tmp_path / "o.hwpx", v, sign_only=True, staff=staff)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {}
+    for m in re.finditer(r"<hp:tc>(.*?)</hp:tc>", sec, re.S):
+        t = "".join(re.findall(r"<hp:t>([^<]*)</hp:t>", m.group(1)))
+        col, row = map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m.group(1)).groups())
+        if t:
+            got[(row, col)] = t
+    names = [got.get((r, 5)) for r in range(1, 6)]
+    grades = [got.get((r, 2)) for r in range(1, 6)]
+    assert names == ["나특급", "가특급", "나고급", "다고급", "가초급"], got  # 등급순, 같은 등급은 입사일순
+    assert grades == ["특급", "특급", "고급", "고급", "초급"]
+    assert not any(c not in (2, 5) for (r, c) in got if r > 0)  # 등급·성명 말고는 빈칸
+    assert 'rowCnt="6"' in sec and rep.overflow == 0

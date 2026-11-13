@@ -1527,9 +1527,52 @@ def _widen_track_cols(xml: str, tbl: tuple[int, int], tracks: list[dict], chars:
     return xml
 
 
-def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int) -> str:
+_GRADE_RANK = {"기술사": 0, "특급": 1, "고급": 2, "중급": 3, "초급": 4}
+
+
+def _staff_head(heads: list[str]) -> bool:
+    """기술인력 보유 현황 표 머리줄 — '성명'(이름)과 '기술자 등급'(등급) 칸이 같이 있는 줄."""
+    return any(h in ("성명", "이름", "성함") for h in heads) and any("등급" in h for h in heads)
+
+
+def _fill_staff(cells: list[Cell], staff: list[dict], rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+    """'기술인력 보유 현황' 표(서식 7호 — 구분·일련번호·기술자 등급·…·성명·…)의 빈 줄에 화면에서 고른 기술인력의
+    기술자 등급·성명만 넣음(11/13 사용자 요청). 등급순(특급·고급·중급·초급), 같은 등급은 입사일순 — 화면 목록과 같은 순서."""
+    rows: dict[int, list[Cell]] = {}
+    for c in cells:
+        rows.setdefault(c.row, []).append(c)
+    head = next((r for r in sorted(rows) if _staff_head([_sq(c.text) for c in rows[r]])), None)
+    if head is None:
+        return []
+    name_col = next(c.col for c in rows[head] if _sq(c.text) in ("성명", "이름", "성함"))
+    grade_col = next(c.col for c in rows[head] if "등급" in _sq(c.text))
+    people = sorted(staff, key=lambda p: (_GRADE_RANK.get(re.sub(r"\s|기술자", "", str(p.get("등급") or "")), 9),
+                                          str(p.get("입사일") or "")))
+    queue = [p for p in people if str(p.get("이름") or "").strip()]
+    edits = []
+    for r in sorted(k for k in rows if k > head):
+        line = rows[r]
+        if not queue or not all(c.blank for c in line):
+            continue
+        p = queue.pop(0)
+        for c in line:
+            if c.col == name_col:
+                edits.append((c, [str(p["이름"]).strip()], False))
+            elif c.col == grade_col and str(p.get("등급") or "").strip():
+                edits.append((c, [str(p["등급"]).strip()], False))
+        rep.rows += 1
+    if edits:
+        rep.filled.append(f"기술인력 보유 현황 → {rep.rows}명(기술자 등급·성명)")
+    if queue:
+        rep.overflow += len(queue)
+        rep.overflow_names += [str(p["이름"]) for p in queue]
+    return edits
+
+
+def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int, head_test=None) -> str:
     """실적표 아래가 세로로 긴 빈 칸 한 줄뿐이면(11/04 필암서원 서식16 — 17.8cm 한 줄) 그 줄을 실적 수만큼(칸 높이가 허락하는 만큼)
-    같은 높이의 줄로 나눔 — 표 전체 높이는 그대로, 줄마다 실적 하나. 세로로 합친 칸이 있는 표는 건드리지 않음."""
+    같은 높이의 줄로 나눔 — 표 전체 높이는 그대로, 줄마다 실적 하나. 세로로 합친 칸이 있는 표는 건드리지 않음.
+    head_test: 머리줄 알아보기(칸 글 목록 → 참/거짓) — 기본은 실적표('사업명' + '금액'), 기술인력 표는 `_staff_head`."""
     seg = xml[tbl[0]:tbl[1]]
     if re.search(r'rowSpan="([2-9]|\d\d+)"', seg):
         return xml
@@ -1538,8 +1581,10 @@ def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int) -> str:
     rows: dict[int, list[Cell]] = {}
     for c in cells:
         rows.setdefault(c.row, []).append(c)
-    head = next((r for r in sorted(rows) if any("사업명" in _sq(c.text) or "용역명" in _sq(c.text) or "공사명" in _sq(c.text) for c in rows[r])
-                 and any("금액" in _sq(c.text) for c in rows[r])), None)
+    if head_test is None:
+        def head_test(heads):
+            return any("사업명" in h or "용역명" in h or "공사명" in h for h in heads) and any("금액" in h for h in heads)
+    head = next((r for r in sorted(rows) if head_test([_sq(c.text) for c in rows[r]])), None)
     if head is None or len(trs) != len(rows):
         return xml
     head_h = max(int(m) for m in re.findall(r'cellSz\b[^>]*height="(\d+)"', seg[trs[head][0]:trs[head][1]]) or [0])
@@ -2017,10 +2062,12 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cel
 
 def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "",
               notice_no: tuple[str, str] | None = None, g2b_no: str = "", self_scores=None,
-              basis: int | None = None, sign_only: bool = False, face: str = "") -> FillReport:
+              basis: int | None = None, sign_only: bool = False, face: str = "",
+              staff: list[dict] | None = None) -> FillReport:
     """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸).
     sign_only: 직접 기입 서식(재직증명서 등) — 표는 건드리지 않고 표 밖 서명 줄('업 체 명 :'·'주 소 :'·'대 표 자 : (인)')만(11/05).
-    face: 채운 글의 한글 글꼴 이름(통합서식 첫 서식의 채운 글 글꼴 — 11/10). 돌려주는 rep.face = 이 서식에서 쓴 글꼴."""
+    face: 채운 글의 한글 글꼴 이름(통합서식 첫 서식의 채운 글 글꼴 — 11/10). 돌려주는 rep.face = 이 서식에서 쓴 글꼴.
+    staff: 화면에서 고른 기술인력(인력목록 줄) — '기술인력 보유 현황' 표의 기술자 등급·성명 칸에(sign_only여도, 11/13)."""
     rep = FillReport(Path(dst).name)
     # 묶음은 그대로 두고 이번 서식에만 공고 이름·공고번호를 더함(11/04 사용자 요청 — 공고마다 자동)
     # 공고번호 = 공고문의 기관 공고번호('제2026-1129호'), 못 찾으면 나라장터 공고번호
@@ -2048,12 +2095,21 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
                 for i in range(len(_spans(xml, "tbl"))):  # 사업기간·금액 열이 좁으면 가장 넓은 열에서 너비를 받아 옴(11/12)
                     xml = _widen_track_cols(xml, _spans(xml, "tbl")[i], tracks, chars)
+            if staff:  # 기술인력 보유 현황 표 — 세로로 긴 빈 줄이면 고른 인원 수만큼 줄을 나눔(실적표와 같은 방식)
+                for i in range(len(_spans(xml, "tbl"))):
+                    for _ in range(len(staff)):
+                        new = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(staff), _staff_head)
+                        if new == xml:
+                            break
+                        xml = new
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
             none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
             for tbl in _spans(xml, "tbl"):
                 cells = _cells(xml, tbl)
+                if staff:
+                    edits += _fill_staff(cells, staff, rep)
                 # 직접 기입 서식(실적증명서 등)은 표 안을 건드리지 않음 — 단 '신청인' 묶음 줄(업체명·대표자·사업자번호·소재지·전화)은 채움
                 # (11/10 경남교육청 사업이행 실적증명서 — 증명 내용은 발주처가, 신청인 칸은 지일이)
                 if sign_only and not any(_row_group(cells, x) == "신청인" for x in cells):

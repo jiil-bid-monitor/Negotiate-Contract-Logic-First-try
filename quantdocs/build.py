@@ -305,6 +305,20 @@ def _note_unfilled(a: "Analysis", form, path: Path, sign_only: bool) -> None:
                        + (" 외" if len(names) > 6 else "") + " (회사 정보 이름표가 있는데 빈칸 — 한글에서 직접 기입)")
 
 
+# '기술인력 보유 현황'(당진 서식 7호) — 화면에서 고른 기술인력의 등급·성명을 넣는 서식. 투입·참여 인력·경력·이력 서식은 사업마다 따로라 빼고
+_STAFF_FORM = re.compile(r"기술\s*(?:인력|자)")
+_NOT_STAFF_FORM = re.compile(r"투입|참여|이력|경력|재직|증명")
+
+
+def _staff_for(title: str, vault) -> list[dict] | None:
+    """화면에서 고른 기술인력(11/13 사용자 요청) — 기술인력 보유 현황 서식에만, 화면에서 한 명 이상 골랐을 때만."""
+    if not getattr(vault, "staff_pick_from_screen", False) or not vault.staff:
+        return None
+    if not _STAFF_FORM.search(title or "") or _NOT_STAFF_FORM.search(title or ""):
+        return None
+    return list(vault.staff)
+
+
 def is_manual(name: str) -> bool:
     return bool(_MANUAL_FORM.search(name or "") or _BLANK_FORM.search(name or ""))
 
@@ -400,7 +414,8 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                     if _BLANK_FORM.search(c.title):  # 질의서·공동수급 서식은 공란(11/05)
                         shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
                     else:  # 재직증명서 등도 표 밖 서명 줄(업체명·주소·대표자 (인))은 채움(11/05 사용자 요청)
-                        reports.append(fill_hwpx(forms_dir / c.file, manual_dir / c.file, vault, title=notice_title, sign_only=True))
+                        reports.append(fill_hwpx(forms_dir / c.file, manual_dir / c.file, vault, title=notice_title, sign_only=True,
+                                                 staff=_staff_for(c.title, vault)))
                         _note_unfilled(a, c, manual_dir / c.file, True)
                     manual.append(c.file)
                     parts.append((c, manual_dir / c.file))
@@ -415,7 +430,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                     rows, why = form_tracks(years.group(0) if years else c.title, vault.tracks, notice_date or date.today())
                     a.notes += [f"{c.file}: {w}" for w in why]
                 rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title,
-                                agency_no, notice_no, score_ctx, basis[0] if basis else None)
+                                agency_no, notice_no, score_ctx, basis[0] if basis else None, staff=_staff_for(c.title, vault))
                 reports.append(rep)
                 _note_unfilled(a, c, filled_dir / c.file, False)
                 parts.append((c, filled_dir / c.file))

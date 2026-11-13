@@ -271,7 +271,7 @@ def _label_key(text: str) -> str | None:
         return None
     if re.fullmatch(r"기관\((?:회사|업체)\)명|(?:회사|업체)\(기관\)명|기관명\((?:회사|업체)명\)", t):
         return "회사명"  # '기관(회사)명 :'(11/13 위탁·수탁 서명란) — 기관 아닌 회사 쪽은 지일
-    if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호", t):  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
+    if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호|입찰공고(?:\(지명\))?", t):  # '입찰공고 | 제2026- 호'(11/13 제천)  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
         return "_notice_no"
     if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
         return "전화번호"
@@ -1041,7 +1041,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             continue
         # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름
         # '신청인(대표사)          (인)'(11/13 운리단길 별지서식 1 입찰참가신청서)도 같은 모양
-        bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{{1,10}}\))?))(\s{{3,}})({_SEAL_TAIL}.*)", text, re.S)
+        bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{{1,10}}\))?))(\s{{3,}})((?:{_SEAL_TAIL}|인(?=\s*$)).*)", text, re.S)  # 괄호 없는 '서 약 자      인'(11/13 제천)
         if bare:
             sign_at.add(n)
         if bare and _value("대표자", vault):
@@ -2325,6 +2325,9 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
     if not basis or "보증금" not in flat or not re.search(r"확약|각서|지급", flat):
         return xml
     bond = int(round(basis * BOND_RATE))
+    pm = re.search(r"100분의(\d{1,2})", flat)
+    pct = int(pm.group(1)) if pm else round(BOND_RATE * 100)
+    rate_bond = int(round(basis * pct / 100))
     blank = r"(금)\s+(원\s*\(\s*금)\s+(원\s*\))"
     # '금        원 (￦        )'(11/06 청주 입찰보증금 지급각서)·'금      원정(￦      )'(11/13 운리단길 입찰참가신청서)
     won_sign = r"금\s+원(정?)\s*\(\s*[￦₩]\s*\)"
@@ -2356,6 +2359,11 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
             if value not in done and rx.search(body):
                 body = rx.sub(lambda mm: f"{mm.group(1)} {_mark(f'{value:,}')} {mm.group(3)}", body, count=1)
                 done.append(value)
+        # '○ 보증금율 :'(빈칸, 11/13 제천 입찰참가 신청서) — 서식에 적힌 '100분의 N'(없으면 5) + 기초금액으로 셈한 보증금
+        if "rate" not in done and re.search(r"보\s*증\s*금\s*율\s*[:：]\s*$", body) and not _rest_of_para(xml, m.end()):
+            body = re.sub(r"(보\s*증\s*금\s*율\s*[:：])\s*$",
+                          lambda mm: f"{mm.group(1)} {_mark(f'100분의 {pct}')} (금 {_mark(f'{rate_bond:,}')}원)", body, count=1)
+            done.append("rate")
         in_label_cell = any(a <= m.start() < b for a, b in label_only)
         if title and not in_label_cell and re.search(rf"{_BID_NAME}\s*[:：]?\s*$", body) \
                 and not _rest_of_para(xml, m.end()):  # 비어 있는 '입찰건명 :' — 뒤 run에 이미 이름이 있으면 안 넣음(11/06 청주 각서 중복)
@@ -2371,6 +2379,8 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
             rep.filled.append(f"입찰 금액 → {basis:,}원(기초금액) · 입찰 보증금 → {bond:,}원(기초금액 × {BOND_RATE:g})")
         if 0 in done:
             rep.filled.append(f"입찰건명 → {title}")
+        if "rate" in done:
+            rep.filled.append(f"보증금율 → 100분의 {pct} (금 {rate_bond:,}원)")
     return new
 
 
@@ -2650,6 +2660,24 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                 edits.append((target, [rrn], False))
                                 rep.filled.append(f"대표자 주민등록번호 → {rrn}")
                         continue
+                    if not key and _sq(c.text) == "연락처" and _value("전화번호", vault):
+                        # '연 락 처 | 회 사 / 휴대폰'(11/13 제천 서식 5 대표자 선임계) — '회 사' 줄 옆에 회사 전화, 휴대폰은 비움(개인 번호)
+                        target = by_pos.get((c.row, c.col + c.colspan))
+                        if target is not None and not target.blank:
+                            paras = _spans(xml, "p", target.start, target.end)
+                            texts = [_sq(_text(xml[a:b])) for a, b in paras]
+                            hit = next((i for i, t in enumerate(texts) if re.fullmatch(r"회사|사무실(?:전화)?", t)), None)
+                            if hit is not None and any(re.fullmatch(r"휴대(?:폰|전화)|핸드폰", t) for t in texts):
+                                a, b = paras[hit]
+                                para = xml[a:b]
+                                tl = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", para, re.S))
+                                if tl:
+                                    para = para[:tl[-1].end(2)] + "   " + _mark(_value("전화번호", vault)) + para[tl[-1].end(2):]
+                                    para = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", para, flags=re.S)
+                                    seg = xml[target.start:a] + para + xml[b:target.end]
+                                    edits.append((target, None, seg))
+                                    rep.filled.append(f"연락처 회사 → {_value('전화번호', vault)}")
+                        continue
                     if not key:
                         continue
                     if _LIST_ITEM.match(c.text) and len(_sq(c.text)) > 6:
@@ -2696,7 +2724,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             rf"\s*대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL})?\s*", target.text):
                         # '회사명 | 대표자 :      (인)' — 값 칸에 대표자 서명 줄이 미리 적힌 칸(11/05 국민안전체험관 서식 1 질의서)
                         seg = _after_colon(xml[target.start:target.end], _value("대표자", vault), True)
-                        if seg is not None:
+                        own = _after_colon(xml[c.start:c.end], value, False) if re.search(r"[:：]\s*$", c.text) else None
+                        if seg is not None and own is not None:
+                            # '회사명: | 대표자:   (인)'(11/13 제천 서식 6 서약서) — 이름표 칸이 ':'로 끝나면 회사명은 그 ':' 옆, 값 칸엔 대표자만
+                            edits.append((c, None, own))
+                            edits.append((target, None, seg))
+                            rep.filled.append(f"{_sq(c.text)} {value} · 대표자 {_value('대표자', vault)}")
+                        elif seg is not None:
                             seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>/]*>)", lambda m: m.group(1) + _mark(value) + "   ", seg, count=1)
                             edits.append((target, None, seg))
                             rep.filled.append(f"{_sq(c.text)} → {value} · 대표자 {_value('대표자', vault)}")

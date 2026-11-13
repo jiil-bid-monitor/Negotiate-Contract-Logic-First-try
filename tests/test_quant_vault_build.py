@@ -3398,6 +3398,34 @@ def test_no_forms_made_warns_why(tmp_path: Path):
     assert readme.splitlines()[2].startswith("⚠ 통합서식을 만들지 못함") and "· 통합서식.hwpx" not in readme and "· 서식/" not in readme
 
 
+def test_jecheon_notice_bond_rate_contact_company_and_bare_seal(tmp_path: Path):
+    """11/13 사용자 지적(제천 어린이 과학체험공간 제안요청서): ① '입찰공고 | 제2026- 호' 빔 ② '○ 보증금율 :' 빔(서식에 '100분의 5', 사업예산 명시)
+    ③ '연 락 처 | 회 사 / 휴대폰'의 회사 줄에 전화 ④ '회사명: | 대표자: (인)'에서 회사명이 대표자 칸에 들어감 ⑤ '서 약 자      인'(괄호 없는 인)에 이름 빠짐."""
+    from quantdocs.fill import _text, fill_hwpx
+
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+
+    def cell(col, row, *paras):
+        return (f'<hp:tc><hp:subList>{"".join(para(p) for p in paras)}</hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+
+    tbl = lambda rows: '<hp:p><hp:run><hp:tbl>' + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + '</hp:tbl></hp:run></hp:p>'
+    body = (tbl([[cell(0, 0, "입찰공고"), cell(1, 0, " 제2026-     호")],
+                 [cell(0, 1, "납    부"), cell(1, 1, "○ 보증금율 :", "○ 보증금 납부방법 : ")],
+                 [cell(0, 2, "납부면제 및 지급 확약"), cell(1, 2, "○ 본인은 낙찰금액의 100분의 5에 해당하는 입찰보증금을 현금으로 납부할 것을 확약합니다.")]])
+            + tbl([[cell(0, 0, "대표자명"), cell(1, 0, "")], [cell(0, 1, "연 락 처"), cell(1, 1, "회  사", "휴대폰")]])
+            + tbl([[cell(0, 0, "회사명:"), cell(1, 0, "대표자:             (인)")]])
+            + para("서 약 자              인"))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222"})
+    fill_hwpx(_mini_hwpx(tmp_path / "j.hwpx", body), tmp_path / "jo.hwpx", v, title="가상 사업",
+              g2b_no="R26BK00000001-000", basis=2_000_000_000)
+    t = re.sub(r"\s+", " ", _text(zipfile.ZipFile(tmp_path / "jo.hwpx").read("Contents/section0.xml").decode()))
+    assert "R26BK00000001-000" in t
+    assert "보증금율 : 100분의 5 (금 100,000,000원)" in t
+    assert re.search(r"회 사 033-111-2222 ?휴대폰", t)
+    assert re.search(r"회사명: \(주\)가상 ?대표자: 홍길동", t)
+    assert re.search(r"서 약 자 홍길동 +인", t)
+
 def test_inline_paragraph_drops_tabs_pushed_by_values(tmp_path: Path):
     """11/13 사용자 지적: 입찰참가등록서류 표 밖 '전화번호 :  [탭 4개](이메일 :   )'에 값을 넣으면서 탭을 그대로 둬
     줄이 필요 이상 벌어져 이메일이 다음 줄로 넘어감 → 값으로 늘어난 너비만큼 탭을 뺌(원래 줄 길이 유지)."""

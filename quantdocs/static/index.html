@@ -201,7 +201,8 @@ function poll() {
     if (busy) { $(where).innerHTML = `<span class="spin"></span> ${esc(j.step || "진행 중")}`; return poll(); }
     $("#go").disabled = false; $("#build").disabled = false;
     if (j.state === "error") { $(where).innerHTML = `<span class="err">${esc(j.error)}</span>`; if (where === "#status") return; }
-    else $(where).innerHTML = j.state === "built" ? `<span class="ok">완료</span>` : "";
+    else $(where).innerHTML = j.state === "built"   // 만들기 경고(⚠ 통합서식을 만들지 못함 등)는 '완료' 옆에 붉게(11/13)
+      ? `<span class="ok">완료</span>` + (j.warnings || []).map(w => `<div class="err">${esc(w)}</div>`).join("") : "";
     if (j.summary) render(j);
     $("#build").disabled = !j.vault_ok;
     if (j.download) { $("#dlink").href = j.download; $("#dl").classList.remove("hide"); }

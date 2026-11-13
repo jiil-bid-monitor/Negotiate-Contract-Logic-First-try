@@ -3373,3 +3373,26 @@ def test_certificate_issuer_rows_left_blank(tmp_path: Path):
     sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     first, rest = sec.split("증 명 서", 1)
     assert "(주)가상" in first and "033-000-0000" not in rest and "(주)가상" not in rest and "홍길동" not in rest, re.sub(r"<[^>]+>", "|", sec)
+
+
+def test_no_forms_made_warns_why(tmp_path: Path):
+    """11/13 사용자 요청(옛길박물관 R26BK01810510): 서식이 PDF 제안요청서에만 있고 다른 한글 첨부가 있으면 '한글 파일 필요'가 안 떠
+    통합서식이 경고 없이 빠졌음 — 서식 머리가 든 한글 파일이 없으면 '한글 파일 필요', 서식을 하나도 못 만들면 늘 ⚠ 이유."""
+    from types import SimpleNamespace
+    from quantdocs import build
+
+    p = lambda t: f'<hp:p><hp:run><hp:t>{t}</hp:t></hp:run></hp:p>'
+    plain = _mini_hwpx(tmp_path / "과업내용서.hwpx", p("1. 과업 범위") + p("전시 설계 및 제작 설치"))
+    forms = _mini_hwpx(tmp_path / "서식.hwpx", p("[서식 1]") + p("입찰참가신청서") + p("[서식 2]") + p("위임장"))
+    f = lambda src: SimpleNamespace(source=src)
+    rfp = tmp_path / "제안요청서.pdf"
+    assert build._hwp_needed([f(rfp.name)], [rfp, plain], {}) is True        # 한글 첨부는 있어도 서식 머리가 없음
+    assert build._hwp_needed([f(rfp.name)], [rfp, plain, forms], {}) is False
+    assert build._hwp_needed([f(rfp.name)], [rfp, Path("옛한글.hwp")], {}) is False  # 변환 실패는 따로 알림
+    assert build._hwp_needed([f(rfp.name)], [rfp, plain]) is False          # 잘라 볼 정보가 없으면 예전대로
+    # 서식을 하나도 못 만들면 화면 경고·읽어보기 맨 위에 이유, 없는 파일 설명은 안 붙임
+    warn: list[str] = []
+    out = build.build([plain], vault.Vault({}, info={"회사명": "(주)가상"}), tmp_path / "o.zip", "가상", dt.date(2026, 11, 13), warnings=warn)
+    assert any(w.startswith("⚠ 통합서식을 만들지 못함") for w in warn), warn
+    readme = zipfile.ZipFile(out).read("읽어보기.txt").decode()
+    assert readme.splitlines()[2].startswith("⚠ 통합서식을 만들지 못함") and "· 통합서식.hwpx" not in readme and "· 서식/" not in readme

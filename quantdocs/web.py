@@ -227,10 +227,12 @@ def _run_build(job: dict) -> None:
             job["step"] = "서식 채우고 회사 서류 고르는 중"
             v = vault_mod.load()
             out = JOBS / job["id"] / "out" / f"정량평가서_{job['no']}.zip"
+            job["warnings"] = []
             n = job.get("notice", {})
             build([Path(f) for f in job["files"]], v, out, n.get("title", ""), job.get("date"),
                   n.get("award", ""), n.get("contract", ""), n.get("licenses") or [], _g2b_no(n, job["no"]),
-                  job.get("staff_pick"), n.get("license_groups") or [], job.get("patent_pick"), n.get("budget"))
+                  job.get("staff_pick"), n.get("license_groups") or [], job.get("patent_pick"), n.get("budget"),
+                  warnings=job["warnings"])
             job["zip"] = str(out)
             job["state"] = "built"
         except Exception as err:
@@ -241,7 +243,7 @@ def _run_build(job: dict) -> None:
 
 
 def _public(job: dict, base: str = "/api") -> dict:
-    return {k: job.get(k) for k in ("id", "no", "state", "step", "error", "notice", "summary", "vault_ok")} | {
+    return {k: job.get(k) for k in ("id", "no", "state", "step", "error", "notice", "summary", "vault_ok", "warnings")} | {
         "download": f"{base}/download/{job['id']}" if job.get("zip") else None}
 
 

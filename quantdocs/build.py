@@ -27,7 +27,7 @@ from .bundle import Pick, merge, pick
 from .catalog import load_catalog
 from .selfscore import AUTO_KINDS, Criterion as SelfCriterion, SelfScore, fmt, form_staff_grades, patent_scope, patent_status, read_criteria, score as score_items, staff_status
 from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx, unfilled_slots
-from .forms_cut import cut, merge as merge_forms, page_titles
+from .forms_cut import cut, find_forms, merge as merge_forms, page_titles
 from .g2b import qualification_rows
 from .kinds import detect, guide
 from .notice import Form, classify, form_tracks, read_notice, track_candidates, unfinished, write_sheet
@@ -58,11 +58,34 @@ HWP_NEEDED_NOTE = ("⚠ 한글 파일 필요 — 이 공고는 서식이 PDF에�
                    "나라장터·발주기관에서 한글(HWP/HWPX) 서식을 받아 직접 작성하세요")
 
 
-def _hwp_needed(forms, files) -> bool:
-    """서식 목록은 있는데 읽은 첨부에 한글 파일(.hwp·.hwpx)이 하나도 없음(PDF 등만).
+def _hwp_needed(forms, files, converted: dict | None = None) -> bool:
+    """서식 목록은 있는데 서식을 잘라 낼 한글 파일이 없음 — 한글 첨부(.hwp·.hwpx)가 하나도 없거나,
+    있어도 그 안에 서식 머리('[서식 N]' 등)가 하나도 없음(11/13 사용자 요청: 옛길박물관 R26BK01810510 — 서식은 PDF 제안요청서에만,
+    다른 한글 첨부가 있어 경고 없이 통합서식이 빠졌음).
     서식 목록을 어느 파일에서 읽었는지로 보지 않음 — 11/06 필암서원: 나라장터 공고문 변환본 PDF에서 목록이 먼저 읽혀
     제안요청서가 한글인데도 '한글 파일 필요'가 떴음."""
-    return bool(forms) and not any(Path(f).suffix.lower() in (".hwp", ".hwpx") for f in files)
+    if not forms:
+        return False
+    hwps = [Path(f) for f in files if Path(f).suffix.lower() in (".hwp", ".hwpx")]
+    if not hwps:
+        return True
+    if converted is None:  # 어느 한글 파일을 잘라 볼지 모르면 예전처럼 '한글 첨부가 있음'으로 봄
+        return False
+    if any(f.suffix.lower() == ".hwp" and f.name not in converted for f in hwps):
+        return False  # 옛 한글을 못 바꿔 안을 못 봄 — 변환 실패 안내가 따로 나감
+    return not any(_form_heads(Path(converted.get(f.name, f))) for f in hwps)
+
+
+def _form_heads(path: Path) -> int:
+    """한글(HWPX) 파일 안 서식 머리 수 — 자르기(`forms_cut.cut`)와 같은 규칙. 읽지 못하면 0."""
+    if path.suffix.lower() != ".hwpx" or not _is_hwpx(path):
+        return 0
+    try:
+        with zipfile.ZipFile(path) as z:
+            secs = {n: z.read(n).decode("utf-8") for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n)}
+        return len(find_forms(secs))
+    except (zipfile.BadZipFile, OSError, UnicodeDecodeError, KeyError):
+        return 0
 
 
 def _is_hwpx(p: Path) -> bool:
@@ -199,7 +222,7 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
         notes.append(f"{guide(kind)['name']} 공고 — 첨부에서 서식 목록을 찾지 못함. 서식은 {guide(kind)['source']}")
     picks, pick_missing = pick(list(vault.files), [it.text for it in sheet.submit_items], quals, with_history=bool(vault.history))
     a = Analysis(sheet, quals, candidates, converted, notes, kind, picks, pick_missing)
-    a.hwp_needed = _hwp_needed(sheet.forms, readable)
+    a.hwp_needed = _hwp_needed(sheet.forms, readable, converted)
     crits = read_criteria(_rfp_first(files, converted))
     # 보유기술(특허)을 평가하는 공고면 특허증 원본을 통합본 끝에(11/05 사용자 결정 (가)) — 공고 인정 분야에 맞는(또는 화면에서 고른) 특허만(11/06)
     pcrit = next((c for c in crits if c.kind == "patent"), None)
@@ -378,8 +401,9 @@ def _safe(name: str) -> str:
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
           award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
           notice_no: str = "", staff_pick: list[str] | None = None, license_groups: list | None = None,
-          patent_pick: list[str] | None = None, budget: int | None = None) -> Path:
-    """staff_pick: 화면에서 고른 기술인력 이름 — 주면 그 사람만 자기평점 기술인력 점수에(None이면 인력목록 전체).
+          patent_pick: list[str] | None = None, budget: int | None = None, warnings: list[str] | None = None) -> Path:
+    """warnings: 주면 화면에 띄울 경고(⚠)를 여기에 담음 — 통합서식을 못 만든 이유 등(11/13).
+    staff_pick: 화면에서 고른 기술인력 이름 — 주면 그 사람만 자기평점 기술인력 점수에(None이면 인력목록 전체).
     patent_pick: 화면에서 고른 특허(파일 경로 등 key) — 주면 그 특허만 자기평점·통합본에(None이면 공고 인정 분야에 이름이 맞는 특허)."""
     import copy
     files = [Path(f) for f in files]
@@ -472,6 +496,19 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                     merge_failed = True
                     a.notes.append(f"{f.name}: 서식을 한 파일로 잇지 못함({err}) — 서식별 파일을 쓰세요")
         per_form = merge_failed or not merged_forms
+        # 서식을 하나도 못 만들었으면 이유를 늘 알림(11/13 사용자 요청 — 옛길박물관: 통합서식이 경고 없이 빠졌음)
+        if not reports and not manual and not merged_forms:
+            if a.hwp_needed:
+                why = "서식이 PDF에만 있음 — 한글 서식 파일을 받아야 만들 수 있음(나라장터 첨부·발주처 홈페이지 확인)"
+            elif not any(Path(a.converted.get(f.name, f)).suffix.lower() == ".hwpx" for f in files):
+                why = "한글(.hwp·.hwpx) 첨부가 없거나 HWPX로 바꾸지 못함 — 위 변환 실패 안내 확인"
+            elif not a.sheet.forms:
+                why = "첨부에서 서식 목록·'[서식 N]' 머리를 찾지 못함 — 공고번호를 알려 주면 확인"
+            else:
+                why = "한글 첨부 안에서 '[서식 N]' 같은 서식 머리를 찾지 못함 — 공고번호를 알려 주면 확인"
+            a.notes.insert(0, f"⚠ 통합서식을 만들지 못함 — {why}")
+        if warnings is not None:
+            warnings += [n for n in a.notes if n.startswith("⚠")]
         # 첨부할 회사 서류: 파일 이름 키워드로 고른 것(통합본 순서대로 번호) + 연혁·실적 증빙(양식에 적힌 파일 이름)
         attach: list[tuple[str, str, bytes]] = []  # (폴더, 이름, 내용)
         missing: list[str] = list(a.pick_missing)
@@ -558,24 +595,28 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
             for f in files:
                 z.write(f, f"공고문/{f.name}")
             z.writestr("읽어보기.txt", _readme(f"{notice_title} [{guide(a.kind)['name']}]", reports, attach, missing, a.notes, manual,
-                                              per_form))
+                                              per_form, bool(merged_forms)))
         return out_zip
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _readme(title: str, reports, attach, missing, notes, manual=(), per_form: bool = True) -> str:
-    lines = [f"정량평가서 준비 묶음 — {title}".strip(), "",
-             "· 통합서식.hwpx : 공고 서식 전체를 서식 순서대로 이은 한글 파일 하나 — 회사 정보·연혁·실적을 채운 서식과 "
-             "담당 PM·투입 인력·자기평가처럼 공고마다 정하는 값을 적는 서식(제안요청서 양식 그대로)이 함께 있음, 이 파일에서 바로 기입 "
-             "— 자동으로 채운 칸은 준비표 '자동입력' 시트에서 확인"]
-    if per_form:
-        lines += ["· 서식/ : 서식별로 잘라 채운 것(통합서식을 다 잇지 못해 함께 넣음)",
-                  "· 서식_직접기입/ : 직접 기입할 서식(제안요청서 양식 그대로)"]
+def _readme(title: str, reports, attach, missing, notes, manual=(), per_form: bool = True, has_merged: bool = True) -> str:
+    # 경고(⚠)는 맨 위에, 묶음에 실제로 있는 파일만 설명(11/13 — 서식이 0개인데 통합서식·서식/ 설명이 늘 붙어 있었음)
+    warn = [n for n in notes if n.startswith("⚠")]
+    lines = [f"정량평가서 준비 묶음 — {title}".strip(), ""] + warn + ([""] if warn else [])
+    if has_merged:
+        lines += ["· 통합서식.hwpx : 공고 서식 전체를 서식 순서대로 이은 한글 파일 하나 — 회사 정보·연혁·실적을 채운 서식과 "
+                  "담당 PM·투입 인력·자기평가처럼 공고마다 정하는 값을 적는 서식(제안요청서 양식 그대로)이 함께 있음, 이 파일에서 바로 기입 "
+                  "— 자동으로 채운 칸은 준비표 '자동입력' 시트에서 확인"]
+    if per_form and reports:
+        lines += ["· 서식/ : 서식별로 잘라 채운 것" + ("(통합서식을 다 잇지 못해 함께 넣음)" if has_merged else "")]
+    if per_form and manual:
+        lines += ["· 서식_직접기입/ : 직접 기입할 서식(제안요청서 양식 그대로)"]
     lines += ["· 통합본.pdf : (회사 서류 스캔본) 공고 제출서류·요구 자격에 맞는 회사 서류를 파일 이름 키워드로 골라 원본 그대로 이어 붙인 것(목차·책갈피) — 순서는 준비표 '통합본 순서'",
               "· 첨부/ : 연혁·실적 증빙(참고 — 제출할 실적은 담당자가 확정) + 통합본.pdf에 못 넣은 서류 원본 — 제출 전 유효기간 확인",
               "· 공고별_준비표.xlsx : 서식 목록·제출서류·자격요건·실적요건·실적후보·준비 필요 서류",
               "· 실적후보는 후보일 뿐 — 제출할 실적은 담당자가 확정", "· 이 묶음엔 회사 서류가 들어 있으니 사내에서만 보관",
               "", f"채운 서식 {len(reports)}개, 직접 기입 서식 {len(manual)}개, 첨부 서류 {len(attach)}개"]
-    lines += [f"! {m}" for m in missing] + [f"※ {n}" for n in notes]
+    lines += [f"! {m}" for m in missing] + [f"※ {n}" for n in notes if not n.startswith("⚠")]
     return "\r\n".join(lines)

@@ -475,6 +475,24 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
 _OTHER_PARTY = re.compile(r"발행자|제조사|수입원|공급자|총판")
 
 
+# 점검표·체크리스트 머리글(11/13 사용자 요청: 보안 점검표 '- 인터넷 전화 보안' 옆 '적용' 칸에 지일 전화번호가 들어감 —
+# 낱말만 보지 말고 표 머리글을 먼저 볼 것). 이 머리글 아래 열엔 회사 정보를 넣지 않음.
+_CHECK_HEAD = re.compile(r"(?:부분|미)?적용(?:계획|결과|여부)?|해당(?:사항)?없음|해당여부|여부|예|아니오|준수|미준수|"
+                         r"이행|미이행|확인|점검(?:결과)?|[OX○×]|적합|부적합|비고|사유")
+# 목록 줄 머리표('- 인터넷 전화 보안'·'ｏ 국정원 검증필…') — 항목 이름이지 회사 정보 이름표가 아님
+_LIST_ITEM = re.compile(r"\s*(?:[-–·•▪]|[oｏ○◦ㅇ□■※]\s)\s*\S")
+
+
+def _check_cols(cells: list[Cell]) -> set[int]:
+    """표 위쪽 머리글 줄(첫 3줄)에서 점검 머리글('적용·미적용·해당없음·여부…')이 덮는 열 번호."""
+    out: set[int] = set()
+    top = min((c.row for c in cells), default=0)
+    for c in cells:
+        if c.row <= top + 2 and _CHECK_HEAD.fullmatch(_sq(c.text) or "-"):
+            out.update(range(c.col, c.col + c.colspan))
+    return out
+
+
 def _row_group(cells: list[Cell], c: Cell) -> str | None:
     """c 왼쪽에서 세로로 여러 줄을 묶은 머리 칸이 '대표자'면 '대표자', '대리인·수임인'이면 '대리인'(위임장·신청서)."""
     for o in cells:
@@ -2376,6 +2394,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 by_pos = {(c.row, c.col): c for c in cells}
                 other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
+                check_cols = _check_cols(cells)
                 agent_rows = _agent_rows(xml, cells)  # 위임장 '대리인' 칸이 세로로 묶은 줄 — 주소는 비움(11/05 사용자 요청)
                 if tracks:
                     track_edits = [_wrap_track_cell(xml, c, lines, keep, rep, chars)
@@ -2441,6 +2460,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         continue
                     if not key:
                         continue
+                    if _LIST_ITEM.match(c.text) and len(_sq(c.text)) > 6:
+                        continue  # 목록 줄 항목 이름('- 인터넷 전화 보안') — 이름표 아님
                     if key == "주소" and c.row in agent_rows:
                         continue
                     target = by_pos.get((c.row, c.col + c.colspan))
@@ -2466,6 +2487,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         continue
                     if target is None:
                         continue
+                    if check_cols and target.col in check_cols:
+                        continue  # 점검표 '적용·해당없음' 열 — 회사 정보 칸이 아님(11/13)
                     seal = _sq(target.text)
                     if key == "_notice_no" and _NO_SLOT.fullmatch(target.text) and (g2b_no or notice_no):
                         # 서식에 미리 적힌 '제 2026 - 호' — 나라장터 번호면 칸을 그 번호로, 기관 번호면 모양 그대로 번호만

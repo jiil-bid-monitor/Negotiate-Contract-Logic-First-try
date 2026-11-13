@@ -3021,3 +3021,17 @@ def test_pledge_table_business_name_is_notice_title(tmp_path: Path):
     tbls = re.findall(r"<hp:tbl>.*?</hp:tbl>", sec, re.S)
     assert "가상 전시관 조성 사업" in re.sub(r"<[^>]+>", "", tbls[0])
     assert "가상 전시관 조성 사업" not in re.sub(r"<[^>]+>", "", tbls[1])
+
+
+def test_bond_won_jeong_and_service_fee_basis(tmp_path: Path):
+    """11/13 사용자 제보(운리단길 골목상권 입찰참가신청서): '용 역 비 : 금 62,700,000원'을 기초금액으로 못 읽었고,
+    '보증금 : 금      원정(￦      )'(원정)은 보증금 칸 모양에 없어 비었음 — 보증금 = 기초금액 × 0.05."""
+    from quantdocs.fill import basis_amount, fill_hwpx
+
+    assert basis_amount({"과업지시서.hwpx": "3. 용 역 비 : 금 62,700,000원 (부가가치세 포함)"})[0] == 62_700_000
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "s.hwpx", p("입 찰 보 증 금 납부") + p("ㆍ보증금률 : 5%") + p("ㆍ보증금 : 금            원정(￦            )")
+                     + p("ㆍ보증금 납부방법 : 지급 확약"))
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={}), basis=62_700_000)
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert "보증금 : 금 삼백십삼만오천 원정 (￦ 3,135,000 )" in text

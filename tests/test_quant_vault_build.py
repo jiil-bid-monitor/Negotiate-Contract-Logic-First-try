@@ -3088,3 +3088,18 @@ def test_track_table_contract_name_head():
     assert rep.rows == 1
     assert vals[1] == ["가상 전시관 조성"] and vals[4] == ["가상시"] and vals[5] == ["전시·", "체험"] and vals[6] == ["단독"]
     assert 7 not in vals and 8 not in vals  # 증빙 번호·비고는 담당자가
+
+
+def test_placeholder_signer_line_without_colon(tmp_path: Path):
+    """11/13 사용자 요청: 예시 답('○○○회사 대표 ○○○')이 미리 적힌 서명 줄 '서 약 자 : ○○○회사    대표 ○○○ (서명 또는 날인)'도
+    회사명·대표자로 바꿈(대표 뒤 쌍점 없음). 회사 자리표시가 없는 봉투 예시 '대표이사 ○○○ (인)'은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    body = ('<hp:p><hp:run charPrIDRef="0"><hp:t>서 약 자 : ○○○회사     대표 ○○○ (서명 또는 날인)</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>대표이사 ○○○     (인)</hp:t></hp:run></hp:p>')
+    fill_hwpx(_mini_hwpx(tmp_path / "o.hwpx", body), tmp_path / "oo.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "oo.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"<[^>]+>", "", out).replace("", "").replace("", "")
+    assert re.search(r"서 약 자 : \(주\)가상\s+대표 홍길동 \(서명 또는 날인\)", text), text
+    assert "○○○회사" not in text and "대표이사 ○○○     (인)" in text

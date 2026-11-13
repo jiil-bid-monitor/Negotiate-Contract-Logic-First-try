@@ -59,6 +59,9 @@
   #patents td.chk, #patents th.chk { text-align:center; width:48px } #patents input { width:18px; height:18px; accent-color:var(--accent) }
   #patents tr.off td { color:var(--mute) }
   #patentRule b.scope { color:var(--ink); font-weight:700 }
+#title a.g2b{color:inherit;text-decoration:none}
+#title a.g2b:hover{text-decoration:underline}
+#title a.g2b small{font-size:12px;color:var(--mute);font-weight:400}
 </style>
 </head>
 <body>
@@ -222,7 +225,9 @@ function showProgress(total, set) {
 
 function render(j) {
   const n = j.notice, s = j.summary;
-  $("#title").textContent = n.title;
+  // 공고명 → 나라장터 공고 상세(웹앱 공고 목록·투찰 계산기와 같은 주소, 11/13 사용자 요청)
+  const g2b = `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${encodeURIComponent(n.no)}&bidPbancOrd=${encodeURIComponent(n.ord || "000")}`;
+  $("#title").innerHTML = n.no ? `<a class="g2b" href="${g2b}" target="_blank" rel="noopener" title="나라장터에서 공고 보기">${esc(n.title)} <small>↗</small></a>` : esc(n.title);
   $("#kind2").textContent = s.kind.name;
   $("#sub").textContent = [`${n.no}${n.ord ? "-" + n.ord : ""}`, n.institution, n.award].filter(Boolean).join(" · ");
   const info = [["공고번호", `${n.no}${n.ord ? "-" + n.ord : ""}`], ["발주기관", n.institution], ["업무", n.work],

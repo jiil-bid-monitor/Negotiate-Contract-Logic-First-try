@@ -594,6 +594,55 @@ def _blank_prefix(prefix: str, chars: "_Chars") -> str | None:
     return "".join(out)
 
 
+def _set_valign(cell_seg: str, how: str) -> str:
+    """표 칸의 세로 정렬(subList vertAlign)을 바꾼 칸 글."""
+    return re.sub(r'(<(?:[\w.-]+:)?subList\b[^>]*\bvertAlign=")\w+(")', rf"\g<1>{how}\2", cell_seg, count=1)
+
+
+def _inner_width(xml: str, cell, chars: "_Chars") -> int | None:
+    """표 칸 안 글이 쓸 수 있는 너비 = 칸 너비 − 칸 여백 − 문단 왼쪽 여백."""
+    seg = xml[cell.start:cell.end]
+    w = re.findall(r'cellSz\b[^>]*\bwidth="(\d+)"', seg)
+    if not w:
+        return None
+    mg = re.findall(r'cellMargin\b[^>]*\bleft="(\d+)"[^>]*\bright="(\d+)"', seg)
+    pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', seg)
+    left = max(0, chars.margins(pm.group(1))[1]) if pm else 0
+    return int(w[-1]) - (int(mg[-1][0]) + int(mg[-1][1]) if mg else 0) - left
+
+
+def _word_lines(text: str, height: int, width: float) -> list[str]:
+    """낱말 사이에서 width에 맞춰 나눈 줄들(낱말 하나가 더 넓으면 그 낱말은 한 줄에 그대로)."""
+    lines, line = [], ""
+    for word in text.split(" "):
+        test = f"{line} {word}" if line else word
+        if line and _cjk_width(test, height) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = test
+    return lines + [line] if line else lines
+
+
+def _colon_layout(xml: str, label, target, value: str, chars: "_Chars") -> tuple[list[str], str | None, str | None]:
+    """'주소: | 값' 칸 — (값 줄들, 이름표 칸 세로 정렬, 값 칸 세로 정렬). 값이 길면 낱말 사이에서 나눠 줄마다 문단 하나(줄 첫머리가 같은 곳).
+    이름표가 한 줄이고 값이 여러 줄이면 둘 다 위로(값 첫 줄이 ':' 옆), 이름표가 여러 줄이고 값이 한 줄이면 값을 아래로(':'이 있는 마지막 줄 옆)."""
+    lm = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', xml[label.start:label.end])
+    lab_h = chars.height(lm.group(1)) if lm else FILL_HEIGHT
+    val_h = max(lab_h, FILL_HEIGHT)
+    vw, lw = _inner_width(xml, target, chars), _inner_width(xml, label, chars)
+    if not vw or not lw:
+        return [value], None, None
+    lines = [value] if re.search(_SEAL_TAIL, value) else _word_lines(value, val_h, vw * 0.97)
+    # 이름표는 원본 문단 그대로 글자 단위로 넘어감('계약상대자등록번 / 호:') — 너비로 줄 수만 어림
+    n_lab = max(1, -(-int(_cjk_width(re.sub(r"\s+", " ", label.text).strip(), lab_h)) // max(lw, 1)))
+    if len(lines) > n_lab:
+        return lines, "TOP", "TOP"
+    if n_lab > len(lines):
+        return lines, None, "BOTTOM"
+    return lines, None, None
+
+
 def _break_value(seg: str, chars: "_Chars | None", line_w: int | None) -> str:
     """이름표 문단('주    소: 값')의 값이 한 줄에 안 들어가면 낱말 사이에서 끊어 **같은 문단 모양의 다음 문단**으로 넘김 —
     둘째 문단은 앞부분을 빈칸으로 채워 값 시작 위치에 맞춤(11/13 사용자 요청: 서명란 양식(문단 모양)은 바꾸지 말고 값만, 줄바꿈은 허용).
@@ -2120,6 +2169,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
         if re.fullmatch(r"Contents/section\d+\.xml", name):
             xml = data.decode("utf-8")
             edits: list[tuple[Cell, list[str], bool]] = []
+            valign: dict[int, str] = {}  # 칸 시작 위치 → 세로 정렬(TOP/BOTTOM) — ':' 이름표 옆 값 칸(11/13)
             para_override: dict[int, str] = {}  # 칸 시작 위치 → 쓸 문단 모양(번호 칸 가운데 정렬 맞춤)
             base_char: dict[int, str] = {}  # 칸 시작 위치 → 쓸 글자 모양(안내 글 칸은 이름표 칸 모양으로)
             track_marks: list[str] = []  # 실적을 넣은 칸의 글 — 그 표가 한 쪽보다 길면 쪽에서 나뉘게(11/12)
@@ -2266,7 +2316,18 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         value = f"{value}{' ' * (gap or 3)}{seal_text}"
                         if chars is not None and pm:
                             para_override[target.start] = chars.left_any(pm.group(1))
-                    edits.append((target, [value], False))
+                    lines = [value]
+                    if chars is not None and target.col == c.col + c.colspan and target.row == c.row \
+                            and re.search(r"[:：]\s*$", c.text):
+                        # 이름표가 ':'로 끝나는 칸 옆 값 칸(11/13 사용자 요청 '값은 늘 : 옆에, 길면 첫 줄 시작 위치에 맞춰 줄바꿈') —
+                        # 낱말 사이에서 줄을 나누고, 값 첫 줄(또는 한 줄 값)이 이름표의 ':' 줄과 같은 높이에 오게 칸 세로 정렬을 맞춤
+                        lines, lab_v, val_v = _colon_layout(xml, c, target, value, chars)
+                        if lab_v:
+                            valign[c.start] = lab_v
+                            edits.append((c, None, _set_valign(xml[c.start:c.end], lab_v)))
+                        if val_v:
+                            valign[target.start] = val_v
+                    edits.append((target, lines, False))
                     if _GUIDE_TEXT.fullmatch(_sq(target.text)):
                         # 회색·기울임 안내 글이 있던 칸 — 그 글자 모양 대신 이름표 칸 글자 모양으로(11/06 사용자 요청: 기본 폰트와 같게)
                         lm = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', xml[c.start:c.end])
@@ -2323,6 +2384,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if lines is None:  # 칸 안 빈자리 채우기 — 바꾼 칸 그대로
                     xml = xml[:cell.start] + keep + xml[cell.end:]
                     continue
+                if cell.start in valign:
+                    seg = _set_valign(seg, valign[cell.start])
                 if cell.start in para_override:
                     seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")\d+(")', rf"\g<1>{para_override[cell.start]}\2", seg, count=1)
                 elif chars is not None and cell.start in rep.word_cells:

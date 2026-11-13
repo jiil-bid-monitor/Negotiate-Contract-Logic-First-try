@@ -2980,3 +2980,30 @@ def test_gyeryang_credit_criteria_percent_of_points(tmp_path: Path):
     for grade, want in [("BBB0", 5.0), ("BB+", 4.75), ("CCC", 3.5)]:
         v = vault.Vault({}, info={"신용평가등급": grade, "신용평가 종류": "기업신용평가등급"})
         assert score(crit, v, _dt.date(2026, 11, 13))[0].score == want, grade
+
+
+def test_security_pledge_signer_fields(tmp_path: Path):
+    """11/13 사용자 요청: 한국산업단지공단 별첨 보안 서류 — ① '서 약 자 (업체 대표) | 소 속 : / 직 위 : / 성 명 :'
+    ② 서명 줄 '서약자  소속 …  직급/직위 …  성 명 … (인)' → 회사명·대표이사·대표자. '(참여인력용)' 서약서와 '확인자' 줄은 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    cell = lambda col, ts: (f'<hp:tc><hp:subList>{"".join(p(t) for t in ts)}</hp:subList>'
+                            f'<hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    body = ("<hp:p><hp:run><hp:tbl><hp:tr>" + cell(0, ["서  약  자", "(업체 대표)"]) + cell(1, ["소  속 :", "직  위 :", "성  명 :"])
+            + "</hp:tr></hp:tbl></hp:run></hp:p>"
+            + p("[양식2] 보안서약서(업체대표용)") + p("      서약자      소속 ") + p("                  직급/직위           성 명                (인)")
+            + p("[양식3] 보안서약서(참여인력용)") + p("      서약자      소속                    직급/직위           성 명                (인)")
+            + p("[양식12] 보안확약서(업체대표용)")
+            + p("      서약자      소속                           직급/직위     대표이사        성 명           인")
+            + p("      확인자      소속                           직급/직위                     성 명           인"))
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    lines = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", m)).strip() for m in re.findall(r"<hp:p\b[^>]*>(?:(?!<hp:p\b).)*?</hp:p>", sec, re.S)]
+    assert lines[2:5] == ["소 속 : (주)가상", "직 위 : 대표이사", "성 명 : 홍길동"]
+    assert lines[6] == "서약자 소속 (주)가상" and lines[7] == "직급/직위 대표이사 성 명 홍길동 (인)"
+    assert lines[9] == "서약자 소속 직급/직위 성 명 (인)"  # 참여인력용 — 비움
+    assert lines[11] == "서약자 소속 (주)가상 직급/직위 대표이사 성 명 홍길동 인"
+    assert lines[12] == "확인자 소속 직급/직위 성 명 인"

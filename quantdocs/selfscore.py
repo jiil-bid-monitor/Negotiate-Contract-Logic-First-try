@@ -26,7 +26,7 @@ from .fill import _cells, _spans, _sq, _text
 from .forms_cut import _top_paragraphs
 
 KINDS = [("track", re.compile(r"실적")), ("staff", re.compile(r"인력|기술자|기술\s*능력")),
-         ("patent", re.compile(r"특허|보유\s*기술|전문\s*기술|기술\s*보유")), ("credit", re.compile(r"경영|신용")),
+         ("patent", re.compile(r"특허|보유\s*기술|전문\s*기술|기술\s*보유")), ("credit", re.compile(r"경영|신용|재무\s*상태")),
          ("sanction", re.compile(r"신인도|제재|성실성|사회적\s*책임"))]  # '사회적 책임 및 성실성'(11/12 당진 서식 4호)
 _START = re.compile(r"정량\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
 _STOP = re.compile(r"^\s*주\s*\d+\s*\)|정성\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
@@ -626,6 +626,12 @@ def _rule_hit(rule: str, grade: str) -> bool:
     scale, rank = got
     for part in re.split(r"[,，/]", rule):
         part = part.strip().upper().replace("O", "0")
+        rng = re.fullmatch(r"([A-D][A-D0-9+\-]*)\s*[~∼～\-]\s*([A-D][A-D0-9+\-]*)(?:\s*등급)?", part)
+        if rng:  # 'BB- ~ BBB-' — 두 등급 사이(양 끝 포함, 11/13 서식 14호)
+            a, b = _grade_rank(rng.group(1)), _grade_rank(rng.group(2))
+            if a and b and a[0] is scale and b[0] is scale and min(a[1], b[1]) <= rank <= max(a[1], b[1]):
+                return True
+            continue
         m = re.match(r"([A-D][A-D0-9+\-]*)\s*(이상|이하)?", part)
         if not m:
             continue
@@ -696,7 +702,7 @@ def score(criteria: list[Criterion], vault, ref: date) -> list[ItemScore]:
 # 11/05 사용자 결정: 제안요청서 배점표·계산 조건대로 계산하되, 서식의 배점 기준과 다르면 서식 기준,
 # 계산식끼리 다르면 지일에게 유리한 쪽. 서식 표 안에 구간·등급이 적힌 서식(국민안전체험관 서식 6)은 그 구간으로,
 # 줄마다 배점만 적힌 서식(필암서원 서식 24)은 본문 기준 점수를 서식 배점에 맞춰 비율로.
-_SCORE_HEAD = ("자기평점", "자체평점", "자기평가점수", "자기평가", "평점", "평가점수")
+_SCORE_HEAD = ("자기평점", "자체평점", "자기평가점수", "자기평가", "평점", "평가점수", "점수")  # '점수' — 국립아시아문화전당 서식 14호(11/13)
 
 
 # 자동으로 채점하는 항목 — 기술인력·경영상태(신용평가)·신인도·보유기술(특허)(11/05 사용자 결정, 실적은 담당자가 직접)
@@ -732,7 +738,7 @@ def read_form(cells) -> list[FormRow]:
     """자기평가표 표 칸들 → 점수 줄. '배점' 칸과 '자기평점'(또는 '평점') 칸이 있는 표만."""
     plain = lambda t: re.sub(r"\([^)]*\)", "", _sq(t))  # '배점(점)'·'평점(점)'(11/10 경남교육청)
     head = next((c for c in cells if plain(c.text) in _SCORE_HEAD), None)
-    pts_head = next((c for c in cells if plain(c.text) == "배점"), None)
+    pts_head = next((c for c in cells if plain(c.text) in ("배점", "총배점")), None)  # '총 배 점(상한점수)'(11/13)
     if head is None or pts_head is None or head.row != pts_head.row:
         return []
     rows: dict[int, list] = {}
@@ -759,6 +765,18 @@ def read_form(cells) -> list[FormRow]:
         else:
             merged.append(list(rs))
     blocks = merged
+    # 등급이 가로로 놓인 표 — 머리 아래 줄에 'BBB0이상 | BB- ~ BBB- | B+ ~ B- | CCC+ 이하', 점수 줄엔 그 아래 '15 | 14.25 | …'
+    # (11/13 사용자 제보: 국립아시아문화전당 서식 14호 재무상태 점수가 빔) — {열: 등급 규칙}
+    grade_cols: dict[int, str] = {}
+    in_block = {r for rs in blocks for r in rs}
+    for r in sorted(rows):
+        if r in in_block:
+            continue
+        cand = {c.col: re.sub(r"\s+", " ", c.text).strip() for c in rows[r]
+                if c.col > scol and len(_sq(c.text)) <= 20 and re.search(r"(?<![A-Za-z가-힣])[A-D]{1,3}[0+\-]?", c.text)}
+        if len(cand) >= 2:
+            grade_cols = cand
+            break
     out = []
     for rs in blocks:
         first = sorted(rows[rs[0]], key=lambda c: c.col)
@@ -825,6 +843,11 @@ def read_form(cells) -> list[FormRow]:
                     crit.bands.append(Band(rng[0], rng[1], pts, t))
                     crit.unit = crit.unit or rng[2]
                     break
+        for r in rs if grade_cols else ():
+            for c in rows[r]:
+                v = _num(c.text) if c.col in grade_cols else None
+                if v is not None:
+                    crit.credit_rows.append(({"기업신용평가등급": grade_cols[c.col]}, v))
         points = cap if cap is not None else (max(nums) if nums else None)
         crit.points = points or 0.0
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction

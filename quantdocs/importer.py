@@ -338,7 +338,7 @@ _DATE = r"((?:19|20)\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})"
 
 
 def read_credit(text: str) -> dict[str, str]:
-    """확인서 글 → {신용평가등급, 신용평가 종류, 신용평가 평가일, 신용평가 유효기간}. 못 찾은 것은 빼고."""
+    """확인서 글 → {신용평가등급, 신용평가 종류, 신용평가 평가일, 신용평가 유효기간, 신용평가 재무기준일}. 못 찾은 것은 빼고."""
     t = re.sub(r"[ \t]+", " ", text or "").replace("Ｏ", "0").replace("ｏ", "0")
     out: dict[str, str] = {}
     m = re.search(r"(?:신용\s*등급|평가\s*등급|등\s*급)\s*[:：]?\s*(?:\n\s*)?" + _GRADE, t)
@@ -353,6 +353,10 @@ def read_credit(text: str) -> dict[str, str]:
     v = re.search(r"유효\s*기간[^\n]{0,40}?[~∼～]\s*" + _DATE, t) or re.search(r"유효\s*기간\s*[:：]?\s*(?:까지\s*)?" + _DATE, t)  # '유효기간 2027년 06월 15일'(KCB 확인서)
     if v:
         out["신용평가 유효기간"] = f"{v.group(1)}-{int(v.group(2)):02d}-{int(v.group(3)):02d}"
+    # '재무기준일 2025년 12월 31일'(KCB 확인서) — 등급을 매긴 재무제표의 결산 기준일(11/13 사용자 제보: 서식 13호 '재무결산기준' 칸이 빔)
+    f = re.search(r"(?:재무|결산)\s*(?:기준\s*일|결산\s*일|기준)\s*[:：]?\s*" + _DATE, t)
+    if f:
+        out["신용평가 재무기준일"] = f"{f.group(1)}-{int(f.group(2)):02d}-{int(f.group(3)):02d}"
     if "신용평가등급" not in out:
         return {}
     return out

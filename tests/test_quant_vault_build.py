@@ -893,8 +893,9 @@ def test_filled_text_is_11pt(tmp_path: Path):
 
 
 def test_label_paragraph_value_wraps_under_value(tmp_path: Path):
-    """11/05 사용자 요청: '          주  소 : 강원특별자치도 … (공장1층)'이 둘째 줄로 넘어가면 줄 맨 앞이 아니라 값 시작 위치에 맞춰 이어지게
-    — 그 문단에 내어쓰기(앞부분 너비)를 준 문단 모양 사본. 첫 줄 시작은 그대로, hp:default 묶음은 hp:case의 두 배."""
+    """11/05 사용자 요청: '          주  소 : 강원특별자치도 … (공장1층)'이 둘째 줄로 넘어가면 값 시작 위치에 맞춰 이어지게.
+    11/13 사용자 요청으로 방법을 바꿈 — 서명란 문단 모양은 그대로 두고(내어쓰기 사본 안 만듦), 값을 낱말 사이에서 끊어
+    같은 문단 모양의 다음 문단으로 넘김(앞부분은 탭은 그대로·글자는 같은 너비 빈칸). 양쪽 정렬이어도 각 문단의 마지막 줄이라 낱말 사이가 안 벌어짐."""
     from quantdocs.fill import fill_hwpx
 
     margin = lambda f: (f'<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="{1000 * f}" unit="HWPUNIT"/>'
@@ -903,22 +904,25 @@ def test_label_paragraph_value_wraps_under_value(tmp_path: Path):
               '<hh:spacing hangul="0"/></hh:charPr></hh:charProperties>'
               '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/><hp:switch><hp:case>'
               f'{margin(1)}</hp:case><hp:default>{margin(2)}</hp:default></hp:switch></hh:paraPr></hh:paraProperties></hh:head>')
-    body = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>주  소 :</hp:t></hp:run></hp:p>'
-            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>상  호 :</hp:t></hp:run></hp:p>')
+    page = ('<hp:p><hp:run><hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin header="2834" footer="2834" left="5669" '
+            'right="5669" top="5669" bottom="5669"/></hp:pagePr></hp:secPr></hp:run></hp:p>')
+    body = page + ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>주  소 :</hp:t></hp:run></hp:p>'
+                   '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>상  호 :</hp:t></hp:run></hp:p>')
     src = _mini_hwpx(tmp_path / "h.hwpx", body)
     with zipfile.ZipFile(src, "a") as z:
         z.writestr("Contents/header.xml", header)
     fill_hwpx(src, tmp_path / "ho.hwpx", vault.Vault({}, info={"주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "회사명": "(주)가상"}))
     zo = zipfile.ZipFile(tmp_path / "ho.hwpx")
     out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
-    pid = re.search(r'<hp:p paraPrIDRef="(\d+)">(?:(?!</hp:p>).)*강원특별자치도', out, re.S).group(1)
-    assert pid != "0"
-    block = re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)
-    # 탭 20000 + '주' '소' 1000씩 + 빈칸 4개(500씩) + ':' 450
-    assert re.findall(r'intent value="(-?\d+)"', block) == ["-24450", "-48900"]
-    assert re.findall(r'left value="(\d+)"', block) == ["1000", "2000"]
-    assert 'paraProperties itemCnt="2"' in head  # '주  소 :'·'상  호 :'는 앞부분 너비가 같아 사본 하나를 같이 씀
-    assert re.search(rf'<hp:p paraPrIDRef="{pid}">(?:(?!</hp:p>).)*\(주\)가상', out, re.S)
+    paras = re.findall(r'<hp:p paraPrIDRef="(\d+)">((?:(?!</hp:p>).)*)</hp:p>', out, re.S)
+    text = lambda x: re.sub(r"<[^>]+>", "", x)
+    got = [(pid, text(x)) for pid, x in paras]
+    i = next(k for k, (_p, t) in enumerate(got) if "강원특별자치도" in t)
+    assert got[i][1].rstrip().endswith("무릉2로") and got[i + 1][1].strip() == "64(공장1층)", got
+    assert got[i][0] == got[i + 1][0] == "0"  # 문단 모양은 원래 것 그대로
+    assert '<hp:tab width="20000"' in paras[i + 1][1] and re.search(r"<hp:t><hp:tab[^>]*/> {6,}", paras[i + 1][1])  # 값 시작 위치에 맞춤
+    assert 'paraProperties itemCnt="1"' in head and "intent value=\"-" not in head
+    assert any("(주)가상" in t for _p, t in got)
 
 
 def test_table_keeps_height_when_filled_text_wraps(tmp_path: Path):
@@ -2708,3 +2712,241 @@ def test_track_text_wraps_by_word():
     assert c.start not in rep2.one_line  # 9pt로도 안 들어가는 긴 낱말은 줄이지 않음(칸 끝에서 넘어감)
     _c, lines, _k = _wrap_track_cell(xml, c, ["3,610,090,000"], False, FillReport("x"))
     assert lines == ["3,610,090,000"]  # 숫자 칸은 그대로
+
+
+def test_bid_applicant_and_contractor_no_labels(tmp_path: Path):
+    """11/13 사용자 확인: 입찰참가신청서 끝 '입찰참가 신청자: / 주소: / 계약상대자등록번호: / 대표자: (인)' 표 —
+    신청자 = 회사(상호), 계약상대자등록번호 = 사업자등록번호(둘 다 비었음). 대표자는 아래 줄에 따로."""
+    from quantdocs.fill import _label_key, fill_hwpx
+
+    assert _label_key("입찰참가 신청자:") == "회사명" and _label_key("계약상대자등록번호:") == "사업자등록번호"
+    rows = [("입찰참가 신청자:", 0), ("주소:", 1), ("계약상대자등록번호:", 2), ("대표자:", 3)]
+    body = _tbl([[_c(0, r, t), _c(1, r, "")] for t, r in rows])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "가상시 가상로 1", "사업자등록번호": "123-45-67890", "대표자": "홍길동"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    for want in ("(주)가상", "123-45-67890", "가상시 가상로 1", "홍길동"):
+        assert want in sec, want
+
+
+def test_repeated_party_tables_fill_first_only(tmp_path: Path):
+    """11/13 사용자 요청: 정보 비공개 동의서 — 공동수급 구성원마다 쓰라고 같은 '상호(법인명) / 주소 / 대표자 (인) / 계약상대자등록번호' 표가
+    4번 있는데 모두 지일 정보가 들어감 → 첫 표에만, 나머지는 빈칸 그대로. 모양이 다른 표(위임장 대리인 등)는 따로 채움."""
+    from quantdocs.fill import fill_hwpx
+
+    def party():
+        rows = [("상호(법인명)", ""), ("주 소", ""), ("대 표 자", "(인)"), ("계약상대자등록번호", "")]
+        return _tbl([[_c(0, r, t), _c(1, r, ":" if r == 3 else ""), _c(2, r, s)] for r, (t, s) in enumerate(rows)])
+
+    src = _mini_hwpx(tmp_path / "a.hwpx", party() * 4)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "가상시 가상로 1", "사업자등록번호": "123-45-67890", "대표자": "홍길동"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    for want in ("(주)가상", "가상시 가상로 1", "홍길동", "123-45-67890"):
+        assert sec.count(want) == 1, (want, sec.count(want))
+    tables = sec.split("<hp:tbl")[1:]
+    assert "(주)가상" in tables[0] and not any("(주)가상" in t for t in tables[1:])
+
+
+def test_corp_register_birth_label_is_corp_no(tmp_path: Path):
+    """11/13 사용자 제보: 국립아시아문화전당 서식 13호 신용평가 등급 확인서 '법인등기부등본(생년월일) | __'이 비었음 — 법인은 생년월일 = 법인등록번호."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "업  체  명"), _c(1, 0, "")], [_c(0, 1, "법인등기부등본(생년월일)"), _c(1, 1, "")]])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "법인등록번호": "110111-1234567"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert "110111-1234567" in sec and "(주)가상" in sec
+
+
+def test_signature_table_inside_frame_table(tmp_path: Path):
+    """11/13 사용자 제보: 안전관리 서약서 — 쪽 테두리 표 칸 안에 '서약자 | 상 호 : | __ / | 주 소 : | __ / | 대 표 자 : | (인)' 표가 들어 있어
+    (표 안 표) 서명이 모두 비었음. 안쪽 표도 채움, 바깥 칸의 글은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    inner = _tbl([[_c(0, 0, "서약자"), _c(1, 0, "상    호 :"), _c(2, 0, "")],
+                  [_c(0, 1, ""), _c(1, 1, "주    소 :"), _c(2, 1, "")],
+                  [_c(0, 2, ""), _c(1, 2, "대 표 자 :"), _c(2, 2, "(인)")]])
+    outer = ('<hp:p><hp:run><hp:tbl><hp:tr><hp:tc><hp:subList>'
+             '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>안전관리 서약서 — 작업 기간 중 안전사고 예방에 최선을 다하며 다음과 같이 서약한다.</hp:t></hp:run></hp:p>'
+             + inner + '</hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "a.hwpx", outer)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "주소": "가상시 가상로 1", "대표자": "홍길동"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    for want in ("(주)가상", "가상시 가상로 1", "홍길동", "(인)", "다음과 같이 서약한다"):
+        assert want in sec, want
+    assert sec.count("<hp:tbl>") == 2
+
+
+def test_self_score_horizontal_credit_grades(tmp_path: Path):
+    """11/13 사용자 제보: 국립아시아문화전당 서식 14호 사업수행능력 자기평가표 — '구분 | 총배점(상한점수) | 점수 | 기업 신용 평가 등급' 아래
+    가로로 'BBB0이상 | BB- ~ BBB- | B+ ~ B- | CCC+ 이하', 재무상태 줄 '15 | (점수) | 15 | 14.25 | 13.5 | 10.5' — 점수 칸이 비었음.
+    머리 '점수'·'총배점', 가로 등급 열, 등급 범위('BB- ~ BBB-')를 읽음 → BB+ = 14.25."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                           f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "구      분", 1, 2), c(1, 0, "총 배 점(상한점수)", 1, 2), c(2, 0, "점수", 1, 2), c(3, 0, "기업 신용 평가 등급", 4)],
+            [c(3, 1, "BBB0이상"), c(4, 1, "BB- ~ BBB-"), c(5, 1, "B+ ~ B-"), c(6, 1, "CCC+ 이하")],
+            [c(0, 2, "재무상태"), c(1, 2, "15"), c(2, 2, ""), c(3, 2, "15"), c(4, 2, "14.25"), c(5, 2, "13.5"), c(6, 2, "10.5")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"})
+    rep = fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 13)))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups())): re.sub(r"<[^>]+>", "", m)
+           for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S)}
+    assert got[(2, 2)] == "14.25", (got, rep.filled)
+
+
+def test_blank_inquiry_form_fills_appendix_after_it(tmp_path: Path):
+    """11/13 사용자 제보: 국립아시아문화전당 서식 16호 서면 질의서 뒤에 【별표 3】 안전관리 서약서가 붙어 한 조각으로 잘림 —
+    질의서는 공란 규칙(11/05)이라 서약서 서명까지 비었음. 질의서 부분은 원본 그대로, 【별표】부터 채움."""
+    from quantdocs.build import _fill_appendix
+
+    inquiry = '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>서 면 질 의 서</hp:t></hp:run></hp:p>' + _tbl(
+        [[_c(0, 0, "업 체 명"), _c(1, 0, "")], [_c(0, 1, "대표자:"), _c(1, 1, "(인)")]])
+    pledge = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>【별표 3】</hp:t></hp:run></hp:p>'
+              '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>안전관리 서약서</hp:t></hp:run></hp:p>'
+              + _tbl([[_c(0, 0, "서약자"), _c(1, 0, "상    호 :"), _c(2, 0, "")],
+                      [_c(0, 1, ""), _c(1, 1, "대 표 자 :"), _c(2, 1, "(인)")]]))
+    src = _mini_hwpx(tmp_path / "q.hwpx", inquiry + pledge)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    assert _fill_appendix(src, tmp_path / "o.hwpx", v, "가상 공고") is not None
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    head, tail = sec.split("【별표 3】")
+    assert "(주)가상" not in head and "홍길동" not in head  # 질의서는 공란
+    assert tail.count("(주)가상") == 1 and tail.count("홍길동") == 1  # 서약서 서명은 한 번씩
+    plain = _mini_hwpx(tmp_path / "p.hwpx", inquiry)
+    assert _fill_appendix(plain, tmp_path / "o2.hwpx", v, "") is None  # 별표가 없으면 예전처럼 통째로 공란
+
+
+def test_colon_label_value_next_to_colon(tmp_path: Path):
+    """11/13 사용자 요청: '값은 늘 : 옆에, 길면 첫 줄 시작 위치에 맞춰 줄바꿈' — 테두리 없는 '입찰참가 신청자: | 값' 표.
+    주소가 길면 낱말 사이에서 나눠(글자 가운데 '무 / 릉2로'로 잘리지 않게) 줄마다 문단, 두 칸 모두 위 정렬(값 첫 줄이 ':' 옆).
+    이름표가 두 줄('계약상대자등록번 / 호:')이고 값이 한 줄이면 값 칸을 아래 정렬(':' 줄 옆)."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1300" useFontSpace="0"><hh:ratio hangul="100"/>'
+              '<hh:spacing hangul="0"/></hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0">'
+              '<hh:align horizontal="LEFT"/><hh:margin><hc:intent value="0"/><hc:left value="0"/></hh:margin></hh:paraPr></hh:paraProperties></hh:head>')
+    cell = lambda col, row, t, w: (f'<hp:tc><hp:subList vertAlign="CENTER"><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+                                   f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                                   f'<hp:cellSz width="{w}" height="2997"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+    labels = ["입찰참가 신청자:", "주소:", "계약상대자등록번호:", "대표자:"]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join(f"<hp:tr>{cell(0, r, t, 11810)}{cell(1, r, '', 20300)}</hp:tr>" for r, t in enumerate(labels)) \
+        + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "c.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "대표자": "홍길동",
+                              "사업자등록번호": "123-45-67890"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {}
+    for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S):
+        pos = tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups()))
+        got[pos] = (re.search(r'vertAlign="(\w+)"', m).group(1), [re.sub(r"<[^>]+>", "", p) for p in re.findall(r"<hp:p\b.*?</hp:p>", m, re.S)])
+    assert got[(1, 1)] == ("TOP", ["강원특별자치도 정선군 남면", "무릉2로 64(공장1층)"]) and got[(0, 1)][0] == "TOP", got
+    assert got[(1, 2)] == ("BOTTOM", ["123-45-67890"]) and got[(0, 2)][0] == "CENTER"
+    assert got[(1, 0)] == ("CENTER", ["(주)가상"]) and got[(1, 3)] == ("CENTER", ["홍길동"])
+
+
+def test_colon_in_value_cell_is_kept(tmp_path: Path):
+    """11/13 사용자 지적: 정보 비공개 동의서 '상호(법인명) | : | / 주소 | : | / 대표자 | : | (인) / 계약상대자등록번호 | : |' — 값 칸에
+    미리 적힌 ':'를 지우고 값을 넣었음. ':'는 두고 ': 값', 길면 다음 줄은 값 첫 글자 위치에서(빈칸)."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1300" useFontSpace="0"><hh:ratio hangul="100"/>'
+              '<hh:spacing hangul="0"/></hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0">'
+              '<hh:align horizontal="LEFT"/><hh:margin><hc:intent value="0"/><hc:left value="0"/></hh:margin></hh:paraPr></hh:paraProperties></hh:head>')
+    cell = lambda col, row, t, w: (f'<hp:tc><hp:subList vertAlign="CENTER"><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+                                   f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                                   f'<hp:cellSz width="{w}" height="2997"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+    rows = [("상호(법인명)", ""), ("주소", ""), ("대표자", "(인)"), ("계약상대자등록번호", "")]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join(f"<hp:tr>{cell(0, r, t, 10000)}{cell(1, r, ':', 18000)}{cell(2, r, s, 6000)}</hp:tr>"
+                                              for r, (t, s) in enumerate(rows)) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "c.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "대표자": "홍길동",
+                              "사업자등록번호": "123-45-67890"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {}
+    for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S):
+        pos = tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups()))
+        got[pos] = [re.sub(r"<[^>]+>", "", p) for p in re.findall(r"<hp:p\b.*?</hp:p>", m, re.S)]
+    assert got[(1, 0)] == [": (주)가상"] and got[(1, 2)] == [": 홍길동"] and got[(1, 3)] == [": 123-45-67890"], got
+    addr = got[(1, 1)]
+    assert addr[0].startswith(": 강원특별자치도") and len(addr) == 2 and addr[1].startswith("  ") and not addr[1].startswith("   ")
+    assert got[(2, 2)] == ["(인)"]
+
+
+def test_credit_financial_base_date(tmp_path: Path):
+    """11/13 사용자 제보: 서식 13호 신용평가 등급 확인서 '재무결산기준' 칸이 빔 — 확인서 PDF의 '재무기준일 2025년 12월 31일'을 읽어
+    '2025. 12. 31.'로(등급평가일·유효기간과 같은 모양)."""
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.importer import read_credit
+
+    text = "기업신용평가 확인서\n신용등급 BB+\n• 재무기준일 2025년 12월 31일\n• 등급평가일 2026년 06월 16일\n• 유효기간 2027년 06월 15일"
+    got = read_credit(text)
+    assert got["신용평가 재무기준일"] == "2025-12-31" and got["신용평가 평가일"] == "2026-06-16"
+    body = _tbl([[_c(0, 0, "재무결산기준"), _c(1, 0, "")], [_c(0, 1, "등급 평가일"), _c(1, 1, "")]])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", **got}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert "2025. 12. 31." in sec and "2026. 06. 16." in sec
+
+
+def test_deduction_cells_always_zero(tmp_path: Path):
+    """11/13 사용자 결정: 사업수행능력 자기평가표 감점 표('구분 | 총배점(상한점수) | 감점 | 등급' — 임금체불·고용개선조치 미이행 −2.0)
+    — 지일은 감점 사유가 없으니 다른 공고 서식에서도 감점 칸은 늘 0."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                   f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "구      분"), c(1, 0, "총배점(상한점수)"), c(2, 0, "감점"), c(3, 0, "등급")],
+            [c(0, 1, "임금체불"), c(1, 1, "5.0", 2), c(2, 1, ""), c(3, 1, "공고일 기준, 체불사업주로 명단이 공개중인 자(-2.0)")],
+            [c(0, 2, "고용개선조치 미이행"), c(2, 2, ""), c(3, 2, "최근 2년 이내 고용개선조치 미이행 사업주로 명단이 공표된 자(-2.0)")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "d.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups())): re.sub(r"<[^>]+>", "", m)
+           for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S)}
+    assert got[(2, 1)] == "0" and got[(2, 2)] == "0", got
+    assert got[(1, 1)] == "5.0" and got[(2, 0)] == "감점"
+
+
+def test_self_score_total_table_below(tmp_path: Path):
+    """11/13 사용자 요청: 서식 14호 맨 아래 따로 놓인 '합 계 | 20 점 | __' 표에 합계 점수 — 재무상태 14.25 + 감점 0 = '14.25 점'.
+    자동 채점이 비운 줄이 있으면(담당자 직접 채점) 합계도 비움."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                           f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    tbl = lambda rows: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    credit = tbl([[c(0, 0, "구      분", 1, 2), c(1, 0, "총 배 점(상한점수)", 1, 2), c(2, 0, "점수", 1, 2), c(3, 0, "기업 신용 평가 등급", 4)],
+                  [c(3, 1, "BBB0이상"), c(4, 1, "BB- ~ BBB-"), c(5, 1, "B+ ~ B-"), c(6, 1, "CCC+ 이하")],
+                  [c(0, 2, "재무상태"), c(1, 2, "15"), c(2, 2, ""), c(3, 2, "15"), c(4, 2, "14.25"), c(5, 2, "13.5"), c(6, 2, "10.5")]])
+    minus = tbl([[c(0, 0, "구      분"), c(1, 0, "총배점(상한점수)"), c(2, 0, "감점"), c(3, 0, "등급")],
+                 [c(0, 1, "임금체불"), c(1, 1, "5.0", 1, 2), c(2, 1, ""), c(3, 1, "체불사업주(-2.0)")],
+                 [c(0, 2, "고용개선조치 미이행"), c(2, 2, ""), c(3, 2, "미이행 사업주(-2.0)")]])
+    total = tbl([[c(0, 0, "합      계"), c(1, 0, "20 점"), c(2, 0, "")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", credit + minus + total)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 13)))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    last = sec.rsplit("<hp:tbl>", 1)[1]
+    assert re.sub(r"<[^>]+>", "", last).endswith("20 점14.25 점"), re.sub(r"<[^>]+>", "", last)
+    # 신용등급을 모르면 재무상태가 비어 합계도 비움
+    v2 = vault.Vault({}, info={"회사명": "(주)가상"})
+    fill_hwpx(src, tmp_path / "o2.hwpx", v2, self_scores=SelfScore([], v2, _dt.date(2026, 11, 13)))
+    sec2 = zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()
+    assert re.sub(r"<[^>]+>", "", sec2.rsplit("<hp:tbl>", 1)[1]).endswith("20 점")

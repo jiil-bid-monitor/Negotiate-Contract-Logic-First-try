@@ -52,6 +52,25 @@ def _spans(xml: str, tag: str, start: int = 0, end: int | None = None) -> list[t
     return out
 
 
+def _all_tables(xml: str) -> list[tuple[int, int]]:
+    """모든 표 위치(표 칸 안에 든 표도) — 쪽 테두리 표 안에 서명 표가 든 서식(11/13 안전관리 서약서 '서약자 상 호 : / 주 소 : / 대 표 자 : (인)'이
+    바깥 표 칸 안 표라 값 칸이 안 채워졌음). 바깥 표가 먼저."""
+    return _all_spans(xml, "tbl")
+
+
+def _all_spans(xml: str, tag: str) -> list[tuple[int, int]]:
+    """안에 든 것까지 모든 <?:tag>…</?:tag> 위치(시작 순)."""
+    out, stack = [], []
+    for m in re.finditer(rf"<(/?)(?:[\w.-]+:)?{tag}\b[^>]*?(/?)>", xml):
+        if m.group(2):
+            continue
+        if not m.group(1):
+            stack.append(m.start())
+        elif stack:
+            out.append((stack.pop(), m.end()))
+    return sorted(out)
+
+
 def _text(seg: str) -> str:
     """칸·문단의 글. 글 안 태그(<hp:fwSpace/>·<hp:tab/> 등)는 빈칸으로(11/04: '상호<fwSpace/>또는 법인명' 이름표를 못 알아봄)."""
     raw = "".join(re.findall(r"<(?:[\w.-]+:)?t\b[^>]*>(.*?)</(?:[\w.-]+:)?t>", seg, flags=re.S))
@@ -156,7 +175,8 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     # 신용평가등급 확인서(11/10 경남교육청 서식 19) — 신용평가 확인서 PDF에서 읽은 값(importer.read_credit)
     (("기업신용평가등급", "기업신용등급", "신용평가등급", "신용등급"), "신용평가등급"),
     (("등급평가일", "신용평가일", "평가일자"), "신용평가 평가일"),
-    (("등급유효기간", "신용등급유효기간", "신용평가유효기간"), "신용평가 유효기간"),  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
+    (("등급유효기간", "신용등급유효기간", "신용평가유효기간"), "신용평가 유효기간"),
+    (("재무결산기준", "재무기준일", "결산기준일", "재무결산기준일"), "신용평가 재무기준일"),  # 신용평가 확인서의 재무기준일(11/13 서식 13호)  # 이번 공고 이름(서식 5·6) — '사업명'은 실적증명서의 실적 이름이기도 해서 뺌
 ]
 _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
 
@@ -231,6 +251,14 @@ def _label_key(text: str) -> str | None:
     if "사업자등록번호" in t and re.match(r"생년월일|법인등록번호|법인번호", t):
         # '생년월일(사업자등록번호)'·'법인등록번호(사업자등록번호)' — 법인은 생년월일 = 법인등록번호, 괄호 안에 사업자등록번호(11/05 사용자 요청)
         return "_corp_biz"
+    # 입찰참가신청서 끝 '입찰참가 신청자: / 주소: / 계약상대자등록번호: / 대표자: (인)'(11/13 사용자 확인) —
+    # 신청자 = 신청하는 회사(상호), 계약상대자등록번호 = 사업자등록번호. 대표자는 아래 줄에 따로
+    if re.fullmatch(r"(?:입찰)?참가신청(?:자|인|업체)", t):
+        return "회사명"
+    if re.fullmatch(r"계약상대자(?:등록)?번호", t):
+        return "사업자등록번호"
+    if re.match(r"법인등기", t):  # '법인등기부등본(생년월일)' = 법인등록번호(11/13 사용자 제보 — 국립아시아문화전당 서식 13호, 법인은 생년월일 = 법인등록번호)
+        return "법인등록번호"
     if t in ("서약자", "서약인", "각서인", "확약자"):  # 청렴계약 이행서약서 '서 약 자 :   (인)' = 대표자 이름(11/05)
         return "대표자"
     if "전화" in t and re.search(r"전자우편|이메일|e-?mail", t, re.I):
@@ -275,7 +303,7 @@ def _value(key: str, vault) -> str:
         return f"{tel} ({mail})" if tel and mail else tel or mail
     if key == "사업분야":
         return vault.info.get("사업분야") or vault.info.get("종목") or vault.info.get("업태") or ""
-    if key in ("신용평가 평가일", "신용평가 유효기간"):  # '2026-06-16' → '2026. 06. 16.'
+    if key in ("신용평가 평가일", "신용평가 유효기간", "신용평가 재무기준일"):  # '2026-06-16' → '2026. 06. 16.'
         d = str(vault.info.get(key) or "")
         m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", d)
         return f"{m.group(1)}. {m.group(2)}. {m.group(3)}." if m else d
@@ -523,16 +551,10 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
     return re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
 
 
-def _hang(seg: str, chars: "_Chars | None") -> str:
-    """이름표 문단('주 소 : 값')에 값이 들어간 뒤 — 값이 둘째 줄로 넘어가도 값 시작 위치에 맞춰 이어지게 내어쓰기(11/05 사용자 요청).
-    앞부분('   주  소 : ') 너비 = 탭은 한글 파일에 적힌 너비, 글자는 글자 모양 크기로 어림."""
-    if chars is None or _VS not in seg:
-        return seg
-    pm = re.search(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")(\d+)(")', seg)
-    if not pm:
-        return seg
+def _prefix_width(prefix: str, chars: "_Chars") -> tuple[int, str]:
+    """이름표 문단에서 값 앞부분('   주  소 : ')의 너비 어림(HWPUNIT)과 마지막 글자 모양 id — 탭은 한글 파일에 적힌 너비, 글자는 글자 모양 크기로."""
     width, cur, in_t = 0.0, "0", False
-    for part in re.split(r"(<[^>]+>)", seg[:seg.index(_VS)]):
+    for part in re.split(r"(<[^>]+>)", prefix):
         if part.startswith("<"):
             run = re.match(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', part)
             if run:
@@ -550,11 +572,134 @@ def _hang(seg: str, chars: "_Chars | None") -> str:
                 width += chars.char_width(cur, " ")
         elif in_t:
             width += sum(chars.char_width(cur, ch) for ch in unescape(part))
-    width = int(round(width))
-    if width <= 0 or width > 40000:  # 14cm 넘으면 어림이 틀렸을 수 있어 건드리지 않음
+    return int(round(width)), cur
+
+
+def _blank_prefix(prefix: str, chars: "_Chars") -> str | None:
+    """값 앞부분 XML의 글자를 같은 너비의 빈칸으로 바꾼 사본 — 둘째 줄 문단을 값 시작 위치에 맞추려고(탭은 그대로 둠).
+    글·탭·빈칸 말고 다른 것(조판 부호·구역 정보 등)이 섞여 있으면 None."""
+    out, cur, in_t = [], "0", False
+    for part in re.split(r"(<[^>]+>)", prefix):
+        if part.startswith("<"):
+            if not re.match(r"</?(?:[\w.-]+:)?(?:run|t|tab|fwSpace|nbSpace)\b", part):
+                return None
+            run = re.match(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', part)
+            if run:
+                cur = run.group(1)
+            in_t = bool(re.match(r"<(?:[\w.-]+:)?t\b", part)) or (in_t and not re.match(r"</(?:[\w.-]+:)?t>", part))
+            out.append(part)
+        elif part:
+            w = sum(chars.char_width(cur, ch) for ch in unescape(part))
+            sp = chars.char_width(cur, " ") or 1
+            out.append(" " * max(0, int(round(w / sp))) if in_t else part)
+    return "".join(out)
+
+
+def _set_valign(cell_seg: str, how: str) -> str:
+    """표 칸의 세로 정렬(subList vertAlign)을 바꾼 칸 글."""
+    return re.sub(r'(<(?:[\w.-]+:)?subList\b[^>]*\bvertAlign=")\w+(")', rf"\g<1>{how}\2", cell_seg, count=1)
+
+
+def _inner_width(xml: str, cell, chars: "_Chars") -> int | None:
+    """표 칸 안 글이 쓸 수 있는 너비 = 칸 너비 − 칸 여백 − 문단 왼쪽 여백."""
+    seg = xml[cell.start:cell.end]
+    w = re.findall(r'cellSz\b[^>]*\bwidth="(\d+)"', seg)
+    if not w:
+        return None
+    mg = re.findall(r'cellMargin\b[^>]*\bleft="(\d+)"[^>]*\bright="(\d+)"', seg)
+    pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', seg)
+    left = max(0, chars.margins(pm.group(1))[1]) if pm else 0
+    return int(w[-1]) - (int(mg[-1][0]) + int(mg[-1][1]) if mg else 0) - left
+
+
+def _word_lines(text: str, height: int, width: float) -> list[str]:
+    """낱말 사이에서 width에 맞춰 나눈 줄들(낱말 하나가 더 넓으면 그 낱말은 한 줄에 그대로)."""
+    lines, line = [], ""
+    for word in text.split(" "):
+        test = f"{line} {word}" if line else word
+        if line and _cjk_width(test, height) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = test
+    return lines + [line] if line else lines
+
+
+def _colon_layout(xml: str, label, target, value: str, chars: "_Chars", lead: str = "") -> tuple[list[str], str | None, str | None]:
+    """'주소: | 값' 칸 — (값 줄들, 이름표 칸 세로 정렬, 값 칸 세로 정렬). 값이 길면 낱말 사이에서 나눠 줄마다 문단 하나(줄 첫머리가 같은 곳).
+    이름표가 한 줄이고 값이 여러 줄이면 둘 다 위로(값 첫 줄이 ':' 옆), 이름표가 여러 줄이고 값이 한 줄이면 값을 아래로(':'이 있는 마지막 줄 옆)."""
+    lm = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', xml[label.start:label.end])
+    lab_h = chars.height(lm.group(1)) if lm else FILL_HEIGHT
+    val_h = max(lab_h, FILL_HEIGHT)
+    vw, lw = _inner_width(xml, target, chars), _inner_width(xml, label, chars)
+    if not vw or not lw:
+        return [value], None, None
+    lines = [value] if re.search(_SEAL_TAIL, value) else _word_lines(value, val_h, vw * 0.97 - _cjk_width(lead, val_h))
+    if lead:  # 값 칸에 미리 적힌 ':' — 첫 줄은 ': 값', 다음 줄은 같은 너비 빈칸 뒤에서 시작(값 첫 글자 위치에 맞춤)
+        pad = " " * int(round(_cjk_width(lead, val_h) / (val_h / 2)))
+        lines = [lead + lines[0]] + [pad + x for x in lines[1:]]
+    # 이름표는 원본 문단 그대로 글자 단위로 넘어감('계약상대자등록번 / 호:') — 너비로 줄 수만 어림
+    n_lab = max(1, -(-int(_cjk_width(re.sub(r"\s+", " ", label.text).strip(), lab_h)) // max(lw, 1)))
+    if len(lines) > n_lab:
+        return lines, "TOP", "TOP"
+    if n_lab > len(lines):
+        return lines, None, (None if lead else "BOTTOM")  # ':'가 값 칸에 있으면 원래 자리 그대로
+    return lines, None, None
+
+
+def _break_value(seg: str, chars: "_Chars | None", line_w: int | None) -> str:
+    """이름표 문단('주    소: 값')의 값이 한 줄에 안 들어가면 낱말 사이에서 끊어 **같은 문단 모양의 다음 문단**으로 넘김 —
+    둘째 문단은 앞부분을 빈칸으로 채워 값 시작 위치에 맞춤(11/13 사용자 요청: 서명란 양식(문단 모양)은 바꾸지 말고 값만, 줄바꿈은 허용).
+    11/05의 '내어쓰기 문단 모양 사본'을 대체 — 그 사본은 원래 양쪽 정렬을 받아 넘친 첫 줄 낱말 사이가 벌어졌음."""
+    if chars is None or not line_w or _VS not in seg or _VE not in seg:
         return seg
-    new = chars.hanging(pm.group(2), width)
-    return seg[:pm.start(2)] + new + seg[pm.end(2):] if new != pm.group(2) else seg
+    open_m = re.match(r'<([\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"[^>]*>', seg)
+    if not open_m:
+        return seg
+    i, j = seg.index(_VS), seg.index(_VE)
+    tail = re.match(r"([^<]*)", seg[j + 1:]).group(1)
+    if tail.strip():  # 값 뒤에 '(인)' 등이 같은 줄에 있으면 끊지 않음
+        return seg
+    prefix = seg[open_m.end():i]
+    pw, cur = _prefix_width(prefix, chars)
+    intent, left = chars.margins(open_m.group(2))
+    avail = (line_w - left - intent - pw) * 0.97
+    h = max(chars.height(cur), FILL_HEIGHT)
+    value = unescape(seg[i + 1:j])
+    if _cjk_width(value, h) <= avail:
+        return seg
+    lines, line = [], ""
+    for word in value.split(" "):
+        test = f"{line} {word}" if line else word
+        if line and _cjk_width(test, h) > avail:
+            lines.append(line)
+            line = word
+        else:
+            line = test
+    lines.append(line)
+    blank = _blank_prefix(prefix, chars)
+    if len(lines) < 2 or blank is None or _cjk_width(lines[0], h) > avail:
+        return seg
+    ns = open_m.group(1) or ""
+    no_lines = lambda x: re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", x, flags=re.S)
+    first = no_lines(seg[:i] + _mark(lines[0]) + seg[j + 1:])
+    rest = "".join(f"{open_m.group(0)}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>" for x in lines[1:])
+    return first + rest
+
+
+def _line_width(xml: str, s: int, cells: list[tuple[int, int]]) -> int | None:
+    """s 위치 문단의 줄 너비(HWPUNIT) — 표 칸 안이면 칸 너비 − 칸 여백, 아니면 용지 너비 − 왼쪽·오른쪽 여백. 모르면 None."""
+    box = min(((cs, ce) for cs, ce in cells if cs <= s < ce), key=lambda x: x[1] - x[0], default=None)
+    if box is not None:
+        seg = xml[box[0]:box[1]]
+        w = re.findall(r'cellSz\b[^>]*\bwidth="(\d+)"', seg)
+        mg = re.findall(r'cellMargin\b[^>]*\bleft="(\d+)"[^>]*\bright="(\d+)"', seg)
+        return int(w[-1]) - (int(mg[-1][0]) + int(mg[-1][1]) if mg else 0) if w else None
+    page = re.search(r'<(?:[\w.-]+:)?pagePr\b[^>]*\bwidth="(\d+)".*?<(?:[\w.-]+:)?margin\b([^>]*)>', xml, re.S)
+    if not page:
+        return None
+    mg = dict(re.findall(r'\b(left|right)="(\d+)"', page.group(2)))
+    return int(page.group(1)) - sum(int(v) for v in mg.values()) if len(mg) == 2 else None
 
 
 _MULTI_KEYS = {"회사명", "대표자", "주소", "전화번호", "팩스번호", "사업자등록번호", "법인등록번호"}
@@ -601,7 +746,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
     # 표 안이어도 여러 줄짜리 칸(서식 본문 칸)의 줄은 채움 — 한 줄짜리 칸은 이름표 칸이라 표 채우기가 옆 칸에 씀(11/04 서식 8·9 서명 줄)
-    cells = _spans(xml, "tc")
+    cells = _all_spans(xml, "tc")  # 표 안 표의 칸도(11/13 — 안쪽 표 이름표 칸 뒤에도 값이 한 번 더 들어갔음)
     single = [(cs, ce) for cs, ce in cells if len(_spans(xml, "p", cs, ce)) <= 1]
     edits = []
     paras, stack = [], []  # 모든 문단(표 칸 안 문단 포함) — _spans는 맨 바깥만 줌
@@ -835,7 +980,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 below = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>).*?(</(?:[\w.-]+:)?t>)", r"\1\2", xml[ns:ne], flags=re.S)
                 edits.append((ns, ne, re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", below, flags=re.S)))
                 rep.filled.append(f"{_sq(label)} 아래 줄 {seal_m.group(1)} → 이름 줄로")
-        edits.append((s, e, _hang(seg, chars)))
+        edits.append((s, e, _break_value(seg, chars, _line_width(xml, s, cells))))
         rep.filled.append(f"{_sq(label)} → {value[:40]}")
     for s, e, seg in sorted(edits, key=lambda x: x[0], reverse=True):  # 뒤에서부터 — 문단 순서대로 모이지 않은 고침도 있어 정렬(11/05 서식 3 줄 겹침)
         xml = xml[:s] + seg + xml[e:]
@@ -1038,15 +1183,6 @@ class _Chars:
         get = lambda k: int(re.search(rf'<(?:[\w.-]+:)?{k}\b[^>]*value="(-?\d+)"', m.group(0)).group(1)) \
             if m and re.search(rf'<(?:[\w.-]+:)?{k}\b[^>]*value="', m.group(0)) else 0
         return get("intent"), get("left")
-
-    def hanging(self, pid: str, width: int) -> str:
-        """pid 문단 모양에 내어쓰기 width를 준 사본 id — 둘째 줄부터 첫 줄 시작보다 width만큼 오른쪽에서 시작(11/05 '주 소 :' 줄)."""
-        if pid not in self.paras or self.align(pid) in ("CENTER", "RIGHT", "DISTRIBUTE"):
-            return pid
-        key = (pid, width)
-        if key not in self.added_hang:
-            self.added_hang[key] = self._next_para_id()
-        return self.added_hang[key]
 
     def no_indent(self, pid: str) -> str:
         """pid 문단 모양에서 들여쓰기·내어쓰기를 뺀(정렬은 그대로) 어절 단위 줄바꿈 사본 id — 실적 표 글 칸(11/12). 이미 둘 다 없으면 pid."""
@@ -1986,7 +2122,52 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
     return new
 
 
-def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+def _deduction_edits(cells: list[Cell], rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+    """감점 칸 = 늘 0(11/13 사용자 결정: 사업수행능력 평가에서 지일은 감점 사유(임금체불·고용개선조치 미이행 등)가 없음).
+    머리 칸이 '감점'(·'감점점수'·'감점(점)')인 열의 빈 칸마다 '0' — 합계·계 줄은 뺌."""
+    plain = lambda t: re.sub(r"\([^)]*\)", "", _sq(t))
+    head = next((c for c in cells if plain(c.text) in ("감점", "감점점수", "감점액")), None)
+    if head is None:
+        return []
+    col = head.col
+    out = []
+    for c in cells:
+        if c.row < head.row + head.rowspan or not (c.col <= col < c.col + c.colspan) or not c.blank:
+            continue
+        label = next((o for o in cells if o.col == 0 and o.row <= c.row < o.row + o.rowspan), None)
+        if label is not None and re.fullmatch(r"(?:합|소|총)?계|총점", _sq(label.text)):
+            continue
+        out.append((c, ["0"], False))
+    if out:
+        rep.filled.append(f"감점 칸 {len(out)}곳 → 0 (감점 사유 없음)")
+    return out
+
+
+def _total_edits(cells: list[Cell], tally: dict, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+    """자기평가표 아래 따로 놓인 합계 표('합 계 | 20 점 | __' — 11/13 사용자 요청: 국립아시아문화전당 서식 14호)에 합계 점수.
+    같은 서식에서 넣은 점수(자기평점 줄·감점 0)를 더한 값, 비운 줄이 하나라도 있으면 안 채움. 옆 배점 칸이 'N 점'이면 같은 모양으로."""
+    from .selfscore import fmt
+
+    if not tally.get("n") or tally.get("missing"):
+        return []
+    rows: dict[int, list[Cell]] = {}
+    for c in cells:
+        rows.setdefault(c.row, []).append(c)
+    for r in sorted(rows):
+        line = sorted(rows[r], key=lambda c: c.col)
+        if not line or not re.fullmatch(r"(?:합|총)계|총점|계", _sq(line[0].text)):
+            continue
+        blank = next((c for c in line[1:] if c.blank), None)
+        if blank is None:
+            continue
+        unit = " 점" if any(re.fullmatch(r"[\d.]+점", _sq(c.text)) for c in line[1:]) else ""
+        value = round(tally["sum"], 2)
+        rep.filled.append(f"합계 → {fmt(value)}점 (자기평점 {tally['n']}줄 + 감점 0)")
+        return [(blank, [fmt(value) + unit], False)]
+    return []
+
+
+def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | None = None) -> list[tuple[Cell, list[str], bool]]:
     """자기평가 심사표('자기평점'·'평점' 칸)에 점수 — 제안요청서 배점표·계산 조건대로, 서식 배점 기준과 다르면 서식 기준,
     계산식끼리 다르면 유리한 쪽(11/05 사용자 결정, `selfscore.score_form`). '계' = 모든 줄 점수가 있을 때만 합계."""
     from .selfscore import fmt, read_form, score_form
@@ -1999,6 +2180,10 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cel
     for row, item in scored:
         name = _sq(row.label)[:16]
         rep.self_rows.append([row.label, fmt(row.points), fmt(item.score), item.basis, "\n".join(item.notes)])
+        if tally is not None:  # 따로 놓인 합계 표에 쓸 합(11/13)
+            tally["n"] += 1
+            tally["sum"] += item.score or 0
+            tally["missing"] = tally["missing"] or item.score is None
         if item.score is None:
             rep.filled.append(f"자기평점 '{name}' 비움 — " + "; ".join(item.notes[:2]))
             continue
@@ -2037,6 +2222,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
         if re.fullmatch(r"Contents/section\d+\.xml", name):
             xml = data.decode("utf-8")
             edits: list[tuple[Cell, list[str], bool]] = []
+            valign: dict[int, str] = {}  # 칸 시작 위치 → 세로 정렬(TOP/BOTTOM) — ':' 이름표 옆 값 칸(11/13)
             para_override: dict[int, str] = {}  # 칸 시작 위치 → 쓸 문단 모양(번호 칸 가운데 정렬 맞춤)
             base_char: dict[int, str] = {}  # 칸 시작 위치 → 쓸 글자 모양(안내 글 칸은 이름표 칸 모양으로)
             track_marks: list[str] = []  # 실적을 넣은 칸의 글 — 그 표가 한 쪽보다 길면 쪽에서 나뉘게(11/12)
@@ -2052,8 +2238,20 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
             none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
-            for tbl in _spans(xml, "tbl"):
+            tally = {"sum": 0.0, "n": 0, "missing": False}  # 이 서식에서 넣은 자기평점 합(따로 놓인 합계 표용, 11/13)
+            seen_party: set = set()  # 회사 정보 표 모양 — 같은 모양이 또 나오면 공동수급 구성원용 사본이라 비움(11/13)
+            for tbl in _all_tables(xml):
                 cells = _cells(xml, tbl)
+                # 공동수급 때 구성원마다 쓰라고 같은 '상호(법인명) / 주소 / 대표자 (인) / 계약상대자등록번호' 표를 여러 번 둔 서식
+                # (11/13 사용자 요청: 국립아시아문화전당 정보 비공개 동의서 — 4개 모두 지일 정보가 들어감) — 우리 회사 정보는 첫 표에만
+                labels = [c for c in cells if not c.blank]
+                if labels and len({c.row for c in cells}) <= 8 and {"회사명", "대표자"} <= {_label_key(c.text) for c in labels}:
+                    sig = tuple(sorted((c.row, c.col, _sq(c.text)) for c in labels))
+                    if sig in seen_party:
+                        if not any("같은 회사 정보 표" in x for x in rep.filled):
+                            rep.filled.append("같은 회사 정보 표가 또 있음(공동수급 구성원용) — 첫 표에만 지일 정보, 나머지는 비움")
+                        continue
+                    seen_party.add(sig)
                 # 직접 기입 서식(실적증명서 등)은 표 안을 건드리지 않음 — 단 '신청인' 묶음 줄(업체명·대표자·사업자번호·소재지·전화)은 채움
                 # (11/10 경남교육청 사업이행 실적증명서 — 증명 내용은 발주처가, 신청인 칸은 지일이)
                 if sign_only and not any(_row_group(cells, x) == "신청인" for x in cells):
@@ -2067,8 +2265,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                    for c, lines, keep in _fill_tracks(xml, cells, tracks, rep)]
                     edits += track_edits
                     track_marks += [escape(lines[0]) for _c, lines, _k in track_edits if lines and len(lines[0]) >= 4]
-                if self_scores:
-                    edits += _self_score_edits(cells, self_scores, rep)
+                scored = _self_score_edits(cells, self_scores, rep, tally) if self_scores else []
+                edits += scored
+                if not sign_only:
+                    edits += _deduction_edits(cells, rep)
+                    if not scored:  # 자기평가표 아래 따로 놓인 '합 계 | 20 점 | __' 표
+                        edits += _total_edits(cells, tally, rep)
                 for c in cells:
                     if sign_only and _row_group(cells, c) != "신청인":
                         continue
@@ -2172,7 +2374,30 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         value = f"{value}{' ' * (gap or 3)}{seal_text}"
                         if chars is not None and pm:
                             para_override[target.start] = chars.left_any(pm.group(1))
-                    edits.append((target, [value], False))
+                    lines = [value]
+                    lead = re.fullmatch(r"\s*([:：])\s*", target.text)
+                    if lead:
+                        # 값 칸에 ':'만 미리 적힌 표('상호(법인명) | : | ' — 11/13 사용자 지적: ':'를 지우고 값을 넣었음) — ':'는 두고 그 옆에
+                        if chars is not None:
+                            lines, lab_v, val_v = _colon_layout(xml, c, target, value, chars, lead=lead.group(1) + " ")
+                            if lab_v:
+                                valign[c.start] = lab_v
+                                edits.append((c, None, _set_valign(xml[c.start:c.end], lab_v)))
+                            if val_v:
+                                valign[target.start] = val_v
+                        else:
+                            lines = [f"{lead.group(1)} {value}"]
+                    elif chars is not None and target.col == c.col + c.colspan and target.row == c.row \
+                            and re.search(r"[:：]\s*$", c.text):
+                        # 이름표가 ':'로 끝나는 칸 옆 값 칸(11/13 사용자 요청 '값은 늘 : 옆에, 길면 첫 줄 시작 위치에 맞춰 줄바꿈') —
+                        # 낱말 사이에서 줄을 나누고, 값 첫 줄(또는 한 줄 값)이 이름표의 ':' 줄과 같은 높이에 오게 칸 세로 정렬을 맞춤
+                        lines, lab_v, val_v = _colon_layout(xml, c, target, value, chars)
+                        if lab_v:
+                            valign[c.start] = lab_v
+                            edits.append((c, None, _set_valign(xml[c.start:c.end], lab_v)))
+                        if val_v:
+                            valign[target.start] = val_v
+                    edits.append((target, lines, False))
                     if _GUIDE_TEXT.fullmatch(_sq(target.text)):
                         # 회색·기울임 안내 글이 있던 칸 — 그 글자 모양 대신 이름표 칸 글자 모양으로(11/06 사용자 요청: 기본 폰트와 같게)
                         lm = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', xml[c.start:c.end])
@@ -2221,11 +2446,16 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if picks:
                             edits += [(c, ["해당 없음"], False) for c in picks]
                             rep.filled.append(f"표 {len(picks)}줄에 '해당 없음' 기재 — 해당 사항이 있으면 고칠 것")
+            # 바깥 표 칸 고침이 안쪽 표 칸 고침을 감싸면(칸 안 빈자리 채우기 등) 바깥 쪽은 버림 — 안쪽 고침이 덮이지 않게(11/13)
+            edits = [e for e in edits if not any(o is not e and e[0].start <= o[0].start and o[0].end <= e[0].end
+                                                 and (o[0].start, o[0].end) != (e[0].start, e[0].end) for o in edits)]
             for cell, lines, keep in sorted(edits, key=lambda e: e[0].start, reverse=True):
                 seg = xml[cell.start:cell.end]
                 if lines is None:  # 칸 안 빈자리 채우기 — 바꾼 칸 그대로
                     xml = xml[:cell.start] + keep + xml[cell.end:]
                     continue
+                if cell.start in valign:
+                    seg = _set_valign(seg, valign[cell.start])
                 if cell.start in para_override:
                     seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")\d+(")', rf"\g<1>{para_override[cell.start]}\2", seg, count=1)
                 elif chars is not None and cell.start in rep.word_cells:

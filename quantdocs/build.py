@@ -305,6 +305,47 @@ def _note_unfilled(a: "Analysis", form, path: Path, sign_only: bool) -> None:
                        + (" 외" if len(names) > 6 else "") + " (회사 정보 이름표가 있는데 빈칸 — 한글에서 직접 기입)")
 
 
+# 서식 뒤에 붙은 별표('【별표 3】 안전관리 서약서') 머리 — 서식 머리가 없어 앞 서식(서면 질의서)과 한 조각으로 잘림(11/13)
+_APPENDIX = re.compile(r"[【\[〔<]\s*별\s*표\s*\d+\s*[】\]〕>]")
+
+
+def _fill_appendix(src: Path, dst: Path, vault, title: str):
+    """공란으로 두는 서식(질의서 등) 조각 뒤에 【별표 N】이 붙어 있으면 — 국립아시아문화전당 서식 16호 서면 질의서 뒤
+    별표 1 정성평가표·별표 2 안전 관리 준수 서약서·별표 3 안전관리 서약서(11/13 사용자 제보: 서약서 서명이 비었음) —
+    별표부터는 다른 서식처럼 채우고 그 앞(질의서)은 원본 그대로. 별표가 없으면 None."""
+    from .fill import _spans, _text, fill_hwpx
+
+    def cut_at(xml: str) -> int | None:
+        return next((ps for ps, pe in _spans(xml, "p") if _APPENDIX.search(_text(xml[ps:pe]))), None)
+
+    with zipfile.ZipFile(src) as z:
+        secs = {n: z.read(n).decode("utf-8") for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n)}
+    if not any(cut_at(x) is not None for x in secs.values()):
+        return None
+    tmp = dst.with_name(dst.stem + "_별표채움.hwpx")
+    rep = fill_hwpx(src, tmp, vault, title=title)
+    with zipfile.ZipFile(tmp) as zf, zipfile.ZipFile(src) as zs:
+        out = {}
+        for info in zs.infolist():
+            data = zf.read(info.filename) if info.filename in zf.namelist() else zs.read(info.filename)
+            if info.filename in secs:
+                orig, filled = secs[info.filename], data.decode("utf-8")
+                po, pf = cut_at(orig), cut_at(filled)
+                if po is None or pf is None:  # 별표가 없는 구역은 원본 그대로
+                    data = orig.encode("utf-8")
+                else:
+                    data = (orig[:po] + filled[pf:]).encode("utf-8")
+            out[info.filename] = data
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(dst, "w") as zo:
+            for info in zs.infolist():
+                ctype = zipfile.ZIP_STORED if info.filename == "mimetype" else zipfile.ZIP_DEFLATED
+                zo.writestr(zipfile.ZipInfo(info.filename, date_time=info.date_time), out[info.filename], compress_type=ctype)
+    tmp.unlink(missing_ok=True)
+    rep.filled.insert(0, "앞 서식(질의서 등)은 공란 그대로, 뒤에 붙은 별표부터 채움")
+    return rep
+
+
 def is_manual(name: str) -> bool:
     return bool(_MANUAL_FORM.search(name or "") or _BLANK_FORM.search(name or ""))
 
@@ -398,7 +439,11 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 if is_manual(c.title):  # 양식 그대로 — 내려받은 뒤 직접 기입
                     manual_dir.mkdir(parents=True, exist_ok=True)
                     if _BLANK_FORM.search(c.title):  # 질의서·공동수급 서식은 공란(11/05)
-                        shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
+                        rep = _fill_appendix(forms_dir / c.file, manual_dir / c.file, vault, notice_title)
+                        if rep is None:
+                            shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
+                        else:  # 뒤에 붙은 【별표】(안전관리 서약서 등)는 채움 — 질의서 부분만 공란(11/13)
+                            reports.append(rep)
                     else:  # 재직증명서 등도 표 밖 서명 줄(업체명·주소·대표자 (인))은 채움(11/05 사용자 요청)
                         reports.append(fill_hwpx(forms_dir / c.file, manual_dir / c.file, vault, title=notice_title, sign_only=True))
                         _note_unfilled(a, c, manual_dir / c.file, True)

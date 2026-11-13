@@ -218,6 +218,49 @@ def _quant_range(lines: list[str]) -> range:
     return range(start, end)
 
 
+_YHEAD = re.compile(rf"^\s*{_SYM}\s*양\s*식\s*(?:제\s*)?(\d+)\s*호?\s*(?:-\s*\d+)?\s*{_SYM}")
+_APPX_HEAD = re.compile(rf"^\s*{_SYM}\s*별\s*첨\s*{_SYM}\s*(?P<rest>.*)$")
+
+
+def yangsik_text(text: str) -> str:
+    """'【양식1】'·'(양식 5)'처럼 서식을 '양식'으로 적은 문서(11/13 한국산업단지공단 제안요청서) → '서식'으로 바꿔 같은 규칙으로 읽음.
+    본문 양식 번호가 다시 1부터 시작하면(뒤에 붙은 【별첨】 보안 서류 안의 '[양식1] 보안특약 서약서' 등) 그 뒤 양식은 별첨 하나로 —
+    번호 없는 목차 줄 '【별첨】 정보 보안 관련 서류'는 마지막 양식 다음 번호의 서식으로(`forms_cut.find_forms`와 같은 번호)."""
+    if not re.search(r"양\s*식\s*(?:제\s*)?\d", text):
+        return text
+    lines = text.splitlines()
+    heads = [i for i, ln in enumerate(lines) if _YHEAD.match(ln) or _APPX_HEAD.match(ln)]
+    nxt = {a: b for a, b in zip(heads, heads[1:])}
+
+    def toc(i: int) -> bool:  # 목차 줄 — 다음 머리까지 빈 줄뿐
+        end = nxt.get(i, min(len(lines), i + 3))
+        return all(not ln.strip() for ln in lines[i + 1:end]) and i in nxt
+    top, prev, restart = 0, 0, None
+    for i in heads:
+        m = _YHEAD.match(lines[i])
+        if not m:
+            continue
+        n = int(m.group(1))
+        if toc(i):
+            top = max(top, n)
+            continue
+        if n <= prev:
+            restart = i
+            break
+        prev, top = n, max(top, n)
+    out = []
+    for i, ln in enumerate(lines):
+        if restart is not None and i >= restart:
+            ln = re.sub(r"양(\s*)식(?=\s*(?:제\s*)?\d)", r"별첨양\1식", ln)
+        else:
+            a = _APPX_HEAD.match(ln)
+            if a and top and restart is not None:
+                ln = f"【서식 {top + 1}】 {a.group('rest')}"
+            ln = re.sub(r"(?<![-–\w])양(\s*)식(?=\s*(?:제\s*)?\d)", r"서\1식", ln)
+        out.append(ln)
+    return "\n".join(out)
+
+
 def read_forms(text: str, source: str, catalog: list[Document]) -> list[Form]:
     """서식 번호 → 이름. 같은 번호가 여러 번 나오면 처음 이름을 쓰고, 정량 묶음 여부는 하나라도 있으면 참.
     단 '사업수행능력 평가서 (2~10)'처럼 범위로만 적은 이름·칸이 풀린 표에서 짐작한 이름(약한 이름)은
@@ -827,13 +870,14 @@ def read_notice(paths: list[Path], catalog: list[Document] | None = None) -> Not
             continue
         name = Path(p).name
         texts[name] = text
-        got = read_forms(text, name, catalog)
+        ftext = yangsik_text(text)  # '【양식1】'로 적은 서식(11/13)
+        got = read_forms(ftext, name, catalog)
         if got and not any(f.in_quant for f in got):  # 정량 묶음 제목이 없으면 제출서류 표의 '정량' 묶음으로
-            q = submit_quant_forms(text)
+            q = submit_quant_forms(ftext)
             for f in got:
                 f.in_quant = f.no in q
         forms += got
-        submit += read_submit_items(text, name, catalog)
+        submit += read_submit_items(ftext, name, catalog)
         tracks += read_track_reqs(text, name, text_requirements)
         deadlines += [(kind, when, name) for kind, when in schedule_text.extract_deadlines(text)]
     # 같은 실적 문장이 여러 문서에 있으면 한 번만

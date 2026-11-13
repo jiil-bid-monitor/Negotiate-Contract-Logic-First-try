@@ -23,6 +23,11 @@ _TAG = re.compile(r"<(/?)((?:[\w.-]+:)?)(p|run|t|secPr)\b([^>]*?)(/?)>")
 _HEAD = re.compile(r"^[^\w\s]\s*(?:별\s*지\s*)?(?:서식\s*(?:제\s*)?(\d+)\s*호?\s*(?:[-–]\s*(\d+))?|제\s*(\d+)\s*호\s*(?:[-–]\s*(\d+))?\s*서식)\s*[^\w\s]")
 
 
+# '【양식1】'(11/13 한국산업단지공단 제안요청서 — '서식' 대신 '양식'), 번호 없는 '【별첨】'(양식 목록 끝 묶음)
+_YHEAD = re.compile(r"^[^\w\s]\s*양식\s*(?:제\s*)?(\d+)\s*호?\s*(?:[-–]\s*(\d+))?\s*[^\w\s]")
+_APPX = re.compile(r"^[^\w\s]\s*별첨\s*[^\w\s]")
+
+
 @dataclass
 class Para:
     start: int
@@ -194,6 +199,8 @@ def find_forms(sections: dict[str, str], heights: dict[str, int] | None = None, 
                 continue
             no, sub_no = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
             heads.append((idx, no + (f"-{sub_no}" if sub_no else "")))
+        if not heads:
+            heads = _yangsik_heads(paras, xml)
         for k, (idx, no) in enumerate(heads):
             end = heads[k + 1][0] if k + 1 < len(heads) else len(paras)
             body = paras[idx:end]
@@ -202,6 +209,30 @@ def find_forms(sections: dict[str, str], heights: dict[str, int] | None = None, 
                 order.append(no)
             found[no] = CutForm(no, title, name, body)  # 같은 번호는 뒤(본문) 것으로
     return [found[n] for n in order]
+
+
+def _yangsik_heads(paras: list[Para], xml: str) -> list[tuple[int, str]]:
+    """'【양식N】' 머리(서식 머리가 하나도 없는 구역만). 목차 줄(다음 머리까지 빈 문단뿐)은 건너뛰고, 본문 번호가 다시 작아지면
+    (【별첨】 보안 서류 안의 '[양식1]'…) 거기부터 끝까지를 마지막 양식 다음 번호 하나로 — `notice.yangsik_text`와 같은 번호."""
+    marks = [(i, _squash(p.text)) for i, p in enumerate(paras)]
+    marks = [(i, sq) for i, sq in marks if _YHEAD.match(sq) or _APPX.match(sq)]
+    nxt = {a: b for (a, _), (b, _) in zip(marks, marks[1:])}
+    out, top, prev = [], 0, 0
+    for i, sq in marks:
+        m = _YHEAD.match(sq)
+        if not m:
+            continue
+        n = int(m.group(1))
+        body = paras[i + 1:nxt.get(i, i + 1)]
+        if i in nxt and all(not p.text.strip() and "tbl" not in xml[p.start:p.end] for p in body):
+            top = max(top, n)  # 목차 줄
+            continue
+        if n <= prev:
+            out.append((i, str(top + 1)))
+            break
+        prev, top = n, max(top, n)
+        out.append((i, m.group(1) + (f"-{m.group(2)}" if m.group(2) else "")))
+    return out
 
 
 def _norm_title(line: str) -> str:
@@ -216,7 +247,7 @@ def _norm_title(line: str) -> str:
 
 def _guess_title(body: list[Para]) -> str:
     """제목 문단의 '[서식 N]' 뒤 글, 없으면 다음 줄들 중 처음 2글자 넘는 줄."""
-    rest = re.sub(r"^\s*[^\w\s]\s*(?:별\s*지\s*)?(?:서식\s*(?:제\s*)?[\d\s\-–호]+|제[\d\s\-–호]+서식\s*)[^\w\s]", "", body[0].text)  # '〔서식 1호〕'도(11/04 당진)
+    rest = re.sub(r"^\s*[^\w\s]\s*(?:별\s*지\s*)?(?:[서양]식\s*(?:제\s*)?[\d\s\-–호]+|제[\d\s\-–호]+서식\s*)[^\w\s]", "", body[0].text)  # '〔서식 1호〕'도(11/04 당진)
     lines = [ln for p in [rest] + [p.text for p in body[1:4]] for ln in p.splitlines()]
     for ln in lines:
         t = _norm_title(ln)

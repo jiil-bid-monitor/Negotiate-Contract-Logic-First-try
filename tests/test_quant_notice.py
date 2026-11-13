@@ -379,3 +379,28 @@ def test_write_sheet_drops_control_characters(tmp_path: Path):
     out = write_sheet(sheet, tmp_path, ref=dt.date(2026, 11, 11))
     got = load_workbook(out)["공고정보"]["B2"].value
     assert got == "소프트웨어사업자일반현황관리확인서(구(舊)소프트웨어사업자신고확인서)1부.hwp"
+
+
+def test_yangsik_form_heads_and_appendix():
+    """11/13 한국산업단지공단 제안요청서: 서식을 '【양식1】'…'【양식8】'·'【별첨】'으로 적음 — 하나도 못 읽었음.
+    목차 줄('【양식1】 입찰참가신청서' 다음 줄이 또 머리)은 건너뛰고, 본문 번호가 다시 1부터면(별첨 보안 서류 '[양식1] 보안특약 서약서')
+    거기부터 끝까지 별첨 하나 = 마지막 양식 다음 번호(9). 목록 읽기와 자르기가 같은 번호."""
+    import re
+    from quantdocs.forms_cut import Para, _yangsik_heads
+    from quantdocs.notice import yangsik_text
+
+    lines = ["Ⅶ 입찰 관련 양식", "【양식1】 입찰참가신청서", "【양식2】 일반업체일반현황", "【별첨】 정보 보안 관련 서류 각1부", "",
+             "가. 입찰참가신청서(양식1)", "【양식1】", "", "입 찰 참 가 신 청 서", "【양식2】", "제 안 업 체 일 반 현 황",
+             "[양식1] 외주 용역사업 보안특약 서약서", "서약합니다.", "[양식2] 보안서약서(업체대표용)", "본인은"]
+    got = {f.no: f.name for f in read_forms(yangsik_text("\n".join(lines)), "x.hwpx", load_catalog())}
+    assert got[1] == "입찰참가신청서" and got[2] == "제안업체일반현황" and got[3] == "정보 보안 관련 서류"
+    assert "외주" not in " ".join(got.values())
+    xml = "".join(f"<hp:p>{'<hp:tbl/>' if t == '입 찰 참 가 신 청 서' else ''}<hp:t>{t}</hp:t></hp:p>" for t in lines)
+    paras, pos = [], 0
+    for t in lines:
+        seg = re.search(r"<hp:p>.*?</hp:p>", xml[pos:]).group()
+        paras.append(Para(pos, pos + len(seg), t))
+        pos += len(seg)
+    heads = _yangsik_heads(paras, xml)
+    assert [(lines[i], n) for i, n in heads] == [("【양식1】", "1"), ("【양식2】", "2"),
+                                                  ("[양식1] 외주 용역사업 보안특약 서약서", "3")]

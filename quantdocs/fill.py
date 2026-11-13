@@ -485,7 +485,12 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
 
 
 # 지일이 아닌 쪽이 적는 칸 — 장비 공급확약서의 발행자(제조사·공식 수입원) 등(11/04 서식 28: 지일 정보가 들어가 '스스로 확약'이 됨)
-_OTHER_PARTY = re.compile(r"발행자|제조사|수입원|공급자|총판")
+_OTHER_PARTY = re.compile(r"발행자|제조사|수입원|공급자|총판|발급기관|증명기관|확인기관|증명서발급")  # 증명서 발급기관(실적증명서 — 발주처가 적음, 11/13)
+
+
+def _other_rows(cells) -> set[int]:
+    """줄 머리(첫 칸)가 다른 쪽(발행자·제조사·증명서 발급기관 등)인 줄 — 세로로 합친 머리 칸이면 덮는 줄 모두(11/13)."""
+    return {r for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text)) for r in range(c.row, c.row + max(1, c.rowspan))}
 
 
 # 점검표·체크리스트 머리글(11/13 사용자 요청: 보안 점검표 '- 인터넷 전화 보안' 옆 '적용' 칸에 지일 전화번호가 들어감 —
@@ -553,7 +558,7 @@ def _other_party_cells(xml: str) -> list[tuple[int, int]]:
     out = []
     for tbl in _spans(xml, "tbl"):
         cells = _cells(xml, tbl)
-        rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
+        rows = _other_rows(cells)
         out += [(c.start, c.end) for c in cells if c.row in rows]
     return out
 
@@ -1239,7 +1244,7 @@ def unfilled_slots(xml: str, sign_only: bool = False) -> list[str]:
             if re.search(r"<(?:[\w.-]+:)?tbl\b", xml[tbl[0] + 4:tbl[1]]):
                 cells = [c for c in cells if not re.search(r"<(?:[\w.-]+:)?tbl\b", xml[c.start:c.end])]
             by_pos = {(c.row, c.col): c for c in cells}
-            other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
+            other_rows = _other_rows(cells)
             agent = _agent_rows(xml, cells)
             for c in cells:
                 if c.row in other_rows or c.row in agent:
@@ -2522,7 +2527,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if sign_only and not any(_row_group(cells, x) == "신청인" for x in cells):
                     continue
                 by_pos = {(c.row, c.col): c for c in cells}
-                other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
+                other_rows = _other_rows(cells)
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
                 check_cols = _check_cols(cells)
                 qty_cols = _qty_cols(cells)

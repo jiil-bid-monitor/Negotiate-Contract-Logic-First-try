@@ -71,6 +71,11 @@
   서명 줄 '서약자  소속 …  직급/직위 …  성 명 … (인)'(두 문단으로 나뉜 것도 — '서약자' 뒤 5문단 안) → 소속 = 회사명, 직위 = 대표이사(회사정보 '대표자 직위'가 있으면 그 값), 성명 = 대표자.
   미리 적힌 '직급/직위 대표이사'는 그대로, **'(참여인력용)' 서약서와 '확인자'(발주기관) 줄은 비움**. 빈칸은 값 너비만큼 줄임(최소 3칸). **(이어서 사용자 요청, 브랜치 `claude/quant-pledge-bizname`) '사 업 명' 칸 = 공고명 — '서약자' 칸이 있는 표에서만**(실적증명서 '사업명'은 실적 이름이라 그대로), 시험 `test_pledge_table_business_name_is_notice_title`. 시험 `test_security_pledge_signer_fields`.
 
+## 2026-11-13 — 정량평가서 화면 공고명 = 나라장터 링크 (브랜치 `claude/quant-title-link`, 사용자 요청)
+
+- `quantdocs/static/index.html` `render`: 공고명(제목)을 누르면 새 창으로 나라장터 공고 상세 — 웹앱 공고 목록(`collect.py`)·투찰 계산기와 같은 주소
+  `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=…&bidPbancOrd=…`(차수 없으면 000), 제목 뒤 작은 '↗'. 화면만 — F5.
+
 ## 2026-11-12 — 회사 서류 만료 알림: 30일·7일 전 + 상태 표시 (PR #355·#356, 사용자 요청 — 자세한 것 `docs/worklog/2026-11-12.md`)
 
 - 텔레그램 봇(NAS) 만료 알림 = **30일 전 → 7일 전 → 당일**(`docexpiry.ALERT_MONTH`), 단계마다 한 번(`data/doc_alerts_sent.json`).

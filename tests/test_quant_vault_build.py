@@ -2951,3 +2951,12 @@ def test_self_score_total_table_below(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o2.hwpx", v2, self_scores=SelfScore([], v2, _dt.date(2026, 11, 13)))
     sec2 = zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()
     assert re.sub(r"<[^>]+>", "", sec2.rsplit("<hp:tbl>", 1)[1]).endswith("20 점")
+
+
+def test_long_label_matched_by_keyword_not_length():
+    """11/13 한국산업단지공단 양식5: '회사채(또는 기업어음)에 대한 신용평가등급 또는 기업신용평가등급'이 16자를 넘어 이름표로 안 봤음 —
+    글자 수로 거르지 않고 낱말로(여럿이면 끝 낱말). 안내 문장('※ …', '…기재')은 그대로 이름표 아님."""
+    from quantdocs.fill import _label_key
+    assert _label_key("회사채(또는 기업어음)에 대한 신용평가등급 또는 기업신용평가등급") == "신용평가등급"
+    assert _label_key("1. 회   사   명") == "회사명" and _label_key("6. 회 사 설 립    년       도") == "설립일"
+    assert _label_key("※ 주소는 본사 소재지를 기재") is None and _label_key("주소를 정확히 작성함") is None

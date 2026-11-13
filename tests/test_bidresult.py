@@ -128,6 +128,24 @@ class TestFill(unittest.TestCase):
         self.assertEqual(got["fetched"], 0)
         r = log.entries()[0]
         self.assertEqual((r["openingAt"], r["closingAt"]), ("2026-11-13 11:00:00", "2026-11-13 10:00:00"))  # 빈 값으로 안 덮음
+    def test_contract_method_filled_for_old_records(self):
+        """11/13 사용자 요청: 투찰내역에 계약방법(수의·지명 등) — 예전 기록은 공고에서 한 번 찾아 채움(결과 상태와 무관)."""
+        log = BidLog(Path(tempfile.mkdtemp()))
+        e = log.add({"noticeNo": "R26BK01803233", "bid": 1, "workType": "공사", "openingAt": "x", "closingAt": "y"})
+        rows = log._read(); rows[0].pop("contractMethod", None); log._write(rows)
+        log.set_result(e["id"], {"status": "완료", "fetchedAt": datetime.now(KST).isoformat()})
+        asked = []
+
+        def look(client, entry):
+            asked.append(entry["noticeNo"])
+            return {"openingAt": "", "closingAt": "", "contractMethod": "수의계약"}
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result([]), times=look)
+        r = log.entries()[0]
+        self.assertEqual((r["contractMethod"], r["openingAt"], r["closingAt"]), ("수의계약", "x", "y"))
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result([]), times=look)
+        self.assertEqual(asked, ["R26BK01803233"])   # 한 번만
+        self.assertIn("계약방법", log.csv())
+
     def test_bidders_saved_apart(self):
         """투찰 업체 전부(11/10) — 기록 파일 밖에 따로 저장, 지일 줄 표시, 지우면 같이 지움."""
         log = BidLog(Path(tempfile.mkdtemp()))

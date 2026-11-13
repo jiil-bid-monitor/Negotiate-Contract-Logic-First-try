@@ -185,8 +185,9 @@ def _lookup_times(client: Any, entry: dict[str, Any]) -> dict[str, str]:
 
 
 def _needs_times(entry: dict[str, Any], status: str | None) -> bool:
-    """'개찰 전'인데 투찰 마감을 아직 안 찾아본 기록(11/10 전 기록 — 새 기록은 불러올 때 둘 다 저장)."""
-    return status == "개찰 전" and "closingAt" not in entry
+    """'개찰 전'인데 투찰 마감을 아직 안 찾아본 기록(11/10 전 기록 — 새 기록은 불러올 때 둘 다 저장),
+    계약방법(수의·지명 등)을 모르는 기록(11/13 — 투찰내역에 표시)."""
+    return (status == "개찰 전" and "closingAt" not in entry) or "contractMethod" not in entry
 
 
 def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str] | None = None, force: bool = False,

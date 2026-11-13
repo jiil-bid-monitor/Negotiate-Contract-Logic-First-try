@@ -1099,6 +1099,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .bidlog-table td.when { white-space: normal; width: 1%; }
 .bidlog-table td.res { white-space: normal; }
 .bidlog-table td.title { min-width: 130px; }
+/* (11/13 사용자 요청) 계약방법 — 수의계약·지명경쟁은 눈에 띄게 */
+.bidlog-table .cm { display: inline-block; font-size: 11px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--ink); white-space: nowrap; }
+.bidlog-table .cm.cm-hi { border-color: #c47a00; color: #8a5a00; background: #fff3cf; font-weight: 700; }
 .res-grid { max-width: 900px; }
 .bidlog-table .sub a { color: var(--brand); }
 .bidlog-table td.method { min-width: 84px; }

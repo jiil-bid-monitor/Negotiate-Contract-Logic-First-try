@@ -674,22 +674,56 @@
       ? `<span class="res-open nowrap">개찰 ${esc(day(r.openingAt))}</span>`
       : `<span class="res-wait">개찰 전</span><span class="sub">${esc(day(res.fetchedAt))} 확인</span>`;
     if (res.status === "오류") return `<span class="res-bad">받지 못함</span><span class="sub">${esc((res.error || "").slice(0, 40))}</span>`;
-    const o = res.own, n = res.bidderCount;
-    if (!o) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${n}곳</span>`;
+    const o = mine(res), n = res.bidderCount, real = res.own;
+    // 기록 금액이 실제 투찰 금액과 다르면 비교 분석용 기록(11/13 사용자 요청 — 외주 금액으로 투찰하고 계산기 금액을 기록) — 결과는 웹앱 기록 금액 기준, 실제 투찰은 작게
+    const realPlace = real ? (real.rank != null ? `${real.rank}등` : real.underRank != null ? `${real.underRank}등` : "순위 없음") : "참가 안 함";
+    const cmp = res.recorded ? `<span class="res-cmp">비교 기록 · 웹앱 금액 기준</span><span class="sub">실제 투찰 ${realPlace}</span>` : "";
+    if (!o) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${n}곳</span>${cmp}`;
     // 개찰 결과는 '낙찰'(지일 1순위) / '탈락'(그 밖 — 하한선 미달 포함)으로(11/10 사용자 요청), 등수는 옆 칸
-    return o.rank === 1 ? `<b class="res-win">낙찰</b><span class="sub">참가 ${n}곳</span>`
-      : `<b class="res-bad">탈락</b><span class="sub">${o.rank == null ? esc((o.remark || "순위 없음").replace("낙찰하한선미달", "하한선 미달")) + " · " : ""}참가 ${n}곳</span>`;
+    if (o.recorded) {   // 비교 기록 — 실제로 낸 금액이 아니라서 '낙찰·탈락' 대신 웹앱 금액으로 본 자리
+      const lab = o.rank === 1 ? `<b class="res-win">1순위</b>` : o.rank != null ? `<b class="rank">${o.rank}등</b>` : `<b class="res-bad">하한선 미달</b>`;
+      return `${lab}<span class="sub">웹앱 금액 · 참가 ${n}곳</span>${cmp}`;
+    }
+    return (o.rank === 1 ? `<b class="res-win">낙찰</b><span class="sub">참가 ${n}곳</span>`
+      : `<b class="res-bad">탈락</b><span class="sub">${o.rank == null ? esc((o.remark || "순위 없음").replace("낙찰하한선미달", "하한선 미달")) + " · " : ""}참가 ${n}곳</span>`) + cmp;
+  }
+  // 비교 기록이면 표·펼침 칸의 '지일' 숫자(등수·투찰금액·투찰률)는 웹앱 기록 금액 기준, 실제(외주) 투찰은 비교 상자에(11/13 사용자 요청)
+  function mine(res) {
+    const s = res && res.recorded;
+    if (!s) return res && res.own;
+    return { rank: s.rank > 0 ? s.rank : null, underRank: s.rank < 0 ? s.rank : null, amount: s.amount, rate: s.bidRate,
+      remark: s.rank < 0 ? "낙찰하한선미달" : "", recorded: true };
+  }
+  const simPlace = (s) => (s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}등` : `하한선 미달(${s.rank}등)`);
+  // 비교 기록 펼침 칸 — 기록 금액으로 투찰했다면 순위·낙찰하한가와 차이·1순위와 차이(11/13)
+  function compareBlock(r) {
+    const res = r.result || {}, s = res.recorded;
+    if (!s) return "";
+    const gap = (v, lab) => (v == null ? "" : `<div><span>${lab}</span><b>${v >= 0 ? "+" : "−"}${won(Math.abs(v))}원</b></div>`);
+    const real = res.own, fl = s.floor;
+    const realPlace = real ? (real.rank != null ? `${real.rank}위 / ${res.bidderCount}곳` : real.underRank != null ? `하한선 미달 (${real.underRank}등)` : esc(real.remark || "순위 없음")) : "참가 안 함";
+    return `<div class="res-compare"><div class="res-compare-head">비교 기록 — 위 결과는 웹앱 기록 금액(${won(s.amount)}원) 기준, 아래는 실제 투찰${real ? "" : "(지일 참가 없음)"}</div>
+      <div class="res-grid">
+        <div><span>웹앱 금액 − 낙찰하한가</span><b>${s.gapToFloor != null ? `${s.gapToFloor >= 0 ? "+" : "−"}${won(Math.abs(s.gapToFloor))}원` : "-"}</b></div>
+        ${gap(s.gapToWinner, "웹앱 금액 − 실제 1순위")}
+        <div><span>웹앱 금액 사정률</span><b>${s.rate != null ? pct3(s.rate) : "-"}</b></div>
+        <div><span>실제 투찰금액</span><b>${real && real.amount != null ? `${won(real.amount)}원` : "-"}</b>${real && real.amount != null && fl != null ? `<em class="res-floor">낙찰하한가 대비 ${real.amount - fl >= 0 ? "+" : "−"}${won(Math.abs(real.amount - fl))}</em>` : ""}</div>
+        <div><span>실제 투찰률</span><b>${real && real.rate != null ? pct3(real.rate) : "-"}</b></div>
+        <div><span>실제 순위</span><b>${realPlace}</b></div>
+      </div></div>`;
   }
   function rateCell(r) {
     const res = r.result;
     if (!res || res.status !== "완료" || res.assessmentRate == null) return "-";
     const d = res.rateDiff;
     // 지일 등수·하한선 통과/미달을 먼저, 실제 사정률은 부가 정보로(11/10 사용자 요청) — 등수는 하한선 위면 N등, 미달이면 -N등
-    const o = res.own, place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
+    const o = mine(res), place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
     const pass = o && o.rank != null ? true : place ? false : d != null ? d >= 0 : null;
     // 하한선 통과/미달은 옆 개찰 결과 칸(낙찰·탈락 아래)과 겹쳐 등수만(11/10) — 지일이 참가 안 한 공고만 기준 대비 통과/미달
-    const main = place ? `지일 ${place}` : pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
-    const sub = `실제 ${pct3(res.assessmentRate)}${d != null ? ` · 기준 ${signed(d, "%p")}` : ""}`;
+    const main = place ? `${o.recorded ? "웹앱" : "지일"} ${place}` : pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
+    // 비교 기록이면 웹앱 금액의 사정률(그 금액이 하한선이 되는 사정률)도 같이
+    const own_rate = o && o.recorded && res.recorded.rate != null ? ` · 웹앱 ${pct3(res.recorded.rate)}` : "";
+    const sub = `실제 ${pct3(res.assessmentRate)}${own_rate}${d != null ? ` · 기준 ${signed(d, "%p")}` : ""}`;
     // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색
     return main ? `<span class="rate-main nowrap ${place ? "rank" : pass ? "ok" : "ng"}">${main}</span><span class="sub nowrap">${sub}</span>`
       : `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap">기준 ${signed(d, "%p")}</span>` : ""}`;
@@ -700,7 +734,7 @@
     return C.bidAmount({ planned: res.plannedPrice, lowerRate: r.lowerRate, a: res.aValue ?? r.aValue ?? 0, how: "ceil", unit: 1 });
   }
   function detailRow(r) {
-    const res = r.result || {}, o = res.own, w = res.winner;
+    const res = r.result || {}, o = mine(res), w = res.winner, lab = o && o.recorded ? "웹앱" : "지일";
     const item = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
     return `<tr class="bidlog-detail" data-id="${esc(r.id)}"><td colspan="7"><div class="res-grid">
       ${item("1순위 업체", w ? esc(w.name) : "-")}
@@ -709,14 +743,14 @@
       ${(() => {  // 지일 투찰금액 칸 아래에 낙찰하한가와 하한가 대비 차이(11/11 사용자 요청 — 칸 수는 그대로 9칸)
         const amt = o && o.amount != null ? o.amount : r.bid, fl = floorPrice(r);
         const sub = fl != null ? `<em class="res-floor">낙찰하한가 ${won(fl)}원 (${amt - fl >= 0 ? "+" : "−"}${won(Math.abs(amt - fl))})</em>` : "";
-        return `<div><span>지일 투찰금액</span><b>${won(amt)}원${o && o.amount != null ? "" : " (기록)"}</b>${sub}</div>`;
+        return `<div><span>${lab} 투찰금액</span><b>${won(amt)}원${o && o.amount != null ? "" : " (기록)"}</b>${sub}</div>`;
       })()}
-      ${item("지일 투찰률", o && o.rate != null ? pct3(o.rate) : "-")}
-      ${item("지일 순위", o ? (o.rank != null ? `${o.rank}위 / ${res.bidderCount}곳` : esc(o.remark || "순위 없음")) : "참가 기록 없음")}
+      ${item(`${lab} 투찰률`, o && o.rate != null ? pct3(o.rate) : "-")}
+      ${item(`${lab} 순위`, o ? (o.rank != null ? `${o.rank}위 / ${res.bidderCount}곳` : o.underRank != null ? `하한선 미달 (${o.underRank}등)` : esc(o.remark || "순위 없음")) : "참가 기록 없음")}
       ${item("예정가격 (실제)", res.plannedPrice != null ? `${won(res.plannedPrice)}원` : "-")}
       ${item("실제 사정률", pct3(res.assessmentRate))}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
-      </div>${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
+      </div>${compareBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
   }
   // 투찰 업체 전부(11/10 사용자 요청) — 개찰 완료 줄의 '결과 ▼'를 펼치면 결과 아래에 보임, 펼칠 때만 서버에서 받음
   const BIDDERS = new Map();   // id → 목록 | "loading" | {error}
@@ -728,10 +762,20 @@
     else if (!got.length) body = `<p class="why">투찰 업체 정보가 없습니다.</p>`;
     else {
       // 낙찰하한선 미달 업체는 하한선에 가까운(금액이 큰) 업체부터 -1, -2, …(11/10 사용자 요청)
-      const under = got.filter((b) => b.rank == null && /미달/.test(b.remark || "") && b.amount != null)
+      // 비교 기록이면 웹앱 기록 금액을 가상의 줄로 끼워 넣음(11/13 — 등수를 웹앱 금액 기준으로 봄)
+      const sim = (r.result || {}).recorded;
+      const ghost = sim ? { name: "▶ 웹앱 기록 금액", amount: sim.amount, rank: sim.rank > 0 ? sim.rank : null,
+        remark: sim.rank < 0 ? "낙찰하한선미달 (가정)" : "가정", ghost: true } : null;
+      const list = ghost ? [...got, ghost] : got;
+      // 미달 줄(금액 큰 순) — 비교 기록이면 실제 지일 줄은 번호 없이 '실제'로, 번호는 웹앱 금액(가상 줄) 기준
+      const under = list.filter((b) => b.rank == null && /미달/.test(b.remark || "") && b.amount != null)
         .sort((a, b) => b.amount - a.amount);
-      const neg = new Map(under.map((b, i) => [b, -(i + 1)]));
-      const shown = [...got.filter((b) => !neg.has(b)), ...under];   // 순위 있는 업체 → 그 밖 → 미달(-1부터)
+      const neg = new Map();
+      let k = 0;
+      under.forEach((b) => neg.set(b, sim && b.own ? "실제" : -(++k)));
+      const top3 = list.filter((b) => !neg.has(b)).sort((a, b) =>   // 순위 있는 줄(가상 줄 포함)은 금액 순, 그 밖(순위·미달 아님)은 뒤
+        (a.rank == null) - (b.rank == null) || (a.rank == null ? 0 : a.amount - b.amount));
+      const shown = [...top3, ...under];   // 순위 있는 업체 → 그 밖 → 미달(-1부터)
       // 칸은 21라인 경쟁업체 표와 같게(11/10 사용자 요청): 금액 아래 1순위와 차이, 사정률 = 이 금액이 하한선이 되는 사정률(아래 −100),
       // 기초금액 대비 투찰률(붉게), 사업자번호, 비고, A값을 뺀 투찰률((금액 − A) ÷ (예정가격 − A) — 하한율과 견주는 값)
       const res = r.result || {};
@@ -744,7 +788,7 @@
       const row = (b) => {
         const amt = b.amount, rt = amt != null ? rateAt(amt) : null;
         const rank = b.rank ?? neg.get(b) ?? "-";
-        return `<tr class="${b.own ? "own" : ""}${b.rank == null ? " unranked" : ""}">`
+        return `<tr class="${b.own ? "own" : ""}${b.ghost ? " ghost" : ""}${b.rank == null ? " unranked" : ""}">`
           + `<td class="${neg.has(b) ? "under" : ""}">${rank}</td>`
           + `<td class="name">${esc(b.name || "-")}</td>`
           + `<td class="num">${amt != null ? won(amt) : "-"}${amt != null && top != null ? `<span class="paren">(${comma(amt - top)})</span>` : ""}</td>`
@@ -784,10 +828,11 @@
     const q = ($("#bidlogQ").value || "").trim().toLowerCase();
     const rows = LOG.filter((r) => logMatch(r, q));
     const total = rows.reduce((s, r) => s + (r.bid || 0), 0);
-    const done = rows.filter((r) => r.result && r.result.status === "완료" && r.result.own && r.result.own.rank != null);
+    // 비교 기록은 웹앱 기록 금액 기준 등수로 셈(11/13)
+    const ranks = rows.filter((r) => r.result && r.result.status === "완료" && mine(r.result) && mine(r.result).rank != null).map((r) => mine(r.result).rank);
     $("#bidlogSummary").textContent = LOG.length
       ? `${rows.length}건${q ? ` (전체 ${LOG.length}건 중)` : ""} · 투찰금액 합계 ${won(total)}원`
-        + (done.length ? ` · 개찰 ${done.length}건 중 1순위 ${done.filter((r) => r.result.own.rank === 1).length} · 5위 안 ${done.filter((r) => r.result.own.rank <= 5).length}` : "")
+        + (ranks.length ? ` · 개찰 ${ranks.length}건 중 1순위 ${ranks.filter((k) => k === 1).length} · 5위 안 ${ranks.filter((k) => k <= 5).length}` : "")
       : "";
     if (!rows.length) {
       $("#bidlogRows").innerHTML = `<tr><td colspan="7" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;

@@ -3425,3 +3425,18 @@ def test_jecheon_notice_bond_rate_contact_company_and_bare_seal(tmp_path: Path):
     assert re.search(r"회 사 033-111-2222 ?휴대폰", t)
     assert re.search(r"회사명: \(주\)가상 ?대표자: 홍길동", t)
     assert re.search(r"서 약 자 홍길동 +인", t)
+
+def test_inline_paragraph_drops_tabs_pushed_by_values(tmp_path: Path):
+    """11/13 사용자 지적: 입찰참가등록서류 표 밖 '전화번호 :  [탭 4개](이메일 :   )'에 값을 넣으면서 탭을 그대로 둬
+    줄이 필요 이상 벌어져 이메일이 다음 줄로 넘어감 → 값으로 늘어난 너비만큼 탭을 뺌(원래 줄 길이 유지)."""
+    from quantdocs.fill import fill_hwpx
+
+    tab = lambda w: f'<hp:tab width="{w}" leader="0" type="1"/>'
+    body = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>      전화번호 :   '
+            + tab(1496) + tab(4000) * 3 + '(이메일 :   )</hp:t></hp:run></hp:p>')
+    v = vault.Vault({}, info={"회사명": "(주)가상", "전화번호": "031-566-7720", "이메일": "tongilil@naver.com"})
+    fill_hwpx(_mini_hwpx(tmp_path / "t.hwpx", body), tmp_path / "to.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "to.hwpx").read("Contents/section0.xml").decode()
+    assert "031-566-7720" in out and "tongilil@naver.com" in out
+    assert out.count("<hp:tab ") < 4  # 값으로 늘어난 만큼 탭을 뺌
+    assert re.search(r"031-566-7720 +\(이메일 : ", out)

@@ -217,9 +217,22 @@ def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
                 return mm.group(0)
             done.append(f"{mm.group('lab')} → {value}")
             pad = max(2, len(mm.group("sp")) - len(value) - 1) if mm.end() < len(body) else 0
+            # 늘어난 너비(값 + 앞 빈칸 + 남긴 빈칸 − 원래 빈칸) — 뒤따르는 탭을 그만큼 뺌(11/13)
+            grow[0] += _cjk_width(value, FILL_HEIGHT) + (0.5 + 0.5 * pad - 0.5 * len(mm.group("sp"))) * FILL_HEIGHT
             return f"{mm.group('lab')}{mm.group('colon')} {_mark(value)}" + " " * pad
-        parts = re.split(r"(<[^>]*>)", body)  # 태그(<hp:tab/> 등)는 그대로 두고 글 조각만
-        return m.group(1) + "".join(x if x.startswith("<") else rx.sub(rep, x) for x in parts) + m.group(3)
+        grow = [0.0]
+        src = re.split(r"(<[^>]*>)", body)
+        out = [x if x.startswith("<") else rx.sub(rep, x) for x in src]  # 태그(<hp:tab/> 등)는 그대로, 글 조각만
+        # (11/13 사용자 지적: 입찰참가등록서류 '전화번호 : 031-…  [탭 4개](이메일 : … )'가 필요 이상 벌어져 이메일이 다음 줄로)
+        # 표 밖 문단에서 값을 넣어 줄이 길어진 만큼(문단 전체), 첫 값 뒤 빈자리를 메우던 탭을 빼서 줄 길이를 원래대로
+        if loose and grow[0] > 0:
+            first = next((i for i, (a, b) in enumerate(zip(src, out)) if a != b), None)
+            for i in range(first + 1 if first is not None else len(out), len(out)):
+                tw = re.match(r'<(?:[\w.-]+:)?tab\b[^>]*\bwidth="(\d+)"', out[i])
+                if tw and grow[0] > 0:
+                    grow[0] -= int(tw.group(1))
+                    out[i] = ""
+        return m.group(1) + "".join(out) + m.group(3)
     new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, seg, flags=re.S)
     if done:
         new = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", new, flags=re.S)

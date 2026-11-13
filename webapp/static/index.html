@@ -1032,7 +1032,13 @@ footer b { color: var(--muted); }
 .calc-record .job.ok { color: var(--good, #1b6e43); font-weight: 600; }
 .bidlog-bar { justify-content: space-between; }
 .bidlog-bar input { width: 260px; }
-.bidlog-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.bidlog-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+/* (11/13 사용자 요청) 실제 투찰 / 분석용 웹앱(비교 기록) 고르기 칩 */
+.kind-chips { display: inline-flex; gap: 4px; margin-right: 6px; }
+#tab-calc .kind-chip { font-size: 13px; padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--ink); cursor: pointer; }
+#tab-calc .kind-chip span { color: var(--muted); font-size: 12px; margin-left: 2px; }
+#tab-calc .kind-chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+#tab-calc .kind-chip.on span { color: inherit; }
 .bidlog-csv { font-size: 13px; color: var(--brand); text-decoration: none; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 12px; background: var(--panel); }
 .bidlog-table th { width: auto; }
 .bidlog-table td { font-size: 13px; }
@@ -1100,9 +1106,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .bidlog-table td.res { white-space: normal; }
 .bidlog-table td.title { min-width: 130px; }
 @media (min-width: 1000px) { .bidlog-table td.res { min-width: 170px; } }
-/* (11/13 사용자 요청) 계약방법 — 수의계약·지명경쟁은 눈에 띄게 */
+/* (11/13 사용자 요청) 계약방법 칩 — 모두 같은 모양·색(수의·지명 노란 칩은 사용자 요청으로 뺌) */
 .bidlog-table .cm { display: inline-block; font-size: 11px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--ink); white-space: nowrap; }
-.bidlog-table .cm.cm-hi { border-color: #c47a00; color: #8a5a00; background: #fff3cf; font-weight: 700; }
 .res-grid { max-width: 900px; }
 .bidlog-table .sub a { color: var(--brand); }
 .bidlog-table td.method { min-width: 84px; }
@@ -1539,7 +1544,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="calc-lookup bidlog-bar">
         <label>찾기 <input id="bidlogQ" type="search" placeholder="공고명·공고번호·발주처"></label>
         <span id="bidlogSummary" class="job"></span>
-        <span class="bidlog-actions"><button type="button" id="bidlogReload">결과 새로 고침</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
+        <span class="bidlog-actions"><span id="bidlogKind" class="kind-chips"></span><button type="button" id="bidlogReload">결과 새로 고침</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
       </div>
       <div class="bidlog-wrap"><table class="calc-form bidlog-table">
         <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>투찰금액</th><th>기준 사정률</th><th>개찰 결과</th><th>지일 등수</th><th></th></tr></thead>

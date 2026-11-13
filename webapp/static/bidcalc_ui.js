@@ -721,12 +721,9 @@
     const pass = o && o.rank != null ? true : place ? false : d != null ? d >= 0 : null;
     // 하한선 통과/미달은 옆 개찰 결과 칸(낙찰·탈락 아래)과 겹쳐 등수만(11/10) — 지일이 참가 안 한 공고만 기준 대비 통과/미달
     const main = place ? `${o.recorded ? "웹앱" : "지일"} ${place}` : pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
-    // 비교 기록이면 웹앱 금액의 사정률(그 금액이 하한선이 되는 사정률)도 같이
-    const own_rate = o && o.recorded && res.recorded.rate != null ? ` · 웹앱 ${pct3(res.recorded.rate)}` : "";
-    const sub = `실제 ${pct3(res.assessmentRate)}${own_rate}${d != null ? ` · 기준 ${signed(d, "%p")}` : ""}`;
+    // 아래 줄의 실제·웹앱 사정률·기준 차이는 뺌(11/13 사용자 요청 — 펼친 결과 칸에 있음, 표가 좌우로 넘침)
     // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색
-    return main ? `<span class="rate-main nowrap ${place ? "rank" : pass ? "ok" : "ng"}">${main}</span><span class="sub nowrap">${sub}</span>`
-      : `${pct3(res.assessmentRate)}${d != null ? `<span class="sub nowrap">기준 ${signed(d, "%p")}</span>` : ""}`;
+    return main ? `<span class="rate-main nowrap ${place ? "rank" : pass ? "ok" : "ng"}">${main}</span>` : pct3(res.assessmentRate);
   }
   // 낙찰하한가 = A값 + (실제 예정가격 − A값) × 하한율, 원 미만 올림(11/11 사용자 요청 — 투찰 계산기 하한선 금액과 같은 식)
   function floorPrice(r) {
@@ -843,12 +840,12 @@
       const link = `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${encodeURIComponent(r.noticeNo)}&bidPbancOrd=${encodeURIComponent(r.noticeOrd || "000")}`;
       const open = OPEN_ROWS.has(r.id);
       return `<tr data-id="${esc(r.id)}" class="${open ? "is-open" : ""}">
-        <td class="when" data-l="기록일">${esc(day(r.recordedAt))}</td>
-        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType ? `<span class="sub nowrap">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}</span>` : ""}</td>
+        <td class="when" data-l="기록일">${esc(day(r.recordedAt)).split(" ").map((x) => `<span class="nowrap">${x}</span>`).join(" ")}</td>
+        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType ? `<span class="sub">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}</span>` : ""}</td>
         <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub nowrap">기초 ${won(r.basis)}</span>${r.lowerRate != null ? `<span class="sub nowrap">하한율 ${r.lowerRate}%</span>` : ""}</td>
         <td class="num" data-l="기준 사정률">${pct3(r.rate)}</td>
         <td class="res" data-l="개찰 결과"><div>${resultCell(r)}</div></td>
-        <td class="num" data-l="등수 · 사정률">${rateCell(r)}</td>
+        <td class="num" data-l="등수">${rateCell(r)}</td>
         <td class="act">${edit
           ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
           : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button><span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>

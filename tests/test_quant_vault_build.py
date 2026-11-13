@@ -3090,6 +3090,20 @@ def test_track_table_contract_name_head():
     assert 7 not in vals and 8 not in vals  # 증빙 번호·비고는 담당자가
 
 
+def test_checklist_table_headers_block_company_values(tmp_path: Path):
+    """11/13 사용자 요청: 보안 점검표 '항목 | 적용 | 부분적용 | 미적용 | 해당없음'의 '- 인터넷 전화 보안' 줄 '적용' 칸에 지일 전화번호가 들어감 —
+    낱말('전화')만 보지 말고 표 머리글을 먼저 봄: 점검 머리글 아래 열과 목록 줄 항목('- …')엔 회사 정보를 안 넣음. 보통 표는 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "전화번호": "099-111-2222"})
+    body = (_tbl([[_c(0, 0, "항    목"), _c(1, 0, "적용"), _c(2, 0, "해당없음")],
+                  [_c(0, 1, " - 인터넷 전화 보안"), _c(1, 1, ""), _c(2, 1, "")],
+                  [_c(0, 2, "전화"), _c(1, 2, ""), _c(2, 2, "")]])
+            + _tbl([[_c(0, 0, "상호"), _c(1, 0, "")], [_c(0, 1, "전화"), _c(1, 1, "")]]))
+    fill_hwpx(_mini_hwpx(tmp_path / "k.hwpx", body), tmp_path / "ko.hwpx", v)
+    out = zipfile.ZipFile(tmp_path / "ko.hwpx").read("Contents/section0.xml").decode()
+    assert out.count("099-111-2222") == 1 and "(주)가상" in out  # 보통 표의 전화 칸에만
+
 def test_subcontract_self_check_fills_contractor_side_only(tmp_path: Path):
     """11/13 사용자 결정(2번): 하도급계약의 적정성 판단 자기평가표 — 지일 = 수급인이라 왼쪽(사업명 = 공고명, 수급인 = 회사명 + 전화)만,
     하수급인(하도급 받는 다른 회사) 쪽 '(전화) :'·사업명은 비움(예전엔 하수급인 전화 칸에 지일 번호가 들어감)."""

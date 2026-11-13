@@ -3071,6 +3071,26 @@ def test_inline_fax_number_label(tmp_path: Path):
     assert re.search(r"전화번호: 033-000-0000\s+팩스번호: 033-000-0001", text), text
 
 
+def test_trustor_trustee_signature_fills_trustee_only(tmp_path: Path):
+    """11/13 사용자 제보: 서명란 두 칸 '위탁자 / 주 소 : / 기관(회사)명 : / 대표자 성명 : (인)' · '수탁자 / …'에 같은 지일 주소가 들어가고
+    기관명·대표자는 빔 — 위탁자(발주기관)는 비우고 수탁자(지일)만 주소·회사명·대표자."""
+    from quantdocs.fill import fill_hwpx
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+
+    def box(col, who):
+        lines = [who, "주  소 : ", "기관(회사)명 : ", "대표자 성명 :                    (인)"]
+        return (f'<hp:tc><hp:subList>{"".join(para(x) for x in lines)}</hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    src = _mini_hwpx(tmp_path / "s.hwpx", "<hp:p><hp:run><hp:tbl><hp:tr>" + box(0, "위탁자") + box(1, "수탁자") + "</hp:tr></hp:tbl></hp:run></hp:p>")
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"}))
+    out = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    left, right = [re.sub(r"<[^>]+>", "", c) for c in re.findall(r"<hp:tc>.*?</hp:tc>", out, re.S)]
+    assert "강원 정선" not in left and "(주)가상" not in left and "홍길동" not in left, left
+    assert "강원 정선" in right and "(주)가상" in right and re.search(r"대표자 성명 : 홍길동\s+\(인\)", right), right
+
+
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
     """11/13 사용자 제보(운리단길): ① 입찰참가신청서 표 밖 '신청인(대표사)          (인)'에 대표자 이름이 빠짐(쌍점 없는 서명 줄 규칙에 신청인이 없었음)
     ② 위임장 '소 속 (업체명)' 칸만 원본 문단이 오른쪽 정렬이라 '(주)지일'이 오른쪽으로 치우침 — 같은 표 다른 값 칸이 가운데면 가운데로."""

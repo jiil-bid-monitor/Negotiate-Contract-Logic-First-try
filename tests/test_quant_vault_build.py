@@ -3421,7 +3421,7 @@ def test_jecheon_notice_bond_rate_contact_company_and_bare_seal(tmp_path: Path):
               g2b_no="R26BK00000001-000", basis=2_000_000_000)
     t = re.sub(r"\s+", " ", _text(zipfile.ZipFile(tmp_path / "jo.hwpx").read("Contents/section0.xml").decode()))
     assert "R26BK00000001-000" in t
-    assert "보증금율 : 100분의 5 (금 100,000,000원)" in t
+    assert "보증금율 : 5% (금 100,000,000원)" in t
     assert re.search(r"회 사 033-111-2222 ?휴대폰", t)
     assert re.search(r"회사명: \(주\)가상 ?대표자: 홍길동", t)
     assert re.search(r"서 약 자 홍길동 +인", t)

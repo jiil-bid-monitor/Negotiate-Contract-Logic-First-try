@@ -231,6 +231,12 @@ def _label_key(text: str) -> str | None:
     if "사업자등록번호" in t and re.match(r"생년월일|법인등록번호|법인번호", t):
         # '생년월일(사업자등록번호)'·'법인등록번호(사업자등록번호)' — 법인은 생년월일 = 법인등록번호, 괄호 안에 사업자등록번호(11/05 사용자 요청)
         return "_corp_biz"
+    # 입찰참가신청서 끝 '입찰참가 신청자: / 주소: / 계약상대자등록번호: / 대표자: (인)'(11/13 사용자 확인) —
+    # 신청자 = 신청하는 회사(상호), 계약상대자등록번호 = 사업자등록번호. 대표자는 아래 줄에 따로
+    if re.fullmatch(r"(?:입찰)?참가신청(?:자|인|업체)", t):
+        return "회사명"
+    if re.fullmatch(r"계약상대자(?:등록)?번호", t):
+        return "사업자등록번호"
     if t in ("서약자", "서약인", "각서인", "확약자"):  # 청렴계약 이행서약서 '서 약 자 :   (인)' = 대표자 이름(11/05)
         return "대표자"
     if "전화" in t and re.search(r"전자우편|이메일|e-?mail", t, re.I):
@@ -1043,6 +1049,9 @@ class _Chars:
         """pid 문단 모양에 내어쓰기 width를 준 사본 id — 둘째 줄부터 첫 줄 시작보다 width만큼 오른쪽에서 시작(11/05 '주 소 :' 줄)."""
         if pid not in self.paras or self.align(pid) in ("CENTER", "RIGHT", "DISTRIBUTE"):
             return pid
+        if self.align(pid) in ("JUSTIFY", "DISTRIBUTE_SPACE"):
+            # 양쪽 정렬이면 넘친 첫 줄의 낱말 사이가 벌어짐('강원특별자치도   정선군   남면' — 11/13 사용자 제보) → 왼쪽 정렬 + 내어쓰기
+            return self.left_hang(pid, width)
         key = (pid, width)
         if key not in self.added_hang:
             self.added_hang[key] = self._next_para_id()

@@ -2708,3 +2708,44 @@ def test_track_text_wraps_by_word():
     assert c.start not in rep2.one_line  # 9pt로도 안 들어가는 긴 낱말은 줄이지 않음(칸 끝에서 넘어감)
     _c, lines, _k = _wrap_track_cell(xml, c, ["3,610,090,000"], False, FillReport("x"))
     assert lines == ["3,610,090,000"]  # 숫자 칸은 그대로
+
+
+def test_bid_applicant_and_contractor_no_labels(tmp_path: Path):
+    """11/13 사용자 확인: 입찰참가신청서 끝 '입찰참가 신청자: / 주소: / 계약상대자등록번호: / 대표자: (인)' 표 —
+    신청자 = 회사(상호), 계약상대자등록번호 = 사업자등록번호(둘 다 비었음). 대표자는 아래 줄에 따로."""
+    from quantdocs.fill import _label_key, fill_hwpx
+
+    assert _label_key("입찰참가 신청자:") == "회사명" and _label_key("계약상대자등록번호:") == "사업자등록번호"
+    rows = [("입찰참가 신청자:", 0), ("주소:", 1), ("계약상대자등록번호:", 2), ("대표자:", 3)]
+    body = _tbl([[_c(0, r, t), _c(1, r, "")] for t, r in rows])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "가상시 가상로 1", "사업자등록번호": "123-45-67890", "대표자": "홍길동"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    for want in ("(주)가상", "123-45-67890", "가상시 가상로 1", "홍길동"):
+        assert want in sec, want
+
+
+def test_label_line_overflow_left_aligned_not_justified(tmp_path: Path):
+    """11/13 사용자 제보: 서명 줄 '주    소: 강원특별자치도 정선군 남면 …'이 두 줄로 넘치면서 첫 줄 낱말 사이가 벌어짐 —
+    원래 문단이 양쪽 정렬이라 내어쓰기 사본도 양쪽 정렬이었음. 내어쓰기 사본은 왼쪽 정렬로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head xmlns:hh="h"><hh:refList><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1300"><hh:ratio hangul="100"/>'
+              '</hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/>'
+              '<hh:margin><hc:intent value="0"/><hc:left value="0"/></hh:margin>'
+              '<hh:lineSpacing type="PERCENT" value="160"/></hh:paraPr></hh:paraProperties></hh:refList></hh:head>')
+    line = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    pad = " " * 34
+    body = line(f"{pad}상    호: ") + line(f"{pad}주    소: ") + line(f"{pad}대 표 자:           (인)")
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "대표자": "홍길동"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    z = zipfile.ZipFile(tmp_path / "o.hwpx")
+    sec, head = z.read("Contents/section0.xml").decode(), z.read("Contents/header.xml").decode()
+    pid = re.search(r'<hp:p paraPrIDRef="(\d+)"><hp:run charPrIDRef="0"><hp:t>\s*주    소: ', sec).group(1)
+    assert pid != "0"  # 내어쓰기 사본
+    block = re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)
+    assert 'horizontal="LEFT"' in block and 'value="-' in block, block

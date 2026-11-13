@@ -184,12 +184,12 @@ _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴�
 
 _SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|직인|날인)[)）]?$")
 _INLINE_LABELS = {"TEL": "전화번호", "Tel": "전화번호", "전화": "전화번호", "전화번호": "전화번호",
-                  "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일",
+                  "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "팩스번호": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일",
                   "업태": "업태", "종목": "종목"}
 # 이름표는 글자 사이 띄어쓰기를 무시하고 읽음 — '전    화 :'·'팩 스 :'(11/12 필암 — 같은 줄 '(팩스: …)'만 채우고 전화가 비었음,
 # 사용자 요청 "요청서 읽을 때 띄어쓰기 제외하고 단어 읽기")
 _SPACED = lambda w: r"[  　]*".join(w)
-_INLINE_LABS = "|".join([r"(?i:TEL)", r"(?i:FAX)", r"(?i:E-?MAIL)", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스"), _SPACED("이메일"),
+_INLINE_LABS = "|".join([r"(?i:TEL)", r"(?i:FAX)", r"(?i:E-?MAIL)", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스번호"), _SPACED("팩스"), _SPACED("이메일"),
                          _SPACED("업태"), _SPACED("종목")])
 _INLINE_RE = re.compile(rf"(?P<lab>{_INLINE_LABS})(?P<colon>\s*[:：])(?P<sp>[  　]*)(?=(?:{_INLINE_LABS})|$)")
 

@@ -924,7 +924,7 @@ def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
     return xml
 
 
-_PH = r"[○ｏoOㅇ◯](?: ?[○ｏoOㅇ◯]){1,}"  # 서명 줄 자리표시 '○○○'·'o o o'
+_PH = r"[○ｏoOㅇ◯0０](?: ?[○ｏoOㅇ◯0０]){1,}"  # 서명 줄 자리표시 '○○○'·'o o o'·'00회사 대표 000'(숫자 0 — 11/13)
 
 
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None, sign_only: bool = False) -> str:
@@ -1102,8 +1102,10 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 seg = re.sub(rf"{_PH}(\s*)(?=업체|회사)(?:업체|회사)", lambda mm: _mark(company) + mm.group(1), xml[s:e], count=1)
                 # 이름은 쌍점 바로 옆에(11/11 사용자 요청 — 예전엔 자리표시 앞 빈칸을 그대로 둬서 '대표자 :         이운봉 (인)'),
                 # 쌍점 뒤 빈칸은 이름 뒤로 옮겨 줄 길이·(인) 자리 유지
+                src = seg  # '000(인)'처럼 자리표시에 '(인)'이 붙어 있으면 이름 뒤 한 칸
                 seg = re.sub(rf"(대\s*표(?:\s*자|\s*이\s*사)?(?:\s*[:：])?)(\s*){_PH}",
-                             lambda mm: f"{mm.group(1)} {_mark(name)}" + " " * max(0, len(mm.group(2)) - 1), seg, count=1)
+                             lambda mm: f"{mm.group(1)} {_mark(name)}" + " " * max(0, len(mm.group(2)) - 1)
+                             + (" " if len(mm.group(2)) <= 1 and src[mm.end():mm.end() + 1] in ("(", "（") else ""), src, count=1)
                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                 edits.append((s, e, seg))
                 rep.filled.append(f"서명 줄 자리표시 → {company} 대표자 {name}")

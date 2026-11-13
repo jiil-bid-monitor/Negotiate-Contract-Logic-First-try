@@ -3318,6 +3318,16 @@ def test_placeholder_signer_ascii_o_and_title_blank(tmp_path: Path):
     assert re.search(r"서약자 : \(주\)가상\s+대표 홍길동 \(서명 또는 날인\)", text), text
 
 
+def test_placeholder_signer_digit_zero(tmp_path: Path):
+    """11/13 사용자 지적: '서약자 : 00회사 대표 000(인)' — 자리표시가 숫자 0이라 그대로 남음. 0도 자리표시 글자, '(인)'이 붙어 있으면 이름 뒤 한 칸."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    body = '<hp:p><hp:run charPrIDRef="0"><hp:t>서약자 : 00회사  대표 000(인)</hp:t></hp:run></hp:p>'
+    fill_hwpx(_mini_hwpx(tmp_path / "z.hwpx", body), tmp_path / "zo.hwpx", v)
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "zo.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"서약자 : \(주\)가상\s+대표 홍길동 \(인\)", text), text
+
 def test_staff_grade_rows_and_note_filled(tmp_path: Path):
     """11/13 사용자 요청(부산 업사이클센터 자기평가표): 상한점수 줄의 합계(2.6)만 들어가고 등급 줄 평점 칸·비고 '명 × 점 = 점'은 빔 —
     등급별 사람 수대로 '1.0' · '1명 × 1.0점 = 1.0점', 없는 등급은 0명."""

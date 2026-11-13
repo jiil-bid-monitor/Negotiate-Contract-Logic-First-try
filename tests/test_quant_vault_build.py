@@ -3103,3 +3103,19 @@ def test_placeholder_signer_line_without_colon(tmp_path: Path):
     text = re.sub(r"<[^>]+>", "", out).replace("", "").replace("", "")
     assert re.search(r"서 약 자 : \(주\)가상\s+대표 홍길동 \(서명 또는 날인\)", text), text
     assert "○○○회사" not in text and "대표이사 ○○○     (인)" in text
+
+
+def test_placeholder_signer_ascii_o_and_title_blank(tmp_path: Path):
+    """11/13 사용자 요청: 별지서식 24 근로자 권리보호 이행 서약서 — 서명 줄 자리표시가 영문 'o o o'(띄어 씀)인 것도 회사명·대표자로,
+    본문 '당사는 서울특별시에서 시행하는            계약업체로서'의 빈칸 = 공고명."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    body = ('<hp:p><hp:run charPrIDRef="0"><hp:t>당사는 서울특별시에서 시행하는            </hp:t></hp:run>'
+            '<hp:run charPrIDRef="0"><hp:t> 계약업체로서 근로자의 권리보호를 위해</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run charPrIDRef="0"><hp:t>서약자 : o o o 회사 대표 o o o (서명 또는 날인)</hp:t></hp:run></hp:p>')
+    fill_hwpx(_mini_hwpx(tmp_path / "w.hwpx", body), tmp_path / "wo.hwpx", v, title="가상 사업")
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "wo.hwpx").read("Contents/section0.xml").decode())
+    text = text.replace("", "").replace("", "")
+    assert "시행하는 가상 사업" in text and "계약업체로서" in text, text
+    assert re.search(r"서약자 : \(주\)가상\s+대표 홍길동 \(서명 또는 날인\)", text), text

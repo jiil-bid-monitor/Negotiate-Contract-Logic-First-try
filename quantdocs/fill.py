@@ -248,6 +248,12 @@ def _label_key(text: str) -> str | None:
     # 안내 문장('※ …'·'…기재함')만 이름표가 아님
     if re.fullmatch(r"대표(?:자|이사)?(?:의)?성명", t):  # '대표자 성명 :   (인)'(11/13 위탁·수탁 서명란) — '…성명' 개인 칸 규칙보다 먼저
         return "대표자"
+    if re.match(r"법인등기", t):
+        # '법인등기부등본(생년월일)'·'법인등기부등본 (주민등록번호)' = 법인등록번호 — '주민'이 들어 있어도 개인 번호 칸 비움 규칙보다 먼저
+        # (11/13 사용자 지적: 부산 업사이클센터 서식 18 신용평가 등급확인서가 빔. 법인은 주민등록번호 자리에 법인등록번호)
+        return "법인등록번호"
+    if re.fullmatch(r"(?:회사명|업체명|상호|법인명)/(?:대표자|대표이사)(?:성명)?", t):
+        return "_co_rep"  # '회사명 / 대표자 :      (인)' = '(주)지일 / 이운봉'(11/13 사용자 지적 — 회사명만 들어갔음)
     if not t or _SKIP_LABEL.search(t) or _SENTENCE.search(t):
         return None
     if re.fullmatch(r"기관\((?:회사|업체)\)명|(?:회사|업체)\(기관\)명|기관명\((?:회사|업체)명\)", t):
@@ -299,6 +305,9 @@ def _fmt_date(v) -> str:
 
 
 def _value(key: str, vault) -> str:
+    if key == "_co_rep":
+        co, rep = _value("회사명", vault), _value("대표자", vault)
+        return f"{co} / {rep}" if co and rep else co or rep
     if key == "_corp_biz":
         corp, biz = vault.info.get("법인등록번호", ""), vault.info.get("사업자등록번호", "")
         return f"{corp} ({biz})" if corp and biz else corp or biz
@@ -1084,9 +1093,10 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                     rep.filled.append(f"이름표 + 괄호 자리 → {_sq(slot.group(1))} {v1[:20]} · {_sq(slot.group(2))} {v2[:20]}")
                     continue
         # '업 체 명 :' 또는 서명 줄 '대표자 :          (인)'(11/04 서식 8·9) · '신청인(대표자) :      (인 또는 서명)'(서식 1)
-        m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL})?\s*", text)
+        # 쌍점 뒤에 '(대표사)'가 미리 적힌 줄 '업 체 명 :  (대표사)'(11/13 사용자 지적: 부산 업사이클센터 — 업체명이 빔)도 — 값은 '(대표사)' 앞에
+        m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL}|[(（]\s*(?:공\s*동\s*)?대\s*표\s*사\s*[)）])?\s*", text)
         if m:
-            cands.append((s, e, m.group(1), bool(m.group(2)), False, n))
+            cands.append((s, e, m.group(1), bool(m.group(2)) and bool(re.fullmatch(_SEAL_TAIL, m.group(2))), False, n))
         elif _bare_label(text):  # 표 칸 안 줄은 머리글일 수 있어 — 칸 안이면 바로 옆 줄이 서명 줄일 때만(아래에서 거름)
             in_cell = any(cs <= s and e <= ce for cs, ce in cells)
             cands.append((s, e, _bare_label(text), False, "cell" if in_cell else True, n))
@@ -1113,6 +1123,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         seg = _after_colon(xml[s:e], value, seal)
         if seg is None:
             continue
+        seg = re.sub(rf"({_VE})([(（]\s*(?:공\s*동\s*)?대\s*표\s*사)", r"\1 \2", seg, count=1)  # '(주)지일 (대표사)' — 붙지 않게 한 칸
         if bare:  # 쌍점 없는 서식은 쌍점 없이 — ' : 값'을 '   값'으로
             seg = seg.replace(f" : {_mark(value)}", f"   {_mark(value)}", 1)
         if key == "대표자" and not seal and n + 1 < len(order):
@@ -1458,7 +1469,8 @@ class _Chars:
         b = self.blocks.get(cid, "")
         m = re.search(r'\btextColor="#([0-9A-Fa-f]{6})"', b)
         return (bool(m) and m.group(1).upper() != "000000") or bool(re.search(r"<(?:[\w.-]+:)?(?:bold|italic)\s*/>", b)) \
-            or bool(re.search(r'<(?:[\w.-]+:)?underline\b[^>]*\btype="(?!NONE)', b)) or _tight(b)
+            or bool(re.search(r'<(?:[\w.-]+:)?underline\b[^>]*\btype="(?!NONE)', b)) or _tight(b) \
+            or bool(re.search(r'<(?:[\w.-]+:)?strikeout\b[^>]*\bshape="(?!NONE)', b))
 
     def smaller(self, cid: str, height: int) -> str:
         return self.variant(cid, height)
@@ -1493,6 +1505,8 @@ class _Chars:
             b = re.sub(r'\btextColor="#[0-9A-Fa-f]{6}"', 'textColor="#000000"', b, count=1)  # 채운 값은 검은 글씨
             b = re.sub(r"<(?:[\w.-]+:)?(?:bold|italic)\s*/>", "", b)  # 굵게·기울임 없이(11/06)
             b = re.sub(r'(<(?:[\w.-]+:)?underline\b[^>]*\btype=")\w+(")', r"\g<1>NONE\2", b, count=1)
+            # 취소선도 없이(11/13 사용자 지적: 부산 업사이클센터 일반현황 '주소' 빈 칸 글자 모양에 취소선이 걸려 있어 — 빈 칸이라 안 보였음 — 주소에 줄이 그어짐)
+            b = re.sub(r'(<(?:[\w.-]+:)?strikeout\b[^>]*\bshape=")\w+(")', r"\g<1>NONE\2", b, count=1)
             b = _untighten(b)
             ref = self._font_ref(cid)
             return b.replace(ref, self._unified_ref(cid, face), 1) if ref else b

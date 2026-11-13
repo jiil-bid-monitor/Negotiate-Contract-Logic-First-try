@@ -3107,6 +3107,59 @@ def test_pledge_signer_value_after_colon(tmp_path: Path):
     assert re.search(r"직\s+위\s+: 대표이사", text) and re.search(r"성\s+명\s+: 홍길동\s+\(인\)", text), text
 
 
+def test_busan_upcycle_signer_lines_strike_and_corp_register(tmp_path: Path):
+    """11/13 사용자 지적(부산 업사이클센터 R26BK01809556): ① '회사명 / 대표자 :   (인)'에 회사명만 ② '업 체 명 :  (대표사)'가 빔
+    ③ 일반현황 '주소' 빈 칸 글자 모양의 취소선이 값에 그대로 ④ 신용평가 등급확인서 '법인등기부등본 (주민등록번호)'가 빔('주민' 칸 비움 규칙에 걸림)."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="LEFT"/></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000"></hh:charPr>'
+              '<hh:charPr id="9" height="1000"><hh:strikeout shape="SOLID" color="#000000"/></hh:charPr></hh:charProperties></hh:head>')
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+
+    def cell(col, row, inner):
+        return (f'<hp:tc><hp:subList>{inner}</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+                '<hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    tbl = ('<hp:p><hp:run><hp:tbl><hp:tr>' + cell(0, 0, para("주    소"))
+           + cell(1, 0, '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="9"/></hp:p>') + '</hp:tr><hp:tr>'
+           + cell(0, 1, para("법인등기부등본") + para("(주민등록번호)")) + cell(1, 1, para("")) + '</hp:tr></hp:tbl></hp:run></hp:p>')
+    body = para("회사명 / 대표자 :          (인)") + para("          업 체 명 :  (대표사)                  ") + para("          대 표 자 : ") + tbl
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선",
+                                                              "법인등록번호": "110111-1234567"}))
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    text = re.sub(r"<[^>]+>", "", out)
+    assert "회사명 / 대표자 : (주)가상 / 홍길동" in text
+    assert "          업 체 명 : (주)가상 (대표사)" in text  # 들여쓰기 그대로, (대표사) 앞에
+    assert "110111-1234567" in text
+    cid = re.search(r'charPrIDRef="(\d+)"><hp:t>강원 정선', out).group(1)
+    assert 'shape="SOLID"' not in re.search(rf'<hh:charPr id="{cid}".*?</hh:charPr>', head, re.S).group(0)
+
+
+def test_form_staff_rows_plain_points_per_grade(tmp_path: Path):
+    """11/13 사용자 지적(부산 업사이클센터 자기평가표): '기술능력(6점) | 상한점수 6점 / 기술인력보유현황 | 특급기술자 | 1.0점 …'(비고 '명 × 점 = 점')
+    — '/인'·'각' 없이 점수만이라 1인당 점수로 못 읽어 화면 기술인력 칸이 안 나왔음."""
+    from quantdocs.fill import Cell
+    from quantdocs.selfscore import read_form
+
+    def c(row, col, text, rowspan=1, colspan=1):
+        return Cell(0, 0, row, col, colspan, text, rowspan)
+    cells = [c(0, 0, "항 목"), c(0, 1, "세 부 항 목", colspan=4), c(0, 5, "배 점"), c(0, 6, "평 점"), c(0, 7, "비 고"),
+             c(1, 0, "기술능력(6점)", rowspan=5), c(1, 1, "상한점수", colspan=4), c(1, 5, "6점"), c(1, 6, ""), c(1, 7, "")]
+    for i, (g, p) in enumerate((("특급기술자", "1.0점"), ("고급기술자", "0.8점"), ("중급기술자", "0.6점"), ("초급기술자", "0.4점"))):
+        r = 2 + i
+        if i == 0:
+            cells.append(c(r, 1, "기술인력보유현황", rowspan=4))
+        cells += [c(r, 2, g, colspan=3), c(r, 5, p), c(r, 6, ""), c(r, 7, "  명 × 점 =  점")]
+    row = next(r for r in read_form(cells) if r.crit is not None and r.crit.kind == "staff")
+    assert row.crit.per_grade == {"특급": 1.0, "고급": 0.8, "중급": 0.6, "초급": 0.4} and row.points == 6.0
+
+
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
     """11/13 사용자 제보(운리단길): ① 입찰참가신청서 표 밖 '신청인(대표사)          (인)'에 대표자 이름이 빠짐(쌍점 없는 서명 줄 규칙에 신청인이 없었음)
     ② 위임장 '소 속 (업체명)' 칸만 원본 문단이 오른쪽 정렬이라 '(주)지일'이 오른쪽으로 치우침 — 같은 표 다른 값 칸이 가운데면 가운데로."""

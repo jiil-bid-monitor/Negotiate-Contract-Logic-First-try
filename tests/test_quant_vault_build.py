@@ -2900,3 +2900,23 @@ def test_credit_financial_base_date(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", **got}))
     sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     assert "2025. 12. 31." in sec and "2026. 06. 16." in sec
+
+
+def test_deduction_cells_always_zero(tmp_path: Path):
+    """11/13 사용자 결정: 사업수행능력 자기평가표 감점 표('구분 | 총배점(상한점수) | 감점 | 등급' — 임금체불·고용개선조치 미이행 −2.0)
+    — 지일은 감점 사유가 없으니 다른 공고 서식에서도 감점 칸은 늘 0."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                   f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "구      분"), c(1, 0, "총배점(상한점수)"), c(2, 0, "감점"), c(3, 0, "등급")],
+            [c(0, 1, "임금체불"), c(1, 1, "5.0", 2), c(2, 1, ""), c(3, 1, "공고일 기준, 체불사업주로 명단이 공개중인 자(-2.0)")],
+            [c(0, 2, "고용개선조치 미이행"), c(2, 2, ""), c(3, 2, "최근 2년 이내 고용개선조치 미이행 사업주로 명단이 공표된 자(-2.0)")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "d.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups())): re.sub(r"<[^>]+>", "", m)
+           for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S)}
+    assert got[(2, 1)] == "0" and got[(2, 2)] == "0", got
+    assert got[(1, 1)] == "5.0" and got[(2, 0)] == "감점"

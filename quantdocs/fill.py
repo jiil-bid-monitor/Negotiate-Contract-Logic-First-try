@@ -2122,6 +2122,27 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
     return new
 
 
+def _deduction_edits(cells: list[Cell], rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+    """감점 칸 = 늘 0(11/13 사용자 결정: 사업수행능력 평가에서 지일은 감점 사유(임금체불·고용개선조치 미이행 등)가 없음).
+    머리 칸이 '감점'(·'감점점수'·'감점(점)')인 열의 빈 칸마다 '0' — 합계·계 줄은 뺌."""
+    plain = lambda t: re.sub(r"\([^)]*\)", "", _sq(t))
+    head = next((c for c in cells if plain(c.text) in ("감점", "감점점수", "감점액")), None)
+    if head is None:
+        return []
+    col = head.col
+    out = []
+    for c in cells:
+        if c.row < head.row + head.rowspan or not (c.col <= col < c.col + c.colspan) or not c.blank:
+            continue
+        label = next((o for o in cells if o.col == 0 and o.row <= c.row < o.row + o.rowspan), None)
+        if label is not None and re.fullmatch(r"(?:합|소|총)?계|총점", _sq(label.text)):
+            continue
+        out.append((c, ["0"], False))
+    if out:
+        rep.filled.append(f"감점 칸 {len(out)}곳 → 0 (감점 사유 없음)")
+    return out
+
+
 def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
     """자기평가 심사표('자기평점'·'평점' 칸)에 점수 — 제안요청서 배점표·계산 조건대로, 서식 배점 기준과 다르면 서식 기준,
     계산식끼리 다르면 유리한 쪽(11/05 사용자 결정, `selfscore.score_form`). '계' = 모든 줄 점수가 있을 때만 합계."""
@@ -2217,6 +2238,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     track_marks += [escape(lines[0]) for _c, lines, _k in track_edits if lines and len(lines[0]) >= 4]
                 if self_scores:
                     edits += _self_score_edits(cells, self_scores, rep)
+                if not sign_only:
+                    edits += _deduction_edits(cells, rep)
                 for c in cells:
                     if sign_only and _row_group(cells, c) != "신청인":
                         continue

@@ -2853,3 +2853,34 @@ def test_colon_label_value_next_to_colon(tmp_path: Path):
     assert got[(1, 1)] == ("TOP", ["강원특별자치도 정선군 남면", "무릉2로 64(공장1층)"]) and got[(0, 1)][0] == "TOP", got
     assert got[(1, 2)] == ("BOTTOM", ["123-45-67890"]) and got[(0, 2)][0] == "CENTER"
     assert got[(1, 0)] == ("CENTER", ["(주)가상"]) and got[(1, 3)] == ("CENTER", ["홍길동"])
+
+
+def test_colon_in_value_cell_is_kept(tmp_path: Path):
+    """11/13 사용자 지적: 정보 비공개 동의서 '상호(법인명) | : | / 주소 | : | / 대표자 | : | (인) / 계약상대자등록번호 | : |' — 값 칸에
+    미리 적힌 ':'를 지우고 값을 넣었음. ':'는 두고 ': 값', 길면 다음 줄은 값 첫 글자 위치에서(빈칸)."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1300" useFontSpace="0"><hh:ratio hangul="100"/>'
+              '<hh:spacing hangul="0"/></hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0">'
+              '<hh:align horizontal="LEFT"/><hh:margin><hc:intent value="0"/><hc:left value="0"/></hh:margin></hh:paraPr></hh:paraProperties></hh:head>')
+    cell = lambda col, row, t, w: (f'<hp:tc><hp:subList vertAlign="CENTER"><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+                                   f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                                   f'<hp:cellSz width="{w}" height="2997"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+    rows = [("상호(법인명)", ""), ("주소", ""), ("대표자", "(인)"), ("계약상대자등록번호", "")]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join(f"<hp:tr>{cell(0, r, t, 10000)}{cell(1, r, ':', 18000)}{cell(2, r, s, 6000)}</hp:tr>"
+                                              for r, (t, s) in enumerate(rows)) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "c.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "대표자": "홍길동",
+                              "사업자등록번호": "123-45-67890"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {}
+    for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S):
+        pos = tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups()))
+        got[pos] = [re.sub(r"<[^>]+>", "", p) for p in re.findall(r"<hp:p\b.*?</hp:p>", m, re.S)]
+    assert got[(1, 0)] == [": (주)가상"] and got[(1, 2)] == [": 홍길동"] and got[(1, 3)] == [": 123-45-67890"], got
+    addr = got[(1, 1)]
+    assert addr[0].startswith(": 강원특별자치도") and len(addr) == 2 and addr[1].startswith("  ") and not addr[1].startswith("   ")
+    assert got[(2, 2)] == ["(인)"]

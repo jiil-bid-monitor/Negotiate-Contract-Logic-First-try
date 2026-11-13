@@ -624,7 +624,7 @@ def _word_lines(text: str, height: int, width: float) -> list[str]:
     return lines + [line] if line else lines
 
 
-def _colon_layout(xml: str, label, target, value: str, chars: "_Chars") -> tuple[list[str], str | None, str | None]:
+def _colon_layout(xml: str, label, target, value: str, chars: "_Chars", lead: str = "") -> tuple[list[str], str | None, str | None]:
     """'주소: | 값' 칸 — (값 줄들, 이름표 칸 세로 정렬, 값 칸 세로 정렬). 값이 길면 낱말 사이에서 나눠 줄마다 문단 하나(줄 첫머리가 같은 곳).
     이름표가 한 줄이고 값이 여러 줄이면 둘 다 위로(값 첫 줄이 ':' 옆), 이름표가 여러 줄이고 값이 한 줄이면 값을 아래로(':'이 있는 마지막 줄 옆)."""
     lm = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', xml[label.start:label.end])
@@ -633,13 +633,16 @@ def _colon_layout(xml: str, label, target, value: str, chars: "_Chars") -> tuple
     vw, lw = _inner_width(xml, target, chars), _inner_width(xml, label, chars)
     if not vw or not lw:
         return [value], None, None
-    lines = [value] if re.search(_SEAL_TAIL, value) else _word_lines(value, val_h, vw * 0.97)
+    lines = [value] if re.search(_SEAL_TAIL, value) else _word_lines(value, val_h, vw * 0.97 - _cjk_width(lead, val_h))
+    if lead:  # 값 칸에 미리 적힌 ':' — 첫 줄은 ': 값', 다음 줄은 같은 너비 빈칸 뒤에서 시작(값 첫 글자 위치에 맞춤)
+        pad = " " * int(round(_cjk_width(lead, val_h) / (val_h / 2)))
+        lines = [lead + lines[0]] + [pad + x for x in lines[1:]]
     # 이름표는 원본 문단 그대로 글자 단위로 넘어감('계약상대자등록번 / 호:') — 너비로 줄 수만 어림
     n_lab = max(1, -(-int(_cjk_width(re.sub(r"\s+", " ", label.text).strip(), lab_h)) // max(lw, 1)))
     if len(lines) > n_lab:
         return lines, "TOP", "TOP"
     if n_lab > len(lines):
-        return lines, None, "BOTTOM"
+        return lines, None, (None if lead else "BOTTOM")  # ':'가 값 칸에 있으면 원래 자리 그대로
     return lines, None, None
 
 
@@ -2317,7 +2320,19 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if chars is not None and pm:
                             para_override[target.start] = chars.left_any(pm.group(1))
                     lines = [value]
-                    if chars is not None and target.col == c.col + c.colspan and target.row == c.row \
+                    lead = re.fullmatch(r"\s*([:：])\s*", target.text)
+                    if lead:
+                        # 값 칸에 ':'만 미리 적힌 표('상호(법인명) | : | ' — 11/13 사용자 지적: ':'를 지우고 값을 넣었음) — ':'는 두고 그 옆에
+                        if chars is not None:
+                            lines, lab_v, val_v = _colon_layout(xml, c, target, value, chars, lead=lead.group(1) + " ")
+                            if lab_v:
+                                valign[c.start] = lab_v
+                                edits.append((c, None, _set_valign(xml[c.start:c.end], lab_v)))
+                            if val_v:
+                                valign[target.start] = val_v
+                        else:
+                            lines = [f"{lead.group(1)} {value}"]
+                    elif chars is not None and target.col == c.col + c.colspan and target.row == c.row \
                             and re.search(r"[:：]\s*$", c.text):
                         # 이름표가 ':'로 끝나는 칸 옆 값 칸(11/13 사용자 요청 '값은 늘 : 옆에, 길면 첫 줄 시작 위치에 맞춰 줄바꿈') —
                         # 낱말 사이에서 줄을 나누고, 값 첫 줄(또는 한 줄 값)이 이름표의 ':' 줄과 같은 높이에 오게 칸 세로 정렬을 맞춤

@@ -366,9 +366,16 @@ def _alone(t: dict) -> str:
     return "단독" if share >= 100 else f"공동({share:g}%)"
 
 
+def _proof(t: dict, h: str) -> str:
+    # '증빙 번호'·'증빙 페이지'는 첨부 서류의 쪽 번호라 담당자가 적음 — 비움(11/13 별지서식 3). 같은 표의 '비고'도 이 열이 가져가 비게 됨
+    if re.search(r"번호|페이지|쪽", h):
+        return ""
+    return str(t.get("증빙 파일 이름") or "")
+
+
 _TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값(t, 머리글)
     (("연번", "순번"), None),  # 줄 번호 — 따로 채움
-    (("사업명", "용역명", "공사명", "건명"), lambda t, h: str(t.get("사업명") or "")),
+    (("사업명", "용역명", "공사명", "계약명", "건명"), lambda t, h: str(t.get("사업명") or "")),
     (("수행기간", "계약기간", "사업기간", "기간"), lambda t, h: _period(t).replace("~", "~\n", 1)),
     # 분야 '전시·체험'은 '·' 뒤에서 줄을 나눔 — 좁은 칸에서 '전시·체' / '험'처럼 낱말 가운데가 잘리지 않게(11/12 사용자 요청)
     (("사업개요", "내용", "분야"), lambda t, h: re.sub(r"\s*·\s*", "·\n", str(t.get("분야") or "")).strip()),
@@ -377,7 +384,7 @@ _TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값(t, 머리글)
     (("발주기관", "발주처", "발주자"), lambda t, h: str(t.get("발주기관") or "")),
     (("단독", "공동"), lambda t, h: _alone(t)),
     (("구분", "업무"), lambda t, h: (str(t.get("업무") or "") + (f" (지분 {t.get('지분율(%)')}%)" if t.get("지분율(%)") not in (None, "", 100, 100.0) else "")).strip()),
-    (("증빙", "비고"), lambda t, h: str(t.get("증빙 파일 이름") or "")),
+    (("증빙", "비고"), _proof),
 ]
 
 
@@ -388,7 +395,7 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
     edits = []
     for r in sorted(rows):
         heads = [_sq(c.text) for c in rows[r]]
-        if not (any("사업명" in h or "용역명" in h or "공사명" in h for h in heads)
+        if not (any(re.search(r"사업명|용역명|공사명|계약명", h) for h in heads)  # '①계약명'(11/13 별지서식 3 유사사업실적)
                 and any(re.search(r"금액|도급\)?액|납품액|실적액", h) for h in heads)):
             continue
         colmap, headtext, no_col = {}, {}, None

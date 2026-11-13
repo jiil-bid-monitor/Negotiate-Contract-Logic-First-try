@@ -2749,3 +2749,22 @@ def test_label_line_overflow_left_aligned_not_justified(tmp_path: Path):
     assert pid != "0"  # 내어쓰기 사본
     block = re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)
     assert 'horizontal="LEFT"' in block and 'value="-' in block, block
+
+
+def test_repeated_party_tables_fill_first_only(tmp_path: Path):
+    """11/13 사용자 요청: 정보 비공개 동의서 — 공동수급 구성원마다 쓰라고 같은 '상호(법인명) / 주소 / 대표자 (인) / 계약상대자등록번호' 표가
+    4번 있는데 모두 지일 정보가 들어감 → 첫 표에만, 나머지는 빈칸 그대로. 모양이 다른 표(위임장 대리인 등)는 따로 채움."""
+    from quantdocs.fill import fill_hwpx
+
+    def party():
+        rows = [("상호(법인명)", ""), ("주 소", ""), ("대 표 자", "(인)"), ("계약상대자등록번호", "")]
+        return _tbl([[_c(0, r, t), _c(1, r, ":" if r == 3 else ""), _c(2, r, s)] for r, (t, s) in enumerate(rows)])
+
+    src = _mini_hwpx(tmp_path / "a.hwpx", party() * 4)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "가상시 가상로 1", "사업자등록번호": "123-45-67890", "대표자": "홍길동"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    for want in ("(주)가상", "가상시 가상로 1", "홍길동", "123-45-67890"):
+        assert sec.count(want) == 1, (want, sec.count(want))
+    tables = sec.split("<hp:tbl")[1:]
+    assert "(주)가상" in tables[0] and not any("(주)가상" in t for t in tables[1:])

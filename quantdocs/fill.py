@@ -2061,8 +2061,19 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
             none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
+            seen_party: set = set()  # 회사 정보 표 모양 — 같은 모양이 또 나오면 공동수급 구성원용 사본이라 비움(11/13)
             for tbl in _spans(xml, "tbl"):
                 cells = _cells(xml, tbl)
+                # 공동수급 때 구성원마다 쓰라고 같은 '상호(법인명) / 주소 / 대표자 (인) / 계약상대자등록번호' 표를 여러 번 둔 서식
+                # (11/13 사용자 요청: 국립아시아문화전당 정보 비공개 동의서 — 4개 모두 지일 정보가 들어감) — 우리 회사 정보는 첫 표에만
+                labels = [c for c in cells if not c.blank]
+                if labels and len({c.row for c in cells}) <= 8 and {"회사명", "대표자"} <= {_label_key(c.text) for c in labels}:
+                    sig = tuple(sorted((c.row, c.col, _sq(c.text)) for c in labels))
+                    if sig in seen_party:
+                        if not any("같은 회사 정보 표" in x for x in rep.filled):
+                            rep.filled.append("같은 회사 정보 표가 또 있음(공동수급 구성원용) — 첫 표에만 지일 정보, 나머지는 비움")
+                        continue
+                    seen_party.add(sig)
                 # 직접 기입 서식(실적증명서 등)은 표 안을 건드리지 않음 — 단 '신청인' 묶음 줄(업체명·대표자·사업자번호·소재지·전화)은 채움
                 # (11/10 경남교육청 사업이행 실적증명서 — 증명 내용은 발주처가, 신청인 칸은 지일이)
                 if sign_only and not any(_row_group(cells, x) == "신청인" for x in cells):

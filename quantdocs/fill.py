@@ -52,6 +52,25 @@ def _spans(xml: str, tag: str, start: int = 0, end: int | None = None) -> list[t
     return out
 
 
+def _all_tables(xml: str) -> list[tuple[int, int]]:
+    """모든 표 위치(표 칸 안에 든 표도) — 쪽 테두리 표 안에 서명 표가 든 서식(11/13 안전관리 서약서 '서약자 상 호 : / 주 소 : / 대 표 자 : (인)'이
+    바깥 표 칸 안 표라 값 칸이 안 채워졌음). 바깥 표가 먼저."""
+    return _all_spans(xml, "tbl")
+
+
+def _all_spans(xml: str, tag: str) -> list[tuple[int, int]]:
+    """안에 든 것까지 모든 <?:tag>…</?:tag> 위치(시작 순)."""
+    out, stack = [], []
+    for m in re.finditer(rf"<(/?)(?:[\w.-]+:)?{tag}\b[^>]*?(/?)>", xml):
+        if m.group(2):
+            continue
+        if not m.group(1):
+            stack.append(m.start())
+        elif stack:
+            out.append((stack.pop(), m.end()))
+    return sorted(out)
+
+
 def _text(seg: str) -> str:
     """칸·문단의 글. 글 안 태그(<hp:fwSpace/>·<hp:tab/> 등)는 빈칸으로(11/04: '상호<fwSpace/>또는 법인명' 이름표를 못 알아봄)."""
     raw = "".join(re.findall(r"<(?:[\w.-]+:)?t\b[^>]*>(.*?)</(?:[\w.-]+:)?t>", seg, flags=re.S))
@@ -237,6 +256,8 @@ def _label_key(text: str) -> str | None:
         return "회사명"
     if re.fullmatch(r"계약상대자(?:등록)?번호", t):
         return "사업자등록번호"
+    if re.match(r"법인등기", t):  # '법인등기부등본(생년월일)' = 법인등록번호(11/13 사용자 제보 — 국립아시아문화전당 서식 13호, 법인은 생년월일 = 법인등록번호)
+        return "법인등록번호"
     if t in ("서약자", "서약인", "각서인", "확약자"):  # 청렴계약 이행서약서 '서 약 자 :   (인)' = 대표자 이름(11/05)
         return "대표자"
     if "전화" in t and re.search(r"전자우편|이메일|e-?mail", t, re.I):
@@ -672,7 +693,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
     # 표 안이어도 여러 줄짜리 칸(서식 본문 칸)의 줄은 채움 — 한 줄짜리 칸은 이름표 칸이라 표 채우기가 옆 칸에 씀(11/04 서식 8·9 서명 줄)
-    cells = _spans(xml, "tc")
+    cells = _all_spans(xml, "tc")  # 표 안 표의 칸도(11/13 — 안쪽 표 이름표 칸 뒤에도 값이 한 번 더 들어갔음)
     single = [(cs, ce) for cs, ce in cells if len(_spans(xml, "p", cs, ce)) <= 1]
     edits = []
     paras, stack = [], []  # 모든 문단(표 칸 안 문단 포함) — _spans는 맨 바깥만 줌
@@ -2115,7 +2136,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
             none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
             seen_party: set = set()  # 회사 정보 표 모양 — 같은 모양이 또 나오면 공동수급 구성원용 사본이라 비움(11/13)
-            for tbl in _spans(xml, "tbl"):
+            for tbl in _all_tables(xml):
                 cells = _cells(xml, tbl)
                 # 공동수급 때 구성원마다 쓰라고 같은 '상호(법인명) / 주소 / 대표자 (인) / 계약상대자등록번호' 표를 여러 번 둔 서식
                 # (11/13 사용자 요청: 국립아시아문화전당 정보 비공개 동의서 — 4개 모두 지일 정보가 들어감) — 우리 회사 정보는 첫 표에만
@@ -2294,6 +2315,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if picks:
                             edits += [(c, ["해당 없음"], False) for c in picks]
                             rep.filled.append(f"표 {len(picks)}줄에 '해당 없음' 기재 — 해당 사항이 있으면 고칠 것")
+            # 바깥 표 칸 고침이 안쪽 표 칸 고침을 감싸면(칸 안 빈자리 채우기 등) 바깥 쪽은 버림 — 안쪽 고침이 덮이지 않게(11/13)
+            edits = [e for e in edits if not any(o is not e and e[0].start <= o[0].start and o[0].end <= e[0].end
+                                                 and (o[0].start, o[0].end) != (e[0].start, e[0].end) for o in edits)]
             for cell, lines, keep in sorted(edits, key=lambda e: e[0].start, reverse=True):
                 seg = xml[cell.start:cell.end]
                 if lines is None:  # 칸 안 빈자리 채우기 — 바꾼 칸 그대로

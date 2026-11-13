@@ -2747,3 +2747,78 @@ def test_repeated_party_tables_fill_first_only(tmp_path: Path):
         assert sec.count(want) == 1, (want, sec.count(want))
     tables = sec.split("<hp:tbl")[1:]
     assert "(주)가상" in tables[0] and not any("(주)가상" in t for t in tables[1:])
+
+
+def test_corp_register_birth_label_is_corp_no(tmp_path: Path):
+    """11/13 사용자 제보: 국립아시아문화전당 서식 13호 신용평가 등급 확인서 '법인등기부등본(생년월일) | __'이 비었음 — 법인은 생년월일 = 법인등록번호."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "업  체  명"), _c(1, 0, "")], [_c(0, 1, "법인등기부등본(생년월일)"), _c(1, 1, "")]])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "법인등록번호": "110111-1234567"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert "110111-1234567" in sec and "(주)가상" in sec
+
+
+def test_signature_table_inside_frame_table(tmp_path: Path):
+    """11/13 사용자 제보: 안전관리 서약서 — 쪽 테두리 표 칸 안에 '서약자 | 상 호 : | __ / | 주 소 : | __ / | 대 표 자 : | (인)' 표가 들어 있어
+    (표 안 표) 서명이 모두 비었음. 안쪽 표도 채움, 바깥 칸의 글은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    inner = _tbl([[_c(0, 0, "서약자"), _c(1, 0, "상    호 :"), _c(2, 0, "")],
+                  [_c(0, 1, ""), _c(1, 1, "주    소 :"), _c(2, 1, "")],
+                  [_c(0, 2, ""), _c(1, 2, "대 표 자 :"), _c(2, 2, "(인)")]])
+    outer = ('<hp:p><hp:run><hp:tbl><hp:tr><hp:tc><hp:subList>'
+             '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>안전관리 서약서 — 작업 기간 중 안전사고 예방에 최선을 다하며 다음과 같이 서약한다.</hp:t></hp:run></hp:p>'
+             + inner + '</hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "a.hwpx", outer)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "주소": "가상시 가상로 1", "대표자": "홍길동"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    for want in ("(주)가상", "가상시 가상로 1", "홍길동", "(인)", "다음과 같이 서약한다"):
+        assert want in sec, want
+    assert sec.count("<hp:tbl>") == 2
+
+
+def test_self_score_horizontal_credit_grades(tmp_path: Path):
+    """11/13 사용자 제보: 국립아시아문화전당 서식 14호 사업수행능력 자기평가표 — '구분 | 총배점(상한점수) | 점수 | 기업 신용 평가 등급' 아래
+    가로로 'BBB0이상 | BB- ~ BBB- | B+ ~ B- | CCC+ 이하', 재무상태 줄 '15 | (점수) | 15 | 14.25 | 13.5 | 10.5' — 점수 칸이 비었음.
+    머리 '점수'·'총배점', 가로 등급 열, 등급 범위('BB- ~ BBB-')를 읽음 → BB+ = 14.25."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                           f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "구      분", 1, 2), c(1, 0, "총 배 점(상한점수)", 1, 2), c(2, 0, "점수", 1, 2), c(3, 0, "기업 신용 평가 등급", 4)],
+            [c(3, 1, "BBB0이상"), c(4, 1, "BB- ~ BBB-"), c(5, 1, "B+ ~ B-"), c(6, 1, "CCC+ 이하")],
+            [c(0, 2, "재무상태"), c(1, 2, "15"), c(2, 2, ""), c(3, 2, "15"), c(4, 2, "14.25"), c(5, 2, "13.5"), c(6, 2, "10.5")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"})
+    rep = fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 13)))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups())): re.sub(r"<[^>]+>", "", m)
+           for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S)}
+    assert got[(2, 2)] == "14.25", (got, rep.filled)
+
+
+def test_blank_inquiry_form_fills_appendix_after_it(tmp_path: Path):
+    """11/13 사용자 제보: 국립아시아문화전당 서식 16호 서면 질의서 뒤에 【별표 3】 안전관리 서약서가 붙어 한 조각으로 잘림 —
+    질의서는 공란 규칙(11/05)이라 서약서 서명까지 비었음. 질의서 부분은 원본 그대로, 【별표】부터 채움."""
+    from quantdocs.build import _fill_appendix
+
+    inquiry = '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>서 면 질 의 서</hp:t></hp:run></hp:p>' + _tbl(
+        [[_c(0, 0, "업 체 명"), _c(1, 0, "")], [_c(0, 1, "대표자:"), _c(1, 1, "(인)")]])
+    pledge = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>【별표 3】</hp:t></hp:run></hp:p>'
+              '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>안전관리 서약서</hp:t></hp:run></hp:p>'
+              + _tbl([[_c(0, 0, "서약자"), _c(1, 0, "상    호 :"), _c(2, 0, "")],
+                      [_c(0, 1, ""), _c(1, 1, "대 표 자 :"), _c(2, 1, "(인)")]]))
+    src = _mini_hwpx(tmp_path / "q.hwpx", inquiry + pledge)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    assert _fill_appendix(src, tmp_path / "o.hwpx", v, "가상 공고") is not None
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    head, tail = sec.split("【별표 3】")
+    assert "(주)가상" not in head and "홍길동" not in head  # 질의서는 공란
+    assert tail.count("(주)가상") == 1 and tail.count("홍길동") == 1  # 서약서 서명은 한 번씩
+    plain = _mini_hwpx(tmp_path / "p.hwpx", inquiry)
+    assert _fill_appendix(plain, tmp_path / "o2.hwpx", v, "") is None  # 별표가 없으면 예전처럼 통째로 공란

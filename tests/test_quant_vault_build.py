@@ -3107,6 +3107,39 @@ def test_pledge_signer_value_after_colon(tmp_path: Path):
     assert re.search(r"직\s+위\s+: 대표이사", text) and re.search(r"성\s+명\s+: 홍길동\s+\(인\)", text), text
 
 
+def test_center_aligned_sign_block_keeps_label_positions(tmp_path: Path):
+    """11/13 사용자 지적: 가운데 정렬 서명 묶음('업 체 명 : / 주    소 : / 대 표 자 :  (인)' — 원본은 줄마다 빈칸까지 같은 길이라 이름표가
+    같은 자리)에 값을 넣자 줄 길이가 달라져 줄마다 다르게 밀림(주소는 왼쪽 끝으로). 문단 모양은 그대로, 이름표는 원래 자리, 긴 값은 값 시작에 맞춰 다음 줄."""
+    from quantdocs.fill import _cjk_width, fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="1"><hh:paraPr id="57"><hh:align horizontal="CENTER"/>'
+              '<hh:margin><hc:intent value="0"/><hc:left value="1000"/><hc:right value="500"/></hh:margin></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1200"></hh:charPr></hh:charProperties></hh:head>')
+    sec = '<hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin left="8504" right="8504" top="5668" bottom="4252"/></hp:pagePr></hp:secPr>'
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    orig = ["        업 체 명 :                    ", "        주    소 :                    ", "        대 표 자 :              (인)"]
+    body = f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0">{sec}<hp:t>20  년    월    일</hp:t></hp:run></hp:p>' + "".join(para(x) for x in orig)
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동",
+                                                              "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)"}))
+    out = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert 'paraPrIDRef="57"' in out and out.count("paraPrIDRef=") == out.count('paraPrIDRef="57"')  # 문단 모양 그대로
+    lines = ["".join(re.findall(r"<hp:t>(.*?)</hp:t>", q, re.S)) for q in re.findall(r"<hp:p\b.*?</hp:p>", out, re.S)][1:]
+    area = 59528 - 8504 * 2 - 1500
+
+    def start(t):  # 가운데 정렬에서 첫 글자(이름표) 시작 위치
+        return (area - _cjk_width(t, 1200)) / 2 + _cjk_width(t[:len(t) - len(t.lstrip())], 1200)
+    assert len(lines) == 4 and "강원특별자치도" in lines[1] and "64(공장1층)" in lines[2]
+    for before, after in ((orig[0], lines[0]), (orig[1], lines[1]), (orig[2], lines[3])):
+        assert abs(start(before) - start(after)) < 400, (before, after)
+    value_at = start(lines[1]) + _cjk_width(lines[1].strip()[:lines[1].strip().index(":") + 2], 1200)
+    assert abs(start(lines[2]) - value_at) < 400  # 둘째 줄은 값 시작 위치에
+
+
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
     """11/13 사용자 제보(운리단길): ① 입찰참가신청서 표 밖 '신청인(대표사)          (인)'에 대표자 이름이 빠짐(쌍점 없는 서명 줄 규칙에 신청인이 없었음)
     ② 위임장 '소 속 (업체명)' 칸만 원본 문단이 오른쪽 정렬이라 '(주)지일'이 오른쪽으로 치우침 — 같은 표 다른 값 칸이 가운데면 가운데로."""

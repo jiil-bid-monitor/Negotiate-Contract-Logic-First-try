@@ -747,6 +747,55 @@ def _break_value(seg: str, chars: "_Chars | None", line_w: int | None) -> str:
     return first + rest
 
 
+def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None) -> str:
+    """가운데 정렬 이름표 문단(서명 묶음 '업 체 명 : / 주    소 : / 대 표 자 :  (인)')에 값을 넣어도 이름표가 원래 자리에 남게(11/13 사용자 지적).
+    원본은 줄마다 빈칸까지 같은 길이로 맞춰 이름표가 같은 자리에 보였음 — 값을 넣고 빈칸을 줄이면 줄 길이가 달라져 가운데 정렬이
+    줄마다 다르게 밀렸음. 문단 모양은 그대로 두고 줄 길이를 원래 길이(T0)에 맞춤: 짧으면 뒤에, 길면 앞에 그만큼 빈칸
+    (가운데 정렬에서 시작 위치 = (줄 너비 − 길이)/2 + 앞 빈칸 → 원래 시작 위치 그대로). 값이 오른쪽 끝을 넘으면 낱말 사이에서 끊어
+    같은 문단 모양의 다음 문단으로(앞부분은 같은 너비 빈칸 — 값 시작 위치에 맞춤)."""
+    if chars is None or _VS not in seg or _VE not in seg:
+        return seg
+    open_m = re.match(r'<([\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"[^>]*>', seg)
+    if not open_m:
+        return seg
+    t0, cur = _prefix_width(orig, chars)
+    i, j = seg.index(_VS), seg.index(_VE)
+    prefix, tail_xml = seg[open_m.end():i], seg[j + 1:]
+    pw, cur = _prefix_width(prefix, chars)
+    tw, _c = _prefix_width(f'<hp:run charPrIDRef="{cur}"><hp:t>' + tail_xml, chars)  # 값 뒤 글('      (인)')은 글 조각 중간에서 시작
+    h = max(chars.height(cur), FILL_HEIGHT)
+    sp = chars.char_width(cur, " ") or 1
+    value = unescape(seg[i + 1:j])
+    lines = [value]
+    if line_w and not unescape(re.sub(r"<[^>]+>", "", tail_xml)).strip():  # 값 뒤에 '(인)' 등이 없을 때만 끊음
+        block = chars._para(open_m.group(2)) or ""
+        rm = re.search(r'<(?:[\w.-]+:)?right\b[^>]*value="(-?\d+)"', block)
+        _intent, left = chars.margins(open_m.group(2))
+        area = line_w - max(left, 0) - (max(int(rm.group(1)), 0) if rm else 0)
+        avail = ((area + t0) / 2) * 0.97 - pw  # 값이 쓸 수 있는 너비 = 원래 시작 위치부터 오른쪽 끝까지 − 앞부분
+        if avail > h * 2 and _cjk_width(value, h) > avail:
+            lines = _word_lines(value, h, avail)
+    blank = _blank_prefix(prefix, chars) if len(lines) > 1 else ""
+    if blank is None:
+        lines, blank = [value], ""
+
+    def pad(xml_p: str, width: float) -> str:
+        lead = " " * int(round(max(0.0, width - t0) / sp))
+        trail = " " * int(round(max(0.0, t0 - width) / sp))
+        xml_p = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)", lambda m: m.group(1) + lead, xml_p, count=1) if lead else xml_p
+        m = list(re.finditer(r"</(?:[\w.-]+:)?t>", xml_p)) if trail else []
+        if m:  # 마지막 글 조각 끝에(값 뒤 — 값 글자 모양 밖)
+            xml_p = xml_p[:m[-1].start()] + trail + xml_p[m[-1].start():]
+        return xml_p
+    no_lines = lambda x: re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", x, flags=re.S)
+    first = no_lines(seg[:i] + _mark(lines[0]) + seg[j + 1:])
+    out = pad(first, pw + _cjk_width(lines[0], h) + (tw if len(lines) == 1 else 0))
+    ns = open_m.group(1) or ""
+    for x in lines[1:]:
+        out += pad(f"{open_m.group(0)}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>", pw + _cjk_width(x, h))
+    return out
+
+
 def _line_width(xml: str, s: int, cells: list[tuple[int, int]]) -> int | None:
     """s 위치 문단의 줄 너비(HWPUNIT) — 표 칸 안이면 칸 너비 − 칸 여백, 아니면 용지 너비 − 왼쪽·오른쪽 여백. 모르면 None."""
     box = min(((cs, ce) for cs, ce in cells if cs <= s < ce), key=lambda x: x[1] - x[0], default=None)
@@ -1136,7 +1185,12 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 below = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>).*?(</(?:[\w.-]+:)?t>)", r"\1\2", xml[ns:ne], flags=re.S)
                 edits.append((ns, ne, re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", below, flags=re.S)))
                 rep.filled.append(f"{_sq(label)} 아래 줄 {seal_m.group(1)} → 이름 줄로")
-        edits.append((s, e, _break_value(seg, chars, _line_width(xml, s, cells))))
+        pid = re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[s:e])
+        if chars is not None and pid and chars.align(pid.group(1)) == "CENTER":
+            seg = _center_keep(xml[s:e], seg, chars, _line_width(xml, s, cells))  # 가운데 정렬 서명 묶음은 이름표 자리 그대로(11/13)
+        else:
+            seg = _break_value(seg, chars, _line_width(xml, s, cells))
+        edits.append((s, e, seg))
         rep.filled.append(f"{_sq(label)} → {value[:40]}")
     for s, e, seg in sorted(edits, key=lambda x: x[0], reverse=True):  # 뒤에서부터 — 문단 순서대로 모이지 않은 고침도 있어 정렬(11/05 서식 3 줄 겹침)
         xml = xml[:s] + seg + xml[e:]

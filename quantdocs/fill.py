@@ -2372,6 +2372,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             key = "대표자"
                         elif re.fullmatch(r"연락처|전화|전화번호|연락처\(전화\)", lab):
                             key = "전화번호"
+                    if key is None and _sq(c.text) == "사업명" and any(re.match(r"서약자", _sq(x.text)) for x in cells):
+                        key = "_title"  # 보안특약 서약서 '사 업 명 | __'(11/13 사용자 요청) — 실적증명서의 '사업명'(실적 이름)과 달리 서약 표에서만 공고명
                     elif group == "대리인" and key not in ("회사명", None):
                         continue  # 대리인 줄은 업체명만(성명·주민번호·주소·연락처는 개인 정보라 비움 — 10/28·11/05 결정)
                     core = re.sub(r"\(.*?\)|[^\w]", "", c.text)  # '〈 주요연혁(요약) 〉' → '주요연혁'

@@ -3007,3 +3007,17 @@ def test_security_pledge_signer_fields(tmp_path: Path):
     assert lines[9] == "서약자 소속 직급/직위 성 명 (인)"  # 참여인력용 — 비움
     assert lines[11] == "서약자 소속 (주)가상 직급/직위 대표이사 성 명 홍길동 인"
     assert lines[12] == "확인자 소속 직급/직위 성 명 인"
+
+
+def test_pledge_table_business_name_is_notice_title(tmp_path: Path):
+    """11/13 사용자 요청: 보안특약 서약서 '사 업 명 | __ / 서 약 자 (업체 대표) | …' — 사업명 = 공고명. 서약 표가 아닌 '사업명'(실적 이름)은 그대로 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    pledge = _tbl([[_c(0, 0, "사  업  명"), _c(1, 0, "")], [_c(0, 1, "서  약  자 (업체 대표)"), _c(1, 1, "")]])
+    track = _tbl([[_c(0, 0, "사업명"), _c(1, 0, "")], [_c(0, 1, "발주기관"), _c(1, 1, "")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", pledge + track)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}), title="가상 전시관 조성 사업")
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    tbls = re.findall(r"<hp:tbl>.*?</hp:tbl>", sec, re.S)
+    assert "가상 전시관 조성 사업" in re.sub(r"<[^>]+>", "", tbls[0])
+    assert "가상 전시관 조성 사업" not in re.sub(r"<[^>]+>", "", tbls[1])

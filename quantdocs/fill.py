@@ -2038,7 +2038,7 @@ def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:
 # ── 입찰보증금 지급 확약서(11/05 사용자 요청) ─────────────────────────
 # 입찰 금액 = 제안요청서의 기초금액(없으면 사업비·사업예산 — 공고문), 보증금 = 그 금액 × BOND_RATE, '금 20,000,000원(금 이천만원)'
 BOND_RATE = 0.05  # 기초금액 × 0.05(11/11 사용자 요청 — 4억이면 2천만원; 11/05의 × 1.05를 대체)
-_BASIS = re.compile(r"(?:기초\s*금액|사\s*업\s*비|사업\s*예산|사업\s*금액|소요\s*예산|배정\s*예산)(?:\([^)]{0,12}\))?[^\d\n]{0,60}?([\d]{1,3}(?:,\d{3}){2,})\s*원")
+_BASIS = re.compile(r"(?:기초\s*금액|사\s*업\s*비|용\s*역\s*비|용역\s*금액|사업\s*예산|사업\s*금액|소요\s*예산|배정\s*예산)(?:\([^)]{0,12}\))?[^\d\n]{0,60}?([\d]{1,3}(?:,\d{3}){2,})\s*원")
 
 
 def basis_amount(texts: dict[str, str]) -> tuple[int, str] | None:
@@ -2147,7 +2147,8 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
         return xml
     bond = int(round(basis * BOND_RATE))
     blank = r"(금)\s+(원\s*\(\s*금)\s+(원\s*\))"
-    won_sign = r"금\s+원\s*\(\s*[￦₩]\s*\)"  # '금        원 (￦        )'(11/06 청주 입찰보증금 지급각서)
+    # '금        원 (￦        )'(11/06 청주 입찰보증금 지급각서)·'금      원정(￦      )'(11/13 운리단길 입찰참가신청서)
+    won_sign = r"금\s+원(정?)\s*\(\s*[￦₩]\s*\)"
     done = []
     # 이름표만 든 표 칸('입 찰 건 명 :' | 값 칸)엔 끼워 넣지 않음 — 오른쪽 값 칸이 따로 채워져 공고 이름이 두 번 들어갔음(11/06 필암서원 서식 5)
     label_only = [(a, b) for a, b in _spans(xml, "tc") if re.fullmatch(rf"{_BID_NAME}[:：]?", _sq(_text(xml[a:b])))]
@@ -2165,7 +2166,7 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
             if value in done or lead is None:
                 continue
             for pat, make in ((blank, lambda mm, v=value: f"{mm.group(1)}금 {_mark(_won_text(v))}"),
-                              (won_sign, lambda mm, v=value: f"{mm.group(1)}금 {_mark(kor_money(v))} 원 (￦ {_mark(f'{v:,}')} )")):
+                              (won_sign, lambda mm, v=value: f"{mm.group(1)}금 {_mark(kor_money(v))} 원{mm.group(2)} (￦ {_mark(f'{v:,}')} )")):
                 rx = re.compile(lead + pat)
                 if rx.search(body):
                     body = rx.sub(make, body, count=1)

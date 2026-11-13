@@ -162,8 +162,8 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("회사명", "업체명", "상호", "법인명", "제안사명", "제안업체", "공급받는"), "회사명"),
     (("대표자", "대표이사"), "대표자"),
     (("주소", "소재지"), "주소"),
-    (("전화",), "전화번호"),
-    (("팩스", "FAX"), "팩스번호"),
+    (("전화", "TEL", "Tel"), "전화번호"),
+    (("팩스", "FAX", "Fax", "fax"), "팩스번호"),
     (("홈페이지",), "홈페이지"),
     (("E-mail", "E-Mail", "e-mail", "Email", "EMAIL", "E-MAIL", "이메일", "전자우편"), "이메일"),
     (("회사설립", "설립년", "설립연", "설립일", "개업"), "설립일"),
@@ -189,7 +189,7 @@ _INLINE_LABELS = {"TEL": "전화번호", "Tel": "전화번호", "전화": "전�
 # 이름표는 글자 사이 띄어쓰기를 무시하고 읽음 — '전    화 :'·'팩 스 :'(11/12 필암 — 같은 줄 '(팩스: …)'만 채우고 전화가 비었음,
 # 사용자 요청 "요청서 읽을 때 띄어쓰기 제외하고 단어 읽기")
 _SPACED = lambda w: r"[  　]*".join(w)
-_INLINE_LABS = "|".join(["TEL", "Tel", "FAX", "Fax", r"E-?mail", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스"), _SPACED("이메일"),
+_INLINE_LABS = "|".join([r"(?i:TEL)", r"(?i:FAX)", r"(?i:E-?MAIL)", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스"), _SPACED("이메일"),
                          _SPACED("업태"), _SPACED("종목")])
 _INLINE_RE = re.compile(rf"(?P<lab>{_INLINE_LABS})(?P<colon>\s*[:：])(?P<sp>[  　]*)(?=(?:{_INLINE_LABS})|$)")
 
@@ -210,7 +210,8 @@ def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
         body = m.group(2)
 
         def rep(mm):
-            key = _INLINE_LABELS.get(re.sub(r"[  　]", "", mm.group("lab")), "")
+            lab = re.sub(r"[  　]", "", mm.group("lab"))
+            key = _INLINE_LABELS.get(lab) or {"TEL": "전화번호", "FAX": "팩스번호", "EMAIL": "이메일", "E-MAIL": "이메일"}.get(lab.upper(), "")  # 소문자 fax·tel(11/13)
             value = _value(key, vault) if key else ""
             if not value:
                 return mm.group(0)

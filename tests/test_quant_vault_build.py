@@ -3035,3 +3035,13 @@ def test_bond_won_jeong_and_service_fee_basis(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={}), basis=62_700_000)
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert "보증금 : 금 삼백십삼만오천 원정 (￦ 3,135,000 )" in text
+
+
+def test_inline_lowercase_fax_label(tmp_path: Path):
+    """11/13 사용자 제보(별지서식 9-1 제안업체 일반현황): '연 락 처 | 전화 :      fax :' — 소문자 'fax'를 이름표로 몰라 전화·팩스 둘 다 빔."""
+    from quantdocs.fill import fill_hwpx
+
+    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl([[_c(0, 0, "연 락 처"), _c(1, 0, " 전화 :                        fax :          ")]]))
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "전화번호": "033-000-0000", "팩스번호": "033-000-0001"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert "033-000-0000" in text and "033-000-0001" in text, text

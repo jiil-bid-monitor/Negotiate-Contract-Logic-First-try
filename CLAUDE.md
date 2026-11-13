@@ -77,6 +77,12 @@
   → '원정'도 받고 그대로 둠('금 삼백십삼만오천 원정 (￦ 3,135,000 )'). 기초금액 낱말(`_BASIS`)에 **'용역비'·'용역금액'**('3. 용 역 비 : 금 62,700,000원') 추가.
   보증금 = 기초금액 × 0.05(그대로). 시험 `test_bond_won_jeong_and_service_fee_basis`.
 
+## 2026-11-13 — 정량평가서 연락처 칸 소문자 'fax' (브랜치 `claude/quant-inline-fax-case`, 사용자 제보)
+
+- 별지서식 9-1 제안업체 일반현황 '연 락 처 | 전화 :      fax :'가 비었음 — 칸 안 빈자리 채우기(`_INLINE_LABS`)가 'FAX·Fax'만 알아 소문자 'fax'를 이름표로 못 봐,
+  '전화 :' 뒤 빈자리도 끝을 못 찾음. TEL·FAX·E-mail은 대소문자 없이(`(?i:…)`), 값 찾기도 대문자로 맞춤. 칸 이름표(`LABELS`)에도 'Fax·fax'·'TEL·Tel'('tel'은 Hotel 같은 낱말 때문에 뺌).
+  시험 `test_inline_lowercase_fax_label`.
+
 ## 2026-11-13 — 정량평가서 화면 공고명 = 나라장터 링크 (브랜치 `claude/quant-title-link`, 사용자 요청)
 
 - `quantdocs/static/index.html` `render`: 공고명(제목)을 누르면 새 창으로 나라장터 공고 상세 — 웹앱 공고 목록(`collect.py`)·투찰 계산기와 같은 주소

@@ -834,6 +834,11 @@ def read_form(cells) -> list[FormRow]:
             for col, t in texts:
                 if re.fullmatch(r"회사채.*|기업어음|기업신용.*|신용평가등급", _sq(t)):
                     kinds[col] = _sq(t)
+            if per is None and kind == "staff" and pts is not None:
+                # '특급기술자 | 1.0점'처럼 '/인'·'각' 없이 등급 이름 줄에 점수만(11/13 사용자 지적: 부산 업사이클센터 자기평가표 '기술능력(6점)' —
+                # 비고 '명 × 점 = 점' — 1인당 점수인데 못 읽어 화면 기술인력 칸이 안 나왔음). 줄 이름이 등급 이름뿐일 때만
+                if any(re.fullmatch(r"(?:기술사|특급|고급|중급|초급)(?:기술자|기술인|기능사)?", _sq(t)) for _, t in texts):
+                    per = pts
             if per is not None:
                 g = next((g for g in GRADES for _, t in texts if g in _sq(t)), None)
                 if g:

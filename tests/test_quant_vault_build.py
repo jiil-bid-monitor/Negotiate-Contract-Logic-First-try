@@ -3069,3 +3069,22 @@ def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
     assert re.search(r"신청인\(대표사\)\s+홍길동\s+\(인\)", text)
     pid = re.search(r'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?\(주\)가상', out, re.S).group(1)
     assert 'horizontal="CENTER"' in re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)
+
+
+def test_track_table_contract_name_head():
+    """11/13 사용자 제보: 별지서식 3 유사사업실적 표 머리가 '①계약명'이라 실적 표로 못 알아봐 통째로 빔 →
+    계약명 = 사업명, ③수행내용 = 분야, ④타사와 공동 프로젝트 수행여부 = '단독'(사용자 결정), ⑤증빙 번호(쪽 번호)·비고는 비움."""
+    from quantdocs.fill import FillReport, _cells, _fill_tracks, _spans
+
+    heads = ["연번", "①계약명", "사 업 기 간", "② 계약금액 (단위:천원)", "발주처", "③수행내용(간략)",
+             "④타사와 공동 프로젝트 수행여부", "⑤ 증빙 번호", "비고"]
+    rows = [[_sz_cell(i, 0, h, 2000, 1500) for i, h in enumerate(heads)],
+            [_sz_cell(i, 1, "", 2000, 1500) for i in range(len(heads))]]
+    xml = '<hp:tbl rowCnt="2" colCnt="9">' + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    tracks = [{"사업명": "가상 전시관 조성", "계약금액(원)": 300_000_000, "발주기관": "가상시", "분야": "전시·체험",
+               "증빙 파일 이름": "가상.pdf"}]
+    rep = FillReport("x")
+    vals = {c.col: l for c, l, _ in _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, rep)}
+    assert rep.rows == 1
+    assert vals[1] == ["가상 전시관 조성"] and vals[4] == ["가상시"] and vals[5] == ["전시·", "체험"] and vals[6] == ["단독"]
+    assert 7 not in vals and 8 not in vals  # 증빙 번호·비고는 담당자가

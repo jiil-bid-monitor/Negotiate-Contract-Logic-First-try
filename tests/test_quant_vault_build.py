@@ -2884,3 +2884,19 @@ def test_colon_in_value_cell_is_kept(tmp_path: Path):
     addr = got[(1, 1)]
     assert addr[0].startswith(": 강원특별자치도") and len(addr) == 2 and addr[1].startswith("  ") and not addr[1].startswith("   ")
     assert got[(2, 2)] == ["(인)"]
+
+
+def test_credit_financial_base_date(tmp_path: Path):
+    """11/13 사용자 제보: 서식 13호 신용평가 등급 확인서 '재무결산기준' 칸이 빔 — 확인서 PDF의 '재무기준일 2025년 12월 31일'을 읽어
+    '2025. 12. 31.'로(등급평가일·유효기간과 같은 모양)."""
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.importer import read_credit
+
+    text = "기업신용평가 확인서\n신용등급 BB+\n• 재무기준일 2025년 12월 31일\n• 등급평가일 2026년 06월 16일\n• 유효기간 2027년 06월 15일"
+    got = read_credit(text)
+    assert got["신용평가 재무기준일"] == "2025-12-31" and got["신용평가 평가일"] == "2026-06-16"
+    body = _tbl([[_c(0, 0, "재무결산기준"), _c(1, 0, "")], [_c(0, 1, "등급 평가일"), _c(1, 1, "")]])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", **got}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert "2025. 12. 31." in sec and "2026. 06. 16." in sec

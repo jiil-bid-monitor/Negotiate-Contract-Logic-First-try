@@ -493,6 +493,23 @@ def _check_cols(cells: list[Cell]) -> set[int]:
     return out
 
 
+# 수량·금액·기간 머리글(11/13 사용자 지적: 수행경험(실적) 표 '구분 | 건수 | 총 계약금액 | 비고' — 구분 칸 '…홈페이지 … 실적'의
+# '홈페이지' 낱말만 보고 '건수' 칸에 지일 누리집 주소를 넣음). 이 머리글 아래 열엔 같은 성격의 값(자본금·매출액·인원 등)만 넣음.
+_QTY_HEAD = re.compile(r"(?:총)?(?:계약|사업|수주|실적)?(?:건수|금액|액)|점수|배점|평점|자기평점|기간|(?:시작|종료|계약|준공)?일자|날짜|"
+                       r"비율|지분율?|인원수?|수량|횟수|개수|실적|연도|년도")
+_QTY_KEY = re.compile(r"자본금|종업원 수|설립일|신용평가")
+
+
+def _qty_cols(cells: list[Cell]) -> set[int]:
+    """표 위쪽 머리글 줄(첫 3줄)에서 수량·금액·기간 머리글('건수·총 계약금액·점수…')이 덮는 열 번호."""
+    out: set[int] = set()
+    top = min((c.row for c in cells), default=0)
+    for c in cells:
+        if c.row <= top + 2 and _QTY_HEAD.fullmatch(re.sub(r"\(.*?\)", "", _sq(c.text)) or "-"):
+            out.update(range(c.col, c.col + c.colspan))
+    return out
+
+
 def _row_group(cells: list[Cell], c: Cell) -> str | None:
     """c 왼쪽에서 세로로 여러 줄을 묶은 머리 칸이 '대표자'면 '대표자', '대리인·수임인'이면 '대리인'(위임장·신청서)."""
     for o in cells:
@@ -2409,6 +2426,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 other_rows = {c.row for c in cells if c.col == 0 and _OTHER_PARTY.search(_sq(c.text))}
                 cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
                 check_cols = _check_cols(cells)
+                qty_cols = _qty_cols(cells)
 
                 # 하도급계약의 적정성 판단 자기평가표('수급인 관련 사항 | 하수급인 관련 사항' — 11/13 사용자 결정 2번):
                 # 지일 = 수급인이라 왼쪽만 채움(사업명 = 공고명, 수급인 = 회사명 + 전화), 하수급인(하도급 받는 다른 회사) 쪽·점수·사유는 비움
@@ -2548,6 +2566,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         continue
                     if check_cols and target.col in check_cols:
                         continue  # 점검표 '적용·해당없음' 열 — 회사 정보 칸이 아님(11/13)
+                    if target.col in qty_cols and not _QTY_KEY.search(key) and target.row > min(x.row for x in cells):
+                        continue  # '건수·금액·점수' 열에 누리집·주소·이름 같은 글을 넣지 않음(11/13)
                     seal = _sq(target.text)
                     if key == "_notice_no" and _NO_SLOT.fullmatch(target.text) and (g2b_no or notice_no):
                         # 서식에 미리 적힌 '제 2026 - 호' — 나라장터 번호면 칸을 그 번호로, 기관 번호면 모양 그대로 번호만

@@ -893,8 +893,9 @@ def test_filled_text_is_11pt(tmp_path: Path):
 
 
 def test_label_paragraph_value_wraps_under_value(tmp_path: Path):
-    """11/05 사용자 요청: '          주  소 : 강원특별자치도 … (공장1층)'이 둘째 줄로 넘어가면 줄 맨 앞이 아니라 값 시작 위치에 맞춰 이어지게
-    — 그 문단에 내어쓰기(앞부분 너비)를 준 문단 모양 사본. 첫 줄 시작은 그대로, hp:default 묶음은 hp:case의 두 배."""
+    """11/05 사용자 요청: '          주  소 : 강원특별자치도 … (공장1층)'이 둘째 줄로 넘어가면 값 시작 위치에 맞춰 이어지게.
+    11/13 사용자 요청으로 방법을 바꿈 — 서명란 문단 모양은 그대로 두고(내어쓰기 사본 안 만듦), 값을 낱말 사이에서 끊어
+    같은 문단 모양의 다음 문단으로 넘김(앞부분은 탭은 그대로·글자는 같은 너비 빈칸). 양쪽 정렬이어도 각 문단의 마지막 줄이라 낱말 사이가 안 벌어짐."""
     from quantdocs.fill import fill_hwpx
 
     margin = lambda f: (f'<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="{1000 * f}" unit="HWPUNIT"/>'
@@ -903,22 +904,25 @@ def test_label_paragraph_value_wraps_under_value(tmp_path: Path):
               '<hh:spacing hangul="0"/></hh:charPr></hh:charProperties>'
               '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/><hp:switch><hp:case>'
               f'{margin(1)}</hp:case><hp:default>{margin(2)}</hp:default></hp:switch></hh:paraPr></hh:paraProperties></hh:head>')
-    body = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>주  소 :</hp:t></hp:run></hp:p>'
-            '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>상  호 :</hp:t></hp:run></hp:p>')
+    page = ('<hp:p><hp:run><hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin header="2834" footer="2834" left="5669" '
+            'right="5669" top="5669" bottom="5669"/></hp:pagePr></hp:secPr></hp:run></hp:p>')
+    body = page + ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>주  소 :</hp:t></hp:run></hp:p>'
+                   '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t><hp:tab width="20000" leader="0" type="1"/>상  호 :</hp:t></hp:run></hp:p>')
     src = _mini_hwpx(tmp_path / "h.hwpx", body)
     with zipfile.ZipFile(src, "a") as z:
         z.writestr("Contents/header.xml", header)
     fill_hwpx(src, tmp_path / "ho.hwpx", vault.Vault({}, info={"주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "회사명": "(주)가상"}))
     zo = zipfile.ZipFile(tmp_path / "ho.hwpx")
     out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
-    pid = re.search(r'<hp:p paraPrIDRef="(\d+)">(?:(?!</hp:p>).)*강원특별자치도', out, re.S).group(1)
-    assert pid != "0"
-    block = re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)
-    # 탭 20000 + '주' '소' 1000씩 + 빈칸 4개(500씩) + ':' 450
-    assert re.findall(r'intent value="(-?\d+)"', block) == ["-24450", "-48900"]
-    assert re.findall(r'left value="(\d+)"', block) == ["1000", "2000"]
-    assert 'paraProperties itemCnt="2"' in head  # '주  소 :'·'상  호 :'는 앞부분 너비가 같아 사본 하나를 같이 씀
-    assert re.search(rf'<hp:p paraPrIDRef="{pid}">(?:(?!</hp:p>).)*\(주\)가상', out, re.S)
+    paras = re.findall(r'<hp:p paraPrIDRef="(\d+)">((?:(?!</hp:p>).)*)</hp:p>', out, re.S)
+    text = lambda x: re.sub(r"<[^>]+>", "", x)
+    got = [(pid, text(x)) for pid, x in paras]
+    i = next(k for k, (_p, t) in enumerate(got) if "강원특별자치도" in t)
+    assert got[i][1].rstrip().endswith("무릉2로") and got[i + 1][1].strip() == "64(공장1층)", got
+    assert got[i][0] == got[i + 1][0] == "0"  # 문단 모양은 원래 것 그대로
+    assert '<hp:tab width="20000"' in paras[i + 1][1] and re.search(r"<hp:t><hp:tab[^>]*/> {6,}", paras[i + 1][1])  # 값 시작 위치에 맞춤
+    assert 'paraProperties itemCnt="1"' in head and "intent value=\"-" not in head
+    assert any("(주)가상" in t for _p, t in got)
 
 
 def test_table_keeps_height_when_filled_text_wraps(tmp_path: Path):
@@ -2724,31 +2728,6 @@ def test_bid_applicant_and_contractor_no_labels(tmp_path: Path):
     sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     for want in ("(주)가상", "123-45-67890", "가상시 가상로 1", "홍길동"):
         assert want in sec, want
-
-
-def test_label_line_overflow_left_aligned_not_justified(tmp_path: Path):
-    """11/13 사용자 제보: 서명 줄 '주    소: 강원특별자치도 정선군 남면 …'이 두 줄로 넘치면서 첫 줄 낱말 사이가 벌어짐 —
-    원래 문단이 양쪽 정렬이라 내어쓰기 사본도 양쪽 정렬이었음. 내어쓰기 사본은 왼쪽 정렬로."""
-    from quantdocs.fill import fill_hwpx
-
-    header = ('<hh:head xmlns:hh="h"><hh:refList><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1300"><hh:ratio hangul="100"/>'
-              '</hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/>'
-              '<hh:margin><hc:intent value="0"/><hc:left value="0"/></hh:margin>'
-              '<hh:lineSpacing type="PERCENT" value="160"/></hh:paraPr></hh:paraProperties></hh:refList></hh:head>')
-    line = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
-    pad = " " * 34
-    body = line(f"{pad}상    호: ") + line(f"{pad}주    소: ") + line(f"{pad}대 표 자:           (인)")
-    src = _mini_hwpx(tmp_path / "s.hwpx", body)
-    with zipfile.ZipFile(src, "a") as z:
-        z.writestr("Contents/header.xml", header)
-    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "대표자": "홍길동"})
-    fill_hwpx(src, tmp_path / "o.hwpx", v)
-    z = zipfile.ZipFile(tmp_path / "o.hwpx")
-    sec, head = z.read("Contents/section0.xml").decode(), z.read("Contents/header.xml").decode()
-    pid = re.search(r'<hp:p paraPrIDRef="(\d+)"><hp:run charPrIDRef="0"><hp:t>\s*주    소: ', sec).group(1)
-    assert pid != "0"  # 내어쓰기 사본
-    block = re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)
-    assert 'horizontal="LEFT"' in block and 'value="-' in block, block
 
 
 def test_repeated_party_tables_fill_first_only(tmp_path: Path):

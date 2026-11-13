@@ -529,16 +529,10 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
     return re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
 
 
-def _hang(seg: str, chars: "_Chars | None") -> str:
-    """이름표 문단('주 소 : 값')에 값이 들어간 뒤 — 값이 둘째 줄로 넘어가도 값 시작 위치에 맞춰 이어지게 내어쓰기(11/05 사용자 요청).
-    앞부분('   주  소 : ') 너비 = 탭은 한글 파일에 적힌 너비, 글자는 글자 모양 크기로 어림."""
-    if chars is None or _VS not in seg:
-        return seg
-    pm = re.search(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")(\d+)(")', seg)
-    if not pm:
-        return seg
+def _prefix_width(prefix: str, chars: "_Chars") -> tuple[int, str]:
+    """이름표 문단에서 값 앞부분('   주  소 : ')의 너비 어림(HWPUNIT)과 마지막 글자 모양 id — 탭은 한글 파일에 적힌 너비, 글자는 글자 모양 크기로."""
     width, cur, in_t = 0.0, "0", False
-    for part in re.split(r"(<[^>]+>)", seg[:seg.index(_VS)]):
+    for part in re.split(r"(<[^>]+>)", prefix):
         if part.startswith("<"):
             run = re.match(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', part)
             if run:
@@ -556,11 +550,82 @@ def _hang(seg: str, chars: "_Chars | None") -> str:
                 width += chars.char_width(cur, " ")
         elif in_t:
             width += sum(chars.char_width(cur, ch) for ch in unescape(part))
-    width = int(round(width))
-    if width <= 0 or width > 40000:  # 14cm 넘으면 어림이 틀렸을 수 있어 건드리지 않음
+    return int(round(width)), cur
+
+
+def _blank_prefix(prefix: str, chars: "_Chars") -> str | None:
+    """값 앞부분 XML의 글자를 같은 너비의 빈칸으로 바꾼 사본 — 둘째 줄 문단을 값 시작 위치에 맞추려고(탭은 그대로 둠).
+    글·탭·빈칸 말고 다른 것(조판 부호·구역 정보 등)이 섞여 있으면 None."""
+    out, cur, in_t = [], "0", False
+    for part in re.split(r"(<[^>]+>)", prefix):
+        if part.startswith("<"):
+            if not re.match(r"</?(?:[\w.-]+:)?(?:run|t|tab|fwSpace|nbSpace)\b", part):
+                return None
+            run = re.match(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', part)
+            if run:
+                cur = run.group(1)
+            in_t = bool(re.match(r"<(?:[\w.-]+:)?t\b", part)) or (in_t and not re.match(r"</(?:[\w.-]+:)?t>", part))
+            out.append(part)
+        elif part:
+            w = sum(chars.char_width(cur, ch) for ch in unescape(part))
+            sp = chars.char_width(cur, " ") or 1
+            out.append(" " * max(0, int(round(w / sp))) if in_t else part)
+    return "".join(out)
+
+
+def _break_value(seg: str, chars: "_Chars | None", line_w: int | None) -> str:
+    """이름표 문단('주    소: 값')의 값이 한 줄에 안 들어가면 낱말 사이에서 끊어 **같은 문단 모양의 다음 문단**으로 넘김 —
+    둘째 문단은 앞부분을 빈칸으로 채워 값 시작 위치에 맞춤(11/13 사용자 요청: 서명란 양식(문단 모양)은 바꾸지 말고 값만, 줄바꿈은 허용).
+    11/05의 '내어쓰기 문단 모양 사본'을 대체 — 그 사본은 원래 양쪽 정렬을 받아 넘친 첫 줄 낱말 사이가 벌어졌음."""
+    if chars is None or not line_w or _VS not in seg or _VE not in seg:
         return seg
-    new = chars.hanging(pm.group(2), width)
-    return seg[:pm.start(2)] + new + seg[pm.end(2):] if new != pm.group(2) else seg
+    open_m = re.match(r'<([\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"[^>]*>', seg)
+    if not open_m:
+        return seg
+    i, j = seg.index(_VS), seg.index(_VE)
+    tail = re.match(r"([^<]*)", seg[j + 1:]).group(1)
+    if tail.strip():  # 값 뒤에 '(인)' 등이 같은 줄에 있으면 끊지 않음
+        return seg
+    prefix = seg[open_m.end():i]
+    pw, cur = _prefix_width(prefix, chars)
+    intent, left = chars.margins(open_m.group(2))
+    avail = (line_w - left - intent - pw) * 0.97
+    h = max(chars.height(cur), FILL_HEIGHT)
+    value = unescape(seg[i + 1:j])
+    if _cjk_width(value, h) <= avail:
+        return seg
+    lines, line = [], ""
+    for word in value.split(" "):
+        test = f"{line} {word}" if line else word
+        if line and _cjk_width(test, h) > avail:
+            lines.append(line)
+            line = word
+        else:
+            line = test
+    lines.append(line)
+    blank = _blank_prefix(prefix, chars)
+    if len(lines) < 2 or blank is None or _cjk_width(lines[0], h) > avail:
+        return seg
+    ns = open_m.group(1) or ""
+    no_lines = lambda x: re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", x, flags=re.S)
+    first = no_lines(seg[:i] + _mark(lines[0]) + seg[j + 1:])
+    rest = "".join(f"{open_m.group(0)}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>" for x in lines[1:])
+    return first + rest
+
+
+def _line_width(xml: str, s: int, cells: list[tuple[int, int]]) -> int | None:
+    """s 위치 문단의 줄 너비(HWPUNIT) — 표 칸 안이면 칸 너비 − 칸 여백, 아니면 용지 너비 − 왼쪽·오른쪽 여백. 모르면 None."""
+    box = min(((cs, ce) for cs, ce in cells if cs <= s < ce), key=lambda x: x[1] - x[0], default=None)
+    if box is not None:
+        seg = xml[box[0]:box[1]]
+        w = re.findall(r'cellSz\b[^>]*\bwidth="(\d+)"', seg)
+        mg = re.findall(r'cellMargin\b[^>]*\bleft="(\d+)"[^>]*\bright="(\d+)"', seg)
+        return int(w[-1]) - (int(mg[-1][0]) + int(mg[-1][1]) if mg else 0) if w else None
+    page = re.search(r'<(?:[\w.-]+:)?pagePr\b[^>]*\bwidth="(\d+)".*?<(?:[\w.-]+:)?margin\b([^>]*)>', xml, re.S)
+    if not page:
+        return None
+    mg = dict(re.findall(r'\b(left|right)="(\d+)"', page.group(2)))
+    return int(page.group(1)) - sum(int(v) for v in mg.values()) if len(mg) == 2 else None
 
 
 _MULTI_KEYS = {"회사명", "대표자", "주소", "전화번호", "팩스번호", "사업자등록번호", "법인등록번호"}
@@ -841,7 +906,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 below = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>).*?(</(?:[\w.-]+:)?t>)", r"\1\2", xml[ns:ne], flags=re.S)
                 edits.append((ns, ne, re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", below, flags=re.S)))
                 rep.filled.append(f"{_sq(label)} 아래 줄 {seal_m.group(1)} → 이름 줄로")
-        edits.append((s, e, _hang(seg, chars)))
+        edits.append((s, e, _break_value(seg, chars, _line_width(xml, s, cells))))
         rep.filled.append(f"{_sq(label)} → {value[:40]}")
     for s, e, seg in sorted(edits, key=lambda x: x[0], reverse=True):  # 뒤에서부터 — 문단 순서대로 모이지 않은 고침도 있어 정렬(11/05 서식 3 줄 겹침)
         xml = xml[:s] + seg + xml[e:]
@@ -1044,18 +1109,6 @@ class _Chars:
         get = lambda k: int(re.search(rf'<(?:[\w.-]+:)?{k}\b[^>]*value="(-?\d+)"', m.group(0)).group(1)) \
             if m and re.search(rf'<(?:[\w.-]+:)?{k}\b[^>]*value="', m.group(0)) else 0
         return get("intent"), get("left")
-
-    def hanging(self, pid: str, width: int) -> str:
-        """pid 문단 모양에 내어쓰기 width를 준 사본 id — 둘째 줄부터 첫 줄 시작보다 width만큼 오른쪽에서 시작(11/05 '주 소 :' 줄)."""
-        if pid not in self.paras or self.align(pid) in ("CENTER", "RIGHT", "DISTRIBUTE"):
-            return pid
-        if self.align(pid) in ("JUSTIFY", "DISTRIBUTE_SPACE"):
-            # 양쪽 정렬이면 넘친 첫 줄의 낱말 사이가 벌어짐('강원특별자치도   정선군   남면' — 11/13 사용자 제보) → 왼쪽 정렬 + 내어쓰기
-            return self.left_hang(pid, width)
-        key = (pid, width)
-        if key not in self.added_hang:
-            self.added_hang[key] = self._next_para_id()
-        return self.added_hang[key]
 
     def no_indent(self, pid: str) -> str:
         """pid 문단 모양에서 들여쓰기·내어쓰기를 뺀(정렬은 그대로) 어절 단위 줄바꿈 사본 id — 실적 표 글 칸(11/12). 이미 둘 다 없으면 pid."""

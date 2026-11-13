@@ -246,8 +246,12 @@ def _label_key(text: str) -> str | None:
     t = _sq(text).strip(":：")
     # 글자 수로 거르지 않음(11/13 사용자 요청 — '회사채(또는기업어음)에대한신용평가등급또는기업신용평가등급'이 16자를 넘어 빠졌음).
     # 안내 문장('※ …'·'…기재함')만 이름표가 아님
+    if re.fullmatch(r"대표(?:자|이사)?(?:의)?성명", t):  # '대표자 성명 :   (인)'(11/13 위탁·수탁 서명란) — '…성명' 개인 칸 규칙보다 먼저
+        return "대표자"
     if not t or _SKIP_LABEL.search(t) or _SENTENCE.search(t):
         return None
+    if re.fullmatch(r"기관\((?:회사|업체)\)명|(?:회사|업체)\(기관\)명|기관명\((?:회사|업체)명\)", t):
+        return "회사명"  # '기관(회사)명 :'(11/13 위탁·수탁 서명란) — 기관 아닌 회사 쪽은 지일
     if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호", t):  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
         return "_notice_no"
     if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
@@ -895,6 +899,12 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 if not (re.search(_SEAL_TAIL, bt) and re.search(r"업\s*체\s*명|회\s*사\s*명|상\s*호", bt)):
                     continue
         text = _text(xml[s:e])
+        # 위탁·수탁 서명란 머리 줄 '위탁자' / '수탁자'(11/13 사용자 제보 — 두 칸에 같은 지일 주소가 들어감):
+        # 위탁자 = 일을 맡기는 발주기관 → 비움, 수탁자 = 맡아 하는 지일 → 채움. 머리 줄 아래 이름표 줄은 다음 머리까지 같은 묶음
+        role = re.fullmatch(r"\s*(?:[○●◦□■▪·\-]\s*)?(위\s*탁|수\s*탁)\s*(?:자|기\s*관|업\s*체|사)\s*(?:\([^()]{0,20}\))?\s*[:：]?\s*", text)
+        if role:
+            party = "other" if _sq(role.group(1)) == "위탁" else "own"
+            continue
         # '○ 대 표 사      업 체 명 :' / '○ 공동참여자      업 체 명 :'처럼 묶음 머리가 앞에 붙은 이름표 줄(11/06 청주 서식) —
         # 머리는 떼고 이름표만 보고, 공동참여자·구성원 묶음 아래 줄(업체명·주소·대표자)은 다른 회사 칸이라 비움
         got = _party_head(text)

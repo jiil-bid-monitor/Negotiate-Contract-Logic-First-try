@@ -1088,7 +1088,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .bidlog-table td.num .sub { white-space: normal; }
 .bidlog-table .sub.nowrap, .bidlog-table td.num .sub.nowrap, .bidlog-table .nowrap { white-space: nowrap; }
 .bidlog-table .res-open { display: block; color: var(--urgent); }
-.bidlog-table .rate-main { display: block; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.bidlog-table .rate-main { display: block; font-weight: 700; font-size: 14px; white-space: normal; }
 .bidlog-table .rate-main.ok { color: var(--good, #1b6e43); }
 .bidlog-table .rate-main.ng { color: var(--urgent); }  /* '기준 −0.853%p · 하한선 미달' 한 줄로(11/10) */
 .bidlog-table .rate-main.rank { color: var(--ink-strong); }  /* 지일 N등·-N등은 진한 검은 글씨(11/11) */
@@ -1099,6 +1099,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .bidlog-table td.when { white-space: normal; width: 1%; }
 .bidlog-table td.res { white-space: normal; }
 .bidlog-table td.title { min-width: 130px; }
+@media (min-width: 1000px) { .bidlog-table td.res { min-width: 170px; } .bidlog-table td.rankcol { min-width: 185px; } }
 /* (11/13 사용자 요청) 계약방법 — 수의계약·지명경쟁은 눈에 띄게 */
 .bidlog-table .cm { display: inline-block; font-size: 11px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--ink); white-space: nowrap; }
 .bidlog-table .cm.cm-hi { border-color: #c47a00; color: #8a5a00; background: #fff3cf; font-weight: 700; }

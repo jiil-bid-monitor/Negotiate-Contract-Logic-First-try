@@ -2920,3 +2920,33 @@ def test_deduction_cells_always_zero(tmp_path: Path):
            for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S)}
     assert got[(2, 1)] == "0" and got[(2, 2)] == "0", got
     assert got[(1, 1)] == "5.0" and got[(2, 0)] == "감점"
+
+
+def test_self_score_total_table_below(tmp_path: Path):
+    """11/13 사용자 요청: 서식 14호 맨 아래 따로 놓인 '합 계 | 20 점 | __' 표에 합계 점수 — 재무상태 14.25 + 감점 0 = '14.25 점'.
+    자동 채점이 비운 줄이 있으면(담당자 직접 채점) 합계도 비움."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                           f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    tbl = lambda rows: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    credit = tbl([[c(0, 0, "구      분", 1, 2), c(1, 0, "총 배 점(상한점수)", 1, 2), c(2, 0, "점수", 1, 2), c(3, 0, "기업 신용 평가 등급", 4)],
+                  [c(3, 1, "BBB0이상"), c(4, 1, "BB- ~ BBB-"), c(5, 1, "B+ ~ B-"), c(6, 1, "CCC+ 이하")],
+                  [c(0, 2, "재무상태"), c(1, 2, "15"), c(2, 2, ""), c(3, 2, "15"), c(4, 2, "14.25"), c(5, 2, "13.5"), c(6, 2, "10.5")]])
+    minus = tbl([[c(0, 0, "구      분"), c(1, 0, "총배점(상한점수)"), c(2, 0, "감점"), c(3, 0, "등급")],
+                 [c(0, 1, "임금체불"), c(1, 1, "5.0", 1, 2), c(2, 1, ""), c(3, 1, "체불사업주(-2.0)")],
+                 [c(0, 2, "고용개선조치 미이행"), c(2, 2, ""), c(3, 2, "미이행 사업주(-2.0)")]])
+    total = tbl([[c(0, 0, "합      계"), c(1, 0, "20 점"), c(2, 0, "")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", credit + minus + total)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 13)))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    last = sec.rsplit("<hp:tbl>", 1)[1]
+    assert re.sub(r"<[^>]+>", "", last).endswith("20 점14.25 점"), re.sub(r"<[^>]+>", "", last)
+    # 신용등급을 모르면 재무상태가 비어 합계도 비움
+    v2 = vault.Vault({}, info={"회사명": "(주)가상"})
+    fill_hwpx(src, tmp_path / "o2.hwpx", v2, self_scores=SelfScore([], v2, _dt.date(2026, 11, 13)))
+    sec2 = zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()
+    assert re.sub(r"<[^>]+>", "", sec2.rsplit("<hp:tbl>", 1)[1]).endswith("20 점")

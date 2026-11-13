@@ -2143,7 +2143,31 @@ def _deduction_edits(cells: list[Cell], rep: FillReport) -> list[tuple[Cell, lis
     return out
 
 
-def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+def _total_edits(cells: list[Cell], tally: dict, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+    """자기평가표 아래 따로 놓인 합계 표('합 계 | 20 점 | __' — 11/13 사용자 요청: 국립아시아문화전당 서식 14호)에 합계 점수.
+    같은 서식에서 넣은 점수(자기평점 줄·감점 0)를 더한 값, 비운 줄이 하나라도 있으면 안 채움. 옆 배점 칸이 'N 점'이면 같은 모양으로."""
+    from .selfscore import fmt
+
+    if not tally.get("n") or tally.get("missing"):
+        return []
+    rows: dict[int, list[Cell]] = {}
+    for c in cells:
+        rows.setdefault(c.row, []).append(c)
+    for r in sorted(rows):
+        line = sorted(rows[r], key=lambda c: c.col)
+        if not line or not re.fullmatch(r"(?:합|총)계|총점|계", _sq(line[0].text)):
+            continue
+        blank = next((c for c in line[1:] if c.blank), None)
+        if blank is None:
+            continue
+        unit = " 점" if any(re.fullmatch(r"[\d.]+점", _sq(c.text)) for c in line[1:]) else ""
+        value = round(tally["sum"], 2)
+        rep.filled.append(f"합계 → {fmt(value)}점 (자기평점 {tally['n']}줄 + 감점 0)")
+        return [(blank, [fmt(value) + unit], False)]
+    return []
+
+
+def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | None = None) -> list[tuple[Cell, list[str], bool]]:
     """자기평가 심사표('자기평점'·'평점' 칸)에 점수 — 제안요청서 배점표·계산 조건대로, 서식 배점 기준과 다르면 서식 기준,
     계산식끼리 다르면 유리한 쪽(11/05 사용자 결정, `selfscore.score_form`). '계' = 모든 줄 점수가 있을 때만 합계."""
     from .selfscore import fmt, read_form, score_form
@@ -2156,6 +2180,10 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport) -> list[tuple[Cel
     for row, item in scored:
         name = _sq(row.label)[:16]
         rep.self_rows.append([row.label, fmt(row.points), fmt(item.score), item.basis, "\n".join(item.notes)])
+        if tally is not None:  # 따로 놓인 합계 표에 쓸 합(11/13)
+            tally["n"] += 1
+            tally["sum"] += item.score or 0
+            tally["missing"] = tally["missing"] or item.score is None
         if item.score is None:
             rep.filled.append(f"자기평점 '{name}' 비움 — " + "; ".join(item.notes[:2]))
             continue
@@ -2210,6 +2238,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
             none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
+            tally = {"sum": 0.0, "n": 0, "missing": False}  # 이 서식에서 넣은 자기평점 합(따로 놓인 합계 표용, 11/13)
             seen_party: set = set()  # 회사 정보 표 모양 — 같은 모양이 또 나오면 공동수급 구성원용 사본이라 비움(11/13)
             for tbl in _all_tables(xml):
                 cells = _cells(xml, tbl)
@@ -2236,10 +2265,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                    for c, lines, keep in _fill_tracks(xml, cells, tracks, rep)]
                     edits += track_edits
                     track_marks += [escape(lines[0]) for _c, lines, _k in track_edits if lines and len(lines[0]) >= 4]
-                if self_scores:
-                    edits += _self_score_edits(cells, self_scores, rep)
+                scored = _self_score_edits(cells, self_scores, rep, tally) if self_scores else []
+                edits += scored
                 if not sign_only:
                     edits += _deduction_edits(cells, rep)
+                    if not scored:  # 자기평가표 아래 따로 놓인 '합 계 | 20 점 | __' 표
+                        edits += _total_edits(cells, tally, rep)
                 for c in cells:
                     if sign_only and _row_group(cells, c) != "신청인":
                         continue

@@ -3354,3 +3354,22 @@ def test_staff_grade_rows_and_note_filled(tmp_path: Path):
     for line in ("1.0점|1.0|1명 × 1.0점 = 1.0점", "0.8점|0.0|0명 × 0.8점 = 0.0점",
                  "0.6점|1.2|2명 × 0.6점 = 1.2점", "0.4점|0.4|1명 × 0.4점 = 0.4점"):
         assert line in text, (line, text)
+
+
+def test_certificate_issuer_rows_left_blank(tmp_path: Path):
+    """11/13 사용자 지적: 실적증명서 '증 명 서 발급기관'(세로로 합친 머리 칸) 줄의 '전화번호 :'에 지일 전화가 들어감 —
+    증명서는 발주처가 적는 칸. 머리 칸이 덮는 줄은 모두 비움, 위 신청인 줄은 그대로 채움."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "신청인"), c(1, 0, "전화번호 :    "), c(2, 0, "상 호 :    ")],
+            [c(0, 1, "증 명 서\n발급기관", 1, 3), c(1, 1, "위 사실을 증명함\n기 관 명 :            (인)", 2)],
+            [c(1, 2, "발급부서 :", 2)],
+            [c(1, 3, "전화번호 : "), c(2, 3, "담 당 자 :            (인)")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-000-0000"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    first, rest = sec.split("증 명 서", 1)
+    assert "(주)가상" in first and "033-000-0000" not in rest and "(주)가상" not in rest and "홍길동" not in rest, re.sub(r"<[^>]+>", "|", sec)

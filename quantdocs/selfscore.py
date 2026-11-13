@@ -83,6 +83,7 @@ class ItemScore:
     score: float | None
     basis: str = ""
     notes: list[str] = field(default_factory=list)
+    counts: dict = field(default_factory=dict)  # 기술인력 등급별 인원 {등급: 명} — 서식 등급 줄·비고 '명 × 점 = 점'(11/13)
 
 
 # ── 읽기 ────────────────────────────────────────────────────────────
@@ -521,6 +522,7 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
         band = _band(c, raw)
         res.score = band.score if band else None
         counts0 = {g: sum(1 for gg, _ in best.values() if gg == g) for g in GRADES}
+        res.counts = counts0
         res.basis = (", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts0.items() if n) or "고른 인원 0명") \
             + f" = {raw:g}점 → '{band.text if band else '구간 없음'}'"
         res.notes += [f"뺀 인원 {k} {n}명" for k, n in {p['why']: sum(1 for q in people if not q['counted'] and q['why'] == p['why']) for p in people if not p['counted']}.items()]
@@ -538,6 +540,7 @@ def _staff(c: Criterion, vault, ref: date) -> ItemScore:
         res.score = min(float(floor.group(1)), c.points)
         res.notes.append(f"최저 {floor.group(1)}점 적용")
     counts = {g: sum(1 for gg, _ in best.values() if gg == g) for g in GRADES}
+    res.counts = counts
     res.basis = (", ".join(f"{g} {n}명×{c.per_grade[g]:g}" for g, n in counts.items() if n) or "고른 인원 0명") + f" = {raw:g}점" + (
         f" → 최고 {c.points:g}점" if raw > c.points else "")
     res.notes += [f"뺀 인원 {k} {n}명" for k, n in skipped.items() if n]
@@ -742,6 +745,7 @@ class FormRow:
     crit: Criterion | None = None  # 서식 표 안의 기준(구간·등급) — 없으면 본문 기준
     total: bool = False
     by_points: dict = field(default_factory=dict)  # 구간 줄마다 평점 칸이 따로인 표 — {그 줄 배점: 평점 칸}(11/10 경남교육청)
+    grade_cells: dict = field(default_factory=dict)  # 기술인력 등급 줄 — {등급: (평점 칸, 비고 '명 × 점 = 점' 칸)}(11/13)
 
 
 def _per_person(text: str) -> float | None:
@@ -820,6 +824,7 @@ def read_form(cells) -> list[FormRow]:
         kind = next((k for k, rx in KINDS if rx.search(_sq(label))), "")
         crit = Criterion(label, 0.0, kind)
         cap = None
+        grade_cells: dict = {}
         kinds: dict[int, str] = {}
         nums = []
         for r in rs:
@@ -843,6 +848,11 @@ def read_form(cells) -> list[FormRow]:
                 g = next((g for g in GRADES for _, t in texts if g in _sq(t)), None)
                 if g:
                     crit.per_grade.setdefault(g, per)
+                    # 등급 줄의 평점 칸·비고 '명 × 점 = 점' 칸 — 사람 수대로 채움(11/13 사용자 요청: 부산 업사이클센터)
+                    sc = next((c for c in line if c.col <= scol < c.col + c.colspan and c.blank), None)
+                    nc = next((c for c in line if c.col > scol and re.search(r"명\s*[×xX*]", c.text)), None)
+                    if (sc is not None or nc is not None) and g not in grade_cells:
+                        grade_cells[g] = (sc, nc)
                 continue
             if pts is None:
                 continue
@@ -873,7 +883,7 @@ def read_form(cells) -> list[FormRow]:
         points = cap if cap is not None else (max(nums) if nums else None)
         crit.points = points or 0.0
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
-        out.append(FormRow(label, points, target, crit if has else None, by_points=by_points))
+        out.append(FormRow(label, points, target, crit if has else None, by_points=by_points, grade_cells=grade_cells))
     return out
 
 

@@ -3316,3 +3316,31 @@ def test_placeholder_signer_ascii_o_and_title_blank(tmp_path: Path):
     text = text.replace("", "").replace("", "")
     assert "시행하는 가상 사업" in text and "계약업체로서" in text, text
     assert re.search(r"서약자 : \(주\)가상\s+대표 홍길동 \(서명 또는 날인\)", text), text
+
+
+def test_staff_grade_rows_and_note_filled(tmp_path: Path):
+    """11/13 사용자 요청(부산 업사이클센터 자기평가표): 상한점수 줄의 합계(2.6)만 들어가고 등급 줄 평점 칸·비고 '명 × 점 = 점'은 빔 —
+    등급별 사람 수대로 '1.0' · '1명 × 1.0점 = 1.0점', 없는 등급은 0명."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                           f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항 목"), c(1, 0, "세 부 항 목", 4), c(5, 0, "배 점"), c(6, 0, "평 점"), c(7, 0, "비 고")],
+            [c(0, 1, "기술능력(6점)", 1, 5), c(1, 1, "상한점수", 4), c(5, 1, "6점"), c(6, 1, ""), c(7, 1, "")]]
+    for i, (g, p) in enumerate((("특급기술자", "1.0점"), ("고급기술자", "0.8점"), ("중급기술자", "0.6점"), ("초급기술자", "0.4점"))):
+        r = 2 + i
+        rows.append(([c(1, r, "기술인력보유현황", 1, 4)] if i == 0 else []) + [c(2, r, g, 3), c(5, r, p), c(6, r, ""), c(7, r, "  명 × 점 =  점")])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    v.staff = [{"이름": "가", "입사일": "2010-01-01", "등급": "특급"}, {"이름": "나", "입사일": "2010-01-01", "등급": "중급"},
+               {"이름": "다", "입사일": "2010-01-01", "등급": "중급"}, {"이름": "라", "입사일": "2010-01-01", "등급": "초급"}]
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 13)))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+    assert "6점|2.6|" in text  # 상한점수 줄 합계 그대로
+    for line in ("1.0점|1.0|1명 × 1.0점 = 1.0점", "0.8점|0.0|0명 × 0.8점 = 0.0점",
+                 "0.6점|1.2|2명 × 0.6점 = 1.2점", "0.4점|0.4|1명 × 0.4점 = 0.4점"):
+        assert line in text, (line, text)

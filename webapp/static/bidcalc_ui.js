@@ -682,7 +682,8 @@
     // 개찰 결과는 '낙찰'(지일 1순위) / '탈락'(그 밖 — 하한선 미달 포함)으로(11/10 사용자 요청), 등수는 옆 칸
     if (o.recorded) {   // 비교 기록 — 실제로 낸 금액이 아니라서 '낙찰·탈락' 대신 웹앱 금액으로 본 자리
       const lab = o.rank === 1 ? `<b class="res-win">1순위</b>` : o.rank != null ? `<b class="rank">${o.rank}등</b>` : `<b class="res-bad">하한선 미달</b>`;
-      return `${lab}<span class="sub">웹앱 금액 · 참가 ${n}곳</span>${cmp}`;
+      // '비교 기록' 칩은 결과 바로 아래, 그 밑에 참가 수·실제 투찰 등수만(11/13 사용자 요청 — '웹앱 금액' 글은 칩과 겹쳐 뺌)
+      return `${lab}<span class="res-cmp">비교 기록 · 웹앱 금액 기준</span><span class="sub">참가 ${n}곳</span><span class="sub">실제 투찰 ${realPlace}</span>`;
     }
     return (o.rank === 1 ? `<b class="res-win">낙찰</b><span class="sub">참가 ${n}곳</span>`
       : `<b class="res-bad">탈락</b><span class="sub">${o.rank == null ? esc((o.remark || "순위 없음").replace("낙찰하한선미달", "하한선 미달")) + " · " : ""}참가 ${n}곳</span>`) + cmp;

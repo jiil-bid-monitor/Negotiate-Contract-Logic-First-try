@@ -100,6 +100,7 @@
 
 ## 2026-11-13 — 투찰내역에 계약방법(수의·지명 등) 표시 (브랜치 `claude/bidlog-contract-method`, 사용자 요청)
 
+- (이어서 사용자 요청) 비교 기록 칸: '비교 기록 · 웹앱 금액 기준' 칩을 결과(하한선 미달·N등) 바로 아래로, '웹앱 금액' 글 뺌 → 참가 N곳 / 실제 투찰 N등만.
 - 공고 칸 발주처 줄 끝에 계약방법 칩(`contractMethod` = 나라장터 `cntrctCnclsMthdNm` — 일반경쟁·제한경쟁·지명경쟁·수의계약), 수의·지명은 노란 칩. CSV에 '계약방법' 열.
 - 새 기록은 불러올 때 이미 저장됨, 예전 기록은 결과 받을 때 공고에서 한 번 찾아 채움(`bidcalc.notice_times`가 계약방법도, `bidresult._needs_times`·`BidLog.set_times`).
   시험 `test_contract_method_filled_for_old_records`. 서버 코드도 바뀜 — 웹앱 다시 켜기 + F5.

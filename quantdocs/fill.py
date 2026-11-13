@@ -895,7 +895,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 rep.filled.append("한 줄 이름표 → " + " · ".join(done))
             continue
         # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름
-        bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)))(\s{{3,}})({_SEAL_TAIL}.*)", text)
+        # '신청인(대표사)          (인)'(11/13 운리단길 별지서식 1 입찰참가신청서)도 같은 모양
+        bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{{1,10}}\))?))(\s{{3,}})({_SEAL_TAIL}.*)", text, re.S)
         if bare:
             sign_at.add(n)
         if bare and _value("대표자", vault):
@@ -906,7 +907,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 body = mm.group(2)
                 if done:
                     return mm.group(0)
-                m2 = re.search(r"((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)))( {3,})", body)
+                m2 = re.search(r"((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{1,10}\))?))( {3,})", body)
                 if not m2:
                     return mm.group(0)
                 done.append(1)
@@ -1798,6 +1799,24 @@ def _align_numbers(xml: str, edits: list, chars: "_Chars", override: dict[int, s
                 override[cell.start] = center
 
 
+def _align_right_cells(xml: str, edits: list, chars: "_Chars", override: dict[int, str]) -> None:
+    """같은 표에 넣은 값 칸 대부분이 가운데 정렬인데 홀로 오른쪽 정렬인 칸은 가운데로(11/13 사용자 제보: 위임장 '소 속 (업체명)' 칸의
+    '(주)지일'만 오른쪽으로 치우침 — 원본 문단이 오른쪽 정렬). 금액처럼 오른쪽이 맞는 칸이 많은 표는 그대로."""
+    pids = []
+    for cell, lines, _keep in edits:
+        if cell.start in override or not lines:
+            continue
+        m = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[cell.start:cell.end])
+        if m:
+            pids.append((cell, m.group(1)))
+    aligns = [chars.align(pid) for _c, pid in pids]
+    if aligns.count("CENTER") < 2 or aligns.count("CENTER") <= aligns.count("RIGHT"):
+        return
+    for cell, pid in pids:
+        if chars.align(pid) == "RIGHT" and not _NUMBER.fullmatch(" ".join(next(e[1] for e in edits if e[0] is cell)).strip()):
+            override[cell.start] = chars.centered(pid)
+
+
 def _seal_gap(cell: str, name: str, seal: str, chars: "_Chars") -> int | None:
     """'이름 + 빈칸 + (인)'이 칸 한 줄을 꽉 채우게 할 빈칸 수(이름은 왼쪽, (인)은 오른쪽 끝). 채운 글은 11pt라 그 크기로 어림,
     줄이 넘치지 않게 조금 덜 둠. 칸 너비·글자 모양을 모르면 None."""
@@ -2510,6 +2529,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         rep.filled += done
                 if chars is not None:
                     _align_numbers(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override)
+                    _align_right_cells(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override)
                 if none_rule and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
                     head = [c for c in cells if c.row == 0]
                     body = [c for c in cells if c.row > 0]

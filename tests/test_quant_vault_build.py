@@ -3045,3 +3045,27 @@ def test_inline_lowercase_fax_label(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "전화번호": "033-000-0000", "팩스번호": "033-000-0001"}))
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert "033-000-0000" in text and "033-000-0001" in text, text
+
+
+def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
+    """11/13 사용자 제보(운리단길): ① 입찰참가신청서 표 밖 '신청인(대표사)          (인)'에 대표자 이름이 빠짐(쌍점 없는 서명 줄 규칙에 신청인이 없었음)
+    ② 위임장 '소 속 (업체명)' 칸만 원본 문단이 오른쪽 정렬이라 '(주)지일'이 오른쪽으로 치우침 — 같은 표 다른 값 칸이 가운데면 가운데로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="2"><hh:paraPr id="0"><hh:align horizontal="CENTER"/></hh:paraPr>'
+              '<hh:paraPr id="5"><hh:align horizontal="RIGHT"/></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+    right = ('<hp:tc><hp:subList><hp:p paraPrIDRef="5"><hp:run charPrIDRef="0"><hp:t></hp:t></hp:run></hp:p></hp:subList>'
+             '<hp:cellAddr colAddr="1" rowAddr="2"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    body = _tbl([[_c(0, 0, "대 표 자"), _c(1, 0, "")], [_c(0, 1, "주 소"), _c(1, 1, "")], [_c(0, 2, "소 속 (업체명)"), right]]) \
+        + '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>            신청인(대표사)                (인)</hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"}))
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    text = re.sub(r"<[^>]+>", "", out).replace("", "").replace("", "")
+    assert re.search(r"신청인\(대표사\)\s+홍길동\s+\(인\)", text)
+    pid = re.search(r'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?\(주\)가상', out, re.S).group(1)
+    assert 'horizontal="CENTER"' in re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)

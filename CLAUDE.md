@@ -19,6 +19,16 @@
 병합 안 한 브랜치, 서버 PC 반영 여부) ③ 다음에 할 일(우선순위 순, 결정 대기 항목은 "사용자 결정 대기"로) ④ 지켜야 할 것(한국어 답변, 요청 전엔 고치지 않기 등).
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 
+## 2026-11-16 — 보안 검토 2·3번: 서버 PC 'Users' 공유 해제 + 잠금 묶음 비밀번호 바꾸기 명령 (브랜치 `claude/vault-rekey`, 사용자 요청)
+
+- 2번(원본 서류가 암호 없이 서버 PC 폴더에): 원본은 비공개 레포 git 기록·추적에 없음(확인), 폴더 권한은 HJE·관리자만. 그런데 `C:\Users`가 'Users' 공유로
+  **Everyone 모든 권한**으로 열려 있었음 → 사용자가 관리자 PowerShell로 `net share Users /delete`(11/16). 남은 것: HJE 계정 비밀번호를 아는 사람 확인.
+- 3번(묶음 비밀번호가 예전 채팅에 나감): 비공개 레포 `회사자료` 폴더(43개, 11/3)가 묶음(약 55개, 11/4)보다 낡아 `seal`로 다시 만들 수 없음 →
+  **`py -m quantdocs vault rekey`**(`vault.rekey`): .env의 예전 비밀번호로 메모리에서만 풀고 새 비밀번호(두 번 입력, 12자 이상)로 같은 내용을 다시 잠금,
+  새 비밀번호로 열어 내용 같은지 확인한 뒤 바꿈, 예전 묶음은 이 저장소 `data/vault_backup/`(.gitignore — 비공개 레포 폴더에 두면 `git add .`로 올라갈 수 있어서).
+  그 뒤 .env `QUANT_VAULT_PASSPHRASE` 갱신·웹앱 재시작·jiil-quant-docs에서 `vault/company.enc` 커밋·push. GitHub 기록의 옛 묶음은 옛 비밀번호로 열림(①안 — 기록 지우기는 안 함).
+  **새 비밀번호는 채팅·저장소에 적지 말 것.** 시험 `test_vault_rekey_keeps_content_changes_password`.
+
 ## 2026-11-16 — 웹앱 접속 토큰을 저장소에서 뺌 (브랜치 `claude/rotate-app-token`, 사용자 요청 — 보안 검토 1번)
 
 - 계기: 기본 접속 토큰과 서버 PC 사내 주소가 공개 저장소(`start.sh`·README·HANDOFF·CLAUDE.md)에 적혀 있어, 사내망 누구나 정량평가서 '만들기'로

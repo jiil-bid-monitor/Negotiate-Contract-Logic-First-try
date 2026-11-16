@@ -746,6 +746,7 @@ class FormRow:
     total: bool = False
     by_points: dict = field(default_factory=dict)  # 구간 줄마다 평점 칸이 따로인 표 — {그 줄 배점: 평점 칸}(11/10 경남교육청)
     grade_cells: dict = field(default_factory=dict)  # 기술인력 등급 줄 — {등급: (평점 칸, 비고 '명 × 점 = 점' 칸)}(11/13)
+    none_cells: list = field(default_factory=list)  # 신인도 '없음' 줄 — [(평점 칸, 그 줄 배점)](11/16 사용자 요청: '없음' 줄에 그 배점)
 
 
 def _per_person(text: str) -> float | None:
@@ -825,6 +826,7 @@ def read_form(cells) -> list[FormRow]:
         crit = Criterion(label, 0.0, kind)
         cap = None
         grade_cells: dict = {}
+        none_cells: list = []
         kinds: dict[int, str] = {}
         nums = []
         for r in rs:
@@ -833,7 +835,8 @@ def read_form(cells) -> list[FormRow]:
             pts, per = _num(pts_text), _per_person(pts_text)
             crit.note += " ".join(c.text.strip() for c in line if c.col > scol and c.text.strip()) + "\n"
             texts = [(c.col, re.sub(r"\s+", " ", c.text).strip()) for c in line if c.col < min(pcol, scol) and c.text.strip()]
-            if any("상한" in _sq(t) for _, t in texts):
+            if any("상한" in _sq(t) for _, t in texts) and not (texts and re.fullmatch(r"(?:해당)?없음", _sq(texts[-1][1]))):
+                # '책임성 (상한 2점) | 없음 | 2.0'처럼 세로 묶음 칸에만 '상한'이 있고 줄 이름이 '없음'인 줄은 상한 줄이 아님(11/16)
                 cap = pts
                 continue
             for col, t in texts:
@@ -856,6 +859,11 @@ def read_form(cells) -> list[FormRow]:
                 continue
             if pts is None:
                 continue
+            if texts and re.fullmatch(r"(?:해당)?없음", _sq(texts[-1][1])):
+                # 신인도(책임성·성실성) 표의 '없음' 줄(11/16 사용자 요청: 감점 사유가 없으니 '없음' 줄에 그 배점 2.0)
+                sc = next((c for c in line if c.col <= scol < c.col + c.colspan and c.blank), None)
+                if sc is not None:
+                    none_cells.append((sc, pts))
             nums.append(pts)
             rules = {kinds[col]: t for col, t in texts if col in kinds and re.search(r"[A-D]", t)}
             if not rules and len(set(kinds.values())) == 1:
@@ -883,7 +891,8 @@ def read_form(cells) -> list[FormRow]:
         points = cap if cap is not None else (max(nums) if nums else None)
         crit.points = points or 0.0
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
-        out.append(FormRow(label, points, target, crit if has else None, by_points=by_points, grade_cells=grade_cells))
+        out.append(FormRow(label, points, target, crit if has else None, by_points=by_points, grade_cells=grade_cells,
+                           none_cells=none_cells))
     return out
 
 

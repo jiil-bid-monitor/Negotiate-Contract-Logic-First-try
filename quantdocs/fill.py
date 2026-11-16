@@ -808,7 +808,46 @@ def _break_value(seg: str, chars: "_Chars | None", line_w: int | None) -> str:
     return first + rest
 
 
-def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None) -> str:
+def _colon_cut(xml: str, last: bool = False) -> int | None:
+    """xml 안 글(태그 밖)에서 ':'(또는 '：') 바로 뒤 위치 — 이름표 문단의 ':' 자리를 재려고. 없으면 None."""
+    pos, found = 0, None
+    for part in re.split(r"(<[^>]+>)", xml):
+        if not part.startswith("<"):
+            for k, ch in enumerate(part):
+                if ch in ":：":
+                    found = pos + k + 1
+                    if not last:
+                        return found
+        pos += len(part)
+    return found
+
+
+def _center_area(pid: str, chars: "_Chars", line_w: int | None) -> tuple[float, int]:
+    """가운데 정렬 문단의 글이 놓이는 너비(줄 너비 − 왼쪽·오른쪽 여백)와 왼쪽 여백."""
+    block = chars._para(pid) or ""
+    rm = re.search(r'<(?:[\w.-]+:)?right\b[^>]*value="(-?\d+)"', block)
+    _intent, left = chars.margins(pid)
+    return (line_w or 0) - max(left, 0) - (max(int(rm.group(1)), 0) if rm else 0), left
+
+
+def _orig_colon_x(orig: str, chars: "_Chars", line_w: int | None) -> float | None:
+    """원본(가운데 정렬) 이름표 문단에서 ':' 오른쪽 끝이 있던 자리(글 영역 왼쪽 끝 기준, HWPUNIT 어림)."""
+    open_m = re.match(r'<([\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"[^>]*>', orig)
+    if not open_m or not line_w:
+        return None
+    body = orig[open_m.end():]
+    cut = _colon_cut(body)
+    if cut is None:
+        return None
+    area, _left = _center_area(open_m.group(2), chars, line_w)
+    if area <= 0:
+        return None
+    t0, _c = _prefix_width(orig, chars)
+    wc, _c = _prefix_width(body[:cut], chars)
+    return max(0.0, (area - t0) / 2) + wc
+
+
+def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None, colon_x: float | None = None) -> str:
     """가운데 정렬 이름표 문단(서명 묶음 '업 체 명 : / 주    소 : / 대 표 자 :  (인)')에 값을 넣어도 이름표가 원래 자리에 남게(11/13 사용자 지적).
     원본은 줄마다 빈칸까지 같은 길이로 맞춰 이름표가 같은 자리에 보였음 — 값을 넣고 빈칸을 줄이면 줄 길이가 달라져 가운데 정렬이
     줄마다 다르게 밀렸음. 문단 모양은 그대로 두고 줄 길이를 원래 길이(T0)에 맞춤: 짧으면 뒤에, 길면 앞에 그만큼 빈칸
@@ -848,6 +887,12 @@ def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None
         if value_x not in seen:
             seen.append(value_x)
         offset = max(0, int(round(value_x - pw)))
+        cut = _colon_cut(prefix, last=True)
+        if colon_x is not None and cut is not None:
+            # (11/16 사용자 지적: '대 표 자:' 줄만 ':'가 왼쪽으로 — 기본 서식의 ':' 자리는 절대 옮기지 말 것) 값 시작 어림 대신
+            # 원본의 ':' 자리(같은 묶음 줄끼리 맞춘 값)에 이 줄 ':'를 그대로 둠 — 왼쪽 여백 = ':' 자리 − ':'까지 너비
+            wc, _c = _prefix_width(prefix[:cut], chars)
+            offset = max(0, int(round(colon_x - wc)))
     if line_w and not unescape(re.sub(r"<[^>]+>", "", tail_xml)).strip():  # 값 뒤에 '(인)' 등이 없을 때만 끊음
         avail = (area - offset) * 0.97 - pw if use_left else ((area + t0) / 2) * 0.97 - pw
         if avail > h * 2 and _cjk_width(value, h) > avail:
@@ -1008,6 +1053,38 @@ def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
 
 
 _PH = r"[○ｏoOㅇ◯0０](?: ?[○ｏoOㅇ◯0０]){1,}"  # 서명 줄 자리표시 '○○○'·'o o o'·'00회사 대표 000'(숫자 0 — 11/13)
+
+
+def _block_colons(xml: str, cands: list, chars: "_Chars | None", cells: list[tuple[int, int]]) -> dict[int, float]:
+    """가운데 정렬 서명 묶음('주 소 : / 업 체 명 : / 대 표 자 :  (인)') 줄마다 원본 ':' 자리 → 묶음끼리 하나로 맞춘 값(문단 시작 → 자리).
+    원본은 줄마다 빈칸으로 길이를 맞춰 ':'가 한 줄로 서 있음 — 빈칸·'(인)' 너비 어림이 줄마다 조금씩 틀려도(11/16 '대 표 자:' 줄이
+    1.5글자 밀림) 같은 문단 모양으로 잇달아 놓인 줄(문단 6개 안)은 글자 4개 너비 안이면 한 묶음, 묶음 값은 가운데 값."""
+    if chars is None:
+        return {}
+    rows = []
+    for s, _e, _label, _seal, bare, n in cands:
+        if bare:
+            continue
+        pm = re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[s:_e])
+        if not pm or chars.align(pm.group(1)) != "CENTER":
+            continue
+        x = _orig_colon_x(xml[s:_e], chars, _line_width(xml, s, cells))
+        if x is not None:
+            h = max(chars.height(re.search(r'charPrIDRef="(\d+)"', xml[s:_e]).group(1)) if re.search(r'charPrIDRef="(\d+)"', xml[s:_e]) else 1000, 1000)
+            rows.append((n, pm.group(1), s, x, h))
+    out, groups = {}, []
+    for row in sorted(rows):
+        g = next((g for g in groups if g[-1][1] == row[1] and row[0] - g[-1][0] <= 6
+                  and abs(sorted(r[3] for r in g)[len(g) // 2] - row[3]) <= 4 * row[4]), None)
+        (g.append(row) if g is not None else groups.append([row]))
+    for g in groups:
+        xs = sorted(r[3] for r in g)
+        mid = xs[len(xs) // 2] if len(xs) % 2 else (xs[len(xs) // 2 - 1] + xs[len(xs) // 2]) / 2
+        if len(xs) >= 3:  # 셋 이상이면 가운데 값(어긋난 한 줄이 끌어당기지 않게), 둘이면 평균
+            mid = xs[len(xs) // 2]
+        for r in g:
+            out[r[2]] = mid
+    return out
 
 
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None, sign_only: bool = False) -> str:
@@ -1243,6 +1320,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     bare_at = {c[5] for c in cands if c[4]} | sign_at
     # 대표자가 서명하는 보안각서(11/16 사용자 결정) — 참여인력용 각서는 사람마다 다르니 그대로 비움
     memo = re.search(r"보\s*안\s*각\s*서", _text(xml)) and not re.search(r"참\s*여\s*인\s*력", _text(xml))
+    colon_at = _block_colons(xml, cands, chars, cells)
     for s, e, label, seal, bare, n in cands:
         if bare == "cell" and not ({n - 1, n + 1} & sign_at):
             continue  # 표 칸 안 쌍점 없는 이름표는 서명 묶음('신청인 업체명' / '대표자     ㉿')일 때만(11/06 청주 신청서)
@@ -1286,7 +1364,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 rep.filled.append(f"{_sq(label)} 아래 줄 {seal_m.group(1)} → 이름 줄로")
         pid = re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[s:e])
         if chars is not None and pid and chars.align(pid.group(1)) == "CENTER":
-            seg = _center_keep(xml[s:e], seg, chars, _line_width(xml, s, cells))  # 가운데 정렬 서명 묶음은 이름표 자리 그대로(11/13)
+            seg = _center_keep(xml[s:e], seg, chars, _line_width(xml, s, cells), colon_at.get(s))  # 가운데 정렬 서명 묶음은 이름표 자리 그대로(11/13)
         else:
             seg = _break_value(seg, chars, _line_width(xml, s, cells))
         edits.append((s, e, seg))
@@ -2542,10 +2620,10 @@ def _deduction_edits(cells: list[Cell], rep: FillReport, tally: dict | None = No
 
 def _total_edits(cells: list[Cell], tally: dict, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
     """자기평가표 아래 따로 놓인 합계 표('합 계 | 20 점 | __' — 11/13 사용자 요청: 국립아시아문화전당 서식 14호)에 합계 점수.
-    같은 서식에서 넣은 점수(자기평점 줄·감점 0)를 더한 값, 비운 줄이 하나라도 있으면 안 채움. 옆 배점 칸이 'N 점'이면 같은 모양으로."""
+    같은 서식에서 넣은 점수(자기평점 줄·감점 0)를 더한 값 — 비운 줄은 빼고 더함(11/16 사용자 요청: 합산 점수는 늘 기입). 옆 배점 칸이 'N 점'이면 같은 모양으로."""
     from .selfscore import fmt
 
-    if not tally.get("n") or tally.get("missing"):
+    if not tally.get("n") or tally.get("sum") is None:
         return []
     rows: dict[int, list[Cell]] = {}
     for c in cells:
@@ -2562,6 +2640,12 @@ def _total_edits(cells: list[Cell], tally: dict, rep: FillReport) -> list[tuple[
         rep.filled.append(f"합계 → {fmt(value)}점 (감점 없는 항목 배점 {fmt(tally.get('extra', 0.0))}점 포함)")
         return [(blank, [fmt(value) + unit], False)]
     return []
+
+
+def _one_dec(v: float) -> str:
+    """배점 칸 모양대로 소수 한 자리('2.0')."""
+    t = f"{round(v, 2):g}"
+    return t if "." in t else t + ".0"
 
 
 def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | None = None) -> list[tuple[Cell, list[str], bool]]:
@@ -2584,8 +2668,12 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
         if item.score is None:
             rep.filled.append(f"자기평점 '{name}' 비움 — " + "; ".join(item.notes[:2]))
             continue
+        none_cells = row.none_cells if item.kind == "sanction" else []
         cell = row.by_points.get(item.score, row.cell) if row.by_points else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
-        out.append((cell, [fmt(item.score)], False))
+        if not any(cell is nc for nc, _p in none_cells):
+            out.append((cell, [fmt(item.score)], False))
+        for nc, pts in none_cells:  # 신인도 '없음' 줄마다 그 줄 배점(11/16 사용자 요청) — 상한점수 줄엔 위대로 합(상한까지)
+            out.append((nc, [_one_dec(pts)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")
         # 기술인력 등급 줄마다 그 등급 점수 + 비고 '명 × 점 = 점'(11/13 사용자 요청: 부산 업사이클센터 '특급기술자 | 1.0점 | __ | 명 × 점 = 점')
         if row.grade_cells and row.crit is not None and item.kind == "staff":
@@ -2602,11 +2690,15 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
                     out.append((nc, [f"{n}명 × {one(per)}점 = {one(v)}점"], False))
                 rep.filled.append(f"자기평점 '{name}' {g} {n}명 × {one(per)}점 = {one(v)}점")
     total = next((r for r in rows if r.total), None)
-    if scored and all(it.score is not None for _, it in scored):
-        value = round(sum(it.score for _, it in scored), 2)
+    done = [it for _, it in scored if it.score is not None]
+    if done:
+        # 합계 = 넣은 점수의 합(11/16 사용자 요청: 최하단 합산 점수도 계산해 기입 — 11/13 '비운 줄이 있으면 합계도 비움'을 대체).
+        # 비운 줄(담당자 직접 채점)은 안 더함 — 읽어보기에 알림
+        value = round(sum(it.score for it in done), 2)
+        blank = [r.label for r, it in scored if it.score is None]
         if total is not None:
             out.append((total.cell, [fmt(value)], False))
-            rep.filled.append(f"자기평점 계 → {fmt(value)}점")
+            rep.filled.append(f"자기평점 계 → {fmt(value)}점" + (f" (비운 줄 {', '.join(_sq(b)[:12] for b in blank)} 빼고 — 직접 채점 뒤 고칠 것)" if blank else ""))
         rep.self_rows.append(["계", fmt(sum(r.points or 0 for r, _ in scored)), fmt(value), "서식 줄 합계", ""])
     return out
 

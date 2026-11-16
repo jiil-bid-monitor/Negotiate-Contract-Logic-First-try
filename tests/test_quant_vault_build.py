@@ -1054,7 +1054,8 @@ def test_self_score_fills_form_by_rfp(tmp_path: Path):
     got = {c.row: c.text for c in _cells(out, _spans(out, "tbl")[0]) if c.col == 2}
     # 11/05 사용자 결정: 기술인력·경영상태·신인도·특허만 자동 — 실적은 담당자가 직접(비움), 그래서 계도 비움
     # 인력 특급 1명 1점(본문 3점) × 6/3 = 2, 특허 1건 1점, 경영 3.5, 신인도 2
-    assert got == {0: "자기평점", 1: "", 2: "", 3: "", 4: "2", 5: "1", 6: "3.5", 7: "2"}
+    # 계 = 넣은 점수 합(11/16 사용자 요청: 비운 실적 줄은 빼고 늘 기입)
+    assert got == {0: "자기평점", 1: "8.5", 2: "", 3: "", 4: "2", 5: "1", 6: "3.5", 7: "2"}
     assert any("직접" in r[4] for r in rep.self_rows if r[0].startswith("최근"))
 
 
@@ -2946,11 +2947,44 @@ def test_self_score_total_table_below(tmp_path: Path):
     last = sec.rsplit("<hp:tbl>", 1)[1]
     # 감점이 없으면 감점 항목은 배점(5.0) 만점 → 14.25 + 5.0 = 19.25(11/13 사용자 지적)
     assert re.sub(r"<[^>]+>", "", last).endswith("20 점19.25 점"), re.sub(r"<[^>]+>", "", last)
-    # 신용등급을 모르면 재무상태가 비어 합계도 비움
+    # 신용등급을 모르면 재무상태는 비우고, 합계는 넣은 점수만 더함(11/16 사용자 요청: 합산 점수는 늘 기입)
     v2 = vault.Vault({}, info={"회사명": "(주)가상"})
     fill_hwpx(src, tmp_path / "o2.hwpx", v2, self_scores=SelfScore([], v2, _dt.date(2026, 11, 13)))
     sec2 = zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()
-    assert re.sub(r"<[^>]+>", "", sec2.rsplit("<hp:tbl>", 1)[1]).endswith("20 점")
+    assert re.sub(r"<[^>]+>", "", sec2.rsplit("<hp:tbl>", 1)[1]).endswith("20 점5 점")
+
+
+def test_sanction_none_rows_and_total(tmp_path: Path):
+    """11/16 사용자 지적: 신인도(책임성·성실성) 표 '없음' 줄 자기평점이 비고 '상한 점수' 줄에만 4 — '없음' 줄마다 그 배점(2.0),
+    맨 아래 '합 계' 줄에도 합산 점수(비운 줄 — 담당자 직접 채점 실적 — 은 빼고 더함)."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                           f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "구 분", 4), c(4, 0, "배점"), c(5, 0, "자기평점"), c(6, 0, "비고")],
+            [c(0, 1, "사업수행실적", 4), c(4, 1, "10"), c(5, 1, "")],
+            [c(0, 2, "책임성 성실성 (4점)", 1, 10), c(1, 2, "책임성 (상한 2점)", 1, 4), c(2, 2, "없음", 2), c(4, 2, "2.0"), c(5, 2, "")]]
+    rows += [[c(2, r, t, 2), c(4, r, "-2.0"), c(5, r, "")] for r, t in ((3, "최저임금 위반"), (4, "임금체불"), (5, "고용개선조치 미이행"))]
+    rows += [[c(1, 6, "성실성 (상한 2점)", 1, 5), c(2, 6, "부정당 업자 제재 (총 제재 기간)", 1, 5), c(3, 6, "없음"), c(4, 6, "2.0"), c(5, 6, "")]]
+    rows += [[c(3, r, t), c(4, r, p), c(5, r, "")] for r, t, p in ((7, "24개월 이상", "-2.0"), (8, "24개월 미만 ~ 12개월 이상", "-1.5"),
+                                                                   (9, "12개월 미만 ~ 6개월 이상", "-1.0"), (10, "6개월 미만", "-0.5"))]
+    rows += [[c(1, 11, "상 한 점 수", 3), c(4, 11, "4점"), c(5, 11, "")], [c(0, 12, "합 계", 4), c(4, 12, "20점"), c(5, 12, "")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 16)))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    score = {}
+    for tc in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S):
+        col, row = re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', tc).groups()
+        if col == "5":
+            score[int(row)] = re.sub(r"<[^>]+>", "", tc).strip()
+    assert score[1] == ""  # 실적 = 담당자 직접 채점
+    assert score[2] == "2.0" and score[6] == "2.0", score  # '없음' 줄마다 그 배점
+    assert all(score[r] == "" for r in (3, 4, 5, 7, 8, 9, 10))
+    assert score[11] == "4" and score[12] == "4"  # 상한 점수 줄 그대로 + 합계(실적 빼고)
 
 
 def test_long_label_matched_by_keyword_not_length():
@@ -3196,6 +3230,35 @@ def test_center_aligned_sign_block_keeps_label_positions(tmp_path: Path):
     colon = [_cjk_width(ln[:ln.index(":")], 1200) for ln in (lines[0], lines[1], lines[3])]
     assert max(colon) - min(colon) < 100  # 원본처럼 이름표 앞부분 너비가 같아 ':' 자리가 같음
     assert lines[2].startswith("\u3000") or lines[2].lstrip(" ").startswith("\u3000")  # 둘째 줄 앞은 같은 너비 빈칸
+
+
+def test_center_sign_block_colons_stay_in_one_column(tmp_path: Path):
+    """11/16 사용자 지적: '기본 서식의 ':' 위치를 절대 옮기지 마' — 가운데 정렬 서명 묶음에서 '대 표 자:  (인)' 줄만 ':'가 왼쪽으로 1.5글자 밀림
+    (빈칸·'(인)' 너비 어림이 줄마다 달라 묶음에서 떨어져 나감). 같은 묶음 줄은 ':' 자리가 하나로 — 이름표 길이·값 길이와 상관없이."""
+    from quantdocs.fill import _cjk_width, _prefix_width, fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="1"><hh:paraPr id="57"><hh:align horizontal="CENTER"/>'
+              '<hh:margin><hc:intent value="0"/><hc:left value="0"/><hc:right value="0"/></hh:margin></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1200"></hh:charPr></hh:charProperties></hh:head>')
+    sec = '<hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin left="8504" right="8504" top="5668" bottom="4252"/></hp:pagePr></hp:secPr>'
+    para = lambda t: f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    orig = ["주      소:                    ", "업 체 명:                    ", "대 표 자:                     (인)   "]
+    body = f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0">{sec}<hp:t>20  년    월    일</hp:t></hp:run></hp:p>' + "".join(para(x) for x in orig)
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동",
+                                                              "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)"}))
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    xs = []
+    for pid, inner in re.findall(r'<hp:p paraPrIDRef="(\d+)">(.*?)</hp:p>', out, re.S)[1:]:
+        text = "".join(re.findall(r"<hp:t>(.*?)</hp:t>", inner, re.S))
+        if ":" not in text:
+            continue
+        left = int(re.search(r'<hc:left value="(\d+)"', re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)).group(1))
+        xs.append(left + _cjk_width(text[:text.index(":") + 1].replace("\u3000", "가"), 1200))
+    assert len(xs) == 3 and max(xs) - min(xs) < 300, xs  # ':' 세 줄이 한 자리(어림 차이 빈칸 반 칸 안)
 
 
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):

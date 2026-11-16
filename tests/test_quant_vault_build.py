@@ -3150,6 +3150,21 @@ def test_trustor_trustee_signature_fills_trustee_only(tmp_path: Path):
     assert "강원 정선" in right and "(주)가상" in right and re.search(r"대표자 성명 : 홍길동\s+\(인\)", right), right
 
 
+def test_signer_name_rep_paren_label(tmp_path: Path):
+    """11/16 사용자 지적: 서명 묶음 '주 소 : / 업 체 명 : / 성명(대표) :   (인) / 전화번호 :'에서 성명(대표)만 빔 —
+    '성명$' 개인 칸 비움 규칙에 걸렸음. 괄호 안이 '대표'면 대표자 이름."""
+    from quantdocs.fill import fill_hwpx
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (para("주       소 :          ") + para("업  체  명 :          ")
+            + para("성명(대표) :                    (인)") + para("전화번호 :          "))
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"성명\(대표\) : 홍길동\s+\(인\)", text), text
+
+
 def test_pledge_signer_value_after_colon(tmp_path: Path):
     """11/13 사용자 지적: 보안 서약서 서약자 '직 위 :' / '성 명 : (인)'이 한 문단(줄바꿈)이면 '직 위 대표이사 :'처럼 ':' 앞에 들어가고
     성명은 비었음 — ':'가 있으면 값은 늘 ':' 오른쪽."""

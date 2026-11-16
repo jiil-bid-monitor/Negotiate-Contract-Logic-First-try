@@ -709,6 +709,8 @@
   function actualChip(r) {
     const a = actualSide(r);
     if (!a) return "";
+    // '투찰금액·외주 금액으로 투찰' 칩은 뺌(11/16 사용자 요청) — 어느 쪽인지는 안 낸 쪽 금액을 흐리게 해서 보임. 투찰 안 함·다른 금액·기록과 다름만
+    if (a.kind === "web" || a.kind === "out") return a.differs ? ` <span class="actual-warn" title="기록할 때 고른 금액과 나라장터 실제 투찰 금액이 다름">기록과 다름</span>` : "";
     const lab = a.plan ? { web: "투찰금액으로 투찰", out: "외주 금액으로 투찰" }[a.kind]
       : { web: "투찰금액으로 투찰", out: "외주 금액으로 투찰", none: "투찰 안 함", other: `다른 금액으로 투찰 (${won(a.amount || 0)}원)` }[a.kind];
     const tip = a.plan ? "기록할 때 고른 금액 — 개찰 뒤 나라장터 실제 금액으로 확인" : "나라장터 개찰 결과의 지일 실제 금액으로 확인";

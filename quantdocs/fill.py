@@ -828,17 +828,41 @@ def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None
     sp = chars.char_width(cur, " ") or 1
     value = unescape(seg[i + 1:j])
     lines = [value]
+    pid = open_m.group(2)
+    block = chars._para(pid) or ""
+    rm = re.search(r'<(?:[\w.-]+:)?right\b[^>]*value="(-?\d+)"', block)
+    _intent, left = chars.margins(pid)
+    area = (line_w or 0) - max(left, 0) - (max(int(rm.group(1)), 0) if rm else 0)
+    # (11/16 사용자 지적: '주 소:' 줄만 '업 체 명:'·'대 표 자:'보다 ':'가 왼쪽으로 어긋남) 값 너비를 어림해 가운데 정렬 위치를 맞추던
+    # 방식은 긴 값(주소)에서 어림이 틀리면 그 줄만 밀렸음 → 원래 줄이 시작하던 자리(빈칸까지 같은 길이로 맞춘 원본 줄 = (칸 너비 − 원래 길이)/2)를
+    # 왼쪽 여백으로 고정한 왼쪽 정렬 사본으로 바꿈. 원래 줄 길이는 이름표·빈칸뿐이라 어림이 정확하고, 같은 묶음 줄은 같은 자리(빈칸 너비 단위로 맞춤)
+    # → ':'와 값 시작이 줄마다 같은 자리. 값의 너비는 위치에 영향 없음. 칸 너비·여백을 모르면 예전 방식.
+    use_left = bool(line_w) and area > 0 and re.search(r"<(?:[\w.-]+:)?left\b", block) is not None
+    offset = 0
+    if use_left:
+        # 원본(가운데 정렬)에서 값이 시작하던 자리(= ': ' 바로 뒤) — 같은 문단 모양의 앞 줄과 한 글자 너비 안이면 같은 자리로 맞춤
+        # (원본 줄 길이가 빈칸·'(인)' 때문에 조금씩 달라도 ':'는 한 줄로). 왼쪽 여백 = 그 자리 − 이름표 앞부분 너비.
+        value_x = max(0.0, (area - t0) / 2) + pw
+        seen = chars.__dict__.setdefault("center_value_x", {}).setdefault(pid, [])
+        value_x = next((x for x in seen if abs(x - value_x) <= h), value_x)
+        if value_x not in seen:
+            seen.append(value_x)
+        offset = max(0, int(round(value_x - pw)))
     if line_w and not unescape(re.sub(r"<[^>]+>", "", tail_xml)).strip():  # 값 뒤에 '(인)' 등이 없을 때만 끊음
-        block = chars._para(open_m.group(2)) or ""
-        rm = re.search(r'<(?:[\w.-]+:)?right\b[^>]*value="(-?\d+)"', block)
-        _intent, left = chars.margins(open_m.group(2))
-        area = line_w - max(left, 0) - (max(int(rm.group(1)), 0) if rm else 0)
-        avail = ((area + t0) / 2) * 0.97 - pw  # 값이 쓸 수 있는 너비 = 원래 시작 위치부터 오른쪽 끝까지 − 앞부분
+        avail = (area - offset) * 0.97 - pw if use_left else ((area + t0) / 2) * 0.97 - pw
         if avail > h * 2 and _cjk_width(value, h) > avail:
             lines = _word_lines(value, h, avail)
     blank = _blank_prefix(prefix, chars) if len(lines) > 1 else ""
     if blank is None:
         lines, blank = [value], ""
+    no_lines = lambda x: re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", x, flags=re.S)
+    ns = open_m.group(1) or ""
+    if use_left:
+        new_open = open_m.group(0).replace(f'paraPrIDRef="{pid}"', f'paraPrIDRef="{chars.left_at(pid, max(left, 0) + offset)}"', 1)
+        out = new_open + no_lines(seg[open_m.end():i] + _mark(lines[0]) + seg[j + 1:])
+        for x in lines[1:]:
+            out += f"{new_open}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>"
+        return out
 
     def pad(xml_p: str, width: float) -> str:
         lead = " " * int(round(max(0.0, width - t0) / sp))
@@ -848,10 +872,8 @@ def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None
         if m:  # 마지막 글 조각 끝에(값 뒤 — 값 글자 모양 밖)
             xml_p = xml_p[:m[-1].start()] + trail + xml_p[m[-1].start():]
         return xml_p
-    no_lines = lambda x: re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", x, flags=re.S)
     first = no_lines(seg[:i] + _mark(lines[0]) + seg[j + 1:])
     out = pad(first, pw + _cjk_width(lines[0], h) + (tw if len(lines) == 1 else 0))
-    ns = open_m.group(1) or ""
     for x in lines[1:]:
         out += pad(f"{open_m.group(0)}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>", pw + _cjk_width(x, h))
     return out
@@ -1403,6 +1425,7 @@ class _Chars:
         self.added_left: dict[str, str] = {}  # 문단 모양 id → 왼쪽 정렬로 바꾼 사본 id(양쪽·배분 정렬 칸)
         self.added_hang: dict[tuple[str, int], str] = {}  # (문단 모양 id, 내어쓰기 너비) → 사본 id
         self.added_left_hang: dict[tuple[str, int], str] = {}  # (문단 모양 id, 내어쓰기 너비) → 왼쪽 정렬 + 내어쓰기 사본 id(연혁 칸, 11/11)
+        self.added_left_at: dict[tuple[str, int], str] = {}  # (문단 모양 id, 왼쪽 여백) → 왼쪽 정렬 + 그 왼쪽 여백 사본 id(가운데 정렬 서명 묶음, 11/16)
         # 언어별 글꼴 목록 {LATIN: {id: 이름}} — 채운 글의 숫자·영문을 한글과 같은 글꼴로(11/04 사용자 제보: 숫자 글꼴이 다름)
         self.faces = {m.group(1).upper(): dict(re.findall(r'<(?:[\w.-]+:)?font\b[^>]*\bid="(\d+)"[^>]*\bface="([^"]*)"', m.group(2)))
                       for m in re.finditer(r'<(?:[\w.-]+:)?fontface\b[^>]*\blang="(\w+)"[^>]*>(.*?)</(?:[\w.-]+:)?fontface>', header, re.S)}
@@ -1427,7 +1450,8 @@ class _Chars:
 
     def _next_para_id(self) -> str:
         ids = [int(x) for x in self.paras] + [int(x) for x in self.added_para.values()] + [int(x) for x in self.added_hang.values()] \
-            + [int(x) for x in self.added_left.values()] + [int(x) for x in self.added_left_hang.values()]
+            + [int(x) for x in self.added_left.values()] + [int(x) for x in self.added_left_hang.values()] \
+            + [int(x) for x in self.added_left_at.values()]
         return str(max(ids) + 1)
 
     def centered(self, pid: str) -> str:
@@ -1497,6 +1521,30 @@ class _Chars:
             self.added_left_hang[key] = self._next_para_id()
         return self.added_left_hang[key]
 
+    def left_at(self, pid: str, left: int) -> str:
+        """pid 문단 모양을 왼쪽 정렬 + 왼쪽 여백 left(들여쓰기 없음)로 바꾼 사본 id — 가운데 정렬 서명 묶음의 이름표를 원래 자리에 고정(11/16)."""
+        if pid not in self.paras:
+            return pid
+        key = (pid, int(left))
+        if key not in self.added_left_at:
+            self.added_left_at[key] = self._next_para_id()
+        return self.added_left_at[key]
+
+    def _at_block(self, pid: str, left_val: int, new: str) -> str:
+        block = re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1)
+        block = re.sub(r'\bhorizontal="\w+"', 'horizontal="LEFT"', block, count=1)
+        _intent, left = self.margins(pid)
+        first = re.search(r"<(?:[\w.-]+:)?margin\b.*?</(?:[\w.-]+:)?margin>", block, re.S)
+        first_end = first.end() if first else 0
+
+        def margin(mm):  # hp:default 묶음은 값이 hp:case의 두 배(한글 저장 형식)
+            seg = mm.group(0)
+            cur = re.search(r'<(?:[\w.-]+:)?left\b[^>]*value="(-?\d+)"', seg)
+            factor = (int(cur.group(1)) / left) if cur and left else (2 if mm.start() > first_end else 1)
+            seg = re.sub(r'(<(?:[\w.-]+:)?intent\b[^>]*value=")-?\d+', r"\g<1>0", seg, count=1)
+            return re.sub(r'(<(?:[\w.-]+:)?left\b[^>]*value=")-?\d+', lambda x: f"{x.group(1)}{round(left_val * factor)}", seg, count=1)
+        return re.sub(r"<(?:[\w.-]+:)?margin\b.*?</(?:[\w.-]+:)?margin>", margin, block, flags=re.S)
+
     def _hang_block(self, pid: str, width: int, new: str) -> str:
         block = re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1)
         intent, left = self.margins(pid)
@@ -1536,7 +1584,7 @@ class _Chars:
         for orig, new in list(self.added_para.items()) + list(self.added_left.items()):
             if new == pid:
                 return self.paras.get(orig, "")
-        for (orig, _w), new in list(self.added_hang.items()) + list(self.added_left_hang.items()):
+        for (orig, _w), new in list(self.added_hang.items()) + list(self.added_left_hang.items()) + list(self.added_left_at.items()):
             if new == pid:
                 return self.paras.get(orig, "")
         return ""
@@ -1608,11 +1656,12 @@ class _Chars:
 
     @property
     def changed(self) -> bool:
-        return bool(self.added or self.added_para or self.added_hang or self.added_left or self.added_left_hang or self.font_added)
+        return bool(self.added or self.added_para or self.added_hang or self.added_left or self.added_left_hang or self.added_left_at
+                    or self.font_added)
 
     def finish(self) -> str:
         header = self.header
-        if self.added_para or self.added_hang or self.added_left or self.added_left_hang:
+        if self.added_para or self.added_hang or self.added_left or self.added_left_hang or self.added_left_at:
             def aligned(pid, new, how):
                 return re.sub(r'\bhorizontal="\w+"', f'horizontal="{how}"', re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1))
             extra = "".join(aligned(pid, new, "CENTER") for pid, new in self.added_para.items())
@@ -1622,7 +1671,8 @@ class _Chars:
                              for (pid, w), new in self.added_hang.items())
             extra += "".join(re.sub(r'\bhorizontal="\w+"', 'horizontal="LEFT"', self._hang_block(pid, w, new), count=1)
                              for (pid, w), new in self.added_left_hang.items())
-            n = len(self.added_para) + len(self.added_hang) + len(self.added_left) + len(self.added_left_hang)
+            extra += "".join(self._at_block(pid, left, new) for (pid, left), new in self.added_left_at.items())
+            n = len(self.added_para) + len(self.added_hang) + len(self.added_left) + len(self.added_left_hang) + len(self.added_left_at)
             header = re.sub(r"(</(?:[\w.-]+:)?paraProperties>)", lambda m: extra + m.group(1), header, count=1)
             header = re.sub(r'(<(?:[\w.-]+:)?paraProperties\b[^>]*\bitemCnt=")(\d+)"',
                             lambda m: f'{m.group(1)}{int(m.group(2)) + n}"', header, count=1)
@@ -2734,26 +2784,24 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if not key and _sq(c.text) == "연락처" and _value("전화번호", vault):
                         # '연 락 처 | 회 사 / 휴대폰'(11/13 제천 서식 5 대표자 선임계) — '회 사' 줄 옆에 회사 전화, 휴대폰은 비움(개인 번호)
                         target = by_pos.get((c.row, c.col + c.colspan))
-                        if target is not None and not target.blank:
-                            paras = _spans(xml, "p", target.start, target.end)
-                            texts = [_sq(_text(xml[a:b])) for a, b in paras]
-                            hit = next((i for i, t in enumerate(texts) if re.fullmatch(r"회사|사무실(?:전화)?", t)), None)
-                            if hit is not None and any(re.fullmatch(r"휴대(?:폰|전화)|핸드폰", t) for t in texts):
-                                a, b = paras[hit]
-                                para = xml[a:b]
-                                tl = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", para, re.S))
-                                if tl:
-                                    # (11/16 사용자 지적) 번호는 '회  사' 바로 오른쪽에 — 줄 끝 빈칸을 그대로 두고 붙이면 번호가 다음 줄로 밀리고
-                                    # 양쪽·배분 정렬 줄이라 '회 … 사'가 칸 끝까지 벌어졌음 → 끝 빈칸을 지우고 두 칸 띄워 붙임, 정렬은 왼쪽 사본
-                                    last = re.sub(r"(?:\s|&#160;|<(?:[\w.-]+:)?(?:fwSpace|nbSpace|tab)\b[^>]*/>)+$", "", tl[-1].group(2))
-                                    para = para[:tl[-1].start(2)] + last + "  " + _mark(_value("전화번호", vault)) + para[tl[-1].end(2):]
-                                    pm = re.search(r'paraPrIDRef="(\d+)"', para)
-                                    if pm and chars is not None and chars.align(pm.group(1)) in ("JUSTIFY", "DISTRIBUTE", "DISTRIBUTE_SPACE", "RIGHT"):
-                                        para = para[:pm.start(1)] + chars.left_any(pm.group(1)) + para[pm.end(1):]
-                                    para = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", para, flags=re.S)
-                                    seg = xml[target.start:a] + para + xml[b:target.end]
-                                    edits.append((target, None, seg))
-                                    rep.filled.append(f"연락처 회사 → {_value('전화번호', vault)}")
+                        if target is not None and not target.blank and re.search(r"휴대(?:폰|전화)|핸드폰", _sq(target.text)):
+                            # (11/16 사용자 지적 두 번째) 번호는 '회  사' 글자 바로 오른쪽에 — 문단 끝에 붙이면 '회  사' 뒤 줄바꿈(lineBreak)·
+                            # 탭·빈칸 뒤로 가서 다음 줄로 밀렸음. 칸 글에서 '회 사'(또는 '사무실') 낱말 끝을 찾아 그 뒤 빈칸·탭만 걷어내고 두 칸 띄워 넣음
+                            # (뒤에 오는 줄바꿈·'휴대폰' 줄은 그대로)
+                            seg = xml[target.start:target.end]
+                            sp = r"(?:[ \u3000\t]|&#160;|<(?:[\w.-]+:)?(?:fwSpace|nbSpace|tab)\b[^>]*/>)"
+                            lab = re.search(rf"(?<=>)({sp}*)(회{sp}*사|사{sp}*무{sp}*실(?:{sp}*전{sp}*화)?)(?=(?:{sp}|<(?:[\w.-]+:)?lineBreak\b[^>]*/>|</(?:[\w.-]+:)?t>))", seg) \
+                                or re.search(rf"(회{sp}*사|사{sp}*무{sp}*실)(?={sp}*(?:<(?:[\w.-]+:)?lineBreak\b[^>]*/>|</(?:[\w.-]+:)?t>))", seg)
+                            if lab:
+                                after = re.match(rf"{sp}*", seg[lab.end():])
+                                seg = seg[:lab.end()] + "  " + _mark(_value("전화번호", vault)) + seg[lab.end() + after.end():]
+                                popen = [m for m in re.finditer(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', seg) if m.start() < lab.start()]
+                                pm = popen[-1] if popen else None  # '회 사'가 든 문단 — 양쪽·배분·오른쪽 정렬이면 왼쪽 사본(칸 끝까지 안 벌어지게)
+                                if pm and chars is not None and chars.align(pm.group(1)) in ("JUSTIFY", "DISTRIBUTE", "DISTRIBUTE_SPACE", "RIGHT"):
+                                    seg = seg[:pm.start(1)] + chars.left_any(pm.group(1)) + seg[pm.end(1):]
+                                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                                edits.append((target, None, seg))
+                                rep.filled.append(f"연락처 회사 → {_value('전화번호', vault)}")
                         continue
                     if not key:
                         continue

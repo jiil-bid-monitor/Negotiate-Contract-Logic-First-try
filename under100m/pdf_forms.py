@@ -14,6 +14,8 @@ from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 
+from nego.attachments import _SURROGATE
+
 from .form_fill import CERT, JIIL, STAFF, _configure, key_of
 from .form_split import tidy
 
@@ -54,7 +56,8 @@ def _title_after(lines: list[str], mark) -> str:
 def split_pdf(src: Path, out: Path) -> list[str]:
     """서식마다 PDF 한 개. 만든 파일 이름들(서식 표시가 없으면 빈 목록)."""
     reader = PdfReader(src)
-    pages = [(page.extract_text() or "").splitlines() for page in reader.pages]
+    # 글꼴을 못 푼 PDF는 짝 없는 대리 글자를 내 서식 이름·목록 utf-8 저장이 멈춘다 — 첨부 글과 같이 지운다
+    pages = [_SURROGATE.sub("", page.extract_text() or "").splitlines() for page in reader.pages]
     starts: list[tuple[int, str, str, str]] = []
     for i, lines in enumerate(pages):
         if len({m.group(2) for m in _MARK.finditer(" ".join(lines))}) >= 3 or re.search(r"서\s*식\s*번\s*호", " ".join(lines[:8])):

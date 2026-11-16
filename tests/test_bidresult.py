@@ -86,6 +86,17 @@ class TestSummarize(unittest.TestCase):
         head, rows = log.table()
         self.assertIn("외주 금액", head)
 
+    def test_actual_side(self):
+        """11/16 사용자 요청: 개찰 결과의 지일 실제 금액으로 웹앱·외주 중 어느 금액으로 투찰했는지."""
+        from webapp.bidlog import actual_side
+        done = lambda amt: {"status": "완료", "own": {"amount": amt} if amt else None}  # noqa: E731
+        e = {"bid": 100, "outsource": 90}
+        self.assertIsNone(actual_side({**e, "result": {"status": "개찰 전"}}))
+        self.assertEqual(actual_side({**e, "result": done(90)}), "외주 금액")
+        self.assertEqual(actual_side({**e, "result": done(100)}), "웹앱 금액")
+        self.assertEqual(actual_side({**e, "result": done(95)}), "다른 금액 (95원)")
+        self.assertEqual(actual_side({**e, "result": done(None)}), "투찰 안 함")
+
     def test_needs_fetch(self):
         now = datetime(2026, 11, 6, 12, tzinfo=KST)
         self.assertTrue(needs_fetch({}, now))

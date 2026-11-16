@@ -683,6 +683,23 @@
     const a = r.aValue || 0, lower = r.lowerRate, basis = r.basis, amt = r.outsource;
     return amt && lower && basis ? (a + (amt - a) / (lower / 100)) / basis * 100 : null;
   }
+  // 실제로 어느 금액으로 투찰했나(11/16 사용자 요청) — 개찰 뒤 나라장터 결과의 지일 실제 금액을 웹앱·외주 금액과 맞춰 봄, 개찰 전엔 모름(null)
+  function actualSide(r) {
+    const res = r.result;
+    if (!res || res.status !== "완료") return null;
+    const own = res.own;
+    if (!own || own.amount == null) return { kind: "none" };
+    const same = (v) => v != null && Math.abs(Number(v) - Number(own.amount)) < 1;
+    return same(r.bid) ? { kind: "web" } : same(r.outsource) ? { kind: "out" } : { kind: "other", amount: own.amount };
+  }
+  function actualChip(r) {
+    const a = actualSide(r);
+    if (!a) return "";
+    const lab = { web: "웹앱 금액으로 투찰", out: "외주 금액으로 투찰", none: "투찰 안 함", other: `다른 금액으로 투찰 (${won(a.amount || 0)}원)` }[a.kind];
+    return ` <span class="cm actual actual-${a.kind}">${esc(lab)}</span>`;
+  }
+  // 실제로 낸 쪽 금액은 그대로, 다른 쪽은 흐리게
+  const dimClass = (r, side) => { const a = actualSide(r); return a && a.kind !== side && (a.kind === "web" || a.kind === "out") ? " dim" : ""; };
   function outsourceCell(r, edit) {
     if (edit) return `<input class="edit" data-f="outsource" value="${r.outsource ? esc(Number(r.outsource).toLocaleString("ko-KR")) : ""}" placeholder="외주 금액">`;
     if (!r.outsource) return `<span class="res-wait">-</span>`;
@@ -912,9 +929,9 @@
       const open = OPEN_ROWS.has(r.id);
       return `<tr data-id="${esc(r.id)}" class="${open ? "is-open" : ""}">
         <td class="when" data-l="기록일">${esc(day(r.recordedAt)).split(" ").map((x) => `<span class="nowrap">${x}</span>`).join(" ")}</td>
-        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType || r.contractMethod ? `<span class="sub">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}${r.contractMethod ? ` <span class="cm${/지명/.test(r.contractMethod) ? " designated" : ""}"${/지명/.test(r.contractMethod) ? ' title="지명경쟁 — 투찰 경향 표본에서 빠짐"' : ""}>${esc(r.contractMethod)}</span>` : ""}</span>` : ""}</td>
-        <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub nowrap">기초 ${won(r.basis)}</span>${r.lowerRate != null ? `<span class="sub nowrap">하한율 ${r.lowerRate}%</span>` : ""}</td>
-        <td class="num out" data-l="외주 금액">${outsourceCell(r, edit)}</td>
+        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType || r.contractMethod ? `<span class="sub">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}${r.contractMethod ? ` <span class="cm${/지명/.test(r.contractMethod) ? " designated" : ""}"${/지명/.test(r.contractMethod) ? ' title="지명경쟁 — 투찰 경향 표본에서 빠짐"' : ""}>${esc(r.contractMethod)}</span>` : ""}${actualChip(r)}</span>` : actualChip(r) ? `<span class="sub">${actualChip(r)}</span>` : ""}</td>
+        <td class="num bid${dimClass(r, "web")}" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub nowrap">기초 ${won(r.basis)}</span>${r.lowerRate != null ? `<span class="sub nowrap">하한율 ${r.lowerRate}%</span>` : ""}</td>
+        <td class="num out${dimClass(r, "out")}" data-l="외주 금액">${outsourceCell(r, edit)}</td>
         <td class="num" data-l="기준 사정률">${pct3(r.rate)}</td>
         <td class="res" data-l="개찰 결과"><div>${resultCell(r)}${versusLines(r)}</div></td>
         <td class="num rankcol" data-l="등수">${rateCell(r)}</td>

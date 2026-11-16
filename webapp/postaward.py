@@ -172,7 +172,9 @@ QUAL_DOC = "적격심사서류.xlsx"
 QUAL_LABELS = {"no": ("입찰공고번호", "입찰등록번호"), "title": ("공사명", "입찰 대상 물품명"), "institution": ("수요기관",),
                "opening": ("입찰일시",), "bid": ("입찰금액",), "planned": ("예정가격",), "a": ("A값",), "posted": ("입찰공고일",),
                "est": ("추정가격",), "classno": ("정부물품 분류번호",), "qty": ("수량",), "site": ("공사현장 시·군",),
-               "trade": ("업종",), "rate": ("업종평가비율(%)",)}
+               "trade": ("업종",), "rate": ("업종평가비율(%)",), "to": ("수신(발주기관)", "수신"), "kind": ("업종 구분",)}
+# 종합공사업(건설산업기본법) — 그 밖(실내건축·정보통신·전기·소방 등)은 '전문·그밖'
+GENERAL_TRADES = ("토목공사업", "건축공사업", "토목건축공사업", "산업환경설비공사업", "조경공사업")
 _YELLOW = "FFFFF4C2"
 # 기본사항 C열(안내)이 비어 있으면 넣는 설명 — 틀에 안내가 없는 칸만
 QUAL_NOTES = {"구매관리번호": "보통 비워서 냄(2023 강서구 실물모형 제출본도 빈칸) — 조달청 대행 공고처럼 공고문에 구매관리번호가 있을 때만 적음"}
@@ -530,6 +532,8 @@ class PostAward:
             "classno": str(raw.get("dtilPrdctClsfcNo") or ""), "qty": " ".join(str(raw.get(k) or "").strip() for k in ("prdctQty", "prdctUnit")).strip(),
             "site": (str(raw.get("cnstrtsiteRgnNm") or "").split() or [""])[-1],
             "trade": licenses[0] if len(licenses) == 1 else None,  # 업종이 여럿이면 담당자가 고름
+            "kind": (("종합공사" if licenses[0].replace("·", "") in GENERAL_TRADES else "전문·그밖") if len(licenses) == 1 else None),
+            "to": str(raw.get("ntceInsttNm") or "") or nf.institution,  # 발주기관 = 공고기관(조달청 대행이면 조달청)
             "rate": num("indstrytyEvlRt")})
         return [f"[적격심사] 0_적격심사/{QUAL_DOC} ← {template.name} — 자동으로 채운 칸: " + ", ".join(done),
                 "  제출일·작성자 등 노란 칸과 구매관리번호는 직접 넣으세요" + ("" if est else " — 추정가격을 못 받아 10억 미만/이상 틀을 기초금액으로 골랐으니 대조")] +             (["  구매관리번호: " + QUAL_NOTES["구매관리번호"]] if v.get("work") == "물품" else [])

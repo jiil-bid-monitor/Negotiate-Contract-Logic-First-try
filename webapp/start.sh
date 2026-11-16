@@ -11,6 +11,19 @@
 cd "$(dirname "$0")/.." || exit 1
 ENV_FILE=".env"
 
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+  if command -v py >/dev/null 2>&1; then PY=py; else PY=python; fi
+fi
+
+# 접속 토큰 — 사람마다·설치마다 다른 무작위 값(2026-11-16: 예전 고정값은 공개 저장소에 적혀 있었음)
+new_token() {
+  "$PY" -c "import secrets; print(secrets.token_urlsafe(16))" 2>/dev/null \
+    || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n'
+}
+# 예전에 저장소에 적혀 있던 기본 토큰 — 이 값이면 바꾸라고 알림
+OLD_PUBLIC_TOKEN="jiil""2026"
+
 # ── 설정 ────────────────────────────────────────────────
 if [ ! -f "$ENV_FILE" ]; then
   echo "처음 실행입니다. 공공데이터포털 인증키(Decoding)를 붙여넣고 Enter (화면엔 안 보임):"
@@ -22,7 +35,7 @@ if [ ! -f "$ENV_FILE" ]; then
     echo "NARA_SERVICE_KEY='$KEY'"
     echo "HOST='0.0.0.0'"
     echo "PORT='8765'"
-    echo "APP_TOKEN='jiil2026'"
+    echo "APP_TOKEN='$(new_token)'"
     echo "# AI 판단을 쓸 때만: ANTHROPIC_API_KEY='...'"
     echo "# 판단 기록 백업(구글 드라이브 동기화 폴더, docs/decision_log.md 8절): BACKUP_DIR='G:/내 드라이브/입찰모니터_백업'"
   } > "$ENV_FILE"
@@ -33,16 +46,23 @@ set -a
 . "./$ENV_FILE"
 set +a
 export PYTHONUTF8=1
-HOST="${HOST:-0.0.0.0}"; PORT="${PORT:-8765}"; APP_TOKEN="${APP_TOKEN:-jiil2026}"
+HOST="${HOST:-0.0.0.0}"; PORT="${PORT:-8765}"
+if [ -z "$APP_TOKEN" ]; then
+  APP_TOKEN="$(new_token)"
+  printf "APP_TOKEN='%s'\n" "$APP_TOKEN" >> "$ENV_FILE"
+  echo "접속 토큰이 없어 새로 만들어 $ENV_FILE 에 저장했습니다."
+fi
 export HOST PORT APP_TOKEN
+if [ "$APP_TOKEN" = "$OLD_PUBLIC_TOKEN" ]; then
+  echo "=================================================================="
+  echo "  경고: 접속 토큰이 예전 기본값 그대로입니다 — 공개 저장소에 적혀 있던 값이라"
+  echo "  사내망의 누구나 회사 서류(정량평가서 만들기)에 접근할 수 있습니다."
+  echo "  바꾸는 법: webapp/README.md '접속 토큰 바꾸기'"
+  echo "=================================================================="
+fi
 
 if [ -z "$NARA_SERVICE_KEY" ]; then
   echo "경고: $ENV_FILE 에 NARA_SERVICE_KEY가 없습니다 — 화면은 뜨지만 불러오기는 실패합니다."
-fi
-
-PY="${PYTHON:-}"
-if [ -z "$PY" ]; then
-  if command -v py >/dev/null 2>&1; then PY=py; else PY=python; fi
 fi
 
 # ── 예전 서버 정리 ──────────────────────────────────────

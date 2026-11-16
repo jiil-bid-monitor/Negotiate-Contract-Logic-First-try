@@ -61,11 +61,26 @@ bash webapp/start.sh
 ```
 
 - 처음 한 번만 인증키(Decoding)를 물어보고 레포 루트 `.env`에 저장한다(깃에 안 올라감). 이후엔 묻지 않는다.
-  `HOST=0.0.0.0`, `APP_TOKEN=jiil2026`, `PORT=8765`가 기본으로 들어가 export를 빠뜨리는 실수가 없다.
+  `HOST=0.0.0.0`, `PORT=8765`와 **무작위 접속 토큰**(`APP_TOKEN`)이 들어가 export를 빠뜨리는 실수가 없다.
+  `.env`에 `APP_TOKEN`이 없으면 켤 때 새로 만들어 넣는다.
 - 8765 포트에 예전 서버가 남아 있으면 정리하고 켠다.
 - 켜진 뒤 실제로 응답하는지 확인해 **"접속 확인됨"**과 팀원에게 줄 주소(사내 IP 자동)를 보여준다.
 - 서버가 오류로 꺼지면 5초 뒤 자동으로 다시 켠다. 끝낼 때는 `Ctrl+C`. 창은 닫지 말고 최소화.
 - 코드 업데이트: 다른 창에서 `git pull` → 서버 창에서 `Ctrl+C` → `bash webapp/start.sh`.
+
+## 접속 토큰 바꾸기 (2026-11-16)
+
+예전 기본 토큰은 공개 저장소에 적혀 있어서, 사내망에 있는 사람은 누구나 웹앱(정량평가서 '만들기' 포함 — 등기·인감·신용평가 원본이 든 통합본)을
+쓸 수 있었다. 저장소의 기록은 지울 수 없으므로 **토큰을 새 값으로 바꾸는 것**이 해결책이다. 예전 값이면 `start.sh`가 켤 때마다 경고한다.
+
+1. 새 값 만들기(서버 PC 깃배시): `py -c "import secrets; print(secrets.token_urlsafe(16))"`
+2. **서버 PC** 레포 루트 `.env`의 `APP_TOKEN='…'`을 새 값으로 → 웹앱 다시 켜기.
+3. **NAS** `jiil-webapp` `.env`의 `APP_TOKEN`도 같은 값으로(서버 PC → NAS 결과 보내기·NAS → 서버 PC 투찰 기록 받아 오기가 이 토큰을 같이 씀.
+   NAS에 따로 값을 두려면 서버 PC `.env`에 `RESULT_PUSH_TOKEN=NAS 토큰`, NAS `.env`에 `BIDLOG_PULL_TOKEN=서버 PC 토큰`) →
+   `control/restart-webapp` 파일을 넣어 NAS 웹앱 다시 켜기.
+4. 주소에 `?t=`가 들어 있는 곳도 새 값으로: GitHub Secret `TELEGRAM_JUDGE_URL`, NAS `.env`의 `TELEGRAM_JUDGE_URL`.
+5. 팀원에게 새 주소(`http://서버PC주소:8765/?t=새토큰`)를 다시 알림 — 예전 주소·즐겨찾기는 막힌다.
+   새 주소는 공개 저장소·단체 채팅방 같은 곳에 적지 말 것.
 
 ## 화면 (2026-10-19 — 팀원 화면으로 바꿈)
 

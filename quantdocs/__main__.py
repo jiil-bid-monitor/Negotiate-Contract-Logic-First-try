@@ -61,8 +61,9 @@ def main(argv: list[str] | None = None) -> int:
     im.add_argument("--direct", help="직접생산확인증명서 폴더 또는 zip")
     im.add_argument("--registration", help="경쟁입찰참가자격등록증 PDF(나라장터 출력본)")
     vt = sub.add_parser("vault", help="지일 회사 자료 잠금 묶음(vault/company.enc) 만들기·확인")
-    vt.add_argument("action", choices=["seal", "list", "check"],
-                    help="seal: 폴더를 잠가 묶음 만들기, list: 묶음 안 파일 목록, check: 서식에 넣을 회사정보를 어디서 찾는지 점검")
+    vt.add_argument("action", choices=["seal", "list", "check", "rekey"],
+                    help="seal: 폴더를 잠가 묶음 만들기, list: 묶음 안 파일 목록, check: 서식에 넣을 회사정보를 어디서 찾는지 점검, "
+                         "rekey: 내용은 그대로 두고 비밀번호만 바꾸기")
     vt.add_argument("--src", help="seal할 회사자료 폴더(회사자료_양식.xlsx + files/)")
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
@@ -122,6 +123,17 @@ def main(argv: list[str] | None = None) -> int:
         else:
             pw = getpass.getpass("회사 자료 묶음 비밀번호: ")
         try:
+            if args.action == "rekey":
+                print("새 비밀번호(12자 이상)를 두 번 입력하세요 — 화면에 안 보임, 채팅·저장소에 적지 말 것")
+                new = getpass.getpass("새 비밀번호: ")
+                if new != getpass.getpass("새 비밀번호 한 번 더: "):
+                    print("두 비밀번호가 다릅니다 — 아무것도 바꾸지 않았습니다", file=sys.stderr)
+                    return 1
+                out, backup, count = vault.rekey(pw, new)
+                print(f"비밀번호를 바꿨습니다: {out} (파일 {count}개, 내용 그대로)")
+                print(f"예전 묶음 백업: {backup} — 새 비밀번호로 웹앱이 잘 열리면 지워도 됨")
+                print(f"이제 .env의 {vault.ENV}= 줄을 새 비밀번호로 바꾸고 웹앱을 다시 켜세요")
+                return 0
             if args.action == "seal":
                 if not args.src:
                     print("--src 로 회사자료 폴더를 주세요", file=sys.stderr)

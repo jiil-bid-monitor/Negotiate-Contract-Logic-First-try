@@ -67,6 +67,24 @@ def test_vault_roundtrip_and_wrong_password(tmp_path: Path):
         vault.seal_bytes(b"x", "short")
 
 
+def test_vault_rekey_keeps_content_changes_password(tmp_path):
+    """11/16 보안 검토 3번 — 원본 폴더 없이 묶음 비밀번호만 바꿈, 예전 묶음은 백업."""
+    enc = vault.seal_folder(_company(tmp_path), PW, tmp_path / "c.enc")
+    before = vault.load(PW, enc).files
+    new = "새-비밀번호-2026-rekey"
+    out, backup, count = vault.rekey(PW, new, enc, tmp_path / "bak")
+    assert out == enc and count == len(before)
+    assert vault.load(new, enc).files == before
+    with pytest.raises(vault.VaultError):
+        vault.load(PW, enc)
+    assert vault.load(PW, backup).files == before  # 백업은 예전 비밀번호로 열림
+    with pytest.raises(vault.VaultError):  # 짧은 비밀번호·예전 비밀번호 틀림 → 그대로
+        vault.rekey(new, "short", enc, tmp_path / "bak")
+    with pytest.raises(vault.VaultError):
+        vault.rekey("틀린-비밀번호-입니다", "또-다른-새-비밀번호", enc, tmp_path / "bak")
+    assert vault.load(new, enc).files == before
+
+
 def test_label_keys():
     assert _label_key("홈페이지주소") == "홈페이지" and _label_key("주        소") == "주소"
     assert _label_key("상호 또는 법인명칭") == "회사명" and _label_key("주민(법인)등록번호") is None
@@ -2752,6 +2770,9 @@ def test_repeated_party_tables_fill_first_only(tmp_path: Path):
         assert sec.count(want) == 1, (want, sec.count(want))
     tables = sec.split("<hp:tbl")[1:]
     assert "(주)가상" in tables[0] and not any("(주)가상" in t for t in tables[1:])
+    # 일부러 비운 사본 표는 '채우지 못한 칸' 경고에 안 나옴(11/16 사용자 제보)
+    from quantdocs.fill import unfilled_slots
+    assert unfilled_slots(sec) == [], unfilled_slots(sec)
 
 
 def test_corp_register_birth_label_is_corp_no(tmp_path: Path):
@@ -3129,6 +3150,21 @@ def test_trustor_trustee_signature_fills_trustee_only(tmp_path: Path):
     assert "강원 정선" in right and "(주)가상" in right and re.search(r"대표자 성명 : 홍길동\s+\(인\)", right), right
 
 
+def test_signer_name_rep_paren_label(tmp_path: Path):
+    """11/16 사용자 지적: 서명 묶음 '주 소 : / 업 체 명 : / 성명(대표) :   (인) / 전화번호 :'에서 성명(대표)만 빔 —
+    '성명$' 개인 칸 비움 규칙에 걸렸음. 괄호 안이 '대표'면 대표자 이름."""
+    from quantdocs.fill import fill_hwpx
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (para("주       소 :          ") + para("업  체  명 :          ")
+            + para("성명(대표) :                    (인)") + para("전화번호 :          "))
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"성명\(대표\) : 홍길동\s+\(인\)", text), text
+
+
 def test_pledge_signer_value_after_colon(tmp_path: Path):
     """11/13 사용자 지적: 보안 서약서 서약자 '직 위 :' / '성 명 : (인)'이 한 문단(줄바꿈)이면 '직 위 대표이사 :'처럼 ':' 앞에 들어가고
     성명은 비었음 — ':'가 있으면 값은 늘 ':' 오른쪽."""
@@ -3469,6 +3505,84 @@ def test_staff_grade_rows_and_note_filled(tmp_path: Path):
     for line in ("1.0점|1.0|1명 × 1.0점 = 1.0점", "0.8점|0.0|0명 × 0.8점 = 0.0점",
                  "0.6점|1.2|2명 × 0.6점 = 1.2점", "0.4점|0.4|1명 × 0.4점 = 0.4점"):
         assert line in text, (line, text)
+
+
+def test_multi_grade_row_and_cap_with_floor(tmp_path: Path):
+    """11/16 사용자 제보(국립청주박물관 디지털문화관 자기평가표): '기술사 또는 특급기술자 | 0.5점/인' 줄을 첫 등급(기술사)으로만 읽어
+    특급 직원이 '등급 없음'으로 빠졌음 — 한 줄의 등급 모두 같은 점수. 상한 줄 배점 칸 '3점 (최저 2.1점)'도 못 읽어 배점이 비었음."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore, read_form, staff_status, _cells, _spans
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항 목"), c(1, 0, "세 부 항 목", 4), c(5, 0, "배 점"), c(6, 0, "평 점"), c(7, 0, "비 고")]]
+    for i, (g, p) in enumerate((("기술사 또는 특급기술자", "0.5점/인"), ("박사학위자 또는 고급기술자", "0.4점/인"),
+                                ("중급기술자", "0.3점/인"), ("석사학위자 또는 초급기술자", "0.2점/인"), ("상 한 점 수", "3점\n(최저 2.1점)"))):
+        r = 1 + i
+        rows.append(([c(0, r, "기술\n능력", 1, 5)] if i == 0 else []) + [c(1, r, g, 4), c(5, r, p), c(6, r, ""), c(7, r, "")])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    xml = zipfile.ZipFile(src).read("Contents/section0.xml").decode()
+    row = next(r for t in _spans(xml, "tbl") for r in read_form(_cells(xml, t)) if r.crit is not None)
+    assert row.points == 3.0
+    assert row.crit.per_grade == {"기술사": 0.5, "특급": 0.5, "고급": 0.4, "중급": 0.3, "초급": 0.2}
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    v.staff = [{"이름": "가", "입사일": "2010-01-01", "등급": "특급"}, {"이름": "나", "입사일": "2010-01-01", "등급": "고급"}]
+    assert all(p["counted"] for p in staff_status(row.crit, v, _dt.date(2026, 11, 16)))
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 16)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "0.5점/인|0.5|" in text and "0.4점/인|0.4|" in text, text  # 특급 1명 × 0.5, 고급 1명 × 0.4
+    assert "(최저 2.1점)|2.1|" in text, text  # 0.9점 → 최저 2.1점
+
+
+def test_staff_merged_score_cell_not_overwritten_by_grade(tmp_path: Path):
+    """11/16 사용자 제보(서식 6 사업수행능력 자기 평가표): 기술인력 평점 칸이 기술사~초급·상한 줄을 세로로 합친 칸 하나인데
+    등급 줄 칸으로도 잡혀 항목 점수(5.4)를 '기술사 0명 = 0.0'으로 덮어썼음 — 등급 줄 칸은 그 줄 하나만 차지하는 칸만."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항 목"), c(1, 0, "세 부 항 목", 3), c(4, 0, "배 점"), c(5, 0, "평 점"), c(6, 0, "비 고")]]
+    for i, (g, p) in enumerate((("기술사", "1.0/인"), ("특급기술자", "0.8/인"), ("고급기술자", "0.6/인"),
+                                ("중급기술자", "0.4/인"), ("초급기술자", "0.2/인"), ("상한 점수", "6.0"))):
+        head = [c(0, 1, "기술인력", 1, 6), c(1, 1, "전시분야\n전문인력", 1, 6)] if i == 0 else []
+        tail = [c(5, 1, "", 1, 6), c(6, 1, "※ 평점 = 기술자수 × 해당 배점\n- 최고 6점\n- 미보유 시 4.2점", 1, 6)] if i == 0 else []
+        rows.append(head + [c(2, 1 + i, g, 2), c(4, 1 + i, p)] + tail)
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    v.staff = [{"이름": n, "입사일": "2010-01-01", "등급": g} for n, g in
+               (("가", "특급"), ("나", "특급"), ("다", "특급"), ("라", "고급"), ("마", "고급"), ("바", "고급"), ("사", "고급"),
+                ("아", "초급"), ("자", "초급"), ("차", "초급"))]
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 16)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "1.0/인|5.4|" in text, text  # 특급 3×0.8 + 고급 4×0.6 + 초급 3×0.2 = 5.4
+    assert "|0.0|" not in text, text
+
+
+def test_credit_score_also_in_cap_row(tmp_path: Path):
+    """11/16 사용자 지적(국립청주박물관 자기평가표): 경영상태 '2.85점' 줄엔 2.85가 들어가는데 '상 한 점 수 | 3점 (최저 2.1점)' 평점 칸은 빔 —
+    상한점수 줄 평점 칸에도 항목 점수, 합계는 한 번만 셈."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항 목"), c(1, 0, "세 부 항 목", 3), c(4, 0, "배 점"), c(5, 0, "평 점")],
+            [c(0, 1, "경영\n상태", 1, 4), c(1, 1, "회사채"), c(2, 1, "기업어음"), c(3, 1, "기업신용평가등급"), c(4, 1, ""), c(5, 1, "")]]
+    for i, (a, b, p) in enumerate((("A+, A0, A-, BBB+, BBB0", "A2+, A20", "3.0점"), ("BBB-, BB+, BB0, BB-", "A3-, B+, B0", "2.85점"))):
+        rows.append([c(1, 2 + i, a), c(2, 2 + i, b), c(3, 2 + i, a), c(4, 2 + i, p), c(5, 2 + i, "")])
+    rows.append([c(1, 4, "상 한 점 수", 3), c(4, 4, "3점\n(최저 2.1점)"), c(5, 4, "")])
+    rows.append([c(0, 5, "합 계", 4), c(5, 5, "")])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 16)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "2.85점|2.85|" in text and "(최저 2.1점)|2.85|" in text, text
+    assert "합 계|2.85|" in text, text  # 상한 칸 점수를 합계에 또 더하지 않음
 
 
 def test_certificate_issuer_rows_left_blank(tmp_path: Path):

@@ -261,6 +261,8 @@ def _label_key(text: str) -> str | None:
     # 안내 문장('※ …'·'…기재함')만 이름표가 아님
     if re.fullmatch(r"대표(?:자|이사)?(?:의)?성명", t):  # '대표자 성명 :   (인)'(11/13 위탁·수탁 서명란) — '…성명' 개인 칸 규칙보다 먼저
         return "대표자"
+    if re.fullmatch(r"성명\(대표(?:자|이사)?\)", t):  # '성명(대표) :   (인)' 서명 줄 = 대표자 이름(11/16 사용자 지적 — '성명$' 개인 칸 비움 규칙에 걸려 빔)
+        return "대표자"
     if re.match(r"법인등기", t):
         # '법인등기부등본(생년월일)'·'법인등기부등본 (주민등록번호)' = 법인등록번호 — '주민'이 들어 있어도 개인 번호 칸 비움 규칙보다 먼저
         # (11/13 사용자 지적: 부산 업사이클센터 서식 18 신용평가 등급확인서가 빔. 법인은 주민등록번호 자리에 법인등록번호)
@@ -564,6 +566,15 @@ def _agent_rows(xml: str, cells: list[Cell]) -> set[int]:
             rs = re.findall(r'rowSpan="(\d+)"', xml[c.start:c.end])
             out.update(range(c.row, c.row + (int(rs[-1]) if rs else 1)))
     return out
+
+
+def _party_table_sig(cells):
+    """회사명·대표자 이름표가 든 8줄 이하 회사 정보 표의 이름표 모양 — 같은 모양이 또 나오면 공동수급 구성원용 사본(11/13). 아니면 None."""
+    # 이름표 칸만으로 비교 — 채운 뒤의 첫 표(값이 들어감)와 빈 사본 표도 같은 모양으로 보게(11/16 '못 채운 칸' 검사)
+    labels = [c for c in cells if not c.blank and _label_key(c.text)]
+    if labels and len({c.row for c in cells}) <= 8 and {"회사명", "대표자"} <= {_label_key(c.text) for c in labels}:
+        return tuple(sorted((c.row, c.col, _sq(c.text)) for c in labels))
+    return None
 
 
 _PARTY_PAIR = re.compile(r"(?:회사명|업체명|상호|법인명).*대표")  # 한 줄에 회사 이름표와 대표자 이름표가 같이
@@ -1412,12 +1423,20 @@ def unfilled_slots(xml: str, sign_only: bool = False) -> list[str]:
     out: list[str] = []
     tbls = _spans(xml, "tbl")
     if not sign_only:
+        seen_party: set = set()
         for tbl in tbls:
             cells = _cells(xml, tbl)
             if re.search(r"<(?:[\w.-]+:)?tbl\b", xml[tbl[0] + 4:tbl[1]]):
                 cells = [c for c in cells if not re.search(r"<(?:[\w.-]+:)?tbl\b", xml[c.start:c.end])]
+            # 채우기가 일부러 비우는 공동수급 구성원용 사본 표·되풀이된 회사·대표자 줄은 '못 채운 칸'이 아님
+            # (11/16 사용자 제보: 정보 비공개 동의서 — 둘째 표부터 상호·주소·대표자·계약상대자등록번호가 경고로 뜸)
+            sig = _party_table_sig(cells)
+            if sig is not None:
+                if sig in seen_party:
+                    continue
+                seen_party.add(sig)
             by_pos = {(c.row, c.col): c for c in cells}
-            other_rows = _other_rows(cells)
+            other_rows = _other_rows(cells) | _repeat_party_rows(cells)
             agent = _agent_rows(xml, cells)
             for c in cells:
                 if c.row in other_rows or c.row in agent:
@@ -2673,20 +2692,26 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
             rep.filled.append(f"자기평점 '{name}' 비움 — " + "; ".join(item.notes[:2]))
             continue
         none_cells = row.none_cells if item.kind == "sanction" else []
-        cell = row.by_points.get(item.score, row.cell) if row.by_points else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
+        # 기술인력 등급 줄이 있으면 합계는 상한 줄 칸(row.cell) — 등급 줄 배점과 같은 값이어도 그 줄로 안 감(11/16)
+        cell = row.by_points.get(item.score, row.cell) if row.by_points and not row.grade_cells else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
         if not any(cell is nc for nc, _p in none_cells):
             out.append((cell, [fmt(item.score)], False))
+        # 상한점수 줄 평점 칸에도 항목 점수(11/16 사용자 요청: 경영상태 '2.85점' 줄엔 들어가고 '상 한 점 수 | 3점' 칸은 빔)
+        if row.cap_cell is not None and row.cap_cell is not cell:
+            out.append((row.cap_cell, [fmt(item.score)], False))
         for nc, pts in none_cells:  # 신인도 '없음' 줄마다 그 줄 배점(11/16 사용자 요청) — 상한점수 줄엔 위대로 합(상한까지)
             out.append((nc, [_one_dec(pts)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")
         # 기술인력 등급 줄마다 그 등급 점수 + 비고 '명 × 점 = 점'(11/13 사용자 요청: 부산 업사이클센터 '특급기술자 | 1.0점 | __ | 명 × 점 = 점')
         if row.grade_cells and row.crit is not None and item.kind == "staff":
             one = lambda v: (lambda t: t if "." in t else t + ".0")(f"{round(v, 2):g}")
-            for g, (sc, nc) in row.grade_cells.items():
-                per = row.crit.per_grade.get(g)
+            for gs, (sc, nc) in row.grade_cells.items():
+                gs = (gs,) if isinstance(gs, str) else gs  # 한 줄에 등급 여럿('기술사 또는 특급기술자')이면 인원을 더함(11/16)
+                per = row.crit.per_grade.get(gs[0])
                 if per is None:
                     continue
-                n = item.counts.get(g, 0)
+                g = "·".join(gs)
+                n = sum(item.counts.get(x, 0) for x in gs)
                 v = n * per
                 if sc is not None:
                     out.append((sc, [one(v)], False))
@@ -2751,9 +2776,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 cells = _cells(xml, tbl)
                 # 공동수급 때 구성원마다 쓰라고 같은 '상호(법인명) / 주소 / 대표자 (인) / 계약상대자등록번호' 표를 여러 번 둔 서식
                 # (11/13 사용자 요청: 국립아시아문화전당 정보 비공개 동의서 — 4개 모두 지일 정보가 들어감) — 우리 회사 정보는 첫 표에만
-                labels = [c for c in cells if not c.blank]
-                if labels and len({c.row for c in cells}) <= 8 and {"회사명", "대표자"} <= {_label_key(c.text) for c in labels}:
-                    sig = tuple(sorted((c.row, c.col, _sq(c.text)) for c in labels))
+                sig = _party_table_sig(cells)
+                if sig is not None:
                     if sig in seen_party:
                         if not any("같은 회사 정보 표" in x for x in rep.filled):
                             rep.filled.append("같은 회사 정보 표가 또 있음(공동수급 구성원용) — 첫 표에만 지일 정보, 나머지는 비움")

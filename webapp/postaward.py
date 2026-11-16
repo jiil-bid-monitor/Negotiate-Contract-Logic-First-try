@@ -174,6 +174,8 @@ QUAL_LABELS = {"no": ("입찰공고번호", "입찰등록번호"), "title": ("�
                "est": ("추정가격",), "classno": ("정부물품 분류번호",), "qty": ("수량",), "site": ("공사현장 시·군",),
                "trade": ("업종",), "rate": ("업종평가비율(%)",)}
 _YELLOW = "FFFFF4C2"
+# 기본사항 C열(안내)이 비어 있으면 넣는 설명 — 틀에 안내가 없는 칸만
+QUAL_NOTES = {"구매관리번호": "보통 비워서 냄(2023 강서구 실물모형 제출본도 빈칸) — 조달청 대행 공고처럼 공고문에 구매관리번호가 있을 때만 적음"}
 
 
 def qual_template(templates: Path, work: str, estimate: float | None) -> Path | None:
@@ -197,6 +199,9 @@ def fill_qual(template: Path, target: Path, values: dict[str, Any]) -> list[str]
         if key and values.get(key) not in (None, ""):
             ws.cell(r, 2).value = values[key]
             done.append(str(ws.cell(r, 1).value).strip())
+        note = QUAL_NOTES.get(str(ws.cell(r, 1).value or "").strip())
+        if note and not ws.cell(r, 3).value:
+            ws.cell(r, 3).value = note
     target.parent.mkdir(parents=True, exist_ok=True)
     wb.save(target)
     return done
@@ -527,7 +532,7 @@ class PostAward:
             "trade": licenses[0] if len(licenses) == 1 else None,  # 업종이 여럿이면 담당자가 고름
             "rate": num("indstrytyEvlRt")})
         return [f"[적격심사] 0_적격심사/{QUAL_DOC} ← {template.name} — 자동으로 채운 칸: " + ", ".join(done),
-                "  제출일·작성자 등 노란 칸과 구매관리번호는 직접 넣으세요" + ("" if est else " — 추정가격을 못 받아 10억 미만/이상 틀을 기초금액으로 골랐으니 대조")]
+                "  제출일·작성자 등 노란 칸과 구매관리번호는 직접 넣으세요" + ("" if est else " — 추정가격을 못 받아 10억 미만/이상 틀을 기초금액으로 골랐으니 대조")] +             (["  구매관리번호: " + QUAL_NOTES["구매관리번호"]] if v.get("work") == "물품" else [])
 
     def _fill_template(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
         """착공(공사)·착수(물품·용역)서류를 단계 폴더에 복사하고 기본사항을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""

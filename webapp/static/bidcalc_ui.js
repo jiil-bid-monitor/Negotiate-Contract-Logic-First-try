@@ -753,7 +753,7 @@
       ${item("예정가격 (실제)", res.plannedPrice != null ? `${won(res.plannedPrice)}원` : "-")}
       ${item("실제 사정률", pct3(res.assessmentRate))}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
-      </div>${compareBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
+      </div>${compareBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button> <button type="button" data-act="jgdocs" title="공고번호·개찰 결과로 기본사항을 채운 적격심사 서류 엑셀(물품·공사)">적격심사 서류(엑셀)</button></div></td></tr>`;
   }
   // 투찰 업체 전부(11/10 사용자 요청) — 개찰 완료 줄의 '결과 ▼'를 펼치면 결과 아래에 보임, 펼칠 때만 서버에서 받음
   const BIDDERS = new Map();   // id → 목록 | "loading" | {error}
@@ -910,6 +910,20 @@
         return;
       }
       if (act === "refetch") { BIDDERS.delete(id); await fetchResults([id], true); if (OPEN_ROWS.has(id)) loadBidders(id); return; }
+      if (act === "jgdocs") {  // 적격심사 서류 엑셀(11/16) — 만드는 데 15~30초
+        const label = btn.textContent;
+        btn.disabled = true; btn.textContent = "만드는 중…";
+        try {
+          const res = await fetch(`/api/bidlog/jgdocs?id=${encodeURIComponent(id)}`, { credentials: "same-origin" });
+          if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
+          const name = decodeURIComponent((res.headers.get("Content-Disposition") || "").split("''")[1] || "적격심사.xlsx");
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(await res.blob()); a.download = name; a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        } catch (err) { alert(`적격심사 서류를 만들지 못했습니다: ${err.message}`); }
+        finally { btn.disabled = false; btn.textContent = label; }
+        return;
+      }
       if (act === "edit") { EDITING = id; renderLog(); return; }
       if (act === "cancel") { EDITING = null; renderLog(); return; }
       if (act === "save") {

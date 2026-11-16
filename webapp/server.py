@@ -17,6 +17,7 @@ import logging
 import mimetypes
 import os
 import secrets
+import subprocess
 import sys
 import threading
 from http import HTTPStatus
@@ -346,6 +347,29 @@ def make_handler(app: App):
                 return self._json({"bidders": app.bidlog.bidders(q.get("id", [""])[0])})
             if url.path == "/api/bidlog.csv":
                 return self._send(200, app.bidlog.csv().encode("utf-8"), "text/csv; charset=utf-8")
+            if url.path == "/api/bidlog/jgdocs":
+                # 적격심사 서류 엑셀(11/16) — 공고번호·개찰 결과로 기본사항을 채움, 물품·공사만
+                from .jgdocs_web import make as make_jgdocs
+
+                entry = next((e for e in app.bidlog.entries() if e.get("id") == q.get("id", [""])[0]), None)
+                if entry is None:
+                    return self._json({"error": "투찰 기록을 찾지 못했습니다"}, 404)
+                try:
+                    config = load_config()
+                    if not config.api.service_key:
+                        return self._json({"error": "서버에 나라장터 인증키(NARA_SERVICE_KEY)가 없습니다"}, 409)
+                    name, body = make_jgdocs(entry, lambda no: bidcalc.lookup(bidcalc.make_client(config.api), no))
+                except (ConfigError, ApiError, ValueError, OSError, subprocess.TimeoutExpired) as err:
+                    key = os.environ.get("NARA_SERVICE_KEY", "")
+                    return self._json({"error": redact(str(err), [key] if key else [])}, 502)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                self.send_header("Content-Disposition", "attachment; filename*=UTF-8''" + quote(name))
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return None
             if url.path == "/api/decisions.csv":
                 # 판단 기록 내려받기(엑셀에서 바로 열리게 BOM 붙인 UTF-8) — 키워드 조정 검토 때 Claude에게 올려 주는 파일
                 return self._send(200, decisions_csv(app.store.decisions(latest_only=False)).encode("utf-8-sig"),

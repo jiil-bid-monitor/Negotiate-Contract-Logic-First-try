@@ -408,6 +408,10 @@ def lookup(client: DataGoKrClient, notice_no: str, fetch: Callable = attachments
             "opening_at": str(notice.get("opengDt") or "").strip(),
             "closing_at": str(notice.get("bidClseDt") or "").strip(),   # 투찰(입찰서 제출) 마감
             "title": str(notice.get("bidNtceNm") or ""),
+            # 적격심사 서류 기본사항(11/16) — 입찰공고일·대표 세부품명(물품)
+            "notice_date": str(notice.get("bidNtceDt") or "").strip(),
+            "product_no": str(notice.get("dtilPrdctClsfcNo") or "").strip(),
+            "product_name": str(notice.get("dtilPrdctClsfcNoNm") or "").strip(),
             "institution": str(notice.get("dminsttNm") or notice.get("ntceInsttNm") or ""),
             "notice_institution": str(notice.get("ntceInsttNm") or ""),
             "demand_institution": str(notice.get("dminsttNm") or ""),

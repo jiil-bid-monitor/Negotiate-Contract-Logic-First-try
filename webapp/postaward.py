@@ -171,7 +171,8 @@ def fill_basic(template: Path, target: Path, values: dict) -> None:
 QUAL_DOC = "적격심사서류.xlsx"
 QUAL_LABELS = {"no": ("입찰공고번호", "입찰등록번호"), "title": ("공사명", "입찰 대상 물품명"), "institution": ("수요기관",),
                "opening": ("입찰일시",), "bid": ("입찰금액",), "planned": ("예정가격",), "a": ("A값",), "posted": ("입찰공고일",),
-               "est": ("추정가격",)}  # 추정가격은 값 출처가 없어 채우지 않고 '채울 칸'으로만 보임
+               "est": ("추정가격",), "classno": ("정부물품 분류번호",), "qty": ("수량",), "site": ("공사현장 시·군",),
+               "trade": ("업종",), "rate": ("업종평가비율(%)",)}
 _YELLOW = "FFFFF4C2"
 
 
@@ -501,17 +502,32 @@ class PostAward:
             return [f"[적격심사] 0_적격심사/{QUAL_DOC}가 이미 있어 그대로 둠(다시 채우려면 그 파일을 지우고 폴더 만들기)"]
         e = next((e for e in (self.bidlog.entries() if self.bidlog is not None else []) if e.get("noticeNo") == v.get("no")), {})
         res = e.get("result") or {}
+        raw = getattr(nf, "raw", None) or {}
+
+        def num(name):
+            try:
+                n = float(str(raw.get(name) or "").replace(",", ""))
+            except ValueError:
+                return None
+            return (int(n) if n == int(n) else n) or None
+
         basis = e.get("basis") or getattr(nf, "budget", None)
-        template = qual_template(templates, v.get("work", ""), basis / 1.1 if basis else None)  # 추정가격 ≈ 기초금액 ÷ 1.1 (틀 고르기용)
+        est = num("presmptPrce")  # 나라장터 추정가격 — 없으면 기초금액 ÷ 1.1로 틀만 고름
+        template = qual_template(templates, v.get("work", ""), est or (basis / 1.1 if basis else None))
+        licenses = [re.sub(r"\s*[/(]\s*\d{4}\)?\s*$", "", name) for name in getattr(nf, "licenses", None) or []]
         if template is None:
             return [f"[적격심사] {v.get('work') or '업무 미확인'} 적격심사 표준틀이 {templates}에 없어 만들지 않음(용역은 틀 보류)"]
         a = res.get("aValue") if res.get("aValue") is not None else e.get("aValue")
         done = fill_qual(template, target, {
             "no": key, "title": nf.title or v.get("title"), "institution": nf.institution or v.get("institution"),
-            "opening": e.get("openingAt"), "bid": e.get("bid"), "planned": res.get("plannedPrice"),
-            "a": round(a) if a else None, "posted": nf.posted})
+            "opening": (e.get("openingAt") or str(raw.get("opengDt") or ""))[:16], "bid": e.get("bid"), "planned": res.get("plannedPrice"),
+            "a": round(a) if a else None, "posted": (nf.posted or "")[:10], "est": est,
+            "classno": str(raw.get("dtilPrdctClsfcNo") or ""), "qty": " ".join(str(raw.get(k) or "").strip() for k in ("prdctQty", "prdctUnit")).strip(),
+            "site": (str(raw.get("cnstrtsiteRgnNm") or "").split() or [""])[-1],
+            "trade": licenses[0] if len(licenses) == 1 else None,  # 업종이 여럿이면 담당자가 고름
+            "rate": num("indstrytyEvlRt")})
         return [f"[적격심사] 0_적격심사/{QUAL_DOC} ← {template.name} — 자동으로 채운 칸: " + ", ".join(done),
-                "  추정가격·업종·제출일 등 노란 칸은 직접 넣으세요(10억 미만/이상 틀은 기초금액으로 골랐으니 추정가격과 대조)"]
+                "  제출일·작성자 등 노란 칸과 구매관리번호는 직접 넣으세요" + ("" if est else " — 추정가격을 못 받아 10억 미만/이상 틀을 기초금액으로 골랐으니 대조")]
 
     def _fill_template(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
         """착공(공사)·착수(물품·용역)서류를 단계 폴더에 복사하고 기본사항을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""

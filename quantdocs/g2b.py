@@ -53,6 +53,7 @@ class NoticeFiles:
     skipped: list[str] = field(default_factory=list)  # 못 받은 첨부(이유)
     # 면허제한 그룹 구조(웹앱 수집과 같은 판정용): [그룹 = [행 = [이름(코드), 대신 인정 업종…]]] — 그룹끼리 '또는', 행끼리 '모두'
     license_groups: list[list[list[str]]] = field(default_factory=list)
+    raw: dict = field(default_factory=dict)  # 나라장터 공고 응답 한 줄 그대로(낙찰 후 서류가 추정가격·수량 등을 읽음, 11/16)
     budget: int | None = None  # 나라장터 배정예산(부가세 포함) — 제안요청서에서 기초금액을 못 찾을 때 보증금 확약서에(11/06)
 
     @property
@@ -121,6 +122,7 @@ def fetch_notice(notice_no: str, out_dir: Path) -> NoticeFiles:
             break
     if not row:
         return out
+    out.raw = dict(row)
     out.ord = str(row.get("bidNtceOrd") or "")
     out.title = str(row.get("bidNtceNm") or "")
     out.institution = str(row.get("dminsttNm") or row.get("ntceInsttNm") or "")

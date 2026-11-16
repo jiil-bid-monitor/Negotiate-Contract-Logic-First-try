@@ -920,7 +920,7 @@ def test_label_paragraph_value_wraps_under_value(tmp_path: Path):
     i = next(k for k, (_p, t) in enumerate(got) if "강원특별자치도" in t)
     assert got[i][1].rstrip().endswith("무릉2로") and got[i + 1][1].strip() == "64(공장1층)", got
     assert got[i][0] == got[i + 1][0] == "0"  # 문단 모양은 원래 것 그대로
-    assert '<hp:tab width="20000"' in paras[i + 1][1] and re.search(r"<hp:t><hp:tab[^>]*/> {6,}", paras[i + 1][1])  # 값 시작 위치에 맞춤
+    assert '<hp:tab width="20000"' in paras[i + 1][1] and re.search(r"<hp:t><hp:tab[^>]*/>\u3000 +\u3000 {2,}<", paras[i + 1][1])  # 값 시작 위치에 맞춤 — 한글 자리는 전각 빈칸(11/16)
     assert 'paraProperties itemCnt="1"' in head and "intent value=\"-" not in head
     assert any("(주)가상" in t for _p, t in got)
 

@@ -667,10 +667,33 @@ def _blank_prefix(prefix: str, chars: "_Chars") -> str | None:
             in_t = bool(re.match(r"<(?:[\w.-]+:)?t\b", part)) or (in_t and not re.match(r"</(?:[\w.-]+:)?t>", part))
             out.append(part)
         elif part:
-            w = sum(chars.char_width(cur, ch) for ch in unescape(part))
+            if not in_t:
+                out.append(part)
+                continue
+            # (11/16 사용자 요청: 값은 ' : ' 기준으로) 다음 줄 값이 첫 줄 값 시작 위치에 꼭 맞게 — 빈칸은 빈칸 그대로, 한글·전각 글자는
+            # 같은 너비의 전각 빈칸(U+3000)으로 바꿈(어림 없이 같은 너비). 쌍점·숫자 같은 반각 글자만 너비를 어림해 빈칸으로
+            # (예전엔 모든 글자를 너비 어림으로 빈칸 수를 셈 — 한글에서 줄이 몇 mm 오른쪽으로 밀렸음)
             sp = chars.char_width(cur, " ") or 1
-            out.append(" " * max(0, int(round(w / sp))) if in_t else part)
+            buf, rest = [], 0.0
+            for ch in unescape(part):
+                if ch == " ":
+                    buf.append(" ")
+                elif _full_width(ch):
+                    buf.append("\u3000")
+                else:
+                    rest += chars.char_width(cur, ch)
+                    if rest >= sp / 2:
+                        n = int(round(rest / sp))
+                        buf.append(" " * n)
+                        rest -= n * sp
+            out.append("".join(buf))
     return "".join(out)
+
+
+def _full_width(ch: str) -> bool:
+    """한글 글꼴에서 한 글자(전각) 너비로 찍히는 글자 — 한글·한자·전각 기호(char_width의 한글 갈래와 같은 범위)."""
+    return "가" <= ch <= "힣" or "一" <= ch <= "鿿" or "　" <= ch <= "ヿ" or "＀" <= ch <= "￯" \
+        or "\u2460" <= ch <= "\u27bf" or ch in "※·ㆍ" or "ㄱ" <= ch <= "ㆎ"
 
 
 def _set_valign(cell_seg: str, how: str) -> str:

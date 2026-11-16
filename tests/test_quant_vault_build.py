@@ -2770,6 +2770,9 @@ def test_repeated_party_tables_fill_first_only(tmp_path: Path):
         assert sec.count(want) == 1, (want, sec.count(want))
     tables = sec.split("<hp:tbl")[1:]
     assert "(주)가상" in tables[0] and not any("(주)가상" in t for t in tables[1:])
+    # 일부러 비운 사본 표는 '채우지 못한 칸' 경고에 안 나옴(11/16 사용자 제보)
+    from quantdocs.fill import unfilled_slots
+    assert unfilled_slots(sec) == [], unfilled_slots(sec)
 
 
 def test_corp_register_birth_label_is_corp_no(tmp_path: Path):

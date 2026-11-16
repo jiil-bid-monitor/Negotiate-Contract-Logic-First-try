@@ -3500,6 +3500,29 @@ def test_multi_grade_row_and_cap_with_floor(tmp_path: Path):
     assert "(최저 2.1점)|2.1|" in text, text  # 0.9점 → 최저 2.1점
 
 
+def test_credit_score_also_in_cap_row(tmp_path: Path):
+    """11/16 사용자 지적(국립청주박물관 자기평가표): 경영상태 '2.85점' 줄엔 2.85가 들어가는데 '상 한 점 수 | 3점 (최저 2.1점)' 평점 칸은 빔 —
+    상한점수 줄 평점 칸에도 항목 점수, 합계는 한 번만 셈."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항 목"), c(1, 0, "세 부 항 목", 3), c(4, 0, "배 점"), c(5, 0, "평 점")],
+            [c(0, 1, "경영\n상태", 1, 4), c(1, 1, "회사채"), c(2, 1, "기업어음"), c(3, 1, "기업신용평가등급"), c(4, 1, ""), c(5, 1, "")]]
+    for i, (a, b, p) in enumerate((("A+, A0, A-, BBB+, BBB0", "A2+, A20", "3.0점"), ("BBB-, BB+, BB0, BB-", "A3-, B+, B0", "2.85점"))):
+        rows.append([c(1, 2 + i, a), c(2, 2 + i, b), c(3, 2 + i, a), c(4, 2 + i, p), c(5, 2 + i, "")])
+    rows.append([c(1, 4, "상 한 점 수", 3), c(4, 4, "3점\n(최저 2.1점)"), c(5, 4, "")])
+    rows.append([c(0, 5, "합 계", 4), c(5, 5, "")])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 16)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "2.85점|2.85|" in text and "(최저 2.1점)|2.85|" in text, text
+    assert "합 계|2.85|" in text, text  # 상한 칸 점수를 합계에 또 더하지 않음
+
+
 def test_certificate_issuer_rows_left_blank(tmp_path: Path):
     """11/13 사용자 지적: 실적증명서 '증 명 서 발급기관'(세로로 합친 머리 칸) 줄의 '전화번호 :'에 지일 전화가 들어감 —
     증명서는 발주처가 적는 칸. 머리 칸이 덮는 줄은 모두 비움, 위 신청인 줄은 그대로 채움."""

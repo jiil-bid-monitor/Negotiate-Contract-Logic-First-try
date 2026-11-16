@@ -2677,6 +2677,9 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
         cell = row.by_points.get(item.score, row.cell) if row.by_points and not row.grade_cells else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
         if not any(cell is nc for nc, _p in none_cells):
             out.append((cell, [fmt(item.score)], False))
+        # 상한점수 줄 평점 칸에도 항목 점수(11/16 사용자 요청: 경영상태 '2.85점' 줄엔 들어가고 '상 한 점 수 | 3점' 칸은 빔)
+        if row.cap_cell is not None and row.cap_cell is not cell:
+            out.append((row.cap_cell, [fmt(item.score)], False))
         for nc, pts in none_cells:  # 신인도 '없음' 줄마다 그 줄 배점(11/16 사용자 요청) — 상한점수 줄엔 위대로 합(상한까지)
             out.append((nc, [_one_dec(pts)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")

@@ -747,6 +747,7 @@ class FormRow:
     by_points: dict = field(default_factory=dict)  # 구간 줄마다 평점 칸이 따로인 표 — {그 줄 배점: 평점 칸}(11/10 경남교육청)
     grade_cells: dict = field(default_factory=dict)  # 기술인력 등급 줄 — {등급: (평점 칸, 비고 '명 × 점 = 점' 칸)}(11/13)
     none_cells: list = field(default_factory=list)  # 신인도 '없음' 줄 — [(평점 칸, 그 줄 배점)](11/16 사용자 요청: '없음' 줄에 그 배점)
+    cap_cell: object = None  # 상한점수 줄의 빈 평점 칸 — 항목 점수를 이 칸에도(11/16 사용자 요청: 경영상태 상한 칸이 빔)
 
 
 def _per_person(text: str) -> float | None:
@@ -908,7 +909,7 @@ def read_form(cells) -> list[FormRow]:
         if grade_cells and cap_cell is not None:
             target = cap_cell
         out.append(FormRow(label, points, target, crit if has else None, by_points=by_points, grade_cells=grade_cells,
-                           none_cells=none_cells))
+                           none_cells=none_cells, cap_cell=cap_cell))
     return out
 
 

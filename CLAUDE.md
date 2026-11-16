@@ -260,6 +260,14 @@
 - `quantdocs/static/index.html` `render`: 공고명(제목)을 누르면 새 창으로 나라장터 공고 상세 — 웹앱 공고 목록(`collect.py`)·투찰 계산기와 같은 주소
   `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=…&bidPbancOrd=…`(차수 없으면 000), 제목 뒤 작은 '↗'. 화면만 — F5.
 
+## 2026-11-16 — 주간 보고는 메일로만 (브랜치 `claude/weekly-email-only`, 사용자 결정)
+
+- 계기: 주간 본공고가 594건 — 텔레그램에 넣기엔 너무 많음. **주간 보고(협상·규격가격동시입찰 + 사전규격)는 메일로만**, 매일 입찰 보고는 텔레그램 그대로.
+- `daily.yml`: 사전규격을 보는 실행(`PRESPEC=true`)이면 `--telegram`을 안 붙임. `TELEGRAM` 값·Run 이름·외부 예약(cron-job.org) 본문은 그대로
+  (백업 skip 비교가 이름으로 해서 — 바꾸지 말 것). 수동 실행도 `pre_spec=true`면 텔레그램엔 안 감.
+- `cli.main`: 보고 기록(`--report-log` → 판단 기록 '미판단')·피드백 시트 적재를 텔레그램 안이 아니라 **텔레그램·메일 어느 쪽이든 보낸 실행**에서(`_send_email`이 성공 여부를 돌려줌).
+- 실측 미확인: 다음 월요일 주간 실행에서 메일만 오고 bot-state `reports/…-weekly.json`이 쌓이는지.
+
 ## 2026-11-12 — 회사 서류 만료 알림: 30일·7일 전 + 상태 표시 (PR #355·#356, 사용자 요청 — 자세한 것 `docs/worklog/2026-11-12.md`)
 
 - 텔레그램 봇(NAS) 만료 알림 = **30일 전 → 7일 전 → 당일**(`docexpiry.ALERT_MONTH`), 단계마다 한 번(`data/doc_alerts_sent.json`).

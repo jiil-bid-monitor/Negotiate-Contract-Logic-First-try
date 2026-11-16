@@ -207,7 +207,7 @@ def _append_feedback_sheet(candidates, now) -> None:
         print(f"피드백 시트 기록: 추가 {result['appended']}건 · 이미 있음 {result['skipped']}건")
 
 
-def _send_email(candidates, stats, html_path, now) -> None:
+def _send_email(candidates, stats, html_path, now) -> bool:
     """주간 리포트 메일(2026-10-19 통합 결정 15번). 실패해도 종료코드는 그대로 — 텔레그램과 같은 이유.
     본문은 메일 전용 HTML(nego/email_html.py — 메일 프로그램이 <style>을 지워도 안 깨지게), 첨부는 텔레그램과 같은 HTML(2026-10-20).
     (10/21 사용자 요청) 관심 공고·세부품명 공고를 따로 한 통씩 — 한 통이 길면 지메일이 뒤를 잘라서. 첨부(전체 리포트)는 첫 통에만."""
@@ -216,7 +216,7 @@ def _send_email(candidates, stats, html_path, now) -> None:
 
     if html_path is None or not Path(html_path).exists():
         logging.warning("HTML 리포트가 없어 메일을 보내지 않습니다")
-        return
+        return False
     for i, (part, rows) in enumerate(split_parts(candidates)):
         subject = subject_for(now.strftime("%Y-%m-%d"), len(rows), bool(stats.failed_operations), part)
         body = render_email_html(candidates, stats, now, part, attached=i == 0)
@@ -225,8 +225,9 @@ def _send_email(candidates, stats, html_path, now) -> None:
             logging.error(error)
             if os.environ.get("GITHUB_ACTIONS"):
                 print(f"::error::{error}")
-            return  # 설정 문제면 다음 통도 실패하니 멈춤
+            return i > 0  # 설정 문제면 다음 통도 실패하니 멈춤
         print(f"주간 리포트 메일 발송 ({part} {len(rows)}건)")
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -420,6 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     for kind, path in {**paths, **llm_paths}.items():
         print(f"{kind.upper()} 저장: {path}")
 
+    delivered = False
     if args.telegram:
         delivered = _send_telegram(candidates, stats, paths.get("html"))
         if sent_state is not None and delivered:
@@ -427,14 +429,16 @@ def main(argv: list[str] | None = None) -> int:
 
             _sent.save(Path(args.sent_state), _sent.mark(sent_state, candidates, now))
             print(f"보낸 공고 기록 저장: {args.sent_state}")
-        if args.report_log and delivered and candidates:
-            _save_report_log(args.report_log, candidates, config, now)
-        # 정기 보고(매일·주간)면 보고된 공고를 피드백 구글 시트에도 쌓는다 — 사무실 밖에서 시트로 보게(2026-10-20)
-        if args.report_log and candidates:
-            _append_feedback_sheet(candidates, now)
 
     if args.email:
-        _send_email(candidates, stats, paths.get("html"), now)
+        delivered = _send_email(candidates, stats, paths.get("html"), now) or delivered
+
+    # 주간 보고는 메일로만 나가므로(2026-11-16) 보고 기록·시트는 텔레그램·메일 어느 쪽이든 보낸 실행에서 남긴다
+    if args.report_log and candidates and (args.telegram or args.email):
+        if delivered:
+            _save_report_log(args.report_log, candidates, config, now)
+        # 정기 보고(매일·주간)면 보고된 공고를 피드백 구글 시트에도 쌓는다 — 사무실 밖에서 시트로 보게(2026-10-20)
+        _append_feedback_sheet(candidates, now)
 
     # 일부 조회가 실패했으면 종료코드 2로 구분한다 (CI에서 성공/부분성공 구분).
     return 2 if stats.failed_operations else 0

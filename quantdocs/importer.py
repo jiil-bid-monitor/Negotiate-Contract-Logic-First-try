@@ -395,6 +395,10 @@ def _bytes_pdf_text(data: bytes) -> str:
         return ""
 
 
+# 한글 글자마다 띄우지 않고 낱말 사이 빈칸만 남김('등 급 평 가 일' → '등급평가일') — 11/16 회사 서류 스캔본
+OCR_CONFIG = "-c preserve_interword_spaces=1"
+
+
 def _ocr_setup():
     """pytesseract 모듈(설정 반영) — 없으면 None."""
     try:
@@ -428,7 +432,7 @@ def ocr_pages(data: bytes, pages: list[int], dpi: int = 250) -> dict[int, str] |
         pdf = pdfium.PdfDocument(data)
         for i in pages:
             if 0 <= i < len(pdf):
-                out[i] = tess.image_to_string(pdf[i].render(scale=dpi / 72).to_pil(), lang="kor+eng")
+                out[i] = tess.image_to_string(pdf[i].render(scale=dpi / 72).to_pil(), lang="kor+eng", config=OCR_CONFIG)
     except Exception:  # noqa: BLE001 — tesseract·한국어 데이터 없음, 깨진 PDF
         return None if not out else out
     return out
@@ -451,7 +455,7 @@ def ocr_page_tops(data: bytes, pages: list[int], frac: float = 0.15, dpi: int = 
             if 0 <= i < len(pdf):
                 img = pdf[i].render(scale=dpi / 72).to_pil()
                 w, h = img.size
-                out[i] = tess.image_to_string(img.crop((0, 0, w, int(h * frac))), lang="kor+eng", config="--psm 4")
+                out[i] = tess.image_to_string(img.crop((0, 0, w, int(h * frac))), lang="kor+eng", config="--psm 4 " + OCR_CONFIG)
     except Exception:  # noqa: BLE001
         return None if not out else out
     return out
@@ -495,7 +499,7 @@ def _ocr_pdf(data: bytes) -> str | None:
     except Exception:  # noqa: BLE001 — 깨진 PDF
         return ""
     try:
-        return "\n".join(pytesseract.image_to_string(im, lang="kor+eng") for im in images)
+        return "\n".join(pytesseract.image_to_string(im, lang="kor+eng", config=OCR_CONFIG) for im in images)
     except Exception:  # noqa: BLE001 — tesseract 없음·한국어 데이터 없음
         return None
 

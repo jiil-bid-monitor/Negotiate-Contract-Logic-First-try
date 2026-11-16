@@ -54,8 +54,21 @@ class TestBuildEntry(unittest.TestCase):
         n = e["notices"][0]
         self.assertEqual(n["noticeNo"], "R26RL0000")
         self.assertEqual(set(n["meta"]), {"sourceType", "businessType", "institution", "budgetAmount", "confidence",
-                                           "bidMethod", "keywords", "products", "score", "deadline", "detailUrl"})
+                                           "bidMethod", "keywords", "products", "paths", "licenses", "contractMethod",
+                                           "score", "deadline", "detailUrl"})
         self.assertEqual((n["meta"]["keywords"], n["meta"]["score"], n["meta"]["bidMethod"]), (["전시관"], 72, "입찰"))
+        self.assertEqual(n["meta"]["paths"], ["관심 키워드"])
+
+    def test_collect_paths_for_tuning(self):
+        # 판단 기록으로 수집 조건을 고칠 때 어떤 경로로 들어온 공고인지(11/16 사용자 요청)
+        self.assertEqual(R.collect_paths([], ["1"], ["정보통신공사업(0036)"]), ["세부품명", "보유 면허"])
+        self.assertEqual(R.collect_paths(["전시관"], [], []), ["관심 키워드"])
+        rec = {"R1": {"noticeNo": "R1", "title": "t", "status": "불참", "decidedAt": "2026-11-12T08:00:00Z", "tags": [],
+                      "meta": {"paths": ["보유 면허"], "licenses": ["정보통신공사업(0036)"], "contractMethod": "수의계약"}}}
+        csv = R.decisions_csv(rec, datetime(2026, 11, 16, tzinfo=KST)).lstrip("\ufeff").split("\r\n")
+        head, row = csv[0].split(","), csv[1].split(",")
+        got = dict(zip(head, row))
+        self.assertEqual((got["수집 경로"], got["보유 면허(경로)"], got["계약방법"]), ("보유 면허", "정보통신공사업(0036)", "수의계약"))
 
     def test_kst_date(self):
         # 한국 10/20 08:30 = UTC 10/19 23:30

@@ -111,6 +111,8 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         "work_type": n.work_type,
         "category": candidate.category,
         "award_method": n.award_method,
+        # 계약체결방법(일반경쟁·제한경쟁·지명경쟁·수의계약) — 판단 기록 '수집 경로' 보정용(11/16)
+        "contract_method": n.contract_method,
         "confidence": candidate.screen_result.confidence,
         "matched_keywords": candidate.screen_result.matched_keywords,
         "matched_product_codes": candidate.screen_result.matched_product_codes,

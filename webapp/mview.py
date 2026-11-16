@@ -124,6 +124,7 @@ def item(c: dict[str, Any], held_names: dict[str, str], promoted: dict[str, Any]
         "productName": c.get("product_name"),
         "bidMethod": c.get("award_method"),
         "bidMethodCategory": METHOD.get(c.get("category") or ""),
+        "contractMethod": c.get("contract_method"),
         "reNotice": bool(c.get("is_re_notice")),
         "confidence": c.get("confidence") or "참고용",
         "section": c.get("section") or "관심",

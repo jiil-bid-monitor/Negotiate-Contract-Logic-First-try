@@ -642,9 +642,11 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
             return f"{mm.group(2)} {_mark(value)}" + " " * max(2 if seal else 0, room - need)
         last = hit
         body = re.sub(r"(<[^>]*>)|([:：])( *)", put, hit.group(2))
-        if short and short[0]:  # 빈칸이 모자라면 서명 줄 앞 들여쓰기 빈칸을 그만큼 줄여 (인)이 같은 줄에 남게
-            lead = len(body) - len(body.lstrip(" "))
-            body = body[min(lead, short[0]):]
+        # (11/16 사용자 지적: '대 표 자:' 줄만 ':'가 왼쪽으로 — 기본 서식의 ':' 자리는 절대 옮기지 말 것) 빈칸이 모자라도 줄 앞 들여쓰기
+        # 빈칸은 줄이지 않음(예전엔 (인)을 같은 줄에 두려고 앞 빈칸을 줄여 ':'가 밀렸음) — 대신 '(인)' 뒤 줄 끝 빈칸만 그만큼 줄임
+        if short and short[0]:
+            tail = len(body) - len(body.rstrip(" "))
+            body = body[:len(body) - min(tail, short[0])] if tail else body
     seg = seg[:last.start(2)] + body + seg[last.end(2):]
     return re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
 
@@ -1058,7 +1060,7 @@ _PH = r"[○ｏoOㅇ◯0０](?: ?[○ｏoOㅇ◯0０]){1,}"  # 서명 줄 자리
 def _block_colons(xml: str, cands: list, chars: "_Chars | None", cells: list[tuple[int, int]]) -> dict[int, float]:
     """가운데 정렬 서명 묶음('주 소 : / 업 체 명 : / 대 표 자 :  (인)') 줄마다 원본 ':' 자리 → 묶음끼리 하나로 맞춘 값(문단 시작 → 자리).
     원본은 줄마다 빈칸으로 길이를 맞춰 ':'가 한 줄로 서 있음 — 빈칸·'(인)' 너비 어림이 줄마다 조금씩 틀려도(11/16 '대 표 자:' 줄이
-    1.5글자 밀림) 같은 문단 모양으로 잇달아 놓인 줄(문단 6개 안)은 글자 4개 너비 안이면 한 묶음, 묶음 값은 가운데 값."""
+    1.5글자 밀림) 잇달아 놓인 가운데 정렬 줄(문단 6개 안 — 문단 모양이 달라도, 11/16 '대 표 자:' 줄만 모양이 달랐을 수 있음)은 글자 4개 너비 안이면 한 묶음, 묶음 값은 가운데 값."""
     if chars is None:
         return {}
     rows = []
@@ -1071,10 +1073,11 @@ def _block_colons(xml: str, cands: list, chars: "_Chars | None", cells: list[tup
         x = _orig_colon_x(xml[s:_e], chars, _line_width(xml, s, cells))
         if x is not None:
             h = max(chars.height(re.search(r'charPrIDRef="(\d+)"', xml[s:_e]).group(1)) if re.search(r'charPrIDRef="(\d+)"', xml[s:_e]) else 1000, 1000)
-            rows.append((n, pm.group(1), s, x, h))
+            _i, left = chars.margins(pm.group(1))
+            rows.append((n, max(left, 0), s, x + max(left, 0), h))  # 문단 모양이 달라도(왼쪽 여백 포함) 같은 잣대로 비교
     out, groups = {}, []
     for row in sorted(rows):
-        g = next((g for g in groups if g[-1][1] == row[1] and row[0] - g[-1][0] <= 6
+        g = next((g for g in groups if row[0] - g[-1][0] <= 6
                   and abs(sorted(r[3] for r in g)[len(g) // 2] - row[3]) <= 4 * row[4]), None)
         (g.append(row) if g is not None else groups.append([row]))
     for g in groups:
@@ -1083,7 +1086,7 @@ def _block_colons(xml: str, cands: list, chars: "_Chars | None", cells: list[tup
         if len(xs) >= 3:  # 셋 이상이면 가운데 값(어긋난 한 줄이 끌어당기지 않게), 둘이면 평균
             mid = xs[len(xs) // 2]
         for r in g:
-            out[r[2]] = mid
+            out[r[2]] = mid - r[1]  # 그 줄 왼쪽 여백 기준으로 되돌림
     return out
 
 

@@ -3442,6 +3442,21 @@ def test_inline_paragraph_drops_tabs_pushed_by_values(tmp_path: Path):
     assert re.search(r"031-566-7720 +\(이메일 : ", out)
 
 
+def test_repeated_company_rep_rows_fill_first_only(tmp_path: Path):
+    """11/16 사용자 요청(제천 서약서): '회사명: | 대표자: (인)' 줄이 똑같이 3번(공동수급 구성원용) — 3줄 모두 지일 정보가 들어감 →
+    표 줄이든 표 밖 줄이든 같은 모양이 또 나오면 첫 줄에만. 모양이 다른 줄(주소 등)은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"})
+    row = lambda r: [_c(0, r, "회사명:"), _c(1, r, "대표자:             (인)")]
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    for name, body in (("t", _tbl([row(0), row(1), row(2), [_c(0, 3, "주    소"), _c(1, 3, "")]])),
+                       ("p", "".join(para("회사명:                    대표자:            (인)") for _ in range(3)))):
+        fill_hwpx(_mini_hwpx(tmp_path / f"{name}.hwpx", body), tmp_path / f"{name}o.hwpx", v)
+        out = zipfile.ZipFile(tmp_path / f"{name}o.hwpx").read("Contents/section0.xml").decode()
+        assert out.count("(주)가상") == 1 and out.count("홍길동") == 1, name
+        assert out.count("회사명:") == 3  # 나머지 줄 이름표는 그대로
+    assert "강원 정선" in zipfile.ZipFile(tmp_path / "to.hwpx").read("Contents/section0.xml").decode()
 def test_name_never_right_aligned_and_phone_right_after_company_label(tmp_path: Path):
     """11/16 사용자 지적(제천 대표자 선임계): ① '대표자명 | 이운봉'이 원본 칸 정렬대로 오른쪽에 붙음 — 성명·상호는 오른쪽 정렬로 두지 않음
     ② '연 락 처 | 회  사 / 휴대폰'에서 번호가 '회 사' 다음 줄로 밀리고 '회 … 사'가 칸 끝까지 벌어짐 — 번호는 '회  사' 바로 오른쪽."""

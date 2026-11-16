@@ -172,7 +172,7 @@ QUAL_DOC = "적격심사서류.xlsx"
 QUAL_LABELS = {"no": ("입찰공고번호", "입찰등록번호"), "title": ("공사명", "입찰 대상 물품명"), "institution": ("수요기관",),
                "opening": ("입찰일시",), "bid": ("입찰금액",), "planned": ("예정가격",), "a": ("A값",), "posted": ("입찰공고일",),
                "est": ("추정가격",), "classno": ("정부물품 분류번호",), "qty": ("수량",), "site": ("공사현장 시·군",),
-               "trade": ("업종",), "rate": ("업종평가비율(%)",), "to": ("수신(발주기관)", "수신"), "kind": ("업종 구분",)}
+               "trade": ("업종",), "rate": ("업종평가비율(%)",), "to": ("수신(발주기관)", "수신"), "kind": ("업종 구분", "업종구분")}
 # 종합공사업(건설산업기본법) — 그 밖(실내건축·정보통신·전기·소방 등)은 '전문·그밖'
 GENERAL_TRADES = ("토목공사업", "건축공사업", "토목건축공사업", "산업환경설비공사업", "조경공사업")
 _YELLOW = "FFFFF4C2"
@@ -521,6 +521,9 @@ class PostAward:
         basis = e.get("basis") or getattr(nf, "budget", None)
         est = num("presmptPrce")  # 나라장터 추정가격 — 없으면 기초금액 ÷ 1.1로 틀만 고름
         template = qual_template(templates, v.get("work", ""), est or (basis / 1.1 if basis else None))
+        # 물품 업종구분 — 낙찰방법 이름 끝 '(물품제조)'·'(물품구매)'로(모르면 틀 기본값 그대로)
+        method = str(raw.get("sucsfbidMthdNm") or getattr(nf, "award_method", "") or "")
+        goods_kind = "제조" if "제조" in method else "공급" if "구매" in method else None
         licenses = [re.sub(r"\s*[/(]\s*\d{4}\)?\s*$", "", name) for name in getattr(nf, "licenses", None) or []]
         if template is None:
             return [f"[적격심사] {v.get('work') or '업무 미확인'} 적격심사 표준틀이 {templates}에 없어 만들지 않음(용역은 틀 보류)"]
@@ -532,7 +535,8 @@ class PostAward:
             "classno": str(raw.get("dtilPrdctClsfcNo") or ""), "qty": " ".join(str(raw.get(k) or "").strip() for k in ("prdctQty", "prdctUnit")).strip(),
             "site": (str(raw.get("cnstrtsiteRgnNm") or "").split() or [""])[-1],
             "trade": licenses[0] if len(licenses) == 1 else None,  # 업종이 여럿이면 담당자가 고름
-            "kind": (("종합공사" if licenses[0].replace("·", "") in GENERAL_TRADES else "전문·그밖") if len(licenses) == 1 else None),
+            "kind": goods_kind if v.get("work") == "물품" else
+                    (("종합공사" if licenses[0].replace("·", "") in GENERAL_TRADES else "전문·그밖") if len(licenses) == 1 else None),
             "to": str(raw.get("ntceInsttNm") or "") or nf.institution,  # 발주기관 = 공고기관(조달청 대행이면 조달청)
             "rate": num("indstrytyEvlRt")})
         return [f"[적격심사] 0_적격심사/{QUAL_DOC} ← {template.name} — 자동으로 채운 칸: " + ", ".join(done),

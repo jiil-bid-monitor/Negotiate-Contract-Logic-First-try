@@ -1029,6 +1029,11 @@ footer b { color: var(--muted); }
 .calc-record-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; }
 .calc-record-row label { display: flex; gap: 6px; align-items: center; color: var(--ink); font-weight: 600; white-space: nowrap; }
 #cRecBid { width: 160px; text-align: right; font-variant-numeric: tabular-nums; }
+.calc-record .rec-actual { display: inline-flex; gap: 4px; align-items: center; font-weight: 600; border: 1px solid var(--line); padding: 3px 8px; border-radius: 4px; background: var(--bg, #fff); }
+.calc-record .rec-actual label { font-weight: 400; padding: 2px 6px; border-radius: 3px; cursor: pointer; }
+.calc-record .rec-actual label:has(input:checked) { background: var(--accent); color: #fff; }
+.calc-record .rec-actual label:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+.calc-record .rec-actual input { display: none; }
 .calc-record .job.ok { color: var(--good, #1b6e43); font-weight: 600; }
 .bidlog-bar { justify-content: space-between; }
 .bidlog-bar input { width: 260px; }
@@ -1049,6 +1054,9 @@ footer b { color: var(--muted); }
 .bidlog-table .cm.actual-out { background: #eaf0fb; border-color: #a9bfe6; color: #2c4f8f; }
 .bidlog-table .cm.actual-none, .bidlog-table .cm.actual-other { background: #f1f1f1; border-color: #ccc; color: #555; }
 .bidlog-table td.dim { opacity: .45; }
+.bidlog-table td.out .edit { display: block; width: 140px; max-width: 100%; box-sizing: border-box; margin: 0 0 4px auto; font-size: 12px; }
+.bidlog-table .cm.actual.plan { background: transparent; border-style: dashed; }
+.bidlog-table .actual-warn { color: #c0392b; font-size: 11px; font-weight: 700; margin-left: 4px; }
 .bidlog-table td.out { font-weight: 700; color: var(--ink-strong); }
 .bidlog-table .vs-lines { display: block; margin-top: 4px; }
 .bidlog-table .vs-lines .sub { display: block; }
@@ -1501,6 +1509,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="calc-record-row">
         <label>투찰금액 <input id="cRecBid" inputmode="numeric" placeholder="위 투찰금액"> 원</label>
         <label>외주 추천 금액 <input id="cRecOut" inputmode="numeric"> 원</label>
+        <span class="rec-actual" role="radiogroup" aria-label="실제로 낼 금액">실제 투찰
+          <label><input type="radio" name="cRecActual" value="web" checked> 투찰금액</label>
+          <label><input type="radio" name="cRecActual" value="out" id="cRecActualOut" disabled> 외주 금액</label></span>
         <button type="button" id="cRecord" class="primary">투찰 내역에 기록</button>
         <span id="cRecordMsg" class="job"></span>
       </div>

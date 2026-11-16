@@ -3776,7 +3776,7 @@ def test_phone_right_after_company_label_before_line_break(tmp_path: Path):
 
 def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
     """11/16 사용자 요청: 대표님 휴대폰(.env QUANT_REP_MOBILE → 회사정보 '대표자 휴대폰')은 대표자 줄의 휴대폰 칸에만 —
-    선임계 '대표자명 | 이름 | 연 락 처 | 회 사 / 휴대폰'(휴대폰 글자 바로 옆), 위임장 '대 표 자 | 휴대폰 | __'. 대리인 줄 휴대폰은 비움."""
+    선임계 '대표자명 | 이름 | 연 락 처 | 회 사 / 휴대폰'(휴대폰 글자 바로 옆), 위임장 '대 표 자 | 휴대폰 | __'. 대리인 줄 휴대폰 칸은 비움 — 단 '회 사 / 휴대폰' 연락처 칸은 대리인 줄이어도 대표님 번호(11/16)."""
     from quantdocs.fill import fill_hwpx
 
     P = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
@@ -3796,3 +3796,10 @@ def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
     info.pop("대표자 휴대폰")
     fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", body), tmp_path / "no.hwpx", vault.Vault({}, info=info))
     assert "010-" not in zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode()
+    # (11/16 사용자 요청) 위임장 대리인 '업체명 | (주)… | 연락처 | 회 사 / 휴대폰' — '휴대폰'이라 적혀 있으면 대표님 번호
+    agent = tbl([[cell(0, 0, "대리인", rs=2), cell(1, 0, "성 명"), cell(2, 0, ""), cell(3, 0, "주민등록번호"), cell(4, 0, "")],
+                 [cell(1, 1, "업체명"), cell(2, 1, ""), cell(3, 1, "연락처"), cell(4, 1, "회  사", "휴대폰")]])
+    info["대표자 휴대폰"] = "010-0000-1111"
+    fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", agent), tmp_path / "ao.hwpx", vault.Vault({}, info=info))
+    out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
+    assert re.search(r"회  사  (?:<[^>]+>)*033-111-2222", out) and re.search(r"휴대폰  (?:<[^>]+>)*010-0000-1111", out), out

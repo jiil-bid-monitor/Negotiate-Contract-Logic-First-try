@@ -3529,3 +3529,27 @@ def test_phone_right_after_company_label_before_line_break(tmp_path: Path):
         out = zipfile.ZipFile(tmp_path / f"{name}o.hwpx").read("Contents/section0.xml").decode()
         assert re.search(r"회 +사  (?:<[^>]+>)*033-111-2222(?:<[^>]+>)*<hp:lineBreak/>", out), (name, out)
         assert "<hp:tab" not in out.split("033-111-2222")[0].split("사")[-1]
+
+
+def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
+    """11/16 사용자 요청: 대표님 휴대폰(.env QUANT_REP_MOBILE → 회사정보 '대표자 휴대폰')은 대표자 줄의 휴대폰 칸에만 —
+    선임계 '대표자명 | 이름 | 연 락 처 | 회 사 / 휴대폰'(휴대폰 글자 바로 옆), 위임장 '대 표 자 | 휴대폰 | __'. 대리인 줄 휴대폰은 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    P = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+
+    def cell(col, row, *paras, rs=1):
+        return (f'<hp:tc><hp:subList>{"".join(P(x) for x in paras)}</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+    tbl = lambda rows: '<hp:p><hp:run><hp:tbl>' + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + '</hp:tbl></hp:run></hp:p>'
+    body = (tbl([[cell(0, 0, "대표자명"), cell(1, 0, ""), cell(2, 0, "연 락 처"), cell(3, 0, "회  사", "휴대폰")]])
+            + tbl([[cell(0, 0, "대 표 자", rs=2), cell(1, 0, "성 명"), cell(2, 0, "")], [cell(1, 1, "휴대폰"), cell(2, 1, "")],
+                   [cell(0, 2, "대 리 인", rs=2), cell(1, 2, "성 명"), cell(2, 2, "")], [cell(1, 3, "휴대폰"), cell(2, 3, "")]]))
+    info = {"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222", "대표자 휴대폰": "010-0000-1111"}
+    fill_hwpx(_mini_hwpx(tmp_path / "m.hwpx", body), tmp_path / "mo.hwpx", vault.Vault({}, info=info))
+    out = zipfile.ZipFile(tmp_path / "mo.hwpx").read("Contents/section0.xml").decode()
+    assert re.search(r"휴대폰  (?:<[^>]+>)*010-0000-1111", out)  # 선임계 휴대폰 글자 옆
+    assert out.count("010-0000-1111") == 2  # 선임계 + 위임장 대표자 줄만, 대리인 줄은 비움
+    info.pop("대표자 휴대폰")
+    fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", body), tmp_path / "no.hwpx", vault.Vault({}, info=info))
+    assert "010-" not in zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode()

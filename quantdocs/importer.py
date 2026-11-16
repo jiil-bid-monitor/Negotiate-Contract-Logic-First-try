@@ -541,8 +541,9 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     # 회사정보 값 바로잡기 — 서버 PC .env의 QUANT_FAX·QUANT_TEL이 묶음 값보다 먼저(11/05 사용자 요청: FAX 번호 수정).
     # 번호는 공개 저장소에 적지 않고 .env에만. 이메일·홈페이지도 같은 방식(11/11 사용자 — QUANT_EMAIL·QUANT_HOMEPAGE).
     from .vault import read_env
+    # 대표자 휴대폰(QUANT_REP_MOBILE, 11/16 사용자 요청) — 대표자 줄의 휴대폰 칸에만 씀(대리인·담당자 휴대폰 칸은 그대로 비움)
     for env_key, item in (("QUANT_FAX", "팩스번호"), ("QUANT_TEL", "전화번호"), ("QUANT_EMAIL", "이메일"),
-                          ("QUANT_HOMEPAGE", "홈페이지")):
+                          ("QUANT_HOMEPAGE", "홈페이지"), ("QUANT_REP_MOBILE", "대표자 휴대폰")):
         v = read_env(env_key).strip()
         if v:
             vault.info[item] = v

@@ -1394,7 +1394,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <div class="search log-search" id="logSearch" hidden>
       <input id="logQ" type="search" placeholder="공고명·공고번호·판단자·사유로 찾기" autocomplete="off" aria-label="판단 기록에서 찾기">
       <select id="logStatus" aria-label="판단">
-        <option value="">모든 판단</option>
+        <option value="">전체</option>
+        <option value="판단">판단 (참가·보류·불참)</option>
         <option value="미판단">미판단</option>
         <option value="놓침">놓침</option>
         <option value="참가">참가</option>
@@ -3146,6 +3147,13 @@ const REPORT_KIND = { daily: "매일", weekly: "주간" };
 const reportKindOf = (p) => ((p.reports || []).some((r) => r.kind === "daily") ? "daily" : (p.reports || []).length ? "weekly" : "");
 const reportsText = (p) => (p.reports || []).map((r) => `${r.date.slice(5).replace("-", "/")} ${REPORT_KIND[r.kind] || ""} 보고`).join(" · ");
 
+/** 판단 기록 주 묶음을 사용자가 접고 편 상태 {주 key: 펼침?} — 다시 그려도 유지(이 화면을 연 동안) */
+const LOG_WEEK_OPEN = {};
+$("logList").addEventListener("toggle", (ev) => {
+  const box = ev.target.closest && ev.target.closest("details.log-week");
+  if (box && box.dataset.week && !$("logQ").value.trim()) LOG_WEEK_OPEN[box.dataset.week] = box.open;
+}, true);
+
 function renderLog() {
   const entries = logEntriesOf();
   // 키워드 조정용 집계는 실제로 판단한 공고만으로 센다
@@ -3164,7 +3172,7 @@ function renderLog() {
   const q = ($("logQ").value || "").replace(/\s+/g, "").toLowerCase();
   const stf = $("logStatus").value;
   const kf = $("logKind").value;
-  const list = entries.filter(({ p, st }) => (!stf || st === stf) && (!kf || reportKindOf(p) === kf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
+  const list = entries.filter(({ p, st }) => (!stf || st === stf || (stf === "판단" && DECISIONS.includes(st))) && (!kf || reportKindOf(p) === kf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
   const byNo = new Map(lastItems.map((n) => [n.noticeNo, n]));
   const row = ({ p, st }) => {
     const n = byNo.get(p.noticeNo);
@@ -3203,7 +3211,9 @@ function renderLog() {
   }
   const weekHtml = (w, i) => {
     const cnt = [...UNDECIDED, ...DECISIONS].map((s) => [s, w.items.filter((e) => e.st === s).length]).filter(([, c]) => c).map(([s, c]) => `${s} ${c}`).join(" · ");
-    return `<details class="log-week"${i === 0 || q ? " open" : ""}><summary><b>${esc(w.label)}</b> · ${w.items.length}건 <span class="faint-note">${esc(cnt)}</span></summary>${w.items.map(row).join("")}</details>`;
+    // 사용자가 직접 접거나 편 주는 그대로 — 판단 기록은 1분마다 다시 그려져 접어도 저절로 펼쳐졌음(11/16 사용자 제보)
+    const open = q ? true : w.key in LOG_WEEK_OPEN ? LOG_WEEK_OPEN[w.key] : i === 0;
+    return `<details class="log-week" data-week="${esc(w.key)}"${open ? " open" : ""}><summary><b>${esc(w.label)}</b> · ${w.items.length}건 <span class="faint-note">${esc(cnt)}</span></summary>${w.items.map(row).join("")}</details>`;
   };
   $("logList").innerHTML = entries.length
     ? list.length ? weeks.map(weekHtml).join("") : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'

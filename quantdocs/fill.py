@@ -2736,6 +2736,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             key = "대표자"
                         elif re.fullmatch(r"연락처|전화|전화번호|연락처\(전화\)", lab):
                             key = "전화번호"
+                    # 대표자 줄의 휴대폰 칸 = 대표자 휴대폰(.env QUANT_REP_MOBILE — 11/16 사용자 요청). 대표자 묶음 칸 아래이거나 같은 줄에
+                    # 대표자 이름표가 있을 때만 — 대리인·담당자·참여인력 휴대폰 칸은 그대로 비움(개인 번호)
+                    if key is None and _value("대표자 휴대폰", vault) and c.row not in agent_rows and group != "대리인" \
+                            and re.fullmatch(r"(?:대표자)?(?:휴대(?:폰|전화)(?:번호)?|핸드폰|이동전화)", _sq(c.text)) \
+                            and (group == "대표자" or _sq(c.text).startswith("대표자")
+                                 or any(o.row == c.row and o is not c and re.fullmatch(r"대표자(?:명|성명)?|대표이사|대표", _sq(o.text)) for o in cells)):
+                        key = "대표자 휴대폰"
                     if key is None and _sq(c.text) == "사업명" and (sub_head is not None or any(re.match(r"서약자", _sq(x.text)) for x in cells)):
                         key = "_title"  # 보안특약 서약서 '사 업 명 | __'(11/13 사용자 요청) — 실적증명서의 '사업명'(실적 이름)과 달리 서약 표에서만 공고명
                     applicant = False
@@ -2799,6 +2806,15 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                 pm = popen[-1] if popen else None  # '회 사'가 든 문단 — 양쪽·배분·오른쪽 정렬이면 왼쪽 사본(칸 끝까지 안 벌어지게)
                                 if pm and chars is not None and chars.align(pm.group(1)) in ("JUSTIFY", "DISTRIBUTE", "DISTRIBUTE_SPACE", "RIGHT"):
                                     seg = seg[:pm.start(1)] + chars.left_any(pm.group(1)) + seg[pm.end(1):]
+                                mob = _value("대표자 휴대폰", vault)
+                                if mob and c.row not in agent_rows and any(o.row == c.row and o is not c and o is not target
+                                                                          and re.fullmatch(r"대표자(?:명|성명)?|대표이사", _sq(o.text)) for o in cells):
+                                    # 대표자 줄 '휴대폰' 글자 바로 오른쪽에 대표자 휴대폰(11/16 사용자 요청 — 대표자 줄에서만)
+                                    mm = re.search(rf"(휴{sp}*대{sp}*(?:폰|전{sp}*화)|핸{sp}*드{sp}*폰)(?=(?:{sp}|<(?:[\w.-]+:)?lineBreak\b[^>]*/>|</(?:[\w.-]+:)?t>))", seg)
+                                    if mm:
+                                        after = re.match(rf"{sp}*", seg[mm.end():])
+                                        seg = seg[:mm.end()] + "  " + _mark(mob) + seg[mm.end() + after.end():]
+                                        rep.filled.append("연락처 휴대폰 → 대표자 휴대폰")
                                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                                 edits.append((target, None, seg))
                                 rep.filled.append(f"연락처 회사 → {_value('전화번호', vault)}")

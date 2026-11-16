@@ -38,7 +38,8 @@ CSV_COLUMNS = [("recordedAt", "기록일시"), ("noticeNo", "공고번호"), ("n
 RESULT_COLUMNS = [("status", "개찰 결과"), ("ownRank", "지일 순위"), ("bidderCount", "참가 업체 수"), ("assessmentRate", "실제 사정률(%)"),
                   ("plannedPrice", "예정가격"), ("winnerName", "1순위 업체"), ("winnerAmount", "1순위 투찰금액"), ("winnerRate", "1순위 투찰률(%)"),
                   ("gapToWinner", "1순위와 금액 차이"), ("rateDiff", "기준 사정률 − 실제(%p)"),
-                  ("outsourceRank", "외주 금액 순위"), ("outsourceGapToFloor", "외주 금액 − 낙찰하한가")]
+                  ("outsourceRank", "외주 금액 순위"), ("outsourceGapToFloor", "외주 금액 − 낙찰하한가"),
+                  ("actualSide", "실제 투찰")]
 
 
 def _now() -> str:
@@ -71,6 +72,24 @@ def clean_entry(data: dict[str, Any]) -> dict[str, Any]:
     # 외주 업체 추천 금액(11/16 사용자 요청 — 웹앱 금액과 개찰 결과 비교용, 없으면 비움)
     out["outsource"] = round(out["outsource"]) if out["outsource"] and out["outsource"] > 0 else None
     return out
+
+
+def actual_side(entry: dict[str, Any]) -> str | None:
+    """실제로 어느 금액으로 투찰했나(11/16 사용자 요청) — 개찰 결과의 지일 실제 금액을 웹앱·외주 금액과 맞춰 봄. 개찰 전이면 None.
+    화면 `actualSide`(bidcalc_ui.js)와 같은 규칙."""
+    res = entry.get("result") or {}
+    if res.get("status") != "완료":
+        return None
+    own = res.get("own") or {}
+    amount = own.get("amount")
+    if amount is None:
+        return "투찰 안 함"
+    same = lambda v: v is not None and abs(float(v) - float(amount)) < 1  # noqa: E731
+    if same(entry.get("bid")):
+        return "웹앱 금액"
+    if same(entry.get("outsource")):
+        return "외주 금액"
+    return f"다른 금액 ({round(float(amount)):,}원)"
 
 
 class BidLog:
@@ -231,7 +250,8 @@ class BidLog:
             own, win = res.get("own") or {}, res.get("winner") or {}
             flat = {**res, "ownRank": own.get("rank") if own else ("참가 기록 없음" if res.get("status") == "완료" else None),
                     "winnerName": win.get("name"), "winnerAmount": win.get("amount"), "winnerRate": win.get("rate"),
-                    "outsourceRank": (res.get("outsource") or {}).get("rank"), "outsourceGapToFloor": (res.get("outsource") or {}).get("gapToFloor")}
+                    "outsourceRank": (res.get("outsource") or {}).get("rank"), "outsourceGapToFloor": (res.get("outsource") or {}).get("gapToFloor"),
+                    "actualSide": actual_side(r)}
             rows.append([r.get(k) for k, _ in CSV_COLUMNS] + [flat.get(k) for k, _ in RESULT_COLUMNS])
         return [label for _, label in CSV_COLUMNS + RESULT_COLUMNS], rows
 

@@ -1196,6 +1196,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             in_cell = any(cs <= s and e <= ce for cs, ce in cells)
             cands.append((s, e, _bare_label(text), False, "cell" if in_cell else True, n))
     bare_at = {c[5] for c in cands if c[4]} | sign_at
+    # 대표자가 서명하는 보안각서(11/16 사용자 결정) — 참여인력용 각서는 사람마다 다르니 그대로 비움
+    memo = re.search(r"보\s*안\s*각\s*서", _text(xml)) and not re.search(r"참\s*여\s*인\s*력", _text(xml))
     for s, e, label, seal, bare, n in cands:
         if bare == "cell" and not ({n - 1, n + 1} & sign_at):
             continue  # 표 칸 안 쌍점 없는 이름표는 서명 묶음('신청인 업체명' / '대표자     ㉿')일 때만(11/06 청주 신청서)
@@ -1207,9 +1209,15 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             key = "회사명"  # 각서·확약서 끝 '기관명 :  / 대표자 : (인)' = 입찰자(11/05 창업진흥원 서식 7) — 증명서 발급기관 칸(한 줄 칸)은 아님
         if not key and seal and re.fullmatch(r"신청(?:인|자)|제안(?:자|인)|입찰(?:자|인)|응모(?:자|인)", _sq(label)):
             key = "대표자"  # 서명 줄 '신 청 인 :        (인)'(11/10 경남교육청 입찰참가신청서) — (인)이 붙은 줄만, 대표자 이름
+        # 보안각서 끝 서명 묶음 '주 소 : / 생 년 월 일 : / 기 술 분 야 : / 성 명 :  (인)'(11/16 사용자 결정: 대표자가 서명) —
+        # '성명'은 개인 칸 비움 규칙에 걸려 비었음 → 보안각서의 (인) 붙은 '성명' 줄 = 대표자, 같은 묶음 '생년월일' = 대표자 생년월일, '기술분야'는 비움
+        memo_signer = lambda l2, sl2: sl2 and _sq(l2) == "성명" and bool(memo)
+        if not key and memo_signer(label, seal) and not any(cs <= s and e <= ce for cs, ce in single):
+            key = "대표자"
         value = _value(key, vault) if key else ""
         if not key and _sq(label) == "생년월일" and any(
-                n - 3 <= n2 < n and (_label_key(l2) == "대표자" or _BARE_LABELS.get(l2) == "대표자") for _s2, _e2, l2, _sl, _b2, n2 in cands):
+                n - 3 <= n2 < n and (_label_key(l2) == "대표자" or _BARE_LABELS.get(l2) == "대표자") or abs(n2 - n) <= 4 and memo_signer(l2, sl2)
+                for _s2, _e2, l2, sl2, _b2, n2 in cands):
             # 서명 묶음 '대 표 자 :  (인)' 바로 아래 '생 년 월 일 :'(11/12 당진 서식) = 대표자 생년월일 — 주민등록번호 앞 6자리로(표 칸 규칙과 같게)
             value = _birth(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
             key = "생년월일"

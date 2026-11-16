@@ -1169,6 +1169,31 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 continue
         if sign_only and not re.search(_SEAL_TAIL, text) and not re.search(r"업\s*체\s*명|상\s*호|회\s*사\s*명|주\s*소", text):
             continue
+        # 쌍점 없는 서명 줄 '서 약 자 상 호          대표자          (인)'(11/16 사용자 지적 — 상호·대표자 둘 다 빔:
+        # 쌍점 있는 '업체명 : … 대표자 :' 규칙과 '서 약 자      (인)' 규칙 어느 쪽에도 안 맞았음) → 상호 뒤 회사명, 대표자 뒤 대표자 이름
+        sign3 = re.fullmatch(rf"\s*(?:서\s*약\s*(?:자|인)|확\s*약\s*자|각\s*서\s*인|신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)\s+"
+                             rf"(?:상\s*호|업\s*체\s*명|회\s*사\s*명)\s*대\s*표\s*(?:자|이\s*사)\s*{_SEAL_TAIL}.*", text, re.S)  # 빈칸이 탭이면 글이 붙어 읽힘
+        if sign3 and _value("회사명", vault) and _value("대표자", vault):
+            sign_at.add(n)
+            company, name = _value("회사명", vault), _value("대표자", vault)
+
+            def put3(mm, st):
+                body = mm.group(2)
+                for key, lab, val in (("c", r"(?:상\s*호|업\s*체\s*명|회\s*사\s*명)", company), ("n", r"대\s*표\s*(?:자|이\s*사)", name)):
+                    if st[key]:
+                        continue
+                    body, k = re.subn(rf"({lab})( {{2,}}|$)",
+                                      lambda m2, v=val: f"{m2.group(1)}  {_mark(v)}" + (" " * max(2, len(m2.group(2)) - _span(v) - 2) if m2.group(2) else ""),
+                                      body, count=1)
+                    st[key] = bool(k)
+                return mm.group(1) + body + mm.group(3)
+            seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", lambda mm, st={"c": False, "n": False}: put3(mm, st),
+                         xml[s:e], flags=re.S)
+            if seg != xml[s:e]:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 → {company} · 대표자 {name}")
+            continue
         # 한 줄에 회사 이름표와 대표자 이름표가 같이 — '업체명 :      대표자 :      (인)'·'제안업체 :      대표자 :'(11/06 과거 제안요청서 검사)
         two = re.fullmatch(rf"\s*(?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*(?:[:：]\s{{2,}}|\s{{2,}}/\s*)대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL}|[(（])?\s*", text)  # '업체명      / 대표자 :   (인)'도(11/10 경남교육청 서약서)
         if two and _value("회사명", vault) and _value("대표자", vault):

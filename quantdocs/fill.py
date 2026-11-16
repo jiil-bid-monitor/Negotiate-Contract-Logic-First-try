@@ -566,12 +566,32 @@ def _agent_rows(xml: str, cells: list[Cell]) -> set[int]:
     return out
 
 
+_PARTY_PAIR = re.compile(r"(?:회사명|업체명|상호|법인명).*대표")  # 한 줄에 회사 이름표와 대표자 이름표가 같이
+
+
+def _repeat_party_rows(cells) -> set[int]:
+    """같은 표에서 '회사명: | 대표자: (인)'처럼 회사·대표자 이름표 줄이 똑같은 모양으로 또 나오면 그 뒤 줄들 — 공동수급 구성원마다
+    쓰라고 둔 줄이라 우리 회사 정보는 첫 줄에만(11/16 사용자 요청: 제천 서약서 '회사명: | 대표자: (인)' 3줄 모두 지일 정보가 들어감)."""
+    rows: dict[int, list] = {}
+    for c in cells:
+        rows.setdefault(c.row, []).append(c)
+    seen, dup = set(), set()
+    for r in sorted(rows):
+        sig = tuple((c.col, _sq(c.text)) for c in sorted(rows[r], key=lambda c: c.col) if not c.blank)
+        if not sig or not _PARTY_PAIR.search("".join(t for _c, t in sig)):
+            continue
+        if sig in seen:
+            dup.add(r)
+        seen.add(sig)
+    return dup
+
+
 def _other_party_cells(xml: str) -> list[tuple[int, int]]:
-    """줄 머리(첫 칸) 이름표가 발행자·제조사 등인 표 줄의 칸들 — 채우지 않음."""
+    """줄 머리(첫 칸) 이름표가 발행자·제조사 등인 표 줄의 칸들 + 공동수급용으로 되풀이된 회사·대표자 줄(11/16) — 채우지 않음."""
     out = []
     for tbl in _spans(xml, "tbl"):
         cells = _cells(xml, tbl)
-        rows = _other_rows(cells)
+        rows = _other_rows(cells) | _repeat_party_rows(cells)
         out += [(c.start, c.end) for c in cells if c.row in rows]
     return out
 
@@ -964,6 +984,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     cands = []  # (s, e, 이름표, 서명 줄?, 쌍점 없는 이름표?, 문단 순번)
     party: str | None = None  # 지금 묶음: 'own'(대표사) / 'other'(공동참여자·구성원 — 비움) / None
     multi_done: set[str] = set()  # 한 줄 여러 이름표로 이미 채운 항목 — 아래 묶음(공동참여 구성원 칸)의 같은 줄은 비움
+    pair_lines: set[str] = set()  # 이미 본 '회사명 … 대표자' 줄 — 같은 줄이 또 나오면 공동수급 구성원용이라 비움(11/16)
     sign_at: set[int] = set()  # 쌍점 없는 서명 줄('대표자      ㉿') 문단 순번 — 바로 위 '신청인 업체명' 줄도 서명 묶음으로 봄
     # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
     # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
@@ -996,6 +1017,11 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             party = None  # 이름표 아닌 글 줄('청주시장 귀하')에서 묶음이 끝남
         if party == "other":
             continue
+        # 표 밖이나 한 칸 안에 '회사명:      대표자:      (인)' 줄이 똑같이 또 나오면 공동수급 구성원용 — 첫 줄에만(11/16 사용자 요청)
+        if _PARTY_PAIR.search(_sq(text)):
+            if _sq(text) in pair_lines:
+                continue
+            pair_lines.add(_sq(text))
         # 본문 '당사는 서울특별시에서 시행하는            계약업체로서'의 빈칸 = 공고명(11/13 사용자 요청, 별지서식 24)
         if not sign_only and _value("_title", vault) and re.search(r"(?:시행|발주)하는\s{5,}(?:계약업체|사업|용역|공사)", text):
             title = _value("_title", vault)
@@ -2550,7 +2576,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     continue
                 by_pos = {(c.row, c.col): c for c in cells}
                 other_rows = _other_rows(cells)
-                cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
+                repeat_rows = _repeat_party_rows(cells)
+                if repeat_rows and not any("되풀이된 회사·대표자 줄" in x for x in rep.filled):
+                    rep.filled.append("되풀이된 회사·대표자 줄(공동수급 구성원용) — 첫 줄에만 지일 정보, 나머지는 비움")
+                cells = [c for c in cells if c.row not in other_rows | repeat_rows]  # 발행자·제조사 줄·되풀이된 구성원 줄은 안 채움
                 check_cols = _check_cols(cells)
                 qty_cols = _qty_cols(cells)
 

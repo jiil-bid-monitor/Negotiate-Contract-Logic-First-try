@@ -3511,6 +3511,26 @@ def test_name_never_right_aligned_and_phone_right_after_company_label(tmp_path: 
     assert re.search(r"회      사  033-111-2222", text)  # 끝 빈칸은 지우고 '회  사' 바로 오른쪽, 원래 '회 사' 간격은 그대로
 
 
+def test_credit_grade_centered_in_cell(tmp_path: Path):
+    """11/16 사용자 요청: '기업 신용 등급' 머리 아래 세로로 긴 칸의 'BB+'가 왼쪽에 붙음 — 신용평가등급은 칸 정중앙(가로 가운데 + 세로 가운데)."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+    cell = lambda col, row, t, rs=1: (f'<hp:tc><hp:subList vertAlign="TOP"><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+                                      f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+    body = '<hp:p><hp:run><hp:tbl><hp:tr>' + cell(0, 0, "기업 신용 등급") + '</hp:tr><hp:tr>' + cell(0, 1, "", 7) + '</hp:tr></hp:tbl></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "c.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "co.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+"}))
+    zo = zipfile.ZipFile(tmp_path / "co.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    m = re.search(r'<hp:subList vertAlign="(\w+)"><hp:p paraPrIDRef="(\d+)">(?:(?!</hp:tc>).)*BB\+', out, re.S)
+    assert m and m.group(1) == "CENTER"
+    assert 'horizontal="CENTER"' in re.search(rf'<hh:paraPr id="{m.group(2)}".*?</hh:paraPr>', head, re.S).group(0)
+
+
 def test_phone_right_after_company_label_before_line_break(tmp_path: Path):
     """11/16 사용자 지적(두 번째): '연 락 처 | 회  사 / 휴대폰'에서 번호가 여전히 다음 줄로 — '회  사' 문단 끝에 줄바꿈·탭이 있으면
     문단 끝에 붙인 번호가 그 뒤로 감. 번호는 '회  사' 글자 바로 오른쪽(같은 줄), 뒤 줄바꿈·'휴대폰' 줄은 그대로. 한 문단 안 줄바꿈 모양도."""

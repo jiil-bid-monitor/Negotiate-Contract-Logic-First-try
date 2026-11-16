@@ -2911,6 +2911,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if val_v:
                             valign[target.start] = val_v
                     edits.append((target, lines, False))
+                    if key == "신용평가등급" and chars is not None:
+                        # 신용평가등급은 칸 정중앙에(11/16 사용자 요청: '기업 신용 등급' 머리 아래 세로로 긴 칸에 'BB+'가 왼쪽에 붙음)
+                        pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[target.start:target.end])
+                        if pm:
+                            para_override[target.start] = chars.centered(pm.group(1))
+                        valign[target.start] = "CENTER"
                     if _GUIDE_TEXT.fullmatch(_sq(target.text)):
                         # 회색·기울임 안내 글이 있던 칸 — 그 글자 모양 대신 이름표 칸 글자 모양으로(11/06 사용자 요청: 기본 폰트와 같게)
                         lm = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', xml[c.start:c.end])

@@ -1,0 +1,146 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-16",
+ "reportedAt": "2026-11-16T00:43:20+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01829307",
+   "title": "2027년 난지물재생센터 수질계측기 유지관리 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "서울특별시",
+    "budgetAmount": 357460909.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "score": 56,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01829307&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01824222",
+   "title": "2027년 인천광역시의회 전자회의시스템 유지보수 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "인천광역시 의회사무처",
+    "budgetAmount": 37165455.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [],
+    "score": 53,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01824222&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01828335",
+   "title": "국립한국교통대학교 충주캠퍼스 노후 정보통신설비 개선공사 관급자재 구매 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "국립한국교통대학교",
+    "budgetAmount": 519800000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "score": 48,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01828335&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01827696",
+   "title": "대구우편집중국 발송장 오버헤드도어 교체 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "과학기술정보통신부 우정사업본부 경북지방우정청 대구우편집중국",
+    "budgetAmount": 130662000.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [],
+    "score": 44,
+    "deadline": "2026-11-18T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01827696&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01828796",
+   "title": "원산도 명품해수욕장 조성사업 지급자재(재난안전방송시스템) 제조구매설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "한국농어촌공사 충남지역본부 보령지사",
+    "budgetAmount": 90874545.0,
+    "confidence": "참고용",
+    "bidMethod": null,
+    "keywords": [],
+    "products": [],
+    "score": 46,
+    "deadline": "2026-11-19T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01828796&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01827937",
+   "title": "회의실·강당 LED 전광판 등 구매설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "과학기술연합대학원대학교",
+    "budgetAmount": 128254545.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "score": 50,
+    "deadline": "2026-11-22T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01827937&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01828280",
+   "title": "마음에온 연동 건설공사(건축) 관급자재(신발장, 장롱) 제작ㆍ설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "제주특별자치도개발공사",
+    "budgetAmount": 125070910.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "score": 59,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01828280&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01829471",
+   "title": "성남금토 스마트도시 정보통신공사-금속기둥",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "한국토지주택공사 경기남부지역본부",
+    "budgetAmount": 245500000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "score": 51,
+    "deadline": "2026-11-26T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01829471&bidPbancOrd=000"
+   }
+  }
+ ]
+}

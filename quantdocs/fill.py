@@ -2673,7 +2673,8 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
             rep.filled.append(f"자기평점 '{name}' 비움 — " + "; ".join(item.notes[:2]))
             continue
         none_cells = row.none_cells if item.kind == "sanction" else []
-        cell = row.by_points.get(item.score, row.cell) if row.by_points else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
+        # 기술인력 등급 줄이 있으면 합계는 상한 줄 칸(row.cell) — 등급 줄 배점과 같은 값이어도 그 줄로 안 감(11/16)
+        cell = row.by_points.get(item.score, row.cell) if row.by_points and not row.grade_cells else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
         if not any(cell is nc for nc, _p in none_cells):
             out.append((cell, [fmt(item.score)], False))
         for nc, pts in none_cells:  # 신인도 '없음' 줄마다 그 줄 배점(11/16 사용자 요청) — 상한점수 줄엔 위대로 합(상한까지)
@@ -2682,11 +2683,13 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
         # 기술인력 등급 줄마다 그 등급 점수 + 비고 '명 × 점 = 점'(11/13 사용자 요청: 부산 업사이클센터 '특급기술자 | 1.0점 | __ | 명 × 점 = 점')
         if row.grade_cells and row.crit is not None and item.kind == "staff":
             one = lambda v: (lambda t: t if "." in t else t + ".0")(f"{round(v, 2):g}")
-            for g, (sc, nc) in row.grade_cells.items():
-                per = row.crit.per_grade.get(g)
+            for gs, (sc, nc) in row.grade_cells.items():
+                gs = (gs,) if isinstance(gs, str) else gs  # 한 줄에 등급 여럿('기술사 또는 특급기술자')이면 인원을 더함(11/16)
+                per = row.crit.per_grade.get(gs[0])
                 if per is None:
                     continue
-                n = item.counts.get(g, 0)
+                g = "·".join(gs)
+                n = sum(item.counts.get(x, 0) for x in gs)
                 v = n * per
                 if sc is not None:
                     out.append((sc, [one(v)], False))

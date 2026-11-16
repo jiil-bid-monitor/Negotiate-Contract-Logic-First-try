@@ -61,6 +61,31 @@ class TestSummarize(unittest.TestCase):
         self.assertEqual(under["rank"], -1)                   # 하한가 아래 — 지일 실제 줄은 빼고 마바(170,000,000)보다 위라 -1
         self.assertNotIn("recorded", summarize(result(own_under), {**entry, "bid": 172_000_000}, OWN))  # 같은 금액 = 실제 투찰 기록
 
+    def test_outsource_amount_compared(self):
+        """11/16 사용자 요청: 외주 추천 금액도 기록 — 그 금액이면 몇 등인지 웹앱 금액과 나란히."""
+        bidders = [Bidder(1, "가나건설", "111-11-11111", 173_200_000, 89.81, ""),
+                   Bidder(2, "다라전기", "222-22-22222", 173_210_000, 89.82, ""),
+                   Bidder(None, "마바", "333-33-33333", 170_000_000, 88.0, "낙찰하한선미달")]
+        entry = {"bid": 173_205_000, "outsource": 171_000_000, "lowerRate": 89.745, "aValue": 0}
+        s = summarize(result(bidders), entry, OWN)
+        self.assertEqual(s["recorded"]["rank"], 2)    # 웹앱 금액
+        self.assertEqual(s["outsource"]["rank"], -1)  # 외주 금액은 하한가 아래 — 마바보다 위라 -1
+        self.assertEqual(s["outsource"]["amount"], 171_000_000)
+        self.assertNotIn("outsource", summarize(result(bidders), {**entry, "outsource": None}, OWN))
+
+    def test_outsource_added_after_opening_recomputed(self):
+        log = BidLog(Path(tempfile.mkdtemp()))
+        e = log.add({"noticeNo": "R26BK01824015", "bid": 173_205_000, "lowerRate": 89.745})
+        bidders = [Bidder(1, "가나건설", "111-11-11111", 173_200_000, 89.81, ""), Bidder(2, "다라전기", "222-22-22222", 173_210_000, 89.82, "")]
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(bidders))
+        self.assertNotIn("outsource", log.entries()[0]["result"])
+        row = log.update(e["id"], {"outsource": "173,195,000"})   # 개찰 뒤에 '고치기'로 넣음
+        self.assertEqual(row["outsource"], 173_195_000)
+        self.assertEqual(row["result"]["outsource"]["rank"], 1)
+        self.assertNotIn("outsource", log.update(e["id"], {"outsource": ""})["result"])
+        head, rows = log.table()
+        self.assertIn("외주 금액", head)
+
     def test_needs_fetch(self):
         now = datetime(2026, 11, 6, 12, tzinfo=KST)
         self.assertTrue(needs_fetch({}, now))

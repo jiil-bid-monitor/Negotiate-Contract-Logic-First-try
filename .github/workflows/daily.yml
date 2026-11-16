@@ -13,7 +13,7 @@ run-name: >-
 #    수동 실행이 이미 있으면(진행 중·성공) 수집 없이 끝난다.
 #      평일 09:00 KST — 어제 게시된 "입찰" → 텔레그램   (2026-10-14 사용자 요청으로 08:00 → 09:00,
 #        2026-10-20 팀원 레포 10/19 결정 이식: 평일만 — 월요일만 3일치(금~일), 화~금은 어제 하루(2026-10-30))
-#      매주 월 09:10 KST — 지난 7일 "협상·규격가격동시입찰" + 사전규격 → 텔레그램
+#      매주 월 09:10 KST — 지난 7일 "협상·규격가격동시입찰" + 사전규격 → 메일만(2026-11-16 — 텔레그램엔 안 보냄)
 #    ※ GitHub 예약 실행은 붐비면 몇 시간씩 늦게 시작한다(실측 10/13 08:00 예약 → 12:21 시작, 10/14 → 10:35 시작).
 #    조회 기간을 날짜 단위로 딱 잘라(--complete-days) 주기끼리 겹치지 않으므로
 #    같은 공고가 두 번 잡히지 않는다. 스케줄은 **기본 브랜치(main)에 이 파일이 있어야** 돈다.
@@ -316,7 +316,9 @@ jobs:
           ARGS=(--fetch-attachment-text)
           [ -n "$CATEGORIES" ] && ARGS+=(--categories "$CATEGORIES")
           [ -n "$COMPLETE_DAYS" ] && ARGS+=(--complete-days "$COMPLETE_DAYS")
-          [ "$TELEGRAM" = "true" ] && ARGS+=(--telegram)
+          # 주간 보고(사전규격까지)는 메일로만 — 건수가 많아 텔레그램엔 안 보낸다(2026-11-16 사용자 결정).
+          # TELEGRAM 값·Run 이름·외부 예약 본문은 그대로 둔다(백업 skip 비교가 이름으로 하므로).
+          [ "$TELEGRAM" = "true" ] && [ "$PRESPEC" != "true" ] && ARGS+=(--telegram)
           [ "$PRESPEC" = "true" ] && ARGS+=(--pre-spec)
           [ "$NO_SUPABASE" = "true" ] && ARGS+=(--no-supabase)
           [ "$LLM" = "true" ] && ARGS+=(--llm-similarity)

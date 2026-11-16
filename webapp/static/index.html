@@ -3154,6 +3154,15 @@ $("logList").addEventListener("toggle", (ev) => {
   if (box && box.dataset.week && !$("logQ").value.trim()) LOG_WEEK_OPEN[box.dataset.week] = box.open;
 }, true);
 
+/** 찾기 칸·판단·보고 고르기에 맞는 판단 기록 — 화면 목록과 CSV 내려받기가 같이 쓴다(11/16 사용자 요청: CSV는 고른 기록만) */
+function logFiltered(entries) {
+  const q = ($("logQ").value || "").replace(/\s+/g, "").toLowerCase();
+  const stf = $("logStatus").value;
+  const kf = $("logKind").value;
+  return entries.filter(({ p, st }) => (!stf || st === stf || (stf === "판단" && DECISIONS.includes(st))) && (!kf || reportKindOf(p) === kf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
+}
+const logFilterOn = () => Boolean(($("logQ").value || "").trim() || $("logStatus").value || $("logKind").value);
+
 function renderLog() {
   const entries = logEntriesOf();
   // 키워드 조정용 집계는 실제로 판단한 공고만으로 센다
@@ -3161,7 +3170,7 @@ function renderLog() {
   const count = (s) => entries.filter((e) => e.st === s).length;
   $("logMeta").innerHTML =
     `판단 기록 <b>${num(entries.length)}</b>건 — ${[...UNDECIDED, ...DECISIONS].filter((s) => s !== "놓침" || count(s)).map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
-    `<button type="button" class="linkish" id="logCsv">CSV 내려받기</button>` +
+    `<button type="button" class="linkish" id="logCsv">${logFilterOn() ? `CSV 내려받기 (고른 ${num(logFiltered(entries).length)}건)` : "CSV 내려받기"}</button>` +
     `<br><span class="faint-note">판단 없이 마감된 '놓침'은 마감 4주 뒤 자동으로 지웁니다 (판단·담당·대화가 있으면 남김)</span>`;
   $("logAggNote").textContent = all.length >= LOG_AGG_MIN
     ? "아래 키워드 조정용 집계는 판단할 때 공고에 걸린 관심 키워드 기준입니다."
@@ -3170,9 +3179,7 @@ function renderLog() {
   $("logEmpty").hidden = entries.length > 0;
 
   const q = ($("logQ").value || "").replace(/\s+/g, "").toLowerCase();
-  const stf = $("logStatus").value;
-  const kf = $("logKind").value;
-  const list = entries.filter(({ p, st }) => (!stf || st === stf || (stf === "판단" && DECISIONS.includes(st))) && (!kf || reportKindOf(p) === kf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
+  const list = logFiltered(entries);
   const byNo = new Map(lastItems.map((n) => [n.noticeNo, n]));
   const row = ({ p, st }) => {
     const n = byNo.get(p.noticeNo);
@@ -3259,7 +3266,7 @@ function downloadLogCsv() {
     const s = v == null ? "" : String(v);
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const rows = logEntriesOf().map(({ p, st }) => {
+  const rows = logFiltered(logEntriesOf()).map(({ p, st }) => {
     const m = p.meta || {};
     const d = !UNDECIDED.includes(st);
     return [d && p.decidedAt ? fmtDT(p.decidedAt) : "", st, d ? (p.tags || []).join(", ") : "", d ? p.reason || "" : "", d ? p.decidedBy || "" : "", p.owner || "", p.noticeNo, p.title, m.sourceType, m.businessType, m.institution, m.budgetAmount, m.confidence, m.bidMethod, (m.keywords || []).join(", "), (m.products || []).join(", "), m.score, m.deadline, m.detailUrl, [...new Set((p.reports || []).map((r) => r.date))].join(", "), [...new Set((p.reports || []).map((r) => REPORT_KIND[r.kind]))].join(", ")];
@@ -3275,6 +3282,7 @@ function downloadLogCsv() {
 $("logMeta").addEventListener("click", (ev) => {
   if (ev.target.id !== "logCsv") return;
   if (!logEntriesOf().length) return void alert("아직 판단 기록이 없습니다. 보고된 공고가 쌓이거나 실제 공고 카드에서 참가·보류·불참을 고르면 내려받을 수 있습니다.");
+  if (!logFiltered(logEntriesOf()).length) return void alert("고른 조건에 맞는 판단 기록이 없습니다 — 찾기 칸·판단·보고 고르기를 바꿔 보세요.");
   downloadLogCsv();
 });
 $("logQ").oninput = () => renderLog();

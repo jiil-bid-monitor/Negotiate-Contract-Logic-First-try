@@ -340,13 +340,18 @@ _DATE = r"((?:19|20)\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})"
 def read_credit(text: str) -> dict[str, str]:
     """확인서 글 → {신용평가등급, 신용평가 종류, 신용평가 평가일, 신용평가 유효기간, 신용평가 재무기준일}. 못 찾은 것은 빼고."""
     t = re.sub(r"[ \t]+", " ", text or "").replace("Ｏ", "0").replace("ｏ", "0")
+    # OCR(Tesseract) 글은 한글 글자마다 띄우고('등 급 평 가 일') B를 8로 읽음('회사채 등급 88+') — 11/16 KCB 확인서 스캔본
+    t = re.sub(r"(?<=[가-힣]) (?=[가-힣])", "", t)
+    t = re.sub(r"(등급\s*[:：]?\s*)(8{1,3})(?=[+\-0]?(?![A-Za-z0-9]))", lambda m: m.group(1) + "B" * len(m.group(2)), t)
     out: dict[str, str] = {}
     m = re.search(r"(?:신용\s*등급|평가\s*등급|등\s*급)\s*[:：]?\s*(?:\n\s*)?" + _GRADE, t)
     if m:
         g = m.group(1).replace("O", "0")
         out["신용평가등급"] = g
     head = re.sub(r"\s+", "", t[:600])
-    out["신용평가 종류"] = "기업어음" if "기업어음" in head else "회사채" if "회사채" in head else "기업신용평가등급"
+    # '기업신용평가'가 있으면 먼저 — 서식 확인서 안내문('회사채 … 또는 기업어음 …')이 앞에 붙은 묶음(11/16)
+    out["신용평가 종류"] = ("기업신용평가등급" if "기업신용평가" in head else "기업어음" if "기업어음" in head
+                       else "회사채" if "회사채" in head else "기업신용평가등급")
     d = re.search(r"(?:등급\s*)?평가\s*(?:일자|일|기준일|완료일)\s*[:：]?\s*" + _DATE, t) or re.search(r"(?:발급|확인)\s*일\s*[:：]?\s*" + _DATE, t)
     if d:
         out["신용평가 평가일"] = f"{d.group(1)}-{int(d.group(2)):02d}-{int(d.group(3)):02d}"

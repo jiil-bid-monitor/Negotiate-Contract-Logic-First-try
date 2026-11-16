@@ -3198,6 +3198,35 @@ def test_center_aligned_sign_block_keeps_label_positions(tmp_path: Path):
     assert lines[2].startswith("\u3000") or lines[2].lstrip(" ").startswith("\u3000")  # 둘째 줄 앞은 같은 너비 빈칸
 
 
+def test_center_sign_block_colons_stay_in_one_column(tmp_path: Path):
+    """11/16 사용자 지적: '기본 서식의 ':' 위치를 절대 옮기지 마' — 가운데 정렬 서명 묶음에서 '대 표 자:  (인)' 줄만 ':'가 왼쪽으로 1.5글자 밀림
+    (빈칸·'(인)' 너비 어림이 줄마다 달라 묶음에서 떨어져 나감). 같은 묶음 줄은 ':' 자리가 하나로 — 이름표 길이·값 길이와 상관없이."""
+    from quantdocs.fill import _cjk_width, _prefix_width, fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="1"><hh:paraPr id="57"><hh:align horizontal="CENTER"/>'
+              '<hh:margin><hc:intent value="0"/><hc:left value="0"/><hc:right value="0"/></hh:margin></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1200"></hh:charPr></hh:charProperties></hh:head>')
+    sec = '<hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin left="8504" right="8504" top="5668" bottom="4252"/></hp:pagePr></hp:secPr>'
+    para = lambda t: f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    orig = ["주      소:                    ", "업 체 명:                    ", "대 표 자:                     (인)   "]
+    body = f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0">{sec}<hp:t>20  년    월    일</hp:t></hp:run></hp:p>' + "".join(para(x) for x in orig)
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동",
+                                                              "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)"}))
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    xs = []
+    for pid, inner in re.findall(r'<hp:p paraPrIDRef="(\d+)">(.*?)</hp:p>', out, re.S)[1:]:
+        text = "".join(re.findall(r"<hp:t>(.*?)</hp:t>", inner, re.S))
+        if ":" not in text:
+            continue
+        left = int(re.search(r'<hc:left value="(\d+)"', re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)).group(1))
+        xs.append(left + _cjk_width(text[:text.index(":") + 1].replace("\u3000", "가"), 1200))
+    assert len(xs) == 3 and max(xs) - min(xs) < 300, xs  # ':' 세 줄이 한 자리(어림 차이 빈칸 반 칸 안)
+
+
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
     """11/13 사용자 제보(운리단길): ① 입찰참가신청서 표 밖 '신청인(대표사)          (인)'에 대표자 이름이 빠짐(쌍점 없는 서명 줄 규칙에 신청인이 없었음)
     ② 위임장 '소 속 (업체명)' 칸만 원본 문단이 오른쪽 정렬이라 '(주)지일'이 오른쪽으로 치우침 — 같은 표 다른 값 칸이 가운데면 가운데로."""

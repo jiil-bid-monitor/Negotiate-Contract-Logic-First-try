@@ -1054,7 +1054,8 @@ def test_self_score_fills_form_by_rfp(tmp_path: Path):
     got = {c.row: c.text for c in _cells(out, _spans(out, "tbl")[0]) if c.col == 2}
     # 11/05 사용자 결정: 기술인력·경영상태·신인도·특허만 자동 — 실적은 담당자가 직접(비움), 그래서 계도 비움
     # 인력 특급 1명 1점(본문 3점) × 6/3 = 2, 특허 1건 1점, 경영 3.5, 신인도 2
-    assert got == {0: "자기평점", 1: "", 2: "", 3: "", 4: "2", 5: "1", 6: "3.5", 7: "2"}
+    # 계 = 넣은 점수 합(11/16 사용자 요청: 비운 실적 줄은 빼고 늘 기입)
+    assert got == {0: "자기평점", 1: "8.5", 2: "", 3: "", 4: "2", 5: "1", 6: "3.5", 7: "2"}
     assert any("직접" in r[4] for r in rep.self_rows if r[0].startswith("최근"))
 
 
@@ -2946,11 +2947,44 @@ def test_self_score_total_table_below(tmp_path: Path):
     last = sec.rsplit("<hp:tbl>", 1)[1]
     # 감점이 없으면 감점 항목은 배점(5.0) 만점 → 14.25 + 5.0 = 19.25(11/13 사용자 지적)
     assert re.sub(r"<[^>]+>", "", last).endswith("20 점19.25 점"), re.sub(r"<[^>]+>", "", last)
-    # 신용등급을 모르면 재무상태가 비어 합계도 비움
+    # 신용등급을 모르면 재무상태는 비우고, 합계는 넣은 점수만 더함(11/16 사용자 요청: 합산 점수는 늘 기입)
     v2 = vault.Vault({}, info={"회사명": "(주)가상"})
     fill_hwpx(src, tmp_path / "o2.hwpx", v2, self_scores=SelfScore([], v2, _dt.date(2026, 11, 13)))
     sec2 = zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()
-    assert re.sub(r"<[^>]+>", "", sec2.rsplit("<hp:tbl>", 1)[1]).endswith("20 점")
+    assert re.sub(r"<[^>]+>", "", sec2.rsplit("<hp:tbl>", 1)[1]).endswith("20 점5 점")
+
+
+def test_sanction_none_rows_and_total(tmp_path: Path):
+    """11/16 사용자 지적: 신인도(책임성·성실성) 표 '없음' 줄 자기평점이 비고 '상한 점수' 줄에만 4 — '없음' 줄마다 그 배점(2.0),
+    맨 아래 '합 계' 줄에도 합산 점수(비운 줄 — 담당자 직접 채점 실적 — 은 빼고 더함)."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                           f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "구 분", 4), c(4, 0, "배점"), c(5, 0, "자기평점"), c(6, 0, "비고")],
+            [c(0, 1, "사업수행실적", 4), c(4, 1, "10"), c(5, 1, "")],
+            [c(0, 2, "책임성 성실성 (4점)", 1, 10), c(1, 2, "책임성 (상한 2점)", 1, 4), c(2, 2, "없음", 2), c(4, 2, "2.0"), c(5, 2, "")]]
+    rows += [[c(2, r, t, 2), c(4, r, "-2.0"), c(5, r, "")] for r, t in ((3, "최저임금 위반"), (4, "임금체불"), (5, "고용개선조치 미이행"))]
+    rows += [[c(1, 6, "성실성 (상한 2점)", 1, 5), c(2, 6, "부정당 업자 제재 (총 제재 기간)", 1, 5), c(3, 6, "없음"), c(4, 6, "2.0"), c(5, 6, "")]]
+    rows += [[c(3, r, t), c(4, r, p), c(5, r, "")] for r, t, p in ((7, "24개월 이상", "-2.0"), (8, "24개월 미만 ~ 12개월 이상", "-1.5"),
+                                                                   (9, "12개월 미만 ~ 6개월 이상", "-1.0"), (10, "6개월 미만", "-0.5"))]
+    rows += [[c(1, 11, "상 한 점 수", 3), c(4, 11, "4점"), c(5, 11, "")], [c(0, 12, "합 계", 4), c(4, 12, "20점"), c(5, 12, "")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 16)))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    score = {}
+    for tc in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S):
+        col, row = re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', tc).groups()
+        if col == "5":
+            score[int(row)] = re.sub(r"<[^>]+>", "", tc).strip()
+    assert score[1] == ""  # 실적 = 담당자 직접 채점
+    assert score[2] == "2.0" and score[6] == "2.0", score  # '없음' 줄마다 그 배점
+    assert all(score[r] == "" for r in (3, 4, 5, 7, 8, 9, 10))
+    assert score[11] == "4" and score[12] == "4"  # 상한 점수 줄 그대로 + 합계(실적 빼고)
 
 
 def test_long_label_matched_by_keyword_not_length():

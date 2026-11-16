@@ -2620,10 +2620,10 @@ def _deduction_edits(cells: list[Cell], rep: FillReport, tally: dict | None = No
 
 def _total_edits(cells: list[Cell], tally: dict, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
     """자기평가표 아래 따로 놓인 합계 표('합 계 | 20 점 | __' — 11/13 사용자 요청: 국립아시아문화전당 서식 14호)에 합계 점수.
-    같은 서식에서 넣은 점수(자기평점 줄·감점 0)를 더한 값, 비운 줄이 하나라도 있으면 안 채움. 옆 배점 칸이 'N 점'이면 같은 모양으로."""
+    같은 서식에서 넣은 점수(자기평점 줄·감점 0)를 더한 값 — 비운 줄은 빼고 더함(11/16 사용자 요청: 합산 점수는 늘 기입). 옆 배점 칸이 'N 점'이면 같은 모양으로."""
     from .selfscore import fmt
 
-    if not tally.get("n") or tally.get("missing"):
+    if not tally.get("n") or tally.get("sum") is None:
         return []
     rows: dict[int, list[Cell]] = {}
     for c in cells:
@@ -2640,6 +2640,12 @@ def _total_edits(cells: list[Cell], tally: dict, rep: FillReport) -> list[tuple[
         rep.filled.append(f"합계 → {fmt(value)}점 (감점 없는 항목 배점 {fmt(tally.get('extra', 0.0))}점 포함)")
         return [(blank, [fmt(value) + unit], False)]
     return []
+
+
+def _one_dec(v: float) -> str:
+    """배점 칸 모양대로 소수 한 자리('2.0')."""
+    t = f"{round(v, 2):g}"
+    return t if "." in t else t + ".0"
 
 
 def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | None = None) -> list[tuple[Cell, list[str], bool]]:
@@ -2662,8 +2668,12 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
         if item.score is None:
             rep.filled.append(f"자기평점 '{name}' 비움 — " + "; ".join(item.notes[:2]))
             continue
+        none_cells = row.none_cells if item.kind == "sanction" else []
         cell = row.by_points.get(item.score, row.cell) if row.by_points else row.cell  # 구간 줄마다 평점 칸이면 맞는 줄에
-        out.append((cell, [fmt(item.score)], False))
+        if not any(cell is nc for nc, _p in none_cells):
+            out.append((cell, [fmt(item.score)], False))
+        for nc, pts in none_cells:  # 신인도 '없음' 줄마다 그 줄 배점(11/16 사용자 요청) — 상한점수 줄엔 위대로 합(상한까지)
+            out.append((nc, [_one_dec(pts)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")
         # 기술인력 등급 줄마다 그 등급 점수 + 비고 '명 × 점 = 점'(11/13 사용자 요청: 부산 업사이클센터 '특급기술자 | 1.0점 | __ | 명 × 점 = 점')
         if row.grade_cells and row.crit is not None and item.kind == "staff":
@@ -2680,11 +2690,15 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
                     out.append((nc, [f"{n}명 × {one(per)}점 = {one(v)}점"], False))
                 rep.filled.append(f"자기평점 '{name}' {g} {n}명 × {one(per)}점 = {one(v)}점")
     total = next((r for r in rows if r.total), None)
-    if scored and all(it.score is not None for _, it in scored):
-        value = round(sum(it.score for _, it in scored), 2)
+    done = [it for _, it in scored if it.score is not None]
+    if done:
+        # 합계 = 넣은 점수의 합(11/16 사용자 요청: 최하단 합산 점수도 계산해 기입 — 11/13 '비운 줄이 있으면 합계도 비움'을 대체).
+        # 비운 줄(담당자 직접 채점)은 안 더함 — 읽어보기에 알림
+        value = round(sum(it.score for it in done), 2)
+        blank = [r.label for r, it in scored if it.score is None]
         if total is not None:
             out.append((total.cell, [fmt(value)], False))
-            rep.filled.append(f"자기평점 계 → {fmt(value)}점")
+            rep.filled.append(f"자기평점 계 → {fmt(value)}점" + (f" (비운 줄 {', '.join(_sq(b)[:12] for b in blank)} 빼고 — 직접 채점 뒤 고칠 것)" if blank else ""))
         rep.self_rows.append(["계", fmt(sum(r.points or 0 for r, _ in scored)), fmt(value), "서식 줄 합계", ""])
     return out
 

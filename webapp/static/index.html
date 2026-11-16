@@ -3906,11 +3906,12 @@ function awardDetailHtml(key, s) {
   const notes = s.notes.length ? `<div class="award-box"><h4>확인할 것</h4><ul>${s.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>` : "";
   const docs = `<div class="award-box"><h4>공고문 제출서류</h4>${s.docList.length ? `<ul class="award-docs">${s.docList.map((d) =>
       `<li class="${d.covered ? "ok" : "no"}">${d.covered ? "✓ 틀에 있음" : "✗ 따로 준비"} — ${esc(d.text)}</li>`).join("")}</ul>` : `<p class="sub">첨부에서 제출서류 목록을 찾지 못함 — 공고문 확인</p>`}</div>`;
-  const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")}</li>`),
+  const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="/api/postaward/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}">zip으로 모두 받기</a></li>`),
     s.attach.length ? `<li><b>공고문서</b> ${s.attach.map((f) => link("공고문서/" + f, f)).join(" · ")}</li>` : ""].join("");
   return `<div class="award-path"><span>폴더</span><code>${esc(s.folder)}</code>
       <button type="button" data-award-copy="${esc(s.folder)}">경로 복사</button>
-      <span class="sub">${local ? "서버 PC 안 폴더라 다른 PC에서는 열리지 않습니다 — 아래 파일을 내려받으세요." : "탐색기 주소창에 붙여 넣으면 열립니다."}</span></div>
+      <span class="sub">${local ? "서버 PC 안 폴더라 다른 PC에서는 열리지 않습니다 — 아래 파일을 내려받으세요." : "탐색기 주소창에 붙여 넣으면 열립니다. 여기서 파일을 열어 채우고 저장하면 서버에 그대로 남습니다."}</span>
+      <span class="sub">지금은 시험 위치(낙찰후서류)에 만들어집니다 — 002 진행프로젝트에 보이게 하려면 부장님(NAS 관리자)의 폴더 연결 설정이 필요합니다.</span></div>
     <ul class="award-stages">${stages}</ul>
     <div class="award-grid">${todo}${notes}${docs}</div>
     ${files ? `<div class="award-box"><h4>파일 내려받기</h4><ul class="award-files">${files}</ul></div>` : ""}`;

@@ -472,6 +472,27 @@ class PostAward:
             raise ValueError("파일을 찾지 못했습니다")
         return target
 
+    def zip(self, key: str, rel: str) -> tuple[str, bytes]:
+        """단계 폴더 하나를 zip으로(제출용 내려받기) — (파일 이름, 내용). 폴더 밖·빈 폴더면 오류."""
+        import io
+        import zipfile
+
+        v = self._read().get(key) or {}
+        if not v.get("folder"):
+            raise ValueError("폴더를 아직 만들지 않은 공고입니다")
+        folder = Path(v["folder"]).resolve()
+        target = (folder / rel).resolve()
+        if folder not in target.parents or not target.is_dir():
+            raise ValueError("폴더를 찾지 못했습니다")
+        files = [f for f in sorted(target.rglob("*")) if f.is_file() and not f.name.startswith("~$")]
+        if not files:
+            raise ValueError("폴더가 비어 있습니다")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in files:
+                z.write(f, f.relative_to(target).as_posix())
+        return f"{key}_{STAGE_NAME.get(target.name, target.name)}.zip", buf.getvalue()
+
     def _fill_qual(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
         """적격심사 표준틀을 0_적격심사에 복사하고 공고·투찰 기록 값을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
         v = self._read().get(key) or {}
@@ -599,6 +620,20 @@ def selfcheck() -> None:
         out = Path(d) / "q.xlsx"
         assert fill_qual(qual_template(Path(d) / "qtpl", "공사", None), out, {"no": "R1-000", "title": "A 공사", "bid": None}) == ["입찰공고번호", "공사명"]
         assert qual_todo(out) == (["추정가격", "제출일"], [["입찰공고번호", "R1-000"], ["공사명", "A 공사"]]), qual_todo(out)
+
+        import io as _io
+        import zipfile as _zip
+
+        zf = pa.make_folder("R26BK00000001-000", Path(d) / "out")
+        (zf / "0_적격심사" / "a.txt").write_text("x", encoding="utf-8")
+        name, body = pa.zip("R26BK00000001-000", "0_적격심사")
+        assert name == "R26BK00000001-000_적격심사.zip" and _zip.ZipFile(_io.BytesIO(body)).namelist() == ["a.txt"], name
+        (zf / "0_적격심사" / "a.txt").unlink()
+        try:
+            pa.zip("R26BK00000001-000", "..")
+            raise AssertionError("폴더 밖은 막아야 함")
+        except ValueError:
+            pass
 
         # 기본사항 채우기(시험판) — 공고문 글에서 공사위치·기간·안전관리자, 낙찰금액은 낙찰현황 값
         vals, notes = basic_values({"work": "공사", "winner": {"amount": "184131570"}}, "A 공사", "정선군", "",

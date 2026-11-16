@@ -566,6 +566,15 @@ def _agent_rows(xml: str, cells: list[Cell]) -> set[int]:
     return out
 
 
+def _party_table_sig(cells):
+    """회사명·대표자 이름표가 든 8줄 이하 회사 정보 표의 이름표 모양 — 같은 모양이 또 나오면 공동수급 구성원용 사본(11/13). 아니면 None."""
+    # 이름표 칸만으로 비교 — 채운 뒤의 첫 표(값이 들어감)와 빈 사본 표도 같은 모양으로 보게(11/16 '못 채운 칸' 검사)
+    labels = [c for c in cells if not c.blank and _label_key(c.text)]
+    if labels and len({c.row for c in cells}) <= 8 and {"회사명", "대표자"} <= {_label_key(c.text) for c in labels}:
+        return tuple(sorted((c.row, c.col, _sq(c.text)) for c in labels))
+    return None
+
+
 _PARTY_PAIR = re.compile(r"(?:회사명|업체명|상호|법인명).*대표")  # 한 줄에 회사 이름표와 대표자 이름표가 같이
 
 
@@ -1412,12 +1421,20 @@ def unfilled_slots(xml: str, sign_only: bool = False) -> list[str]:
     out: list[str] = []
     tbls = _spans(xml, "tbl")
     if not sign_only:
+        seen_party: set = set()
         for tbl in tbls:
             cells = _cells(xml, tbl)
             if re.search(r"<(?:[\w.-]+:)?tbl\b", xml[tbl[0] + 4:tbl[1]]):
                 cells = [c for c in cells if not re.search(r"<(?:[\w.-]+:)?tbl\b", xml[c.start:c.end])]
+            # 채우기가 일부러 비우는 공동수급 구성원용 사본 표·되풀이된 회사·대표자 줄은 '못 채운 칸'이 아님
+            # (11/16 사용자 제보: 정보 비공개 동의서 — 둘째 표부터 상호·주소·대표자·계약상대자등록번호가 경고로 뜸)
+            sig = _party_table_sig(cells)
+            if sig is not None:
+                if sig in seen_party:
+                    continue
+                seen_party.add(sig)
             by_pos = {(c.row, c.col): c for c in cells}
-            other_rows = _other_rows(cells)
+            other_rows = _other_rows(cells) | _repeat_party_rows(cells)
             agent = _agent_rows(xml, cells)
             for c in cells:
                 if c.row in other_rows or c.row in agent:
@@ -2757,9 +2774,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 cells = _cells(xml, tbl)
                 # 공동수급 때 구성원마다 쓰라고 같은 '상호(법인명) / 주소 / 대표자 (인) / 계약상대자등록번호' 표를 여러 번 둔 서식
                 # (11/13 사용자 요청: 국립아시아문화전당 정보 비공개 동의서 — 4개 모두 지일 정보가 들어감) — 우리 회사 정보는 첫 표에만
-                labels = [c for c in cells if not c.blank]
-                if labels and len({c.row for c in cells}) <= 8 and {"회사명", "대표자"} <= {_label_key(c.text) for c in labels}:
-                    sig = tuple(sorted((c.row, c.col, _sq(c.text)) for c in labels))
+                sig = _party_table_sig(cells)
+                if sig is not None:
                     if sig in seen_party:
                         if not any("같은 회사 정보 표" in x for x in rep.filled):
                             rep.filled.append("같은 회사 정보 표가 또 있음(공동수급 구성원용) — 첫 표에만 지일 정보, 나머지는 비움")

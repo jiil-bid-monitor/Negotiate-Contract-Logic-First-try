@@ -3518,6 +3518,32 @@ def test_multi_grade_row_and_cap_with_floor(tmp_path: Path):
     assert "(최저 2.1점)|2.1|" in text, text  # 0.9점 → 최저 2.1점
 
 
+def test_staff_merged_score_cell_not_overwritten_by_grade(tmp_path: Path):
+    """11/16 사용자 제보(서식 6 사업수행능력 자기 평가표): 기술인력 평점 칸이 기술사~초급·상한 줄을 세로로 합친 칸 하나인데
+    등급 줄 칸으로도 잡혀 항목 점수(5.4)를 '기술사 0명 = 0.0'으로 덮어썼음 — 등급 줄 칸은 그 줄 하나만 차지하는 칸만."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항 목"), c(1, 0, "세 부 항 목", 3), c(4, 0, "배 점"), c(5, 0, "평 점"), c(6, 0, "비 고")]]
+    for i, (g, p) in enumerate((("기술사", "1.0/인"), ("특급기술자", "0.8/인"), ("고급기술자", "0.6/인"),
+                                ("중급기술자", "0.4/인"), ("초급기술자", "0.2/인"), ("상한 점수", "6.0"))):
+        head = [c(0, 1, "기술인력", 1, 6), c(1, 1, "전시분야\n전문인력", 1, 6)] if i == 0 else []
+        tail = [c(5, 1, "", 1, 6), c(6, 1, "※ 평점 = 기술자수 × 해당 배점\n- 최고 6점\n- 미보유 시 4.2점", 1, 6)] if i == 0 else []
+        rows.append(head + [c(2, 1 + i, g, 2), c(4, 1 + i, p)] + tail)
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    v.staff = [{"이름": n, "입사일": "2010-01-01", "등급": g} for n, g in
+               (("가", "특급"), ("나", "특급"), ("다", "특급"), ("라", "고급"), ("마", "고급"), ("바", "고급"), ("사", "고급"),
+                ("아", "초급"), ("자", "초급"), ("차", "초급"))]
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 16)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "1.0/인|5.4|" in text, text  # 특급 3×0.8 + 고급 4×0.6 + 초급 3×0.2 = 5.4
+    assert "|0.0|" not in text, text
+
+
 def test_credit_score_also_in_cap_row(tmp_path: Path):
     """11/16 사용자 지적(국립청주박물관 자기평가표): 경영상태 '2.85점' 줄엔 2.85가 들어가는데 '상 한 점 수 | 3점 (최저 2.1점)' 평점 칸은 빔 —
     상한점수 줄 평점 칸에도 항목 점수, 합계는 한 번만 셈."""

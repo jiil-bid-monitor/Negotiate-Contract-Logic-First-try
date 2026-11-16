@@ -2927,9 +2927,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                 if pm and chars is not None and chars.align(pm.group(1)) in ("JUSTIFY", "DISTRIBUTE", "DISTRIBUTE_SPACE", "RIGHT"):
                                     seg = seg[:pm.start(1)] + chars.left_any(pm.group(1)) + seg[pm.end(1):]
                                 mob = _value("대표자 휴대폰", vault)
-                                if mob and c.row not in agent_rows and any(o.row == c.row and o is not c and o is not target
-                                                                          and re.fullmatch(r"대표자(?:명|성명)?|대표이사", _sq(o.text)) for o in cells):
-                                    # 대표자 줄 '휴대폰' 글자 바로 오른쪽에 대표자 휴대폰(11/16 사용자 요청 — 대표자 줄에서만)
+                                if mob:
+                                    # '휴대폰' 글자 바로 오른쪽에 대표자 휴대폰 — '회 사' 옆에 회사 전화를 넣는 칸이면 대리인 줄이어도
+                                    # (11/16 사용자 요청: 위임장 대리인 '연락처 | 회 사 / 휴대폰' — '휴대폰'이라 적혀 있으면 대표님 번호. 처음엔 대표자 줄에서만이었음)
                                     mm = re.search(rf"(휴{sp}*대{sp}*(?:폰|전{sp}*화)|핸{sp}*드{sp}*폰)(?=(?:{sp}|<(?:[\w.-]+:)?lineBreak\b[^>]*/>|</(?:[\w.-]+:)?t>))", seg)
                                     if mm:
                                         after = re.match(rf"{sp}*", seg[mm.end():])

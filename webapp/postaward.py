@@ -166,6 +166,61 @@ def fill_basic(template: Path, target: Path, values: dict) -> None:
     wb.save(target)
 
 
+# 적격심사 표준틀(11/16 — 공사·물품 × 추정가격 10억 미만/이상, 용역은 보류) → 0_적격심사/적격심사서류.xlsx.
+# 기본사항 A열 이름으로 칸을 찾음(틀이 바뀌어 줄이 밀려도 맞게). 틀의 칸 색: 파랑 = 공고·개찰 값(여기서 채움), 노랑 = 담당자.
+QUAL_DOC = "적격심사서류.xlsx"
+QUAL_LABELS = {"no": ("입찰공고번호", "입찰등록번호"), "title": ("공사명", "입찰 대상 물품명"), "institution": ("수요기관",),
+               "opening": ("입찰일시",), "bid": ("입찰금액",), "planned": ("예정가격",), "a": ("A값",), "posted": ("입찰공고일",),
+               "est": ("추정가격",)}  # 추정가격은 값 출처가 없어 채우지 않고 '채울 칸'으로만 보임
+_YELLOW = "FFFFF4C2"
+
+
+def qual_template(templates: Path, work: str, estimate: float | None) -> Path | None:
+    """업무·추정가격에 맞는 적격심사 표준틀. 금액을 모르면 10억 미만 틀."""
+    kind = "공사" if work == "공사" else "물품" if work == "물품" else ""
+    tier = "10억이상" if (estimate or 0) >= 1_000_000_000 else "10억미만"
+    path = Path(templates) / f"표준틀_적격심사_{kind}_{tier}.xlsx"
+    return path if kind and path.exists() else None
+
+
+def fill_qual(template: Path, target: Path, values: dict[str, Any]) -> list[str]:
+    """표준틀을 복사해 기본사항의 이름이 맞는 칸(B열)에 값. 채운 칸 이름을 돌려줌."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(template)
+    ws = wb["기본사항"]
+    names = {label: key for key, labels in QUAL_LABELS.items() for label in labels}
+    done = []
+    for r in range(1, ws.max_row + 1):
+        key = names.get(str(ws.cell(r, 1).value or "").strip())
+        if key and values.get(key) not in (None, ""):
+            ws.cell(r, 2).value = values[key]
+            done.append(str(ws.cell(r, 1).value).strip())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(target)
+    return done
+
+
+def qual_todo(xlsx: Path) -> tuple[list[str], list[list[str]]]:
+    """적격심사서류 기본사항에서 (빈 노란 칸 이름 — 안내에 '비우면'·'때만'이 있는 선택 칸은 뺌, [파란 칸 이름, 값])."""
+    from openpyxl import load_workbook
+
+    ws = load_workbook(xlsx)["기본사항"]
+    labels = {label for group in QUAL_LABELS.values() for label in group}
+    todo, auto = [], []
+    for r in range(1, ws.max_row + 1):
+        name, cell = str(ws.cell(r, 1).value or "").strip(), ws.cell(r, 2)
+        if not name:
+            continue
+        if cell.value in (None, ""):
+            hint = str(ws.cell(r, 3).value or "")
+            if (cell.fill.fgColor.rgb == _YELLOW or name in labels) and "비우면" not in hint and "때만" not in hint:
+                todo.append(name)
+        elif name in labels:
+            auto.append([name, f"{cell.value:,}" if isinstance(cell.value, int) else str(cell.value)])
+    return todo, auto
+
+
 # 서류 현황(화면 '서류 현황' 칸) — 단계 폴더마다 무엇이 만들어졌는지. 표준틀은 착공·착수만, 나머지는 샘플을 받은 뒤(11/11)
 STAGE_NAME = {"0_적격심사": "적격심사", "1_계약": "계약", "2_착공": "착공", "2_착수": "착수", "3_준공": "준공", "4_청구": "청구"}
 READY_STAGES = {"2_착공", "2_착수"}
@@ -352,8 +407,10 @@ class PostAward:
                 target = folder / "공고문서" / f.name
                 if not target.exists():  # 담당자가 고쳤을 수 있어 덮어쓰지 않음
                     shutil.copyfile(f, target)
-            basic = (["[적격심사] 낙찰 전 — 0_적격심사·공고문서만 만듦(계약·착공 서류는 낙찰 뒤 '낙찰 서류 만들기')"] if qual_only
-                     else self._fill_template(key, folder, nf, Path(templates) if templates else template_dir(root)))
+            tdir = Path(templates) if templates else template_dir(root)
+            basic = [] if private else self._fill_qual(key, folder, nf, tdir)
+            basic += (["[적격심사] 낙찰 전 — 0_적격심사·공고문서만 만듦(계약·착공 서류는 낙찰 뒤 '낙찰 서류 만들기')"] if qual_only
+                      else self._fill_template(key, folder, nf, tdir))
             summary = folder / "공고문서" / SUMMARY
             if nf.title and not summary.exists():
                 try:
@@ -390,10 +447,11 @@ class PostAward:
         for d in sorted(p for p in folder.iterdir() if p.is_dir() and p.name in STAGE_NAME):
             files = sorted(f.name for f in d.iterdir() if f.is_file() and not f.name.startswith("~$"))
             stage = {"dir": d.name, "name": STAGE_NAME[d.name], "files": files, "ready": d.name in READY_STAGES}
-            doc = d / TEMPLATES["공사" if gong else "물품·용역"][2]
-            if d.name in READY_STAGES and doc.exists():
+            qual = d.name == "0_적격심사"
+            doc = d / (QUAL_DOC if qual else TEMPLATES["공사" if gong else "물품·용역"][2])
+            if (qual or d.name in READY_STAGES) and doc.exists():
                 try:
-                    stage["todo"], stage["auto"] = sheet_todo(doc, gong)
+                    stage["todo"], stage["auto"] = qual_todo(doc) if qual else sheet_todo(doc, gong)
                     stage["doc"] = doc.name
                 except Exception as err:  # noqa: BLE001 — 엑셀이 열려 있거나 깨졌어도 나머지는 보임
                     stage["error"] = f"{doc.name}을 읽지 못함({err.__class__.__name__}) — 엑셀에서 닫고 다시 보세요"
@@ -413,6 +471,26 @@ class PostAward:
         if folder not in target.parents or not target.is_file():
             raise ValueError("파일을 찾지 못했습니다")
         return target
+
+    def _fill_qual(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
+        """적격심사 표준틀을 0_적격심사에 복사하고 공고·투찰 기록 값을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
+        v = self._read().get(key) or {}
+        target = folder / "0_적격심사" / QUAL_DOC
+        if target.exists():
+            return [f"[적격심사] 0_적격심사/{QUAL_DOC}가 이미 있어 그대로 둠(다시 채우려면 그 파일을 지우고 폴더 만들기)"]
+        e = next((e for e in (self.bidlog.entries() if self.bidlog is not None else []) if e.get("noticeNo") == v.get("no")), {})
+        res = e.get("result") or {}
+        basis = e.get("basis") or getattr(nf, "budget", None)
+        template = qual_template(templates, v.get("work", ""), basis / 1.1 if basis else None)  # 추정가격 ≈ 기초금액 ÷ 1.1 (틀 고르기용)
+        if template is None:
+            return [f"[적격심사] {v.get('work') or '업무 미확인'} 적격심사 표준틀이 {templates}에 없어 만들지 않음(용역은 틀 보류)"]
+        a = res.get("aValue") if res.get("aValue") is not None else e.get("aValue")
+        done = fill_qual(template, target, {
+            "no": key, "title": nf.title or v.get("title"), "institution": nf.institution or v.get("institution"),
+            "opening": e.get("openingAt"), "bid": e.get("bid"), "planned": res.get("plannedPrice"),
+            "a": round(a) if a else None, "posted": nf.posted})
+        return [f"[적격심사] 0_적격심사/{QUAL_DOC} ← {template.name} — 자동으로 채운 칸: " + ", ".join(done),
+                "  추정가격·업종·제출일 등 노란 칸은 직접 넣으세요(10억 미만/이상 틀은 기초금액으로 골랐으니 추정가격과 대조)"]
 
     def _fill_template(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
         """착공(공사)·착수(물품·용역)서류를 단계 폴더에 복사하고 기본사항을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
@@ -504,6 +582,23 @@ def selfcheck() -> None:
         assert f.parent.name == "공사" and (f / "2_착공").is_dir(), f
         f = pa.make_folder("R26BK00000003-000", Path(d) / "out")
         assert f.parent.name == "물품·용역" and (f / "2_착수").is_dir(), f
+
+        # 적격심사 표준틀: 이름이 맞는 칸만 채우고, 빈 노란 칸·추정가격은 '채울 칸'(선택 칸 '비우면'은 뺌)
+        from openpyxl import Workbook
+        from openpyxl.styles import PatternFill
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "기본사항"
+        for r, (name, hint) in enumerate([("입찰공고번호", ""), ("공사명", ""), ("추정가격", ""), ("제출일", "날짜"), ("작성자 전화", "비우면 회사 전화")], 4):
+            ws.cell(r, 1).value, ws.cell(r, 3).value = name, hint
+            ws.cell(r, 2).fill = PatternFill("solid", fgColor=_YELLOW if r >= 7 else "FFDDEBF7")
+        (Path(d) / "qtpl").mkdir()
+        wb.save(Path(d) / "qtpl" / "표준틀_적격심사_공사_10억미만.xlsx")
+        assert qual_template(Path(d) / "qtpl", "공사", 5e8) and not qual_template(Path(d) / "qtpl", "공사", 2e9) and not qual_template(Path(d) / "qtpl", "용역", 1)
+        out = Path(d) / "q.xlsx"
+        assert fill_qual(qual_template(Path(d) / "qtpl", "공사", None), out, {"no": "R1-000", "title": "A 공사", "bid": None}) == ["입찰공고번호", "공사명"]
+        assert qual_todo(out) == (["추정가격", "제출일"], [["입찰공고번호", "R1-000"], ["공사명", "A 공사"]]), qual_todo(out)
 
         # 기본사항 채우기(시험판) — 공고문 글에서 공사위치·기간·안전관리자, 낙찰금액은 낙찰현황 값
         vals, notes = basic_values({"work": "공사", "winner": {"amount": "184131570"}}, "A 공사", "정선군", "",

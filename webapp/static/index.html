@@ -3897,12 +3897,12 @@ function awardDetailHtml(key, s) {
       : st.ready ? `<span class="badge warn">틀 없음</span>` : `<span class="badge award-wait">틀 준비 중</span>`;
     return `<li><b>${esc(st.name)}</b> ${state}</li>`;
   }).join("");
-  const doc = s.stages.find((st) => st.doc || st.error);
-  const todo = doc && doc.doc ? `
+  // 서류가 있는 단계마다 한 상자(적격심사서류·착공/착수서류)
+  const todo = s.stages.filter((st) => st.doc || st.error).map((doc) => doc.doc ? `
     <div class="award-box todo"><h4>담당자가 채울 칸 <span class="sub">${esc(doc.dir)}/${esc(doc.doc)} · 기본사항</span></h4>
       ${doc.todo.length ? `<ul class="award-chips">${doc.todo.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p>필수 칸을 모두 채웠습니다.</p>`}
-      ${doc.auto.length ? `<h4>자동으로 채운 칸 <span class="sub">계약서와 대조</span></h4><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl>` : ""}
-    </div>` : doc && doc.error ? `<div class="award-box todo"><p>${esc(doc.error)}</p></div>` : "";
+      ${doc.auto.length ? `<h4>자동으로 채운 칸 <span class="sub">원문과 대조</span></h4><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl>` : ""}
+    </div>` : `<div class="award-box todo"><p>${esc(doc.error)}</p></div>`).join("");
   const notes = s.notes.length ? `<div class="award-box"><h4>확인할 것</h4><ul>${s.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>` : "";
   const docs = `<div class="award-box"><h4>공고문 제출서류</h4>${s.docList.length ? `<ul class="award-docs">${s.docList.map((d) =>
       `<li class="${d.covered ? "ok" : "no"}">${d.covered ? "✓ 틀에 있음" : "✗ 따로 준비"} — ${esc(d.text)}</li>`).join("")}</ul>` : `<p class="sub">첨부에서 제출서류 목록을 찾지 못함 — 공고문 확인</p>`}</div>`;

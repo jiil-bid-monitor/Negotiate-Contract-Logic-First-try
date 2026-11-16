@@ -3471,6 +3471,35 @@ def test_staff_grade_rows_and_note_filled(tmp_path: Path):
         assert line in text, (line, text)
 
 
+def test_multi_grade_row_and_cap_with_floor(tmp_path: Path):
+    """11/16 사용자 제보(국립청주박물관 디지털문화관 자기평가표): '기술사 또는 특급기술자 | 0.5점/인' 줄을 첫 등급(기술사)으로만 읽어
+    특급 직원이 '등급 없음'으로 빠졌음 — 한 줄의 등급 모두 같은 점수. 상한 줄 배점 칸 '3점 (최저 2.1점)'도 못 읽어 배점이 비었음."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore, read_form, staff_status, _cells, _spans
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항 목"), c(1, 0, "세 부 항 목", 4), c(5, 0, "배 점"), c(6, 0, "평 점"), c(7, 0, "비 고")]]
+    for i, (g, p) in enumerate((("기술사 또는 특급기술자", "0.5점/인"), ("박사학위자 또는 고급기술자", "0.4점/인"),
+                                ("중급기술자", "0.3점/인"), ("석사학위자 또는 초급기술자", "0.2점/인"), ("상 한 점 수", "3점\n(최저 2.1점)"))):
+        r = 1 + i
+        rows.append(([c(0, r, "기술\n능력", 1, 5)] if i == 0 else []) + [c(1, r, g, 4), c(5, r, p), c(6, r, ""), c(7, r, "")])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    xml = zipfile.ZipFile(src).read("Contents/section0.xml").decode()
+    row = next(r for t in _spans(xml, "tbl") for r in read_form(_cells(xml, t)) if r.crit is not None)
+    assert row.points == 3.0
+    assert row.crit.per_grade == {"기술사": 0.5, "특급": 0.5, "고급": 0.4, "중급": 0.3, "초급": 0.2}
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    v.staff = [{"이름": "가", "입사일": "2010-01-01", "등급": "특급"}, {"이름": "나", "입사일": "2010-01-01", "등급": "고급"}]
+    assert all(p["counted"] for p in staff_status(row.crit, v, _dt.date(2026, 11, 16)))
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 16)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "0.5점/인|0.5|" in text and "0.4점/인|0.4|" in text, text  # 특급 1명 × 0.5, 고급 1명 × 0.4
+    assert "(최저 2.1점)|2.1|" in text, text  # 0.9점 → 최저 2.1점
+
+
 def test_certificate_issuer_rows_left_blank(tmp_path: Path):
     """11/13 사용자 지적: 실적증명서 '증 명 서 발급기관'(세로로 합친 머리 칸) 줄의 '전화번호 :'에 지일 전화가 들어감 —
     증명서는 발주처가 적는 칸. 머리 칸이 덮는 줄은 모두 비움, 위 신청인 줄은 그대로 채움."""

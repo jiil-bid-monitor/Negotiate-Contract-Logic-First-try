@@ -825,6 +825,7 @@ def read_form(cells) -> list[FormRow]:
         kind = next((k for k, rx in KINDS if rx.search(_sq(label))), "")
         crit = Criterion(label, 0.0, kind)
         cap = None
+        cap_cell = None
         grade_cells: dict = {}
         none_cells: list = []
         kinds: dict[int, str] = {}
@@ -837,7 +838,16 @@ def read_form(cells) -> list[FormRow]:
             texts = [(c.col, re.sub(r"\s+", " ", c.text).strip()) for c in line if c.col < min(pcol, scol) and c.text.strip()]
             if any("상한" in _sq(t) for _, t in texts) and not (texts and re.fullmatch(r"(?:해당)?없음", _sq(texts[-1][1]))):
                 # '책임성 (상한 2점) | 없음 | 2.0'처럼 세로 묶음 칸에만 '상한'이 있고 줄 이름이 '없음'인 줄은 상한 줄이 아님(11/16)
+                # 배점 칸이 '3점 (최저 2.1점)'(11/16 국립청주박물관)이면 앞 숫자가 상한, 최저는 채점 쪽이 읽게 note에
+                if pts is None:
+                    lead = re.match(r"\s*(\d+(?:\.\d+)?)\s*점", pts_text or "")
+                    pts = float(lead.group(1)) if lead else None
+                    low = re.search(r"최저\s*[\d.]+\s*점", pts_text or "")
+                    if low:
+                        crit.note += low.group(0) + "\n"
                 cap = pts
+                # 상한 줄 평점 칸 = 항목 합계 자리(11/16 — 등급 줄이 위에 있으면 첫 등급 줄 칸에 합계를 썼다가 등급 점수로 덮여 상한 칸이 비었음)
+                cap_cell = next((c for c in line if c.col <= scol < c.col + c.colspan and c.blank), None)
                 continue
             for col, t in texts:
                 if re.fullmatch(r"회사채.*|기업어음|기업신용.*|신용평가등급", _sq(t)):
@@ -848,14 +858,18 @@ def read_form(cells) -> list[FormRow]:
                 if any(re.fullmatch(r"(?:기술사|특급|고급|중급|초급)(?:기술자|기술인|기능사)?", _sq(t)) for _, t in texts):
                     per = pts
             if per is not None:
-                g = next((g for g in GRADES for _, t in texts if g in _sq(t)), None)
-                if g:
+                # 한 줄에 등급이 여럿('기술사 또는 특급기술자 | 0.5점/인' — 11/16 사용자 제보: 국립청주박물관, 예전엔 첫 등급(기술사)만 읽어
+                # 특급 직원이 '등급 없음')이면 모두 같은 점수
+                gs = tuple(g for g in GRADES if any(g in _sq(t) for _, t in texts))
+                for g in gs:
                     crit.per_grade.setdefault(g, per)
+                if gs:
                     # 등급 줄의 평점 칸·비고 '명 × 점 = 점' 칸 — 사람 수대로 채움(11/13 사용자 요청: 부산 업사이클센터)
+                    # 키 = 그 줄의 등급들(한 줄에 여럿이면 인원을 더함)
                     sc = next((c for c in line if c.col <= scol < c.col + c.colspan and c.blank), None)
                     nc = next((c for c in line if c.col > scol and re.search(r"명\s*[×xX*]", c.text)), None)
-                    if (sc is not None or nc is not None) and g not in grade_cells:
-                        grade_cells[g] = (sc, nc)
+                    if (sc is not None or nc is not None) and not any(g in k for k in grade_cells for g in gs):
+                        grade_cells[gs] = (sc, nc)
                 continue
             if pts is None:
                 continue
@@ -891,6 +905,8 @@ def read_form(cells) -> list[FormRow]:
         points = cap if cap is not None else (max(nums) if nums else None)
         crit.points = points or 0.0
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
+        if grade_cells and cap_cell is not None:
+            target = cap_cell
         out.append(FormRow(label, points, target, crit if has else None, by_points=by_points, grade_cells=grade_cells,
                            none_cells=none_cells))
     return out

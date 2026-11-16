@@ -626,7 +626,7 @@ def main(argv: list[str] | None = None) -> int:
         elif errors:
             log.warning("텔레그램 알림 실패: %s", html.escape(str(errors))[:200])
 
-    # 시작·끝 알림(11/11 사용자 요청 — 수집이 돌았는지 개발자 방에서 바로 보이게)
+    # 시작·끝 알림(11/11 사용자 요청 — 수집이 돌았는지 개발자 방에서 바로 보이게, 11/16 새 공고가 없으면 끝은 성공 한 줄)
     started = datetime.now()
     notify(f"[1억 미만] 수집 시작 — 최근 {args.days}일 게시분 ({started:%m/%d %H:%M})")
     try:
@@ -678,6 +678,8 @@ def _took(started: datetime) -> str:
 
 def end_text(result: dict, took: str) -> str:
     """끝 알림 — 새로 만든 폴더 이름과 건수(마감·지역으로 뺀 공고는 대상에 안 셈)."""
+    if not result["made"] and not result["failed"]:
+        return f"[1억 미만] 수집 성공 ({took}) — 새 공고 없음"
     lines = [f"[1억 미만] 수집 끝 ({took}) — 새 폴더 {len(result['made'])}건",
              f"대상 {result.get('seen', 0)}건 중 이미 만든 공고 {result.get('done_before', 0)}건 · 1억 이상 {result['over']}건 · 실패 {len(result['failed'])}건"]
     lines += [f"· {name}" for name in result["made"][:15]]

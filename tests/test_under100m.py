@@ -547,6 +547,19 @@ class RunAlertTest(unittest.TestCase):
         self.assertIn("대상 5건 중 이미 만든 공고 3건", sent[1])
         self.assertIn("[1억미만] A", sent[1])
 
+    def test_no_new_notice_is_one_line(self):
+        from unittest import mock
+
+        import under100m.__main__ as m
+
+        sent = []
+        with tempfile.TemporaryDirectory() as d, mock.patch("nego.telegram.send_dev_alert", lambda text: sent.append(text) or []),                 mock.patch.object(m, "run_once", lambda *a, **k: {"made": [], "over": 2, "failed": [], "seen": 4, "done_before": 2}):
+            self.assertEqual(m.main(["--out", d]), 0)
+        self.assertEqual(len(sent), 2)
+        self.assertIn("수집 시작", sent[0])
+        self.assertIn("수집 성공", sent[1])
+        self.assertNotIn(chr(10), sent[1])
+
     def test_failure_alert(self):
         from unittest import mock
 

@@ -1394,7 +1394,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <div class="search log-search" id="logSearch" hidden>
       <input id="logQ" type="search" placeholder="공고명·공고번호·판단자·사유로 찾기" autocomplete="off" aria-label="판단 기록에서 찾기">
       <select id="logStatus" aria-label="판단">
-        <option value="">모든 판단</option>
+        <option value="">전체</option>
+        <option value="판단">판단 (참가·보류·불참)</option>
         <option value="미판단">미판단</option>
         <option value="놓침">놓침</option>
         <option value="참가">참가</option>
@@ -3171,7 +3172,7 @@ function renderLog() {
   const q = ($("logQ").value || "").replace(/\s+/g, "").toLowerCase();
   const stf = $("logStatus").value;
   const kf = $("logKind").value;
-  const list = entries.filter(({ p, st }) => (!stf || st === stf) && (!kf || reportKindOf(p) === kf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
+  const list = entries.filter(({ p, st }) => (!stf || st === stf || (stf === "판단" && DECISIONS.includes(st))) && (!kf || reportKindOf(p) === kf) && (!q || [p.title, p.noticeNo, p.decidedBy, p.owner, p.reason, ...(p.tags || [])].join(" ").replace(/\s+/g, "").toLowerCase().includes(q)));
   const byNo = new Map(lastItems.map((n) => [n.noticeNo, n]));
   const row = ({ p, st }) => {
     const n = byNo.get(p.noticeNo);

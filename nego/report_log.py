@@ -23,7 +23,20 @@ KIND_LABEL = {"daily": "매일", "weekly": "주간"}
 DECISIONS = ("참가", "보류", "불참")
 UNDECIDED = ("미판단", "놓침")
 # 화면 낙찰방법 분류 (webapp/mview.py METHOD와 같음)
-METHOD = {"협상": "협상", "규격가격동시입찰": "규격가격동시", "입찰": "입찰"}
+METHOD = {"협상": "협상", "규격가격동시입찰": "규격가격동시", "입찰": "입찰", "수의계약": "수의"}
+
+
+def collect_paths(keywords: list[str], products: list[str], licenses: list[str]) -> list[str]:
+    """이 공고가 어떤 경로로 수집됐나 — 판단 기록으로 수집 조건을 조금씩 고칠 때 원인을 묶는 데 쓴다(11/16 사용자 요청).
+    화면 쪽 같은 규칙은 index.html `collectPaths`."""
+    out = []
+    if keywords:
+        out.append("관심 키워드")
+    if products:
+        out.append("세부품명")
+    if licenses:
+        out.append("보유 면허")
+    return out
 
 
 def kst_date(now: datetime) -> str:
@@ -54,6 +67,10 @@ def reported_notice(candidate: Any, held_names: dict[str, str]) -> dict[str, Any
             "bidMethod": METHOD.get(candidate.category or ""),
             "keywords": list(sr.matched_keywords or []),
             "products": [held_names.get(p, p) for p in (sr.matched_product_codes or [])],
+            "paths": collect_paths(list(sr.matched_keywords or []), list(sr.matched_product_codes or []),
+                                   list(getattr(sr, "license_match", None) or [])),
+            "licenses": list(getattr(sr, "license_match", None) or []),
+            "contractMethod": n.contract_method,
             "score": round(score * 100) if isinstance(score, (int, float)) else None,
             # 기준 마감(통합 결정 4번) — 화면 카드 마감과 같은 값
             "deadline": _iso_minutes(earliest[1]) if earliest else None,
@@ -169,7 +186,7 @@ def log_status(p: dict[str, Any], now: datetime) -> str | None:
 
 
 CSV_HEAD = ["판단일시", "판단", "주된 사유", "사유", "판단자", "담당", "공고번호", "공고명", "구분", "업무", "수요기관",
-            "사업금액(원)", "추천등급", "낙찰방법", "관심 키워드", "등록 품목", "싱크로율(%)", "마감", "링크", "보고일", "보고"]
+            "사업금액(원)", "추천등급", "낙찰방법", "관심 키워드", "등록 품목", "수집 경로", "보유 면허(경로)", "계약방법", "싱크로율(%)", "마감", "링크", "보고일", "보고"]
 
 
 def _kst_datetime(iso: Any) -> str:
@@ -210,7 +227,8 @@ def decisions_csv(records: dict[str, dict[str, Any]], now: datetime) -> str:
             (p.get("decidedBy") or "") if d else "", p.get("owner") or "",
             p.get("noticeNo"), p.get("title"), m.get("sourceType"), m.get("businessType"), m.get("institution"),
             m.get("budgetAmount"), m.get("confidence"), m.get("bidMethod"), ", ".join(m.get("keywords") or []),
-            ", ".join(m.get("products") or []), m.get("score"), m.get("deadline"), m.get("detailUrl"),
+            ", ".join(m.get("products") or []), " + ".join(m.get("paths") or []), ", ".join(m.get("licenses") or []),
+            m.get("contractMethod"), m.get("score"), m.get("deadline"), m.get("detailUrl"),
             ", ".join(_unique([r.get("date", "") for r in reports])),
             ", ".join(_unique([KIND_LABEL.get(r.get("kind"), "") for r in reports])),
         ])

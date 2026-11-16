@@ -2995,11 +2995,30 @@ function pastHint(n) {
     .join("")}</div>`;
 }
 
+/**
+ * 이 공고가 어떤 경로로 수집됐나 — 판단 기록으로 수집 조건을 조금씩 고칠 때 원인을 묶는 데 쓴다(11/16 사용자 요청).
+ * 텔레그램 보고 쪽 같은 규칙은 nego/report_log.py `collect_paths`.
+ */
+function collectPaths(n) {
+  const out = [];
+  if (n.promoted) out.push("제외에서 올림");
+  if (n.fromDoc) out.push("공고문 세부품명");
+  else if (n.outside) out.push("세부품명(제외된 공고)");
+  if (n.excludeKeyword || n.confidence === "검토필요") out.push(`검토 필요(제외 키워드 '${n.excludeKeyword || n.reviewExclude || ""}')`);
+  if ((n.matchedBy?.keywords || []).length) out.push("관심 키워드");
+  if (!n.outside && (n.matchedBy?.products || []).length) out.push("세부품명");
+  if ((n.licenseMatch || []).length) out.push("보유 면허");
+  return out;
+}
+
 /** 판단할 때의 공고 정보 — 판단 기록 CSV와 키워드 조정용 집계에 쓴다 */
 function decisionMeta(noticeNo) {
-  const n = [...lastItems, ...lastHeld].find((x) => x.noticeNo === noticeNo);
+  const n = [...lastItems, ...lastHeld, ...lastTitleExcluded].find((x) => x.noticeNo === noticeNo);
   if (!n) return undefined;
   return {
+    paths: collectPaths(n),
+    licenses: n.licenseMatch || [],
+    contractMethod: n.contractMethod || null,
     sourceType: n.sourceType,
     businessType: n.businessType,
     institution: n.demandInstitution || n.institution || "",
@@ -3261,7 +3280,7 @@ function logAggHtml(all) {
 
 /** 판단 기록 CSV — 엑셀에서 한글이 깨지지 않게 BOM을 붙인다 */
 function downloadLogCsv() {
-  const head = ["판단일시", "판단", "주된 사유", "사유", "판단자", "담당", "공고번호", "공고명", "구분", "업무", "수요기관", "사업금액(원)", "추천등급", "낙찰방법", "관심 키워드", "등록 품목", "싱크로율(%)", "마감", "링크", "보고일", "보고"];
+  const head = ["판단일시", "판단", "주된 사유", "사유", "판단자", "담당", "공고번호", "공고명", "구분", "업무", "수요기관", "사업금액(원)", "추천등급", "낙찰방법", "관심 키워드", "등록 품목", "수집 경로", "보유 면허(경로)", "계약방법", "싱크로율(%)", "마감", "링크", "보고일", "보고"];
   const cell = (v) => {
     const s = v == null ? "" : String(v);
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -3269,7 +3288,7 @@ function downloadLogCsv() {
   const rows = logFiltered(logEntriesOf()).map(({ p, st }) => {
     const m = p.meta || {};
     const d = !UNDECIDED.includes(st);
-    return [d && p.decidedAt ? fmtDT(p.decidedAt) : "", st, d ? (p.tags || []).join(", ") : "", d ? p.reason || "" : "", d ? p.decidedBy || "" : "", p.owner || "", p.noticeNo, p.title, m.sourceType, m.businessType, m.institution, m.budgetAmount, m.confidence, m.bidMethod, (m.keywords || []).join(", "), (m.products || []).join(", "), m.score, m.deadline, m.detailUrl, [...new Set((p.reports || []).map((r) => r.date))].join(", "), [...new Set((p.reports || []).map((r) => REPORT_KIND[r.kind]))].join(", ")];
+    return [d && p.decidedAt ? fmtDT(p.decidedAt) : "", st, d ? (p.tags || []).join(", ") : "", d ? p.reason || "" : "", d ? p.decidedBy || "" : "", p.owner || "", p.noticeNo, p.title, m.sourceType, m.businessType, m.institution, m.budgetAmount, m.confidence, m.bidMethod, (m.keywords || []).join(", "), (m.products || []).join(", "), (m.paths || []).join(" + "), (m.licenses || []).join(", "), m.contractMethod, m.score, m.deadline, m.detailUrl, [...new Set((p.reports || []).map((r) => r.date))].join(", "), [...new Set((p.reports || []).map((r) => REPORT_KIND[r.kind]))].join(", ")];
   });
   const csv = "\ufeff" + [head, ...rows].map((r) => r.map(cell).join(",")).join("\r\n");
   const a = document.createElement("a");

@@ -3297,6 +3297,16 @@ def test_center_sign_block_colons_mixed_paragraph_shapes(tmp_path: Path):
     assert len(xs) == 3 and max(xs) - min(xs) < 300, xs  # ':' 세 줄이 한 자리(어림 차이 빈칸 반 칸 안)
 
 
+def test_space_width_follows_char_ratio():
+    """11/16 사용자 파일(제천 서명 묶음 '주 소: / 업 체 명: / 대 표 자: (인)'): 글자 장평 90%인데 빈칸은 100%로 셈 —
+    앞 빈칸이 27개인 '대 표 자:' 줄만 한글에서 ':'가 약 1,500(1글자) 왼쪽. 빈칸 너비에도 장평을 곱함."""
+    from quantdocs.fill import _Chars
+    head = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="570" height="1500" useFontSpace="0">'
+            '<hh:ratio hangul="90" latin="90"/><hh:spacing hangul="0" latin="0"/></hh:charPr></hh:charProperties></hh:head>')
+    ch = _Chars(head)
+    assert abs(ch.char_width("570", " ") - 1500 * 0.5 * 0.9) < 1
+
+
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
     """11/13 사용자 제보(운리단길): ① 입찰참가신청서 표 밖 '신청인(대표사)          (인)'에 대표자 이름이 빠짐(쌍점 없는 서명 줄 규칙에 신청인이 없었음)
     ② 위임장 '소 속 (업체명)' 칸만 원본 문단이 오른쪽 정렬이라 '(주)지일'이 오른쪽으로 치우침 — 같은 표 다른 값 칸이 가운데면 가운데로."""

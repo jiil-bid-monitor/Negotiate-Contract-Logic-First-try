@@ -1647,7 +1647,8 @@ class _Chars:
         sp = re.search(r'<(?:[\w.-]+:)?spacing\b[^>]*\bhangul="(-?\d+)"', block)
         extra = 1 + (int(sp.group(1)) / 100 if sp else 0)
         if ch == " ":
-            return h * (0.3 if 'useFontSpace="1"' in block else 0.5) * extra
+            # 장평도 빈칸에 적용(11/16 제천 서명 묶음 — 장평 90% 글자에서 빈칸을 100%로 셈해, 앞 빈칸 27개인 '대 표 자:' 줄만 ':'가 1글자쯤 왼쪽)
+            return h * (0.3 if 'useFontSpace="1"' in block else 0.5) * ratio * extra
         # 한글·한자·전각 + ❍○□※①· 같은 기호(한글 글꼴에서 한 글자 너비)
         if "가" <= ch <= "힣" or "一" <= ch <= "鿿" or "　" <= ch <= "ヿ" or "＀" <= ch <= "￯" \
                 or "\u2460" <= ch <= "\u27bf" or ch in "※·ㆍ":

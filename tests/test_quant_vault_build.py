@@ -3165,6 +3165,20 @@ def test_signer_name_rep_paren_label(tmp_path: Path):
     assert re.search(r"성명\(대표\) : 홍길동\s+\(인\)", text), text
 
 
+def test_signer_line_company_and_rep_without_colon(tmp_path: Path):
+    """11/16 사용자 지적: 쌍점 없는 서명 줄 '서 약 자 상 호          대표자          (인)'에서 상호·대표자가 빔."""
+    from quantdocs.fill import fill_hwpx
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    for i, body in enumerate([para("서 약 자 상 호                    대표자                    (인)"),
+                              '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>서 약 자 상 호</hp:t><hp:tab width="8000"/>'
+                              '<hp:t>대표자</hp:t><hp:tab width="8000"/><hp:t>(인)</hp:t></hp:run></hp:p>']):
+        fill_hwpx(_mini_hwpx(tmp_path / f"s{i}.hwpx", body), tmp_path / f"o{i}.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+        text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / f"o{i}.hwpx").read("Contents/section0.xml").decode())
+        assert re.search(r"상 호  \(주\)가상\s*대표자  홍길동\s*\(인\)", text), (i, text)
+
+
 def test_pledge_signer_value_after_colon(tmp_path: Path):
     """11/13 사용자 지적: 보안 서약서 서약자 '직 위 :' / '성 명 : (인)'이 한 문단(줄바꿈)이면 '직 위 대표이사 :'처럼 ':' 앞에 들어가고
     성명은 비었음 — ':'가 있으면 값은 늘 ':' 오른쪽."""

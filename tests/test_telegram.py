@@ -164,6 +164,14 @@ class TestBuildMessages(unittest.TestCase):
         c.notice.kind = "본공고"
         self.assertEqual(T.Row.from_candidate(c).qualification, "자격 미확인")
 
+    def test_license_route_candidate_builds_row(self):
+        # 11/13~11/16 발송이 멈춘 원인: 보유 면허 후보에서 NameError(re import 빠짐)
+        from types import SimpleNamespace as NS
+        c = NS(qualification=NS(checked=True, passes=True, missing_count=0), joint=NS(raw_value=None, allowed=False),
+               notice=NS(kind="본공고", title="t", detail_url=None, budget=None, linked_system=None), category="입찰",
+               days_left=3, screen_result=NS(license_match=["정보통신공사업/0036"], section=None, overseas_suspect=None))
+        T.Row.from_candidate(c)
+
     def test_single_kind_has_no_sections(self):
         text = T.build_messages([_row("가", 3, "입찰"), _row("나", 5, "입찰")], "입찰 공고 보고")[0]
         self.assertNotIn("──", text)

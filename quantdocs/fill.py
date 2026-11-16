@@ -2327,7 +2327,6 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
     bond = int(round(basis * BOND_RATE))
     pm = re.search(r"100분의(\d{1,2})", flat)
     pct = int(pm.group(1)) if pm else round(BOND_RATE * 100)
-    rate_bond = int(round(basis * pct / 100))
     blank = r"(금)\s+(원\s*\(\s*금)\s+(원\s*\))"
     # '금        원 (￦        )'(11/06 청주 입찰보증금 지급각서)·'금      원정(￦      )'(11/13 운리단길 입찰참가신청서)
     won_sign = r"금\s+원(정?)\s*\(\s*[￦₩]\s*\)"
@@ -2359,10 +2358,10 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
             if value not in done and rx.search(body):
                 body = rx.sub(lambda mm: f"{mm.group(1)} {_mark(f'{value:,}')} {mm.group(3)}", body, count=1)
                 done.append(value)
-        # '○ 보증금율 :'(빈칸, 11/13 제천 입찰참가 신청서) — 서식에 적힌 '100분의 N'(없으면 5)을 'N%'로 + 기초금액으로 셈한 보증금
+        # '○ 보증금율 :'(빈칸, 11/13 제천 입찰참가 신청서) — 서식에 적힌 '100분의 N'(없으면 5)을 'N%'로
         if "rate" not in done and re.search(r"보\s*증\s*금\s*율\s*[:：]\s*$", body) and not _rest_of_para(xml, m.end()):
             body = re.sub(r"(보\s*증\s*금\s*율\s*[:：])\s*$",
-                          lambda mm: f"{mm.group(1)} {_mark(f'{pct}%')} (금 {_mark(f'{rate_bond:,}')}원)", body, count=1)  # 율은 '5%'로 + 금액(11/13 사용자 요청)
+                          lambda mm: f"{mm.group(1)} {_mark(f'{pct}%')}", body, count=1)  # 율만 '5%'(11/13 사용자 요청 — 원본에 없는 금액은 안 붙임)
             done.append("rate")
         in_label_cell = any(a <= m.start() < b for a, b in label_only)
         if title and not in_label_cell and re.search(rf"{_BID_NAME}\s*[:：]?\s*$", body) \
@@ -2380,7 +2379,7 @@ def _fill_bond(xml: str, basis: int | None, rep: FillReport, title: str = "") ->
         if 0 in done:
             rep.filled.append(f"입찰건명 → {title}")
         if "rate" in done:
-            rep.filled.append(f"보증금율 → {pct}% (금 {rate_bond:,}원)")
+            rep.filled.append(f"보증금율 → {pct}%")
     return new
 
 

@@ -566,12 +566,32 @@ def _agent_rows(xml: str, cells: list[Cell]) -> set[int]:
     return out
 
 
+_PARTY_PAIR = re.compile(r"(?:회사명|업체명|상호|법인명).*대표")  # 한 줄에 회사 이름표와 대표자 이름표가 같이
+
+
+def _repeat_party_rows(cells) -> set[int]:
+    """같은 표에서 '회사명: | 대표자: (인)'처럼 회사·대표자 이름표 줄이 똑같은 모양으로 또 나오면 그 뒤 줄들 — 공동수급 구성원마다
+    쓰라고 둔 줄이라 우리 회사 정보는 첫 줄에만(11/16 사용자 요청: 제천 서약서 '회사명: | 대표자: (인)' 3줄 모두 지일 정보가 들어감)."""
+    rows: dict[int, list] = {}
+    for c in cells:
+        rows.setdefault(c.row, []).append(c)
+    seen, dup = set(), set()
+    for r in sorted(rows):
+        sig = tuple((c.col, _sq(c.text)) for c in sorted(rows[r], key=lambda c: c.col) if not c.blank)
+        if not sig or not _PARTY_PAIR.search("".join(t for _c, t in sig)):
+            continue
+        if sig in seen:
+            dup.add(r)
+        seen.add(sig)
+    return dup
+
+
 def _other_party_cells(xml: str) -> list[tuple[int, int]]:
-    """줄 머리(첫 칸) 이름표가 발행자·제조사 등인 표 줄의 칸들 — 채우지 않음."""
+    """줄 머리(첫 칸) 이름표가 발행자·제조사 등인 표 줄의 칸들 + 공동수급용으로 되풀이된 회사·대표자 줄(11/16) — 채우지 않음."""
     out = []
     for tbl in _spans(xml, "tbl"):
         cells = _cells(xml, tbl)
-        rows = _other_rows(cells)
+        rows = _other_rows(cells) | _repeat_party_rows(cells)
         out += [(c.start, c.end) for c in cells if c.row in rows]
     return out
 
@@ -987,6 +1007,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     cands = []  # (s, e, 이름표, 서명 줄?, 쌍점 없는 이름표?, 문단 순번)
     party: str | None = None  # 지금 묶음: 'own'(대표사) / 'other'(공동참여자·구성원 — 비움) / None
     multi_done: set[str] = set()  # 한 줄 여러 이름표로 이미 채운 항목 — 아래 묶음(공동참여 구성원 칸)의 같은 줄은 비움
+    pair_lines: set[str] = set()  # 이미 본 '회사명 … 대표자' 줄 — 같은 줄이 또 나오면 공동수급 구성원용이라 비움(11/16)
     sign_at: set[int] = set()  # 쌍점 없는 서명 줄('대표자      ㉿') 문단 순번 — 바로 위 '신청인 업체명' 줄도 서명 묶음으로 봄
     # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
     # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
@@ -1019,6 +1040,11 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             party = None  # 이름표 아닌 글 줄('청주시장 귀하')에서 묶음이 끝남
         if party == "other":
             continue
+        # 표 밖이나 한 칸 안에 '회사명:      대표자:      (인)' 줄이 똑같이 또 나오면 공동수급 구성원용 — 첫 줄에만(11/16 사용자 요청)
+        if _PARTY_PAIR.search(_sq(text)):
+            if _sq(text) in pair_lines:
+                continue
+            pair_lines.add(_sq(text))
         # 본문 '당사는 서울특별시에서 시행하는            계약업체로서'의 빈칸 = 공고명(11/13 사용자 요청, 별지서식 24)
         if not sign_only and _value("_title", vault) and re.search(r"(?:시행|발주)하는\s{5,}(?:계약업체|사업|용역|공사)", text):
             title = _value("_title", vault)
@@ -1193,6 +1219,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             in_cell = any(cs <= s and e <= ce for cs, ce in cells)
             cands.append((s, e, _bare_label(text), False, "cell" if in_cell else True, n))
     bare_at = {c[5] for c in cands if c[4]} | sign_at
+    # 대표자가 서명하는 보안각서(11/16 사용자 결정) — 참여인력용 각서는 사람마다 다르니 그대로 비움
+    memo = re.search(r"보\s*안\s*각\s*서", _text(xml)) and not re.search(r"참\s*여\s*인\s*력", _text(xml))
     for s, e, label, seal, bare, n in cands:
         if bare == "cell" and not ({n - 1, n + 1} & sign_at):
             continue  # 표 칸 안 쌍점 없는 이름표는 서명 묶음('신청인 업체명' / '대표자     ㉿')일 때만(11/06 청주 신청서)
@@ -1204,9 +1232,15 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             key = "회사명"  # 각서·확약서 끝 '기관명 :  / 대표자 : (인)' = 입찰자(11/05 창업진흥원 서식 7) — 증명서 발급기관 칸(한 줄 칸)은 아님
         if not key and seal and re.fullmatch(r"신청(?:인|자)|제안(?:자|인)|입찰(?:자|인)|응모(?:자|인)", _sq(label)):
             key = "대표자"  # 서명 줄 '신 청 인 :        (인)'(11/10 경남교육청 입찰참가신청서) — (인)이 붙은 줄만, 대표자 이름
+        # 보안각서 끝 서명 묶음 '주 소 : / 생 년 월 일 : / 기 술 분 야 : / 성 명 :  (인)'(11/16 사용자 결정: 대표자가 서명) —
+        # '성명'은 개인 칸 비움 규칙에 걸려 비었음 → 보안각서의 (인) 붙은 '성명' 줄 = 대표자, 같은 묶음 '생년월일' = 대표자 생년월일, '기술분야'는 비움
+        memo_signer = lambda l2, sl2: sl2 and _sq(l2) == "성명" and bool(memo)
+        if not key and memo_signer(label, seal) and not any(cs <= s and e <= ce for cs, ce in single):
+            key = "대표자"
         value = _value(key, vault) if key else ""
         if not key and _sq(label) == "생년월일" and any(
-                n - 3 <= n2 < n and (_label_key(l2) == "대표자" or _BARE_LABELS.get(l2) == "대표자") for _s2, _e2, l2, _sl, _b2, n2 in cands):
+                n - 3 <= n2 < n and (_label_key(l2) == "대표자" or _BARE_LABELS.get(l2) == "대표자") or abs(n2 - n) <= 4 and memo_signer(l2, sl2)
+                for _s2, _e2, l2, sl2, _b2, n2 in cands):
             # 서명 묶음 '대 표 자 :  (인)' 바로 아래 '생 년 월 일 :'(11/12 당진 서식) = 대표자 생년월일 — 주민등록번호 앞 6자리로(표 칸 규칙과 같게)
             value = _birth(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
             key = "생년월일"
@@ -1981,9 +2015,12 @@ def _align_numbers(xml: str, edits: list, chars: "_Chars", override: dict[int, s
                 override[cell.start] = center
 
 
-def _align_right_cells(xml: str, edits: list, chars: "_Chars", override: dict[int, str]) -> None:
+def _align_right_cells(xml: str, edits: list, chars: "_Chars", override: dict[int, str], names: tuple = ()) -> None:
     """같은 표에 넣은 값 칸 대부분이 가운데 정렬인데 홀로 오른쪽 정렬인 칸은 가운데로(11/13 사용자 제보: 위임장 '소 속 (업체명)' 칸의
-    '(주)지일'만 오른쪽으로 치우침 — 원본 문단이 오른쪽 정렬). 금액처럼 오른쪽이 맞는 칸이 많은 표는 그대로."""
+    '(주)지일'만 오른쪽으로 치우침 — 원본 문단이 오른쪽 정렬). 금액처럼 오른쪽이 맞는 칸이 많은 표는 그대로.
+    **회사명·대표자 이름이 든 칸은 오른쪽 정렬로 두지 않음**(11/16 사용자: '성명이나 상호명은 우측 정렬할 일이 절대 없어' —
+    제천 대표자 선임계 '대표자명 | 이운봉'이 원본 칸 정렬대로 오른쪽에 붙었음) — 표 값 칸 대부분이 가운데면 가운데, 아니면 왼쪽."""
+    names = tuple(n for n in names if n)
     pids = []
     for cell, lines, _keep in edits:
         if cell.start in override or not lines:
@@ -1992,9 +2029,18 @@ def _align_right_cells(xml: str, edits: list, chars: "_Chars", override: dict[in
         if m:
             pids.append((cell, m.group(1)))
     aligns = [chars.align(pid) for _c, pid in pids]
-    if aligns.count("CENTER") < 2 or aligns.count("CENTER") <= aligns.count("RIGHT"):
+    mostly_center = aligns.count("CENTER") >= 2 and aligns.count("CENTER") > aligns.count("RIGHT")
+    for cell, pid in pids:
+        if chars.align(pid) != "RIGHT" or cell.start in override:
+            continue
+        value = " ".join(next(e[1] for e in edits if e[0] is cell))
+        if names and any(n in value for n in names):
+            override[cell.start] = chars.centered(pid) if mostly_center else chars.left_any(pid)
+    if not mostly_center:
         return
     for cell, pid in pids:
+        if cell.start in override:
+            continue
         if chars.align(pid) == "RIGHT" and not _NUMBER.fullmatch(" ".join(next(e[1] for e in edits if e[0] is cell)).strip()):
             override[cell.start] = chars.centered(pid)
 
@@ -2573,7 +2619,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     continue
                 by_pos = {(c.row, c.col): c for c in cells}
                 other_rows = _other_rows(cells)
-                cells = [c for c in cells if c.row not in other_rows]  # 발행자·제조사 줄은 안 채움
+                repeat_rows = _repeat_party_rows(cells)
+                if repeat_rows and not any("되풀이된 회사·대표자 줄" in x for x in rep.filled):
+                    rep.filled.append("되풀이된 회사·대표자 줄(공동수급 구성원용) — 첫 줄에만 지일 정보, 나머지는 비움")
+                cells = [c for c in cells if c.row not in other_rows | repeat_rows]  # 발행자·제조사 줄·되풀이된 구성원 줄은 안 채움
                 check_cols = _check_cols(cells)
                 qty_cols = _qty_cols(cells)
 
@@ -2694,7 +2743,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                 para = xml[a:b]
                                 tl = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", para, re.S))
                                 if tl:
-                                    para = para[:tl[-1].end(2)] + "   " + _mark(_value("전화번호", vault)) + para[tl[-1].end(2):]
+                                    # (11/16 사용자 지적) 번호는 '회  사' 바로 오른쪽에 — 줄 끝 빈칸을 그대로 두고 붙이면 번호가 다음 줄로 밀리고
+                                    # 양쪽·배분 정렬 줄이라 '회 … 사'가 칸 끝까지 벌어졌음 → 끝 빈칸을 지우고 두 칸 띄워 붙임, 정렬은 왼쪽 사본
+                                    last = re.sub(r"(?:\s|&#160;|<(?:[\w.-]+:)?(?:fwSpace|nbSpace|tab)\b[^>]*/>)+$", "", tl[-1].group(2))
+                                    para = para[:tl[-1].start(2)] + last + "  " + _mark(_value("전화번호", vault)) + para[tl[-1].end(2):]
+                                    pm = re.search(r'paraPrIDRef="(\d+)"', para)
+                                    if pm and chars is not None and chars.align(pm.group(1)) in ("JUSTIFY", "DISTRIBUTE", "DISTRIBUTE_SPACE", "RIGHT"):
+                                        para = para[:pm.start(1)] + chars.left_any(pm.group(1)) + para[pm.end(1):]
                                     para = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", para, flags=re.S)
                                     seg = xml[target.start:a] + para + xml[b:target.end]
                                     edits.append((target, None, seg))
@@ -2811,7 +2866,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         rep.filled += done
                 if chars is not None:
                     _align_numbers(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override)
-                    _align_right_cells(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override)
+                    _align_right_cells(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override,
+                                       (_value("회사명", vault), _value("대표자", vault)))
                 if none_rule and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
                     head = [c for c in cells if c.row == 0]
                     body = [c for c in cells if c.row > 0]

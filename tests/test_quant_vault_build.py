@@ -3440,3 +3440,20 @@ def test_inline_paragraph_drops_tabs_pushed_by_values(tmp_path: Path):
     assert "031-566-7720" in out and "tongilil@naver.com" in out
     assert out.count("<hp:tab ") < 4  # 값으로 늘어난 만큼 탭을 뺌
     assert re.search(r"031-566-7720 +\(이메일 : ", out)
+
+
+def test_security_memo_signed_by_representative(tmp_path: Path):
+    """11/16 사용자 결정: 보안각서 끝 '주 소 : / 생 년 월 일 : / 기 술 분 야 : / 성 명 : (인)'은 대표자가 서명 —
+    성명 = 대표자, 생년월일 = 대표자 생년월일, 기술분야는 비움(예전엔 주소만 들어감). 참여인력용 각서는 그대로 비움."""
+    from quantdocs.fill import _text, fill_hwpx
+
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    lines = ["주          소 : ", "생 년 월 일 : ", "기 술 분 야 : ", "성          명 :                    (인)"]
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선", "대표자 주민등록번호": "650312-*******"})
+    for name, head in (("m", "보 안 각 서"), ("s", "보 안 각 서 (참여인력용)")):
+        fill_hwpx(_mini_hwpx(tmp_path / f"{name}.hwpx", "".join(para(t) for t in [head, *lines])), tmp_path / f"{name}o.hwpx", v)
+    t = re.sub(r"\s+", " ", _text(zipfile.ZipFile(tmp_path / "mo.hwpx").read("Contents/section0.xml").decode()))
+    assert "생 년 월 일 : 1965. 03. 12." in t and re.search(r"성 명 : 홍길동 +\(인\)", t)
+    assert re.search(r"기 술 분 야 : ?성", t)  # 기술분야는 비움
+    staff = _text(zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode())
+    assert "홍길동" not in staff and "1965" not in staff

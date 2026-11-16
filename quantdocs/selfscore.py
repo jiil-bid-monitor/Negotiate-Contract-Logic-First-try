@@ -867,7 +867,8 @@ def read_form(cells) -> list[FormRow]:
                 if gs:
                     # 등급 줄의 평점 칸·비고 '명 × 점 = 점' 칸 — 사람 수대로 채움(11/13 사용자 요청: 부산 업사이클센터)
                     # 키 = 그 줄의 등급들(한 줄에 여럿이면 인원을 더함)
-                    sc = next((c for c in line if c.col <= scol < c.col + c.colspan and c.blank), None)
+                    # 여러 줄을 합친 칸(항목 평점 칸)은 등급 줄 칸이 아님 — 항목 점수를 '기술사 0명 = 0.0'으로 덮어썼음(11/16 사용자 제보)
+                    sc = next((c for c in line if c.col <= scol < c.col + c.colspan and c.blank and c.rowspan == 1), None)
                     nc = next((c for c in line if c.col > scol and re.search(r"명\s*[×xX*]", c.text)), None)
                     if (sc is not None or nc is not None) and not any(g in k for k in grade_cells for g in gs):
                         grade_cells[gs] = (sc, nc)

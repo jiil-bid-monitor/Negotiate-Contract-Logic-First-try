@@ -28,16 +28,17 @@ BIDDERS_DIR = "bid_log_bidders"
 
 # 화면이 보내는 값 → 저장할 이름과 종류. 그 밖의 값은 버린다
 _TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "contractMethod": 40, "method": 80, "openingAt": 25, "closingAt": 25}
-_NUMBER = ("basis", "lowerRate", "rangeLo", "rangeHi", "aValue", "bid", "rate", "planned", "netCost")
+_NUMBER = ("basis", "lowerRate", "rangeLo", "rangeHi", "aValue", "bid", "rate", "planned", "netCost", "outsource")
 _NO_RE = re.compile(r"^[A-Z0-9]{8,14}$")
 
 CSV_COLUMNS = [("recordedAt", "기록일시"), ("noticeNo", "공고번호"), ("noticeOrd", "차수"), ("title", "공고명"),
                ("institution", "발주처"), ("workType", "업무"), ("contractMethod", "계약방법"), ("basis", "기초금액"), ("lowerRate", "하한율(%)"),
-               ("aValue", "A값"), ("bid", "투찰금액"), ("rate", "기준 사정률(%)"), ("method", "추천 방식")]
+               ("aValue", "A값"), ("bid", "투찰금액"), ("outsource", "외주 금액"), ("rate", "기준 사정률(%)"), ("method", "추천 방식")]
 # 개찰 결과 칸(CSV 뒤쪽) — result 안의 값
 RESULT_COLUMNS = [("status", "개찰 결과"), ("ownRank", "지일 순위"), ("bidderCount", "참가 업체 수"), ("assessmentRate", "실제 사정률(%)"),
                   ("plannedPrice", "예정가격"), ("winnerName", "1순위 업체"), ("winnerAmount", "1순위 투찰금액"), ("winnerRate", "1순위 투찰률(%)"),
-                  ("gapToWinner", "1순위와 금액 차이"), ("rateDiff", "기준 사정률 − 실제(%p)")]
+                  ("gapToWinner", "1순위와 금액 차이"), ("rateDiff", "기준 사정률 − 실제(%p)"),
+                  ("outsourceRank", "외주 금액 순위"), ("outsourceGapToFloor", "외주 금액 − 낙찰하한가")]
 
 
 def _now() -> str:
@@ -67,6 +68,8 @@ def clean_entry(data: dict[str, Any]) -> dict[str, Any]:
     if not out["bid"] or out["bid"] <= 0:
         raise ValueError("투찰금액이 없습니다 — 금액을 넣으세요")
     out["bid"] = round(out["bid"])
+    # 외주 업체 추천 금액(11/16 사용자 요청 — 웹앱 금액과 개찰 결과 비교용, 없으면 비움)
+    out["outsource"] = round(out["outsource"]) if out["outsource"] and out["outsource"] > 0 else None
     return out
 
 
@@ -111,7 +114,7 @@ class BidLog:
         return entry
 
     def update(self, entry_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """투찰금액만 고친다(잘못 넣은 금액 바로잡기)."""
+        """투찰금액·외주 금액을 고친다(잘못 넣은 금액 바로잡기, 외주 금액은 개찰 뒤에 넣어도 됨 — 비우면 지움)."""
         with self._lock:
             rows = self._read()
             row = next((r for r in rows if r.get("id") == entry_id), None)
@@ -122,6 +125,21 @@ class BidLog:
                 if not bid or bid <= 0:
                     raise ValueError("투찰금액이 맞지 않습니다")
                 row["bid"] = round(bid)
+            if "outsource" in data:
+                out = _num(data.get("outsource"))
+                if out is not None and out < 0:
+                    raise ValueError("외주 금액이 맞지 않습니다")
+                row["outsource"] = round(out) if out else None
+                res = row.get("result") or {}
+                if res.get("status") == "완료":   # 개찰 뒤에 넣거나 고쳤으면 저장된 투찰 업체 목록으로 바로 다시 셈
+                    from .bidresult import outsource_sim
+                    bidders = self.bidders(entry_id)
+                    if bidders is not None:
+                        sim = outsource_sim(bidders, row, res)
+                        if sim:
+                            res["outsource"] = sim
+                        else:
+                            res.pop("outsource", None)
             row["updatedAt"] = _now()
             self._write(rows)
             return row
@@ -212,7 +230,8 @@ class BidLog:
             res = r.get("result") or {}
             own, win = res.get("own") or {}, res.get("winner") or {}
             flat = {**res, "ownRank": own.get("rank") if own else ("참가 기록 없음" if res.get("status") == "완료" else None),
-                    "winnerName": win.get("name"), "winnerAmount": win.get("amount"), "winnerRate": win.get("rate")}
+                    "winnerName": win.get("name"), "winnerAmount": win.get("amount"), "winnerRate": win.get("rate"),
+                    "outsourceRank": (res.get("outsource") or {}).get("rank"), "outsourceGapToFloor": (res.get("outsource") or {}).get("gapToFloor")}
             rows.append([r.get(k) for k, _ in CSV_COLUMNS] + [flat.get(k) for k, _ in RESULT_COLUMNS])
         return [label for _, label in CSV_COLUMNS + RESULT_COLUMNS], rows
 

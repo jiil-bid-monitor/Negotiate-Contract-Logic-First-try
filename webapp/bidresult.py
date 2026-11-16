@@ -72,10 +72,25 @@ def recorded_sim(bidders: list[dict[str, Any]], entry: dict[str, Any], res: dict
     bid = entry.get("bid")
     if bid is None or res.get("status") != "완료":
         return None
-    bid = round(float(bid))
     own = res.get("own")
-    if own and own.get("amount") is not None and abs(float(own["amount"]) - bid) < 1:
+    if own and own.get("amount") is not None and abs(float(own["amount"]) - round(float(bid))) < 1:
         return None
+    return simulate(bidders, entry, res, bid)
+
+
+def outsource_sim(bidders: list[dict[str, Any]], entry: dict[str, Any], res: dict[str, Any]) -> dict[str, Any] | None:
+    """외주 업체 추천 금액(기록의 `outsource`)으로 투찰했다면 — 웹앱 금액과 같은 셈(11/16 사용자 요청: 3억 미만 공고 외주 vs 웹앱 비교).
+    지일이 그 금액으로 실제 투찰했어도 같은 셈(지일 실제 줄은 경쟁에서 빼고 그 금액을 넣음 — 결과는 실제 순위와 같음)."""
+    amount = entry.get("outsource")
+    if not amount or res.get("status") != "완료":
+        return None
+    return simulate(bidders, entry, res, amount)
+
+
+def simulate(bidders: list[dict[str, Any]], entry: dict[str, Any], res: dict[str, Any], amount: float) -> dict[str, Any]:
+    """그 금액으로 투찰했다면 몇 등·낙찰하한가와 차이·1순위와 차이(지일 실제 줄은 경쟁에서 뺌)."""
+    bid = round(float(amount))
+    own = res.get("own")
     others = [b for b in bidders if not b.get("own") and b.get("amount") is not None]
     floor = floor_price(res.get("plannedPrice"), entry.get("lowerRate"), res.get("aValue") if res.get("aValue") is not None else entry.get("aValue"))
     if floor is None:  # 하한가를 못 구하면 순위 있는 업체 중 가장 싼 금액을 선으로 어림
@@ -156,6 +171,9 @@ def summarize(result: BidResult, entry: dict[str, Any], own_bizno: str, now: dat
     sim = recorded_sim(out["bidders"], entry, out)
     if sim:
         out["recorded"] = sim
+    osim = outsource_sim(out["bidders"], entry, out)
+    if osim:
+        out["outsource"] = osim
     return out
 
 
@@ -232,6 +250,17 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
         sim = recorded_sim(bidders, e, res)
         if sim != old:
             log.set_result_field(e["id"], "recorded", sim)
+    # 외주 금액 비교(11/16) — 개찰 뒤에 외주 금액을 넣었거나 고친 기록도
+    for e in log.entries():
+        res = e.get("result") or {}
+        if res.get("status") != "완료" or e["id"] in {d["id"] for d in done}:
+            continue
+        old = res.get("outsource")
+        if (old or {}).get("amount") == (round(float(e["outsource"])) if e.get("outsource") else None):
+            continue
+        bidders = log.bidders(e["id"])
+        if bidders is not None:
+            log.set_result_field(e["id"], "outsource", outsource_sim(bidders, e, res))
     done_ids = {e["id"] for e in done}
     pending = [e for e in entries if e.get("id") not in done_ids and (not ids or e.get("id") in ids)
                and _needs_times(e, (e.get("result") or {}).get("status"))]

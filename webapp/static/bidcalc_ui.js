@@ -284,7 +284,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
-    LAST_NOTICE = null; REC_BID_EDITED = false;
+    LAST_NOTICE = null; REC_BID_EDITED = false; $("#cRecOut").value = "";
     WORK = ""; REC_METHOD = ""; NET_RULE = null; REGION_LIMITED = null; REC_PICK = null; REC_OPTIONS = []; NEGO = null; $("#cRec").textContent = "";
     render();
   };
@@ -636,6 +636,7 @@
     $("#cRecBid").value = CURRENT ? Number(CURRENT.bid).toLocaleString("ko-KR") : "";
   }
   $("#cRecBid").addEventListener("input", (e) => { REC_BID_EDITED = true; commaInput(e.target); });
+  $("#cRecOut").addEventListener("input", (e) => commaInput(e.target));
   $("#cRecord").addEventListener("click", async () => {
     if (!LAST_NOTICE) { recordMsg("먼저 공고번호로 공고를 불러오세요", "err"); return; }
     const bid = numIn("#cRecBid");
@@ -645,13 +646,14 @@
     try {
       const d = await post("/api/bidlog", {
         ...LAST_NOTICE, basis: numIn("#cBasis"), lowerRate: numIn("#cRate"), rangeLo: numIn("#cLo"), rangeHi: numIn("#cHi"),
-        aValue: aValue() || null, netCost: numIn("#cNet"), bid,
+        aValue: aValue() || null, netCost: numIn("#cNet"), bid, outsource: numIn("#cRecOut") || null,
         // 금액을 손으로 바꿨으면 추천 방식·기준 사정률은 그 금액의 근거가 아니라서 '직접 입력'으로
         rate: same ? CURRENT.rate : null, method: same ? CURRENT.method : "직접 입력", planned: same ? CURRENT.planned : null,
       });
       LOG = d.entries || [];
       renderLog();
-      recordMsg(`기록했습니다 — ${LAST_NOTICE.noticeNo} · ${won(bid)}원 ('투찰내역'에서 확인)`, "ok");
+      recordMsg(`기록했습니다 — ${LAST_NOTICE.noticeNo} · ${won(bid)}원${numIn("#cRecOut") > 0 ? ` · 외주 ${won(numIn("#cRecOut"))}원` : ""} ('투찰내역'에서 확인)`, "ok");
+      $("#cRecOut").value = "";
     } catch (err) {
       recordMsg(`기록 실패: ${err.message}`, "err");
     } finally {
@@ -665,6 +667,52 @@
   // 개찰 결과 칸(11/06) — 순위/참가 · 실제 사정률, 줄을 펼치면 1순위 업체·금액·차이
   const pct3 = (v) => (v == null ? "-" : `${Number(v).toFixed(3)}%`);
   const signed = (v, unit, d = 3) => (v == null ? "" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${unit === "원" ? won(Math.abs(v)) : Math.abs(v).toFixed(d)}${unit}`);
+  // 외주 금액 비교(11/16 사용자 요청 — 3억 미만 공고 외주 추천 금액 vs 웹앱 금액) — 등수가 작을수록 좋고, 미달은 통과보다 나쁨(미달끼리는 하한선에 가까운 쪽)
+  const placeKey = (rank) => (rank == null ? Infinity : rank > 0 ? rank : 100000 - rank);
+  const webRank = (res) => { const o = mine(res); return o ? (o.rank != null ? o.rank : o.underRank) : null; };
+  function versus(res) {
+    const s = res && res.status === "완료" ? res.outsource : null;
+    if (!s) return null;
+    const w = placeKey(webRank(res)), x = placeKey(s.rank);
+    return w === x ? "same" : w < x ? "web" : "out";
+  }
+  const VERSUS = { web: "웹앱이 나음", out: "외주가 나음", same: "같음" };
+  const shortPlace = (rank) => (rank == null ? "순위 모름" : rank > 0 ? `${rank}등` : "하한선 미달");
+  // 외주 금액이 하한선이 되는 사정률(투찰 업체 표 '사정률'과 같은 식) — 개찰 전엔 어림으로 보여 줌
+  function outRate(r) {
+    const a = r.aValue || 0, lower = r.lowerRate, basis = r.basis, amt = r.outsource;
+    return amt && lower && basis ? (a + (amt - a) / (lower / 100)) / basis * 100 : null;
+  }
+  function outsourceCell(r, edit) {
+    if (edit) return `<input class="edit" data-f="outsource" value="${r.outsource ? esc(Number(r.outsource).toLocaleString("ko-KR")) : ""}" placeholder="외주 금액">`;
+    if (!r.outsource) return `<span class="res-wait">-</span>`;
+    const rt = outRate(r);
+    return `${won(r.outsource)}${rt != null ? `<span class="sub nowrap">사정률 약 ${rt.toFixed(2)}%</span>` : ""}`;
+  }
+  function versusLines(r) {
+    const res = r.result || {}, v = versus(res);
+    if (!v) return "";
+    const w = webRank(res), s = res.outsource;
+    const cls = (k) => (k == null ? "" : k > 0 ? "rank" : "res-bad");
+    return `<span class="vs-lines"><span class="sub nowrap">웹앱 <b class="${cls(w)}">${shortPlace(w)}</b></span>`
+      + `<span class="sub nowrap">외주 <b class="${cls(s.rank)}">${shortPlace(s.rank)}</b></span>`
+      + `<span class="sub nowrap vs-${v}">▶ ${VERSUS[v]}</span></span>`;
+  }
+  // 펼친 결과 — 외주 금액으로 투찰했다면(11/16)
+  function outsourceBlock(r) {
+    const res = r.result || {}, s = res.status === "완료" ? res.outsource : null;
+    if (!s) return "";
+    const money = (v) => (v == null ? "-" : `${v >= 0 ? "+" : "−"}${won(Math.abs(v))}원`);
+    return `<div class="res-compare"><div class="res-compare-head">외주 추천 금액(${won(s.amount)}원)으로 투찰했다면${versus(res) ? ` — ${VERSUS[versus(res)]}` : ""}</div>
+      <div class="res-grid">
+        <div><span>외주 금액 순위</span><b>${s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}위 / ${s.total}곳` : `하한선 미달 (${s.rank}등)`}</b></div>
+        <div><span>외주 금액 − 낙찰하한가</span><b>${money(s.gapToFloor)}</b></div>
+        <div><span>외주 금액 − 실제 1순위</span><b>${money(s.gapToWinner)}</b></div>
+        <div><span>외주 금액 사정률</span><b>${s.rate != null ? pct3(s.rate) : "-"}</b></div>
+        <div><span>외주 금액 투찰률</span><b>${s.bidRate != null ? pct3(s.bidRate) : "-"}</b></div>
+        <div><span>웹앱 금액 순위</span><b>${shortPlace(webRank(res))}</b></div>
+      </div></div>`;
+  }
   function resultCell(r) {
     const res = r.result;
     if (FETCHING.has(r.id)) return `<span class="res-wait">결과 받는 중…</span>`;
@@ -739,7 +787,7 @@
   function detailRow(r) {
     const res = r.result || {}, o = mine(res), w = res.winner, lab = o && o.recorded ? "웹앱" : "지일";
     const item = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
-    return `<tr class="bidlog-detail" data-id="${esc(r.id)}"><td colspan="7"><div class="res-grid">
+    return `<tr class="bidlog-detail" data-id="${esc(r.id)}"><td colspan="8"><div class="res-grid">
       ${item("1순위 업체", w ? esc(w.name) : "-")}
       ${item("1순위 투찰금액", w && w.amount != null ? `${won(w.amount)}원` : "-")}
       ${item("1순위 투찰률", w && w.rate != null ? pct3(w.rate) : "-")}
@@ -753,7 +801,7 @@
       ${item("예정가격 (실제)", res.plannedPrice != null ? `${won(res.plannedPrice)}원` : "-")}
       ${item("실제 사정률", pct3(res.assessmentRate))}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
-      </div>${compareBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
+      </div>${compareBlock(r)}${outsourceBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
   }
   // 투찰 업체 전부(11/10 사용자 요청) — 개찰 완료 줄의 '결과 ▼'를 펼치면 결과 아래에 보임, 펼칠 때만 서버에서 받음
   const BIDDERS = new Map();   // id → 목록 | "loading" | {error}
@@ -849,8 +897,13 @@
       ? `${rows.length}건${q || LOG_KIND !== "all" ? ` (전체 ${LOG.length}건 중)` : ""} · 투찰금액 합계 ${won(total)}원`
         + (ranks.length ? ` · 개찰 ${ranks.length}건 중 1순위 ${ranks.filter((k) => k === 1).length} · 5위 안 ${ranks.filter((k) => k <= 5).length}` : "")
       : "";
+    // 외주 vs 웹앱(11/16) — 외주 금액이 있고 개찰된 기록만
+    const vs = rows.map((r) => versus(r.result)).filter(Boolean);
+    $("#bidlogVersus").hidden = !vs.length;
+    $("#bidlogVersus").innerHTML = vs.length ? `<b>외주 vs 웹앱</b> (개찰된 ${vs.length}건, 외주 금액이 있는 공고만) — 웹앱이 더 좋은 등수 <b class="vs-web">${vs.filter((v) => v === "web").length}건</b>`
+      + ` · 외주가 더 좋은 등수 <b class="vs-out">${vs.filter((v) => v === "out").length}건</b> · 같음 ${vs.filter((v) => v === "same").length}건` : "";
     if (!rows.length) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="7" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="8" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
       return;
     }
     $("#bidlogRows").innerHTML = rows.map((r) => {
@@ -861,8 +914,9 @@
         <td class="when" data-l="기록일">${esc(day(r.recordedAt)).split(" ").map((x) => `<span class="nowrap">${x}</span>`).join(" ")}</td>
         <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType || r.contractMethod ? `<span class="sub">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}${r.contractMethod ? ` <span class="cm${/지명/.test(r.contractMethod) ? " designated" : ""}"${/지명/.test(r.contractMethod) ? ' title="지명경쟁 — 투찰 경향 표본에서 빠짐"' : ""}>${esc(r.contractMethod)}</span>` : ""}</span>` : ""}</td>
         <td class="num bid" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub nowrap">기초 ${won(r.basis)}</span>${r.lowerRate != null ? `<span class="sub nowrap">하한율 ${r.lowerRate}%</span>` : ""}</td>
+        <td class="num out" data-l="외주 금액">${outsourceCell(r, edit)}</td>
         <td class="num" data-l="기준 사정률">${pct3(r.rate)}</td>
-        <td class="res" data-l="개찰 결과"><div>${resultCell(r)}</div></td>
+        <td class="res" data-l="개찰 결과"><div>${resultCell(r)}${versusLines(r)}</div></td>
         <td class="num rankcol" data-l="등수">${rateCell(r)}</td>
         <td class="act">${edit
           ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
@@ -890,7 +944,7 @@
     try {
       LOG = (await api("/api/bidlog")).entries || [];
     } catch (err) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="7" class="why">투찰내역을 불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="8" class="why">투찰내역을 불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
       return;
     }
     renderLog();
@@ -914,7 +968,7 @@
       if (act === "cancel") { EDITING = null; renderLog(); return; }
       if (act === "save") {
         const val = (f) => tr.querySelector(`input[data-f="${f}"]`).value;
-        LOG = (await post("/api/bidlog/update", { id, bid: val("bid").replace(/[^\d.]/g, "") })).entries || [];
+        LOG = (await post("/api/bidlog/update", { id, bid: val("bid").replace(/[^\d.]/g, ""), outsource: val("outsource").replace(/[^\d.]/g, "") })).entries || [];
         EDITING = null; renderLog(); return;
       }
       if (act === "del") {

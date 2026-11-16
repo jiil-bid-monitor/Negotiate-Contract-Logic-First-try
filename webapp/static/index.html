@@ -1044,6 +1044,13 @@ footer b { color: var(--muted); }
 .bidlog-table td { font-size: 13px; }
 .bidlog-table td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bidlog-table td.bid { font-weight: 700; color: var(--ink-strong); }
+/* 외주 금액 비교(11/16) */
+.bidlog-table td.out { font-weight: 700; color: var(--ink-strong); }
+.bidlog-table .vs-lines { display: block; margin-top: 4px; }
+.bidlog-table .vs-lines .sub { display: block; }
+.vs-web, .vs-out { font-weight: 700; }
+.vs-web { color: var(--good, #1b6e43); } .vs-out { color: #c0392b; }
+.bidlog-versus { margin: 6px 0 10px; padding: 8px 12px; border: 1px solid var(--line, #d9ddd8); background: var(--panel, #f3f8f4); font-size: 13px; }
 .bidlog-table td.when, .bidlog-table td.no { white-space: nowrap; }
 .bidlog-table .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .bidlog-table td.act { white-space: nowrap; text-align: right; }
@@ -1489,6 +1496,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <h4 class="calc-h">투찰 기록 <span class="why">— 이 공고에 실제로 투찰했으면 남겨 두세요. '투찰내역'에서 모아 봅니다.</span></h4>
       <div class="calc-record-row">
         <label>투찰금액 <input id="cRecBid" inputmode="numeric" placeholder="위 투찰금액"> 원</label>
+        <label>외주 추천 금액 <input id="cRecOut" inputmode="numeric"> 원</label>
         <button type="button" id="cRecord" class="primary">투찰 내역에 기록</button>
         <span id="cRecordMsg" class="job"></span>
       </div>
@@ -1549,9 +1557,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         <span id="bidlogSummary" class="job"></span>
         <span class="bidlog-actions"><span id="bidlogKind" class="kind-chips"></span><button type="button" id="bidlogReload">결과 새로 고침</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
       </div>
+      <div id="bidlogVersus" class="bidlog-versus" hidden></div>
       <div class="bidlog-wrap"><table class="calc-form bidlog-table">
-        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>투찰금액</th><th>기준 사정률</th><th>개찰 결과</th><th>지일 등수</th><th></th></tr></thead>
-        <tbody id="bidlogRows"><tr><td colspan="9" class="why">불러오는 중…</td></tr></tbody>
+        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>투찰금액</th><th>외주 금액</th><th>기준 사정률</th><th>개찰 결과</th><th>지일 등수</th><th></th></tr></thead>
+        <tbody id="bidlogRows"><tr><td colspan="8" class="why">불러오는 중…</td></tr></tbody>
       </table></div>
     </div>
   </section>

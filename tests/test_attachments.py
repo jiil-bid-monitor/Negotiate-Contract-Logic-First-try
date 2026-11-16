@@ -1021,3 +1021,13 @@ class TestZipAttachment(unittest.TestCase):
         result = fetch_attachment_text(FakeSession(data), att)
         self.assertTrue(result.ok, result.error)
         self.assertIn("Fetched", result.text)
+
+
+def test_extract_text_drops_lone_surrogates(monkeypatch):
+    # KSCms-UHC-HW-H 글꼴 PDF가 짝 없는 대리 글자를 내 utf-8 저장이 멈췄던 것(11/16 1억 미만 수집 실패)
+    from nego import attachments
+
+    monkeypatch.setattr(attachments, "_extract_raw", lambda data, ext, depth: "가\udd29나")
+    text = attachments.extract_text(b"", "pdf")
+    assert text == "가나"
+    text.encode("utf-8")

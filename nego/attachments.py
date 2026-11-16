@@ -169,8 +169,12 @@ def _is_drm(data: bytes) -> bool:
     return not head.startswith((_PDF_MAGIC, _OLE_MAGIC) + tuple(_ZIP_MAGIC_PREFIXES)) and bool(_DRM_HEAD_RE.search(head))
 
 
+_SURROGATE = re.compile("[\\ud800-\\udfff]")
+
+
 def extract_text(data: bytes, ext: str) -> str:
-    return redact_personal_contacts(_extract_raw(data, ext, depth=0))
+    # 글꼴 인코딩을 못 푼 PDF(KSCms-UHC-HW-H 등)는 짝 없는 대리 글자를 내 utf-8 저장이 멈춘다 — 지운다
+    return redact_personal_contacts(_SURROGATE.sub("", _extract_raw(data, ext, depth=0)))
 
 
 def _extract_raw(data: bytes, ext: str, depth: int) -> str:

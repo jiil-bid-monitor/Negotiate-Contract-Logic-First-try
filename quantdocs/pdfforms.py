@@ -567,7 +567,7 @@ def _ocr_top_head(img) -> tuple[str, str] | None:
         return None
     w, h = img.size
     try:
-        top = tess.image_to_string(img.crop((0, 0, w, int(h * 0.15))), lang="kor+eng", config="--psm 4")
+        top = tess.image_to_string(img.crop((0, 0, w, int(h * 0.15))), lang="kor+eng", config="--psm 4 -c preserve_interword_spaces=1")
     except Exception:  # noqa: BLE001
         return None
     m = _OCR_HEAD.search(top)

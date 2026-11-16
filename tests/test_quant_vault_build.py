@@ -3161,7 +3161,8 @@ def test_form_staff_rows_plain_points_per_grade(tmp_path: Path):
 
 def test_center_aligned_sign_block_keeps_label_positions(tmp_path: Path):
     """11/13 사용자 지적: 가운데 정렬 서명 묶음('업 체 명 : / 주    소 : / 대 표 자 :  (인)' — 원본은 줄마다 빈칸까지 같은 길이라 이름표가
-    같은 자리)에 값을 넣자 줄 길이가 달라져 줄마다 다르게 밀림(주소는 왼쪽 끝으로). 문단 모양은 그대로, 이름표는 원래 자리, 긴 값은 값 시작에 맞춰 다음 줄."""
+    같은 자리)에 값을 넣자 줄 길이가 달라져 줄마다 다르게 밀림. (11/16 사용자 지적: 그래도 '주 소:' 줄만 ':'가 어긋남 — 값 너비 어림 탓)
+    → 묶음 줄 모두 같은 왼쪽 정렬 사본(왼쪽 여백 = 원래 줄 시작 자리)으로: 이름표·':'·값 시작이 줄마다 같은 자리, 긴 값 둘째 줄도 같은 모양."""
     from quantdocs.fill import _cjk_width, fill_hwpx
 
     header = ('<hh:head><hh:paraProperties itemCnt="1"><hh:paraPr id="57"><hh:align horizontal="CENTER"/>'
@@ -3178,18 +3179,23 @@ def test_center_aligned_sign_block_keeps_label_positions(tmp_path: Path):
         z.writestr("Contents/header.xml", header)
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동",
                                                               "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)"}))
-    out = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
-    assert 'paraPrIDRef="57"' in out and out.count("paraPrIDRef=") == out.count('paraPrIDRef="57"')  # 문단 모양 그대로
-    lines = ["".join(re.findall(r"<hp:t>(.*?)</hp:t>", q, re.S)) for q in re.findall(r"<hp:p\b.*?</hp:p>", out, re.S)][1:]
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    paras = re.findall(r'<hp:p paraPrIDRef="(\d+)">(.*?)</hp:p>', out, re.S)
+    assert paras[0][0] == "57"  # 날짜 줄 그대로
+    ids = {pid for pid, _x in paras[1:]}
+    assert len(ids) == 1 and "57" not in ids  # 묶음 줄 모두 같은 새 문단 모양
+    new = re.search(rf'<hh:paraPr id="{ids.pop()}".*?</hh:paraPr>', head, re.S).group(0)
+    assert 'horizontal="LEFT"' in new and '<hc:intent value="0"/>' in new
+    left = int(re.search(r'<hc:left value="(\d+)"', new).group(1))
     area = 59528 - 8504 * 2 - 1500
-
-    def start(t):  # 가운데 정렬에서 첫 글자(이름표) 시작 위치
-        return (area - _cjk_width(t, 1200)) / 2 + _cjk_width(t[:len(t) - len(t.lstrip())], 1200)
+    want = 1000 + (area - _cjk_width(orig[0], 1200)) / 2  # 원래 가운데 정렬에서 줄이 시작하던 자리
+    assert abs(left - want) < 700
+    lines = ["".join(re.findall(r"<hp:t>(.*?)</hp:t>", x, re.S)) for _p, x in paras[1:]]
     assert len(lines) == 4 and "강원특별자치도" in lines[1] and "64(공장1층)" in lines[2]
-    for before, after in ((orig[0], lines[0]), (orig[1], lines[1]), (orig[2], lines[3])):
-        assert abs(start(before) - start(after)) < 400, (before, after)
-    value_at = start(lines[1]) + _cjk_width(lines[1].strip()[:lines[1].strip().index(":") + 2], 1200)
-    assert abs(start(lines[2]) - value_at) < 400  # 둘째 줄은 값 시작 위치에
+    colon = [_cjk_width(ln[:ln.index(":")], 1200) for ln in (lines[0], lines[1], lines[3])]
+    assert max(colon) - min(colon) < 100  # 원본처럼 이름표 앞부분 너비가 같아 ':' 자리가 같음
+    assert lines[2].startswith("\u3000") or lines[2].lstrip(" ").startswith("\u3000")  # 둘째 줄 앞은 같은 너비 빈칸
 
 
 def test_applicant_seal_line_and_right_aligned_outlier(tmp_path: Path):
@@ -3523,3 +3529,47 @@ def test_credit_grade_centered_in_cell(tmp_path: Path):
     m = re.search(r'<hp:subList vertAlign="(\w+)"><hp:p paraPrIDRef="(\d+)">(?:(?!</hp:tc>).)*BB\+', out, re.S)
     assert m and m.group(1) == "CENTER"
     assert 'horizontal="CENTER"' in re.search(rf'<hh:paraPr id="{m.group(2)}".*?</hh:paraPr>', head, re.S).group(0)
+
+
+def test_phone_right_after_company_label_before_line_break(tmp_path: Path):
+    """11/16 사용자 지적(두 번째): '연 락 처 | 회  사 / 휴대폰'에서 번호가 여전히 다음 줄로 — '회  사' 문단 끝에 줄바꿈·탭이 있으면
+    문단 끝에 붙인 번호가 그 뒤로 감. 번호는 '회  사' 글자 바로 오른쪽(같은 줄), 뒤 줄바꿈·'휴대폰' 줄은 그대로. 한 문단 안 줄바꿈 모양도."""
+    from quantdocs.fill import fill_hwpx
+
+    def cell(col, row, *paras):
+        return (f'<hp:tc><hp:subList>{"".join(paras)}</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    P = lambda inner: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{inner}</hp:t></hp:run></hp:p>'
+    v = vault.Vault({}, info={"회사명": "(주)가상", "전화번호": "033-111-2222"})
+    shapes = {"a": [P("회  사<hp:tab width=\"3000\" leader=\"0\" type=\"1\"/><hp:lineBreak/>"), P("휴대폰")],
+              "b": [P("회   사<hp:lineBreak/>휴대폰")]}
+    for name, paras in shapes.items():
+        body = '<hp:p><hp:run><hp:tbl><hp:tr>' + cell(0, 0, P("연 락 처")) + cell(1, 0, *paras) + '</hp:tr></hp:tbl></hp:run></hp:p>'
+        fill_hwpx(_mini_hwpx(tmp_path / f"{name}.hwpx", body), tmp_path / f"{name}o.hwpx", v)
+        out = zipfile.ZipFile(tmp_path / f"{name}o.hwpx").read("Contents/section0.xml").decode()
+        assert re.search(r"회 +사  (?:<[^>]+>)*033-111-2222(?:<[^>]+>)*<hp:lineBreak/>", out), (name, out)
+        assert "<hp:tab" not in out.split("033-111-2222")[0].split("사")[-1]
+
+
+def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
+    """11/16 사용자 요청: 대표님 휴대폰(.env QUANT_REP_MOBILE → 회사정보 '대표자 휴대폰')은 대표자 줄의 휴대폰 칸에만 —
+    선임계 '대표자명 | 이름 | 연 락 처 | 회 사 / 휴대폰'(휴대폰 글자 바로 옆), 위임장 '대 표 자 | 휴대폰 | __'. 대리인 줄 휴대폰은 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    P = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+
+    def cell(col, row, *paras, rs=1):
+        return (f'<hp:tc><hp:subList>{"".join(P(x) for x in paras)}</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+    tbl = lambda rows: '<hp:p><hp:run><hp:tbl>' + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + '</hp:tbl></hp:run></hp:p>'
+    body = (tbl([[cell(0, 0, "대표자명"), cell(1, 0, ""), cell(2, 0, "연 락 처"), cell(3, 0, "회  사", "휴대폰")]])
+            + tbl([[cell(0, 0, "대 표 자", rs=2), cell(1, 0, "성 명"), cell(2, 0, "")], [cell(1, 1, "휴대폰"), cell(2, 1, "")],
+                   [cell(0, 2, "대 리 인", rs=2), cell(1, 2, "성 명"), cell(2, 2, "")], [cell(1, 3, "휴대폰"), cell(2, 3, "")]]))
+    info = {"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222", "대표자 휴대폰": "010-0000-1111"}
+    fill_hwpx(_mini_hwpx(tmp_path / "m.hwpx", body), tmp_path / "mo.hwpx", vault.Vault({}, info=info))
+    out = zipfile.ZipFile(tmp_path / "mo.hwpx").read("Contents/section0.xml").decode()
+    assert re.search(r"휴대폰  (?:<[^>]+>)*010-0000-1111", out)  # 선임계 휴대폰 글자 옆
+    assert out.count("010-0000-1111") == 2  # 선임계 + 위임장 대표자 줄만, 대리인 줄은 비움
+    info.pop("대표자 휴대폰")
+    fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", body), tmp_path / "no.hwpx", vault.Vault({}, info=info))
+    assert "010-" not in zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode()

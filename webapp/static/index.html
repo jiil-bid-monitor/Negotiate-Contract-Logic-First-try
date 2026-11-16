@@ -4180,7 +4180,17 @@ loadParticipation();
 setInterval(loadParticipation, 10000);
 
 // 텔레그램 '판단하러 가기' 링크(…#log) — 판단 기록 탭으로 바로
-if (location.hash === "#log") showTab("log");
+// 주소 끝 #탭이름으로 그 탭을 바로 연다(#log 그대로) — 새 화면 시험판(/v2/)의 도구 단추가 쓴다(2026-11-16).
+// #calc=공고번호 는 투찰 계산기에 번호를 넣고 불러오기까지 누른다
+(function openHashTab() {
+  const [tab, arg] = decodeURIComponent(location.hash.slice(1)).split("=");
+  if (!["live", "excluded", "corpus", "log", "calc", "quant", "award"].includes(tab)) return;
+  showTab(tab);
+  if (tab === "calc" && arg) {
+    $("cNo").value = arg;
+    window.addEventListener("load", () => $("cLookup").click());  // 계산기 스크립트(bidcalc_ui.js)가 아래에서 읽힌 뒤
+  }
+})();
 boot();
 </script>
 <!-- 투찰 계산기 — 계산은 bidcalc.js(BidCalc), 화면은 bidcalc_ui.js (2026-10-15, 21라인 복수예가산출프로그램 모양) -->

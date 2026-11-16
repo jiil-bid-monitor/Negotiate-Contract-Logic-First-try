@@ -626,8 +626,9 @@ def main(argv: list[str] | None = None) -> int:
         elif errors:
             log.warning("텔레그램 알림 실패: %s", html.escape(str(errors))[:200])
 
-    # 끝 알림만(11/16 사용자 요청 — 시작 알림은 뺌, 새 공고가 없으면 성공 한 줄)
+    # 시작·끝 알림(11/11 사용자 요청 — 수집이 돌았는지 개발자 방에서 바로 보이게, 11/16 새 공고가 없으면 끝은 성공 한 줄)
     started = datetime.now()
+    notify(f"[1억 미만] 수집 시작 — 최근 {args.days}일 게시분 ({started:%m/%d %H:%M})")
     try:
         result = run_once(out, state_path, args.days, notify=notify)
     except Exception as err:  # noqa: BLE001

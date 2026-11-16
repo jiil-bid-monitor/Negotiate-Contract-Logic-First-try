@@ -541,10 +541,11 @@ class RunAlertTest(unittest.TestCase):
         sent = []
         with tempfile.TemporaryDirectory() as d, mock.patch("nego.telegram.send_dev_alert", lambda text: sent.append(text) or []),                 mock.patch.object(m, "run_once", lambda *a, **k: {"made": ["[1억미만] A"], "over": 1, "failed": [], "seen": 5, "done_before": 3}):
             self.assertEqual(m.main(["--out", d, "--days", "7"]), 0)
-        self.assertEqual(len(sent), 1)  # 시작 알림 없음
-        self.assertIn("새 폴더 1건", sent[0])
-        self.assertIn("대상 5건 중 이미 만든 공고 3건", sent[0])
-        self.assertIn("[1억미만] A", sent[0])
+        self.assertEqual(len(sent), 2)
+        self.assertIn("수집 시작", sent[0])
+        self.assertIn("새 폴더 1건", sent[1])
+        self.assertIn("대상 5건 중 이미 만든 공고 3건", sent[1])
+        self.assertIn("[1억미만] A", sent[1])
 
     def test_no_new_notice_is_one_line(self):
         from unittest import mock
@@ -554,9 +555,10 @@ class RunAlertTest(unittest.TestCase):
         sent = []
         with tempfile.TemporaryDirectory() as d, mock.patch("nego.telegram.send_dev_alert", lambda text: sent.append(text) or []),                 mock.patch.object(m, "run_once", lambda *a, **k: {"made": [], "over": 2, "failed": [], "seen": 4, "done_before": 2}):
             self.assertEqual(m.main(["--out", d]), 0)
-        self.assertEqual(len(sent), 1)
-        self.assertIn("수집 성공", sent[0])
-        self.assertNotIn(chr(10), sent[0])
+        self.assertEqual(len(sent), 2)
+        self.assertIn("수집 시작", sent[0])
+        self.assertIn("수집 성공", sent[1])
+        self.assertNotIn(chr(10), sent[1])
 
     def test_failure_alert(self):
         from unittest import mock

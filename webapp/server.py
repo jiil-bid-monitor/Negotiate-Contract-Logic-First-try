@@ -376,6 +376,8 @@ def make_handler(app: App):
 
         def _static(self, path: str) -> None:
             name = "index.html" if path in ("", "/") else path.lstrip("/")
+            if name in ("v2", "v2/"):  # 새 화면 시험판(2026-11-16) — 기존 화면(/)은 그대로
+                name = "v2/index.html"
             target = (STATIC / name).resolve()
             if STATIC not in target.parents or not target.is_file():
                 return self._error(HTTPStatus.NOT_FOUND, "없는 파일")
@@ -383,7 +385,7 @@ def make_handler(app: App):
             if ctype.startswith("text/") or ctype.endswith("javascript"):
                 ctype += "; charset=utf-8"
             cookie = None
-            if name == "index.html" and app.token:
+            if name.endswith("index.html") and app.token:
                 given = parse_qs(urlparse(self.path).query).get("t", [""])[0]
                 if given and hmac.compare_digest(given.encode(), app.token.encode()):
                     # HttpOnly·SameSite=Lax, 1년 — 한 번 토큰 주소로 들어오면 그 뒤로는 주소에 토큰이 없어도 된다

@@ -570,6 +570,16 @@ class TestServer(unittest.TestCase):
             self.assertIn("나라장터 공고 수집", res.read().decode())
         self.assertEqual(self.call("/../server.py")[0], 404)
 
+    def test_v2_preview_page(self):
+        """새 화면 시험판(2026-11-16): /v2·/v2/는 시험판 화면, 기존 화면(/)은 그대로, ?t=로 들어와도 토큰 쿠키."""
+        for path in ("/v2", "/v2/"):
+            with urllib.request.urlopen(self.base + path) as res:
+                self.assertIn("새 화면 시험판", res.read().decode())
+        with urllib.request.urlopen(self.base + "/") as res:
+            self.assertIn("<title>나라장터", res.read().decode())
+        with urllib.request.urlopen(f"{self.base}/v2/?t={self.app.token}") as res:
+            self.assertIn("app_token=", res.headers.get("Set-Cookie") or "")
+
     def test_quant_tab_routes(self):
         """정량평가서 탭(11/03 합침): /quant/ 화면은 토큰 없이, /api/quant/…는 이 웹앱 토큰으로 quantdocs를 부름."""
         with urllib.request.urlopen(self.base + "/quant/") as res:

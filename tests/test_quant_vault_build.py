@@ -3457,3 +3457,49 @@ def test_security_memo_signed_by_representative(tmp_path: Path):
     assert re.search(r"기 술 분 야 : ?성", t)  # 기술분야는 비움
     staff = _text(zipfile.ZipFile(tmp_path / "so.hwpx").read("Contents/section0.xml").decode())
     assert "홍길동" not in staff and "1965" not in staff
+def test_repeated_company_rep_rows_fill_first_only(tmp_path: Path):
+    """11/16 사용자 요청(제천 서약서): '회사명: | 대표자: (인)' 줄이 똑같이 3번(공동수급 구성원용) — 3줄 모두 지일 정보가 들어감 →
+    표 줄이든 표 밖 줄이든 같은 모양이 또 나오면 첫 줄에만. 모양이 다른 줄(주소 등)은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"})
+    row = lambda r: [_c(0, r, "회사명:"), _c(1, r, "대표자:             (인)")]
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    for name, body in (("t", _tbl([row(0), row(1), row(2), [_c(0, 3, "주    소"), _c(1, 3, "")]])),
+                       ("p", "".join(para("회사명:                    대표자:            (인)") for _ in range(3)))):
+        fill_hwpx(_mini_hwpx(tmp_path / f"{name}.hwpx", body), tmp_path / f"{name}o.hwpx", v)
+        out = zipfile.ZipFile(tmp_path / f"{name}o.hwpx").read("Contents/section0.xml").decode()
+        assert out.count("(주)가상") == 1 and out.count("홍길동") == 1, name
+        assert out.count("회사명:") == 3  # 나머지 줄 이름표는 그대로
+    assert "강원 정선" in zipfile.ZipFile(tmp_path / "to.hwpx").read("Contents/section0.xml").decode()
+def test_name_never_right_aligned_and_phone_right_after_company_label(tmp_path: Path):
+    """11/16 사용자 지적(제천 대표자 선임계): ① '대표자명 | 이운봉'이 원본 칸 정렬대로 오른쪽에 붙음 — 성명·상호는 오른쪽 정렬로 두지 않음
+    ② '연 락 처 | 회  사 / 휴대폰'에서 번호가 '회 사' 다음 줄로 밀리고 '회 … 사'가 칸 끝까지 벌어짐 — 번호는 '회  사' 바로 오른쪽."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="3"><hh:paraPr id="0"><hh:align horizontal="LEFT"/></hh:paraPr>'
+              '<hh:paraPr id="5"><hh:align horizontal="RIGHT"/></hh:paraPr>'
+              '<hh:paraPr id="6"><hh:align horizontal="JUSTIFY"/></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+
+    def cell(col, row, pid, *texts):
+        paras = "".join(f'<hp:p paraPrIDRef="{pid}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>' for t in texts)
+        return (f'<hp:tc><hp:subList>{paras}</hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+
+    body = ('<hp:p><hp:run><hp:tbl><hp:tr>' + cell(0, 0, 0, "대표자명") + cell(1, 0, 5, "") + cell(2, 0, 0, "연 락 처")
+            + cell(3, 0, 6, "회      사                    ", "휴대폰") + '</hp:tr></hp:tbl></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "n.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222"})
+    fill_hwpx(src, tmp_path / "no.hwpx", v)
+    zo = zipfile.ZipFile(tmp_path / "no.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    align = lambda pid: re.search(rf'<hh:paraPr id="{pid}".*?horizontal="(\w+)"', head, re.S).group(1)
+    name_pid = re.search(r'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?홍길동', out, re.S).group(1)
+    assert align(name_pid) == "LEFT"
+    tel = re.search(r'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?033-111-2222', out, re.S)
+    assert align(tel.group(1)) == "LEFT"
+    text = re.sub(r"<[^>]+>", "", out)
+    assert re.search(r"회      사  033-111-2222", text)  # 끝 빈칸은 지우고 '회  사' 바로 오른쪽, 원래 '회 사' 간격은 그대로

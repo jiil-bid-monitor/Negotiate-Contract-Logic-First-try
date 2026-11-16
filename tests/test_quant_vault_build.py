@@ -3457,3 +3457,34 @@ def test_repeated_company_rep_rows_fill_first_only(tmp_path: Path):
         assert out.count("(주)가상") == 1 and out.count("홍길동") == 1, name
         assert out.count("회사명:") == 3  # 나머지 줄 이름표는 그대로
     assert "강원 정선" in zipfile.ZipFile(tmp_path / "to.hwpx").read("Contents/section0.xml").decode()
+def test_name_never_right_aligned_and_phone_right_after_company_label(tmp_path: Path):
+    """11/16 사용자 지적(제천 대표자 선임계): ① '대표자명 | 이운봉'이 원본 칸 정렬대로 오른쪽에 붙음 — 성명·상호는 오른쪽 정렬로 두지 않음
+    ② '연 락 처 | 회  사 / 휴대폰'에서 번호가 '회 사' 다음 줄로 밀리고 '회 … 사'가 칸 끝까지 벌어짐 — 번호는 '회  사' 바로 오른쪽."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="3"><hh:paraPr id="0"><hh:align horizontal="LEFT"/></hh:paraPr>'
+              '<hh:paraPr id="5"><hh:align horizontal="RIGHT"/></hh:paraPr>'
+              '<hh:paraPr id="6"><hh:align horizontal="JUSTIFY"/></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+
+    def cell(col, row, pid, *texts):
+        paras = "".join(f'<hp:p paraPrIDRef="{pid}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>' for t in texts)
+        return (f'<hp:tc><hp:subList>{paras}</hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+
+    body = ('<hp:p><hp:run><hp:tbl><hp:tr>' + cell(0, 0, 0, "대표자명") + cell(1, 0, 5, "") + cell(2, 0, 0, "연 락 처")
+            + cell(3, 0, 6, "회      사                    ", "휴대폰") + '</hp:tr></hp:tbl></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "n.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222"})
+    fill_hwpx(src, tmp_path / "no.hwpx", v)
+    zo = zipfile.ZipFile(tmp_path / "no.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    align = lambda pid: re.search(rf'<hh:paraPr id="{pid}".*?horizontal="(\w+)"', head, re.S).group(1)
+    name_pid = re.search(r'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?홍길동', out, re.S).group(1)
+    assert align(name_pid) == "LEFT"
+    tel = re.search(r'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?033-111-2222', out, re.S)
+    assert align(tel.group(1)) == "LEFT"
+    text = re.sub(r"<[^>]+>", "", out)
+    assert re.search(r"회      사  033-111-2222", text)  # 끝 빈칸은 지우고 '회  사' 바로 오른쪽, 원래 '회 사' 간격은 그대로

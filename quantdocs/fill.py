@@ -1984,9 +1984,12 @@ def _align_numbers(xml: str, edits: list, chars: "_Chars", override: dict[int, s
                 override[cell.start] = center
 
 
-def _align_right_cells(xml: str, edits: list, chars: "_Chars", override: dict[int, str]) -> None:
+def _align_right_cells(xml: str, edits: list, chars: "_Chars", override: dict[int, str], names: tuple = ()) -> None:
     """같은 표에 넣은 값 칸 대부분이 가운데 정렬인데 홀로 오른쪽 정렬인 칸은 가운데로(11/13 사용자 제보: 위임장 '소 속 (업체명)' 칸의
-    '(주)지일'만 오른쪽으로 치우침 — 원본 문단이 오른쪽 정렬). 금액처럼 오른쪽이 맞는 칸이 많은 표는 그대로."""
+    '(주)지일'만 오른쪽으로 치우침 — 원본 문단이 오른쪽 정렬). 금액처럼 오른쪽이 맞는 칸이 많은 표는 그대로.
+    **회사명·대표자 이름이 든 칸은 오른쪽 정렬로 두지 않음**(11/16 사용자: '성명이나 상호명은 우측 정렬할 일이 절대 없어' —
+    제천 대표자 선임계 '대표자명 | 이운봉'이 원본 칸 정렬대로 오른쪽에 붙었음) — 표 값 칸 대부분이 가운데면 가운데, 아니면 왼쪽."""
+    names = tuple(n for n in names if n)
     pids = []
     for cell, lines, _keep in edits:
         if cell.start in override or not lines:
@@ -1995,9 +1998,18 @@ def _align_right_cells(xml: str, edits: list, chars: "_Chars", override: dict[in
         if m:
             pids.append((cell, m.group(1)))
     aligns = [chars.align(pid) for _c, pid in pids]
-    if aligns.count("CENTER") < 2 or aligns.count("CENTER") <= aligns.count("RIGHT"):
+    mostly_center = aligns.count("CENTER") >= 2 and aligns.count("CENTER") > aligns.count("RIGHT")
+    for cell, pid in pids:
+        if chars.align(pid) != "RIGHT" or cell.start in override:
+            continue
+        value = " ".join(next(e[1] for e in edits if e[0] is cell))
+        if names and any(n in value for n in names):
+            override[cell.start] = chars.centered(pid) if mostly_center else chars.left_any(pid)
+    if not mostly_center:
         return
     for cell, pid in pids:
+        if cell.start in override:
+            continue
         if chars.align(pid) == "RIGHT" and not _NUMBER.fullmatch(" ".join(next(e[1] for e in edits if e[0] is cell)).strip()):
             override[cell.start] = chars.centered(pid)
 
@@ -2700,7 +2712,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                 para = xml[a:b]
                                 tl = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", para, re.S))
                                 if tl:
-                                    para = para[:tl[-1].end(2)] + "   " + _mark(_value("전화번호", vault)) + para[tl[-1].end(2):]
+                                    # (11/16 사용자 지적) 번호는 '회  사' 바로 오른쪽에 — 줄 끝 빈칸을 그대로 두고 붙이면 번호가 다음 줄로 밀리고
+                                    # 양쪽·배분 정렬 줄이라 '회 … 사'가 칸 끝까지 벌어졌음 → 끝 빈칸을 지우고 두 칸 띄워 붙임, 정렬은 왼쪽 사본
+                                    last = re.sub(r"(?:\s|&#160;|<(?:[\w.-]+:)?(?:fwSpace|nbSpace|tab)\b[^>]*/>)+$", "", tl[-1].group(2))
+                                    para = para[:tl[-1].start(2)] + last + "  " + _mark(_value("전화번호", vault)) + para[tl[-1].end(2):]
+                                    pm = re.search(r'paraPrIDRef="(\d+)"', para)
+                                    if pm and chars is not None and chars.align(pm.group(1)) in ("JUSTIFY", "DISTRIBUTE", "DISTRIBUTE_SPACE", "RIGHT"):
+                                        para = para[:pm.start(1)] + chars.left_any(pm.group(1)) + para[pm.end(1):]
                                     para = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", para, flags=re.S)
                                     seg = xml[target.start:a] + para + xml[b:target.end]
                                     edits.append((target, None, seg))
@@ -2817,7 +2835,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         rep.filled += done
                 if chars is not None:
                     _align_numbers(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override)
-                    _align_right_cells(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override)
+                    _align_right_cells(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override,
+                                       (_value("회사명", vault), _value("대표자", vault)))
                 if none_rule and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
                     head = [c for c in cells if c.row == 0]
                     body = [c for c in cells if c.row > 0]

@@ -96,6 +96,18 @@ class TestSummarize(unittest.TestCase):
         self.assertEqual(actual_side({**e, "result": done(100)}), "웹앱 금액")
         self.assertEqual(actual_side({**e, "result": done(95)}), "다른 금액 (95원)")
         self.assertEqual(actual_side({**e, "result": done(None)}), "투찰 안 함")
+        self.assertEqual(actual_side({**e, "actual": "out", "result": None}), "외주 금액(예정)")
+
+    def test_actual_choice_recorded_and_edited(self):
+        log = BidLog(Path(tempfile.mkdtemp()))
+        e = log.add({"noticeNo": "R26BK01824934", "bid": 197_347_031, "outsource": 195_711_831, "actual": "out"})
+        self.assertEqual(e["actual"], "out")
+        self.assertEqual(log.add({"noticeNo": "R26BK01824934", "bid": 1})["actual"], "web")   # 고르지 않으면 투찰금액
+        with self.assertRaises(ValueError):
+            log.add({"noticeNo": "R26BK01824934", "bid": 1, "actual": "out"})               # 외주 금액 없이 외주는 못 고름
+        self.assertEqual(log.update(e["id"], {"actual": "web"})["actual"], "web")
+        log.update(e["id"], {"actual": "out"})
+        self.assertEqual(log.update(e["id"], {"outsource": ""})["actual"], "web")       # 외주 금액을 지우면 투찰금액 쪽으로
 
     def test_needs_fetch(self):
         now = datetime(2026, 11, 6, 12, tzinfo=KST)

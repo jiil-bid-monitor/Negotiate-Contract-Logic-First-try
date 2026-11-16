@@ -284,7 +284,7 @@
     $("#cAItems").innerHTML = "";
     $("#cNotes").innerHTML = "";
     SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
-    LAST_NOTICE = null; REC_BID_EDITED = false; $("#cRecOut").value = "";
+    LAST_NOTICE = null; REC_BID_EDITED = false; $("#cRecOut").value = ""; syncRecActual();
     WORK = ""; REC_METHOD = ""; NET_RULE = null; REGION_LIMITED = null; REC_PICK = null; REC_OPTIONS = []; NEGO = null; $("#cRec").textContent = "";
     render();
   };
@@ -636,7 +636,14 @@
     $("#cRecBid").value = CURRENT ? Number(CURRENT.bid).toLocaleString("ko-KR") : "";
   }
   $("#cRecBid").addEventListener("input", (e) => { REC_BID_EDITED = true; commaInput(e.target); });
-  $("#cRecOut").addEventListener("input", (e) => commaInput(e.target));
+  // 실제 투찰 고르기(11/16 사용자 요청 — 개찰 전에도 어느 금액으로 냈는지 투찰내역에 보이게): 외주 금액이 있어야 '외주 금액'을 고를 수 있음
+  const recActual = () => (document.querySelector('input[name="cRecActual"]:checked') || {}).value || "web";
+  function syncRecActual() {
+    const has = numIn("#cRecOut") > 0;
+    $("#cRecActualOut").disabled = !has;
+    if (!has) document.querySelector('input[name="cRecActual"][value="web"]').checked = true;
+  }
+  $("#cRecOut").addEventListener("input", (e) => { commaInput(e.target); syncRecActual(); });
   $("#cRecord").addEventListener("click", async () => {
     if (!LAST_NOTICE) { recordMsg("먼저 공고번호로 공고를 불러오세요", "err"); return; }
     const bid = numIn("#cRecBid");
@@ -646,14 +653,14 @@
     try {
       const d = await post("/api/bidlog", {
         ...LAST_NOTICE, basis: numIn("#cBasis"), lowerRate: numIn("#cRate"), rangeLo: numIn("#cLo"), rangeHi: numIn("#cHi"),
-        aValue: aValue() || null, netCost: numIn("#cNet"), bid, outsource: numIn("#cRecOut") || null,
+        aValue: aValue() || null, netCost: numIn("#cNet"), bid, outsource: numIn("#cRecOut") || null, actual: recActual(),
         // 금액을 손으로 바꿨으면 추천 방식·기준 사정률은 그 금액의 근거가 아니라서 '직접 입력'으로
         rate: same ? CURRENT.rate : null, method: same ? CURRENT.method : "직접 입력", planned: same ? CURRENT.planned : null,
       });
       LOG = d.entries || [];
       renderLog();
       recordMsg(`기록했습니다 — ${LAST_NOTICE.noticeNo} · ${won(bid)}원${numIn("#cRecOut") > 0 ? ` · 외주 ${won(numIn("#cRecOut"))}원` : ""} ('투찰내역'에서 확인)`, "ok");
-      $("#cRecOut").value = "";
+      $("#cRecOut").value = ""; syncRecActual();
     } catch (err) {
       recordMsg(`기록 실패: ${err.message}`, "err");
     } finally {
@@ -684,24 +691,34 @@
     return amt && lower && basis ? (a + (amt - a) / (lower / 100)) / basis * 100 : null;
   }
   // 실제로 어느 금액으로 투찰했나(11/16 사용자 요청) — 개찰 뒤 나라장터 결과의 지일 실제 금액을 웹앱·외주 금액과 맞춰 봄, 개찰 전엔 모름(null)
+  // 개찰 전엔 기록할 때 고른 쪽(점선 칩 — 예정), 개찰 뒤엔 나라장터 실제 금액으로 확인 — 고른 쪽과 다르면 '기록과 다름'
   function actualSide(r) {
-    const res = r.result;
-    if (!res || res.status !== "완료") return null;
+    const res = r.result, chosen = r.actual || "web";
+    // 개찰 전 — 외주 금액이 있는 기록만(금액이 하나뿐이면 고를 것이 없음)
+    if (!res || res.status !== "완료") return r.outsource ? { kind: chosen, plan: true } : null;
     const own = res.own;
-    if (!own || own.amount == null) return { kind: "none" };
-    const same = (v) => v != null && Math.abs(Number(v) - Number(own.amount)) < 1;
-    return same(r.bid) ? { kind: "web" } : same(r.outsource) ? { kind: "out" } : { kind: "other", amount: own.amount };
+    let a;
+    if (!own || own.amount == null) a = { kind: "none" };
+    else {
+      const same = (v) => v != null && Math.abs(Number(v) - Number(own.amount)) < 1;
+      a = same(r.bid) ? { kind: "web" } : same(r.outsource) ? { kind: "out" } : { kind: "other", amount: own.amount };
+    }
+    a.differs = !!r.actual && a.kind !== r.actual;
+    return a;
   }
   function actualChip(r) {
     const a = actualSide(r);
     if (!a) return "";
-    const lab = { web: "웹앱 금액으로 투찰", out: "외주 금액으로 투찰", none: "투찰 안 함", other: `다른 금액으로 투찰 (${won(a.amount || 0)}원)` }[a.kind];
-    return ` <span class="cm actual actual-${a.kind}">${esc(lab)}</span>`;
+    const lab = a.plan ? { web: "투찰금액으로 투찰", out: "외주 금액으로 투찰" }[a.kind]
+      : { web: "투찰금액으로 투찰", out: "외주 금액으로 투찰", none: "투찰 안 함", other: `다른 금액으로 투찰 (${won(a.amount || 0)}원)` }[a.kind];
+    const tip = a.plan ? "기록할 때 고른 금액 — 개찰 뒤 나라장터 실제 금액으로 확인" : "나라장터 개찰 결과의 지일 실제 금액으로 확인";
+    return ` <span class="cm actual actual-${a.kind}${a.plan ? " plan" : ""}" title="${tip}">${esc(lab)}</span>${a.differs ? `<span class="actual-warn">기록과 다름</span>` : ""}`;
   }
   // 실제로 낸 쪽 금액은 그대로, 다른 쪽은 흐리게
   const dimClass = (r, side) => { const a = actualSide(r); return a && a.kind !== side && (a.kind === "web" || a.kind === "out") ? " dim" : ""; };
   function outsourceCell(r, edit) {
-    if (edit) return `<input class="edit" data-f="outsource" value="${r.outsource ? esc(Number(r.outsource).toLocaleString("ko-KR")) : ""}" placeholder="외주 금액">`;
+    if (edit) return `<input class="edit" data-f="outsource" value="${r.outsource ? esc(Number(r.outsource).toLocaleString("ko-KR")) : ""}" placeholder="외주 금액">`
+      + `<select class="edit" data-f="actual" aria-label="실제 투찰"><option value="web"${(r.actual || "web") === "web" ? " selected" : ""}>실제: 투찰금액</option><option value="out"${r.actual === "out" ? " selected" : ""}>실제: 외주 금액</option></select>`;
     if (!r.outsource) return `<span class="res-wait">-</span>`;
     const rt = outRate(r);
     return `${won(r.outsource)}${rt != null ? `<span class="sub nowrap">사정률 약 ${rt.toFixed(2)}%</span>` : ""}`;
@@ -985,7 +1002,7 @@
       if (act === "cancel") { EDITING = null; renderLog(); return; }
       if (act === "save") {
         const val = (f) => tr.querySelector(`input[data-f="${f}"]`).value;
-        LOG = (await post("/api/bidlog/update", { id, bid: val("bid").replace(/[^\d.]/g, ""), outsource: val("outsource").replace(/[^\d.]/g, "") })).entries || [];
+        LOG = (await post("/api/bidlog/update", { id, bid: val("bid").replace(/[^\d.]/g, ""), outsource: val("outsource").replace(/[^\d.]/g, ""), actual: tr.querySelector('select[data-f="actual"]').value })).entries || [];
         EDITING = null; renderLog(); return;
       }
       if (act === "del") {

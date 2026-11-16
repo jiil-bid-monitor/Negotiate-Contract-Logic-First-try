@@ -27,7 +27,7 @@ FILE_NAME = "bid_log.json"
 BIDDERS_DIR = "bid_log_bidders"
 
 # 화면이 보내는 값 → 저장할 이름과 종류. 그 밖의 값은 버린다
-_TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "contractMethod": 40, "method": 80, "openingAt": 25, "closingAt": 25}
+_TEXT = {"noticeNo": 20, "noticeOrd": 3, "title": 200, "institution": 100, "workType": 10, "contractMethod": 40, "method": 80, "openingAt": 25, "closingAt": 25, "actual": 4}
 _NUMBER = ("basis", "lowerRate", "rangeLo", "rangeHi", "aValue", "bid", "rate", "planned", "netCost", "outsource")
 _NO_RE = re.compile(r"^[A-Z0-9]{8,14}$")
 
@@ -71,15 +71,24 @@ def clean_entry(data: dict[str, Any]) -> dict[str, Any]:
     out["bid"] = round(out["bid"])
     # 외주 업체 추천 금액(11/16 사용자 요청 — 웹앱 금액과 개찰 결과 비교용, 없으면 비움)
     out["outsource"] = round(out["outsource"]) if out["outsource"] and out["outsource"] > 0 else None
+    # 실제로 낼 금액(11/16 사용자 요청 — 개찰 전에도 투찰내역에서 보이게): web = 투찰금액, out = 외주 금액(외주 금액이 있을 때만)
+    out["actual"] = _actual(out["actual"], out["outsource"])
     return out
 
 
+def _actual(value: Any, outsource: Any) -> str:
+    v = str(value or "").strip()
+    if v == "out" and not outsource:
+        raise ValueError("외주 금액을 넣어야 '외주 금액으로 투찰'을 고를 수 있습니다")
+    return v if v in ("web", "out") else "web"
+
+
 def actual_side(entry: dict[str, Any]) -> str | None:
-    """실제로 어느 금액으로 투찰했나(11/16 사용자 요청) — 개찰 결과의 지일 실제 금액을 웹앱·외주 금액과 맞춰 봄. 개찰 전이면 None.
+    """실제로 어느 금액으로 투찰했나(11/16 사용자 요청) — 개찰 결과의 지일 실제 금액을 웹앱·외주 금액과 맞춰 봄. 개찰 전이면 기록할 때 고른 쪽('…(예정)').
     화면 `actualSide`(bidcalc_ui.js)와 같은 규칙."""
     res = entry.get("result") or {}
-    if res.get("status") != "완료":
-        return None
+    if res.get("status") != "완료":   # 개찰 전 — 기록할 때 고른 금액
+        return {"web": "웹앱 금액(예정)", "out": "외주 금액(예정)"}.get(entry.get("actual") or "")
     own = res.get("own") or {}
     amount = own.get("amount")
     if amount is None:
@@ -159,6 +168,10 @@ class BidLog:
                             res["outsource"] = sim
                         else:
                             res.pop("outsource", None)
+            if "actual" in data:
+                row["actual"] = _actual(data.get("actual"), row.get("outsource"))
+            elif row.get("actual") == "out" and not row.get("outsource"):   # 외주 금액을 지웠으면 투찰금액 쪽으로
+                row["actual"] = "web"
             row["updatedAt"] = _now()
             self._write(rows)
             return row

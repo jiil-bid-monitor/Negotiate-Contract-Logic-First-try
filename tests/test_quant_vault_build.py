@@ -2107,21 +2107,25 @@ def test_applicant_signature_line(tmp_path: Path):
 
 def test_applicant_signature_line_keeps_width(tmp_path: Path):
     """11/11 '신 청 인 : 이윤봉' 뒤 (인)이 다음 줄로 — 이름을 넣어도 줄 너비(빈칸 단위)가 원래보다 늘지 않게.
-    빈칸이 모자라면 앞 들여쓰기를 줄임."""
+    (11/16 사용자 지적: 기본 서식의 ':' 위치는 절대 옮기지 말 것) 빈칸이 모자라면 앞 들여쓰기 대신 '(인)' 뒤 줄 끝 빈칸만 줄임 —
+    줄 끝 빈칸도 없으면 줄이 조금 길어져도 ':' 자리는 그대로."""
     from html import unescape
 
     from quantdocs.fill import _span, fill_hwpx
 
     p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
     roomy = "        신 청 인 :              (인)"
-    tight = "                    신 청 인 :     (인)"
-    src = _mini_hwpx(tmp_path / "t.hwpx", p("입찰참가신청서") + p(roomy) + p(tight))
+    tight = "                    신 청 인 :     (인)        "
+    bare = "                    신 청 인 :     (인)"
+    src = _mini_hwpx(tmp_path / "t.hwpx", p("입찰참가신청서") + p(roomy) + p(tight) + p(bare))
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "이윤봉"}))
     text = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     lines = [unescape(re.sub(r"<[^>]+>", "", m)) for m in re.findall(r"<hp:p\b.*?</hp:p>", text, re.S)]
-    for before, after in ((roomy, lines[1]), (tight, lines[2])):
+    for before, after in ((roomy, lines[1]), (tight, lines[2]), (bare, lines[3])):
         assert re.sub(r"\s+", " ", after).strip() == "신 청 인 : 이윤봉 (인)"
-        assert _span(after) <= _span(before), (before, after)
+        assert after.index(":") == before.index(":"), (before, after)  # ':' 자리 그대로
+        if before is not bare:
+            assert _span(after) <= _span(before), (before, after)
 
 
 def test_pledge_line_with_preset_ceo_word(tmp_path: Path):
@@ -3244,6 +3248,38 @@ def test_center_sign_block_colons_stay_in_one_column(tmp_path: Path):
     para = lambda t: f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
     orig = ["주      소:                    ", "업 체 명:                    ", "대 표 자:                     (인)   "]
     body = f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0">{sec}<hp:t>20  년    월    일</hp:t></hp:run></hp:p>' + "".join(para(x) for x in orig)
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동",
+                                                              "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)"}))
+    zo = zipfile.ZipFile(tmp_path / "o.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    xs = []
+    for pid, inner in re.findall(r'<hp:p paraPrIDRef="(\d+)">(.*?)</hp:p>', out, re.S)[1:]:
+        text = "".join(re.findall(r"<hp:t>(.*?)</hp:t>", inner, re.S))
+        if ":" not in text:
+            continue
+        left = int(re.search(r'<hc:left value="(\d+)"', re.search(rf'<hh:paraPr id="{pid}".*?</hh:paraPr>', head, re.S).group(0)).group(1))
+        xs.append(left + _cjk_width(text[:text.index(":") + 1].replace("\u3000", "가"), 1200))
+    assert len(xs) == 3 and max(xs) - min(xs) < 300, xs  # ':' 세 줄이 한 자리(어림 차이 빈칸 반 칸 안)
+
+
+
+def test_center_sign_block_colons_mixed_paragraph_shapes(tmp_path: Path):
+    """11/16 사용자 지적(두 번째): 고친 뒤에도 '대 표 자:' 줄만 ':'가 어긋남 — 그 줄만 문단 모양(왼쪽 여백)이 다르면 묶음에서 빠졌음.
+    문단 모양이 달라도 잇달아 놓인 가운데 정렬 줄은 ':'가 한 자리."""
+    from quantdocs.fill import _cjk_width, _prefix_width, fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="2"><hh:paraPr id="57"><hh:align horizontal="CENTER"/>'
+              '<hh:margin><hc:intent value="0"/><hc:left value="0"/><hc:right value="0"/></hh:margin></hh:paraPr>'
+              '<hh:paraPr id="58"><hh:align horizontal="CENTER"/>'
+              '<hh:margin><hc:intent value="0"/><hc:left value="1200"/><hc:right value="0"/></hh:margin></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1200"></hh:charPr></hh:charProperties></hh:head>')
+    sec = '<hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin left="8504" right="8504" top="5668" bottom="4252"/></hp:pagePr></hp:secPr>'
+    para = lambda t: f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    orig = ["주      소:                    ", "업 체 명:                    ", "대 표 자:                     (인)   "]
+    body = f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0">{sec}<hp:t>20  년    월    일</hp:t></hp:run></hp:p>' + para(orig[0]) + para(orig[1]) + para(orig[2]).replace('paraPrIDRef="57"', 'paraPrIDRef="58"')
     src = _mini_hwpx(tmp_path / "s.hwpx", body)
     with zipfile.ZipFile(src, "a") as z:
         z.writestr("Contents/header.xml", header)

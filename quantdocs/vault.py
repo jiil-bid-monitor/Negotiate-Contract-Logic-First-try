@@ -124,6 +124,35 @@ def seal_folder(src: Path, passphrase: str, out: Path | None = None) -> Path:
     return out
 
 
+def rekey(old: str, new: str, path: Path | None = None, backup_dir: Path | None = None) -> tuple[Path, Path, int]:
+    """내용은 그대로, 비밀번호만 바꿔 다시 잠금(11/16 보안 검토 3번 — 원본 폴더가 묶음보다 낡아 seal로 다시 만들 수 없었음).
+    원본은 메모리에서만 풀고 디스크에 꺼내지 않음. 예전 묶음은 이 저장소 data/vault_backup/(.gitignore)에 남김
+    — 비공개 레포 폴더에 두면 `git add .` 때 같이 올라갈 수 있어서. 돌려줌: (새 묶음, 백업, 묶음 안 파일 수)."""
+    import tarfile as _t
+    from datetime import datetime
+
+    path = Path(path) if path is not None else sealed_path()
+    if not path.exists():
+        raise VaultError(f"회사 자료 묶음이 없습니다: {path}")
+    if new == old:
+        raise VaultError("새 비밀번호가 예전 비밀번호와 같습니다")
+    data = path.read_bytes()
+    plain = unseal_bytes(data, old)
+    sealed = seal_bytes(plain, new)  # 12자 미만이면 여기서 멈춤(아무것도 안 바뀜)
+    if unseal_bytes(sealed, new) != plain:
+        raise VaultError("다시 잠근 묶음을 새 비밀번호로 열어 보니 내용이 다릅니다 — 바꾸지 않았습니다")
+    with _t.open(fileobj=io.BytesIO(plain), mode="r") as tar:
+        count = sum(1 for m in tar.getmembers() if m.isfile())
+    bdir = Path(backup_dir) if backup_dir is not None else ROOT / "data" / "vault_backup"
+    bdir.mkdir(parents=True, exist_ok=True)
+    backup = bdir / f"company_{datetime.now():%Y%m%d_%H%M%S}.enc"
+    backup.write_bytes(data)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(sealed)
+    tmp.replace(path)
+    return path, backup, count
+
+
 @dataclass
 class Vault:
     """메모리에 푼 회사 자료. files: 묶음 안 경로 → 내용."""

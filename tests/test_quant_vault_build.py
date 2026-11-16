@@ -67,6 +67,24 @@ def test_vault_roundtrip_and_wrong_password(tmp_path: Path):
         vault.seal_bytes(b"x", "short")
 
 
+def test_vault_rekey_keeps_content_changes_password(tmp_path):
+    """11/16 보안 검토 3번 — 원본 폴더 없이 묶음 비밀번호만 바꿈, 예전 묶음은 백업."""
+    enc = vault.seal_folder(_company(tmp_path), PW, tmp_path / "c.enc")
+    before = vault.load(PW, enc).files
+    new = "새-비밀번호-2026-rekey"
+    out, backup, count = vault.rekey(PW, new, enc, tmp_path / "bak")
+    assert out == enc and count == len(before)
+    assert vault.load(new, enc).files == before
+    with pytest.raises(vault.VaultError):
+        vault.load(PW, enc)
+    assert vault.load(PW, backup).files == before  # 백업은 예전 비밀번호로 열림
+    with pytest.raises(vault.VaultError):  # 짧은 비밀번호·예전 비밀번호 틀림 → 그대로
+        vault.rekey(new, "short", enc, tmp_path / "bak")
+    with pytest.raises(vault.VaultError):
+        vault.rekey("틀린-비밀번호-입니다", "또-다른-새-비밀번호", enc, tmp_path / "bak")
+    assert vault.load(new, enc).files == before
+
+
 def test_label_keys():
     assert _label_key("홈페이지주소") == "홈페이지" and _label_key("주        소") == "주소"
     assert _label_key("상호 또는 법인명칭") == "회사명" and _label_key("주민(법인)등록번호") is None

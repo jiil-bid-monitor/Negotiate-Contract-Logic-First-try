@@ -609,6 +609,10 @@ class AnnounceTextTest(unittest.TestCase):
         c.schedule = SimpleNamespace(earliest=("입찰 마감", NOW))
         hold = hold_reasons(c, NOW)
         self.assertEqual(len(hold), 4)
+        self.assertEqual(hold_reasons(candidate(text="글"), NOW, ["20261116_특수조건_v1.hwpx", "공고정보_요약.pdf"]), ["첨부에 공고문 없음"])
+        self.assertEqual(hold_reasons(candidate(text="글"), NOW, ["20261116_입찰공고문_v1.hwp"]), [])
+        from nego.qualification_text import find_qualification_section
+        self.assertIsNotNone(find_qualification_section("2. 방법\n3. 견적제출 참가자격\n가. 지방계약법 시행령 제13조의 자격을 갖춘 자로서 소기업인 자\n4. 보증금\n"))
         self.assertIn("담당자 방 안내 보류: 읽은 공고 문서 없음", alert_text(c, 70_000_000, "나라장터 배정예산", Path("폴더"), hold=hold))
         state = {"notices": {"R1-000": {"status": "made", "at": "2026-11-12T08:03:00", "folder": "가", "hold": hold},
                              "R2-000": {"status": "made", "at": "2026-11-12T08:03:00", "folder": "나"}}}

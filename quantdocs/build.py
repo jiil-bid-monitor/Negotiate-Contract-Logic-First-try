@@ -602,21 +602,31 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
 
 
 def _readme(title: str, reports, attach, missing, notes, manual=(), per_form: bool = True, has_merged: bool = True) -> str:
-    # 경고(⚠)는 맨 위에, 묶음에 실제로 있는 파일만 설명(11/13 — 서식이 0개인데 통합서식·서식/ 설명이 늘 붙어 있었음)
+    # 11/17 사용자 요청: 한눈에 — 먼저 확인 / 할 일 / 파일 / 참고 구역, 한 줄씩 짧게.
+    # 경고(⚠)는 맨 위(셋째 줄), 묶음에 실제로 있는 파일만 설명(11/13), 일상 안내(_SCREEN_HIDDEN)는 빼고 준비표 '준비 필요'에만.
     warn = [n for n in notes if n.startswith("⚠")]
-    lines = [f"정량평가서 준비 묶음 — {title}".strip(), ""] + warn + ([""] if warn else [])
+    lines = [f"정량평가서 준비 묶음 — {title}".strip(), ""] + warn + [f"⚠ {m}" for m in missing]
+    if len(lines) > 2:
+        lines += [""]
+    form = "통합서식.hwpx" if has_merged else "서식/"
+    lines += ["■ 할 일",
+              f"  1. {form} 열어 빈 칸 채우기" + (f" (직접 기입 서식 {len(manual)}개)" if manual else ""),
+              "  2. 자동으로 채운 칸 확인 — 준비표 '자동입력' 시트",
+              "  3. 제출할 실적 고르기 — 준비표 '실적후보'",
+              "  4. 통합본.pdf 서류 유효기간 확인",
+              "", "■ 파일"]
     if has_merged:
-        lines += ["· 통합서식.hwpx : 공고 서식 전체를 서식 순서대로 이은 한글 파일 하나 — 회사 정보·연혁·실적을 채운 서식과 "
-                  "담당 PM·투입 인력·자기평가처럼 공고마다 정하는 값을 적는 서식(제안요청서 양식 그대로)이 함께 있음, 이 파일에서 바로 기입 "
-                  "— 자동으로 채운 칸은 준비표 '자동입력' 시트에서 확인"]
+        lines += ["  통합서식.hwpx       서식 전체 (회사 정보 채움)"]
     if per_form and reports:
-        lines += ["· 서식/ : 서식별로 잘라 채운 것" + ("(통합서식을 다 잇지 못해 함께 넣음)" if has_merged else "")]
+        lines += ["  서식/               서식별 파일" + (" (통합서식에 못 이은 것)" if has_merged else "")]
     if per_form and manual:
-        lines += ["· 서식_직접기입/ : 직접 기입할 서식(제안요청서 양식 그대로)"]
-    lines += ["· 통합본.pdf : (회사 서류 스캔본) 공고 제출서류·요구 자격에 맞는 회사 서류를 파일 이름 키워드로 골라 원본 그대로 이어 붙인 것(목차·책갈피) — 순서는 준비표 '통합본 순서'",
-              "· 첨부/ : 연혁·실적 증빙(참고 — 제출할 실적은 담당자가 확정) + 통합본.pdf에 못 넣은 서류 원본 — 제출 전 유효기간 확인",
-              "· 공고별_준비표.xlsx : 서식 목록·제출서류·자격요건·실적요건·실적후보·준비 필요 서류",
-              "· 실적후보는 후보일 뿐 — 제출할 실적은 담당자가 확정", "· 이 묶음엔 회사 서류가 들어 있으니 사내에서만 보관",
-              "", f"채운 서식 {len(reports)}개, 직접 기입 서식 {len(manual)}개, 첨부 서류 {len(attach)}개"]
-    lines += [f"! {m}" for m in missing] + [f"※ {n}" for n in notes if not n.startswith("⚠")]
+        lines += ["  서식_직접기입/      직접 적을 서식"]
+    lines += ["  통합본.pdf          회사 서류 원본 모음",
+              "  첨부/               연혁·실적 증빙, 통합본에 못 넣은 서류",
+              "  공고별_준비표.xlsx  서식·서류·자격·실적 목록",
+              "", f"  채운 서식 {len(reports)}개 · 직접 기입 {len(manual)}개 · 첨부 {len(attach)}개",
+              "  ※ 회사 서류가 들어 있음 — 사내에서만 보관"]
+    rest = [n for n in notes if not n.startswith("⚠") and not _SCREEN_HIDDEN.match(n)]
+    if rest:
+        lines += ["", "■ 참고"] + [f"  · {n}" for n in rest]
     return "\r\n".join(lines)

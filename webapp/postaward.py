@@ -190,19 +190,25 @@ def qual_template(templates: Path, work: str, estimate: float | None) -> Path | 
     return path if kind and path.exists() else None
 
 
-def service_template(templates: Path, sido: str | None, estimate: float | None, it: bool, procure: bool, sw: bool = False) -> Path | None:
+def service_template(templates: Path, sido: str | None, estimate: float | None, it: bool, procure: bool, sw: bool = False,
+                     tech: bool = False, pq: bool = False) -> Path | None:
     """용역 틀 '표준틀_적격심사_용역_{지역}_{분야}_{금액}.xlsx' — 조달청 공고면 조달청 틀, 아니면 수요기관 시·도·분야·추정가격 구간.
+    기술용역(나라장터 용역구분)은 행안부 예규 제393호 제2장의2 틀 — P.Q 공고면 PQ_, 아니면 기술_(학술연구는 나라장터가 안 가려 담당자가 바꿈).
+    조달청 기술용역은 맞는 틀이 없어 None(조달청 틀은 일반용역 세부기준).
     분야: 정보통신 업종이면 정보통신, 아니면 SW 사업이면 SW 틀 먼저(경기 2~5억만 SW/일반이 따로), 없으면 일반.
     금액 구간은 이름의 'N억이상'·'N억미만'으로 읽음. 금액을 모르면 2억 미만으로. 맞는 틀이 없으면 None."""
     won = estimate or 0
     hits = []
     for p in sorted(Path(templates).glob("표준틀_적격심사_용역_*.xlsx")):
         region, *rest = p.stem.split("_")[3:]
-        if procure:
+        if tech:
+            if procure or region != "행안부" or len(rest) != 2 or rest[0] != ("PQ" if pq else "기술"):
+                continue
+        elif procure:
             if region == "조달청":
                 return p
             continue
-        if region != sido or len(rest) != 2 or ("정보통신" in rest[0]) != it:
+        elif region != sido or len(rest) != 2 or ("정보통신" in rest[0]) != it:
             continue
         lo, hi = re.search(r"(\d+)억이상", rest[1]), re.search(r"(\d+)억미만", rest[1])
         if (lo or hi) and (not lo or won >= int(lo[1]) * 1e8) and (not hi or won < int(hi[1]) * 1e8):
@@ -550,13 +556,17 @@ class PostAward:
         procure = "조달청" in str(raw.get("ntceInsttNm") or "")
         sido = next((s for s in (sido_of(str(raw.get(k) or "")) for k in ("dminsttNm", "ntceInsttNm")) if s), None) \
             or sido_of(nf.institution or v.get("institution"))
+        tech = service and str(raw.get("srvceDivNm") or "").strip() == "기술용역"
+        pq = str(raw.get("pqEvalYn") or "").upper() == "Y"
         if service:
             template = service_template(templates, sido, est or (basis / 1.1 if basis else None),
                                         any("정보통신" in n for n in licenses), procure,
-                                        str(raw.get("swBizObjYn") or "").upper() == "Y" or any("소프트웨어" in n for n in licenses))
+                                        str(raw.get("swBizObjYn") or "").upper() == "Y" or any("소프트웨어" in n for n in licenses),
+                                        tech, pq)
             if template is None:
-                return [f"[적격심사] 용역 적격심사 표준틀 중 맞는 것이 없어 만들지 않음 — 조달청 공고 {'예' if procure else '아니오'}, "
-                        f"수요기관 시·도 {sido or '모름'}, 추정가격 {f'{est:,.0f}원' if est else '모름'}(틀: 강원·경기·경남·조달청)"]
+                return [f"[적격심사] 용역 적격심사 표준틀 중 맞는 것이 없어 만들지 않음 — 용역구분 {raw.get('srvceDivNm') or '모름'}, "
+                        f"조달청 공고 {'예' if procure else '아니오'}, 수요기관 시·도 {sido or '모름'}, "
+                        f"추정가격 {f'{est:,.0f}원' if est else '모름'}(틀: 일반용역 강원·경기·경남·조달청 / 기술용역 행안부 — 조달청 기술용역 틀은 없음)"]
         else:
             template = qual_template(templates, v.get("work", ""), est or (basis / 1.1 if basis else None))
         if template is None:
@@ -575,7 +585,8 @@ class PostAward:
             "to": None if service and procure else str(raw.get("ntceInsttNm") or "") or nf.institution,
             "rate": num("indstrytyEvlRt")})
         return [f"[적격심사] 0_적격심사/{QUAL_DOC} ← {template.name} — 자동으로 채운 칸: " + ", ".join(done)] + \
-            (["  용역 틀은 수요기관 시·도로 골랐음 — 공고문이 인용한 적격심사 세부기준(별표)과 틀 이름이 같은지 확인"] if service else []) + [
+            (["  용역 틀은 수요기관 시·도로 골랐음 — 공고문이 인용한 적격심사 세부기준(별표)과 틀 이름이 같은지 확인"] if service and not tech else []) +             ([f"  기술용역이라 행안부 예규 제393호 제2장의2 {'[별표 1] P.Q' if pq else '[별표 2] 기술용역'} 틀로 골랐음 — "
+              "학술연구용역이면 학술 틀로 바꾸고, 공고문이 인용한 기준·별표와 같은지 확인"] if tech else []) + [
                 "  제출일·작성자 등 노란 칸과 구매관리번호는 직접 넣으세요" + ("" if est else " — 추정가격을 못 받아 금액 구간 틀을 기초금액으로 골랐으니 대조")] +             (["  구매관리번호: " + QUAL_NOTES["구매관리번호"]] if v.get("work") == "물품" else [])
 
     def _fill_template(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
@@ -698,6 +709,14 @@ def selfcheck() -> None:
         assert st("경기", 3e8, False, False).endswith("경기_일반_2억이상5억미만")
         assert st("경기", 6e8, False, False, True).endswith("SW·일반_5억이상10억미만") and st("경기", 6e8, False, False).endswith("SW·일반_5억이상10억미만")
         assert st(None, None, False, True).endswith("조달청_수요기관지정형") and st("경기", None, False, False) == "없음"
+        # 기술용역(11/17) — 행안부 틀, P.Q 여부·금액 구간, 조달청이면 없음, 일반용역 고르기엔 안 끼어듦
+        for n in ("용역_행안부_기술_1억미만", "용역_행안부_기술_2억이상5억미만", "용역_행안부_PQ_5억미만", "용역_행안부_학술_1억미만"):
+            wb.save(Path(d) / "qtpl" / f"표준틀_적격심사_{n}.xlsx")
+        assert st("강원", 5e7, False, False, False, True).endswith("행안부_기술_1억미만")
+        assert st("경남", 3e8, True, False, False, True).endswith("행안부_기술_2억이상5억미만")
+        assert st("강원", 3e8, False, False, False, True, True).endswith("행안부_PQ_5억미만")
+        assert st(None, 3e8, False, True, False, True) == "없음" and st("강원", 6e8, False, False, False, True) == "없음"
+        assert st("강원", 5e7, False, False).endswith("강원_일반_2억미만")
 
         import io as _io
         import zipfile as _zip

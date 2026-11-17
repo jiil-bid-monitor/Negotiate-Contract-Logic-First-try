@@ -10,6 +10,7 @@ trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; exit 0' TERM INT
 mkdir -p "$CONTROL"
 
 while :; do
+  sh scripts/nas/pull.sh  # 켤 때마다 코드 최신으로 — restart-webapp만 넣으면 병합한 코드가 반영된다
   python scripts/nas/run_with_env.py python -m webapp &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do

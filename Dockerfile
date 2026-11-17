@@ -11,8 +11,10 @@ ENV PYTHONUTF8=1 \
     TZ=KST-9
 
 # 정량평가서: 스캔본 회사 서류(연혁·등록증·인감증명) 글자 인식 — Tesseract + 한국어 데이터(11/04)
-RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor \
-    && rm -rf /var/lib/apt/lists/*
+# git: 켤 때·1억 미만 실행 때마다 코드 최신으로 받기(scripts/nas/pull.sh, 11/17). 공유 폴더 주인이 컨테이너 사용자와 달라 safe.directory 필요
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor git \
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --system --add safe.directory '*'
 
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt

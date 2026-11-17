@@ -32,6 +32,13 @@
 - 개찰 뒤 지일 실제 금액이 투찰금액·외주 금액 어느 쪽과도 다를 때 공고 칸에 붙던 회색 칩 '다른 금액으로 투찰 (N원)'을 뺌(`bidcalc_ui.js` `actualChip`).
   남은 칩은 '투찰 안 함'·'기록과 다름'뿐. 서버 `bidlog.actual_side`(CSV '실제 투찰' 열 '다른 금액 (N원)')는 그대로. 화면만 — F5.
 
+## 2026-11-17 — NAS가 코드를 스스로 받음 (브랜치 `claude/nas-auto-pull`, 사용자 결정)
+
+- 계기: 1억 미만 수집 실패를 고친 #434·#441이 병합됐는데 NAS 코드가 11/16 17시(#432)에 멈춰 있어 같은 실패가 이어짐 — NAS 코드는 누가 손으로 `git pull`해야만 바뀌었음
+  (웹앱 재시작 `control/restart-webapp`도 코드를 안 받았음). 11/17엔 이 PC에서 공유 폴더 저장소를 직접 pull(#444) + 그 저장소 `core.autocrlf=true`(윈도우·리눅스 git이 같은 줄바꿈으로 봄).
+- `scripts/nas/pull.sh`(`git pull --ff-only origin main`, 실패해도 지금 코드로 계속) — 웹앱을 켤 때마다(`webapp_run.sh`)·1억 미만 실행마다(`under100m_job.sh`).
+  이미지에 git이 있어야 해서 Dockerfile에 git + `safe.directory '*'` — **부장님이 이미지를 한 번 다시 빌드해야 켜짐**(그 전엔 아무 일도 안 함). requirements.txt가 바뀐 병합은 여전히 다시 빌드.
+
 ## 2026-11-16 — 투찰 기록할 때 '실제 투찰' 고르기 (브랜치 `claude/bidlog-actual-choice`, 사용자 요청 — 개찰 전에도 보이게)
 
 - 투찰 기록 칸 '실제 투찰 [투찰금액 | 외주 금액]'(외주 금액을 넣어야 외주를 고를 수 있음, 기본 투찰금액) → 기록 `actual`(web·out). 투찰내역: 외주 금액이 있는 기록은

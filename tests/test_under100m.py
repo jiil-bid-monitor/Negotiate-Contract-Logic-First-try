@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -597,3 +597,21 @@ class AnnounceTextTest(unittest.TestCase):
         self.assertNotIn("R2-000", text)
         self.assertNotIn("R4-000", text)
         self.assertEqual(announce_text(state, "2026-11-13"), "")
+
+    def test_held_folders_stay_out_of_staff_room(self):
+        # 2026-11-17 사용자 결정: 폴더는 만들되 걸린 것(지명경쟁·수의시담·읽은 문서 없음·마감이 오늘)은 개발자 방에만
+        from under100m.__main__ import alert_text, announce_text, hold_reasons
+
+        c = candidate(assigned=70_000_000, text="입찰공고")
+        c.schedule = SimpleNamespace(earliest=("입찰 마감", NOW + timedelta(days=3)))
+        self.assertEqual(hold_reasons(c, NOW), [])
+        c.notice.contract_method, c.notice.award_method, c.attachment_text = "지명경쟁", "수의시담-수의시담", ""
+        c.schedule = SimpleNamespace(earliest=("입찰 마감", NOW))
+        hold = hold_reasons(c, NOW)
+        self.assertEqual(len(hold), 4)
+        self.assertIn("담당자 방 안내 보류: 읽은 공고 문서 없음", alert_text(c, 70_000_000, "나라장터 배정예산", Path("폴더"), hold=hold))
+        state = {"notices": {"R1-000": {"status": "made", "at": "2026-11-12T08:03:00", "folder": "가", "hold": hold},
+                             "R2-000": {"status": "made", "at": "2026-11-12T08:03:00", "folder": "나"}}}
+        text = announce_text(state, "2026-11-12")
+        self.assertIn("새 공고 폴더 1건", text)
+        self.assertNotIn("R1-000", text)

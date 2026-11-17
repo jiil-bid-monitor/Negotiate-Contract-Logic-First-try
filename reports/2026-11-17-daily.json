@@ -1,0 +1,303 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-17",
+ "reportedAt": "2026-11-16T23:58:56+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01831479",
+   "title": "논산시 과학영농종합분석센터 LED전광판 제작 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "충청남도 논산시 농업기술센터",
+    "budgetAmount": 136363636.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [
+     "안내전광판"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 29,
+    "deadline": "2026-11-17T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01831479&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01828859",
+   "title": "상용SW 제3자단가(커스터마이징)(인피니티스택 v2.0 비그라운드(주))",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "각 수요기관",
+    "budgetAmount": 77581818.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [
+     "패키지소프트웨어개발및도입서비스"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 55,
+    "deadline": "2026-11-17T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01828859&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01833116",
+   "title": "2026 남산분원 수학체험관 전시물 설계 및 제작·설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "서울특별시교육청 서울특별시교육청융합과학교육원",
+    "budgetAmount": 99781818.0,
+    "confidence": "강력추천",
+    "bidMethod": "수의",
+    "keywords": [
+     "체험관",
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "paths": [
+     "관심 키워드",
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 54,
+    "deadline": "2026-11-19T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01833116&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01832781",
+   "title": "자원순환 전자저울 제작·설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "제주특별자치도 제주시",
+    "budgetAmount": 90909091.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [
+     "소프트웨어유지및지원서비스"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 52,
+    "deadline": "2026-11-19T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01832781&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01833031",
+   "title": "정선 청년센터 인테리어 공사(건축, 기계) 공고",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "재단법인 강원디자인진흥원",
+    "budgetAmount": 177750909.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "수의계약",
+    "score": 53,
+    "deadline": "2026-11-19T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01833031&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01832118",
+   "title": "괴산아트센터 미디어아트 확장사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "충청북도 괴산군",
+    "budgetAmount": 199412727.0,
+    "confidence": "강력추천",
+    "bidMethod": "입찰",
+    "keywords": [
+     "미디어아트"
+    ],
+    "products": [
+     "안내전광판"
+    ],
+    "paths": [
+     "관심 키워드",
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "지명경쟁",
+    "score": 69,
+    "deadline": "2026-11-22T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01832118&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01831346",
+   "title": "Adobe CC 학생용 라이센스",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "광주과학기술원",
+    "budgetAmount": 29260000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "패키지소프트웨어개발및도입서비스"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 46,
+    "deadline": "2026-11-22T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01831346&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01831509",
+   "title": "2026년 정보보호시스템 노후장비 교체 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "전남대학교병원",
+    "budgetAmount": 261720000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 38,
+    "deadline": "2026-11-23T17:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01831509&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01831640",
+   "title": "2027년~2028년 민방위경보시설 유지보수 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "세종특별자치시",
+    "budgetAmount": 299559091.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 48,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01831640&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01832655",
+   "title": "인프라 취약점 진단 솔루션 구매",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "양산부산대학교병원",
+    "budgetAmount": 54545000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 41,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01832655&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01833403",
+   "title": "초소형체계 민임무연동체 운영시스템 단방향전송장비",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "한국항공우주연구원",
+    "budgetAmount": 77000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 43,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01833403&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01834359",
+   "title": "빔프로젝터 단가계약",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "조선대학교",
+    "budgetAmount": 405000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "비디오프로젝터"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 30,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01834359&bidPbancOrd=000"
+   }
+  }
+ ]
+}

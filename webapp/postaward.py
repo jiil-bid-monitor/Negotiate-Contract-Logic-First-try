@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from nego import fields as F
+from nego.region import sido_of
 
 KST = timezone(timedelta(hours=9))
 STATE_FILE = "postaward.json"
@@ -166,10 +167,11 @@ def fill_basic(template: Path, target: Path, values: dict) -> None:
     wb.save(target)
 
 
-# 적격심사 표준틀(11/16 — 공사·물품 × 추정가격 10억 미만/이상, 용역은 보류) → 0_적격심사/적격심사서류.xlsx.
+# 적격심사 표준틀(11/16 — 공사·물품 × 추정가격 10억 미만/이상, 11/17 용역 = 지역·분야·금액별) → 0_적격심사/적격심사서류.xlsx.
 # 기본사항 A열 이름으로 칸을 찾음(틀이 바뀌어 줄이 밀려도 맞게). 틀의 칸 색: 파랑 = 공고·개찰 값(여기서 채움), 노랑 = 담당자.
 QUAL_DOC = "적격심사서류.xlsx"
-QUAL_LABELS = {"no": ("입찰공고번호", "입찰등록번호"), "title": ("공사명", "입찰 대상 물품명"), "institution": ("수요기관",),
+QUAL_LABELS = {"no": ("입찰공고번호", "입찰등록번호", "관리번호"), "title": ("공사명", "입찰 대상 물품명", "용역명"),
+               "institution": ("수요기관",), "basis": ("기초금액",),
                "opening": ("입찰일시",), "bid": ("입찰금액",), "planned": ("예정가격",), "a": ("A값",), "posted": ("입찰공고일",),
                "est": ("추정가격",), "classno": ("정부물품 분류번호",), "qty": ("수량",), "site": ("공사현장 시·군",),
                "trade": ("업종",), "rate": ("업종평가비율(%)",), "to": ("수신(발주기관)", "수신"), "kind": ("업종 구분", "업종구분")}
@@ -186,6 +188,20 @@ def qual_template(templates: Path, work: str, estimate: float | None) -> Path | 
     tier = "10억이상" if (estimate or 0) >= 1_000_000_000 else "10억미만"
     path = Path(templates) / f"표준틀_적격심사_{kind}_{tier}.xlsx"
     return path if kind and path.exists() else None
+
+
+def service_template(templates: Path, sido: str | None, estimate: float | None, it: bool, procure: bool) -> Path | None:
+    """용역 틀 '표준틀_적격심사_용역_{지역}_{분야}_{금액}.xlsx' — 조달청 공고면 조달청 틀, 아니면 수요기관 시·도·정보통신 여부·추정가격 구간.
+    금액을 모르면 2억 미만. 맞는 틀이 없으면 None."""
+    tier = "2억미만" if (estimate or 0) < 2e8 else "2억이상5억미만" if estimate < 5e8 else None
+    for p in sorted(Path(templates).glob("표준틀_적격심사_용역_*.xlsx")):
+        region, *rest = p.stem.split("_")[3:]
+        if procure:
+            if region == "조달청":
+                return p
+        elif region == sido and len(rest) == 2 and ("정보통신" in rest[0]) == it and rest[1] == tier:
+            return p
+    return None
 
 
 def fill_qual(template: Path, target: Path, values: dict[str, Any]) -> list[str]:
@@ -520,27 +536,40 @@ class PostAward:
 
         basis = e.get("basis") or getattr(nf, "budget", None)
         est = num("presmptPrce")  # 나라장터 추정가격 — 없으면 기초금액 ÷ 1.1로 틀만 고름
-        template = qual_template(templates, v.get("work", ""), est or (basis / 1.1 if basis else None))
         # 물품 업종구분 — 낙찰방법 이름 끝 '(물품제조)'·'(물품구매)'로(모르면 틀 기본값 그대로)
         method = str(raw.get("sucsfbidMthdNm") or getattr(nf, "award_method", "") or "")
         goods_kind = "제조" if "제조" in method else "공급" if "구매" in method else None
         licenses = [re.sub(r"\s*[/(]\s*\d{4}\)?\s*$", "", name) for name in getattr(nf, "licenses", None) or []]
+        service = v.get("work") == "용역"
+        procure = "조달청" in str(raw.get("ntceInsttNm") or "")
+        sido = next((s for s in (sido_of(str(raw.get(k) or "")) for k in ("dminsttNm", "ntceInsttNm")) if s), None) \
+            or sido_of(nf.institution or v.get("institution"))
+        if service:
+            template = service_template(templates, sido, est or (basis / 1.1 if basis else None),
+                                        any("정보통신" in n for n in licenses), procure)
+            if template is None:
+                return [f"[적격심사] 용역 적격심사 표준틀 중 맞는 것이 없어 만들지 않음 — 조달청 공고 {'예' if procure else '아니오'}, "
+                        f"수요기관 시·도 {sido or '모름'}, 추정가격 {f'{est:,.0f}원' if est else '모름'}(틀: 강원·경기·경남·조달청)"]
+        else:
+            template = qual_template(templates, v.get("work", ""), est or (basis / 1.1 if basis else None))
         if template is None:
-            return [f"[적격심사] {v.get('work') or '업무 미확인'} 적격심사 표준틀이 {templates}에 없어 만들지 않음(용역은 틀 보류)"]
+            return [f"[적격심사] {v.get('work') or '업무 미확인'} 적격심사 표준틀이 {templates}에 없어 만들지 않음"]
         a = res.get("aValue") if res.get("aValue") is not None else e.get("aValue")
         done = fill_qual(template, target, {
-            "no": key, "title": nf.title or v.get("title"), "institution": nf.institution or v.get("institution"),
+            "no": key, "title": nf.title or v.get("title"), "institution": nf.institution or v.get("institution"), "basis": basis,
             "opening": (e.get("openingAt") or str(raw.get("opengDt") or ""))[:16], "bid": e.get("bid"), "planned": res.get("plannedPrice"),
             "a": round(a) if a else None, "posted": (nf.posted or "")[:10], "est": est,
             "classno": str(raw.get("dtilPrdctClsfcNo") or ""), "qty": " ".join(str(raw.get(k) or "").strip() for k in ("prdctQty", "prdctUnit")).strip(),
             "site": (str(raw.get("cnstrtsiteRgnNm") or "").split() or [""])[-1],
             "trade": licenses[0] if len(licenses) == 1 else None,  # 업종이 여럿이면 담당자가 고름
-            "kind": goods_kind if v.get("work") == "물품" else
+            "kind": goods_kind if v.get("work") == "물품" else None if service else
                     (("종합공사" if licenses[0].replace("·", "") in GENERAL_TRADES else "전문·그밖") if len(licenses) == 1 else None),
-            "to": str(raw.get("ntceInsttNm") or "") or nf.institution,  # 발주기관 = 공고기관(조달청 대행이면 조달청)
+            # 발주기관 = 공고기관(조달청 대행이면 조달청) — 조달청 용역 틀은 기본값 '조달청장' 그대로
+            "to": None if service and procure else str(raw.get("ntceInsttNm") or "") or nf.institution,
             "rate": num("indstrytyEvlRt")})
-        return [f"[적격심사] 0_적격심사/{QUAL_DOC} ← {template.name} — 자동으로 채운 칸: " + ", ".join(done),
-                "  제출일·작성자 등 노란 칸과 구매관리번호는 직접 넣으세요" + ("" if est else " — 추정가격을 못 받아 10억 미만/이상 틀을 기초금액으로 골랐으니 대조")] +             (["  구매관리번호: " + QUAL_NOTES["구매관리번호"]] if v.get("work") == "물품" else [])
+        return [f"[적격심사] 0_적격심사/{QUAL_DOC} ← {template.name} — 자동으로 채운 칸: " + ", ".join(done)] + \
+            (["  용역 틀은 수요기관 시·도로 골랐음 — 공고문이 인용한 적격심사 세부기준(별표)과 틀 이름이 같은지 확인"] if service else []) + [
+                "  제출일·작성자 등 노란 칸과 구매관리번호는 직접 넣으세요" + ("" if est else " — 추정가격을 못 받아 금액 구간 틀을 기초금액으로 골랐으니 대조")] +             (["  구매관리번호: " + QUAL_NOTES["구매관리번호"]] if v.get("work") == "물품" else [])
 
     def _fill_template(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
         """착공(공사)·착수(물품·용역)서류를 단계 폴더에 복사하고 기본사항을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
@@ -649,6 +678,13 @@ def selfcheck() -> None:
         out = Path(d) / "q.xlsx"
         assert fill_qual(qual_template(Path(d) / "qtpl", "공사", None), out, {"no": "R1-000", "title": "A 공사", "bid": None}) == ["입찰공고번호", "공사명"]
         assert qual_todo(out) == (["추정가격", "제출일"], [["입찰공고번호", "R1-000"], ["공사명", "A 공사"]]), qual_todo(out)
+        # 용역 틀(11/17) — 조달청 공고면 조달청 틀, 아니면 시·도·정보통신·금액 구간
+        for n in ("용역_강원_일반_2억미만", "용역_경남_정보통신_2억이상5억미만", "용역_조달청_수요기관지정형"):
+            wb.save(Path(d) / "qtpl" / f"표준틀_적격심사_{n}.xlsx")
+        st = lambda *a: (service_template(Path(d) / "qtpl", *a) or Path("없음")).stem
+        assert st("강원", 1e8, False, False).endswith("강원_일반_2억미만") and st("강원", 3e8, False, False) == "없음"
+        assert st("경남", 3e8, True, False).endswith("정보통신_2억이상5억미만") and st("경남", 1e8, False, False) == "없음"
+        assert st(None, None, False, True).endswith("조달청_수요기관지정형") and st("경기", None, False, False) == "없음"
 
         import io as _io
         import zipfile as _zip

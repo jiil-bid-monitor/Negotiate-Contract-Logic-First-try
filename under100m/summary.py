@@ -164,7 +164,7 @@ def _short(topic: str, lines: list[str]) -> tuple[list[str], int]:
     return shown, len(rows) - len(shown)
 
 
-def _original(k, sections: dict | None) -> list:
+def _original(k, sections: dict | None, read: bool = True) -> list:
     """공고 문서의 참가 자격·제출 서류·유의사항 — 핵심 줄만 짧게(전문은 공고문)."""
     story = []
     for topic in ("참가 자격", "제출 서류", "유의사항·기타"):
@@ -173,7 +173,7 @@ def _original(k, sections: dict | None) -> list:
         if topic == "유의사항·기타":  # 공고문 쪽만 — 과업지시서 일반 조항까지 넣으면 길어짐
             items = [it for it in items if "공고" in it[0]] or items[:1]
         if not items:
-            story.append(k.P("공고 문서에서 이 절을 찾지 못함 — 공고문 확인", k.base))
+            story.append(k.P("공고문에 이 제목의 절이 없음 — 공고문 확인" if read else "공고 문서를 읽지 못함 — 나라장터에서 확인", k.base))
         for name, head, lines in items:
             shown, cut = _short(topic, lines)
             story.append(k.P(f"<b>{esc(head)}</b> &nbsp;<font size=7 color='#777777'>({esc(name)})</font>", k.base))
@@ -214,6 +214,8 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
 
     n = candidate.notice
     q = candidate.qualification
+    read = bool(files)  # '제한 없음'과 '읽지 못함'을 나눠 적는다(2026-11-17 사용자 제보 — 못 읽은 것처럼 보임)
+    unread = "공고 문서를 읽지 못함 — 나라장터에서 확인"
     story = [Paragraph(esc(n.title or ""), h1), Paragraph(esc(f"공고번호 {key}"), small), Paragraph("기본 정보", h2),
              table([("공고기관", n.notice_institution), ("수요기관", n.demand_institution or n.notice_institution),
                     ("업무", getattr(n, "work_type", None)), ("계약방법", getattr(n, "contract_method", None)),
@@ -226,7 +228,7 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
     if labels:
         story.append(Paragraph("나라장터 면허제한: " + esc(" / ".join(labels)), small))
     if not q.checked:
-        story.append(Paragraph("자격 판정 정보 없음 — 공고문 참가자격 절을 원문에서 확인", base))
+        story.append(Paragraph("면허·업종코드 제한 없음(나라장터 면허제한·공고문 코드 없음) — 아래 '참가 자격' 요약 확인" if read else unread, base))
     for part in getattr(candidate, "qual_parts", None) or []:
         reqs = list(part.get("missing") or []) + list(part.get("satisfied") or [])
         if not reqs:
@@ -237,8 +239,8 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
             story += [Paragraph("&nbsp;&nbsp;&nbsp;&nbsp;" + line, base) for line in lines]
     region = candidate.region_check
     story += [Paragraph("지역 제한", h2),
-              table([("판정", region.status + (f" (근거: {region.source})" if region.source else "")),
-                     ("참가 가능 지역", ", ".join(region.required) or "제한 정보 없음"), ("지일 소재지", region.company or "-")]),
+              table([("판정", (region.status if region.required or not read else "지역 제한 표시 없음") + (f" (근거: {region.source})" if region.source else "")),
+                     ("참가 가능 지역", ", ".join(region.required) or ("제한 없음" if read else "확인 못 함")), ("지일 소재지", region.company or "-")]),
               Paragraph("확인 필요 요건", h2)]
     if candidate.text_flags:
         for flag in candidate.text_flags:
@@ -246,7 +248,7 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
             story += [Paragraph(f"&nbsp;&nbsp;{esc(str(k))}: {esc(str(v))}", base) for k, v in summarize_flag(flag) or []]
             story.append(Paragraph("&nbsp;&nbsp;원문: " + esc((flag.get("text") or "")[:300]), small))
     else:
-        story.append(Paragraph("없음(실적·기술인력 요건 문장을 찾지 못함)", base))
+        story.append(Paragraph("실적·기술인력 요건 없음(공고문에 해당 문장 없음)" if read else unread, base))
     # 제출할 서식·입찰서 — 회사 서류만 보이면 서식을 빠뜨린 것처럼 읽힘(2026-11-12 사용자 제보)
     story.append(Paragraph("제출 서식 — 서식자동분리 폴더에 만들어 둠", h2))
     story += [Paragraph("&nbsp;&nbsp;" + esc(re.sub(r"^별도_", "", name)), base) for name in forms or []] or [
@@ -260,7 +262,7 @@ def write_summary_pdf(candidate, amount: float | None, source: str, path: Path, 
                   Paragraph("유효기간이 지났거나 재발급이 필요한 서류는 회사준비서류 폴더에 넣지 않았습니다.", small)]
     else:
         story.append(Paragraph("없음 — 체크리스트의 증명서류는 회사 서류에서 모두 넣음", base))
-    story += _original(k, sections)
+    story += _original(k, sections, read)
     story += [Spacer(1, 6), Paragraph("읽은 문서: " + esc(" / ".join(files) or "-"), small)]
     k.build(path, story)
     return True

@@ -465,11 +465,25 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
     return final, top_files
 
 
-def alert_text(candidate, amount, source, folder: Path, updated: bool = False) -> str:
+def hold_reasons(candidate, now: datetime) -> list[str]:
+    """담당자 방 안내를 미룰 이유(2026-11-17 사용자 결정 — 폴더는 만들되 걸린 것은 개발자 방에만). 없으면 빈 목록."""
+    n = candidate.notice
+    found = candidate.schedule.earliest
+    return [why for hit, why in (
+        (not (candidate.attachment_text or "").strip(), "읽은 공고 문서 없음"),
+        ("지명" in (getattr(n, "contract_method", None) or ""), "지명경쟁 — 지명통지를 받은 업체만 참가"),
+        ("시담" in (getattr(n, "award_method", None) or ""), "수의시담"),
+        (bool(found) and found[1].date() <= now.date(), "마감이 오늘" + (f" {found[1]:%H:%M}" if found else "")),
+    ) if hit]
+
+
+def alert_text(candidate, amount, source, folder: Path, updated: bool = False, hold: list[str] | None = None) -> str:
     n = candidate.notice
     head = f"재공고·정정 — 기존 폴더 갱신, 이전 문서는 {PREV_DIR}로" if updated else "새 공고 폴더"
     text = (f"[1억 미만 시험] {head} ({candidate.category})\n{n.title}\n공고번호: {notice_key(n)}\n{n.demand_institution or n.notice_institution}\n사업금액: {won(amount)} {source}\n"
             f"마감: {deadline_of(candidate)}\n자격: {qualification_label(candidate)}\n폴더: {folder.name}\n{n.detail_url or ''}")
+    if hold:
+        text += "\n※ 담당자 방 안내 보류: " + " · ".join(hold)
     lines = issue_lines(COMPANY_DOCS, candidate.attachment_text)
     if lines:
         text += "\n\n새로 발급할 서류 (제출 요구 여부는 공고문에서 확인)\n" + "\n".join(lines)
@@ -590,9 +604,12 @@ def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None
                      "title": title_key(candidate.notice), "institution": candidate.notice.demand_institution or candidate.notice.notice_institution,
                      "name": candidate.notice.title, "deadline": deadline_of(candidate),  # 담당자 방 아침 안내용(announce_text)
                      "at": now.isoformat(timespec="seconds")}
+        hold = hold_reasons(candidate, now)
+        if hold:
+            done[key]["hold"] = hold
         result["made"].append(folder.name)
         save_state(state_path, state)  # 알림이 실패해도 같은 폴더를 또 만들지 않게 먼저 저장
-        notify(alert_text(candidate, amount, source, folder, updated=bool(previous)))
+        notify(alert_text(candidate, amount, source, folder, updated=bool(previous), hold=hold))
     save_state(state_path, state)
     return result
 
@@ -641,9 +658,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def announce_text(state: dict, today: str, where: str = "") -> str:
-    """오늘 만든(갱신한) 1억 미만 공고 폴더 안내 글 — 없으면 빈 글(보내지 않음)."""
+    """오늘 만든(갱신한) 1억 미만 공고 폴더 안내 글 — 없으면 빈 글(보내지 않음). 보류(`hold`)한 폴더는 뺀다."""
     made = [(key, v) for key, v in sorted(state.get("notices", {}).items())
-            if v.get("status") == "made" and str(v.get("at", "")).startswith(today) and not v.get("replaced_by")]
+            if v.get("status") == "made" and str(v.get("at", "")).startswith(today) and not v.get("replaced_by") and not v.get("hold")]
     if not made:
         return ""
     lines = [f"[1억 미만] 오늘 새 공고 폴더 {len(made)}건 ({today[5:7]}/{today[8:10]})"]

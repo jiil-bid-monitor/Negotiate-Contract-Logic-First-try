@@ -509,7 +509,7 @@ class PostAward:
         return target
 
     def zip(self, key: str, rel: str) -> tuple[str, bytes]:
-        """단계 폴더 하나를 zip으로(제출용 내려받기) — (파일 이름, 내용). 폴더 밖·빈 폴더면 오류."""
+        """단계 폴더 하나(rel이 비면 공고 폴더 전체 — 폴더 만들기 때 묶음, 11/17)를 zip으로 — (파일 이름, 내용). 폴더 밖·빈 폴더면 오류."""
         import io
         import zipfile
 
@@ -517,8 +517,8 @@ class PostAward:
         if not v.get("folder"):
             raise ValueError("폴더를 아직 만들지 않은 공고입니다")
         folder = Path(v["folder"]).resolve()
-        target = (folder / rel).resolve()
-        if folder not in target.parents or not target.is_dir():
+        target = (folder / rel).resolve() if rel else folder
+        if (target != folder and folder not in target.parents) or not target.is_dir():
             raise ValueError("폴더를 찾지 못했습니다")
         files = [f for f in sorted(target.rglob("*")) if f.is_file() and not f.name.startswith("~$")]
         if not files:
@@ -527,7 +527,7 @@ class PostAward:
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
             for f in files:
                 z.write(f, f.relative_to(target).as_posix())
-        return f"{key}_{STAGE_NAME.get(target.name, target.name)}.zip", buf.getvalue()
+        return f"{key}_{STAGE_NAME.get(target.name, target.name) if rel else '전체'}.zip", buf.getvalue()
 
     def _fill_qual(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
         """적격심사 표준틀을 0_적격심사에 복사하고 공고·투찰 기록 값을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
@@ -725,6 +725,8 @@ def selfcheck() -> None:
         (zf / "0_적격심사" / "a.txt").write_text("x", encoding="utf-8")
         name, body = pa.zip("R26BK00000001-000", "0_적격심사")
         assert name == "R26BK00000001-000_적격심사.zip" and _zip.ZipFile(_io.BytesIO(body)).namelist() == ["a.txt"], name
+        name, body = pa.zip("R26BK00000001-000", "")  # 공고 폴더 전체 묶음(폴더 만들기 때, 11/17)
+        assert name == "R26BK00000001-000_전체.zip" and "0_적격심사/a.txt" in _zip.ZipFile(_io.BytesIO(body)).namelist(), name
         (zf / "0_적격심사" / "a.txt").unlink()
         try:
             pa.zip("R26BK00000001-000", "..")

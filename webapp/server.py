@@ -664,6 +664,11 @@ def main(argv: list[str] | None = None) -> int:
         bot.start()
     # 예외 낱말 후보 HTML '제출' 파일(다운로드 폴더) → jiil 반영·묶음 다시 잠금·병합 (webapp/exclusionsync.py)
     ExclusionSync().start()
+    # 낙찰 후 서류 폴더 NAS ↔ 사내 공유 폴더 맞추기 — 서버 PC .env POSTAWARD_SHARE_DIR가 있을 때만 (webapp/awardsync.py, 11/17)
+    from .awardsync import AwardShareSync
+    award_sync = AwardShareSync.from_env()
+    if award_sync is not None:
+        award_sync.start()
     # 판단 기록 → 피드백 구글 시트 S~V열 (FEEDBACK_SHEET_ID + 서비스 계정 키가 있을 때만, webapp/sheetsync.py)
     try:
         sheet_cfg = feedback_sheet.settings()

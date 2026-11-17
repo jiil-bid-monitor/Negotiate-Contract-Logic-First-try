@@ -190,18 +190,24 @@ def qual_template(templates: Path, work: str, estimate: float | None) -> Path | 
     return path if kind and path.exists() else None
 
 
-def service_template(templates: Path, sido: str | None, estimate: float | None, it: bool, procure: bool) -> Path | None:
-    """용역 틀 '표준틀_적격심사_용역_{지역}_{분야}_{금액}.xlsx' — 조달청 공고면 조달청 틀, 아니면 수요기관 시·도·정보통신 여부·추정가격 구간.
-    금액을 모르면 2억 미만. 맞는 틀이 없으면 None."""
-    tier = "2억미만" if (estimate or 0) < 2e8 else "2억이상5억미만" if estimate < 5e8 else None
+def service_template(templates: Path, sido: str | None, estimate: float | None, it: bool, procure: bool, sw: bool = False) -> Path | None:
+    """용역 틀 '표준틀_적격심사_용역_{지역}_{분야}_{금액}.xlsx' — 조달청 공고면 조달청 틀, 아니면 수요기관 시·도·분야·추정가격 구간.
+    분야: 정보통신 업종이면 정보통신, 아니면 SW 사업이면 SW 틀 먼저(경기 2~5억만 SW/일반이 따로), 없으면 일반.
+    금액 구간은 이름의 'N억이상'·'N억미만'으로 읽음. 금액을 모르면 2억 미만으로. 맞는 틀이 없으면 None."""
+    won = estimate or 0
+    hits = []
     for p in sorted(Path(templates).glob("표준틀_적격심사_용역_*.xlsx")):
         region, *rest = p.stem.split("_")[3:]
         if procure:
             if region == "조달청":
                 return p
-        elif region == sido and len(rest) == 2 and ("정보통신" in rest[0]) == it and rest[1] == tier:
-            return p
-    return None
+            continue
+        if region != sido or len(rest) != 2 or ("정보통신" in rest[0]) != it:
+            continue
+        lo, hi = re.search(r"(\d+)억이상", rest[1]), re.search(r"(\d+)억미만", rest[1])
+        if (lo or hi) and (not lo or won >= int(lo[1]) * 1e8) and (not hi or won < int(hi[1]) * 1e8):
+            hits.append((("SW" in rest[0]) != sw, p))  # 원하는 분야(SW/일반)가 먼저
+    return min(hits)[1] if hits else None
 
 
 def fill_qual(template: Path, target: Path, values: dict[str, Any]) -> list[str]:
@@ -546,7 +552,8 @@ class PostAward:
             or sido_of(nf.institution or v.get("institution"))
         if service:
             template = service_template(templates, sido, est or (basis / 1.1 if basis else None),
-                                        any("정보통신" in n for n in licenses), procure)
+                                        any("정보통신" in n for n in licenses), procure,
+                                        str(raw.get("swBizObjYn") or "").upper() == "Y" or any("소프트웨어" in n for n in licenses))
             if template is None:
                 return [f"[적격심사] 용역 적격심사 표준틀 중 맞는 것이 없어 만들지 않음 — 조달청 공고 {'예' if procure else '아니오'}, "
                         f"수요기관 시·도 {sido or '모름'}, 추정가격 {f'{est:,.0f}원' if est else '모름'}(틀: 강원·경기·경남·조달청)"]
@@ -679,11 +686,17 @@ def selfcheck() -> None:
         assert fill_qual(qual_template(Path(d) / "qtpl", "공사", None), out, {"no": "R1-000", "title": "A 공사", "bid": None}) == ["입찰공고번호", "공사명"]
         assert qual_todo(out) == (["추정가격", "제출일"], [["입찰공고번호", "R1-000"], ["공사명", "A 공사"]]), qual_todo(out)
         # 용역 틀(11/17) — 조달청 공고면 조달청 틀, 아니면 시·도·정보통신·금액 구간
-        for n in ("용역_강원_일반_2억미만", "용역_경남_정보통신_2억이상5억미만", "용역_조달청_수요기관지정형"):
+        for n in ("용역_강원_일반_2억미만", "용역_강원_일반_10억이상", "용역_경남_정보통신_2억이상5억미만", "용역_경남_정보통신_5억이상",
+                  "용역_경기_SW_2억이상5억미만", "용역_경기_일반_2억이상5억미만", "용역_경기_SW·일반_5억이상10억미만", "용역_조달청_수요기관지정형"):
             wb.save(Path(d) / "qtpl" / f"표준틀_적격심사_{n}.xlsx")
         st = lambda *a: (service_template(Path(d) / "qtpl", *a) or Path("없음")).stem
         assert st("강원", 1e8, False, False).endswith("강원_일반_2억미만") and st("강원", 3e8, False, False) == "없음"
+        assert st("강원", 2e9, False, False, True).endswith("강원_일반_10억이상")  # SW 사업이어도 강원은 일반 틀
         assert st("경남", 3e8, True, False).endswith("정보통신_2억이상5억미만") and st("경남", 1e8, False, False) == "없음"
+        assert st("경남", 9e8, True, False).endswith("정보통신_5억이상")
+        assert st("경기", 3e8, False, False, True).endswith("경기_SW_2억이상5억미만")
+        assert st("경기", 3e8, False, False).endswith("경기_일반_2억이상5억미만")
+        assert st("경기", 6e8, False, False, True).endswith("SW·일반_5억이상10억미만") and st("경기", 6e8, False, False).endswith("SW·일반_5억이상10억미만")
         assert st(None, None, False, True).endswith("조달청_수요기관지정형") and st("경기", None, False, False) == "없음"
 
         import io as _io

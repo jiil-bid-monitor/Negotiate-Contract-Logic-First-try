@@ -31,6 +31,9 @@ PRIVATE_CONTRACT_MARK = "수의"
 # 설계공모(일반·제안·간이) — 작품 공모로 설계자만 뽑는 발주라 수집하지 않는다(2026-10-16 통합 결정 5번, 팀원 수집기 방식).
 # 공고명에 '설계공모'가 없고 낙찰방법에만 적힌 공고가 있다(신안갯벌박물관 리모델링 기본 및 실시설계 용역).
 DESIGN_CONTEST_MARK = "설계공모"
+# 지명경쟁 — 본공고가 나올 땐 발주처가 참가 업체를 이미 골라 지명통지를 보낸 뒤라 수집하지 않는다(2026-11-18 사용자 결정).
+# 사전규격 단계(아직 업체를 고르기 전)에서만 수집 — 사전규격은 계약방법 칸이 없어 그대로 남는다.
+DESIGNATED_MARK = "지명"
 
 CATEGORY_NEGOTIATED = "협상"
 CATEGORY_SPEC_PRICE = "규격가격동시입찰"
@@ -77,12 +80,19 @@ def is_design_contest(notice: Notice) -> bool:
     return any(DESIGN_CONTEST_MARK in re.sub(r"[\s·ㆍ.,]", "", t or "") for t in texts)
 
 
+def is_designated(notice: Notice) -> bool:
+    """지명경쟁 본공고 — 계약체결방법 칸에 '지명'(지명경쟁)이 있으면. 사전규격은 해당 없음."""
+    return notice.kind != CATEGORY_PRESPEC and DESIGNATED_MARK in _normalize(notice.contract_method)
+
+
 def bid_category(notice: Notice) -> str | None:
-    """공고 유형. 설계공모면 None(수집 범위 밖). 순서: 설계공모 → 수의계약 → 협상 → 규격가격동시 → 입찰.
+    """공고 유형. 설계공모·지명경쟁 본공고면 None(수집 범위 밖). 순서: 설계공모 → 지명경쟁 → 수의계약 → 협상 → 규격가격동시 → 입찰.
     설계공모는 당선자와 수의계약을 맺어 계약방법 칸이 '수의계약'인 경우가 많아 먼저 본다."""
     if notice.kind == CATEGORY_PRESPEC:
         return CATEGORY_PRESPEC
     if is_design_contest(notice):
+        return None
+    if is_designated(notice):
         return None
     if is_private_contract(notice):
         return CATEGORY_PRIVATE
@@ -159,10 +169,12 @@ class ScopeResult:
     dropped_other_category: int = 0
     # 설계공모라 뺀 공고 수 (dropped_private와 따로 센다)
     dropped_design_contest: int = 0
+    # 지명경쟁 본공고라 뺀 공고 수 (2026-11-18 — 사전규격 단계에서만 수집)
+    dropped_designated: int = 0
 
 
 def apply_scope(notices: list[Notice], categories: set[str] | None = None) -> ScopeResult:
-    """수집된 전체 공고에서 수집 범위(설계공모·취소공고 제외 — 수의계약은 2026-11-12부터 포함)만 남긴다.
+    """수집된 전체 공고에서 수집 범위(설계공모·지명경쟁 본공고·취소공고 제외 — 수의계약은 2026-11-12부터 포함)만 남긴다.
     `categories`를 주면 그 유형만 남긴다 (None이면 전 유형).
 
     **순서가 중요하다. 최신 차수를 먼저 고르고, 그 다음에 취소 여부를 본다.**
@@ -182,7 +194,8 @@ def apply_scope(notices: list[Notice], categories: set[str] | None = None) -> Sc
     # 설계공모는 당선자와 수의계약을 맺어 계약방법 칸이 "수의계약"인 경우가 많다 — 수의계약보다 먼저 센다
     # (10/19 실수집 로그 "설계공모 0건"). 빠지는 공고는 같고 건수 나누기만 바뀐다.
     dropped_design_contest = sum(1 for n in alive if n.kind != CATEGORY_PRESPEC and is_design_contest(n))
-    dropped_private = len(alive) - len(competitive) - dropped_design_contest
+    dropped_designated = sum(1 for n in alive if not is_design_contest(n) and is_designated(n))
+    dropped_private = len(alive) - len(competitive) - dropped_design_contest - dropped_designated
 
     kept = competitive
     if categories is not None:
@@ -197,6 +210,7 @@ def apply_scope(notices: list[Notice], categories: set[str] | None = None) -> Sc
         dropped_old_ordinal=dropped_old_ordinal,
         dropped_other_category=len(competitive) - len(kept),
         dropped_design_contest=dropped_design_contest,
+        dropped_designated=dropped_designated,
     )
 
 

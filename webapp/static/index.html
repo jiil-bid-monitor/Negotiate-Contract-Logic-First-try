@@ -448,7 +448,7 @@ body {
 .cat-prod.on { border-style: solid; border-color: var(--brand); color: var(--brand); font-weight: 700; }
 .cat-prod.on .n { background: var(--brand); color: var(--on-brand); }
 /* '적용 중' 칩 + 지금 보는 건수 */
-.active-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; font-size: 12.5px; color: var(--muted); }
+.active-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
 .active-filters[hidden] { display: none; }
 .af-chip { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 3px 10px; border-radius: 14px; border: 1px solid transparent; background: var(--bg); color: var(--brand); }
 .af-chip:hover { border-color: var(--brand); }
@@ -458,7 +458,7 @@ body {
 
 /* 필터(드롭다운) 줄 + 정렬 */
 .filter-row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px; }
-.filter-row .filters { margin-bottom: 8px; }
+.filter-row .filters { margin-bottom: 4px; }
 .sort-box { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .sort-box select {
   height: 34px; padding: 4px 10px; font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 4px;
@@ -736,7 +736,8 @@ ol.steps li.first { background: var(--urgent-tint); }
 .off-group > summary::before { content: "▸"; color: var(--muted); font-size: 13px; }
 .off-group[open] > summary::before { content: "▾"; }
 .off-group > summary h2 { color: var(--muted); }
-.enrich-meta { margin: -10px 0 14px; color: var(--brand); font-size: 12.5px; min-height: 1em; }
+.enrich-meta { margin: -6px 0 12px; color: var(--brand); font-size: 12.5px; }
+.enrich-meta:empty { display: none; } /* 비어 있으면 자리 안 차지(11/18 사용자: 빈 공간이 너무 큼) */
 
 /* 자격판정 배지 — 커서를 올리거나 탭으로 포커스하면 어떤 보유 자격으로 채웠는지 보여준다 */
 .qual { position: relative; display: inline-flex; align-items: center; gap: 4px; cursor: help; outline: none; }
@@ -1387,7 +1388,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       </label>
     </div>
     <div class="active-filters" id="activeFilters" hidden></div>
-    <p class="sub" id="liveMeta" style="margin:0 0 18px">화면을 열면 아직 마감되지 않은 공고를 자동으로 불러옵니다.</p>
+    <p class="sub" id="liveMeta" style="margin:0 0 12px">화면을 열면 아직 마감되지 않은 공고를 자동으로 불러옵니다.</p>
     <p class="sub enrich-meta" id="enrichMeta" role="status"></p>
     <div id="liveResults"></div>
     <div class="empty" id="kindEmpty" hidden></div>

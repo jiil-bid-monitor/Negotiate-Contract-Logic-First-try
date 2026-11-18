@@ -3151,6 +3151,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if none_rule and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
                     head = [c for c in cells if c.row == 0]
                     body = [c for c in cells if c.row > 0]
+                    # '계 | __ | __' 합계 줄은 빼고 봄(11/18 사용자 제보 — 행정처분 내용 표 아래 '계' 줄 때문에 빈 표로 안 봐 '해당 없음'이 빠짐)
+                    sums = {c.row for c in body if re.fullmatch(r"(?:합|소|총)?계", _sq(c.text))}
+                    sums = {r for r in sums if all(c.blank or re.fullmatch(r"(?:합|소|총)?계", _sq(c.text))
+                                                   for c in body if c.row == r)}
+                    if sums and any(c.row not in sums for c in body):
+                        body = [c for c in body if c.row not in sums]
                     if head and any(_sq(c.text) for c in head) and body and all(c.blank for c in body):
                         first = min(body, key=lambda c: (c.row, c.col))
                         edits.append((first, ["해당 없음"], False))

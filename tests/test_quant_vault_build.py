@@ -2802,6 +2802,21 @@ def test_bizno_with_rrn_paren_label(tmp_path: Path):
     assert "123-45-67890" in sec
 
 
+def test_none_rule_ignores_total_row(tmp_path: Path):
+    """11/18 사용자 제보: 행정처분 내용 표 '업 체 명 | 용 역 명 | … / __ / 계 | __' — 값 없는 '계' 줄 때문에 빈 표로 안 봐
+    '해당사항이 없을 경우에는 “해당없음”을 기재'인데 '해당 없음'이 빠짐."""
+    from quantdocs.fill import fill_hwpx
+
+    heads = ["업 체 명", "용 역 명", "지정기관", "지정일자", "제한기간(개월수)", "처분 사유(관련법령)", "비고"]
+    rows = [[_c(i, 0, h) for i, h in enumerate(heads)], [_c(i, 1, "") for i in range(7)],
+            [_c(0, 2, "계")] + [_c(i, 2, "") for i in range(1, 7)]]
+    body = _tbl(rows) + '<hp:p><hp:run><hp:t>※ 해당사항이 없을 경우에는 “해당없음”을 기재</hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert sec.count("해당 없음") == 1 and "(주)가상" not in sec
+
+
 def test_signature_table_inside_frame_table(tmp_path: Path):
     """11/13 사용자 제보: 안전관리 서약서 — 쪽 테두리 표 칸 안에 '서약자 | 상 호 : | __ / | 주 소 : | __ / | 대 표 자 : | (인)' 표가 들어 있어
     (표 안 표) 서명이 모두 비었음. 안쪽 표도 채움, 바깥 칸의 글은 그대로."""

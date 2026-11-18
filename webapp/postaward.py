@@ -126,7 +126,8 @@ def _date(text: Any) -> datetime | None:
 def contract_values(row: dict) -> dict[str, Any]:
     """계약정보 한 줄 → 준공·청구 틀 값 이름. 빈 값은 뺌."""
     amt = lambda k: int(_digits(row.get(k)) or 0) or None  # noqa: E731
-    to = " ".join(x for x in (str(row.get("cntrctInsttNm") or "").strip(), str(row.get("cntrctInsttChrgDeptNm") or "").strip()) if x)
+    inst, dept = str(row.get("cntrctInsttNm") or "").strip(), str(row.get("cntrctInsttChrgDeptNm") or "").strip()
+    to = inst if dept and dept in inst else " ".join(x for x in (inst, dept) if x)  # 에코팜랜드: 기관 이름에 부서 이름이 이미 있음
     out = {"title": str(row.get("cntrctNm") or "").strip(), "amount": amt("thtmCntrctAmt"), "total": amt("totCntrctAmt"),
            "contract": _date(row.get("cntrctDate") or row.get("cntrctCnclsDate")), "start": _date(row.get("wbgnDate")),
            "due": _date(row.get("thtmScmpltDate")),
@@ -226,6 +227,8 @@ def fill_done(source: Path, target: Path, values: dict[str, Any], prev: dict[str
     담당자가 고친 칸은 안 건드림. (이번에 자동으로 둔 값 {값 이름: 글}, 파일을 바꿨는지)."""
     from openpyxl import load_workbook
 
+    from openpyxl.styles import PatternFill
+
     fresh = not target.exists()  # 처음(틀에서 복사) — 틀 기본값(예: 납품서 붙임 '예')도 자동 값으로 바꿈
     wb = load_workbook(source if fresh else target)
     ws = wb["기본사항"]
@@ -241,6 +244,8 @@ def fill_done(source: Path, target: Path, values: dict[str, Any], prev: dict[str
             continue  # 담당자가 고친 값
         if _key(cur) != _key(new) or (isinstance(cur, str) and cur.startswith("=")):
             cell.value, changed = new, True
+            if cell.fill.fgColor.rgb == _YELLOW:  # 노란 칸(계약일 등 — 보통 담당자가 적음)을 자동으로 채웠으면 파랑으로(11/18 사용자)
+                cell.fill = PatternFill("solid", fgColor=_BLUE)
         done[key] = _key(new)
     if changed or fresh:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -1046,7 +1051,7 @@ def selfcheck() -> None:
             ws.title = "기본사항"
             for r, (a, b) in enumerate(rows, 5):
                 ws.cell(r, 1, a), ws.cell(r, 2, b)
-                ws.cell(r, 2).fill = _PF("solid", fgColor=_YELLOW if a in ("제출일", "납품서 붙임") else _BLUE)
+                ws.cell(r, 2).fill = _PF("solid", fgColor=_YELLOW if a in ("제출일", "납품서 붙임", "계약년월일", "착공년월일", "완료기한") else _BLUE)
             wb.save(path)
 
         fake(tpl2 / "표준틀_완료계.xlsx", [("납품서 붙임", "예"), ("수신자", None), ("용역명", None), ("계약금액", None),
@@ -1098,7 +1103,9 @@ def selfcheck() -> None:
         ws = load_workbook(f6 / "3_준공" / "완료계.xlsx")["기본사항"]
         assert ws["B6"].value == "강원특별자치도 홍천군 세무회계과" and ws["B8"].value == 19700000, ws["B6"].value
         assert [ws.cell(r, 2).value.date().isoformat() for r in (10, 11, 12)] == ["2025-03-12", "2025-03-12", "2025-07-09"]
+        assert ws["B10"].fill.fgColor.rgb == _BLUE and ws["B13"].fill.fgColor.rgb == _YELLOW  # 자동으로 채운 노란 칸만 파랑
         assert "to" not in contract_values({**row5, "cntrctInsttNm": "조달청"})
+        assert contract_values({"cntrctInsttNm": "경기도 경기도축산진흥센터", "cntrctInsttChrgDeptNm": "경기도축산진흥센터"})["to"] == "경기도 경기도축산진흥센터"
         def boom(v):
             raise RuntimeError("down")
         pa.prepare(k6, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2, contract_lookup=boom)

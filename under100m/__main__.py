@@ -465,12 +465,13 @@ def build_folder(candidate, amount, source, company: dict, out_root: Path, now: 
     return final, top_files
 
 
-def hold_reasons(candidate, now: datetime) -> list[str]:
+def hold_reasons(candidate, now: datetime, files: list[str] | None = None) -> list[str]:
     """담당자 방 안내를 미룰 이유(2026-11-17 사용자 결정 — 폴더는 만들되 걸린 것은 개발자 방에만). 없으면 빈 목록."""
     n = candidate.notice
     found = candidate.schedule.earliest
     return [why for hit, why in (
         (not (candidate.attachment_text or "").strip(), "읽은 공고 문서 없음"),
+        (files is not None and not any(_DOC_FILE.search(re.sub(r"[\s_]", "", f)) for f in files if f != SUMMARY), "첨부에 공고문 없음"),
         ("지명" in (getattr(n, "contract_method", None) or ""), "지명경쟁 — 지명통지를 받은 업체만 참가"),
         ("시담" in (getattr(n, "award_method", None) or ""), "수의시담"),
         (bool(found) and found[1].date() <= now.date(), "마감이 오늘" + (f" {found[1]:%H:%M}" if found else "")),
@@ -604,7 +605,7 @@ def run_once(out: Path, state_path: Path, days: int, now: datetime | None = None
                      "title": title_key(candidate.notice), "institution": candidate.notice.demand_institution or candidate.notice.notice_institution,
                      "name": candidate.notice.title, "deadline": deadline_of(candidate),  # 담당자 방 아침 안내용(announce_text)
                      "at": now.isoformat(timespec="seconds")}
-        hold = hold_reasons(candidate, now)
+        hold = hold_reasons(candidate, now, files)
         if hold:
             done[key]["hold"] = hold
         result["made"].append(folder.name)

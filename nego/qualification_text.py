@@ -58,7 +58,7 @@ _MARKER = (
 # 제목 뒤 꼬리말: "요건·조건·사항", "및 제한"·"및 관련사항"(실측 정선 남면, 양양군 청사)
 _TAIL = _WS + r"(?:요건|조건|사항)?" + _WS + r"(?:및" + _WS + r"[가-힣]{1,6})?"
 _HEADING_RE = re.compile(
-    r"^" + _WS + _MARKER + _WS + r"(?P<bid>" + _spaced("입찰") + _WS + r")?" + _spaced("참가자격")
+    r"^" + _WS + _MARKER + _WS + r"(?P<bid>(?:" + _spaced("입찰") + "|" + _spaced("견적제출") + "|" + _spaced("견적") + r")" + _WS + r")?" + _spaced("참가자격")  # 수의 견적 공고 '3. 견적제출 참가자격'(2026-11-17)
     + r"(?=" + _TAIL + _WS + r"(?:[:：(（\[][^\n]*|\d{1,3})?" + _WS + r"$)"
     + _TAIL + _WS + r"[:：]?",
     re.MULTILINE,

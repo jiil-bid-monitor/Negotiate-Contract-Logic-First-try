@@ -91,8 +91,11 @@ def template_dir(root: Path) -> Path:
     return Path(root) / "_표준틀"
 
 
+# 착수 틀은 물품·용역 따로(11/18 사용자 — 회사 원본: 용역 11건 중 9건 책임자만, 물품 6건 중 3건 현장대리인도 냄). 폴더 구분(GROUPS)은 그대로 2개
 TEMPLATES = {"공사": ("표준틀_착공서류(공사).xlsx", "2_착공", "착공서류.xlsx"),
-             "물품·용역": ("표준틀_착수서류(물품·용역).xlsx", "2_착수", "착수서류.xlsx")}
+             "물품": ("표준틀_착수서류(물품).xlsx", "2_착수", "착수서류.xlsx"),
+             "용역": ("표준틀_착수서류(용역).xlsx", "2_착수", "착수서류.xlsx")}
+OLD_START_TEMPLATE = "표준틀_착수서류(물품·용역).xlsx"  # 나누기 전 틀 — 새 틀이 _표준틀에 아직 없을 때만 씀
 # 준공·청구 표준틀(11/18) — 업무 3개로 고름(공사 준공계 · 물품 납품계 · 용역 완료계, 폴더 구분 2개와 따로), 청구서는 공통.
 # 기본사항 A열 이름으로 채움(틀마다 줄 위치가 달라도 코드 하나). 파란 칸(계약서 값)을 자동으로.
 DONE_TEMPLATES = {"공사": ("표준틀_준공계.xlsx", "3_준공", "준공계.xlsx"),
@@ -651,7 +654,7 @@ class PostAward:
             stage = {"dir": d.name, "name": STAGE_NAME[d.name], "files": files, "ready": d.name in READY_STAGES}
             qual, done = d.name == "0_적격심사", d.name in ("3_준공", "4_청구")
             doc = d / (QUAL_DOC if qual else CLAIM_TEMPLATE[2] if d.name == "4_청구"
-                       else DONE_TEMPLATES.get(v.get("work", ""), ("", "", "-"))[2] if done else TEMPLATES["공사" if gong else "물품·용역"][2])
+                       else DONE_TEMPLATES.get(v.get("work", ""), ("", "", "-"))[2] if done else TEMPLATES["공사" if gong else "용역"][2])
             if (qual or d.name in READY_STAGES) and doc.is_file():
                 try:
                     stage["todo"], stage["auto"] = (qual_todo(doc) if qual else sheet_todo(doc, gong) if not done
@@ -764,10 +767,12 @@ class PostAward:
     def _fill_template(self, key: str, folder: Path, nf, templates: Path, cv: dict | None = None) -> list[str]:
         """착공(공사)·착수(물품·용역)서류를 단계 폴더에 복사하고 기본사항을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
         v = self._read().get(key) or {}
-        group = group_of(v.get("work", ""))
-        if group not in TEMPLATES:
+        work = v.get("work", "")
+        if work not in TEMPLATES:
             return ["[기본사항] 업무(공사/물품/용역)를 몰라 착공·착수서류를 만들지 않음"]
-        name, stage, doc = TEMPLATES[group]
+        name, stage, doc = TEMPLATES[work]
+        if work != "공사" and not (templates / name).exists() and (templates / OLD_START_TEMPLATE).exists():
+            name = OLD_START_TEMPLATE
         target = folder / stage / doc
         if target.exists():
             return [f"[기본사항] {stage}/{doc}가 이미 있어 그대로 둠(다시 채우려면 그 파일을 지우고 폴더 만들기)"]
@@ -834,7 +839,7 @@ class PostAward:
         lines = list(contract_notes or [])
         cv = cv or {}
         values.update(cv)
-        _, stage0, doc0 = TEMPLATES[group_of(work)]
+        _, stage0, doc0 = TEMPLATES.get(work, TEMPLATES["용역"])
         start = folder / stage0 / doc0
         got: dict[str, Any] = {}
         if start.exists():
@@ -1005,6 +1010,7 @@ def selfcheck() -> None:
             wb = Workbook()
             wb.active.title = "기본사항"
             wb.active["A6"], wb.active["A8"] = "수신", "공사명"
+            wb.active["H1"] = name  # 어느 틀에서 복사했는지 확인용
             wb.save(tpl / name)
 
         class _NF:
@@ -1019,6 +1025,19 @@ def selfcheck() -> None:
         assert sorted(x.name for x in q.iterdir()) == ["0_적격심사", "공고문서"] and pa._read()["R26BK00000002-000"]["qualOnly"] is True
         q, _ = pa.prepare("R26BK00000002-000", Path(d) / "out", fetch=lambda k, t: _NF2(), templates=tpl)
         assert (q / "2_착수").is_dir() and pa._read()["R26BK00000002-000"]["qualOnly"] is False
+        # 착수 틀은 물품·용역 따로(11/18) — 물품은 물품 틀, 새 틀이 없으면 나누기 전 틀(물품·용역)로
+        assert load_workbook(q / "2_착수" / "착수서류.xlsx")["기본사항"]["H1"].value == "표준틀_착수서류(물품).xlsx"
+        old = Path(d) / "tpl_old"
+        old.mkdir()
+        (old / OLD_START_TEMPLATE).write_bytes((tpl / TEMPLATES["용역"][0]).read_bytes())
+
+        class _NF4(_NF):
+            title, work_type = "D 용역", "용역"
+
+        pa.add("R26BK00000005-000")
+        q4, _ = pa.prepare("R26BK00000005-000", Path(d) / "out", fetch=lambda k, t: _NF4(), templates=old)
+        assert (q4 / "2_착수" / "착수서류.xlsx").is_file()
+        pa.remove("R26BK00000005-000")
         # 수의계약: 적격심사 폴더는 막고, 낙찰 서류엔 0_적격심사 단계가 없음
         class _NF3(_NF):
             title, contract_method = "C 공사", "수의계약"

@@ -864,6 +864,8 @@ class PostAward:
                     and any(lab in DONE_LABELS[k] for lab in _labels(folder / stage / doc))]
             head.append(f"[준공·청구] {rel} — 자동으로 채운 파란 칸: " + ", ".join(DONE_NAMES[k] for k in done)
                          + (f" · 담당자가 고친 칸은 그대로: {', '.join(kept)}" if kept else ""))
+            if stage == CLAIM_TEMPLATE[1]:  # 11/16 회의 — 청구 때 추가되는 서류, 그때그때 발급이라 파일은 미리 넣지 않음
+                head.append("  청구할 때 국세·지방세 완납증명서를 새로 발급해 같이 냄 (미리 넣어 두지 않음)")
         if got:
             lines.append(f"  {stage0}/{doc0}에 담당자가 적은 값이 있으면 그 값을 먼저 씀")
         with self._lock:
@@ -1117,6 +1119,7 @@ def selfcheck() -> None:
         assert c["B6"].value == "D 설계 용역" and c["B7"].value == 19700000 and c["B8"].value == "홍천군 분임재무관"
         text = (f5 / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
         assert "담당자가 고친 칸은 그대로: 수신자" in text and "통합계약번호 R25TE1" in text, text
+        assert "국세·지방세 완납증명서" in text, text  # 청구 때 함께 내는 서류 안내(11/18)
         # 착수서류(담당자)가 우선 — 나라장터 계약정보와 다른 날짜는 알림
         assert "확인: 계약년월일" in text and "'2025-03-11', 나라장터 계약정보 '2025-03-12'" in text and "확인: 준공예정일" in text, text
         assert pa._read()[k5]["contract"]["no"] == "R25TE1"

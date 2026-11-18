@@ -3938,6 +3938,16 @@ def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
     out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
     assert re.search(r"회  사  (?:<[^>]+>)*033-111-2222", out) and re.search(r"휴대폰  (?:<[^>]+>)*010-0000-1111", out), out
 
+    # (11/18 사용자 요청) 위임장 '응모 대표자 | 성 명 … / 업체명 | __ | 연 락 처 | __' — 대표자 묶음의 연락처 = 대표자 휴대폰
+    deleg = tbl([[cell(0, 0, "응모 대표자", rs=2), cell(1, 0, "성 명"), cell(2, 0, ""), cell(3, 0, "생년월일"), cell(4, 0, "")],
+                 [cell(1, 1, "업체명"), cell(2, 1, ""), cell(3, 1, "연 락 처"), cell(4, 1, "")]])
+    fill_hwpx(_mini_hwpx(tmp_path / "d.hwpx", deleg), tmp_path / "do.hwpx", vault.Vault({}, info=info))
+    out = zipfile.ZipFile(tmp_path / "do.hwpx").read("Contents/section0.xml").decode()
+    assert "010-0000-1111" in out and "033-111-2222" not in out, out
+    info.pop("대표자 휴대폰")
+    fill_hwpx(_mini_hwpx(tmp_path / "e.hwpx", deleg), tmp_path / "eo.hwpx", vault.Vault({}, info=info))
+    assert "033-111-2222" in zipfile.ZipFile(tmp_path / "eo.hwpx").read("Contents/section0.xml").decode()  # 휴대폰이 없으면 회사 전화
+
 
 def test_bond_amount_label_and_form_rate(tmp_path: Path):
     """11/18 사용자 제보(봉평 공공형 어린이실내놀이터 입찰참가 신청서): 제안요청서에 '마. 총사업비 : 금806,162,000원'이 있는데

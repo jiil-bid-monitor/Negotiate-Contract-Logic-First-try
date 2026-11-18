@@ -2955,7 +2955,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if re.fullmatch(r"(?:대표자)?(?:성명|이름|성함)", lab):
                             key = "대표자"
                         elif re.fullmatch(r"연락처|전화|전화번호|연락처\(전화\)", lab):
-                            key = "전화번호"
+                            # (11/18 사용자 요청) 위임장 '응모 대표자 | … | 연 락 처 | __' = 대표자 개인 번호(QUANT_REP_MOBILE), 없으면 회사 전화
+                            key = "대표자 휴대폰" if _value("대표자 휴대폰", vault) else "전화번호"
                     # 대표자 줄의 휴대폰 칸 = 대표자 휴대폰(.env QUANT_REP_MOBILE — 11/16 사용자 요청). 대표자 묶음 칸 아래이거나 같은 줄에
                     # 대표자 이름표가 있을 때만 — 대리인·담당자·참여인력 휴대폰 칸은 그대로 비움(개인 번호)
                     if key is None and _value("대표자 휴대폰", vault) and c.row not in agent_rows and group != "대리인" \

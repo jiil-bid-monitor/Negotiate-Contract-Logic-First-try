@@ -106,6 +106,64 @@ DONE_LABELS = {"to": ("수신자",), "title": ("공사명", "사업명", "용역
 FROM_START = {"계약건명": "title", "공사명": "title", "계약금액(금차)": "amount", "도급액": "amount", "준공금액(총액)": "total",
               "금액2": "total", "계약일": "contract", "착수일": "start", "착공일": "start", "준공예정일": "due", "수신": "gwiha"}
 
+# 나라장터 계약정보(11/18 사용자 "붙여 줘") — 공고번호 → 계약과정통합공개(계약번호·계약일) → 계약정보 목록(등록일 기준 하루씩)에서
+# 같은 공고·계약번호를 찾아 계약일·착수일·준공예정일·계약금액·담당부서. 찾은 건은 통합계약번호로 기억해 다음엔 한 번에.
+# 실측(홍천 설계용역 R25TE02018742): 계약기관+담당부서 = 완료계 수신자, wbgnDate = 착수일. 날짜 칸은 inqryBgnDt(년월일시분).
+CNTRCT_BASE_URL = "https://apis.data.go.kr/1230000/ao/CntrctInfoService"
+CNTRCT_OPS = {"용역": "getCntrctInfoListServc", "공사": "getCntrctInfoListCnstwk", "물품": "getCntrctInfoListThng"}
+INTG_BASE_URL = "https://apis.data.go.kr/1230000/ao/CntrctProcssIntgOpenService"
+INTG_OP = "getCntrctProcssIntgOpenServc"
+CONTRACT_SCAN_DAYS = 10  # 계약일부터 나라장터 등록일까지 며칠 걸릴 수 있음(홍천: 계약 3/12 → 등록 3/14)
+
+
+def _date(text: Any) -> datetime | None:
+    try:
+        return datetime.strptime(str(text or "").strip()[:10], "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def contract_values(row: dict) -> dict[str, Any]:
+    """계약정보 한 줄 → 준공·청구 틀 값 이름. 빈 값은 뺌."""
+    amt = lambda k: int(_digits(row.get(k)) or 0) or None  # noqa: E731
+    to = " ".join(x for x in (str(row.get("cntrctInsttNm") or "").strip(), str(row.get("cntrctInsttChrgDeptNm") or "").strip()) if x)
+    out = {"title": str(row.get("cntrctNm") or "").strip(), "amount": amt("thtmCntrctAmt"), "total": amt("totCntrctAmt"),
+           "contract": _date(row.get("cntrctDate") or row.get("cntrctCnclsDate")), "start": _date(row.get("wbgnDate")),
+           "due": _date(row.get("thtmScmpltDate")),
+           # 조달청 대행 계약은 계약기관이 조달청 — 준공·납품 신고 수신은 수요기관이라 그대로 둠(공고의 수요기관)
+           "to": "" if "조달청" in str(row.get("cntrctInsttNm") or "") else to}
+    return {k: v for k, v in out.items() if v not in (None, "")}
+
+
+def find_contract(client: Any, no: str, work: str, own_bizno: str, known: str = "") -> dict | None:
+    """공고의 나라장터 계약정보 한 줄(없으면 None — 아직 계약 전). known = 지난번 찾은 통합계약번호."""
+    op = CNTRCT_OPS.get(work)
+    if not op:
+        return None
+    if known:
+        rows = client.fetch_all_pages(CNTRCT_BASE_URL, op, {"inqryDiv": "2", "untyCntrctNo": known}, "계약정보")
+        if rows:
+            return rows[-1]
+    refs, days = set(), []
+    for r in client.fetch_all_pages(INTG_BASE_URL, INTG_OP, {"inqryDiv": "1", "bidNtceNo": no}, "계약과정통합공개"):
+        for entry in re.findall(r"\[([^\]]*)\]", str(r.get("cntrctInfoList") or "")):
+            parts = entry.split("^")  # [순번^계약번호^계약명^계약기관^수요기관^방법^금액^계약일]
+            if len(parts) >= 8:
+                refs.add(parts[1].strip())
+                if (d := _date(parts[7])) is not None:
+                    days.append(d)
+    refs.discard("")
+    if not days:
+        return None
+    own = _digits(own_bizno)
+    for n in range(CONTRACT_SCAN_DAYS + 1):
+        day = (min(days) + timedelta(days=n)).strftime("%Y%m%d")
+        for row in client.fetch_all_pages(CNTRCT_BASE_URL, op, {"inqryDiv": "1", "inqryBgnDt": day + "0000", "inqryEndDt": day + "2359"}, "계약정보"):
+            if str(row.get("ntceNo") or "") == no or ({str(row.get("cntrctRefNo") or ""), str(row.get("dcsnCntrctNo") or "")} & refs):
+                if not own or own in _digits(row.get("corpList")):
+                    return row
+    return None
+
 
 DONE_NAMES = {"to": "수신자", "title": "건명", "amount": "계약금액", "total": "준공금액", "contract": "계약년월일",
               "start": "착공(착수)년월일", "due": "준공예정일(완료기한)", "gwiha": "귀하", "nap": "납품서 붙임"}
@@ -508,7 +566,8 @@ class PostAward:
             self._write(items)
         return folder
 
-    def prepare(self, key: str, root: Path, fetch=None, templates: Path | None = None, qual_only: bool = False) -> tuple[Path, list[dict]]:
+    def prepare(self, key: str, root: Path, fetch=None, templates: Path | None = None, qual_only: bool = False,
+                contract_lookup=None) -> tuple[Path, list[dict]]:
         """공고 폴더 만들기 — 나라장터에서 공고 정보·첨부를 받아(정량평가서와 같은 quantdocs.g2b.fetch_notice) 업무를 정하고,
         첨부는 공고문서/에 두고, 첨부가 요구하는 제출서류를 읽어 표준틀에 없는 것을 '서류_확인.txt'에 적는다.
         표준틀(templates, 기본 root/_표준틀)이 있으면 착공·착수서류를 복사해 기본사항을 채운다(시험판 11/11)."""
@@ -544,7 +603,7 @@ class PostAward:
             tdir = Path(templates) if templates else template_dir(root)
             basic = [] if private else self._fill_qual(key, folder, nf, tdir)
             basic += (["[적격심사] 낙찰 전 — 0_적격심사·공고문서만 만듦(계약·착공 서류는 낙찰 뒤 '낙찰 서류 만들기')"] if qual_only
-                      else self._fill_template(key, folder, nf, tdir) + self._fill_done(key, folder, nf, tdir))
+                      else self._fill_template(key, folder, nf, tdir) + self._fill_done(key, folder, nf, tdir, contract_lookup))
             summary = folder / "공고문서" / SUMMARY
             if nf.title and not summary.exists():
                 try:
@@ -716,10 +775,10 @@ class PostAward:
         return ([f"[기본사항] {stage}/{doc} — 자동으로 채운 칸(하늘색): " + ", ".join(src.split(" — ")[0] for _, src in values.values()),
                  "  계약번호·계약일·착수일·수신·문서번호·제출일·인력은 직접 넣으세요"] + [f"  {n}" for n in notes])
 
-    def _fill_done(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
-        """3_준공(준공계·납품계·완료계)·4_청구(청구서) — 처음엔 나라장터 값(수요기관·공고명·낙찰금액), 담당자가 착공·착수서류를
-        채운 뒤 '첨부 다시 받기'를 누르면 그 계약 값(건명·금액·계약일·착수일·준공예정일·수신)으로 파란 칸을 채움(11/18).
-        담당자가 고친 칸은 안 건드림. 안내 줄을 돌려줌."""
+    def _fill_done(self, key: str, folder: Path, nf, templates: Path, contract_lookup=None) -> list[str]:
+        """3_준공(준공계·납품계·완료계)·4_청구(청구서) 기본사항 파란 칸 — 공고·낙찰 값(수요기관·공고명·낙찰금액) <
+        나라장터 계약정보(contract_lookup(공고) → 계약정보 한 줄: 계약일·착수일·준공예정일·금액·담당부서, 계약 뒤에 생김) <
+        담당자가 착공·착수서류에 적은 값 순으로(11/18). 담당자가 고친 칸은 안 건드림. 안내 줄을 돌려줌."""
         v = self._read().get(key) or {}
         work = v.get("work", "")
         if work not in DONE_TEMPLATES:
@@ -732,6 +791,25 @@ class PostAward:
         if work == "용역":  # 설계 용역이면 공문 붙임에 납품서(11/18 사용자)
             values["nap"] = "예" if "설계" in title else "아니오"
         lines = []
+        # 나라장터 계약정보(계약 뒤에 생김) — 계약일·착수일·준공예정일·계약금액·계약기관 담당부서
+        cv: dict[str, Any] = {}
+        if contract_lookup is not None:
+            try:
+                row = contract_lookup(v)
+            except Exception as err:  # noqa: BLE001 — 나라장터가 안 돼도 나머지는 그대로
+                row = None
+                lines.append(f"  나라장터 계약정보를 받지 못함({err.__class__.__name__}) — 나중에 '첨부 다시 받기'로 다시")
+            else:
+                if row:
+                    cv = contract_values(row)
+                    with self._lock:
+                        items = self._read()
+                        items[key]["contract"] = {"no": str(row.get("untyCntrctNo") or ""), "url": str(row.get("cntrctDtlInfoUrl") or "")}
+                        self._write(items)
+                    lines.append(f"  나라장터 계약정보 찾음(통합계약번호 {row.get('untyCntrctNo')}) — 계약일·착수일·준공예정일 등을 채움")
+                else:
+                    lines.append("  나라장터 계약정보: 아직 계약이 등록되지 않음 — 계약 뒤 '첨부 다시 받기'를 누르면 계약일·착수일·준공예정일이 들어감")
+        values.update(cv)
         _, stage0, doc0 = TEMPLATES[group_of(work)]
         start = folder / stage0 / doc0
         got: dict[str, Any] = {}
@@ -740,6 +818,10 @@ class PostAward:
                 got = start_values(start)
             except Exception as err:  # noqa: BLE001 — 착공·착수서류를 못 읽어도 나라장터 값으로
                 lines.append(f"  {stage0}/{doc0}을 읽지 못함({err.__class__.__name__}) — 나라장터 값만 넣음")
+        # 담당자가 착공·착수서류에 적은 값이 우선(계약서 보고 적음). 나라장터 계약정보와 다르면 알림(홍천: 계약일 하루·완료기한 다름)
+        for k, val in got.items():
+            if k in cv and k != "gwiha" and _key(cv[k]) != _key(val):
+                lines.append(f"  확인: {DONE_NAMES[k]} — {stage0}/{doc0} '{_key(val)}', 나라장터 계약정보 '{_key(cv[k])}' (계약서로 확인)")
         values.update(got)
         auto, head = dict(v.get("autoFill") or {}), []
         for name, stage, doc in (DONE_TEMPLATES[work], CLAIM_TEMPLATE):
@@ -757,9 +839,8 @@ class PostAward:
                     and any(lab in DONE_LABELS[k] for lab in _labels(folder / stage / doc))]
             head.append(f"[준공·청구] {rel} — 자동으로 채운 파란 칸: " + ", ".join(DONE_NAMES[k] for k in done)
                          + (f" · 담당자가 고친 칸은 그대로: {', '.join(kept)}" if kept else ""))
-        lines.append(f"  준공·청구 파란 칸: {stage0}/{doc0} 값으로 채움" if got else
-                     f"  준공·청구 파란 칸은 지금 나라장터 값 — {stage0}/{doc0}에 계약건명·계약금액·계약일·착수일·준공예정일·수신을 "
-                     "넣고 저장한 뒤 '첨부 다시 받기'를 누르면 그 값으로 채움")
+        if got:
+            lines.append(f"  {stage0}/{doc0}에 담당자가 적은 값이 있으면 그 값을 먼저 씀")
         with self._lock:
             items = self._read()
             items[key]["autoFill"] = auto
@@ -981,7 +1062,8 @@ def selfcheck() -> None:
         items = pa._read()
         items[k5]["winner"] = {"amount": "19710000"}
         pa._write(items)
-        f5, _ = pa.prepare(k5, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2)
+        f5, _ = pa.prepare(k5, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2, contract_lookup=lambda v: None)
+        assert "아직 계약이 등록되지 않음" in (f5 / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
         ws = load_workbook(f5 / "3_준공" / "완료계.xlsx")["기본사항"]
         assert [ws.cell(r, 2).value for r in (5, 6, 7, 8, 14)] == ["예", "강원특별자치도 홍천군", "D 설계 용역", 19710000, "강원특별자치도 홍천군"]
         assert ws["B10"].value is None and ws["B9"].value.startswith("=")
@@ -995,7 +1077,9 @@ def selfcheck() -> None:
         w = load_workbook(f5 / "3_준공" / "완료계.xlsx")
         w["기본사항"]["B6"] = "홍천군 세무회계과"
         w.save(f5 / "3_준공" / "완료계.xlsx")
-        pa.prepare(k5, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2)
+        row5 = {"untyCntrctNo": "R25TE1", "cntrctNm": "D 설계 용역", "thtmCntrctAmt": "19700000", "cntrctDate": "2025-03-12",
+                "wbgnDate": "2025-03-12", "thtmScmpltDate": "2025-07-09", "cntrctInsttNm": "강원특별자치도 홍천군", "cntrctInsttChrgDeptNm": "세무회계과"}
+        pa.prepare(k5, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2, contract_lookup=lambda v: row5)
         ws = load_workbook(f5 / "3_준공" / "완료계.xlsx")["기본사항"]
         assert ws["B6"].value == "홍천군 세무회계과" and ws["B8"].value == 19700000 and ws["B14"].value == "홍천군 분임재무관"
         assert [ws.cell(r, 2).value.date().isoformat() for r in (10, 11, 12)] == ["2025-03-11", "2025-03-12", "2025-08-18"]
@@ -1003,7 +1087,43 @@ def selfcheck() -> None:
         c = load_workbook(f5 / "4_청구" / "청구서.xlsx")["기본사항"]
         assert c["B6"].value == "D 설계 용역" and c["B7"].value == 19700000 and c["B8"].value == "홍천군 분임재무관"
         text = (f5 / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
-        assert "담당자가 고친 칸은 그대로: 수신자" in text and "착수서류.xlsx 값으로 채움" in text, text
+        assert "담당자가 고친 칸은 그대로: 수신자" in text and "통합계약번호 R25TE1" in text, text
+        # 착수서류(담당자)가 우선 — 나라장터 계약정보와 다른 날짜는 알림
+        assert "확인: 계약년월일" in text and "'2025-03-11', 나라장터 계약정보 '2025-03-12'" in text and "확인: 준공예정일" in text, text
+        assert pa._read()[k5]["contract"]["no"] == "R25TE1"
+        # 착수서류를 안 채워도 나라장터 계약정보로 날짜·수신자(계약기관+담당부서), 조달청 대행이면 수신자는 그대로
+        k6 = "R26BK00000006-000"
+        pa.add(k6)
+        f6, _ = pa.prepare(k6, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2, contract_lookup=lambda v: row5)
+        ws = load_workbook(f6 / "3_준공" / "완료계.xlsx")["기본사항"]
+        assert ws["B6"].value == "강원특별자치도 홍천군 세무회계과" and ws["B8"].value == 19700000, ws["B6"].value
+        assert [ws.cell(r, 2).value.date().isoformat() for r in (10, 11, 12)] == ["2025-03-12", "2025-03-12", "2025-07-09"]
+        assert "to" not in contract_values({**row5, "cntrctInsttNm": "조달청"})
+        def boom(v):
+            raise RuntimeError("down")
+        pa.prepare(k6, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2, contract_lookup=boom)
+        assert "계약정보를 받지 못함(RuntimeError)" in (f6 / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
+
+        # 계약 찾기 — 공고번호 → 통합공개(계약번호·계약일) → 계약정보 목록(하루씩)에서 같은 공고, 다음엔 통합계약번호로
+        class _CC:
+            calls = []
+
+            def fetch_all_pages(self, url, op, params, label):
+                self.calls.append((op, dict(params)))
+                if op == INTG_OP:
+                    return [{"cntrctInfoList": "[1^R25TA0001^D^홍천군^홍천군^수의계약^19710000^2025-03-12]"}] if params["bidNtceNo"] == "R25BK1" else []
+                if params.get("inqryDiv") == "2":
+                    return [{"untyCntrctNo": params["untyCntrctNo"], "cntrctNm": "D"}]
+                if params["inqryBgnDt"].startswith("20250314"):
+                    return [{"untyCntrctNo": "X", "ntceNo": "", "cntrctRefNo": ""},
+                            {"untyCntrctNo": "R25TE9", "ntceNo": "", "cntrctRefNo": "R25TA0001", "corpList": "[1^주계약업체^단독^㈜지일^^^^^^2068636338]"}]
+                return [{"untyCntrctNo": "Y", "ntceNo": "", "cntrctRefNo": ""}]
+
+        cc = _CC()
+        assert find_contract(cc, "R25BK1", "용역", "206-86-36338")["untyCntrctNo"] == "R25TE9"
+        assert [p["inqryBgnDt"][:8] for op, p in cc.calls if op != INTG_OP] == ["20250312", "20250313", "20250314"]
+        assert find_contract(cc, "R25BK2", "용역", "") is None and find_contract(cc, "R25BK1", "모름", "") is None
+        assert find_contract(cc, "R25BK1", "용역", "", known="R25TE9")["cntrctNm"] == "D"
         by5 = {x["dir"]: x for x in pa.status(k5)["stages"]}
         assert by5["3_준공"]["doc"] == "완료계.xlsx" and by5["3_준공"]["todo"] == ["제출일"], by5["3_준공"]
         assert ["계약금액", "19,700,000"] in by5["3_준공"]["auto"] and "수신자" not in [a for a, _ in by5["3_준공"]["auto"]]

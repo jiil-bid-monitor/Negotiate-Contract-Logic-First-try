@@ -465,7 +465,8 @@ def make_handler(app: App):
                 if url.path == "/api/postaward/folder":
                     # 폴더는 공유 폴더 맨 위 '낙찰후서류'(NAS: \\jiilserver\jiil-webapp\낙찰후서류), POSTAWARD_DIR로 바꿈
                     root = Path(os.environ.get("POSTAWARD_DIR", "").strip() or app.store.path.resolve().parents[2] / "낙찰후서류")
-                    folder, _ = app.postaward.prepare(str(data.get("key") or ""), root, qual_only=data.get("stage") == "qual")
+                    folder, _ = app.postaward.prepare(str(data.get("key") or ""), root, qual_only=data.get("stage") == "qual",
+                                                      contract_lookup=contract_lookup())
                     return self._json({"ok": True, "folder": str(folder), "items": app.postaward.items()})
                 if url.path == "/api/postaward/delete":
                     app.postaward.remove(str(data.get("key") or ""))
@@ -551,6 +552,22 @@ def make_handler(app: App):
             return self._json({"run_id": run_id, "skipped": run_id is None})
 
     return Handler
+
+
+def contract_lookup():
+    """낙찰 후 서류 — 나라장터 계약정보 조회 함수(공고 → 계약 한 줄). 인증키가 없으면 None(계약 값 없이 채움, 11/18)."""
+    from nego.bidrecommend import default_own_bizno
+
+    from .postaward import find_contract
+
+    try:
+        config = load_config()
+    except ConfigError:
+        return None
+    if not config.api.service_key:
+        return None
+    client, own = bidcalc.make_client(config.api), default_own_bizno()
+    return lambda v: find_contract(client, v.get("no", ""), v.get("work", ""), own, (v.get("contract") or {}).get("no", ""))
 
 
 def decisions_csv(rows: list[dict[str, Any]]) -> str:

@@ -899,7 +899,10 @@ def read_form(cells) -> list[FormRow]:
                 if sc is not None and pv is not None and sc.blank:
                     by_points.setdefault(pv, sc)
             target = target if target is not None and target.blank else next(iter(by_points.values()), None)
-        if target is None or not target.blank:
+        first_label = " ".join(_sq(c.text) for c in first if c.col < min(pcol, scol))
+        zero_total = target is not None and re.fullmatch(r"계|합계|소계|총점", first_label) \
+            and re.fullmatch(r"\s*0(?:\.0+)?\s*점?\s*", target.text or "")  # 합계 칸에 원본부터 '0'(11/18 사용자 제보 — 합계가 그대로 0)
+        if target is None or not (target.blank or zero_total):
             continue
         def is_label(t: str) -> bool:  # 줄 이름 — 구간('70억 이상')·등급·해당없음 칸은 뺌
             q = _sq(t)

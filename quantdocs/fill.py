@@ -2750,6 +2750,8 @@ def _total_edits(cells: list[Cell], tally: dict, rep: FillReport) -> list[tuple[
         if not line or not re.fullmatch(r"(?:합|총)계|총점|계", _sq(line[0].text)):
             continue
         blank = next((c for c in line[1:] if c.blank), None)
+        if blank is None and len(line) > 1 and re.fullmatch(r"\s*0(?:\.0+)?\s*점?\s*", line[-1].text or ""):
+            blank = line[-1]  # 원본부터 합계 칸에 '0'(11/18 사용자 제보)
         if blank is None:
             continue
         unit = " 점" if any(re.fullmatch(r"[\d.]+점", _sq(c.text)) for c in line[1:]) else ""

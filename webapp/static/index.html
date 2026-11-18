@@ -419,18 +419,41 @@ body {
 .no-copy { font: inherit; font-size: 11px; padding: 0 6px; line-height: 18px; cursor: pointer; border-radius: 4px; background: var(--panel); color: var(--brand); border: 1px solid var(--line-strong); }
 .no-copy:hover, .no-copy:focus-visible { border-color: var(--brand); }
 
-/* 공고 대분류 탭 — 용역 / 입찰 / 협상 / 사전규격 */
-.cat-tabs { display: flex; flex-wrap: wrap; gap: 0; margin: 2px 0 12px; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; width: max-content; max-width: 100%; background: var(--panel); }
+/* 공고 대분류 탭 — 낙찰방법으로만(전체 / 협상 / 입찰 / 수의계약 / 사전규격) + 오른쪽 '세부품명으로만 걸린 공고' 따로 보기 (2026-11-18) */
+.cat-tabs { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 2px 0 12px; border-bottom: 1px solid var(--line); }
+.cat-main { display: flex; flex-wrap: wrap; gap: 2px; }
 .cat-tab {
-  font: inherit; font-family: var(--head); font-size: 14px; font-weight: 500; padding: 8px 18px; cursor: pointer;
-  background: none; color: var(--ink); border: 0; border-right: 1px solid var(--line);
+  font: inherit; font-family: var(--head); font-size: 14.5px; font-weight: 500; padding: 8px 14px 9px; cursor: pointer; text-align: left;
+  background: none; color: var(--muted); border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px;
 }
-.cat-tab:last-child { border-right: 0; }
-.cat-tab.cat-extra { border-left: 2px solid var(--line-strong); }
-.cat-tab .n { font-family: var(--body); font-size: 12px; color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
-.cat-tab:hover { background: var(--bg); }
-.cat-tab.on { background: var(--brand); color: var(--on-brand); font-weight: 700; }
-.cat-tab.on .n { color: inherit; opacity: .85; }
+.cat-tab .cat-name { display: inline-flex; align-items: center; gap: 6px; }
+.cat-tab small { display: block; font-family: var(--body); font-size: 11px; font-weight: 400; color: var(--faint); margin-top: 1px; }
+.cat-tab .n, .cat-prod .n {
+  display: inline-block; min-width: 22px; padding: 0 7px; border-radius: 10px; text-align: center;
+  font-family: var(--body); font-size: 12px; line-height: 18px; font-weight: 500; font-variant-numeric: tabular-nums;
+  background: var(--bg); color: var(--muted);
+}
+.cat-tab:hover:not(:disabled) { color: var(--ink); }
+.cat-tab:disabled { opacity: .45; cursor: default; }
+.cat-tab.on { color: var(--brand); font-weight: 700; border-bottom-color: var(--brand); }
+.cat-tab.on .n { background: var(--brand); color: var(--on-brand); }
+.cat-prod {
+  font: inherit; font-size: 13px; color: var(--ink); cursor: pointer; margin-bottom: 7px; padding: 6px 12px;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--panel); border: 1px dashed var(--line-strong); border-radius: 8px;
+}
+.cat-prod .cat-prod-pre { color: var(--muted); }
+.cat-prod:hover { border-color: var(--brand); }
+.cat-prod.on { border-style: solid; border-color: var(--brand); color: var(--brand); font-weight: 700; }
+.cat-prod.on .n { background: var(--brand); color: var(--on-brand); }
+/* '적용 중' 칩 + 지금 보는 건수 */
+.active-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; font-size: 12.5px; color: var(--muted); }
+.active-filters[hidden] { display: none; }
+.af-chip { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 3px 10px; border-radius: 14px; border: 1px solid transparent; background: var(--bg); color: var(--brand); }
+.af-chip:hover { border-color: var(--brand); }
+.af-reset { font: inherit; font-size: 12.5px; cursor: pointer; background: none; border: 0; padding: 0; color: var(--brand); text-decoration: underline; }
+.af-sum { margin-left: auto; color: var(--ink); }
+.af-sum b { color: var(--brand); }
 
 /* 필터(드롭다운) 줄 + 정렬 */
 .filter-row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px; }
@@ -1362,6 +1385,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         </select>
       </label>
     </div>
+    <div class="active-filters" id="activeFilters" hidden></div>
     <p class="sub" id="liveMeta" style="margin:0 0 18px">화면을 열면 아직 마감되지 않은 공고를 자동으로 불러옵니다.</p>
     <p class="sub enrich-meta" id="enrichMeta" role="status"></p>
     <div id="liveResults"></div>
@@ -1839,24 +1863,20 @@ async function loadNotices(refresh) {
 }
 
 /** 현재 걸려 있는 필터 상태 */
-const filters = { cat: "all", prod: "all", kind: "all", grade: "all", method: "all", part: "all", check: "all" };
+const filters = { cat: "all", work: "all", prod: "all", grade: "all", part: "all", check: "all", kind: "all" };
 
 /**
- * 공고 대분류 — 대표님 제안 3가지 + 사전규격 (2026-10-15 회의).
- *  · 업무가 용역이면 낙찰방법과 상관없이 용역 (예: 협상에 의한 '운영계획 수립 용역')
- *  · 물품·공사 중 협상·규격가격동시는 협상, 나머지는 입찰
- *  · 사전규격은 낙찰방법이 아직 없어 용역이 아니면 '사전규격' 칸에 따로 둔다
- * 그룹은 운영하면서 조정한다 — 규칙은 여기 한 곳에만 둔다.
+ * 공고 대분류 탭 — 낙찰방법 하나로만 나눈다(2026-11-18 사용자 결정 — 예전 '용역' 탭은 업무 구분이라 기준이 섞였음).
+ * 용역·물품·공사는 모두 아래 칸에 들어가고, 업무로 좁히려면 '업무' 필터를 쓴다. [탭 이름, 설명, 탭 아래 작은 글씨]
  */
 const CATEGORIES = [
-  ["용역", "업무 구분이 용역인 공고 (낙찰방법 무관)"],
-  ["입찰", "물품·공사의 일반 입찰"],
-  ["수의계약", "물품·공사 수의계약 — 적격심사 없이 견적 등으로 바로 계약 (2026-11-12부터 수집)"],
-  ["협상", "물품·공사 중 협상에 의한 계약·규격가격동시입찰"],
-  ["사전규격", "용역이 아닌 사전규격 — 낙찰방법이 아직 정해지지 않음"],
+  ["협상", "협상에 의한 계약·규격가격동시입찰 (용역·물품·공사)", "규격가격동시 포함"],
+  ["입찰", "적격심사·최저가 등 일반 입찰 (용역·물품·공사)", "적격심사·최저가"],
+  ["수의계약", "수의계약 — 적격심사 없이 견적 등으로 바로 계약 (2026-11-12부터 수집)", null],
+  ["사전규격", "공고 전 단계 — 낙찰방법이 아직 정해지지 않음", "낙찰방법 정해지기 전"],
 ];
+const WORK_TYPES = ["용역", "물품", "공사"];
 function categoryOf(n) {
-  if (n.businessType === "용역") return "용역";
   if (n.sourceType === "사전규격") return "사전규격";
   const m = bidMethodOf(n);
   if (m === "수의") return "수의계약";
@@ -2121,10 +2141,9 @@ const offKeyOf = () => "";
 function listFilterPass(n) {
   return (
     matchesLiveQuery(n) &&
-    (filters.kind !== "본공고" && filters.kind !== "사전규격" || n.sourceType === filters.kind) &&
+    (filters.work === "all" || n.businessType === filters.work) &&
     (filters.prod === "all" || (n.productCodes || []).includes(filters.prod)) &&
     (filters.grade === "all" || n.confidence === filters.grade) &&
-    (filters.method === "all" || n.bidMethodCategory === filters.method) &&
     (filters.part === "all" || (participation[n.noticeNo]?.status || "미지정") === filters.part) &&
     checkPass(n, filters.check)
   );
@@ -2135,7 +2154,7 @@ function applyFilters() {
   if (offKeyOf() !== lastOffKey) exData = null;
   lastOffKey = offKeyOf();
   // '사전규격 포함'을 끄면 사전규격은 목록·건수에서 모두 뺀다
-  if (!includePre() && filters.kind === "사전규격") filters.kind = "all";
+  if (!includePre() && filters.cat === "사전규격") filters.cat = "all";
   const listed = lastItems.filter((n) => includePre() || n.sourceType !== "사전규격");
   // 본공고·사전규격 목록에는 제목 키워드가 있는 공고만 둔다. 세부품명으로만 걸린 공고는 '세부품명 공고' 탭으로 (2026-10-16 요청).
   // 화면에서만 나눈다 — 텔레그램 보고에는 지금처럼 나간다
@@ -2151,18 +2170,22 @@ function applyFilters() {
   // 대분류 탭 — 건수는 다른 조건과 상관없이 전체 기준 (드롭다운과 같은 셈)
   // 맨 끝 '세부품명 공고'는 대분류와 따로 보는 칸이라 구분선을 두고 붙인다 — 제목 키워드 없이 세부품명으로 걸린 공고 전부
   // (2026-10-16 — '세부품명으로만 수집' 탭과 '보유 품목 공고' 칸을 합침)
-  $("catTabs").innerHTML = [["all", "전체", null], ...CATEGORIES.map(([v, note]) => [v, v, note]), ["product", "세부품명 공고", "제목 키워드 없이 세부품명으로 걸린 공고"]]
-    .map(([v, label, note]) => {
-      const n = v === "all" ? items.length : v === "product" ? productIn.length + outsideShown().length : count((x) => categoryOf(x) === v);
-      return `<button type="button" role="tab" class="cat-tab ${v === "product" ? "cat-extra" : ""} ${filters.cat === v ? "on" : ""}" aria-selected="${filters.cat === v}" data-cat="${v}" ${note ? `title="${esc(note)}"` : ""}>${esc(label)} <span class="n">${n}</span></button>`;
-    })
-    .join("");
+  // (2026-11-18) 탭은 낙찰방법으로만, '세부품명 공고'는 오른쪽에 따로 보는 칸으로 뗌
+  const catTab = ([v, note, sub]) => {
+    const n = v === "all" ? items.length : count((x) => categoryOf(x) === v);
+    const label = v === "all" ? "전체" : v;
+    const off = v === "사전규격" && !includePre();
+    return `<button type="button" role="tab" class="cat-tab ${filters.cat === v ? "on" : ""}" aria-selected="${filters.cat === v}" data-cat="${v}" ${off ? "disabled" : ""} ${note ? `title="${esc(off ? "'사전규격 포함'을 켜면 볼 수 있습니다" : note)}"` : ""}>` +
+      `<span class="cat-name">${esc(label)}<span class="n">${num(n)}</span></span>${sub ? `<small>${esc(sub)}</small>` : ""}</button>`;
+  };
+  const prodN = productIn.length + outsideShown().length;
+  $("catTabs").innerHTML = `<div class="cat-main">${[["all", null, null], ...CATEGORIES].map(catTab).join("")}</div>` +
+    `<button type="button" role="tab" class="cat-prod ${filters.cat === "product" ? "on" : ""}" aria-selected="${filters.cat === "product"}" data-cat="product" title="제목 키워드 없이 세부품명으로 걸린 공고 — 목록 안·밖을 한 목록으로 봅니다">` +
+    `<span class="cat-prod-pre">따로 보기 ·</span> 세부품명으로만 걸린 공고<span class="n">${num(prodN)}</span> <span aria-hidden="true">→</span></button>`;
   $("filters").innerHTML = [
-    dropdown("kind", "공고", [
-      ["all", "본공고+사전규격", items.length],
-      ["본공고", "본공고", count((n) => n.sourceType === "본공고")],
-      ["사전규격", "사전규격", includePre() ? count((n) => n.sourceType === "사전규격") : null, includePre() ? null : "'사전규격 포함'을 켜면 볼 수 있습니다", !includePre()],
-      ["review", "검토필요", reviewOf().length, "제목에 관심 키워드와 제외 키워드가 함께 있는 공고"],
+    dropdown("work", "업무", [
+      ["all", "전체", items.length],
+      ...WORK_TYPES.map((w) => [w, w, count((n) => n.businessType === w)]),
     ]),
     // 수집 세부품명별 — 목록과 '목록 밖 세부품명 공고' 칸을 함께 센다. 0건 품목은 흐리게 (어떤 품목이 안 나오는지 보이게)
     dropdown("prod", "세부품명", [
@@ -2177,10 +2200,6 @@ function applyFilters() {
       ["강력추천", "강력추천", count((n) => n.confidence === "강력추천")],
       ["참고용", "참고용", count((n) => n.confidence === "참고용")],
     ], filters.grade === "강력추천" ? "urgent" : ""),
-    dropdown("method", "낙찰방법", [
-      ["all", "전체", items.length],
-      ...["협상", "규격가격동시", "입찰", "수의"].map((m) => [m, m === "수의" ? "수의계약" : m, count((n) => n.bidMethodCategory === m)]),
-    ]),
     dropdown("part", "참가여부", [
       ["all", "전체", items.length],
       ...["미지정", ...PART_STATUSES].map((st) => [st, st, count((n) => (participation[n.noticeNo]?.status || "미지정") === st)]),
@@ -2189,7 +2208,13 @@ function applyFilters() {
       ["all", "전체", items.length],
       ...CHECK_OPTS.map(([v, label, note]) => [v, label, count((n) => checkPass(n, v)), note]),
     ]),
+    // 검토필요는 목록 아래 따로 있는 칸이라 탭이 아니라 필터로 남김(2026-11-18 사용자 결정) — 고르면 그 칸만 본다
+    dropdown("kind", "검토필요", [
+      ["all", "전체", null],
+      ["review", "검토필요만", reviewOf().length, "제목에 관심 키워드와 제외 키워드가 함께 있는 공고"],
+    ]),
   ].join("");
+  renderActiveFilters(filters.cat === "product" ? null : shown.length);
   applyKindView();
   if (filters.cat === "product") {
     renderProductView(shown);
@@ -2315,6 +2340,23 @@ $("liveSort").onchange = () => {
  * 필터 드롭다운 하나 — "공고 전체 ▾"처럼 이름과 지금 고른 값을 보여 주고, 누르면 항목 목록이 열린다.
  * opts: [값, 이름, 개수(null이면 숨김), 설명(선택), 비활성(선택)]
  */
+/** 고른 필터를 '적용 중' 칩(✕로 하나씩 지우기)과 지금 보는 건수로 — 탭 아래 줄(2026-11-18 사용자 요청) */
+const FILTER_NAMES = { work: "업무", prod: "세부품명", grade: "추천", part: "참가여부", check: "확인 필요", kind: "검토필요" };
+function renderActiveFilters(shownN) {
+  const label = (k, v) => {
+    if (k === "prod") return heldProductList.find((h) => h.code === v)?.name || v;
+    if (k === "check") return CHECK_OPTS.find(([c]) => c === v)?.[1] || v;
+    if (k === "kind") return "검토필요만";
+    return v;
+  };
+  const on = Object.keys(FILTER_NAMES).filter((k) => filters[k] !== "all");
+  const tab = filters.cat === "all" ? "전체" : filters.cat === "product" ? "세부품명으로만 걸린 공고" : filters.cat;
+  const what = [tab, ...on.map((k) => label(k, filters[k]))].join(" · ");
+  $("activeFilters").innerHTML = (on.length
+    ? `<span class="af-lab">적용 중</span>${on.map((k) => `<button type="button" class="af-chip" data-clear="${k}" title="이 조건 지우기">${esc(FILTER_NAMES[k])}: ${esc(label(k, filters[k]))} <span aria-hidden="true">✕</span></button>`).join("")}<button type="button" class="af-reset" data-clear="*">모두 지우기</button>`
+    : "") + (shownN == null || filters.kind === "review" ? "" : `<span class="af-sum">${esc(what)} <b>${num(shownN)}건</b> 보는 중</span>`);
+  $("activeFilters").hidden = !on.length && (shownN == null || filters.kind === "review");
+}
 function dropdown(group, name, opts, tone = "", state = filters) {
   // 첫 항목(전체)을 고른 상태면 버튼에 "전체"라고만 쓴다
   const cur = opts.find(([v]) => v === state[group]) || opts[0];
@@ -3819,9 +3861,18 @@ document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeDro
 $("catTabs").onclick = (ev) => {
   const btn = ev.target.closest("[data-cat]");
   if (!btn) return;
+  if (btn.disabled) return;
   filters.cat = btn.dataset.cat;
-  // '세부품명 공고' 탭은 목록 + 목록 밖 칸을 보는 화면이라, 아래 칸만 보던 상태(검토필요 등)는 풀어 준다
-  if (filters.cat === "product" && !["all", "본공고", "사전규격"].includes(filters.kind)) filters.kind = "all";
+  // '세부품명 공고' 탭은 목록 + 목록 밖 칸을 보는 화면이라, 아래 칸만 보던 상태(검토필요)는 풀어 준다
+  if (filters.cat === "product") filters.kind = "all";
+  applyFilters();
+};
+// '적용 중' 칩 ✕ — 그 조건만, '모두 지우기'는 탭은 두고 필터만 푼다
+$("activeFilters").onclick = (ev) => {
+  const btn = ev.target.closest("[data-clear]");
+  if (!btn) return;
+  const keys = btn.dataset.clear === "*" ? Object.keys(FILTER_NAMES) : [btn.dataset.clear];
+  for (const k of keys) filters[k] = "all";
   applyFilters();
 };
 $("incPre").onchange = () => { saveLiveOpts(); applyFilters(); };

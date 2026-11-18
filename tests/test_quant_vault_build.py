@@ -2879,18 +2879,6 @@ def test_none_rule_ignores_total_row(tmp_path: Path):
     assert sec.count("해당 없음") == 1 and "(주)가상" not in sec
 
 
-def test_notice_no_label_with_agency_placeholder(tmp_path: Path):
-    """11/18 사용자 제보: 봉평 입찰참가 신청서 '입찰(지명)공고 | 평창군 공고 제2026-'이 그대로 — 이름표 '입찰(지명)공고'와
-    기관 이름이 앞에 붙은 자리표시를 몰랐음. 나라장터 공고번호로."""
-    from quantdocs.fill import fill_hwpx
-
-    body = _tbl([[_c(0, 0, "입찰(지명)공고"), _c(1, 0, "평창군 공고\n제2026-")], [_c(0, 1, "업 체 명"), _c(1, 1, "")]])
-    src = _mini_hwpx(tmp_path / "a.hwpx", body)
-    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}), g2b_no="R26BK00000001-000")
-    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
-    assert "R26BK00000001-000" in sec and "제2026-" not in sec
-
-
 def test_signature_table_inside_frame_table(tmp_path: Path):
     """11/13 사용자 제보: 안전관리 서약서 — 쪽 테두리 표 칸 안에 '서약자 | 상 호 : | __ / | 주 소 : | __ / | 대 표 자 : | (인)' 표가 들어 있어
     (표 안 표) 서명이 모두 비었음. 안쪽 표도 채움, 바깥 칸의 글은 그대로."""

@@ -3196,6 +3196,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         body = [c for c in body if c.row not in sums]
                     if head and any(_sq(c.text) for c in head) and body and all(c.blank for c in body):
                         first = min(body, key=lambda c: (c.row, c.col))
+                        # 머리에 용역명·사업명·공사명·계약명 칸이 있으면 그 열 첫 빈 줄에(11/18 사용자 요청: 행정처분 표 '용 역 명' 칸)
+                        tcol = next((h.col for h in sorted(head, key=lambda h: h.col)
+                                     if re.search(r"용역명|사업명|공사명|계약명|건명", _sq(h.text))), None)
+                        if tcol is not None:
+                            first = next((c for c in sorted(body, key=lambda c: c.row) if c.col == tcol), first)
                         edits.append((first, ["해당 없음"], False))
                         rep.filled.append("표가 비어 '해당 없음' 기재 — 해당 사항이 있으면 고칠 것")
                     elif head and any(_sq(c.text) for c in head) and body:

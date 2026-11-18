@@ -2877,6 +2877,9 @@ def test_none_rule_ignores_total_row(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
     sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     assert sec.count("해당 없음") == 1 and "(주)가상" not in sec
+    # 11/18 사용자 요청: '해당 없음'은 '용 역 명' 칸에(업체명 칸 아님)
+    cell = re.search(r'<hp:tc>(?:(?!</hp:tc>).)*해당 없음(?:(?!</hp:tc>).)*</hp:tc>', sec, re.S).group(0)
+    assert 'colAddr="1" rowAddr="1"' in cell, cell
 
 
 def test_agency_ref_no_appended_keeps_form_text(tmp_path: Path):

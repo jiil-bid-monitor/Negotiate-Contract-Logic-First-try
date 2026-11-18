@@ -42,8 +42,12 @@ _START_TITLE = re.compile(r"(?:정량|계량)\S{0,3}\s*평가\s*(?:항목|기준
 _HEAD_CIRC = re.compile(r"^\s*[①-⑳](?!\s*-)\s*([^:：\n()（）]{2,30}?)\s*[:：]?\s*[(（]\s*(\d+(?:\.\d+)?)\s*점\s*[)）]\s*$")
 
 
+# '1) 기술인력 보유현황(6점)'·'4) 신인도(3점) : 행정처분내용'(11/18 모란민속5일장 — 쌍점 대신 괄호 점수, 뒤에 설명이 붙기도)
+_HEAD_PAREN = re.compile(r"^\s*(?:\d+\)|\(\d+\)|[가-하]\.|[가-하]\))\s*([^:：\n()（）]{2,30}?)\s*[(（]\s*(\d+(?:\.\d+)?)\s*점\s*[)）]\s*(?:[:：][^\n]*)?$")
+
+
 def _head(text: str):
-    return _HEAD.match(text) or _HEAD_BOX.match(text) or _HEAD_CIRC.match(text)
+    return _HEAD.match(text) or _HEAD_BOX.match(text) or _HEAD_CIRC.match(text) or _HEAD_PAREN.match(text)
 
 
 _MULT = {"억": 1e8, "천만": 1e7, "백만": 1e6, "만": 1e4}
@@ -185,8 +189,16 @@ def _read_table(c: Criterion, xml: str, tbl: tuple[int, int]) -> None:
     def _kind_head(text):
         t = re.sub(r"^[①-⑳]", "", _sq(text))
         m = re.fullmatch(r"(회사채|기업어음)(?:에대한)?(?:신용평가등급)?|기업신용평가등급|신용평가등급", t)
+        if m is None:  # '신용평가등급(회사채)'·'신용평가등급(기업어음)'(11/18 모란민속5일장)
+            m = re.fullmatch(r"신용평가등급[(（](회사채|기업어음)[)）]", t)
         return (m.group(1) or m.group(0)) if m else None
-    kinds = {col: _kind_head(text) for r, cols in rows.items() for col, text in cols.items() if _kind_head(text)}
+    kinds: dict[int, str] = {}
+    for r, cols in sorted(rows.items()):  # 아래 줄의 자세한 머리('신용평가등급(회사채)')가 위 묶음 머리('신용평가등급')를 덮음
+        for col, text in cols.items():
+            if _kind_head(text):
+                kinds[col] = _kind_head(text)
+    # 점수 열 = 머리 '배점' 칸(오른쪽에 '비고' 열이 더 있는 표 — 11/18), 없으면 줄의 맨 오른쪽 칸
+    pts_col = next((col for r, cols in sorted(rows.items()) for col, text in cols.items() if _sq(text) == "배점"), None)
     # 점수 칸이 여러 줄을 세로로 합친 표('5' 한 칸이 AAA~A- 세 줄, 11/18 봉평) — 줄마다 그 줄을 덮는 점수 칸
     span_score: dict[int, float] = {}
     for cell in _cells(xml, tbl):
@@ -197,6 +209,8 @@ def _read_table(c: Criterion, xml: str, tbl: tuple[int, int]) -> None:
     if kinds and "등급" in flat:
         for r, cols in sorted(rows.items()):
             score = _num(cols[max(cols)]) if cols else None
+            if pts_col is not None and pts_col in cols:
+                score = _num(cols[pts_col])
             if score is None:
                 score = span_score.get(r)
             pct = re.fullmatch(r"배점의?(\d+(?:\.\d+)?)%", _sq(cols[max(cols)])) if cols else None
@@ -848,7 +862,15 @@ def read_form(cells) -> list[FormRow]:
         limit = next((c for c in cells if plain(c.text) in ("배점한도", "배점상한", "한도")), None)
         if limit is not None and pts_head is not None and pts_head.row == limit.row:
             head, pts_head = pts_head, limit
-    if head is None or pts_head is None or head.row != pts_head.row:
+    if head is None:  # '자체평가'(두 칸 묶음) 아래 '배점 | 비고' — 그 '배점' 칸이 자기평점(11/18 모란민속5일장 서식 20)
+        group = next((c for c in cells if plain(c.text) in ("자체평가", "자기평가", "자체평가점수", "자기평가점수")), None)
+        if group is not None:
+            head = next((c for c in cells if c.row == group.row + max(1, group.rowspan)
+                         and group.col <= c.col < group.col + group.colspan and plain(c.text) in ("배점", "점수", "평점")), None)
+            if head is not None:
+                pts_head = next((c for c in cells if c is not head and plain(c.text) in ("배점", "총배점")
+                                 and c.row <= head.row < c.row + max(1, c.rowspan)), None)
+    if head is None or pts_head is None or not (pts_head.row <= head.row < pts_head.row + max(1, pts_head.rowspan)):
         return []
     rows: dict[int, list] = {}
     for c in cells:
@@ -866,9 +888,14 @@ def read_form(cells) -> list[FormRow]:
         return next((c for c in cells if c.col == 0 and c.row <= r < c.row + c.rowspan and c.rowspan > 1), None)
     merged: list[list[int]] = []
     split_cells: dict[int, dict] = {}
+    def score_cell(r):
+        return next((c for c in rows[r] if c.col <= scol < c.col + c.colspan), None)
     for rs in blocks:
         ic = item_cell(rs[0])
-        if merged and ic is not None and item_cell(merged[-1][0]) is ic:
+        sc = score_cell(rs[0])
+        # 평점 칸이 여러 줄을 합친 칸이면 줄마다 따로 평점 칸이 있는 표가 아님 — 묶지 않음
+        # ('참여인력의 전문성 | 사업총괄책임자 3 / 참여인력 3'처럼 큰 항목 아래 작은 항목마다 평점 칸, 11/18)
+        if merged and ic is not None and item_cell(merged[-1][0]) is ic and (sc is None or sc.rowspan <= 1):
             merged[-1] += rs
             split_cells.setdefault(merged[-1][0], {})
         else:
@@ -909,7 +936,7 @@ def read_form(cells) -> list[FormRow]:
             return bool(q) and not (parse_range(t) and len(q) <= 20) and not any(g in q for g in GRADES) \
                 and q not in ("해당없음", "해당") and not re.search(r"회사채|기업어음|^[A-D][A-D0-9+\-]*", q)
         label = " ".join(re.sub(r"\s+", " ", c.text).strip() for c in first if c.col < min(pcol, scol) and is_label(c.text))
-        if re.fullmatch(r"\s*(?:계|합\s*계|소\s*계|총\s*점)\s*", label):
+        if re.fullmatch(r"\s*(?:계|합\s*계|소\s*계|총\s*점)\s*(?:[(（][^)）]*[)）])?\s*", label):  # '합 계(20점)'(11/18)
             out.append(FormRow(label, None, target, total=True))
             continue
         kind = next((k for k, rx in KINDS if rx.search(_sq(label))), "")

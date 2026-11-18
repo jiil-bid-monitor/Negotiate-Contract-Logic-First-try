@@ -4096,3 +4096,42 @@ def test_bid_proposal_notice_slot_gets_ref_no(tmp_path: Path):
     fill_hwpx(src, tmp_path / "p.hwpx", vault.Vault({}, info={}), notice_no=("2025", "99"), g2b_no="R26BK00000001-000")
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "p.hwpx").read("Contents/section0.xml").decode())
     assert "1703" not in text and "-99" not in text, text
+
+
+def test_self_eval_group_head_score_column_and_total(tmp_path: Path):
+    """11/18 사용자 지적(모란민속5일장 서식 20 사업수행능력 자기평가표): 머리 '자체평가'(두 칸 묶음) 아래 '배점 | 비고' —
+    점수 칸 머리를 몰라 평가표로 못 알아봐 신인도 만점·합계가 비었고, 경영상태 줄 '배점' 칸엔 옆 기준표 글을 이름표로 읽어 'BB+'가 들어감.
+    본문 '3) 경영상태(5점)'(괄호 점수 머리)·'신용평가등급(회사채)' 머리·'비고' 열이 더 있는 표도 읽음."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore, read_criteria
+
+    c = lambda col, row, t="", span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                              f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    tb = lambda rows: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = tb([[c(0, 0, "평가요소", rs=2), c(1, 0, "신용평가등급", 3), c(4, 0, "배점", rs=2), c(5, 0, "비고", rs=2)],
+               [c(1, 1, "신용평가등급(회사채)"), c(2, 1, "신용평가등급(기업어음)"), c(3, 1, "기업신용평가등급")],
+               [c(0, 2, "경영상태", rs=3), c(1, 2, "A-이상"), c(2, 2, "A2-이상"), c(3, 2, "A-이상"), c(4, 2, "5.0"), c(5, 2, "", rs=3)],
+               [c(1, 3, "BBB+, BBB0, BBB-"), c(2, 3, "A3+, A30, A3-"), c(3, 3, "BBB+, BBB0, BBB-"), c(4, 3, "4.5")],
+               [c(1, 4, "BB+, BB0, BB-"), c(2, 4, "B+, B0"), c(3, 4, "BB+, BB0, BB-"), c(4, 4, "4.0")]])
+    rfp = _mini_hwpx(tmp_path / "rfp.hwpx", p("가. 정량적평가(20점) : 객관적 지표에 의한 평가") + p("3) 경영상태(5점)") + body
+                     + p("4) 신인도(3점) : 행정처분내용") + p("나. 정성적평가 (70점) : 평가위원의 주관적 평가"))
+    crit = read_criteria([rfp])
+    credit = next(x for x in crit if x.kind == "credit")
+    assert credit.points == 5 and ({"회사채": "A-이상", "기업어음": "A2-이상", "기업신용평가등급": "A-이상"}, 5.0) in credit.credit_rows
+    form = tb([[c(0, 0, "평가항목", rs=2), c(1, 0, "평가요소", rs=2), c(2, 0, "배점", rs=2), c(3, 0, "점수계산방법", rs=2), c(4, 0, "자체평가", 2)],
+               [c(4, 1, "배점"), c(5, 1, "비고")],
+               [c(0, 2, "회사경영상태(4점)"), c(1, 2, "신용평가등급"), c(2, 2, "5"),
+                c(3, 2, "신용평가등급(회사채)신용평가등급(기업어음)기업신용평가등급배점A-이상A2-이상A-이상5BB+, BB0, BB-4.0"), c(4, 2), c(5, 2)],
+               [c(0, 3, "신인도(2점)"), c(1, 3, "최근 3년 내 부정당업자 제재를 받은 사실"), c(2, 3, "3"), c(3, 3, "해당시 미해당시 0 3"), c(4, 3), c(5, 3)],
+               [c(0, 4, "합 계(20점)", 4), c(4, 4), c(5, 4)]])
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"})
+    fill_hwpx(_mini_hwpx(tmp_path / "f.hwpx", form), tmp_path / "o.hwpx", v, self_scores=SelfScore(crit, v, _dt.date(2026, 11, 18)))
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {}
+    for tc in re.findall(r"<hp:tc>.*?</hp:tc>", xml, re.S):
+        col, row = re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', tc).groups()
+        got[(int(row), int(col))] = re.sub(r"<[^>]+>", "", tc).strip()
+    assert got[(2, 4)] == "4" and got[(3, 4)] == "3" and got[(4, 4)] == "7", got  # 경영상태 BB+ → 4, 신인도 만점 3, 합계 7
+    assert "BB+" not in got[(2, 4)] + got[(2, 5)]

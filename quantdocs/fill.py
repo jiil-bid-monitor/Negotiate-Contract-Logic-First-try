@@ -320,7 +320,7 @@ def _label_key(text: str) -> str | None:
         return None
     if re.fullmatch(r"기관\((?:회사|업체)\)명|(?:회사|업체)\(기관\)명|기관명\((?:회사|업체)명\)", t):
         return "회사명"  # '기관(회사)명 :'(11/13 위탁·수탁 서명란) — 기관 아닌 회사 쪽은 지일
-    if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호|입찰공고(?:\(지명\))?", t):  # '입찰공고 | 제2026- 호'(11/13 제천)  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
+    if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호|입찰공고(?:\(지명\))?|입찰\(지명\)공고(?:번호)?", t):  # '입찰공고 | 제2026- 호'(11/13 제천)  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
         return "_notice_no"
     if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
         return "전화번호"
@@ -2510,6 +2510,11 @@ def _keep_table_heights(before: str, after: str, chars: "_Chars", rep: FillRepor
 _NO_SLOT = re.compile(r"\s*(?:공\s*고\s*)?제\s*(?:\d{4}\s*[-–]?\s*)?호\s*")  # 서식에 미리 적힌 '제 2026 - 호'·'공고 제   호'(11/06 청주)
 
 
+# 기관 이름이 앞에 붙고 번호·'호'가 빈 자리표시 '평창군 공고 제2026-'(11/18 봉평) — 글은 그대로 두고 '-' 뒤에 번호만
+_REF_TEXT = re.compile(r"[가-힣]{2,12}공고제\d{4}[-–]호?")
+_REF_SLOT = re.compile(r"(제\s*\d{4}\s*[-–])\s*(호?)(?=\s*</(?:[\w.-]+:)?t>)")
+
+
 def agency_notice_no(texts: dict[str, str]) -> tuple[str, str] | None:
     """공고문의 기관 공고번호('장성군 공고 제2026 - 1129 호') → ('2026', '1129'). 이름에 '공고'가 든 문서 먼저."""
     for name in sorted(texts, key=lambda n: "공고" not in n):
@@ -3078,6 +3083,17 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if target.col in qty_cols and not _QTY_KEY.search(key) and target.row > min(x.row for x in cells):
                         continue  # '건수·금액·점수' 열에 누리집·주소·이름 같은 글을 넣지 않음(11/13)
                     seal = _sq(target.text)
+                    ref = _REF_SLOT.search(xml[target.start:target.end])
+                    if key == "_notice_no" and ref and _REF_TEXT.fullmatch(_sq(target.text)) and notice_no \
+                            and notice_no[0] == re.sub(r"\D", "", ref.group(1))[-4:]:
+                        # '입찰(지명)공고 | 평창군 공고 제2026-'(11/18 사용자: 서식 글은 그대로 — 나라장터 참조번호의 번호만 '-' 뒤에)
+                        seg = xml[target.start:target.end]
+                        # '…제2026- 호'처럼 '호'가 이미 있으면 번호만 그 앞에(빈칸은 번호 자리), 없으면 번호 + '호'
+                        seg = (seg[:ref.end(1)] + _mark(notice_no[1]) + " " + seg[ref.start(2):] if ref.group(2)
+                               else seg[:ref.end(1)] + _mark(f"{notice_no[1]}호") + seg[ref.end(1):])
+                        edits.append((target, None, seg))
+                        rep.filled.append(f"{_sq(c.text)} → 공고 제{notice_no[0]}-{notice_no[1]}호(서식 글 그대로)")
+                        continue
                     if key == "_notice_no" and _NO_SLOT.fullmatch(target.text) and (g2b_no or notice_no):
                         # 서식에 미리 적힌 '제 2026 - 호' — 나라장터 번호면 칸을 그 번호로, 기관 번호면 모양 그대로 번호만
                         line = g2b_no or f"제 {notice_no[0]} - {notice_no[1]} 호"

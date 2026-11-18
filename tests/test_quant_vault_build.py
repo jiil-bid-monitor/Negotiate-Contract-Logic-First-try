@@ -4062,7 +4062,7 @@ def test_horizontal_eval_table_rows_labelled_points_score(tmp_path: Path):
         [c(2, 15, "제재처분", 2), c(4, 15, "-2.0", 4)],
         [c(2, 16, "배점", 2), c(4, 16, "", 4)],
         [c(2, 17, "점수", 2), c(4, 17, "", 4)],
-        [c(0, 18, "합 계", 8), c(8, 18)],
+        [c(0, 18, "합 계", 8), c(8, 18, "0")],  # 원본 서식부터 합계 칸에 '0'(11/18 사용자 제보)
     ]
     src = _mini_hwpx(tmp_path / "s.hwpx", tb(rows))
     v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"},

@@ -27,7 +27,7 @@ from .forms_cut import _top_paragraphs
 
 KINDS = [("track", re.compile(r"실적")), ("staff", re.compile(r"인력|기술자|기술\s*능력")),
          ("patent", re.compile(r"특허|보유\s*기술|전문\s*기술|기술\s*보유")), ("credit", re.compile(r"경영|신용|재무\s*상태")),
-         ("sanction", re.compile(r"신인도|제재|성실성|사회적\s*책임"))]  # '사회적 책임 및 성실성'(11/12 당진 서식 4호)
+         ("sanction", re.compile(r"신인도|제재|성실성|성실도|사회적\s*책임"))]  # '사회적 책임 및 성실성'(11/12 당진 서식 4호)
 _START = re.compile(r"(?:정량|계량)\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
 _STOP = re.compile(r"^\s*주\s*\d+\s*\)|^\s*[\[【]\s*별\s*표|정성\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
 _MARK = re.compile(r"^\s*(\d+\)|\(\d+\)|[가-하]\.|[가-하]\)|\d+\.)")
@@ -767,6 +767,8 @@ class FormRow:
     grade_cells: dict = field(default_factory=dict)  # 기술인력 등급 줄 — {등급: (평점 칸, 비고 '명 × 점 = 점' 칸)}(11/13)
     none_cells: list = field(default_factory=list)  # 신인도 '없음' 줄 — [(평점 칸, 그 줄 배점)](11/16 사용자 요청: '없음' 줄에 그 배점)
     cap_cell: object = None  # 상한점수 줄의 빈 평점 칸 — 항목 점수를 이 칸에도(11/16 사용자 요청: 경영상태 상한 칸이 빔)
+    col_cells: dict = field(default_factory=dict)  # 가로형 '배점 | 5.0 | 4.5 …' 아래 '점수' 줄 칸 — {그 열 배점: 칸}(11/18)
+    zero_cells: list = field(default_factory=list)  # 가로형 감점 표('배점 | -2.0 …')의 '점수' 칸 — 감점 없음 → 0(11/18)
 
 
 def _per_person(text: str) -> float | None:
@@ -774,6 +776,67 @@ def _per_person(text: str) -> float | None:
     m = re.fullmatch(r"\s*([\d.]+)\s*점?\s*/\s*인\s*", text or "") or \
         re.fullmatch(r"\s*(?:각|1\s*인\s*당|인\s*당)\s*([\d.]+)\s*점?\s*", text or "")
     return float(m.group(1)) if m else None
+
+
+def _horizontal(rs, rows, pcol: int, scol: int, crit) -> tuple[dict, dict, list]:
+    """항목 안에 '등급(·회사채·실적액…) | 값 … / 배점 | 값 … / 점수 | __ …'가 가로로 놓인 표(11/18 사용자 제보 — 평가요소 칸이 줄 이름).
+    crit에 등급별 1인당 점수(per_grade)·신용등급 규칙(credit_rows)을 더하고 ({등급들: (점수 칸, None)}, {열 배점: 점수 칸}, 감점 점수 칸들)."""
+    mid = {r: sorted((c for c in rows[r] if pcol < c.col < scol), key=lambda c: c.col) for r in rs}
+    grade_cells: dict = {}
+    col_cells: dict = {}
+    zero: list = []
+    cats: list = []  # 배점 줄 위의 기준 줄들 — (이름, {열: 글})
+    for i, r in enumerate(rs):
+        line = mid[r]
+        lab = next((c for c in line if _sq(c.text)), None)
+        if lab is None:
+            continue
+        vals = {c.col: re.sub(r"\s+", " ", c.text).strip() for c in line if c.col > lab.col}
+        if _sq(lab.text) == "점수":
+            cats = []
+            continue
+        if _sq(lab.text) != "배점":
+            cats.append((_sq(lab.text), vals))
+            continue
+        nxt = rs[i + 1] if i + 1 < len(rs) else None
+        score_row = {}
+        if nxt is not None:
+            nl = mid[nxt]
+            nlab = next((c for c in nl if _sq(c.text)), None)
+            if nlab is not None and _sq(nlab.text) == "점수":
+                score_row = {c.col: c for c in nl if c.col > nlab.col and c.blank}
+        def under(col):  # 그 열(합친 칸이면 덮는 열)의 점수 칸
+            return next((c for k, c in score_row.items() if k <= col < k + c.colspan), None)
+        neg = lambda t: (lambda m: -float(m.group(1)) if m else None)(re.fullmatch(r"\s*[-－−–]\s*(\d+(?:\.\d+)?)\s*점?\s*", t or ""))
+        for col, t in vals.items():
+            per, pts = _per_person(t), (_num(t) if neg(t) is None else neg(t))
+            heads = [(name, v[col]) for name, v in cats if col in v]
+            if per is not None:
+                gs = tuple(g for g in GRADES if any(g in _sq(h) for _, h in heads))
+                for g in gs:
+                    crit.per_grade.setdefault(g, per)
+                if gs and under(col) is not None:
+                    grade_cells[gs] = (under(col), None)
+                continue
+            if pts is None:
+                continue
+            if pts < 0:  # 감점(납품지체·제재처분) — 사유 없음 → 점수 칸 0
+                if under(col) is not None:
+                    zero.append(under(col))
+                continue
+            rules = {}
+            for name, h in heads:
+                if re.search(r"(?<![A-Za-z가-힣])[A-D]{1,3}[0+\-°]?", h):
+                    rules["기업신용평가등급" if name == "기업" else name] = h
+            if rules:
+                crit.credit_rows.append((rules, pts))
+            if under(col) is not None:
+                col_cells.setdefault(pts, under(col))
+        for name, v in cats:  # '제재처분 | -2.0' 다음 '배점 | __ / 점수 | __'
+            if any(neg(x) is not None for x in v.values()):
+                zero += [c for c in score_row.values() if c not in zero]
+        cats = []
+    return grade_cells, col_cells, zero
 
 
 def read_form(cells) -> list[FormRow]:
@@ -927,13 +990,18 @@ def read_form(cells) -> list[FormRow]:
                 v = _num(c.text) if c.col in grade_cols else None
                 if v is not None:
                     crit.credit_rows.append(({"기업신용평가등급": grade_cols[c.col]}, v))
+        col_cells: dict = {}
+        zero_cells: list = []
+        if not (crit.bands or crit.per_grade or crit.credit_rows or crit.sanction or grade_cells):
+            hg, col_cells, zero_cells = _horizontal(rs, rows, pcol, scol, crit)
+            grade_cells = grade_cells or hg
         points = cap if cap is not None else (max(nums) if nums else None)
         crit.points = points or 0.0
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
         if grade_cells and cap_cell is not None:
             target = cap_cell
         out.append(FormRow(label, points, target, crit if has else None, by_points=by_points, grade_cells=grade_cells,
-                           none_cells=none_cells, cap_cell=cap_cell))
+                           none_cells=none_cells, cap_cell=cap_cell, col_cells=col_cells, zero_cells=zero_cells))
     return out
 
 

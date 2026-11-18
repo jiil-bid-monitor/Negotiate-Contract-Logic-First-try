@@ -327,6 +327,8 @@ def _label_key(text: str) -> str | None:
     if "사업자등록번호" in t and re.match(r"생년월일|법인등록번호|법인번호", t):
         # '생년월일(사업자등록번호)'·'법인등록번호(사업자등록번호)' — 법인은 생년월일 = 법인등록번호, 괄호 안에 사업자등록번호(11/05 사용자 요청)
         return "_corp_biz"
+    if re.fullmatch(r"사업자등록\(법인(?:등록)?\)번호|사업자\(법인\)등록번호", t):
+        return "_corp_biz"  # 서명 묶음 '사업자등록(법인)번호 :'(11/18 사용자 결정 — 둘 다: '법인등록번호 (사업자등록번호)')
     # 입찰참가신청서 끝 '입찰참가 신청자: / 주소: / 계약상대자등록번호: / 대표자: (인)'(11/13 사용자 확인) —
     # 신청자 = 신청하는 회사(상호), 계약상대자등록번호 = 사업자등록번호. 대표자는 아래 줄에 따로
     if re.fullmatch(r"(?:입찰)?참가신청(?:자|인|업체)", t):
@@ -2791,6 +2793,10 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
         # 상한점수 줄 평점 칸에도 항목 점수(11/16 사용자 요청: 경영상태 '2.85점' 줄엔 들어가고 '상 한 점 수 | 3점' 칸은 빔)
         if row.cap_cell is not None and row.cap_cell is not cell:
             out.append((row.cap_cell, [fmt(item.score)], False))
+        if item.kind == "credit" and item.score in row.col_cells:  # 가로형 표 — 맞는 등급 열 아래 '점수' 칸에도(11/18)
+            out.append((row.col_cells[item.score], [fmt(item.score)], False))
+        for zc in row.zero_cells:  # 가로형 감점 표 '점수' 칸 — 감점 사유 없음 → 0(11/13 '감점 칸은 늘 0')
+            out.append((zc, ["0"], False))
         for nc, pts in none_cells:  # 신인도 '없음' 줄마다 그 줄 배점(11/16 사용자 요청) — 상한점수 줄엔 위대로 합(상한까지)
             out.append((nc, [_one_dec(pts)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")
@@ -2955,7 +2961,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if re.fullmatch(r"(?:대표자)?(?:성명|이름|성함)", lab):
                             key = "대표자"
                         elif re.fullmatch(r"연락처|전화|전화번호|연락처\(전화\)", lab):
-                            key = "전화번호"
+                            # (11/18 사용자 요청) 위임장 '응모 대표자 | … | 연 락 처 | __' = 대표자 개인 번호(QUANT_REP_MOBILE), 없으면 회사 전화
+                            key = "대표자 휴대폰" if _value("대표자 휴대폰", vault) else "전화번호"
                     # 대표자 줄의 휴대폰 칸 = 대표자 휴대폰(.env QUANT_REP_MOBILE — 11/16 사용자 요청). 대표자 묶음 칸 아래이거나 같은 줄에
                     # 대표자 이름표가 있을 때만 — 대리인·담당자·참여인력 휴대폰 칸은 그대로 비움(개인 번호)
                     if key is None and _value("대표자 휴대폰", vault) and c.row not in agent_rows and group != "대리인" \

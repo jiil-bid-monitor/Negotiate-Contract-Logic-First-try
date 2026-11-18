@@ -731,9 +731,9 @@
     if (!v) return "";
     const w = webRank(res), s = res.outsource;
     const cls = (k) => (k == null ? "" : k > 0 ? "rank" : "res-bad");
+    // '▶ 웹앱이 나음·외주가 나음·같음' 줄은 뺌(11/18 사용자 요청) — 웹앱·외주 등수 두 줄만
     return `<span class="vs-lines"><span class="sub nowrap">웹앱 <b class="${cls(w)}">${shortPlace(w)}</b></span>`
-      + `<span class="sub nowrap">외주 <b class="${cls(s.rank)}">${shortPlace(s.rank)}</b></span>`
-      + `<span class="sub nowrap vs-${v}">▶ ${VERSUS[v]}</span></span>`;
+      + `<span class="sub nowrap">외주 <b class="${cls(s.rank)}">${shortPlace(s.rank)}</b></span></span>`;
   }
   // 펼친 결과 — 외주 금액으로 투찰했다면(11/16)
   function outsourceBlock(r) {

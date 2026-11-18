@@ -3882,10 +3882,11 @@ def test_contact_marks_capital_sales_and_history_in_parens(tmp_path: Path):
         + _tbl([[_c(0, 0, "기타"), _c(1, 0, "  자본금                       매출액")],
                 [multi(0, 1, ["", "  주요 이력(연혁)", "", ""], colspan=2)]])
     src = _mini_hwpx(tmp_path / "s.hwpx", body)
-    v = vault.Vault({}, info={"회사명": "(주)가상", "전화번호": "033-000-0000", "대표자 휴대폰": "010-0000-0000", "자본금": "1,000,000,000"})
+    v = vault.Vault({}, info={"회사명": "(주)가상", "전화번호": "033-000-0000", "대표자 휴대폰": "010-0000-0000", "자본금": "1,000,000,000",
+                              "매출액": "5,000,000,000"})
     v.history = [{"연월일": "2009-09-01", "내용": "법인 설립"}]
     fill_hwpx(src, tmp_path / "o.hwpx", v)
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert "(회사)☎ 033-000-0000" in text and "010-0000-0000" in text, text
-    assert "자본금 1,000,000,000원" in text and "매출액" in text, text
+    assert "자본금 1,000,000,000원" in text and "매출액" in text and "5,000" not in text, text
     assert "주요 이력(연혁)" in text and "법인 설립" in text, text

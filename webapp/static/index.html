@@ -390,7 +390,10 @@ body {
   font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 4px;
   background: var(--panel); color: var(--ink);
 }
-#liveTools .tab-search { margin-left: auto; }
+#liveTools .tab-search, #exTools .tab-search { margin-left: auto; }
+.ex-tools { flex-wrap: nowrap; }
+.ex-tools .ex-summary { margin: 0; flex: 1 1 auto; min-width: 0; }
+@media (max-width: 760px) { .ex-tools { flex-wrap: wrap; } }
 .tab-search::placeholder { color: var(--faint); }
 .tab-search:focus { outline: none; border-color: var(--brand); }
 @media (max-width: 760px) { .tab-search { flex: 1 1 100%; } }
@@ -1411,7 +1414,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   </section>
 
   <section id="tab-excluded" hidden>
-    <p class="sub ex-summary" id="exSummary" title="키워드·품목은 맞지만 다른 조건에 걸려 목록에서 빠진 공고와, 다른 조건은 모두 통과했는데 키워드·세부품명만 안 맞은 공고(세부품명 미달)입니다. 여러 조건에 걸리면 처음 걸린 조건에만 셉니다.">불러오는 중…</p>
+    <!-- 찾기 칸 자리 — 탭 줄엔 두지 않아 모든 탭의 탭 줄 높이가 같게 (2026-11-18 사용자 요청) -->
+    <div class="toolbar ex-tools" id="exTools">
+      <p class="sub ex-summary" id="exSummary" title="키워드·품목은 맞지만 다른 조건에 걸려 목록에서 빠진 공고와, 다른 조건은 모두 통과했는데 키워드·세부품명만 안 맞은 공고(세부품명 미달)입니다. 여러 조건에 걸리면 처음 걸린 조건에만 셉니다.">불러오는 중…</p>
+    </div>
     <div class="filter-row">
       <div class="filters" id="exFilters"></div>
       <label class="sort-box">정렬
@@ -4107,7 +4113,7 @@ function showTab(tab) {
   $("liveQ").hidden = !(tab === "live" || tab === "excluded");
   // 실제 공고 탭에선 수집 줄 오른쪽에 둬서 한 줄을 아낌 (2026-11-18 사용자 결정) — 제외된 공고 탭과 같이 쓰는 칸이라 탭마다 옮긴다
   if (tab === "live") $("liveTools").appendChild($("liveQ"));
-  else if (tab === "excluded") document.querySelector(".tabbar").appendChild($("liveQ"));
+  else if (tab === "excluded") $("exTools").appendChild($("liveQ"));
   if (tab === "excluded") exData ? renderExcluded() : loadExcluded();
   if (tab === "log") renderLog();
   if (tab === "award") loadAward();

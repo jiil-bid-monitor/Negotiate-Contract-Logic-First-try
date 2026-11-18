@@ -3822,3 +3822,17 @@ def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", agent), tmp_path / "ao.hwpx", vault.Vault({}, info=info))
     out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
     assert re.search(r"회  사  (?:<[^>]+>)*033-111-2222", out) and re.search(r"휴대폰  (?:<[^>]+>)*010-0000-1111", out), out
+
+
+def test_bond_amount_label_and_form_rate(tmp_path: Path):
+    """11/18 사용자 제보(봉평 공공형 어린이실내놀이터 입찰참가 신청서): 제안요청서에 '마. 총사업비 : 금806,162,000원'이 있는데
+    '❍ 보증금액 : 금   원정(￦   )'이 빔 — 이름표 '보증금액'(액 붙음)을 몰랐음. 보증금율은 서식에 적힌 '2.5%이상'을 씀(× 0.025)."""
+    from quantdocs.fill import basis_amount, fill_hwpx
+
+    assert basis_amount({"제안요청서.hwpx": "마. 총사업비 : 금806,162,000원(금팔억육백일십육만이천원)"})[0] == 806_162_000
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "s.hwpx", p("입 찰 보 증 금 납 부") + p("❍ 보증금율 : 2.5%이상") + p("❍ 보증금액 : 금                원정(￦                )")
+                     + p("❍ 보증금 납부방법 : 납부면제 및 지 급 확 약"))
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={}), basis=806_162_000)
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert "보증금액 : 금 이천십오만사천오십 원정 (￦ 20,154,050 )" in text, text

@@ -50,7 +50,7 @@ def group_of(work: str) -> str:
 
 
 # 표준틀이 만드는 서류(시험본 v4 탭 이름에서) — 틀이 정해지면 이 목록만 바꾼다. 서류 이름에 이 낱말이 있으면 '틀에 있음'
-TEMPLATE_DOCS = ("공문", "착수계", "착공계", "조직도", "선임신고서", "보안각서", "재직증명서", "참여기술자")
+TEMPLATE_DOCS = ("공문", "착수계", "착공계", "준공계", "납품계", "완료계", "청구서", "조직도", "선임신고서", "보안각서", "재직증명서", "참여기술자")
 
 
 def required_docs(files: list[Path]) -> list[dict]:
@@ -93,6 +93,103 @@ def template_dir(root: Path) -> Path:
 
 TEMPLATES = {"공사": ("표준틀_착공서류(공사).xlsx", "2_착공", "착공서류.xlsx"),
              "물품·용역": ("표준틀_착수서류(물품·용역).xlsx", "2_착수", "착수서류.xlsx")}
+# 준공·청구 표준틀(11/18) — 업무 3개로 고름(공사 준공계 · 물품 납품계 · 용역 완료계, 폴더 구분 2개와 따로), 청구서는 공통.
+# 기본사항 A열 이름으로 채움(틀마다 줄 위치가 달라도 코드 하나). 파란 칸(계약서 값)을 자동으로.
+DONE_TEMPLATES = {"공사": ("표준틀_준공계.xlsx", "3_준공", "준공계.xlsx"),
+                  "물품": ("표준틀_납품계.xlsx", "3_준공", "납품계.xlsx"),
+                  "용역": ("표준틀_완료계.xlsx", "3_준공", "완료계.xlsx")}
+CLAIM_TEMPLATE = ("표준틀_대금청구서.xlsx", "4_청구", "청구서.xlsx")
+DONE_LABELS = {"to": ("수신자",), "title": ("공사명", "사업명", "용역명"), "amount": ("계약금액",), "total": ("준공금액",),
+               "contract": ("계약년월일",), "start": ("착공년월일",), "due": ("준공예정년월일", "완료기한"),
+               "gwiha": ("귀하", "귀하(재무관)"), "nap": ("납품서 붙임",)}
+# 착공·착수서류 기본사항(담당자가 계약 때 채움) A열 이름 → 값 이름
+FROM_START = {"계약건명": "title", "공사명": "title", "계약금액(금차)": "amount", "도급액": "amount", "준공금액(총액)": "total",
+              "금액2": "total", "계약일": "contract", "착수일": "start", "착공일": "start", "준공예정일": "due", "수신": "gwiha"}
+
+
+DONE_NAMES = {"to": "수신자", "title": "건명", "amount": "계약금액", "total": "준공금액", "contract": "계약년월일",
+              "start": "착공(착수)년월일", "due": "준공예정일(완료기한)", "gwiha": "귀하", "nap": "납품서 붙임"}
+
+
+def _labels(xlsx: Path) -> set[str]:
+    """기본사항 A열 이름들."""
+    from openpyxl import load_workbook
+
+    ws = load_workbook(xlsx)["기본사항"]
+    return {str(ws.cell(r, 1).value or "").strip() for r in range(1, ws.max_row + 1)}
+
+
+def done_todo(xlsx: Path, auto: dict[str, str]) -> tuple[list[str], list[list[str]]]:
+    """준공·청구 서류 기본사항에서 (빈 노랑·파랑 칸 이름 — 안내에 '비우면'·'때만'이 있는 칸은 뺌, [자동으로 채운 칸 이름, 값])."""
+    from openpyxl import load_workbook
+
+    ws = load_workbook(xlsx)["기본사항"]
+    names = {label: key for key, labels in DONE_LABELS.items() for label in labels}
+    todo, filled = [], []
+    for r in range(5, ws.max_row + 1):
+        name, cell = str(ws.cell(r, 1).value or "").strip(), ws.cell(r, 2)
+        if not name:
+            continue
+        if cell.value in (None, ""):
+            hint = str(ws.cell(r, 3).value or "")
+            if cell.fill.fgColor.rgb in (_YELLOW, _BLUE) and "비우면" not in hint and "때만" not in hint:
+                todo.append(name)
+        elif names.get(name) in auto and _key(cell.value) == auto[names[name]]:
+            filled.append([name, f"{cell.value:,}" if isinstance(cell.value, int) else _key(cell.value)])
+    return todo, filled
+
+
+def start_values(xlsx: Path) -> dict[str, Any]:
+    """착공·착수서류 기본사항에서 담당자가 넣은 계약 값(빈 칸·수식은 뺌)."""
+    from openpyxl import load_workbook
+
+    ws = load_workbook(xlsx)["기본사항"]
+    out: dict[str, Any] = {}
+    for r in range(4, 22):
+        key = FROM_START.get(str(ws.cell(r, 1).value or "").strip())
+        val = ws.cell(r, 2).value
+        if key and val not in (None, "") and not (isinstance(val, str) and val.startswith("=")):
+            out.setdefault(key, val)
+    return out
+
+
+def _key(value: Any) -> str:
+    """같은 값인지 비교용 글(날짜·숫자 모양이 달라도)."""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, float) and value == int(value):
+        value = int(value)
+    return "" if value is None else str(value).strip()
+
+
+def fill_done(source: Path, target: Path, values: dict[str, Any], prev: dict[str, str]) -> tuple[dict[str, str], bool]:
+    """준공·청구 틀(source)을 target에 복사해 기본사항의 이름이 맞는 칸(B열)에 값. target이 이미 있으면 그 파일에서
+    빈 칸·틀 기본 수식·지난번 자동 값 그대로인 칸만 씀 —
+    담당자가 고친 칸은 안 건드림. (이번에 자동으로 둔 값 {값 이름: 글}, 파일을 바꿨는지)."""
+    from openpyxl import load_workbook
+
+    fresh = not target.exists()  # 처음(틀에서 복사) — 틀 기본값(예: 납품서 붙임 '예')도 자동 값으로 바꿈
+    wb = load_workbook(source if fresh else target)
+    ws = wb["기본사항"]
+    names = {label: key for key, labels in DONE_LABELS.items() for label in labels}
+    done, changed = {}, False
+    for r in range(1, ws.max_row + 1):
+        key = names.get(str(ws.cell(r, 1).value or "").strip())
+        if not key or values.get(key) in (None, ""):
+            continue
+        cell, new = ws.cell(r, 2), values[key]
+        cur = cell.value
+        if not (fresh or cur in (None, "") or (isinstance(cur, str) and cur.startswith("=")) or _key(cur) == prev.get(key)):
+            continue  # 담당자가 고친 값
+        if _key(cur) != _key(new) or (isinstance(cur, str) and cur.startswith("=")):
+            cell.value, changed = new, True
+        done[key] = _key(new)
+    if changed or fresh:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        wb.save(target)
+    return done, changed
+
+
 _SITE = re.compile(r"공\s*사\s*(?:위\s*치|장\s*소|현\s*장)\s*[:：]\s*([^\n]{4,60})")
 _PERIOD = re.compile(r"(?:착\s*공|착\s*수|계\s*약)\s*일\s*(?:로\s*)?부\s*터\s*(\d{1,4})\s*일")
 _LONG = re.compile(r"장\s*기\s*계\s*속\s*(?:계\s*약|공\s*사)")
@@ -178,6 +275,7 @@ QUAL_LABELS = {"no": ("입찰공고번호", "입찰등록번호", "관리번호"
 # 종합공사업(건설산업기본법) — 그 밖(실내건축·정보통신·전기·소방 등)은 '전문·그밖'
 GENERAL_TRADES = ("토목공사업", "건축공사업", "토목건축공사업", "산업환경설비공사업", "조경공사업")
 _YELLOW = "FFFFF4C2"
+_BLUE = "FFDDEBF7"  # 준공·청구 틀 파란 칸(계약서 값)
 # 기본사항 C열(안내)이 비어 있으면 넣는 설명 — 틀에 안내가 없는 칸만
 QUAL_NOTES = {"구매관리번호": "보통 비워서 냄(2023 강서구 실물모형 제출본도 빈칸) — 조달청 대행 공고처럼 공고문에 구매관리번호가 있을 때만 적음"}
 
@@ -259,7 +357,7 @@ def qual_todo(xlsx: Path) -> tuple[list[str], list[list[str]]]:
 
 # 서류 현황(화면 '서류 현황' 칸) — 단계 폴더마다 무엇이 만들어졌는지. 표준틀은 착공·착수만, 나머지는 샘플을 받은 뒤(11/11)
 STAGE_NAME = {"0_적격심사": "적격심사", "1_계약": "계약", "2_착공": "착공", "2_착수": "착수", "3_준공": "준공", "4_청구": "청구"}
-READY_STAGES = {"2_착공", "2_착수"}
+READY_STAGES = {"2_착공", "2_착수", "3_준공", "4_청구"}  # 표준틀이 있는 단계(3·4는 11/18)
 # 기본사항에서 담당자가 꼭 넣을 칸(행 번호 — 이름은 A열에서 읽어 틀 이름이 바뀌어도 맞음). 공사는 21행 공사위치도
 REQUIRED_ROWS = (6, 8, 9, 10, 12, 15, 16, 17, 18, 19, 20)
 
@@ -446,7 +544,7 @@ class PostAward:
             tdir = Path(templates) if templates else template_dir(root)
             basic = [] if private else self._fill_qual(key, folder, nf, tdir)
             basic += (["[적격심사] 낙찰 전 — 0_적격심사·공고문서만 만듦(계약·착공 서류는 낙찰 뒤 '낙찰 서류 만들기')"] if qual_only
-                      else self._fill_template(key, folder, nf, tdir))
+                      else self._fill_template(key, folder, nf, tdir) + self._fill_done(key, folder, nf, tdir))
             summary = folder / "공고문서" / SUMMARY
             if nf.title and not summary.exists():
                 try:
@@ -483,11 +581,13 @@ class PostAward:
         for d in sorted(p for p in folder.iterdir() if p.is_dir() and p.name in STAGE_NAME):
             files = sorted(f.name for f in d.iterdir() if f.is_file() and not f.name.startswith("~$"))
             stage = {"dir": d.name, "name": STAGE_NAME[d.name], "files": files, "ready": d.name in READY_STAGES}
-            qual = d.name == "0_적격심사"
-            doc = d / (QUAL_DOC if qual else TEMPLATES["공사" if gong else "물품·용역"][2])
-            if (qual or d.name in READY_STAGES) and doc.exists():
+            qual, done = d.name == "0_적격심사", d.name in ("3_준공", "4_청구")
+            doc = d / (QUAL_DOC if qual else CLAIM_TEMPLATE[2] if d.name == "4_청구"
+                       else DONE_TEMPLATES.get(v.get("work", ""), ("", "", "-"))[2] if done else TEMPLATES["공사" if gong else "물품·용역"][2])
+            if (qual or d.name in READY_STAGES) and doc.is_file():
                 try:
-                    stage["todo"], stage["auto"] = qual_todo(doc) if qual else sheet_todo(doc, gong)
+                    stage["todo"], stage["auto"] = (qual_todo(doc) if qual else sheet_todo(doc, gong) if not done
+                                                    else done_todo(doc, (v.get("autoFill") or {}).get(f"{d.name}/{doc.name}", {})))
                     stage["doc"] = doc.name
                 except Exception as err:  # noqa: BLE001 — 엑셀이 열려 있거나 깨졌어도 나머지는 보임
                     stage["error"] = f"{doc.name}을 읽지 못함({err.__class__.__name__}) — 엑셀에서 닫고 다시 보세요"
@@ -615,6 +715,56 @@ class PostAward:
         fill_basic(templates / name, target, values)
         return ([f"[기본사항] {stage}/{doc} — 자동으로 채운 칸(하늘색): " + ", ".join(src.split(" — ")[0] for _, src in values.values()),
                  "  계약번호·계약일·착수일·수신·문서번호·제출일·인력은 직접 넣으세요"] + [f"  {n}" for n in notes])
+
+    def _fill_done(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
+        """3_준공(준공계·납품계·완료계)·4_청구(청구서) — 처음엔 나라장터 값(수요기관·공고명·낙찰금액), 담당자가 착공·착수서류를
+        채운 뒤 '첨부 다시 받기'를 누르면 그 계약 값(건명·금액·계약일·착수일·준공예정일·수신)으로 파란 칸을 채움(11/18).
+        담당자가 고친 칸은 안 건드림. 안내 줄을 돌려줌."""
+        v = self._read().get(key) or {}
+        work = v.get("work", "")
+        if work not in DONE_TEMPLATES:
+            return ["[준공·청구] 업무(공사/물품/용역)를 몰라 준공·청구 서류를 만들지 않음"]
+        raw = getattr(nf, "raw", None) or {}
+        title = nf.title or v.get("title", "")
+        inst = str(raw.get("dminsttNm") or "").strip() or nf.institution or v.get("institution", "")
+        amount = _digits(str((v.get("winner") or {}).get("amount") or "").split(".")[0])
+        values: dict[str, Any] = {"to": inst, "title": title, "amount": int(amount) if amount else None, "gwiha": inst}
+        if work == "용역":  # 설계 용역이면 공문 붙임에 납품서(11/18 사용자)
+            values["nap"] = "예" if "설계" in title else "아니오"
+        lines = []
+        _, stage0, doc0 = TEMPLATES[group_of(work)]
+        start = folder / stage0 / doc0
+        got: dict[str, Any] = {}
+        if start.exists():
+            try:
+                got = start_values(start)
+            except Exception as err:  # noqa: BLE001 — 착공·착수서류를 못 읽어도 나라장터 값으로
+                lines.append(f"  {stage0}/{doc0}을 읽지 못함({err.__class__.__name__}) — 나라장터 값만 넣음")
+        values.update(got)
+        auto, head = dict(v.get("autoFill") or {}), []
+        for name, stage, doc in (DONE_TEMPLATES[work], CLAIM_TEMPLATE):
+            rel = f"{stage}/{doc}"
+            if not (templates / name).exists():
+                head.append(f"[준공·청구] 표준틀 '{name}'이 {templates}에 없어 {rel}를 만들지 않음")
+                continue
+            try:
+                done, _ = fill_done(templates / name, folder / stage / doc, values, auto.get(rel, {}))
+            except PermissionError:
+                head.append(f"[준공·청구] {rel}이 열려 있어 채우지 못함 — 엑셀에서 닫고 '첨부 다시 받기'")
+                continue
+            auto[rel] = done
+            kept = [DONE_NAMES[k] for k in values if values[k] not in (None, "") and k not in done
+                    and any(lab in DONE_LABELS[k] for lab in _labels(folder / stage / doc))]
+            head.append(f"[준공·청구] {rel} — 자동으로 채운 파란 칸: " + ", ".join(DONE_NAMES[k] for k in done)
+                         + (f" · 담당자가 고친 칸은 그대로: {', '.join(kept)}" if kept else ""))
+        lines.append(f"  준공·청구 파란 칸: {stage0}/{doc0} 값으로 채움" if got else
+                     f"  준공·청구 파란 칸은 지금 나라장터 값 — {stage0}/{doc0}에 계약건명·계약금액·계약일·착수일·준공예정일·수신을 "
+                     "넣고 저장한 뒤 '첨부 다시 받기'를 누르면 그 값으로 채움")
+        with self._lock:
+            items = self._read()
+            items[key]["autoFill"] = auto
+            self._write(items)
+        return head + lines
 
     def check(self, client: Any, base_url: str, keys: list[str] | None = None) -> dict[str, int]:
         """'대기' 공고의 낙찰자를 확인. keys를 주면 그 공고만(상태와 상관없이 다시)."""
@@ -792,7 +942,8 @@ def selfcheck() -> None:
         todo = by_dir["2_착공"]["todo"]   # 인력: 필수 줄 1번은 이름이 없어도 9칸 전부, 참여기술자 2번·해당 시 5번은 이름이 없으면 안 셈
         assert any(t.startswith("1번: ") and t.count("·") == 8 for t in todo), todo
         assert not any(t.startswith(("2번", "5번")) for t in todo), todo
-        assert by_dir["3_준공"]["ready"] is False and by_dir["3_준공"]["files"] == []
+        assert by_dir["3_준공"]["ready"] is True and by_dir["3_준공"]["files"] == []  # 준공 틀이 tpl에 없어 안 만듦
+        assert "표준틀_준공계.xlsx" in (folder / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
         assert pa.file("R26BK00000001-000", "2_착공/착공서류.xlsx").name == "착공서류.xlsx"
         for bad in ("../../postaward.json", "공고문서/없는파일.hwp"):
             try:
@@ -800,6 +951,63 @@ def selfcheck() -> None:
                 raise AssertionError("폴더 밖·없는 파일은 막아야 함: " + bad)
             except ValueError:
                 pass
+        # 준공·청구(11/18) — 처음엔 나라장터 값, 착수서류를 채운 뒤 다시 하면 계약 값으로. 담당자가 고친 칸은 그대로
+        from openpyxl.styles import PatternFill as _PF
+
+        tpl2 = Path(d) / "tpl2"
+        tpl2.mkdir()
+        for name, _, _ in TEMPLATES.values():
+            (tpl2 / name).write_bytes((tpl / name).read_bytes())
+
+        def fake(path, rows):
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "기본사항"
+            for r, (a, b) in enumerate(rows, 5):
+                ws.cell(r, 1, a), ws.cell(r, 2, b)
+                ws.cell(r, 2).fill = _PF("solid", fgColor=_YELLOW if a in ("제출일", "납품서 붙임") else _BLUE)
+            wb.save(path)
+
+        fake(tpl2 / "표준틀_완료계.xlsx", [("납품서 붙임", "예"), ("수신자", None), ("용역명", None), ("계약금액", None),
+                                       ("준공금액", '=IF(B8="","",B8)'), ("계약년월일", None), ("착공년월일", None),
+                                       ("완료기한", None), ("제출일", None), ("귀하", None)])
+        fake(tpl2 / "표준틀_대금청구서.xlsx", [("수신자", None), ("사업명", None), ("계약금액", None), ("귀하(재무관)", None)])
+
+        class _NF4(_NF):
+            title, work_type, institution, raw = "D 설계 용역", "용역", "홍천군", {"dminsttNm": "강원특별자치도 홍천군"}
+
+        k5 = "R26BK00000005-000"
+        pa.add(k5)
+        items = pa._read()
+        items[k5]["winner"] = {"amount": "19710000"}
+        pa._write(items)
+        f5, _ = pa.prepare(k5, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2)
+        ws = load_workbook(f5 / "3_준공" / "완료계.xlsx")["기본사항"]
+        assert [ws.cell(r, 2).value for r in (5, 6, 7, 8, 14)] == ["예", "강원특별자치도 홍천군", "D 설계 용역", 19710000, "강원특별자치도 홍천군"]
+        assert ws["B10"].value is None and ws["B9"].value.startswith("=")
+        # 담당자: 착수서류에 계약 값, 완료계 수신자는 손으로 고침
+        sx = load_workbook(f5 / "2_착수" / "착수서류.xlsx")
+        s = sx["기본사항"]
+        for r, (a, b) in {6: ("수신", "홍천군 분임재무관"), 12: ("계약금액(금차)", 19700000), 15: ("계약일", datetime(2025, 3, 11)),
+                          16: ("착수일", datetime(2025, 3, 12)), 17: ("준공예정일", datetime(2025, 8, 18))}.items():
+            s.cell(r, 1, a), s.cell(r, 2, b)
+        sx.save(f5 / "2_착수" / "착수서류.xlsx")
+        w = load_workbook(f5 / "3_준공" / "완료계.xlsx")
+        w["기본사항"]["B6"] = "홍천군 세무회계과"
+        w.save(f5 / "3_준공" / "완료계.xlsx")
+        pa.prepare(k5, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2)
+        ws = load_workbook(f5 / "3_준공" / "완료계.xlsx")["기본사항"]
+        assert ws["B6"].value == "홍천군 세무회계과" and ws["B8"].value == 19700000 and ws["B14"].value == "홍천군 분임재무관"
+        assert [ws.cell(r, 2).value.date().isoformat() for r in (10, 11, 12)] == ["2025-03-11", "2025-03-12", "2025-08-18"]
+        assert ws["B9"].value.startswith("=") and ws["B13"].value is None
+        c = load_workbook(f5 / "4_청구" / "청구서.xlsx")["기본사항"]
+        assert c["B6"].value == "D 설계 용역" and c["B7"].value == 19700000 and c["B8"].value == "홍천군 분임재무관"
+        text = (f5 / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
+        assert "담당자가 고친 칸은 그대로: 수신자" in text and "착수서류.xlsx 값으로 채움" in text, text
+        by5 = {x["dir"]: x for x in pa.status(k5)["stages"]}
+        assert by5["3_준공"]["doc"] == "완료계.xlsx" and by5["3_준공"]["todo"] == ["제출일"], by5["3_준공"]
+        assert ["계약금액", "19,700,000"] in by5["3_준공"]["auto"] and "수신자" not in [a for a, _ in by5["3_준공"]["auto"]]
+        assert by5["4_청구"]["doc"] == "청구서.xlsx" and by5["4_청구"]["todo"] == []
         assert share_path("/work/낙찰후서류/공사/A") == "\\\\jiilserver\\jiil-webapp\\낙찰후서류\\공사\\A"
 
 

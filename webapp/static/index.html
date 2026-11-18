@@ -3976,7 +3976,7 @@ function renderAward(items) {
     const hint = qualWhy ? "" : `<div class="sub">${rank === 1 ? "적격심사 대상 가능성 높음 — 통보 확인" : "적격심사 통보받으면 만들기"}</div>`;
     const act = (v.folder
       ? `<button type="button" class="award-toggle" data-award-open="${esc(key)}" aria-expanded="${AWARD_OPEN.has(key)}">서류 현황 ${AWARD_OPEN.has(key) ? "▴" : "▾"}</button>
-         <button type="button" data-award-folder="${esc(key)}"${stage} title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀(담당자가 고친 파일은 안 덮어씀)">첨부 다시 받기</button><br>` : "")
+         <button type="button" data-award-folder="${esc(key)}"${stage} title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀. 착공·착수서류에 넣은 계약 값을 준공·청구 서류의 파란 칸에 채움(담당자가 고친 칸은 안 덮어씀)">첨부 다시 받기</button><br>` : "")
       + `${qualBtn} ${awardBtn}${hint}`;
     const detail = AWARD_OPEN.has(key) ? `<tr class="award-detail"><td colspan="5"><div id="awardDetail-${esc(key)}" class="award-panel">불러오는 중…</div></td></tr>` : "";
     return `<tr><td><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener">${esc(key)}</a><div>${esc(v.title || "")}</div><div class="sub">${esc(v.institution || "")}</div></td>

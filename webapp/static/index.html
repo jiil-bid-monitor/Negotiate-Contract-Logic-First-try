@@ -1080,6 +1080,8 @@ footer b { color: var(--muted); }
 .bidlog-table th { width: auto; }
 .bidlog-table td { font-size: 13px; }
 .bidlog-table td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* 외주 금액이 없는 줄의 '-'는 칸 가운데 (2026-11-18 사용자 요청) — 좁은 화면 카드 모양은 그대로 */
+@media (min-width: 761px) { .bidlog-table td.out .res-wait { display: block; text-align: center; } }
 .bidlog-table td.bid { font-weight: 700; color: var(--ink-strong); }
 /* 외주 금액 비교(11/16) */
 .bidlog-table .cm.actual { background: #e7f3ec; border-color: #9fcdb2; color: #1b6e43; }

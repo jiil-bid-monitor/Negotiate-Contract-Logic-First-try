@@ -4028,3 +4028,55 @@ def test_bizno_corp_paren_label(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info=info))
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert "사업자등록(법인)번호 : 110111-1234567 (123-45-67890)" in text, text
+
+
+def test_horizontal_eval_table_rows_labelled_points_score(tmp_path: Path):
+    """11/18 사용자 제보: 평가표 '평가항목 | 배점 | 평가요소 | 평가기준 | 점수(합계)' — 항목마다 '등급 | 특급… / 배점 | 각1.0 … / 점수 | __ …'처럼
+    '배점'·'점수'가 줄 이름이고 등급이 가로로 놓인 모양이라 점수를 하나도 못 읽고 합계만 0. 전문인력 = 등급별 인원 × 점수,
+    경영상태 = 맞는 등급 열 아래 점수 칸 + 항목 칸, 계약이행 성실도 = 감점 칸 0 + 항목 5(감점 방식 — 사용자 결정), 실적은 담당자 직접."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t="", span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                              f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    tb = lambda rows: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    four = lambda r, vals: [c(4 + i, r, v) for i, v in enumerate(vals)]
+    rule = ["AAA, AA+, A+, BBB+, BBB°", "BBB-, BB+, BB°, BB-", "B+, B°, B-", "CCC+이하"]
+    rows = [
+        [c(0, 0, "평가항목"), c(1, 0, "배점"), c(2, 0, "평가요소", 2), c(4, 0, "평가기준", 4), c(8, 0, "점수(합계)")],
+        [c(0, 1, "사업수행실적", rs=3), c(1, 1, "5", rs=3), c(2, 1, "실적액", 2)] + four(1, ["100% 이상", "70% 이상~100% 미만", "40% 이상~70% 미만", "40% 미만"]) + [c(8, 1, rs=3)],
+        [c(2, 2, "배점", 2)] + four(2, ["5.0", "4.5", "4.0", "3.5"]),
+        [c(2, 3, "점수", 2)] + four(3, [""] * 4),
+        [c(0, 4, "전문인력", rs=3), c(1, 4, "5", rs=3), c(2, 4, "등급", 2)] + four(4, ["특급기술자", "고급기술자", "중급기술자", "초급기술자이하"]) + [c(8, 4, rs=3)],
+        [c(2, 5, "배점", 2)] + four(5, ["각1.0", "각0.8", "각0.6", "각0.4"]),
+        [c(2, 6, "점수", 2)] + four(6, [""] * 4),
+        [c(0, 7, "경영상태", rs=5), c(1, 7, "5", rs=5), c(2, 7, "신용평가등급", rs=3), c(3, 7, "회사채")] + four(7, rule) + [c(8, 7, rs=5)],
+        [c(3, 8, "기업어음")] + four(8, ["A1, A2+", "A3-, B+, B°", "B-", "C이하"]),
+        [c(3, 9, "기업")] + four(9, rule),
+        [c(2, 10, "배점", 2)] + four(10, ["5.0", "4.5", "4.0", "3.5"]),
+        [c(2, 11, "점수", 2)] + four(11, [""] * 4),
+        [c(0, 12, "계약이행 성실도", rs=6), c(1, 12, "5", rs=6), c(2, 12, "납품지체일 수", 2)] + four(12, ["60일 이상", "45일 이상", "30일 이상", "30일 미만"]) + [c(8, 12, rs=6)],
+        [c(2, 13, "배점", 2)] + four(13, ["-2.0", "-1.5", "-1.0", "-0.5"]),
+        [c(2, 14, "점수", 2)] + four(14, [""] * 4),
+        [c(2, 15, "제재처분", 2), c(4, 15, "-2.0", 4)],
+        [c(2, 16, "배점", 2), c(4, 16, "", 4)],
+        [c(2, 17, "점수", 2), c(4, 17, "", 4)],
+        [c(0, 18, "합 계", 8), c(8, 18)],
+    ]
+    src = _mini_hwpx(tmp_path / "s.hwpx", tb(rows))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"},
+                    staff=[{"이름": "가상1", "등급": "특급", "입사일": "2015-01-01"}, {"이름": "가상2", "등급": "고급", "입사일": "2015-01-01"},
+                           {"이름": "가상3", "등급": "고급", "입사일": "2015-01-01"}])
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 18)))
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {}
+    for tc in re.findall(r"<hp:tc>.*?</hp:tc>", xml, re.S):
+        col, row = re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', tc).groups()
+        got[(int(row), int(col))] = re.sub(r"<[^>]+>", "", tc).strip()
+    assert [got[(6, k)] for k in range(4, 8)] == ["1.0", "1.6", "0.0", "0.0"], got  # 특급 1 × 1.0, 고급 2 × 0.8
+    assert got[(4, 8)] == "2.6"
+    assert [got[(11, k)] for k in range(4, 8)] == ["", "4.5", "", ""] and got[(7, 8)] == "4.5"  # BB+ → 4.5 열
+    assert [got[(14, k)] for k in range(4, 8)] == ["0"] * 4 and got[(17, 4)] == "0" and got[(12, 8)] == "5"
+    assert got[(1, 8)] == "" and [got[(3, k)] for k in range(4, 8)] == [""] * 4  # 실적은 담당자 직접
+    assert got[(18, 8)] == "12.1"  # 2.6 + 4.5 + 5

@@ -2793,6 +2793,10 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
         # 상한점수 줄 평점 칸에도 항목 점수(11/16 사용자 요청: 경영상태 '2.85점' 줄엔 들어가고 '상 한 점 수 | 3점' 칸은 빔)
         if row.cap_cell is not None and row.cap_cell is not cell:
             out.append((row.cap_cell, [fmt(item.score)], False))
+        if item.kind == "credit" and item.score in row.col_cells:  # 가로형 표 — 맞는 등급 열 아래 '점수' 칸에도(11/18)
+            out.append((row.col_cells[item.score], [fmt(item.score)], False))
+        for zc in row.zero_cells:  # 가로형 감점 표 '점수' 칸 — 감점 사유 없음 → 0(11/13 '감점 칸은 늘 0')
+            out.append((zc, ["0"], False))
         for nc, pts in none_cells:  # 신인도 '없음' 줄마다 그 줄 배점(11/16 사용자 요청) — 상한점수 줄엔 위대로 합(상한까지)
             out.append((nc, [_one_dec(pts)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")

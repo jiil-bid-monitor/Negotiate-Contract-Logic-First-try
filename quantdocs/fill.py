@@ -2910,6 +2910,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         right = by_pos.get((c.row, c.col + c.colspan))
                         if right is not None and _SEAL_ONLY.match(_sq(right.text)):
                             key, applicant = "회사명", True
+                    if key is None and _sq(c.text) == "성명" and group is None \
+                            and any(_sq(o.text) == "접수번호" for o in cells) and any(_label_key(o.text) == "회사명" for o in cells):
+                        key = "대표자"  # 접수증 '접수번호 | 2026 - | 업체명 | __ / 주 소 / 성 명 | __ | 제출자'(11/18 사용자 요청 — 성명 = 대표자, 제출자는 비움)
                     if key is None and re.fullmatch(r"기관명|대표", _sq(c.text)) and _sign_table(cells, by_pos):
                         # 각서·신청서 끝 서명 표 '제 출 일 | 2026년 월 일 / 기 관 명 | __ / 대    표 | (인)'(11/18 봉평) — 기관명 = 지일(입찰자), 대표 = 대표자
                         key = "회사명" if _sq(c.text) == "기관명" else "대표자"

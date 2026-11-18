@@ -3850,3 +3850,18 @@ def test_sign_table_org_name_and_rep(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert text.count("(주)가상") == 1 and "홍길동" in text, text
+
+
+def test_receipt_table_name_is_rep(tmp_path: Path):
+    """11/18 사용자 요청(접수증 '접수번호 | 2026 - | 업체명 | (주)… | 확인필 / 주 소 | … | 전화번호 | … / 성 명 | __ | 제 출 자 | __'):
+    '성 명' 칸 = 대표자(접수번호 칸이 있는 표만 — 다른 서식의 '성명'은 개인 칸이라 그대로 비움), 제출자는 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "접수번호"), _c(1, 0, "2026 -"), _c(2, 0, "업 체 명"), _c(3, 0, ""), _c(4, 0, "확인필")],
+                 [_c(0, 1, "주    소"), _c(1, 1, ""), _c(2, 1, "전화번호"), _c(3, 1, ""), _c(4, 1, "")],
+                 [_c(0, 2, "성    명"), _c(1, 2, ""), _c(2, 2, "제 출 자"), _c(3, 2, ""), _c(4, 2, "")]]) \
+        + _tbl([[_c(0, 0, "성    명"), _c(1, 0, "")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert text.count("홍길동") == 1 and "(주)가상" in text, text

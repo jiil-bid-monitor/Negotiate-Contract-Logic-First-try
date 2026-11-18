@@ -4080,3 +4080,19 @@ def test_horizontal_eval_table_rows_labelled_points_score(tmp_path: Path):
     assert [got[(14, k)] for k in range(4, 8)] == ["0"] * 4 and got[(17, 4)] == "0" and got[(12, 8)] == "5"
     assert got[(1, 8)] == "" and [got[(3, k)] for k in range(4, 8)] == [""] * 4  # 실적은 담당자 직접
     assert got[(18, 8)] == "12.1"  # 2.6 + 4.5 + 5
+
+
+def test_bid_proposal_notice_slot_gets_ref_no(tmp_path: Path):
+    """11/18 사용자 요청: '입찰(제안) 공고 | 제2026-      호'(기관 이름 없이 연도만 적힌 칸)에도 나라장터 참조번호의 번호 —
+    서식 글은 그대로, '-' 뒤 빈칸에 번호만('제2026-1703 호'). 예전엔 이름표를 몰라 빈 채로 남았음."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "입찰(제안) 공고"), _c(1, 0, "제2026-      호")]])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={}), notice_no=("2026", "1703"), g2b_no="R26BK00000001-000")
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert "제2026-1703 호" in text and "R26BK00000001" not in text, text
+    # 참조번호 연도가 서식과 다르면 원본 글 그대로
+    fill_hwpx(src, tmp_path / "p.hwpx", vault.Vault({}, info={}), notice_no=("2025", "99"), g2b_no="R26BK00000001-000")
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "p.hwpx").read("Contents/section0.xml").decode())
+    assert "1703" not in text and "-99" not in text, text

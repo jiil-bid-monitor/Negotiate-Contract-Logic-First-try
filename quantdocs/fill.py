@@ -2948,6 +2948,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     track_marks += [escape(lines[0]) for _c, lines, _k in track_edits if lines and len(lines[0]) >= 4]
                 scored = _self_score_edits(cells, self_scores, rep, tally) if self_scores else []
                 edits += scored
+                # 자기평가표 점수 칸엔 회사 정보를 안 넣음(11/18 사용자 지적: '자체평가 | 배점' 칸에 'BB+'가 들어감 —
+                # 옆 '신용평가등급(회사채)…' 기준표 칸을 이름표로 읽었음)
+                from .selfscore import read_form as _rf
+                score_cells = {id(e[0]) for e in scored} | {id(r.cell) for r in _rf(cells) if r.cell is not None}
                 if not sign_only:
                     edits += _deduction_edits(cells, rep, tally)
                     if not scored:  # 자기평가표 아래 따로 놓인 '합 계 | 20 점 | __' 표
@@ -3085,7 +3089,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             edits.append((c, None, seg))
                             rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
                         continue
-                    if target is None:
+                    if target is None or id(target) in score_cells:
                         continue
                     if check_cols and target.col in check_cols:
                         continue  # 점검표 '적용·해당없음' 열 — 회사 정보 칸이 아님(11/13)

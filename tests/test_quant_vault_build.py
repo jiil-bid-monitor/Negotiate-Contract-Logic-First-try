@@ -421,6 +421,7 @@ def test_circled_heads_credit_merged_score_and_limit_form(tmp_path: Path):
     got = {tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups())): re.sub(r"<[^>]+>", "", m)
            for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S)}
     assert got[(3, 1)] == "4" and got[(3, 2)] == "1.8", got
+    assert got[(1, 1)] == "BB+" and got[(1, 2)] == "(해당등급 및 인원표기)", got  # 경영상태 등급 표기 칸 = 등급(11/18 사용자 요청)
 
 
 def test_qualification_rows_merge_docs_and_name_only(tmp_path: Path, monkeypatch):

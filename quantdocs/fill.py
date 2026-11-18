@@ -255,6 +255,18 @@ def _birth(v: str) -> str:
     return f"{century + yy}. {m.group(2)}. {m.group(3)}."
 
 
+def _sign_table(cells: list[Cell], by_pos: dict) -> bool:
+    """작은 서명 표 — '대표 | (인)' 줄이 있는 5줄 이하 표(11/18 봉평 '제출일 / 기관명 / 대표 (인)')."""
+    if len({c.row for c in cells}) > 5:
+        return False
+    for c in cells:
+        if _sq(c.text) == "대표":
+            right = by_pos.get((c.row, c.col + c.colspan))
+            if right is not None and _SEAL_ONLY.match(_sq(right.text)):
+                return True
+    return False
+
+
 def _label_key(text: str) -> str | None:
     t = _sq(text).strip(":：")
     # 글자 수로 거르지 않음(11/13 사용자 요청 — '회사채(또는기업어음)에대한신용평가등급또는기업신용평가등급'이 16자를 넘어 빠졌음).
@@ -2898,6 +2910,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         right = by_pos.get((c.row, c.col + c.colspan))
                         if right is not None and _SEAL_ONLY.match(_sq(right.text)):
                             key, applicant = "회사명", True
+                    if key is None and re.fullmatch(r"기관명|대표", _sq(c.text)) and _sign_table(cells, by_pos):
+                        # 각서·신청서 끝 서명 표 '제 출 일 | 2026년 월 일 / 기 관 명 | __ / 대    표 | (인)'(11/18 봉평) — 기관명 = 지일(입찰자), 대표 = 대표자
+                        key = "회사명" if _sq(c.text) == "기관명" else "대표자"
                     if group == "대리인" and key not in ("회사명", None):
                         continue  # 대리인 줄은 업체명만(성명·주민번호·주소·연락처는 개인 정보라 비움 — 10/28·11/05 결정)
                     core = re.sub(r"\(.*?\)|[^\w]", "", c.text)  # '〈 주요연혁(요약) 〉' → '주요연혁'

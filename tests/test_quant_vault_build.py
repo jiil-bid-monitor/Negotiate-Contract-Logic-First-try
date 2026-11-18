@@ -3836,3 +3836,17 @@ def test_bond_amount_label_and_form_rate(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={}), basis=806_162_000)
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert "보증금액 : 금 이천십오만사천오십 원정 (￦ 20,154,050 )" in text, text
+
+
+def test_sign_table_org_name_and_rep(tmp_path: Path):
+    """11/18 사용자 제보(봉평 입찰참가 신청서 끝 서명 표): '제 출 일 | 2026년 월 일 / 기 관 명 | __ / 대    표 | (인)'에서
+    기관명·대표가 빔 — '기관명'·'대표'(자 없이)를 이름표로 몰랐음. '대표 | (인)' 줄이 있는 작은 서명 표에서만 기관명 = 회사명, 대표 = 대표자."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "제 출 일"), _c(1, 0, "2026년    월    일")],
+                 [_c(0, 1, "기 관 명"), _c(1, 1, "")],
+                 [_c(0, 2, "대    표"), _c(1, 2, "(인)")]]) + _tbl([[_c(0, 0, "기 관 명"), _c(1, 0, "")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert text.count("(주)가상") == 1 and "홍길동" in text, text

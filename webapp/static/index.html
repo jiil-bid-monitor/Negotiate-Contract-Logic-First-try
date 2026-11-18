@@ -349,7 +349,7 @@ body {
 .topbar .me-top + .theme { margin-left: 0; flex: none; }
 /* 바로가기 — 나라장터·21라인 (10/26 사용자 요청: 본문 오른쪽 빈 곳에 사이트 아이콘과 블록으로).
    본문 오른쪽에 자리가 없으면(1520px 이하) 본문 맨 위 줄 오른쪽에 한 줄로. */
-.me-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: -16px 0 6px; }
+.me-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin: -16px 0 6px; }
 .me-row .me-note { margin: 0; }
 .side-links {
   position: fixed; z-index: 20; top: 128px;
@@ -390,6 +390,7 @@ body {
   font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 4px;
   background: var(--panel); color: var(--ink);
 }
+#liveTools .tab-search { margin-left: auto; }
 .tab-search::placeholder { color: var(--faint); }
 .tab-search:focus { outline: none; border-color: var(--brand); }
 @media (max-width: 760px) { .tab-search { flex: 1 1 100%; } }
@@ -1321,7 +1322,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <span class="slash">|</span>
     <div class="brand-text">
       <h1>나라장터 공고 수집</h1>
-      <p class="corpus-sum" id="corpusSum">과거 실적을 불러오는 중…</p>
+      <p class="corpus-sum" id="corpusSum" hidden>과거 실적을 불러오는 중…</p>
     </div>
 
     <label class="me-top">내 이름 <input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></label>
@@ -1335,7 +1336,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 
 <div class="wrap">
   <div class="me-row">
-    <p class="me-note">내 이름은 이 브라우저에 기억되고, 참가여부·담당·대화에 표시됩니다.</p>
     <nav class="side-links" aria-label="바로가기">
       <a href="https://www.g2b.go.kr/" target="_blank" rel="noopener" title="나라장터 새 창으로 열기"><img src="icons/g2b.ico" alt=""><b>나라장터</b><small>g2b.go.kr</small><span class="go">↗</span></a>
       <a href="https://www.21line.co.kr/conty/?cd=first" target="_blank" rel="noopener" title="21라인 새 창으로 열기"><img src="icons/21line.ico" alt=""><b>21라인</b><small>21line.co.kr</small><span class="go">↗</span></a>
@@ -1352,11 +1352,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <button role="tab" aria-selected="false" data-tab="quant">정량평가서</button>
       <button role="tab" aria-selected="false" data-tab="award">낙찰 후 서류</button>
     </div>
-    <input id="liveQ" class="tab-search" type="search" placeholder="공고명·수요기관·공고기관·공고번호 검색" autocomplete="off" aria-label="실제 공고 목록에서 찾기">
   </div>
 
   <section id="tab-live">
-    <div class="toolbar">
+    <div class="toolbar" id="liveTools">
       <!-- 조회 기간은 '나라장터에서 불러오기'를 누를 때만 쓴다 (게시일 기준, 마감 지난 공고는 서버가 뺀다) -->
       <select id="days" autocomplete="off" aria-label="조회 기간" title="'나라장터에서 불러오기'를 누를 때 이 기간에 게시된 공고를 받습니다">
         <option value="1">최근 1일</option>
@@ -1372,10 +1371,11 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         <span>~</span>
         <input type="date" id="toDate" aria-label="종료일" title="게시일 종료일 (이날 23:59까지, 오늘이면 지금까지)">
       </span>
-      <label class="check" title="끄면 사전규격(공고 전 단계)은 목록에서 숨깁니다"><input type="checkbox" id="incPre" checked> 사전규격 포함</label>
       <button type="button" id="refresh" title="고른 기간의 공고를 나라장터에서 새로 받고 첨부(공고문·과업지시서)까지 읽습니다 — 몇 분 걸립니다">나라장터에서 불러오기</button>
       <button type="button" id="load" class="ghost" title="서버에 저장된 마지막 수집 결과와 팀원의 참가여부·대화를 다시 받아옵니다 (나라장터에 다시 묻지 않습니다)">판단 갱신</button>
       <span class="load-state" id="loadState" role="status"></span>
+      <!-- 찾기 칸 — 실제 공고 탭에선 수집 줄 오른쪽(2026-11-18), 제외된 공고 탭으로 가면 탭 줄 오른쪽으로 옮긴다(showTab) -->
+      <input id="liveQ" class="tab-search" type="search" placeholder="공고명·수요기관·공고기관·공고번호 검색" autocomplete="off" aria-label="실제 공고 목록에서 찾기">
     </div>
     <div class="cat-tabs" id="catTabs" role="tablist" aria-label="공고 대분류"></div>
     <div class="filter-row">
@@ -1387,7 +1387,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
           <option value="deadline" title="자격등록 마감 기준 — 자격등록 마감이 없거나 이미 지났으면 투찰 마감으로">자격등록 마감 순</option>
           <option value="bid" title="입찰서·제안서를 실제로 내는 마감 기준 (사전규격은 의견 마감)">투찰 마감 임박 순</option>
           <option value="score">싱크로율 높은 순</option>
-          <option value="grade">강력추천 먼저</option>
           <option value="amount">금액 큰 순</option>
           <option value="posted">최근 게시 순</option>
         </select>
@@ -1790,6 +1789,20 @@ function watchJob(job, mine) {
   jobTimer = setTimeout(tick, 1500);
 }
 
+/** 수집 요약 줄 — '11/18 08:07' 꼴 */
+function fmtShort(v) {
+  const d = v ? new Date(v) : null;
+  if (!d || isNaN(d)) return "";
+  const p = (x) => String(x).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+/** 수집 요약 줄 — 조회 기간. 기간 이름이 있으면 그대로('최근 7일'), 없으면 게시일 범위 */
+function spanLabel(data) {
+  if (data.periodLabel) return `${data.periodLabel} 게시분`;
+  if (data.periodBegin) return `${fmtShort(data.periodBegin)} ~ ${fmtShort(data.periodEnd)} 게시분`;
+  return "";
+}
+
 async function loadNotices(refresh) {
   if (refresh) {
     setBusy(true);
@@ -1841,20 +1854,14 @@ async function loadNotices(refresh) {
     }
     // 마감 지난 공고는 보이지 않는다. 서버가 이미 빼지만, 받아 둔 목록을 다음 날 다시 열면 그 사이 마감된 공고가 남는다
     data.items = data.items.filter(stillOpen);
-    const hi = data.items.filter((n) => n.maxScore >= HIGH).length;
-    const mid = data.items.filter((n) => n.maxScore >= LOW && n.maxScore < HIGH).length;
-    const span = data.periodBegin ? `조회 ${fmtDT(data.periodBegin)} ~ ${fmtDT(data.periodEnd)}` : `조회 ${esc(data.periodLabel || "")}`;
-    const col = data.collected;
+    // 한 줄만 — 마지막 수집 시각과 조회 기간 (2026-11-18 사용자 결정, 받은 공고 수·싱크로율 건수는 뺌)
     $("liveMeta").innerHTML =
-      `${span} · 수집 ${esc(fmtDT(data.fetchedAt))}` +
-      (col ? ` · 나라장터에서 받은 공고 본공고 ${num(col.bid)}건 · 사전규격 ${num(col.pre)}건` : "") +
+      `마지막 수집 ${esc(fmtShort(data.fetchedAt))} · ${esc(spanLabel(data))}` +
       (data.prespecError ? ` · <span style="color:var(--warn)">사전규격 조회 실패</span>` : "") +
       // 판정은 수집할 때 계산해 저장한다 — 서버 코드가 바뀐 뒤 예전 결과를 보고 있으면 다시 불러오라고 알린다
       (data.format !== data.resultFormat ? `<br><span style="color:var(--warn)">이 결과는 이전 버전으로 수집됐습니다 — ${viewer ? "서버 PC에서 다시 수집하면" : "'나라장터에서 불러오기'를 다시 하면"} 새 판정으로 보입니다.</span>` : "") +
       // 서버 PC 화면 — NAS로 보낸 결과 (실패하면 서버가 1분마다 다시 시도한다)
-      (data.push?.error ? `<br><span style="color:var(--urgent)">NAS로 보내지 못함 — ${esc(data.push.error)} (1분마다 다시 시도)</span>` : data.push?.at ? ` · NAS 반영 ${esc(fmtDT(data.push.at))}` : "") +
-      ` · 목록 <b>${data.items.length}건</b> · ` +  // 한 줄로(11/18 사용자 — 예전엔 둘째 줄)
-      `싱크로율 높음 <b>${hi}</b> · 경계선 <b>${mid}</b> · 낮음 <b>${data.items.length - hi - mid}</b>`;
+      (data.push?.error ? `<br><span style="color:var(--urgent)">NAS로 보내지 못함 — ${esc(data.push.error)} (1분마다 다시 시도)</span>` : "");
     if (!jobTimer) $("loadState").textContent = `완료 ${fmtDT(new Date())}`;
     renderNotices(data.items, (data.titleExcludedItems || []).filter(stillOpen), (data.heldItems || []).filter(stillOpen), data.heldProducts || []);
     // 공고문 세부품명 확인이 뒤에서 돌고 있으면 진행을 보여 주고, 찾을 때마다 세부품명 공고 탭을 다시 받는다
@@ -1892,16 +1899,8 @@ function categoryOf(n) {
   return m === "협상" || m === "규격가격동시" ? "협상" : "입찰";
 }
 
-/** 도구 줄 체크박스 — 이 브라우저에 기억한다 */
-const LIVE_OPTS_KEY = "live-opts";
-try {
-  const o = JSON.parse(localStorage.getItem(LIVE_OPTS_KEY) || "{}");
-  if (o.incPre === false) $("incPre").checked = false;
-} catch { /* 기억 못 해도 기본(둘 다 켬)으로 보인다 */ }
-function saveLiveOpts() {
-  try { localStorage.setItem(LIVE_OPTS_KEY, JSON.stringify({ incPre: $("incPre").checked })); } catch { /* 무시 */ }
-}
-const includePre = () => $("incPre").checked;
+/** 사전규격은 늘 목록에 둔다 — 예전 '사전규격 포함' 체크박스는 2026-11-18 사용자 결정으로 뺌 */
+const includePre = () => true;
 
 /**
  * 카드에 ⚠·! 표시가 붙는, 담당자가 원문을 직접 확인해야 하는 점 — '확인 필요' 드롭다운이 이것으로 거른다.
@@ -2153,7 +2152,7 @@ function listFilterPass(n) {
     (filters.work === "all" || n.businessType === filters.work) &&
     (filters.prod === "all" || (n.productCodes || []).includes(filters.prod)) &&
     (filters.grade === "all" || n.confidence === filters.grade) &&
-    (filters.part === "all" || (participation[n.noticeNo]?.status || "미지정") === filters.part) &&
+    (filters.part === "all" || partOf(n) === filters.part) &&
     checkPass(n, filters.check)
   );
 }
@@ -2184,8 +2183,10 @@ function applyFilters() {
     const n = v === "all" ? items.length : count((x) => categoryOf(x) === v);
     const label = v === "all" ? "전체" : v;
     const off = v === "사전규격" && !includePre();
-    return `<button type="button" role="tab" class="cat-tab ${filters.cat === v ? "on" : ""}" aria-selected="${filters.cat === v}" data-cat="${v}" ${off ? "disabled" : ""} ${note ? `title="${esc(off ? "'사전규격 포함'을 켜면 볼 수 있습니다" : note)}"` : ""}>` +
-      `<span class="cat-name">${esc(label)}<span class="n">${num(n)}</span></span>${sub ? `<small>${esc(sub)}</small>` : ""}</button>`;
+    // 작은 설명 글(sub)은 화면에서 빼고 커서를 대면 보이게 (2026-11-18 사용자 결정)
+    const tip = [sub, note].filter(Boolean).join(" — ");
+    return `<button type="button" role="tab" class="cat-tab ${filters.cat === v ? "on" : ""}" aria-selected="${filters.cat === v}" data-cat="${v}" ${off ? "disabled" : ""} ${tip ? `title="${esc(tip)}"` : ""}>` +
+      `<span class="cat-name">${esc(label)}<span class="n">${num(n)}</span></span></button>`;
   };
   const prodN = productIn.length + outsideShown().length;
   $("catTabs").innerHTML = `<div class="cat-main">${[["all", null, null], ...CATEGORIES].map(catTab).join("")}</div>` +
@@ -2204,14 +2205,9 @@ function applyFilters() {
         .sort((a, b) => b[2] - a[2])
         .map(([code, name, c]) => [code, name, c, null, c === 0]),
     ]),
-    dropdown("grade", "추천", [
-      ["all", "전체", items.length],
-      ["강력추천", "강력추천", count((n) => n.confidence === "강력추천")],
-      ["참고용", "참고용", count((n) => n.confidence === "참고용")],
-    ], filters.grade === "강력추천" ? "urgent" : ""),
     dropdown("part", "참가여부", [
       ["all", "전체", items.length],
-      ...["미지정", ...PART_STATUSES].map((st) => [st, st, count((n) => (participation[n.noticeNo]?.status || "미지정") === st)]),
+      ...["미지정", ...PART_STATUSES].map((st) => [st, st, count((n) => partOf(n) === st)]),
     ]),
     dropdown("check", "확인 필요", [
       ["all", "전체", items.length],
@@ -2261,7 +2257,6 @@ function applyFilters() {
             <h2>${esc(key)} <span class="group-n">${list.length}건</span></h2>
             ${strong ? `<span class="group-strong">강력추천 ${strong}건</span>` : ""}
           </div>
-          <p class="group-note">${esc(note)}</p>
           ${list.map(renderNotice).join("")}
         </div>`;
     })
@@ -2469,7 +2464,6 @@ function renderNotice(n) {
         <div class="badges">
           ${promotedBadge(n)}
           ${due}
-          ${gradeBadge(n)}
           ${n.bidMethodCategory ? bidMethodBadge(n) : ""}
           ${businessTypeBadge(n)}
           ${n.reNotice ? reNoticeBadge() : ""}
@@ -2719,7 +2713,8 @@ function regionBadge(n) {
   if (n.sourceType === "사전규격")
     return tipBadge("", "지역제한 미정", "지역제한",
       `<p>사전규격에는 나라장터 참가가능지역 정보가 없습니다.<br>지역제한은 본공고가 나올 때 정해질 수 있으니 본공고에서 확인하세요.</p>`);
-  return tipBadge("faint", "지역제한 정보 없음", "지역제한", `<p>나라장터 참가가능지역 정보에 지역제한이 없습니다.<br>원문에서 한 번 더 확인하세요.</p>`);
+  // 지역제한이 없으면 칩을 안 보임 — 충족·미달·판정 못 함일 때만 (2026-11-18 사용자 결정)
+  return "";
 }
 
 /** ["강원 속초시", "강원 고성군", "경기"] → "강원 속초시·고성군 / 경기" — 같은 시·도는 한 번만 쓴다 */
@@ -2781,8 +2776,11 @@ function jointBadge(n) {
   const j = n.joint || {};
   if (!j.label || j.label === "정보 없음") return tipBadge("faint", "공동수급 정보 없음", "공동수급", `<p>나라장터 공동수급 정보가 없습니다. 공고 원문에서 공동수급 허용 여부를 확인하세요.</p>`);
   const short = j.label;
-  const tone = /불허/.test(short) ? "warn" : "";
-  const label = /^공동수급\s*/.test(short) ? `공동수급 ${short.replace(/^공동수급\s*/, "")}` : `공동수급 · ${short}`;
+  // 허용이면 지역제한 충족 칩과 같은 초록 칩 '✓ 공동수급 가능 · 공동이행' (2026-11-18 사용자 결정), 불허는 노란 칩 그대로
+  const denied = /불허/.test(short);
+  const rest = short.replace(/^공동수급\s*/, "");
+  const tone = denied ? "warn" : "okb";
+  const label = denied ? (/^공동수급\s*/.test(short) ? `공동수급 ${rest}` : `공동수급 · ${short}`) : `✓ 공동수급 가능 · ${rest}`;
   return tipBadge(tone, esc(label), "공동수급", jointTipBody(short, short));
 }
 
@@ -2969,9 +2967,15 @@ function nQualBadges(n, noShare = false) {
   });
 }
 
+/** 참가여부 필터 값 — 예전 '검토중'은 판단 전이라 미지정으로 본다 */
+const partOf = (n) => {
+  const s = participation[n.noticeNo]?.status;
+  return !s || s === "검토중" ? "미지정" : s;
+};
+
 // ── 참가여부 · 담당자 · 대화 (같은 링크로 보는 사람 모두 공유) ────────────────
 let participation = {};
-const PART_STATUSES = ["검토중", "참가", "보류", "불참"];
+const PART_STATUSES = ["참가", "보류", "불참"];  // 검토중 버튼은 2026-11-18 사용자 결정으로 뺌
 const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted", 미판단: "todo", 놓침: "missed" };
 
 async function loadParticipation() {
@@ -3886,7 +3890,6 @@ $("activeFilters").onclick = (ev) => {
   for (const k of keys) filters[k] = "all";
   applyFilters();
 };
-$("incPre").onchange = () => { saveLiveOpts(); applyFilters(); };
 /** 자격 팝업을 열 때 아래 공간이 모자라고 위가 더 넓으면 위로 띄운다 — 화면 하단 카드에서 팝업이 잘렸다 */
 function placeTip(ev) {
   const badge = ev.target.closest?.(".qual");
@@ -4096,6 +4099,9 @@ function showTab(tab) {
   fitQuant(tab === "quant");
   // 탭 줄 오른쪽 찾기 칸은 실제 공고·제외된 공고 탭에서만
   $("liveQ").hidden = !(tab === "live" || tab === "excluded");
+  // 실제 공고 탭에선 수집 줄 오른쪽에 둬서 한 줄을 아낌 (2026-11-18 사용자 결정) — 제외된 공고 탭과 같이 쓰는 칸이라 탭마다 옮긴다
+  if (tab === "live") $("liveTools").appendChild($("liveQ"));
+  else if (tab === "excluded") document.querySelector(".tabbar").appendChild($("liveQ"));
   if (tab === "excluded") exData ? renderExcluded() : loadExcluded();
   if (tab === "log") renderLog();
   if (tab === "award") loadAward();

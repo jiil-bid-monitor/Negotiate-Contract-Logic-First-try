@@ -132,7 +132,9 @@ def contract_values(row: dict) -> dict[str, Any]:
            "contract": _date(row.get("cntrctDate") or row.get("cntrctCnclsDate")), "start": _date(row.get("wbgnDate")),
            "due": _date(row.get("thtmScmpltDate")),
            # 조달청 대행 계약은 계약기관이 조달청 — 준공·납품 신고 수신은 수요기관이라 그대로 둠(공고의 수요기관)
-           "to": "" if "조달청" in str(row.get("cntrctInsttNm") or "") else to}
+           "to": "" if "조달청" in inst else to,
+           # '○○ 귀하' — 계약기관 이름(홍천 실제 완료계 '강원특별자치도 홍천군 귀하'). 분임재무관 등은 담당자가 고침(11/18 사용자 '일단 적어두고')
+           "gwiha": "" if "조달청" in inst else inst}
     return {k: v for k, v in out.items() if v not in (None, "")}
 
 
@@ -198,8 +200,9 @@ def done_todo(xlsx: Path, auto: dict[str, str]) -> tuple[list[str], list[list[st
     return todo, filled
 
 
-def start_values(xlsx: Path) -> dict[str, Any]:
-    """착공·착수서류 기본사항에서 담당자가 넣은 계약 값(빈 칸·수식은 뺌)."""
+def start_values(xlsx: Path, auto: dict[str, str] | None = None) -> dict[str, Any]:
+    """착공·착수서류 기본사항에서 담당자가 넣은 계약 값(빈 칸·수식, 웹앱이 넣은 값 그대로인 칸은 뺌 — auto = {행: 넣은 값})."""
+    auto = auto or {}
     from openpyxl import load_workbook
 
     ws = load_workbook(xlsx)["기본사항"]
@@ -207,7 +210,7 @@ def start_values(xlsx: Path) -> dict[str, Any]:
     for r in range(4, 22):
         key = FROM_START.get(str(ws.cell(r, 1).value or "").strip())
         val = ws.cell(r, 2).value
-        if key and val not in (None, "") and not (isinstance(val, str) and val.startswith("=")):
+        if key and val not in (None, "") and not (isinstance(val, str) and val.startswith("=")) and auto.get(str(r)) != _key(val):
             out.setdefault(key, val)
     return out
 
@@ -289,6 +292,7 @@ def basic_values(v: dict, title: str, institution: str, contract_method: str, te
         out[4] = (work, "나라장터 업무")
     if institution:
         out[5] = (institution, "나라장터 수요기관")
+        out[6] = (institution, "나라장터 수요기관 — '○○ 귀하' 자리, 분임재무관 등으로 바꿔야 하면 고침")
     if title:
         out[8] = (title, "나라장터 공고명 — 계약서 건명과 대조")
     amount = _digits(str((v.get("winner") or {}).get("amount") or "").split(".")[0])
@@ -781,12 +785,19 @@ class PostAward:
         values, notes = basic_values(v, nf.title or v.get("title", ""), nf.institution or v.get("institution", ""),
                                      nf.contract_method, texts)
         cv = cv or {}
+        if cv.get("gwiha"):
+            values[6] = (cv["gwiha"], "나라장터 계약기관 — '○○ 귀하' 자리, 분임재무관 등으로 바꿔야 하면 고침")
         for row, k, what in ((15, "contract", "계약일"), (16, "start", "착수일"), (17, "due", "준공예정일")):
             if cv.get(k):  # 폴더 만들 때 나라장터에 계약이 이미 있으면 한 번에(11/18 사용자 — 두 번 받기는 비효율)
                 values[row] = (cv[k], f"나라장터 계약정보 {what}")
         fill_basic(templates / name, target, values)
+        with self._lock:
+            items = self._read()
+            items[key].setdefault("autoFill", {})[f"{stage}/{doc}"] = {str(r): _key(val) for r, (val, _) in values.items()}
+            self._write(items)
         return ([f"[기본사항] {stage}/{doc} — 자동으로 채운 칸(하늘색): " + ", ".join(src.split(" — ")[0] for _, src in values.values()),
-                 "  계약번호·" + ("" if cv.get("contract") else "계약일·착수일·") + "수신·문서번호·제출일·인력은 직접 넣으세요"] + [f"  {n}" for n in notes])
+                 "  계약번호·" + ("" if cv.get("contract") else "계약일·착수일·") + "문서번호·제출일·인력은 직접 넣으세요"
+                 + " — 수신(○○ 귀하)은 나라장터 기관 이름으로 넣어 둠, 분임재무관 등이면 고치세요"] + [f"  {n}" for n in notes])
 
     def _contract(self, key: str, contract_lookup) -> tuple[dict[str, Any], list[str]]:
         """나라장터 계약정보(계약 뒤에 생김) 한 번 조회 → (틀 값, 안내 줄). 착공·착수서류와 준공·청구 서류가 같이 씀(11/18)."""
@@ -828,7 +839,7 @@ class PostAward:
         got: dict[str, Any] = {}
         if start.exists():
             try:
-                got = start_values(start)
+                got = start_values(start, (v.get("autoFill") or {}).get(f"{stage0}/{doc0}"))
             except Exception as err:  # noqa: BLE001 — 착공·착수서류를 못 읽어도 나라장터 값으로
                 lines.append(f"  {stage0}/{doc0}을 읽지 못함({err.__class__.__name__}) — 나라장터 값만 넣음")
         # 담당자가 착공·착수서류에 적은 값이 우선(계약서 보고 적음). 나라장터 계약정보와 다르면 알림(홍천: 계약일 하루·완료기한 다름)
@@ -1031,7 +1042,8 @@ def selfcheck() -> None:
         # 서류 현황 — 착공 단계는 채울 칸(비어 있는 '수신', 인력 1번)과 자동 칸, 준공은 아직 틀 없음
         st = pa.status("R26BK00000001-000")
         by_dir = {s["dir"]: s for s in st["stages"]}
-        assert by_dir["2_착공"]["doc"] == "착공서류.xlsx" and "수신" in by_dir["2_착공"]["todo"], by_dir["2_착공"]
+        assert by_dir["2_착공"]["doc"] == "착공서류.xlsx" and "수신" not in by_dir["2_착공"]["todo"], by_dir["2_착공"]
+        assert ["수신", "정선군"] in by_dir["2_착공"]["auto"], by_dir["2_착공"]["auto"]
         assert "공사명" not in by_dir["2_착공"]["todo"] and ["공사명", "A 공사"] in by_dir["2_착공"]["auto"]
         todo = by_dir["2_착공"]["todo"]   # 인력: 필수 줄 1번은 이름이 없어도 9칸 전부, 참여기술자 2번·해당 시 5번은 이름이 없으면 안 셈
         assert any(t.startswith("1번: ") and t.count("·") == 8 for t in todo), todo
@@ -1115,7 +1127,8 @@ def selfcheck() -> None:
         sx = load_workbook(f6 / "2_착수" / "착수서류.xlsx")["기본사항"]  # 계약정보 한 번 조회로 착수서류 날짜도
         assert [sx.cell(r, 2).value.date().isoformat() for r in (15, 16, 17)] == ["2025-03-12", "2025-03-12", "2025-07-09"]
         assert sx["C15"].value == "[자동] 나라장터 계약정보 계약일" and sx["B15"].fill.fgColor.rgb == _BLUE
-        assert "to" not in contract_values({**row5, "cntrctInsttNm": "조달청"})
+        assert sx["B6"].value == "강원특별자치도 홍천군" and sx["C6"].value.startswith("[자동] 나라장터 계약기관")
+        assert "to" not in contract_values({**row5, "cntrctInsttNm": "조달청"}) and "gwiha" not in contract_values({**row5, "cntrctInsttNm": "조달청"})
         assert contract_values({"cntrctInsttNm": "경기도 경기도축산진흥센터", "cntrctInsttChrgDeptNm": "경기도축산진흥센터"})["to"] == "경기도 경기도축산진흥센터"
         def boom(v):
             raise RuntimeError("down")

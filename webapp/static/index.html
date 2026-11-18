@@ -448,17 +448,20 @@ body {
 .cat-prod.on { border-style: solid; border-color: var(--brand); color: var(--brand); font-weight: 700; }
 .cat-prod.on .n { background: var(--brand); color: var(--on-brand); }
 /* '적용 중' 칩 + 지금 보는 건수 */
-.active-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; font-size: 12.5px; color: var(--muted); }
+.active-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
 .active-filters[hidden] { display: none; }
 .af-chip { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 3px 10px; border-radius: 14px; border: 1px solid transparent; background: var(--bg); color: var(--brand); }
 .af-chip:hover { border-color: var(--brand); }
 .af-reset { font: inherit; font-size: 12.5px; cursor: pointer; background: none; border: 0; padding: 0; color: var(--brand); text-decoration: underline; }
 .af-sum { margin-left: auto; color: var(--ink); }
+.sort-wrap { display: inline-flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.sort-wrap .af-sum { margin-left: 0; font-size: 12.5px; }
+.sort-wrap .af-sum:empty { display: none; }
 .af-sum b { color: var(--brand); }
 
 /* 필터(드롭다운) 줄 + 정렬 */
 .filter-row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px; }
-.filter-row .filters { margin-bottom: 8px; }
+.filter-row .filters { margin-bottom: 4px; }
 .sort-box { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .sort-box select {
   height: 34px; padding: 4px 10px; font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 4px;
@@ -736,7 +739,8 @@ ol.steps li.first { background: var(--urgent-tint); }
 .off-group > summary::before { content: "▸"; color: var(--muted); font-size: 13px; }
 .off-group[open] > summary::before { content: "▾"; }
 .off-group > summary h2 { color: var(--muted); }
-.enrich-meta { margin: -10px 0 14px; color: var(--brand); font-size: 12.5px; min-height: 1em; }
+.enrich-meta { margin: -6px 0 12px; color: var(--brand); font-size: 12.5px; }
+.enrich-meta:empty { display: none; } /* 비어 있으면 자리 안 차지(11/18 사용자: 빈 공간이 너무 큼) */
 
 /* 자격판정 배지 — 커서를 올리거나 탭으로 포커스하면 어떤 보유 자격으로 채웠는지 보여준다 */
 .qual { position: relative; display: inline-flex; align-items: center; gap: 4px; cursor: help; outline: none; }
@@ -1375,6 +1379,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <div class="cat-tabs" id="catTabs" role="tablist" aria-label="공고 대분류"></div>
     <div class="filter-row">
       <div class="filters" id="filters"></div>
+      <div class="sort-wrap">
+      <span class="af-sum" id="liveCount"></span>
       <label class="sort-box">정렬
         <select id="liveSort" aria-label="본공고·사전규격 정렬" title="본공고·사전규격 목록을 어떤 순서로 볼지">
           <option value="deadline" title="자격등록 마감 기준 — 자격등록 마감이 없거나 이미 지났으면 투찰 마감으로">자격등록 마감 순</option>
@@ -1385,9 +1391,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
           <option value="posted">최근 게시 순</option>
         </select>
       </label>
+      </div>
     </div>
     <div class="active-filters" id="activeFilters" hidden></div>
-    <p class="sub" id="liveMeta" style="margin:0 0 18px">화면을 열면 아직 마감되지 않은 공고를 자동으로 불러옵니다.</p>
+    <p class="sub" id="liveMeta" style="margin:0 0 12px">화면을 열면 아직 마감되지 않은 공고를 자동으로 불러옵니다.</p>
     <p class="sub enrich-meta" id="enrichMeta" role="status"></p>
     <div id="liveResults"></div>
     <div class="empty" id="kindEmpty" hidden></div>
@@ -1845,7 +1852,7 @@ async function loadNotices(refresh) {
       (data.format !== data.resultFormat ? `<br><span style="color:var(--warn)">이 결과는 이전 버전으로 수집됐습니다 — ${viewer ? "서버 PC에서 다시 수집하면" : "'나라장터에서 불러오기'를 다시 하면"} 새 판정으로 보입니다.</span>` : "") +
       // 서버 PC 화면 — NAS로 보낸 결과 (실패하면 서버가 1분마다 다시 시도한다)
       (data.push?.error ? `<br><span style="color:var(--urgent)">NAS로 보내지 못함 — ${esc(data.push.error)} (1분마다 다시 시도)</span>` : data.push?.at ? ` · NAS 반영 ${esc(fmtDT(data.push.at))}` : "") +
-      `<br>목록 <b>${data.items.length}건</b> · ` +
+      ` · 목록 <b>${data.items.length}건</b> · ` +  // 한 줄로(11/18 사용자 — 예전엔 둘째 줄)
       `싱크로율 높음 <b>${hi}</b> · 경계선 <b>${mid}</b> · 낮음 <b>${data.items.length - hi - mid}</b>`;
     if (!jobTimer) $("loadState").textContent = `완료 ${fmtDT(new Date())}`;
     renderNotices(data.items, (data.titleExcludedItems || []).filter(stillOpen), (data.heldItems || []).filter(stillOpen), data.heldProducts || []);
@@ -2355,8 +2362,10 @@ function renderActiveFilters(shownN) {
   const what = [tab, ...on.map((k) => label(k, filters[k]))].join(" · ");
   $("activeFilters").innerHTML = (on.length
     ? `<span class="af-lab">적용 중</span>${on.map((k) => `<button type="button" class="af-chip" data-clear="${k}" title="이 조건 지우기">${esc(FILTER_NAMES[k])}: ${esc(label(k, filters[k]))} <span aria-hidden="true">✕</span></button>`).join("")}<button type="button" class="af-reset" data-clear="*">모두 지우기</button>`
-    : "") + (shownN == null || filters.kind === "review" ? "" : `<span class="af-sum">${esc(what)} <b>${num(shownN)}건</b> 보는 중</span>`);
-  $("activeFilters").hidden = !on.length && (shownN == null || filters.kind === "review");
+    : "");
+  // 'N건 보는 중'은 정렬 칸 바로 왼쪽에(11/18 사용자: 빈 공간이 너무 큼 — 따로 한 줄을 쓰지 않게)
+  $("liveCount").innerHTML = shownN == null || filters.kind === "review" ? "" : `${esc(what)} <b>${num(shownN)}건</b> 보는 중`;
+  $("activeFilters").hidden = !on.length;
 }
 function dropdown(group, name, opts, tone = "", state = filters) {
   // 첫 항목(전체)을 고른 상태면 버튼에 "전체"라고만 쓴다

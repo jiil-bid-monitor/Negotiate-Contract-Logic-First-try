@@ -105,6 +105,7 @@ class RunStats:
     private_contract: int = 0  # 수집 범위 안 수의계약 공고 수(2026-11-12부터 수집 — 예전엔 뺀 수)
     license_route: int = 0  # 키워드 없이 지일 공사 면허로 수집한 공고 수(2026-11-12)
     design_contest: int = 0  # 설계공모라 뺀 공고 (2026-10-16 통합 결정 5번)
+    designated: int = 0  # 지명경쟁 본공고라 뺀 공고 (2026-11-18 — 사전규격 단계에서만 수집)
     other_category: int = 0  # 이번 실행 유형(--categories) 밖이라 뺀 공고
     old_ordinal: int = 0
     in_scope: int = 0  # 수집 범위(+유형)에 든 공고
@@ -249,14 +250,15 @@ def build_candidates(
     stats.cancelled = scope_result.dropped_cancelled
     stats.private_contract = scope_result.dropped_private
     stats.design_contest = scope_result.dropped_design_contest
+    stats.designated = scope_result.dropped_designated
     stats.other_category = scope_result.dropped_other_category
     stats.old_ordinal = scope_result.dropped_old_ordinal
     stats.in_scope = len(scope_result.kept)
     stats.categories = sorted(categories, key=scope.CATEGORIES.index) if categories else None
     # 웹앱 수집 로그에도 보이게 — 설계공모는 제외된 공고 탭에 안 실려 여기서만 건수를 볼 수 있다(통합 결정 5번)
     stats.private_contract = sum(1 for n in scope_result.kept if scope.bid_category(n) == scope.CATEGORY_PRIVATE)
-    log.info("수집 범위 밖: 설계공모 %d건 · 취소공고 %d건 (수의계약 %d건은 2026-11-12부터 수집)", stats.design_contest, stats.cancelled,
-             stats.private_contract)
+    log.info("수집 범위 밖: 설계공모 %d건 · 지명경쟁 본공고 %d건 · 취소공고 %d건 (수의계약 %d건은 2026-11-12부터 수집)",
+             stats.design_contest, stats.designated, stats.cancelled, stats.private_contract)
     # [진단] 공고명에 '설계공모'가 든 공고의 낙찰방법·계약방법 — 설계공모 판별 칸이 맞는지 실응답으로 보려고(10/19)
     named = [n for n in notices if "설계공모" in re.sub(r"\s", "", n.title or "")]
     if named:

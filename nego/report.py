@@ -343,7 +343,8 @@ def render_console(candidates: list[Candidate], stats: RunStats) -> str:
     )
     other = f" / 다른 유형 {stats.other_category}" if stats.other_category else ""
     lines.append(
-        f"  (취소공고 제외 {stats.cancelled} / 설계공모 제외 {stats.design_contest}{other} / "
+        f"  (취소공고 제외 {stats.cancelled} / 설계공모 제외 {stats.design_contest}"
+        f"{f' / 지명경쟁 본공고 제외 {stats.designated}' if getattr(stats, 'designated', 0) else ''}{other} / "
         f"이전 차수 {stats.old_ordinal} · 수의계약 수집 {stats.private_contract}"
         f"{f' · 보유 면허로 수집 {stats.license_route}' if getattr(stats, 'license_route', 0) else ''})"
     )

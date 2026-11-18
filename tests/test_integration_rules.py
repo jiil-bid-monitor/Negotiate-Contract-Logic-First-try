@@ -89,6 +89,31 @@ class TestDesignServiceVariants(unittest.TestCase):
                 self.assertTrue(result.matched, result.excluded_reason)
 
 
+class TestDesignatedPrespecOnly(unittest.TestCase):
+    """2026-11-18 사용자 결정 — 지명경쟁은 사전규격 단계에서만 수집. 본공고 땐 업체가 이미 지명돼 필요 없음."""
+
+    def test_designated_notice_dropped(self):
+        n = _notice(title="OO박물관 전시물 제작 설치")
+        n.contract_method = "지명경쟁"
+        self.assertIsNone(scope.bid_category(n))
+        result = scope.apply_scope([n])
+        self.assertEqual((len(result.kept), result.dropped_designated, result.dropped_private), (0, 1, 0))
+
+    def test_designated_prespec_kept(self):
+        n = _notice(title="OO박물관 전시물 제작 설치")
+        n.kind, n.contract_method = "사전규격", "지명경쟁"
+        self.assertEqual(scope.bid_category(n), "사전규격")
+        result = scope.apply_scope([n])
+        self.assertEqual((len(result.kept), result.dropped_designated), (1, 0))
+
+    def test_general_and_limited_competition_kept(self):
+        for method in ("일반경쟁", "제한경쟁", "제한(총액)경쟁"):
+            with self.subTest(method=method):
+                n = _notice(title="OO박물관 전시물 제작 설치")
+                n.contract_method = method
+                self.assertEqual(len(scope.apply_scope([n]).kept), 1)
+
+
 class TestDesignContest(unittest.TestCase):
     """결정 5번 — 낙찰방법에만 '설계공모'가 있어도 수집 범위 밖."""
 

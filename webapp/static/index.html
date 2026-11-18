@@ -2464,6 +2464,7 @@ function renderNotice(n) {
         <div class="badges">
           ${promotedBadge(n)}
           ${due}
+          ${gradeBadge(n)}
           ${n.bidMethodCategory ? bidMethodBadge(n) : ""}
           ${businessTypeBadge(n)}
           ${n.reNotice ? reNoticeBadge() : ""}

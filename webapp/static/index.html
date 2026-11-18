@@ -3011,8 +3011,9 @@ const REASON_HINT = {
 function decisionRow(p) {
   if (!p) return "";
   const decided = DECISIONS.includes(p.status);
+  // 되돌리기는 참가·보류·불참으로 판단한 카드에만 (2026-11-18 사용자 요청 — 판단 전 카드엔 안 보임, 판단 기록 탭과 같은 규칙)
+  if (!decided) return "";
   const undo = p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단·담당으로 되돌립니다">되돌리기</button>` : "";
-  if (!decided) return undo ? `<div class="decision">${undo}</div>` : "";
   // 주된 사유 버튼을 먼저 고르게 한다 (여러 개, 누르는 즉시 저장 — 보류·불참 2026-10-15, 참가 2026-10-16 요청)
   const tags = p.tags || [];
   const options = tagsFor(p.status);

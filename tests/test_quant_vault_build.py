@@ -4015,3 +4015,16 @@ def test_contact_marks_capital_sales_and_history_in_parens(tmp_path: Path):
     assert "(회사)☎ 033-000-0000" in text and "010-0000-0000" in text, text
     assert "자본금 1,000,000,000원" in text and "매출액" in text and "5,000" not in text, text
     assert "주요 이력(연혁)" in text and "법인 설립" in text, text
+
+
+def test_bizno_corp_paren_label(tmp_path: Path):
+    """11/18 사용자 결정: 서명 묶음 '사업자등록(법인)번호 :'(괄호가 이름 중간)가 빔 — 괄호 앞 '사업자등록'·괄호 안 '법인' 둘 다 모르는 이름이었음.
+    = '법인등록번호 (사업자등록번호)'(생년월일(사업자등록번호) 칸과 같은 모양)."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "s.hwpx", p("업 체 명 : ") + p("사업자등록(법인)번호 : ") + p("대표자 성명 :          (인)"))
+    info = {"회사명": "(주)가상", "사업자등록번호": "123-45-67890", "법인등록번호": "110111-1234567", "대표자": "홍길동"}
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info=info))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert "사업자등록(법인)번호 : 110111-1234567 (123-45-67890)" in text, text

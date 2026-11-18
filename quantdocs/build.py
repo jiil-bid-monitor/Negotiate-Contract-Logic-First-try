@@ -401,7 +401,8 @@ def _safe(name: str) -> str:
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
           award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
           notice_no: str = "", staff_pick: list[str] | None = None, license_groups: list | None = None,
-          patent_pick: list[str] | None = None, budget: int | None = None, warnings: list[str] | None = None) -> Path:
+          patent_pick: list[str] | None = None, budget: int | None = None, warnings: list[str] | None = None,
+          ref_no: str = "") -> Path:
     """warnings: 주면 화면에 띄울 경고(⚠)를 여기에 담음 — 통합서식을 못 만든 이유 등(11/13).
     staff_pick: 화면에서 고른 기술인력 이름 — 주면 그 사람만 자기평점 기술인력 점수에(None이면 인력목록 전체).
     patent_pick: 화면에서 고른 특허(파일 경로 등 key) — 주면 그 특허만 자기평점·통합본에(None이면 공고 인정 분야에 이름이 맞는 특허)."""
@@ -429,6 +430,8 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
         if a.hwp_needed:
             a.notes.append(HWP_NEEDED_NOTE)
         agency_no = agency_notice_no(a.sheet.texts)  # 공고문의 기관 공고번호 — 서식 공고번호 칸에(11/04 사용자 요청)
+        if ref_no:  # 나라장터 참조번호 '평창군 공고 제2026-1703호'(11/18 사용자 — 공고문보다 먼저)
+            agency_no = agency_notice_no({"참조번호": ref_no}) or agency_no
         # 정량평가 자기평점 — 제안요청서 본문 배점기준(11/05 사용자 요청). 제안요청서를 먼저 봄
         criteria = read_criteria(_rfp_first(files, a.converted))
         if getattr(vault, "patent_pick", None) is None:  # 화면에서 안 골랐으면 공고 인정 분야에 이름이 맞는 특허만(통합본과 같게)

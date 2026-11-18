@@ -126,7 +126,8 @@ def _date(text: Any) -> datetime | None:
 def contract_values(row: dict) -> dict[str, Any]:
     """계약정보 한 줄 → 준공·청구 틀 값 이름. 빈 값은 뺌."""
     amt = lambda k: int(_digits(row.get(k)) or 0) or None  # noqa: E731
-    to = " ".join(x for x in (str(row.get("cntrctInsttNm") or "").strip(), str(row.get("cntrctInsttChrgDeptNm") or "").strip()) if x)
+    inst, dept = str(row.get("cntrctInsttNm") or "").strip(), str(row.get("cntrctInsttChrgDeptNm") or "").strip()
+    to = inst if dept and dept in inst else " ".join(x for x in (inst, dept) if x)  # 에코팜랜드: 기관 이름에 부서 이름이 이미 있음
     out = {"title": str(row.get("cntrctNm") or "").strip(), "amount": amt("thtmCntrctAmt"), "total": amt("totCntrctAmt"),
            "contract": _date(row.get("cntrctDate") or row.get("cntrctCnclsDate")), "start": _date(row.get("wbgnDate")),
            "due": _date(row.get("thtmScmpltDate")),
@@ -226,6 +227,8 @@ def fill_done(source: Path, target: Path, values: dict[str, Any], prev: dict[str
     담당자가 고친 칸은 안 건드림. (이번에 자동으로 둔 값 {값 이름: 글}, 파일을 바꿨는지)."""
     from openpyxl import load_workbook
 
+    from openpyxl.styles import PatternFill
+
     fresh = not target.exists()  # 처음(틀에서 복사) — 틀 기본값(예: 납품서 붙임 '예')도 자동 값으로 바꿈
     wb = load_workbook(source if fresh else target)
     ws = wb["기본사항"]
@@ -241,6 +244,8 @@ def fill_done(source: Path, target: Path, values: dict[str, Any], prev: dict[str
             continue  # 담당자가 고친 값
         if _key(cur) != _key(new) or (isinstance(cur, str) and cur.startswith("=")):
             cell.value, changed = new, True
+            if cell.fill.fgColor.rgb == _YELLOW:  # 노란 칸(계약일 등 — 보통 담당자가 적음)을 자동으로 채웠으면 파랑으로(11/18 사용자)
+                cell.fill = PatternFill("solid", fgColor=_BLUE)
         done[key] = _key(new)
     if changed or fresh:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -603,7 +608,7 @@ class PostAward:
             tdir = Path(templates) if templates else template_dir(root)
             basic = [] if private else self._fill_qual(key, folder, nf, tdir)
             basic += (["[적격심사] 낙찰 전 — 0_적격심사·공고문서만 만듦(계약·착공 서류는 낙찰 뒤 '낙찰 서류 만들기')"] if qual_only
-                      else self._fill_template(key, folder, nf, tdir) + self._fill_done(key, folder, nf, tdir, contract_lookup))
+                      else self._fill_both(key, folder, nf, tdir, contract_lookup))
             summary = folder / "공고문서" / SUMMARY
             if nf.title and not summary.exists():
                 try:
@@ -748,7 +753,11 @@ class PostAward:
               "학술연구용역이면 학술 틀로 바꾸고, 공고문이 인용한 기준·별표와 같은지 확인"] if tech else []) + [
                 "  제출일·작성자 등 노란 칸과 구매관리번호는 직접 넣으세요" + ("" if est else " — 추정가격을 못 받아 금액 구간 틀을 기초금액으로 골랐으니 대조")] +             (["  구매관리번호: " + QUAL_NOTES["구매관리번호"]] if v.get("work") == "물품" else [])
 
-    def _fill_template(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
+    def _fill_both(self, key: str, folder: Path, nf, templates: Path, contract_lookup) -> list[str]:
+        cv, notes = self._contract(key, contract_lookup)
+        return self._fill_template(key, folder, nf, templates, cv) + self._fill_done(key, folder, nf, templates, cv, notes)
+
+    def _fill_template(self, key: str, folder: Path, nf, templates: Path, cv: dict | None = None) -> list[str]:
         """착공(공사)·착수(물품·용역)서류를 단계 폴더에 복사하고 기본사항을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
         v = self._read().get(key) or {}
         group = group_of(v.get("work", ""))
@@ -771,11 +780,32 @@ class PostAward:
                     pass
         values, notes = basic_values(v, nf.title or v.get("title", ""), nf.institution or v.get("institution", ""),
                                      nf.contract_method, texts)
+        cv = cv or {}
+        for row, k, what in ((15, "contract", "계약일"), (16, "start", "착수일"), (17, "due", "준공예정일")):
+            if cv.get(k):  # 폴더 만들 때 나라장터에 계약이 이미 있으면 한 번에(11/18 사용자 — 두 번 받기는 비효율)
+                values[row] = (cv[k], f"나라장터 계약정보 {what}")
         fill_basic(templates / name, target, values)
         return ([f"[기본사항] {stage}/{doc} — 자동으로 채운 칸(하늘색): " + ", ".join(src.split(" — ")[0] for _, src in values.values()),
-                 "  계약번호·계약일·착수일·수신·문서번호·제출일·인력은 직접 넣으세요"] + [f"  {n}" for n in notes])
+                 "  계약번호·" + ("" if cv.get("contract") else "계약일·착수일·") + "수신·문서번호·제출일·인력은 직접 넣으세요"] + [f"  {n}" for n in notes])
 
-    def _fill_done(self, key: str, folder: Path, nf, templates: Path, contract_lookup=None) -> list[str]:
+    def _contract(self, key: str, contract_lookup) -> tuple[dict[str, Any], list[str]]:
+        """나라장터 계약정보(계약 뒤에 생김) 한 번 조회 → (틀 값, 안내 줄). 착공·착수서류와 준공·청구 서류가 같이 씀(11/18)."""
+        if contract_lookup is None:
+            return {}, []
+        v = self._read().get(key) or {}
+        try:
+            row = contract_lookup(v)
+        except Exception as err:  # noqa: BLE001 — 나라장터가 안 돼도 나머지는 그대로
+            return {}, [f"  나라장터 계약정보를 받지 못함({err.__class__.__name__}) — 날짜는 계약서 보고 노란 칸에 적으세요"]
+        if not row:
+            return {}, ["  나라장터 계약정보: 아직 계약이 등록되지 않음 — 계약일·착수일·준공예정일은 계약서 보고 노란 칸에 적으세요"]
+        with self._lock:
+            items = self._read()
+            items[key]["contract"] = {"no": str(row.get("untyCntrctNo") or ""), "url": str(row.get("cntrctDtlInfoUrl") or "")}
+            self._write(items)
+        return contract_values(row), [f"  나라장터 계약정보 찾음(통합계약번호 {row.get('untyCntrctNo')}) — 계약일·착수일·준공예정일 등을 채움(파란 칸)"]
+
+    def _fill_done(self, key: str, folder: Path, nf, templates: Path, cv: dict | None = None, contract_notes=None) -> list[str]:
         """3_준공(준공계·납품계·완료계)·4_청구(청구서) 기본사항 파란 칸 — 공고·낙찰 값(수요기관·공고명·낙찰금액) <
         나라장터 계약정보(contract_lookup(공고) → 계약정보 한 줄: 계약일·착수일·준공예정일·금액·담당부서, 계약 뒤에 생김) <
         담당자가 착공·착수서류에 적은 값 순으로(11/18). 담당자가 고친 칸은 안 건드림. 안내 줄을 돌려줌."""
@@ -790,25 +820,8 @@ class PostAward:
         values: dict[str, Any] = {"to": inst, "title": title, "amount": int(amount) if amount else None, "gwiha": inst}
         if work == "용역":  # 설계 용역이면 공문 붙임에 납품서(11/18 사용자)
             values["nap"] = "예" if "설계" in title else "아니오"
-        lines = []
-        # 나라장터 계약정보(계약 뒤에 생김) — 계약일·착수일·준공예정일·계약금액·계약기관 담당부서
-        cv: dict[str, Any] = {}
-        if contract_lookup is not None:
-            try:
-                row = contract_lookup(v)
-            except Exception as err:  # noqa: BLE001 — 나라장터가 안 돼도 나머지는 그대로
-                row = None
-                lines.append(f"  나라장터 계약정보를 받지 못함({err.__class__.__name__}) — 나중에 '첨부 다시 받기'로 다시")
-            else:
-                if row:
-                    cv = contract_values(row)
-                    with self._lock:
-                        items = self._read()
-                        items[key]["contract"] = {"no": str(row.get("untyCntrctNo") or ""), "url": str(row.get("cntrctDtlInfoUrl") or "")}
-                        self._write(items)
-                    lines.append(f"  나라장터 계약정보 찾음(통합계약번호 {row.get('untyCntrctNo')}) — 계약일·착수일·준공예정일 등을 채움")
-                else:
-                    lines.append("  나라장터 계약정보: 아직 계약이 등록되지 않음 — 계약 뒤 '첨부 다시 받기'를 누르면 계약일·착수일·준공예정일이 들어감")
+        lines = list(contract_notes or [])
+        cv = cv or {}
         values.update(cv)
         _, stage0, doc0 = TEMPLATES[group_of(work)]
         start = folder / stage0 / doc0
@@ -1046,7 +1059,7 @@ def selfcheck() -> None:
             ws.title = "기본사항"
             for r, (a, b) in enumerate(rows, 5):
                 ws.cell(r, 1, a), ws.cell(r, 2, b)
-                ws.cell(r, 2).fill = _PF("solid", fgColor=_YELLOW if a in ("제출일", "납품서 붙임") else _BLUE)
+                ws.cell(r, 2).fill = _PF("solid", fgColor=_YELLOW if a in ("제출일", "납품서 붙임", "계약년월일", "착공년월일", "완료기한") else _BLUE)
             wb.save(path)
 
         fake(tpl2 / "표준틀_완료계.xlsx", [("납품서 붙임", "예"), ("수신자", None), ("용역명", None), ("계약금액", None),
@@ -1098,7 +1111,12 @@ def selfcheck() -> None:
         ws = load_workbook(f6 / "3_준공" / "완료계.xlsx")["기본사항"]
         assert ws["B6"].value == "강원특별자치도 홍천군 세무회계과" and ws["B8"].value == 19700000, ws["B6"].value
         assert [ws.cell(r, 2).value.date().isoformat() for r in (10, 11, 12)] == ["2025-03-12", "2025-03-12", "2025-07-09"]
+        assert ws["B10"].fill.fgColor.rgb == _BLUE and ws["B13"].fill.fgColor.rgb == _YELLOW  # 자동으로 채운 노란 칸만 파랑
+        sx = load_workbook(f6 / "2_착수" / "착수서류.xlsx")["기본사항"]  # 계약정보 한 번 조회로 착수서류 날짜도
+        assert [sx.cell(r, 2).value.date().isoformat() for r in (15, 16, 17)] == ["2025-03-12", "2025-03-12", "2025-07-09"]
+        assert sx["C15"].value == "[자동] 나라장터 계약정보 계약일" and sx["B15"].fill.fgColor.rgb == _BLUE
         assert "to" not in contract_values({**row5, "cntrctInsttNm": "조달청"})
+        assert contract_values({"cntrctInsttNm": "경기도 경기도축산진흥센터", "cntrctInsttChrgDeptNm": "경기도축산진흥센터"})["to"] == "경기도 경기도축산진흥센터"
         def boom(v):
             raise RuntimeError("down")
         pa.prepare(k6, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2, contract_lookup=boom)

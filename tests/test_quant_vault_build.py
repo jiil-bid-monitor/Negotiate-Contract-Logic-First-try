@@ -3836,3 +3836,57 @@ def test_bond_amount_label_and_form_rate(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={}), basis=806_162_000)
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert "보증금액 : 금 이천십오만사천오십 원정 (￦ 20,154,050 )" in text, text
+
+
+def test_sign_table_org_name_and_rep(tmp_path: Path):
+    """11/18 사용자 제보(봉평 입찰참가 신청서 끝 서명 표): '제 출 일 | 2026년 월 일 / 기 관 명 | __ / 대    표 | (인)'에서
+    기관명·대표가 빔 — '기관명'·'대표'(자 없이)를 이름표로 몰랐음. '대표 | (인)' 줄이 있는 작은 서명 표에서만 기관명 = 회사명, 대표 = 대표자."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "제 출 일"), _c(1, 0, "2026년    월    일")],
+                 [_c(0, 1, "기 관 명"), _c(1, 1, "")],
+                 [_c(0, 2, "대    표"), _c(1, 2, "(인)")]]) + _tbl([[_c(0, 0, "기 관 명"), _c(1, 0, "")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert text.count("(주)가상") == 1 and "홍길동" in text, text
+
+
+def test_receipt_table_name_is_rep(tmp_path: Path):
+    """11/18 사용자 요청(접수증 '접수번호 | 2026 - | 업체명 | (주)… | 확인필 / 주 소 | … | 전화번호 | … / 성 명 | __ | 제 출 자 | __'):
+    '성 명' 칸 = 대표자(접수번호 칸이 있는 표만 — 다른 서식의 '성명'은 개인 칸이라 그대로 비움), 제출자는 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "접수번호"), _c(1, 0, "2026 -"), _c(2, 0, "업 체 명"), _c(3, 0, ""), _c(4, 0, "확인필")],
+                 [_c(0, 1, "주    소"), _c(1, 1, ""), _c(2, 1, "전화번호"), _c(3, 1, ""), _c(4, 1, "")],
+                 [_c(0, 2, "성    명"), _c(1, 2, ""), _c(2, 2, "제 출 자"), _c(3, 2, ""), _c(4, 2, "")]]) \
+        + _tbl([[_c(0, 0, "성    명"), _c(1, 0, "")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert text.count("홍길동") == 1 and "(주)가상" in text, text
+
+
+def test_contact_marks_capital_sales_and_history_in_parens(tmp_path: Path):
+    """11/18 사용자 제보(봉평 서식 8·12): ① 연락처 칸 '(회사)☎' / '(H. P)☎'가 빔 — 회사 = 회사 전화, H.P = 대표자 휴대폰
+    ② 한 칸 '  자본금                매출액'(쌍점 없음)이 빔 ③ '주요 이력(연혁)' 칸에 연혁이 빔 — 괄호를 떼면 '연혁'이 사라져 연혁 칸으로 못 봤고,
+    이름표가 칸의 둘째 문단(첫 문단은 빈 줄)이라 이름표도 지워질 뻔함."""
+    from quantdocs.fill import fill_hwpx
+
+    def multi(col, row, paras, colspan=1):
+        ps = "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>' if t else
+                     '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"/></hp:p>' for t in paras)
+        return (f'<hp:tc><hp:subList>{ps}</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+                f'<hp:cellSpan colSpan="{colspan}" rowSpan="1"/><hp:cellSz width="9000" height="1000"/></hp:tc>')
+    body = _tbl([[_c(0, 0, "연 락 처"), multi(1, 0, ["(회사)☎", "(H.<hp:fwSpace/>P)☎"])]]) \
+        + _tbl([[_c(0, 0, "기타"), _c(1, 0, "  자본금                       매출액")],
+                [multi(0, 1, ["", "  주요 이력(연혁)", "", ""], colspan=2)]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "전화번호": "033-000-0000", "대표자 휴대폰": "010-0000-0000", "자본금": "1,000,000,000",
+                              "매출액": "5,000,000,000"})
+    v.history = [{"연월일": "2009-09-01", "내용": "법인 설립"}]
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert "(회사)☎ 033-000-0000" in text and "010-0000-0000" in text, text
+    assert "자본금 1,000,000,000원" in text and "매출액" in text and "5,000" not in text, text
+    assert "주요 이력(연혁)" in text and "법인 설립" in text, text

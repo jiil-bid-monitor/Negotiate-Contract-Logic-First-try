@@ -150,8 +150,9 @@ def _set_cell(cell_xml: str, lines: list[str], keep_first: bool = False, char_id
     if para_id is not None:
         first = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")\d+(")', rf"\g<1>{para_id}\2", first, count=1)
     new = "".join(_paragraph(first, ln, char_id) for ln in lines)
-    if keep_first:
-        return cell_xml[:paras[0][1]] + new + cell_xml[paras[-1][1]:]
+    if keep_first:  # 이름표 문단까지 둠 — 앞에 빈 문단이 있으면('' / '  주요 이력(연혁)', 11/18 봉평) 첫 글 문단까지
+        upto = next((pe for ps, pe in paras if _sq(_text(cell_xml[ps:pe]))), paras[0][1])
+        return cell_xml[:upto] + new + cell_xml[paras[-1][1]:]
     return cell_xml[:paras[0][0]] + new + cell_xml[paras[-1][1]:]
 
 
@@ -239,6 +240,37 @@ def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
     return new, done
 
 
+_GAP = r"(?:[  　]|<(?:[\w.-]+:)?fwSpace/>|<(?:[\w.-]+:)?nbSpace/>)*"
+# 연락처 칸 '(회사)☎ / (H. P)☎'(11/18 봉평 서식 8 대표자 선임계) — 회사 = 회사 전화, H.P = 대표자 휴대폰(11/16 '휴대폰' 칸 규칙과 같음)
+_MARKS = [(re.compile(rf"(\({_GAP}회{_GAP}사{_GAP}\){_GAP}(?:☎|☏|TEL|Tel|전화)?)(?:[  　]*)(?=</(?:[\w.-]+:)?t>)"), "전화번호"),
+          (re.compile(rf"(\({_GAP}H{_GAP}\.?{_GAP}P{_GAP}\.?{_GAP}\){_GAP}(?:☎|☏)?)(?:[  　]*)(?=</(?:[\w.-]+:)?t>)"), "대표자 휴대폰"),
+          (re.compile(rf"(\({_GAP}(?:휴{_GAP}대{_GAP}(?:폰|전{_GAP}화)|핸{_GAP}드{_GAP}폰){_GAP}\){_GAP}(?:☎|☏)?)(?:[  　]*)(?=</(?:[\w.-]+:)?t>)"), "대표자 휴대폰")]
+# 한 칸 '  자본금                       매출액'(쌍점 없음, 11/18 봉평 서식 12) — 자본금만 이름표 바로 뒤에, 빈칸은 값 너비만큼 줄임
+# 매출액은 채우지 않음(11/18 사용자 결정 — 회사 자료에 항목이 없고 자동 기입 대상에서 뺌)
+_MONEY_LABS = [(re.compile(rf"(자{_GAP}본{_GAP}금)([  　]{{2,}}|(?=</(?:[\w.-]+:)?t>))"), "자본금")]
+
+
+def _fill_marks(seg: str, vault) -> tuple[str, list[str]]:
+    """쌍점 없이 칸 안에 놓인 이름표 뒤에 값 — 연락처 '(회사)☎'·'(H.P)☎', '자본금   매출액'. 값이 없으면 그대로."""
+    flat = _sq(_text(seg))
+    done: list[str] = []
+    marks = _MARKS if re.fullmatch(r"(?:\((?:회사|H\.?P\.?|휴대폰|휴대전화|핸드폰)\)(?:☎|☏|TEL|Tel|전화)?)+", flat) else []
+    money = _MONEY_LABS if re.fullmatch(r"(?:자본금|매출액)+", flat) else []
+    for rx, key in marks + money:
+        value = _value(key, vault)
+        if not value:
+            continue
+        def put(mm, value=value, key=key):
+            done.append(f"{key} → {value}")
+            gap = mm.group(2) if mm.lastindex and mm.lastindex >= 2 else ""
+            pad = max(3, len(gap) - len(value) - 1) if gap else 0
+            return f"{mm.group(1)} {_mark(value)}" + " " * pad
+        seg, n = rx.subn(put, seg, count=1)
+    if done:
+        seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+    return seg, done
+
+
 def _masked(v: str) -> str:
     """주민등록번호는 앞 6자리만 — 뒷자리는 늘 '*******'(11/04 사용자 요청)."""
     m = re.search(r"(\d{6})\s*-?\s*[\d*Xx]{7}", v or "")
@@ -253,6 +285,18 @@ def _birth(v: str) -> str:
     yy = int(m.group(1))
     century = 2000 if yy <= date.today().year % 100 else 1900
     return f"{century + yy}. {m.group(2)}. {m.group(3)}."
+
+
+def _sign_table(cells: list[Cell], by_pos: dict) -> bool:
+    """작은 서명 표 — '대표 | (인)' 줄이 있는 5줄 이하 표(11/18 봉평 '제출일 / 기관명 / 대표 (인)')."""
+    if len({c.row for c in cells}) > 5:
+        return False
+    for c in cells:
+        if _sq(c.text) == "대표":
+            right = by_pos.get((c.row, c.col + c.colspan))
+            if right is not None and _SEAL_ONLY.match(_sq(right.text)):
+                return True
+    return False
 
 
 def _label_key(text: str) -> str | None:
@@ -2898,9 +2942,17 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         right = by_pos.get((c.row, c.col + c.colspan))
                         if right is not None and _SEAL_ONLY.match(_sq(right.text)):
                             key, applicant = "회사명", True
+                    if key is None and _sq(c.text) == "성명" and group is None \
+                            and any(_sq(o.text) == "접수번호" for o in cells) and any(_label_key(o.text) == "회사명" for o in cells):
+                        key = "대표자"  # 접수증 '접수번호 | 2026 - | 업체명 | __ / 주 소 / 성 명 | __ | 제출자'(11/18 사용자 요청 — 성명 = 대표자, 제출자는 비움)
+                    if key is None and re.fullmatch(r"기관명|대표", _sq(c.text)) and _sign_table(cells, by_pos):
+                        # 각서·신청서 끝 서명 표 '제 출 일 | 2026년 월 일 / 기 관 명 | __ / 대    표 | (인)'(11/18 봉평) — 기관명 = 지일(입찰자), 대표 = 대표자
+                        key = "회사명" if _sq(c.text) == "기관명" else "대표자"
                     if group == "대리인" and key not in ("회사명", None):
                         continue  # 대리인 줄은 업체명만(성명·주민번호·주소·연락처는 개인 정보라 비움 — 10/28·11/05 결정)
                     core = re.sub(r"\(.*?\)|[^\w]", "", c.text)  # '〈 주요연혁(요약) 〉' → '주요연혁'
+                    if "연혁" not in core and re.fullmatch(r"(?:주요)?이력\(연혁\)", _sq(c.text)):
+                        core = "주요연혁"  # '주요 이력(연혁)'(11/18 봉평 서식 12 — 괄호를 떼면 '연혁'이 사라져 연혁을 못 넣었음)
                     if "연혁" in core and len(core) <= 8 and vault.history:
                         lines = [f"{_fmt_ymd(h.get('연월일'))}  {h.get('내용') or ''}".strip() for h in vault.history]
                         right = by_pos.get((c.row, c.col + c.colspan))
@@ -3072,6 +3124,14 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     rep.filled.append(f"{_sq(c.text)} → {value[:40]}")
                 targets = {e[0].start for e in edits}
                 filled_at = {(e[0].row, e[0].col) for e in edits}
+                for c in cells:  # '(회사)☎ / (H.P)☎'·'자본금      매출액'(쌍점 없는 칸 안 이름표, 11/18 봉평)
+                    if c.start in targets:
+                        continue
+                    new_seg, done = _fill_marks(xml[c.start:c.end], vault)
+                    if done:
+                        edits.append((c, None, new_seg))
+                        targets.add(c.start)
+                        rep.filled += done
                 for c in cells:  # 'TEL :      FAX :'처럼 칸 안에 이름표와 빈자리가 같이 있는 칸
                     if c.start in targets or ":" not in c.text and "：" not in c.text:
                         continue

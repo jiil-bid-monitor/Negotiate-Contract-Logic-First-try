@@ -38,8 +38,12 @@ _HEAD_BOX = re.compile(r"^\s*[□■◇◆○●❍◦▪ㅇ]\s*([^:：\n]{2,30}
 _START_TITLE = re.compile(r"(?:정량|계량)\S{0,3}\s*평가\s*(?:항목|기준)")
 
 
+# '② 경영상태 평가(5점)'·'③ 기술능력평가(5점)'(11/18 봉평 — 원 번호 머리, 쌍점 없이 괄호 점수). '③-1 …'(③과 골라 내는 다른 방식)은 머리 아님
+_HEAD_CIRC = re.compile(r"^\s*[①-⑳](?!\s*-)\s*([^:：\n()（）]{2,30}?)\s*[:：]?\s*[(（]\s*(\d+(?:\.\d+)?)\s*점\s*[)）]\s*$")
+
+
 def _head(text: str):
-    return _HEAD.match(text) or _HEAD_BOX.match(text)
+    return _HEAD.match(text) or _HEAD_BOX.match(text) or _HEAD_CIRC.match(text)
 
 
 _MULT = {"억": 1e8, "천만": 1e7, "백만": 1e6, "만": 1e4}
@@ -177,15 +181,30 @@ def _read_table(c: Criterion, xml: str, tbl: tuple[int, int]) -> None:
             if key in ("해당없음", "해당") and _num(rows.get(r + 1, {}).get(col, "")) is not None:
                 c.sanction.setdefault(key, _num(rows[r + 1][col]))
     # 신용등급: 종류 머리(회사채·기업어음·기업신용평가등급) 아래 줄마다 등급 글 + 맨 오른쪽 점수
-    kinds = {col: _sq(text) for r, cols in rows.items() for col, text in cols.items()
-             if re.fullmatch(r"회사채|기업어음|기업신용평가등급|신용평가등급", _sq(text))}
+    # '①회사채에 대한 신용평가등급'·'②기업어음에 대한 신용평가등급'(11/18 봉평)도 같은 머리
+    def _kind_head(text):
+        t = re.sub(r"^[①-⑳]", "", _sq(text))
+        m = re.fullmatch(r"(회사채|기업어음)(?:에대한)?(?:신용평가등급)?|기업신용평가등급|신용평가등급", t)
+        return (m.group(1) or m.group(0)) if m else None
+    kinds = {col: _kind_head(text) for r, cols in rows.items() for col, text in cols.items() if _kind_head(text)}
+    # 점수 칸이 여러 줄을 세로로 합친 표('5' 한 칸이 AAA~A- 세 줄, 11/18 봉평) — 줄마다 그 줄을 덮는 점수 칸
+    span_score: dict[int, float] = {}
+    for cell in _cells(xml, tbl):
+        v = _num(re.sub(r"\s+", " ", cell.text).strip())
+        if v is not None and cell.col == max(rows.get(cell.row, {cell.col: ""})):
+            for k in range(cell.row, cell.row + max(1, cell.rowspan)):
+                span_score.setdefault(k, v)
     if kinds and "등급" in flat:
         for r, cols in sorted(rows.items()):
             score = _num(cols[max(cols)]) if cols else None
+            if score is None:
+                score = span_score.get(r)
             pct = re.fullmatch(r"배점의?(\d+(?:\.\d+)?)%", _sq(cols[max(cols)])) if cols else None
             if score is None and pct and c.points:  # '배점의 95%'(11/13) — 배점 × 비율, 소수 넷째 자리까지
                 score = round(c.points * float(pct.group(1)) / 100, 4)
-            rules = {kinds[col]: text for col, text in cols.items() if col in kinds and re.search(r"[A-D]", text)}
+            # '①의 BBB+, BBB°, BBB-에 준하는 등급' → 'BBB+, BBB0, BBB-'(° = 0, 11/18 봉평)
+            rules = {kinds[col]: re.sub(r"^[①-⑳]\s*의\s*|\s*에\s*준하는\s*등급", "", text).replace("°", "0").replace("º", "0")
+                     for col, text in cols.items() if col in kinds and re.search(r"[A-D]", text)}
             if score is not None and rules:
                 c.credit_rows.append((rules, score))
         return
@@ -762,6 +781,10 @@ def read_form(cells) -> list[FormRow]:
     plain = lambda t: re.sub(r"\([^)]*\)", "", _sq(t))  # '배점(점)'·'평점(점)'(11/10 경남교육청)
     head = next((c for c in cells if plain(c.text) in _SCORE_HEAD), None)
     pts_head = next((c for c in cells if plain(c.text) in ("배점", "총배점")), None)  # '총 배 점(상한점수)'(11/13)
+    if head is None:  # '배점한도 | 배점'(11/18 봉평 서식 20 정량적 평가 요약서) — 한도 칸이 상한, 빈 '배점' 칸이 자기평점
+        limit = next((c for c in cells if plain(c.text) in ("배점한도", "배점상한", "한도")), None)
+        if limit is not None and pts_head is not None and pts_head.row == limit.row:
+            head, pts_head = pts_head, limit
     if head is None or pts_head is None or head.row != pts_head.row:
         return []
     rows: dict[int, list] = {}

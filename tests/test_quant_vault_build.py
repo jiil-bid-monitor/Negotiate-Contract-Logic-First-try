@@ -362,6 +362,67 @@ def test_tall_track_row_is_split_and_text_fits():
     assert 'itemCnt="3"' in out and re.search(r'<hh:charPr id="2" height="1100"', out)
 
 
+def test_track_table_in_frame_with_note_row_is_split():
+    """11/18 사용자 제보: 봉평 서식 16 '최근 3년간 사업수행실적' — 쪽 테두리 표 안에 실적표가 있고, 아래 큰 빈 줄의 사업개요 칸에
+    '※ 간략하게 기재'가 적혀 있어 빈 줄로 안 보고 나누지도 않음 → 실적 한 건만 들어감. 안쪽 표도 나누고, 안내 칸은 빈 칸으로 봄."""
+    from quantdocs.fill import FillReport, _all_tables, _cells, _fill_tracks, _split_tall_rows
+
+    rows = [[_sz_cell(0, 0, "연번", 2000, 3000), _sz_cell(1, 0, "사 업 명", 9000, 3000),
+             _sz_cell(2, 0, "계약금액(천원)", 6000, 3000), _sz_cell(3, 0, "사업개요", 6000, 3000)],
+            [_sz_cell(0, 1, "1", 2000, 3000), _sz_cell(1, 1, "", 9000, 3000), _sz_cell(2, 1, "", 6000, 3000), _sz_cell(3, 1, "", 6000, 3000)],
+            [_sz_cell(0, 2, "", 2000, 30000), _sz_cell(1, 2, "", 9000, 30000), _sz_cell(2, 2, "", 6000, 30000),
+             _sz_cell(3, 2, "※ 간략하게 기재", 6000, 30000)]]
+    inner = '<hp:tbl rowCnt="3" colCnt="4">' + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    xml = ('<hp:tbl rowCnt="1" colCnt="1"><hp:tr><hp:tc><hp:subList><hp:p><hp:run><hp:t>[서식 16]</hp:t></hp:run></hp:p>'
+           f'<hp:p><hp:run>{inner}</hp:run></hp:p></hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/>'
+           '<hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc></hp:tr></hp:tbl>')
+    tracks = [{"사업명": f"가상 사업 {i}", "계약금액(원)": 100_000_000 * (i + 1)} for i in range(4)]
+    for i in range(len(_all_tables(xml))):
+        xml = _split_tall_rows(xml, _all_tables(xml)[i], len(tracks))
+    tbl = _all_tables(xml)[1]
+    assert 'rowCnt="5"' in xml[tbl[0]:tbl[1]] and xml.count("※ 간략하게 기재") == 1
+    rep = FillReport("x")
+    _fill_tracks(xml, _cells(xml, tbl), tracks, rep)
+    assert rep.rows == 4 and rep.overflow == 0
+
+
+def test_circled_heads_credit_merged_score_and_limit_form(tmp_path: Path):
+    """11/18 사용자 제보: 봉평 — 배점기준 머리가 '② 경영상태 평가(5점)'·'③ 기술능력평가(5점)'(원 번호, 쌍점 없음)라 못 읽었고,
+    신용등급 표는 머리 '①회사채에 대한 신용평가등급'·점수 칸이 세 줄을 세로로 합침, 등급 글 '①의 BB+, BB°에 준하는 등급'.
+    서식 20 정량적 평가 요약서는 '배점한도 | 배점'(빈 '배점' 칸이 자기평점)."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore, read_criteria
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                           f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    tb = lambda rows: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    credit = tb([[c(0, 0, "①회사채에 대한 신용평가등급"), c(1, 0, "②기업어음에 대한 신용평가등급"), c(2, 0, "③기업신용평가등급"), c(3, 0, "평점")],
+                 [c(0, 1, "A+, A°, A-"), c(1, 1, "A2+"), c(2, 1, "①의 A+, A°, A-에 준하는 등급"), c(3, 1, "5")],
+                 [c(0, 2, "BBB+, BBB°, BBB-"), c(1, 2, "A3+"), c(2, 2, "①의 BBB+, BBB°, BBB-에 준하는 등급"), c(3, 2, "4", 1, 2)],
+                 [c(0, 3, "BB+, BB°"), c(1, 3, "B+"), c(2, 3, "①의 BB+, BB°에 준하는 등급")]])
+    staff = tb([[c(0, 0, "특급기술자"), c(1, 0, "고급기술자"), c(2, 0, "중급기술자"), c(3, 0, "초급기술자")],
+                [c(0, 1, "1"), c(1, 1, "0.8"), c(2, 1, "0.6"), c(3, 1, "0.4")]])
+    rfp = (p("- 기술능력평가 : 90점(정량적 평가 20점, 정성적 평가 70점)") + p("② 경영상태 평가(5점)") + credit
+           + p("③ 기술능력평가(5점)") + staff + p("③-1 기술능력평가:(5점)") + p("❍ 정성적 평가 (70점) : 기술제안 평가"))
+    src = _mini_hwpx(tmp_path / "r.hwpx", rfp)
+    crit = {x.kind: x for x in read_criteria([src])}
+    assert crit["credit"].points == 5 and crit["staff"].points == 5
+    assert crit["staff"].per_grade == {"특급": 1.0, "고급": 0.8, "중급": 0.6, "초급": 0.4}
+    form = tb([[c(0, 0, "항목"), c(1, 0, "세부항목"), c(2, 0, "배점한도"), c(3, 0, "배점")],
+               [c(0, 1, "경영상태"), c(1, 1, "(해당등급 표기)"), c(2, 1, "5점"), c(3, 1, "")],
+               [c(0, 2, "기술능력"), c(1, 2, "(해당등급 및 인원표기)"), c(2, 2, "5점"), c(3, 2, "")]])
+    fsrc = _mini_hwpx(tmp_path / "f.hwpx", form)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"},
+                    staff=[{"이름": "가상1", "등급": "특급", "입사일": "2015-01-01"}, {"이름": "가상2", "등급": "고급", "입사일": "2015-01-01"}])
+    fill_hwpx(fsrc, tmp_path / "o.hwpx", v, self_scores=SelfScore(list(crit.values()), v, _dt.date(2026, 11, 18)))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups())): re.sub(r"<[^>]+>", "", m)
+           for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S)}
+    assert got[(3, 1)] == "4" and got[(3, 2)] == "1.8", got
+
+
 def test_qualification_rows_merge_docs_and_name_only(tmp_path: Path, monkeypatch):
     """11/04 필암서원: 공고문·제안요청서의 '또는' 묶음을 하나로, 이름만 적힌 중소기업확인서도 한 줄, 통합본에 코드 서류 그대로."""
     from nego import attachments

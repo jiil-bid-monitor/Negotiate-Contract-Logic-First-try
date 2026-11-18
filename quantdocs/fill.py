@@ -463,6 +463,12 @@ _TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값(t, 머리글)
 ]
 
 
+def _note_only(text: str) -> bool:
+    """'※ 간략하게 기재'처럼 작성 안내만 적힌 칸(11/18 봉평 서식 16 — 실적 표 아래 큰 빈 줄의 사업개요 칸)."""
+    t = _sq(text)
+    return t.startswith("※") and len(t) <= 30
+
+
 def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
     rows: dict[int, list[Cell]] = {}
     for c in cells:
@@ -486,8 +492,9 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                     break
         amount_head = next((headtext[k] for k, fn in colmap.items() if fn is _amount), "")
 
-        def empty(line):  # 빈 줄 — 연번 칸에 번호만 미리 적힌 줄도 빈 줄(11/04 당진 '1')
-            return all(c.blank or (c.col in (no_col, line[0].col) and re.fullmatch(r"\d+\.?", _sq(c.text))) for c in line)
+        def empty(line):  # 빈 줄 — 연번 칸에 번호만 미리 적힌 줄도 빈 줄(11/04 당진 '1'), '※ 간략하게 기재' 안내만 있는 칸도(11/18 봉평 서식 16)
+            return all(c.blank or _note_only(c.text)
+                       or (c.col in (no_col, line[0].col) and re.fullmatch(r"\d+\.?", _sq(c.text))) for c in line)
 
         def is_total(line):
             f = _sq(line[0].text)
@@ -2192,13 +2199,17 @@ def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int) -> str:
     if head is None or len(trs) != len(rows):
         return xml
     head_h = max(int(m) for m in re.findall(r'cellSz\b[^>]*height="(\d+)"', seg[trs[head][0]:trs[head][1]]) or [0])
-    empty = [r for r in sorted(rows) if r > head and all(c.blank for c in rows[r])]
+    empty = [r for r in sorted(rows) if r > head and all(c.blank or _note_only(c.text) for c in rows[r])]
     for r in empty:
         tr = seg[trs[r][0]:trs[r][1]]
         hs = [int(x) for x in re.findall(r'cellSz\b[^>]*height="(\d+)"', tr)]
         if not hs or not head_h:
             continue
-        k = min(need - (len(empty) - 1), max(hs) // max(head_h, 2000))  # 한 줄 높이 = 머리줄 높이(최소 약 7mm)
+        # 연번 '1'만 미리 적힌 줄도 실적 한 줄 자리(11/18 봉평) — 그만큼 덜 나눔
+        numbered = sum(1 for rr in sorted(rows) if rr > head and rr not in empty and all(
+            c.blank or _note_only(c.text) or (c.col == min(x.col for x in rows[rr]) and re.fullmatch(r"\d+\.?", _sq(c.text)))
+            for c in rows[rr]))
+        k = min(need - (len(empty) - 1) - numbered, max(hs) // max(head_h, 2000))  # 한 줄 높이 = 머리줄 높이(최소 약 7mm)
         if k < 2:
             continue
         new_h = max(hs) // k
@@ -2206,6 +2217,8 @@ def _split_tall_rows(xml: str, tbl: tuple[int, int], need: int) -> str:
         for i in range(k):
             t = re.sub(r'(cellSz\b[^>]*height=")\d+"', lambda m: f'{m.group(1)}{new_h}"', tr)
             t = re.sub(r'(cellAddr\b[^>]*rowAddr=")(\d+)"', lambda m: f'{m.group(1)}{int(m.group(2)) + i}"', t)
+            if i < k - 1:  # '※ 간략하게 기재' 안내는 맨 아래 줄에만 남김(줄마다 되풀이되지 않게, 11/18)
+                t = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)([^<]*※[^<]*)(</(?:[\w.-]+:)?t>)", r"\1\3", t)
             copies.append(t)
         after = seg[trs[r][1]:]
         after = re.sub(r'(cellAddr\b[^>]*rowAddr=")(\d+)"', lambda m: f'{m.group(1)}{int(m.group(2)) + k - 1}"', after)
@@ -2836,10 +2849,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             rep.one_line.clear()  # 칸 위치는 구역마다 다름
             rep.word_cells.clear()
             if tracks:  # 세로로 긴 빈 칸 한 줄인 실적표는 먼저 줄을 나눔
-                for i in range(len(_spans(xml, "tbl"))):
-                    xml = _split_tall_rows(xml, _spans(xml, "tbl")[i], len(tracks))
-                for i in range(len(_spans(xml, "tbl"))):  # 사업기간·금액 열이 좁으면 가장 넓은 열에서 너비를 받아 옴(11/12)
-                    xml = _widen_track_cols(xml, _spans(xml, "tbl")[i], tracks, chars)
+                # 쪽 테두리 표 안에 든 실적표도(11/18 봉평 서식 16 — 바깥 표만 봐서 큰 빈 줄을 안 나눴음)
+                for i in range(len(_all_tables(xml))):
+                    xml = _split_tall_rows(xml, _all_tables(xml)[i], len(tracks))
+                for i in range(len(_all_tables(xml))):  # 사업기간·금액 열이 좁으면 가장 넓은 열에서 너비를 받아 옴(11/12)
+                    xml = _widen_track_cols(xml, _all_tables(xml)[i], tracks, chars)
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻

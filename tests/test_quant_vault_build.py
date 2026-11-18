@@ -2791,6 +2791,17 @@ def test_corp_register_birth_label_is_corp_no(tmp_path: Path):
     assert "110111-1234567" in sec and "(주)가상" in sec
 
 
+def test_bizno_with_rrn_paren_label(tmp_path: Path):
+    """11/18 사용자 제보: 봉평 신청인 '사업자 등록번호 (주민등록번호) | __'이 빔 — '주민'이 든 이름표를 개인 칸 비움 규칙이 걸렀음."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "성명(상호)"), _c(1, 0, "")], [_c(0, 1, "사업자 등록번호\n(주민등록번호)"), _c(1, 1, "")]])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "사업자등록번호": "123-45-67890"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert "123-45-67890" in sec
+
+
 def test_signature_table_inside_frame_table(tmp_path: Path):
     """11/13 사용자 제보: 안전관리 서약서 — 쪽 테두리 표 칸 안에 '서약자 | 상 호 : | __ / | 주 소 : | __ / | 대 표 자 : | (인)' 표가 들어 있어
     (표 안 표) 서명이 모두 비었음. 안쪽 표도 채움, 바깥 칸의 글은 그대로."""

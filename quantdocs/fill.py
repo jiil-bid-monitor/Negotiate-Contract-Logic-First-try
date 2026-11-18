@@ -2789,6 +2789,13 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
         for nc, pts in none_cells:  # 신인도 '없음' 줄마다 그 줄 배점(11/16 사용자 요청) — 상한점수 줄엔 위대로 합(상한까지)
             out.append((nc, [_one_dec(pts)], False))
         rep.filled.append(f"자기평점 '{name}' → {fmt(item.score)}점 ({item.basis})")
+        # 경영상태 줄 '(해당등급 표기)' 칸 = 신용평가등급(11/18 사용자 요청: 봉평 서식 20 정량적 평가 요약서 — 'BB+')
+        grade = str(ctx.vault.info.get("신용평가등급") or "").strip()
+        if item.kind == "credit" and grade:
+            for c in cells:
+                if c.row == row.cell.row and re.fullmatch(r"\(?해당(?:신용)?등급(?:표기|기재)\)?", _sq(c.text)):
+                    out.append((c, [grade], False))
+                    rep.filled.append(f"'{name}' 등급 표기 칸 → {grade}")
         # 기술인력 등급 줄마다 그 등급 점수 + 비고 '명 × 점 = 점'(11/13 사용자 요청: 부산 업사이클센터 '특급기술자 | 1.0점 | __ | 명 × 점 = 점')
         if row.grade_cells and row.crit is not None and item.kind == "staff":
             one = lambda v: (lambda t: t if "." in t else t + ".0")(f"{round(v, 2):g}")

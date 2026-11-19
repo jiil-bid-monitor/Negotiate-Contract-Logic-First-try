@@ -75,6 +75,70 @@ def required_docs(files: list[Path]) -> list[dict]:
     return out
 
 
+REISSUE_SHEET = "⚠새로발급"
+
+
+def attachment_texts(files: list[Path]) -> list[str]:
+    """첨부 문서 글(정량평가서와 같은 읽기). 못 읽는 첨부는 건너뜀."""
+    from quantdocs.notice import doc_text
+
+    out = []
+    for f in files:
+        if f.suffix.lower() in (".hwp", ".hwpx", ".pdf", ".docx"):
+            try:
+                out.append(doc_text(f))
+            except Exception:  # noqa: BLE001
+                continue
+    return out
+
+
+def company_docs_dir() -> Path | None:
+    from webapp.docexpiry import docs_dir
+
+    d = docs_dir()
+    return d if d.is_dir() else None
+
+
+def reissue_needed(texts: list[str], company_docs: Path | None) -> list[tuple[str, str]]:
+    """첨부 글에 이름이 나온 '공고 때 새로 발급' 서류(under100m.docs.PER_NOTICE) — [(종류, 보유본 발급일 또는 '보유본 없음')].
+    11/19 사용자: 낙찰 공고가 새로 발급할 서류를 요구하면 담당자가 여는 엑셀에 바로 보이게(서류_확인.txt만으론 아무도 안 봄)."""
+    from under100m.docs import LIST_JSON, PER_NOTICE
+
+    text = re.sub(r"\s+", "", " ".join(texts))
+    # PER_NOTICE 낱말('납세증명' 등)은 국세·지방세가 함께 걸려 너무 넓음 — 어느 서류인지 가리는 꼴로 찾음(띄어쓰기 뺀 글)
+    pattern = {"국세 납세증명서": r"국세.{0,12}(납세|완납)증명", "지방세 납세증명서": r"지방세.{0,12}(납세|완납)증명|(납세|완납)증명서?\(?[^)]{0,6}지방세",
+               "4대보험 완납증명서": r"(4대|사회)보험.{0,12}완납", "4대보험 가입증명": r"(4대|사회)보험.{0,12}가입(증명|자명부)|가입자명부",
+               "법인등기사항전부증명서": r"법인등기", "사업자등록증명": r"사업자등록증명"}
+    try:
+        records = json.loads((company_docs / LIST_JSON).read_text(encoding="utf-8")) if company_docs else []
+    except (OSError, ValueError):
+        records = []
+    issued = {r.get("종류"): r.get("발급일") for r in records}
+    return [(kind, issued.get(kind) or "보유본 없음") for kind in PER_NOTICE if re.search(pattern.get(kind, re.escape(kind)), text)]
+
+
+def add_reissue_sheet(xlsx: Path, rows: list[tuple[str, str]]) -> None:
+    """기본사항 바로 뒤에 '⚠새로발급' 탭 — 공고문이 요구한 새로 발급할 서류와 보유본 날짜(인쇄 안 함)."""
+    from openpyxl import load_workbook
+    from openpyxl.styles import Font, PatternFill
+
+    wb = load_workbook(xlsx)
+    if REISSUE_SHEET in wb.sheetnames:
+        del wb[REISSUE_SHEET]
+    ws = wb.create_sheet(REISSUE_SHEET, 1 if "기본사항" in wb.sheetnames else 0)
+    ws.sheet_properties.tabColor = "FFC00000"
+    ws["A1"] = "⚠ 공고문이 요구한 '새로 발급할 서류' — 제출 전에 새로 발급받으세요 (이 탭은 제출 안 함)"
+    ws["A1"].font = Font(b=True, sz=12, color="FFC00000")
+    ws["A3"], ws["B3"], ws["C3"] = "서류", "가지고 있는 것(발급일)", "할 일"
+    for c in ("A3", "B3", "C3"):
+        ws[c].font, ws[c].fill = Font(b=True), PatternFill("solid", fgColor="FFFCE4D6")
+    for i, (kind, have) in enumerate(rows, 4):
+        ws.cell(i, 1, kind), ws.cell(i, 2, have), ws.cell(i, 3, "공고문의 발급 기준(예: 공고일 이후 발급)을 확인해 새로 발급")
+    ws.cell(len(rows) + 5, 1, "공고문에 서류 이름이 나와서 표시함(자동) — 제출 요구인지는 공고문 원문과 대조")
+    ws.column_dimensions["A"].width, ws.column_dimensions["B"].width, ws.column_dimensions["C"].width = 26, 24, 60
+    wb.save(xlsx)
+
+
 # 착공·착수 표준틀 v5(차장님 확인 11/11) — 회사 정보가 들어 있어 저장소 밖 NAS 공유 폴더 '낙찰후서류/_표준틀' 한 곳에 둠
 NAS_TEMPLATES = Path(r"\\jiilserver\jiil-webapp\낙찰후서류\_표준틀")
 
@@ -593,7 +657,10 @@ class PostAward:
         표준틀(templates, 기본 root/_표준틀)이 있으면 착공·착수서류를 복사해 기본사항을 채운다(시험판 11/11)."""
         import shutil
         import tempfile
+        import time
 
+        started = time.time() - 120  # NAS 시계가 조금 달라도 이번에 만든 파일로 봄
+        reissue: list[tuple[str, str]] = []
         if fetch is None:
             from quantdocs.g2b import fetch_notice as fetch
         v = {**(self._read().get(key) or {})}
@@ -624,13 +691,24 @@ class PostAward:
             basic = [] if private else self._fill_qual(key, folder, nf, tdir)
             basic += (["[적격심사] 낙찰 전 — 0_적격심사·공고문서만 만듦(계약·착공 서류는 낙찰 뒤 '낙찰 서류 만들기')"] if qual_only
                       else self._fill_both(key, folder, nf, tdir, contract_lookup))
+            reissue = reissue_needed(attachment_texts(nf.files), company_docs_dir()) if nf.title else []
+            if reissue:  # 이번에 만든 엑셀(적격심사서류·착공/착수서류 등)마다 '⚠새로발급' 탭 — 담당자가 고친 예전 파일은 안 건드림
+                for x in folder.rglob("*.xlsx"):
+                    if "공고문서" in x.parts or x.name.startswith("~$") or x.stat().st_mtime < started:
+                        continue
+                    try:
+                        add_reissue_sheet(x, reissue)
+                    except Exception as err:  # noqa: BLE001 — 탭을 못 넣어도 폴더·서류는 그대로
+                        basic.append(f"[새로 발급] {x.name}에 탭을 넣지 못함({err.__class__.__name__})")
+                basic.append("[새로 발급] 공고문이 요구: " + ", ".join(f"{k}({h})" for k, h in reissue) + " — 엑셀 '⚠새로발급' 탭")
             summary = folder / "공고문서" / SUMMARY
             if nf.title and not summary.exists():
                 try:
                     write_summary(summary, key, v, nf)
                 except Exception as err:  # noqa: BLE001 — 요약을 못 만들어도 폴더·서류는 그대로
                     basic.append(f"[공고요약] {SUMMARY}를 만들지 못함({err.__class__.__name__})")
-        lines = [f"{key} {v.get('title') or nf.title} — 첨부에서 읽은 제출서류 (자동, 원문과 대조하세요)", ""]
+        lines = [f"⚠ 새로 발급 필요: {k} (보유본 {h})" for k, h in reissue] + ([""] if reissue else [])  # 맨 위(11/19 사용자)
+        lines += [f"{key} {v.get('title') or nf.title} — 첨부에서 읽은 제출서류 (자동, 원문과 대조하세요)", ""]
         lines += basic + [""]
         if not nf.title:
             lines.append("나라장터에서 공고를 찾지 못해 첨부를 받지 못했습니다.")
@@ -646,6 +724,7 @@ class PostAward:
             # 서류 현황 화면용 — 첨부 제출서류(틀에 있음/없음)와 기본사항 안내(공고문 기간·해당 시 서류)
             items[key]["docList"] = [{"text": d["text"][:120], "covered": d["covered"]} for d in docs][:40]
             items[key]["notes"] = [n.strip() for n in basic if n.startswith("  ") and "직접 넣으세요" not in n]
+            items[key]["reissue"] = [{"kind": k, "have": h} for k, h in reissue]
             self._write(items)
         return folder, docs
 
@@ -674,7 +753,7 @@ class PostAward:
         notice = folder / "공고문서"
         attach = sorted(f.name for f in notice.iterdir() if f.is_file()) if notice.is_dir() else []
         return {"folder": share_path(folder), "stages": stages, "attach": attach,
-                "docList": v.get("docList") or [], "notes": v.get("notes") or []}
+                "docList": v.get("docList") or [], "notes": v.get("notes") or [], "reissue": v.get("reissue") or []}
 
     def file(self, key: str, rel: str) -> Path:
         """공고 폴더 안 파일 하나(내려받기용). 폴더 밖을 가리키면 오류."""

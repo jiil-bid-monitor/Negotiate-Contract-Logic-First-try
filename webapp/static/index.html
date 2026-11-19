@@ -1291,6 +1291,35 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 /* 결과 글이 버튼 옆에 생겼다 사라지면 입력 칸·버튼이 좌우로 밀림 → 아래 줄에 자리 고정(11/12) */
 #awardMsg { flex: 0 0 100%; min-height: 1.5em; }
 .award-table td { vertical-align: top; }
+.award-lead { margin: 0 0 10px; font-size: 15px; }
+#tab-award h3 { font-size: 17px; margin: 18px 0 8px; }
+.award-group { margin-top: 18px; }
+.award-group > summary { cursor: pointer; font-size: 16px; font-weight: 600; padding: 6px 0; }
+.award-table { font-size: 15px; }
+@media (min-width: 761px) {
+  .award-table { table-layout: fixed; width: 100%; }
+  .award-table th:nth-child(1) { width: 38%; } .award-table th:nth-child(2) { width: 17%; }
+  .award-table th:nth-child(3) { width: 29%; } .award-table th:nth-child(4) { width: 16%; }
+  .award-act { white-space: normal; }
+}
+@media (max-width: 760px) {
+  .award-table thead { display: none; }
+  .award-table, .award-table tbody, .award-table tr, .award-table td { display: block; width: 100%; }
+  .award-table tr:not(.award-detail) { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .award-table td { border: 0; padding: 4px 12px; }
+  .award-money b { display: inline; margin-right: 8px; }
+}
+.award-name a { font-weight: 600; color: inherit; text-decoration: none; }
+.award-name a:hover { text-decoration: underline; }
+.award-money b { display: block; font-size: 15px; margin-bottom: 4px; }
+.award-steps { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.award-steps li { padding: 2px 7px; border: 1px solid var(--line); color: var(--muted); }
+.award-steps li.done { color: var(--brand); border-color: var(--brand); }
+.award-steps li.now { color: var(--on-brand); background: var(--brand); border-color: var(--brand); font-weight: 600; }
+.award-more { margin-top: 6px; }
+.award-more > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.award-more[open] { white-space: normal; max-width: 220px; }
+.award-more p { margin: 4px 0; }
 .award-act { white-space: nowrap; }
 .award-act button { margin: 0 4px 4px 0; }
 .award-act button.award-main { background: var(--brand); color: var(--on-brand); border-color: var(--brand); font-weight: 600; }
@@ -1481,7 +1510,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 
   <!-- 낙찰 후 서류(2026-11-10) — 투찰 기록·직접 넣은 공고의 낙찰자 확인(webapp/postaward.py), 공사 / 물품·용역 구분, 공고 폴더 만들기 -->
   <section id="tab-award" hidden>
-    <p class="sub">투찰 기록에 있는 공고는 저절로 올라오고, 매일 22시에 나라장터 낙찰현황으로 낙찰자를 확인합니다. 협상처럼 투찰 기록이 없는 공고는 공고번호를 넣으세요. 개찰 1순위가 아니라 심사가 끝난 뒤의 낙찰자만 봅니다.</p>
+    <p class="award-lead">투찰한 공고가 저절로 올라옵니다. 투찰 기록이 없는 공고(협상 등)는 공고번호를 넣으세요.</p>
     <div class="search">
       <input id="awardNo" type="search" placeholder="공고번호 — 예: R26BK01800345-000" autocomplete="off" aria-label="공고번호">
       <button type="button" id="awardAdd">목록에 넣기</button>
@@ -3978,48 +4007,57 @@ function awardWaiting(o) {
   if (o.rank > 5) return `<span class="badge">탈락</span><div class="sub">개찰 ${o.rank}등${n}</div>`;
   return `<span class="badge warn">대기</span><div class="sub">개찰 ${o.rank}등${n} · 낙찰자 확정 전</div>`;
 }
+// 11/19 화면 정리(사용자 승인 — 개선안 ①): 할 일 → 기다림 → 끝남 세 묶음, 한 줄에 버튼은 다음 할 일 하나, 나머지는 '더 보기'.
+// 열 순서는 투찰내역과 같게(공고 → 투찰금액·개찰 → 단계). 꺼진 버튼은 안 보이고 그 이유는 '더 보기' 안에 한 줄로.
+const AWARD_STEPS = ["개찰", "적격심사", "계약", "착공·착수", "준공", "청구"];
+function awardKind(v) {
+  const rank = v.opening ? v.opening.rank : null;
+  if (v.status === "낙찰" || v.folder) return "todo";
+  if (v.status === "대기" && rank != null && rank <= 5 && !v.private) return "todo";
+  if (v.status === "다른 업체 낙찰" || (v.status === "대기" && v.opening && (rank == null || rank > 5))) return "done";
+  return "wait";
+}
 function renderAward(items) {
-  const groups = ["공사", "물품·용역", "업무 미확인"];
   const row = (v) => {
     const key = v.no + (v.ord ? "-" + v.ord : "");
-    const w = v.winner || {};
-    const won = v.status === "낙찰";
-    const result = won ? `<span class="badge okb">낙찰</span><div class="sub">${esc(w.date || "")}${w.amount ? " · " + Number(w.amount).toLocaleString() + "원" : ""}</div>`
+    const w = v.winner || {}, o = v.opening, bid = v.bid || {};
+    const isWon = v.status === "낙찰";
+    const rank = o ? o.rank : null;
+    const kind = awardKind(v);
+    const result = isWon ? `<span class="badge okb">낙찰</span><div class="sub">${esc(w.date || "")}${w.amount ? " · " + Number(w.amount).toLocaleString() + "원" : ""}</div>`
       : v.status === "다른 업체 낙찰" ? `<span class="badge">다른 업체 낙찰</span><div class="sub">${esc(w.name || "")}</div>`
-      : v.status === "대기" ? awardWaiting(v.opening) : `<span class="badge">${esc(v.status || "")}</span>`;
-    // 버튼 둘이 늘 보임(11/12 사용자 결정): 적격심사 폴더 = 낙찰 전 개찰 5등 안(적격심사는 1순위부터 차례 — 통보받으면),
-    // 낙찰 서류 = 지일 낙찰 확인 뒤. 수의계약은 적격심사가 없어 낙찰 서류만. 꺼진 버튼은 커서를 대면 이유(설명 상자).
-    // 빼기는 다른 업체 낙찰·잘못 넣은 공고 정리용이라 늘 씀
-    const rank = v.status === "대기" && v.opening ? v.opening.rank : null;
+      : v.status === "대기" ? awardWaiting(o) : `<span class="badge">${esc(v.status || "")}</span>`;
+    // 단계 줄(할 일 묶음만): 지금 단계 = 낙찰·낙찰 서류 폴더 → 계약, 적격심사 폴더·개찰 5등 안 → 적격심사
+    const now = isWon || (v.folder && !v.qualOnly) ? 2 : 1;
+    const steps = kind === "todo" ? `<ol class="award-steps">${AWARD_STEPS.map((s, i) => `<li class="${i < now ? "done" : i === now ? "now" : ""}">${s}</li>`).join("")}</ol>` : "";
     const stage = v.qualOnly ? ` data-award-stage="qual"` : "";
-    const off = (label, why) => `<span class="qual" tabindex="0"><button type="button" disabled>${label}</button>${qtip(label, `<p class="lead">${why.replace(/\. /g, ".<br>")}</p>`)}</span>`;
-    const qualWhy = v.private ? "수의계약 공고 — 적격심사 없이 바로 계약합니다. 낙찰이 확인되면 '낙찰 서류 만들기'를 쓰세요."
-      : v.folder ? "이미 폴더를 만들었습니다 — '서류 현황'에서 확인하세요."
-      : won ? "이미 낙찰이 확인됐습니다 — '낙찰 서류 만들기'가 적격심사 폴더까지 함께 만듭니다."
-      : rank != null && rank <= 5 ? "" : "적격심사는 개찰 1순위부터 차례로 진행됩니다. 지일이 심사 대상이 되면 버튼이 켜집니다.";
-    const awardWhy = !won ? "나라장터 낙찰현황에서 지일 낙찰이 확인되면 켜집니다."
-      : v.folder && !v.qualOnly ? "이미 만들었습니다 — '서류 현황'에서 확인하세요." : "";
-    const qualBtn = qualWhy ? off("적격심사 폴더 만들기", qualWhy)
-      : `<button type="button"${rank === 1 ? ` class="award-main"` : ""} data-award-folder="${esc(key)}" data-award-stage="qual">적격심사 폴더 만들기</button>`;
-    const awardBtn = awardWhy ? off("낙찰 서류 만들기", awardWhy)
-      : `<button type="button" class="award-main" data-award-folder="${esc(key)}" title="계약·착공(착수)·준공·청구 단계와 표준틀까지 만듦">낙찰 서류 만들기</button>`;
-    const hint = qualWhy ? "" : `<div class="sub">${rank === 1 ? "적격심사 대상 가능성 높음 — 통보 확인" : "적격심사 통보받으면 만들기"}</div>`;
-    const act = (v.folder
-      ? `<button type="button" class="award-toggle" data-award-open="${esc(key)}" aria-expanded="${AWARD_OPEN.has(key)}">서류 현황 ${AWARD_OPEN.has(key) ? "▴" : "▾"}</button>
-         <button type="button" data-award-folder="${esc(key)}"${stage} title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀. 착공·착수서류에 넣은 계약 값을 준공·청구 서류의 파란 칸에 채움(담당자가 고친 칸은 안 덮어씀)">첨부 다시 받기</button><br>` : "")
-      + `${qualBtn} ${awardBtn}${hint}`;
-    const detail = AWARD_OPEN.has(key) ? `<tr class="award-detail"><td colspan="5"><div id="awardDetail-${esc(key)}" class="award-panel">불러오는 중…</div></td></tr>` : "";
-    return `<tr><td><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener">${esc(key)}</a><div>${esc(v.title || "")}</div><div class="sub">${esc(v.institution || "")}</div>${(v.reissue || []).length ? `<span class="badge urgentb" title="${esc(v.reissue.map((r) => r.kind + ' (가진 것 ' + r.have + ')').join(', '))}">⚠ 새로 발급 ${v.reissue.length}</span>` : ""}</td>
-      <td>${esc(v.work || "—")}</td><td>${result}</td><td class="sub">${esc(v.source || "")}<br>${esc((v.checkedAt || "").slice(0, 16).replace("T", " "))}</td>
-      <td class="award-act">${act} <button type="button" data-award-del="${esc(key)}">빼기</button></td></tr>${detail}`;
+    const canQual = !v.private && !v.folder && !isWon && rank != null && rank <= 5;
+    const canAward = isWon && !(v.folder && !v.qualOnly);
+    const toggle = (main) => `<button type="button" class="award-toggle${main ? " award-main" : ""}" data-award-open="${esc(key)}" aria-expanded="${AWARD_OPEN.has(key)}">서류 현황 ${AWARD_OPEN.has(key) ? "▴" : "▾"}</button>`;
+    const main = canAward ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" title="계약·착공(착수)·준공·청구 단계와 표준틀까지 만듦">낙찰 서류 만들기</button>`
+      : v.folder ? toggle(true)
+      : canQual ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" data-award-stage="qual">적격심사 서류 만들기</button>`
+        + `<div class="sub">${rank === 1 ? "1순위 — 심사 통보 확인" : "심사 통보받으면 만들기"}</div>` : "";
+    const why = isWon || v.folder || kind === "done" ? ""
+      : v.private ? "수의계약 — 적격심사 없이, 낙찰이 확인되면 '낙찰 서류 만들기'가 생깁니다."
+      : "지일이 개찰 5등 안이면 적격심사 서류, 낙찰이 확인되면 낙찰 서류를 만들 수 있습니다.";
+    const more = [v.folder && canAward ? toggle(false) : "",
+      v.folder ? `<button type="button" data-award-folder="${esc(key)}"${stage} title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀. 착공·착수서류에 넣은 계약 값을 준공·청구 서류의 파란 칸에 채움(담당자가 고친 칸은 안 덮어씀)">첨부 다시 받기</button>` : "",
+      `<button type="button" data-award-del="${esc(key)}">목록에서 빼기</button>`].join("");
+    const detail = AWARD_OPEN.has(key) ? `<tr class="award-detail"><td colspan="4"><div id="awardDetail-${esc(key)}" class="award-panel">불러오는 중…</div></td></tr>` : "";
+    const reissue = (v.reissue || []).length ? ` <span class="badge urgentb" title="${esc(v.reissue.map((r) => r.kind + ' (가진 것 ' + r.have + ')').join(', '))}">⚠ 새로 발급 ${v.reissue.length}</span>` : "";
+    const meta = [v.institution, v.work, bid.at ? "투찰 " + bid.at.slice(5).replace("-", "/") : ""].filter(Boolean).map(esc).join(" · ");
+    return `<tr><td class="award-name"><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener" title="${esc(key)} — 나라장터에서 보기">${esc(v.title || key)}</a>${reissue}<div class="sub">${meta}</div></td>
+      <td class="award-money">${bid.amount ? `<b title="${Number(bid.amount).toLocaleString()}원">${won(Number(bid.amount))}</b>` : `<span class="sub">투찰 기록 없음</span><br>`}${result}</td>
+      <td>${steps || `<span class="sub">${kind === "wait" ? "결과 기다리는 중" : "끝남"}</span>`}</td>
+      <td class="award-act">${main}<details class="award-more"><summary>더 보기</summary>${why ? `<p class="sub">${why}</p>` : ""}${more}</details></td></tr>${detail}`;
   };
-  $("awardList").innerHTML = groups.map((g) => {
-    const rows = items.filter((v) => v.group === g);
-    if (!rows.length && g === "업무 미확인") return "";
-    return `<h3>${g} ${rows.length}건</h3>` + (rows.length
-      ? `<div class="scroll"><table class="award-table"><thead><tr><th>공고</th><th>업무</th><th>낙찰 결과</th><th>들어온 곳 · 확인</th><th></th></tr></thead><tbody>${rows.map(row).join("")}</tbody></table></div>`
-      : `<p class="sub">없음</p>`);
-  }).join("");
+  const table = (rows) => `<div class="scroll"><table class="award-table"><thead><tr><th>공고</th><th>투찰금액 · 개찰</th><th>단계</th><th></th></tr></thead><tbody>${rows.map(row).join("")}</tbody></table></div>`;
+  const pick = (k) => items.filter((v) => awardKind(v) === k);
+  const todo = pick("todo"), wait = pick("wait"), done = pick("done");
+  $("awardList").innerHTML = `<h3>지금 할 일 ${todo.length}건</h3>` + (todo.length ? table(todo) : `<p class="sub">할 일이 있는 공고가 없습니다.</p>`)
+    + (wait.length ? `<details class="award-group" open><summary>결과를 기다리는 공고 ${wait.length}건</summary>${table(wait)}</details>` : "")
+    + (done.length ? `<details class="award-group"><summary>끝난 공고 ${done.length}건 <span class="sub">탈락·다른 업체 낙찰</span></summary>${table(done)}</details>` : "");
   AWARD_OPEN.forEach(loadAwardDetail);
 }
 async function loadAwardDetail(key) {

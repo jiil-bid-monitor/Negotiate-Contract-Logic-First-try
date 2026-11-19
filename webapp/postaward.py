@@ -574,9 +574,11 @@ class PostAward:
     def items(self) -> list[dict]:
         """화면용 — 공사 / 물품·용역 / 업무 미확인 순, 그 안에선 최근 추가 먼저."""
         order = {"공사": 0, "물품·용역": 1}
-        opened = self._opened()
+        opened, bids = self._opened(), self._bids()
         rows = [{**v, "group": group_of(v.get("work", "")),
-                 **({"opening": opened[k]} if k in opened else {})} for k, v in self._read().items()]
+                 **({"opening": opened[k]} if k in opened else {}),
+                 **({"bid": bids.get(k) or bids.get(v.get("no", ""))} if bids.get(k) or bids.get(v.get("no", "")) else {})}
+                for k, v in self._read().items()]
         return sorted(rows, key=lambda v: (order.get(v["group"], 2), v.get("added", "")), reverse=False)
 
     def _opened(self) -> dict[str, dict]:
@@ -591,6 +593,17 @@ class PostAward:
                  "remark": own.get("remark") or ""}
             out.setdefault(f'{e["noticeNo"]}-{(e.get("noticeOrd") or "")[:3]}', o)
             out.setdefault(e["noticeNo"], o)
+        return out
+
+    def _bids(self) -> dict[str, dict]:
+        """투찰 기록의 투찰금액·기록일(개찰 전 공고도) — 화면이 투찰내역과 같은 '공고 → 투찰금액 → 결과' 순서로 보이게(11/19)."""
+        out: dict[str, dict] = {}
+        for e in (self.bidlog.entries() if self.bidlog is not None else []):  # 최근 기록 먼저
+            if not e.get("noticeNo") or not e.get("bid"):
+                continue
+            b = {"amount": e.get("bid"), "at": (e.get("recordedAt") or "")[:10]}
+            out.setdefault(f'{e["noticeNo"]}-{(e.get("noticeOrd") or "")[:3]}', b)
+            out.setdefault(e["noticeNo"], b)
         return out
 
     def _add(self, items: dict, no: str, ord_: str, **info) -> bool:

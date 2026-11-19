@@ -1,0 +1,296 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-19",
+ "reportedAt": "2026-11-18T23:59:10+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01839926",
+   "title": "국민AI서비스혁신추진단 사무실 인테리어 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "과학기술정보통신부",
+    "budgetAmount": 181454545.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "인테리어"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 45,
+    "deadline": "2026-11-19T10:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01839926&bidPbancOrd=001"
+   }
+  },
+  {
+   "noticeNo": "R26BK01836932",
+   "title": "2027년도 인터넷전화교환기 유지관리용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "과학기술정보통신부 중앙전파관리소",
+    "budgetAmount": 59750000.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "수의계약",
+    "score": 57,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01836932&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01839657",
+   "title": "[새로공고] 정선 청년센터 인테리어 공사(건축, 기계) 공고",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "재단법인 강원디자인진흥원",
+    "budgetAmount": 177750909.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "수의계약",
+    "score": 53,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01839657&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01836944",
+   "title": "상용SW 제3자단가(아이알리미 v3.9.11_(주)제이티통신)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "각 수요기관",
+    "budgetAmount": 13636363636.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 50,
+    "deadline": "2026-11-23T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01836944&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01836147",
+   "title": "2027년 경비함정 레이더 유지보수 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "해양경찰청 서해지방해양경찰청",
+    "budgetAmount": 388974545.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 47,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01836147&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01838983",
+   "title": "강원과학고등학교 융합형 학습공간 구축 건축 공사 입찰 공고",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도교육청 강원과학고등학교",
+    "budgetAmount": 305536364.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 40,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01838983&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01838929",
+   "title": "중앙선 영주~옹천 노후 연선전화기 개량공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사 경북본부",
+    "budgetAmount": 1102521818.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": null,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01838929&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01838926",
+   "title": "2호선 건대입구역 승강장안전문(PSD) 제작설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "서울교통공사",
+    "budgetAmount": 4575371836.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "금속창호ㆍ지붕건축물조립공사업/4991"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 59,
+    "deadline": "2026-11-29T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01838926&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01840505",
+   "title": "위성통신/3D프린팅 실험실 환경개선",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "국방과학연구소",
+    "budgetAmount": 36090909.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 24,
+    "deadline": "2026-11-29T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01840505&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01833366",
+   "title": "충주시 비축농지 임대형 스마트팜 온실공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국농어촌공사 충북지역본부 충주.제천.단양지사",
+    "budgetAmount": 657590000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "금속창호ㆍ지붕건축물조립공사업/4991"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 59,
+    "deadline": "2026-11-29T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01833366&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01776311",
+   "title": "5-2생활권 복합커뮤니티센터 건립 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "행정중심복합도시건설청",
+    "budgetAmount": 1914770000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 30,
+    "deadline": "2026-12-02T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01776311&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01838029",
+   "title": "(가칭)검단7초등학교 신축 정보통신 공사(계속비)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "인천광역시교육청",
+    "budgetAmount": 1346110000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 32,
+    "deadline": "2026-12-08T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01838029&bidPbancOrd=000"
+   }
+  }
+ ]
+}

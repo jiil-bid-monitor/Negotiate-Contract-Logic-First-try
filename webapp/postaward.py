@@ -437,6 +437,11 @@ def share_path(path: Path | str) -> str:
     return "\\\\jiilserver\\jiil-webapp\\" + s[len("/work/"):].replace("/", "\\") if s.startswith("/work/") else s
 
 
+# 착수서류 인력 줄 이름(표준틀 build_v5 SWITCH와 같게 — 11/19, 조직도 칸 이름)
+START_ROLES = {"물품": {1: "현장대리인", 3: "디자인·설계", 4: "제작·설치", 5: "공무·관리지원"},
+               "용역": {1: "용역 책임자", 3: "기획", 4: "디자인", 5: "설계"}}
+
+
 def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
     """착공·착수서류 기본사항에서 (아직 빈 필수 칸 이름, [자동으로 채운 칸 이름, 값]). 숨긴 줄은 안 봄."""
     from openpyxl import load_workbook
@@ -458,7 +463,11 @@ def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
             continue
         empty = [heads[c] or str(c) for c in range(2, 11) if ws.cell(r, c).value in (None, "")]
         if empty:
-            todo.append(f"{ws.cell(r, 1).value or f'{n}번'}: " + "·".join(empty))
+            label = str(ws.cell(r, 1).value or f"{n}번")
+            if label.startswith("="):  # 착수 틀 v1.5: 이름표가 업무(B4)에 따라 바뀌는 수식 — 같은 표로 이름을 만듦(openpyxl은 계산 값을 모름)
+                work = "물품" if ws.cell(4, 2).value == "물품" else "용역"
+                label = f"{n} · {START_ROLES[work].get(n, '참여기술자')}"
+            todo.append(f"{label}: " + "·".join(empty))
     for r in range(4, 22):
         if str(ws.cell(r, 3).value or "").startswith("[자동]") and ws.cell(r, 2).value not in (None, ""):
             value = ws.cell(r, 2).value

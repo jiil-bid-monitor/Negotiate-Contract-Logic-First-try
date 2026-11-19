@@ -313,7 +313,11 @@ def search(q: str, run: dict[str, Any] | None, past, held_raw: dict[str, Any]) -
 
 
 def corpus(past) -> dict[str, Any]:
+    def tags(p, kind):  # 과업 프로필 태그(시설·주제·과업유형) — 화면의 분야·과업 칸(11/19, 늘 '있음'·'—'이던 칸 대신)
+        v = p.get("tags") or {}
+        return list(v.get(kind) or [])[:3] if isinstance(v, dict) else []
     projects = [{"id": i, "name": p.get("title"), "year": p.get("year"), "budgetAmount": None,
+                 "fields": tags(p, "시설·주제"), "kinds": tags(p, "과업유형"),
                  "hasBody": bool(p.get("overview") or p.get("exhibition"))} for i, p in enumerate(past.projects)]
     years = sorted({p["year"] for p in projects if p["year"]})
     return {

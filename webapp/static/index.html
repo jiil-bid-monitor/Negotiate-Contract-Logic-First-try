@@ -597,6 +597,25 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 #logList { background: var(--panel); border: 1px solid var(--line); }
 #logList:empty { display: none; }
 .log-row { padding: 14px 18px; border-top: 1px solid var(--line); }
+.log-line { display: grid; grid-template-columns: 64px minmax(0, 1fr) 130px 120px; gap: 4px 14px; align-items: start; }
+.log-line > .badge { justify-self: start; margin-top: 2px; }
+.log-main h3 { margin: 0; font-family: var(--head); font-size: 15px; font-weight: 600; line-height: 1.5; color: var(--ink-strong); }
+.log-main h3 a { color: inherit; text-decoration: none; }
+.log-main h3 a:hover { color: var(--brand); text-decoration: underline; }
+.log-main .log-meta { font-size: 13px; margin: 2px 0 0; }
+.log-due { font-size: 14px; color: var(--ink); white-space: nowrap; padding-top: 2px; }
+.log-act { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.log-go { background: var(--brand); color: var(--on-brand); border: 1px solid var(--brand); font-weight: 600; padding: 4px 12px; cursor: pointer; }
+.log-missed > summary { padding: 10px 18px; cursor: pointer; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); }
+@media (max-width: 760px) {
+  .log-line { grid-template-columns: 56px minmax(0, 1fr); }
+  .log-due, .log-act { grid-column: 2; }
+}
+.corpus-year { margin-top: 10px; background: var(--panel); border: 1px solid var(--line); }
+.corpus-year > summary { cursor: pointer; padding: 10px 14px; font-size: 16px; font-weight: 600; background: var(--bg); }
+.corpus-table { width: 100%; font-size: 15px; }
+.corpus-table th:nth-child(1) { width: 56%; }
+.corpus-table tr.nobody td:first-child { color: var(--muted); }
 .log-row:first-child { border-top: 0; }
 .log-week + .log-week { border-top: 1px solid var(--line-strong); }
 .log-week > summary { padding: 10px 18px; cursor: pointer; background: var(--bg); font-size: 13.5px; color: var(--ink-strong); }
@@ -1469,18 +1488,13 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   </section>
 
   <section id="tab-corpus" hidden>
-    <p class="search-intro">지일이 제안하거나 수행한 사업입니다. 공고와 비교하는 기준이 되고, 사업명을 누르면 과업 내용을 볼 수 있습니다.</p>
+    <p class="search-intro">지일이 제안하거나 수행한 사업입니다. 사업명을 누르면 과업 내용이 펼쳐집니다.</p>
     <div class="search">
       <input id="corpusQ" type="search" placeholder="사업명으로 찾기 — 예: 과학관, 놀이터, 조형물" autocomplete="off" aria-label="사업명으로 찾기">
       <select id="corpusYear" aria-label="연도"><option value="">전체 연도</option></select>
     </div>
     <div class="stats" id="stats"></div>
-    <div class="scroll">
-      <table>
-        <thead><tr><th class="num">연도</th><th>사업명</th><th>과업 내용</th><th class="num">사업비</th></tr></thead>
-        <tbody id="corpusRows"></tbody>
-      </table>
-    </div>
+    <div id="corpusRows"></div>
   </section>
 
   <section id="tab-log" hidden>
@@ -1722,7 +1736,7 @@ async function boot() {
 }
 
 function renderStats(d) {
-  $("stats").innerHTML = `${esc(d.range)} · 총 <b>${d.total}</b>건 · 과업 내용 있음 <b>${d.withBody}</b>건`;
+  $("stats").innerHTML = `${esc(d.range)} · 총 <b>${d.total}</b>건`;
 }
 
 /**
@@ -1753,14 +1767,18 @@ function renderCorpus() {
   const rows = corpus
     .filter((p) => (!q || p.name.replace(/\s+/g, "").toLowerCase().includes(q)) && (!year || String(p.year) === year))
     .sort((a, b) => b.year - a.year || a.name.localeCompare(b.name, "ko"));
-  $("corpusRows").innerHTML = rows.length
-    ? rows.map((p) => `<tr class="${p.hasBody ? "" : "nobody"}">
-      <td class="num">${p.year}</td>
+  // 11/19 화면 정리(개선안 ③): 연도는 묶음 머리로 한 번만(최근 연도만 펼침, 찾는 중엔 모두), 늘 같은 값이던 '과업 내용'·'사업비' 칸 대신 분야·과업
+  const years = [...new Set(rows.map((p) => p.year))];
+  const line = (p) => `<tr class="${p.hasBody ? "" : "nobody"}">
       <td>${p.hasBody ? `<button type="button" class="linkish proj" data-proj="${esc(p.id)}">${esc(p.name)}</button><div class="proj-body" hidden></div>` : esc(p.name)}</td>
-      <td><span class="tag ${p.hasBody ? "" : "none"}">${p.hasBody ? "있음" : "없음"}</span></td>
-      <td class="num">${won(p.budgetAmount)}</td>
-    </tr>`).join("")
-    : `<tr><td colspan="4" class="empty">찾는 사업이 없습니다.</td></tr>`;
+      <td class="sub">${esc((p.fields || []).join(" · "))}</td><td class="sub">${esc((p.kinds || []).join(" · "))}</td></tr>`;
+  $("corpusRows").innerHTML = rows.length
+    ? years.map((y, i) => {
+      const ys = rows.filter((p) => p.year === y);
+      return `<details class="corpus-year"${q || year || i === 0 ? " open" : ""}><summary>${esc(y)}년 <span class="sub">${ys.length}건</span></summary>
+        <div class="scroll"><table class="corpus-table"><thead><tr><th>사업명</th><th>분야</th><th>과업</th></tr></thead><tbody>${ys.map(line).join("")}</tbody></table></div></details>`;
+    }).join("")
+    : `<p class="empty">찾는 사업이 없습니다.</p>`;
   if (q || year) $("stats").dataset.filtered = "1";
 }
 
@@ -3308,6 +3326,13 @@ function logFiltered(entries) {
 }
 const logFilterOn = () => Boolean(($("logQ").value || "").trim() || $("logStatus").value || $("logKind").value);
 
+/** "11/23(일) 18:00" — 마감 칸(예전엔 '11/23T18:00') */
+function dueText(d) {
+  if (!d) return "";
+  const s = String(d), t = new Date(s.slice(0, 10) + "T00:00:00");
+  if (Number.isNaN(t.getTime())) return esc(s);
+  return `${t.getMonth() + 1}/${t.getDate()}(${"일월화수목금토"[t.getDay()]})${/\d:\d/.test(s.slice(11, 16)) ? " " + s.slice(11, 16) : ""}`;
+}
 function renderLog() {
   const entries = logEntriesOf();
   // 키워드 조정용 집계는 실제로 판단한 공고만으로 센다
@@ -3316,42 +3341,38 @@ function renderLog() {
   $("logMeta").innerHTML =
     `판단 기록 <b>${num(entries.length)}</b>건 — ${[...UNDECIDED, ...DECISIONS].filter((s) => s !== "놓침" || count(s)).map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
     `<button type="button" class="linkish" id="logCsv">${logFilterOn() ? `CSV 내려받기 (고른 ${num(logFiltered(entries).length)}건)` : "CSV 내려받기"}</button>` +
-    `<br><span class="faint-note">판단 없이 마감된 '놓침'은 마감 4주 뒤 자동으로 지웁니다 (판단·담당·대화가 있으면 남김)</span>`;
-  $("logAggNote").textContent = all.length >= LOG_AGG_MIN
-    ? "아래 키워드 조정용 집계는 판단할 때 공고에 걸린 관심 키워드 기준입니다."
-    : `판단이 ${LOG_AGG_MIN}건 쌓이면 아래에 키워드 조정용 집계가 열립니다 (${all.length}/${LOG_AGG_MIN}).`;
+    "";
+  $("logAggNote").textContent = all.length >= LOG_AGG_MIN ? "아래 키워드 조정용 집계는 판단할 때 공고에 걸린 관심 키워드 기준입니다." : "";
   $("logSearch").hidden = entries.length === 0;
   $("logEmpty").hidden = entries.length > 0;
 
   const q = ($("logQ").value || "").replace(/\s+/g, "").toLowerCase();
+  const stf = $("logStatus").value;
   const list = logFiltered(entries);
   const byNo = new Map(lastItems.map((n) => [n.noticeNo, n]));
+  // 11/19 화면 정리(개선안 ④): 한 줄 = 판단 · 공고(이름 + 기관·금액·판단자·사유) · 마감(요일) · 할 일 — 공고번호는 이름에 커서를 대면
   const row = ({ p, st }) => {
     const n = byNo.get(p.noticeNo);
     const url = n?.detailUrl || p.meta?.detailUrl;
-    const title = url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(p.title || p.noticeNo)}</a>` : esc(p.title || p.noticeNo);
-    // 지금 실제 공고 목록에 있는 공고면 그 카드로 갈 수 있게
+    const title = url ? `<a href="${esc(url)}" target="_blank" rel="noopener" title="${esc(p.noticeNo)}">${esc(p.title || p.noticeNo)}</a>` : `<span title="${esc(p.noticeNo)}">${esc(p.title || p.noticeNo)}</span>`;
     const inList = Boolean(n);
     const m = p.meta || {};
-    const info = [p.noticeNo, m.institution, m.budgetAmount ? won(m.budgetAmount) : null, m.confidence].filter(Boolean).map(esc).join(" · ");
-    const reported = reportsText(p);
-    // 판단 전 공고는 판단·사유 줄 대신 언제 보고됐는지와 마감을 보여 준다
     const undecided = UNDECIDED.includes(st);
-    const due = m.deadline ? `마감 ${esc(String(m.deadline).slice(5, 16).replace("-", "/"))}` : "";
-    const metaLine = undecided
-      ? `<p class="log-meta">${st === "놓침" ? "판단 없이 마감됨" : "아직 판단하지 않음"}${due ? ` · ${due}` : ""}${reported ? ` · ${esc(reported)}` : ""}${p.owner ? ` · 담당 ${esc(p.owner)}` : ""}${info ? ` · ${info}` : ""}</p>`
-      : `<p class="log-reason">${(p.tags || []).map((t) => `<span class="rchip on static">${esc(t)}</span>`).join("")}${p.reason ? `<b>사유</b> ${esc(p.reason)}` : (p.tags || []).length ? "" : `<span class="faint-note">사유 없음</span>`}</p>
-      <p class="log-meta">판단 <b>${esc(p.decidedBy || p.owner || "—")}</b>${p.decidedAt ? ` · ${esc(fmtDT(p.decidedAt))}` : ""} · 담당 ${esc(p.owner || "없음")}${reported ? ` · ${esc(reported)}` : ""}${info ? ` · ${info}` : ""}</p>`;
-    return `<div class="log-row" data-part="${esc(p.noticeNo)}" data-title="${esc(p.title || "")}">
-      <div class="log-top">
-        <span class="badge pstat ${PART_TONE[st]}">${esc(st)}</span>
-        <h3>${title}${noticeNoTag(p.noticeNo)}</h3>
-        ${inList || st === "미판단" ? `<button type="button" class="linkish" data-goto="${esc(p.noticeNo)}">${undecided ? "판단하러 가기" : "목록에서 보기"}</button>` : ""}
-        ${!undecided && p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단으로 되돌립니다">되돌리기</button>` : ""}
+    const reported = reportsText(p);
+    const why = [...(p.tags || []), p.reason].filter(Boolean).map(esc).join(" · ");
+    const sub = [m.institution, m.budgetAmount ? won(m.budgetAmount) : null].filter(Boolean).map(esc)
+      .concat(undecided ? [p.owner ? `담당 ${esc(p.owner)}` : "", reported ? esc(reported) : ""]
+        : [`<b>${esc(p.decidedBy || p.owner || "—")}</b>${p.decidedAt ? ` ${esc(fmtDT(p.decidedAt).slice(5, 10).replace("-", "/"))}` : ""}`, why || `<span class="faint-note">사유 없음</span>`])
+      .filter(Boolean).join(" · ");
+    const act = st === "미판단" ? `<button type="button" class="log-go" data-goto="${esc(p.noticeNo)}">판단하기</button>`
+      : inList ? `<button type="button" class="linkish" data-goto="${esc(p.noticeNo)}">목록에서 보기</button>` : "";
+    return `<div class="log-row log-line" data-part="${esc(p.noticeNo)}" data-title="${esc(p.title || "")}">
+      <span class="badge pstat ${PART_TONE[st]}">${esc(st)}</span>
+      <div class="log-main"><h3>${title}</h3><p class="log-meta">${sub}</p>
         ${inList || st !== "미판단" ? "" : `<span class="log-judge" hidden>${DECISIONS.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p.status === s ? "on" : ""}" data-pstatus="${s}">${s}</button>`).join("")}</span>`}
-      </div>
-      ${metaLine}
-      ${!undecided && !p.reason && !(p.tags || []).length ? decisionRow(p) : ""}
+        ${!undecided && !p.reason && !(p.tags || []).length ? decisionRow(p) : ""}</div>
+      <div class="log-due">${dueText(m.deadline)}</div>
+      <div class="log-act">${act}${!undecided && p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단으로 되돌립니다">되돌리기</button>` : ""}</div>
     </div>`;
   };
   // 주마다 접기 — 가장 최근 주만 펼치고, 찾기 중이면 모두 펼친다
@@ -3365,7 +3386,10 @@ function renderLog() {
     const cnt = [...UNDECIDED, ...DECISIONS].map((s) => [s, w.items.filter((e) => e.st === s).length]).filter(([, c]) => c).map(([s, c]) => `${s} ${c}`).join(" · ");
     // 사용자가 직접 접거나 편 주는 그대로 — 판단 기록은 1분마다 다시 그려져 접어도 저절로 펼쳐졌음(11/16 사용자 제보)
     const open = q ? true : w.key in LOG_WEEK_OPEN ? LOG_WEEK_OPEN[w.key] : i === 0;
-    return `<details class="log-week" data-week="${esc(w.key)}"${open ? " open" : ""}><summary><b>${esc(w.label)}</b> · ${w.items.length}건 <span class="faint-note">${esc(cnt)}</span></summary>${w.items.map(row).join("")}</details>`;
+    const missed = w.items.filter((e) => e.st === "놓침"), rest = w.items.filter((e) => e.st !== "놓침");
+    const missedHtml = !missed.length ? "" : stf === "놓침" || q ? missed.map(row).join("")
+      : `<details class="log-missed"><summary>판단 없이 마감된 공고(놓침) ${missed.length}건</summary>${missed.map(row).join("")}</details>`;
+    return `<details class="log-week" data-week="${esc(w.key)}"${open ? " open" : ""}><summary><b>${esc(w.label)}</b> · ${w.items.length}건 <span class="faint-note">${esc(cnt)}</span></summary>${rest.map(row).join("")}${missedHtml}</details>`;
   };
   $("logList").innerHTML = entries.length
     ? list.length ? weeks.map(weekHtml).join("") : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'

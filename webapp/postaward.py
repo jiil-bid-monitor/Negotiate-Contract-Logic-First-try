@@ -310,7 +310,8 @@ def basic_values(v: dict, title: str, institution: str, contract_method: str, te
         notes.append(f"준공예정일: 공고문에 '{re.sub(chr(10), ' ', period.group(0))}' — 계약일·착수일을 넣고 계산하세요")
     if not amount:
         notes.append("낙찰금액을 아직 모름 — 낙찰 확인 뒤 다시 만들거나 직접 넣으세요")
-    for word, tab in (("안전관리자", "안전관리자 선임계"), ("품질관리자", "품질관리자 선임계")) if gong else (("현장대리인", "현장대리인 서류(해당시)"),):
+    # 착수서류엔 '해당 시' 서류가 없음 — 선임 서류는 업무 칸으로 하나(물품 = 현장대리인, 용역 = 용역 책임자, 11/19 차장님)
+    for word, tab in (("안전관리자", "안전관리자 선임계"), ("품질관리자", "품질관리자 선임계")) if gong else ():
         if re.search(r"\s*".join(word), joined):
             notes.append(f"공고문에 '{word}'가 있음 — {tab} 탭도 제출할지 확인")
     return out, notes
@@ -448,7 +449,7 @@ def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
         if ws.cell(r, 2).value in (None, ""):
             todo.append(str(ws.cell(r, 1).value))
     # 인력 — 이름을 적은 사람은 9칸 전부(성명~주민등록번호·주소·입사일·연락처, 11/11 사용자 결정 — '빨간 칸만'·'주민번호·주소는 틀에 안 적음'(11/09)을 대체).
-    # 필수 줄(공사 1, 착수 1·3~5)은 이름이 비어도 셈, 나머지(참여기술자·안전·품질관리자·현장대리인(해당 시))는 이름을 적었을 때만
+    # 필수 줄(공사 1, 착수 1·3~5)은 이름이 비어도 셈, 나머지(참여기술자·안전·품질관리자)는 이름을 적었을 때만
     heads = {c: str(ws.cell(23, c).value or "") for c in range(2, 11)}
     required = (1,) if gong else (1, 3, 4, 5)  # 참여기술자 줄은 인원이 공고마다 달라 이름을 적었을 때만(11/11 사용자)
     for n in range(1, 7):
@@ -998,7 +999,7 @@ def selfcheck() -> None:
         assert vals[12][0] == 184131570 and vals[21][0] == "강원특별자치도 정선군 고한읍 1" and 11 not in vals, vals
         assert any("60일" in n for n in notes) and any("안전관리자 선임계" in n for n in notes), notes
         vals, notes = basic_values({"work": "용역"}, "B 용역", "아산시", "장기계속계약", ["현장대리인을 선임"])
-        assert vals[11][0] == "장기계속" and 12 not in vals and any("현장대리인 서류" in n for n in notes), (vals, notes)
+        assert vals[11][0] == "장기계속" and 12 not in vals and not any("현장대리인 서류" in n for n in notes), (vals, notes)
 
         from openpyxl import Workbook, load_workbook
 

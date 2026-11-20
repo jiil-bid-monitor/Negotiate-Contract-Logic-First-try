@@ -1,0 +1,417 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-20",
+ "reportedAt": "2026-11-20T00:55:09+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01841759",
+   "title": "부연지구 변위계측기 수리 및 교체 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "한국농어촌공사 충북지역본부",
+    "budgetAmount": 14818182.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "수의계약",
+    "score": null,
+    "deadline": "2026-11-20T12:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01841759&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01843294",
+   "title": "초단파디지털이동통신시설(PDCD-ATIS) 현대화 사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "한국공항공사 김포공항",
+    "budgetAmount": 1189771472.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 52,
+    "deadline": "2026-11-20T14:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01843294&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01842262",
+   "title": "[새로공고] 정선 청년센터 인테리어 공사(건축, 기계) 공고",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "재단법인 강원디자인진흥원",
+    "budgetAmount": 177750909.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "수의계약",
+    "score": 53,
+    "deadline": "2026-11-24T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01842262&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01836585",
+   "title": "노원 하나금융공동 직장어린이집 인테리어공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "주식회사 하나금융지주",
+    "budgetAmount": 1178000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "인테리어"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 53,
+    "deadline": "2026-11-24T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01836585&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01841821",
+   "title": "상용SW 제3자단가(KITS-WFMS v2.0 유지관리상품 (주)한국아이티에스)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "각 수요기관",
+    "budgetAmount": 1206818182.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [
+     "소프트웨어유지및지원서비스"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 56,
+    "deadline": "2026-11-24T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01841821&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01841803",
+   "title": "상용SW 제3자단가(KITS-WFMS v2.0 커스터마이징 (주)한국아이티에스)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "각 수요기관",
+    "budgetAmount": 180351818.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [
+     "패키지소프트웨어개발및도입서비스"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 50,
+    "deadline": "2026-11-24T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01841803&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01838504",
+   "title": "양양문화복지회관 정보화교육장 노후시스템 교체",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "강원특별자치도 양양군",
+    "budgetAmount": 68545455.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "수의계약",
+    "score": 46,
+    "deadline": "2026-11-24T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01838504&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01840034",
+   "title": "효자노인복지관 전산장비(통합회원관리시스템) 구축 기자재 구입(긴급)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "전북특별자치도 전주시",
+    "budgetAmount": 96440000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 66,
+    "deadline": "2026-11-24T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01840034&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01841530",
+   "title": "2027년 중랑물재생센터 수질계측기 유지관리용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "서울특별시 물재생센터 중랑물재생센터",
+    "budgetAmount": 361455455.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 33,
+    "deadline": "2026-11-26T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01841530&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01840787",
+   "title": "미래인재개발센터 건립공사 관급자재(네트워크스위치) 구매",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "건강보험심사평가원",
+    "budgetAmount": 952008000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 50,
+    "deadline": "2026-11-26T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01840787&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01835688",
+   "title": "미래인재개발센터 건립공사 관급자재(전자교환기) 구매",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "건강보험심사평가원",
+    "budgetAmount": 109419582.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 46,
+    "deadline": "2026-11-26T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01835688&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01843283",
+   "title": "[앵커 1-1] AI 거점센터 K-MIND Y-SPACE 교육용 기자재 설치 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "계명대학교 산학협력단",
+    "budgetAmount": 35454545.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 47,
+    "deadline": "2026-11-27T14:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01843283&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01841583",
+   "title": "기자재운영팀 멀티미디어 강의실 빔프로젝터, 전동스크린 구입",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "계명대학교",
+    "budgetAmount": 104618182.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 31,
+    "deadline": "2026-11-27T11:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01841583&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01841319",
+   "title": "시설안전팀 명교생활관 관리동 운동공간 냉방기 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "계명대학교",
+    "budgetAmount": 34863636.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 41,
+    "deadline": "2026-11-27T11:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01841319&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01842203",
+   "title": "중부경찰서 신축 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "경찰청 서울특별시경찰청",
+    "budgetAmount": 3513070000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 28,
+    "deadline": "2026-11-30T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01842203&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01840738",
+   "title": "서울남부보호관찰소 청사 리모델링 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "법무부",
+    "budgetAmount": 1410790000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 47,
+    "deadline": "2026-12-03T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01840738&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01810312",
+   "title": "(긴급)사상초등학교 공간재구조화 교사개축 정보통신공사(계속비)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "부산광역시교육청",
+    "budgetAmount": 1159350000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간",
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 33,
+    "deadline": "2026-12-08T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01810312&bidPbancOrd=001"
+   }
+  }
+ ]
+}

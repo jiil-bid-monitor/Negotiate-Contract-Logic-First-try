@@ -95,7 +95,10 @@ def _sec_pr_para(xml: str, first: Para) -> str:
         return seg
     # secPr run 안의 글(t)은 지움 — 원래 표지 글이 따라오지 않게
     kept = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>).*?(</(?:[\w.-]+:)?t>)", r"\1\2", keep[0], flags=re.S)
-    return seg[:runs[0][0]] + kept + seg[runs[-1][1]:]
+    # 원래 글 기준 줄 배치(linesegarray)도 지움 — 글을 뺐는데 남겨 두면 줄 시작 위치가 글보다 뒤를 가리켜 한글이
+    # '문서가 손상되었거나 변조되었을 가능성'으로 막음(11/20 장성 월남 참전 기념탑 R26BK01839485). 한글이 열 때 다시 계산함.
+    tail = re.sub(r"<((?:[\w.-]+:)?linesegarray)\b[^>]*>.*?</\1>|<(?:[\w.-]+:)?linesegarray\b[^>]*/>", "", seg[runs[-1][1]:], flags=re.S)
+    return seg[:runs[0][0]] + kept + tail
 
 
 _INNER_P = re.compile(r"<(?:[\w.-]+:)?p\b[^>]*>(?:(?!<(?:[\w.-]+:)?p\b).)*?</(?:[\w.-]+:)?p>", re.S)

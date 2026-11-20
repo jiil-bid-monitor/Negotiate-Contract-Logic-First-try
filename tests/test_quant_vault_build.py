@@ -4135,3 +4135,29 @@ def test_self_eval_group_head_score_column_and_total(tmp_path: Path):
         got[(int(row), int(col))] = re.sub(r"<[^>]+>", "", tc).strip()
     assert got[(2, 4)] == "4" and got[(3, 4)] == "3" and got[(4, 4)] == "7", got  # 경영상태 BB+ → 4, 신인도 만점 3, 합계 7
     assert "BB+" not in got[(2, 4)] + got[(2, 5)]
+
+
+def test_merge_sec_pr_paragraph_drops_stale_lineseg(tmp_path: Path):
+    """11/20 제보(장성 월남 참전 기념탑 R26BK01839485): 통합서식이 한글에서 '문서가 손상되었거나 변조되었을 가능성' — 첫 서식이
+    구역 첫 문단에서 시작하지 않아 쪽 설정 문단만 남겼는데, 원래 글 기준 줄 배치(lineseg textpos=24)가 그대로 남아 글보다 뒤를 가리켰음."""
+    from quantdocs import forms_cut
+
+    para = lambda t, brk="0": f'<hp:p paraPrIDRef="0" pageBreak="{brk}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    first = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:secPr/><hp:t>표지 글 — 제안요청서 첫 쪽</hp:t></hp:run>'
+             '<hp:run charPrIDRef="0"><hp:t>더 많은 글</hp:t></hp:run>'
+             '<hp:linesegarray><hp:lineseg textpos="0"/><hp:lineseg textpos="24"/></hp:linesegarray></hp:p>')
+    src = tmp_path / "rfp.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", '<hh:head xmlns:hh="h" secCnt="1"><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+        z.writestr("Contents/section0.xml", f'<hs:sec>{first}{para("목차")}{para("〈서식 1〉 참가신청서", "1")}{para("내용")}</hs:sec>')
+    forms = forms_cut.cut(src, tmp_path / "cut")
+    out = forms_cut.merge(src, [(f, tmp_path / "cut" / f.file) for f in forms], tmp_path / "merged.hwpx", fit_pages=False)
+    xml = zipfile.ZipFile(out).read("Contents/section0.xml").decode()
+    head = xml[:xml.index("</hp:p>")]
+    assert "<hp:secPr/>" in head and "표지 글" not in head
+    assert "lineseg" not in head  # 남은 글(없음)보다 뒤를 가리키는 줄 배치가 없어야 함
+    assert "서식 1" in xml
+    for f in forms:  # 잘라 낸 서식 파일 맨 앞 쪽 설정 문단도 같음
+        part = zipfile.ZipFile(tmp_path / "cut" / f.file).read("Contents/section0.xml").decode()
+        assert "lineseg" not in part[:part.index("</hp:p>")]

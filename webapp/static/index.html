@@ -4198,14 +4198,28 @@ $("awardList").onclick = (e) => {
   const del = e.target.closest("[data-award-del]");
   if (del && confirm("목록에서 뺄까요? (만든 폴더는 지우지 않습니다)")) awardAct(del, "/api/postaward/delete", { key: del.dataset.awardDel });
 };
-// 정량평가서 탭: 페이지 전체 스크롤을 끄고 iframe을 화면 아래 끝까지 — 스크롤은 iframe 안 하나만(11/04 사용자 요청: 스크롤 2개 불편)
+// 정량평가서 탭: iframe 높이를 안 내용 높이에 맞춰 페이지 스크롤 하나로 — 스크롤바는 다른 탭과 같은 페이지 것(11/20 사용자 요청: 탭마다 모양 통일).
+// 11/04 '스크롤 2개 불편' 때 페이지 스크롤을 껐더니 이 탭만 스크롤바가 없었음 → iframe 안 스크롤을 끄고 높이를 내용에 맞춤(같은 출처라 읽을 수 있음)
+let QUANT_RO = null;
 function fitQuant(on) {
-  document.documentElement.style.overflow = on ? "hidden" : "";
   if (!on) return;
-  window.scrollTo(0, 0);
   const f = $("quantFrame");
-  f.style.height = Math.max(200, window.innerHeight - f.getBoundingClientRect().top - 8) + "px";
+  // 내용이 짧아도 화면 아래 끝까지 — 페이지에서 iframe을 뺀 나머지 높이(위 머리·아래 여백)를 빼고 채움(페이지가 넘쳐 스크롤되지 않게)
+  const fill = () => Math.max(200, window.innerHeight - (document.documentElement.scrollHeight - f.offsetHeight));
+  let doc = null;
+  try { doc = f.contentDocument; } catch (e) { doc = null; }
+  if (!doc || !doc.body) { f.style.height = fill() + "px"; return; }
+  doc.documentElement.style.overflow = "hidden";
+  // 내용 높이 = body 높이 + 위아래 여백 (html.scrollHeight는 iframe 높이보다 작아지지 않아 줄어들지 않음)
+  const cs = doc.defaultView.getComputedStyle(doc.body);
+  const need = Math.ceil(doc.body.getBoundingClientRect().height + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom));
+  f.style.height = Math.max(fill(), need) + "px";
+  if (!QUANT_RO && window.ResizeObserver) {
+    QUANT_RO = new ResizeObserver(() => { if (!$("tab-quant").hidden) fitQuant(true); });
+    QUANT_RO.observe(doc.body);
+  }
 }
+$("quantFrame").addEventListener("load", () => { QUANT_RO && QUANT_RO.disconnect(); QUANT_RO = null; if (!$("tab-quant").hidden) fitQuant(true); });
 window.addEventListener("resize", () => { if (!$("tab-quant").hidden) fitQuant(true); });
 // 기간은 '나라장터에서 불러오기'를 누를 때 쓴다 (바꾸기만 해서는 다시 조회하지 않는다 — 수집이 몇 분 걸려서)
 function showTab(tab) {

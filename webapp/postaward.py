@@ -164,6 +164,15 @@ def reissue_needed(texts: list[str], company_docs: Path | None) -> list[tuple[st
     return [(kind, issued.get(kind) or "보유본 없음") for kind in PER_NOTICE if re.search(pattern.get(kind, re.escape(kind)), text)]
 
 
+def _has_sheet(xlsx: Path, name: str) -> bool:
+    import zipfile
+    from xml.sax.saxutils import escape
+    try:
+        return f'name="{escape(name)}"' in zipfile.ZipFile(xlsx).read("xl/workbook.xml").decode("utf-8")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return False
+
+
 def add_reissue_sheet(xlsx: Path, rows: list[tuple[str, str]]) -> None:
     """기본사항 바로 뒤에 '⚠새로발급' 탭 — 공고문이 요구한 새로 발급할 서류와 보유본 날짜(인쇄 안 함)."""
     from openpyxl import load_workbook
@@ -771,8 +780,8 @@ class PostAward:
             reissue = reissue_needed(attachment_texts(nf.files), company_docs_dir()) if nf.title else []
             if reissue:  # 이번에 만든 엑셀(적격심사서류·착공/착수서류 등)마다 '⚠새로발급' 탭 — 담당자가 고친 예전 파일은 안 건드림
                 for x in folder.rglob("*.xlsx"):
-                    if "공고문서" in x.parts or x.name.startswith("~$") or x.stat().st_mtime < started:
-                        continue
+                    if "공고문서" in x.parts or x.name.startswith("~$") or x.stat().st_mtime < started or _has_sheet(x, REISSUE_SHEET):
+                        continue  # 이미 탭이 있는 파일(먼저 만든 적격심사서류 등)은 다시 안 건드림 — 다음 zip에 또 들어가지 않게(11/20)
                     try:
                         add_reissue_sheet(x, reissue)
                     except Exception as err:  # noqa: BLE001 — 탭을 못 넣어도 폴더·서류는 그대로
@@ -870,8 +879,9 @@ class PostAward:
             raise ValueError("파일을 찾지 못했습니다")
         return target
 
-    def zip(self, key: str, rel: str) -> tuple[str, bytes]:
-        """단계 폴더 하나(rel이 비면 공고 폴더 전체 — 폴더 만들기 때 묶음, 11/17)를 zip으로 — (파일 이름, 내용). 폴더 밖·빈 폴더면 오류."""
+    def zip(self, key: str, rel: str, since: float | None = None) -> tuple[str, bytes]:
+        """단계 폴더 하나(rel이 비면 공고 폴더 전체 — 폴더 만들기 때 묶음, 11/17)를 zip으로 — (파일 이름, 내용). 폴더 밖·빈 폴더면 오류.
+        since(초)를 주면 그 뒤에 바뀐 파일만 — 적격심사 서류를 받은 공고에서 낙찰 서류를 만들 때 더해진 것만(11/20 사용자 'zip 두 번 받지 않게')."""
         import io
         import zipfile
 
@@ -882,14 +892,15 @@ class PostAward:
         target = (folder / rel).resolve() if rel else folder
         if (target != folder and folder not in target.parents) or not target.is_dir():
             raise ValueError("폴더를 찾지 못했습니다")
-        files = [f for f in sorted(target.rglob("*")) if f.is_file() and not f.name.startswith("~$")]
+        files = [f for f in sorted(target.rglob("*")) if f.is_file() and not f.name.startswith("~$")
+                 and (since is None or f.stat().st_mtime >= since)]
         if not files:
-            raise ValueError("폴더가 비어 있습니다")
+            raise ValueError("폴더가 비어 있습니다" if since is None else "새로 더해진 파일이 없습니다")
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
             for f in files:
                 z.write(f, f.relative_to(target).as_posix())
-        return f"{key}_{STAGE_NAME.get(target.name, target.name) if rel else '전체'}.zip", buf.getvalue()
+        return f"{key}_{STAGE_NAME.get(target.name, target.name) if rel else '추가' if since is not None else '전체'}.zip", buf.getvalue()
 
     def _fill_qual(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
         """적격심사 표준틀을 0_적격심사에 복사하고 공고·투찰 기록 값을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""

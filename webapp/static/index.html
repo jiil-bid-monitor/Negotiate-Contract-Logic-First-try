@@ -4236,13 +4236,15 @@ $("awardList").onclick = (e) => {
   }
   if (e.target.closest("[data-award-sim]")) return $("awardCheck").click();  // 시험 페이지 '다음 단계'
   const f = e.target.closest("[data-award-folder]");
-  if (f) return awardAct(f, AWARD_API + "/folder", { key: f.dataset.awardFolder, stage: f.dataset.awardStage || "" }, () => {
+  if (f) return awardAct(f, AWARD_API + "/folder", { key: f.dataset.awardFolder, stage: f.dataset.awardStage || "" }, (d) => {
     loadAward();
     // 묶음 zip 바로 내려받기(11/17 사용자) — 같은 폴더가 NAS와 사내 공유 폴더(서버 PC가 1분마다 복사)에도 있음
     const a = document.createElement("a");
-    a.href = `${AWARD_API}/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=`;  // 시험 페이지는 시험 목록의 zip
+    // 시험 페이지는 시험 목록의 zip, 이미 있던 폴더면 이번에 더해진 파일만(since)
+    a.href = `${AWARD_API}/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=${d.since ? "&since=" + d.since : ""}`;
     document.body.appendChild(a); a.click(); a.remove();
-    return "폴더를 만들고 첨부를 받았습니다 — 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 채울 칸은 '서류 현황'에서 볼 수 있습니다.";
+    return d.since ? "같은 공고 폴더에 이번 서류를 더했습니다 — 더해진 파일만 zip으로 내려받았습니다. 채울 칸은 '서류 현황'에서 볼 수 있습니다."
+      : "폴더를 만들고 첨부를 받았습니다 — 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 채울 칸은 '서류 현황'에서 볼 수 있습니다.";
   });
   const del = e.target.closest("[data-award-del]");
   if (del && confirm("목록에서 뺄까요? (만든 폴더는 지우지 않습니다)")) awardAct(del, AWARD_API + "/delete", { key: del.dataset.awardDel });

@@ -930,49 +930,34 @@ tr.nobody td { color: var(--faint); }
 /* 구역 제목 밑줄과 첫 카드 왼쪽 띠가 이어지게 — 첫 카드는 위 테두리·위 모서리 둥글림 없음 (2026-11-18 사용자 요청) */
 .group-head + .notice { border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
 
-/* ── 오른쪽 바로가기 (본공고 / 사전규격 / 아래 접힌 칸) ── */
+/* ── 오른쪽 바로가기 (본공고 / 사전규격 / 아래 접힌 칸) ──
+   칸마다 둥근 칩 하나씩 — '맨 위로'만 있을 때와 같은 모양 (11/20 사용자 요청 — 예전 왼쪽 선·밑줄 목록을 대체) */
 .jump {
   position: fixed; z-index: 20; top: 280px;   /* 위에 바로가기 블록(.side-links) */
   left: calc(50% + 590px + 16px);   /* 본문(1180px) 오른쪽 바깥 */
-  display: flex; flex-direction: column; gap: 2px; min-width: 150px;
-  padding: 10px 0; border-left: 1px solid var(--line-strong);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   /* 맨 위에서는 필요 없으니 숨겨 두고, 아래로 내려가면 나타난다 */
   opacity: 0; visibility: hidden; transition: opacity .15s, visibility .15s;
 }
 .jump.shown { opacity: 1; visibility: visible; }
 .jump[hidden] { display: none; }
-.jump a[data-jump="top"] { font-size: 12px; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
 .jump a {
-  display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
-  padding: 5px 14px; margin-left: -1px; border-left: 2px solid transparent;
-  color: var(--muted); text-decoration: none; font-size: 13px; line-height: 1.4;
+  display: inline-flex; gap: 10px; align-items: baseline; min-width: 132px; justify-content: space-between;
+  padding: 7px 14px; border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--panel); color: var(--muted); text-decoration: none; font-size: 12.5px; line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
 }
-.jump a:hover { color: var(--ink-strong); }
-.jump a.on { color: var(--brand); border-left-color: var(--brand); font-weight: 600; }
+.jump a[data-jump="top"] { min-width: 0; justify-content: center; margin-bottom: 2px; }
+.jump a:hover { color: var(--ink-strong); border-color: var(--ink-strong); }
+.jump a.on { color: var(--brand); border-color: var(--brand); font-weight: 600; }
 .jump .n { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 400; }
-/* 본문 오른쪽에 자리가 없으면 오른쪽 아래에 작은 상자로 띄운다.
-   카드를 덜 가리게 글자·여백을 줄이고, 목록 끝 카드가 상자 밑에 깔리지 않게 아래 여백을 둔다. */
+/* 본문 오른쪽에 자리가 없으면 오른쪽 아래에 띄운다 — 카드를 덜 가리게 칩을 조금 작게, 목록 끝 카드가 깔리지 않게 아래 여백 */
 @media (max-width: 1520px) {
-  .jump {
-    left: auto; right: 12px; top: auto; bottom: 12px; min-width: 0; gap: 0;
-    background: var(--panel); border: 1px solid var(--line-strong); padding: 3px 0;
-    box-shadow: 0 4px 14px rgba(0,0,0,.12);
-  }
-  .jump a { margin-left: 0; padding: 3px 10px; font-size: 12px; gap: 8px; }
-  .jump a[data-jump="top"] { font-size: 11.5px; padding-bottom: 5px; margin-bottom: 2px; }
+  .jump { left: auto; right: 12px; top: auto; bottom: 12px; align-items: flex-end; gap: 4px; }
+  .jump a { padding: 5px 12px; font-size: 12px; gap: 8px; min-width: 116px; }
+  .jump a[data-jump="top"] { min-width: 0; }
   .jump .n { font-size: 11px; }
-  #tab-live { padding-bottom: 140px; }
-}
-/* 칸이 하나뿐이라 '맨 위로'만 있을 때(세부품명 보기 등) — 왼쪽 선·구분선 없이 둥근 버튼 하나 (11/20 사용자 요청) */
-.jump.solo { border: 0; padding: 0; min-width: 0; background: none; box-shadow: none; }
-.jump.solo a[data-jump="top"] {
-  margin: 0; padding: 7px 14px; border: 1px solid var(--line-strong); border-radius: 999px;
-  background: var(--panel); color: var(--muted); font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.08);
-}
-.jump.solo a[data-jump="top"]:hover { color: var(--ink-strong); border-color: var(--ink-strong); }
-@media (max-width: 1520px) {
-  .jump.solo { border: 0; padding: 0; background: none; box-shadow: none; }
-  .jump.solo a[data-jump="top"] { padding: 6px 12px; font-size: 12px; margin: 0; }
+  #tab-live { padding-bottom: 160px; }
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 

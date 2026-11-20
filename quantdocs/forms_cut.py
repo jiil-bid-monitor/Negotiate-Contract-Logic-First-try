@@ -95,6 +95,13 @@ def _with_sec_pr(prefix: str, body: str) -> str:
     return first_p + body[_para_end(body):]
 
 
+def _drop_sec_pr(body: str) -> str:
+    """잘라 낸 서식 본문 안의 쪽 설정 run(secPr·단 설정)을 뺌 — 통합서식엔 구역마다 쪽 설정이 하나만(11/20 사용자 제보 '문서 열람이 멈췄어').
+    잘라 낸 서식 파일은 쪽 설정을 첫 문단 안에 품어서(`_with_sec_pr`), 그대로 이으면 서식마다 쪽 설정이 하나씩(장성 17개, 첫 문단엔 2개) 들어가
+    한글이 둘째 서식 뒤에서 멈췄음. 구역 첫 문단의 쪽 설정은 merge가 원본에서 다시 넣음."""
+    return re.sub(r"<((?:[\w.-]+:)?run)\b[^>]*>(?:(?!</\1>).)*?<(?:[\w.-]+:)?secPr\b.*?</\1>", "", body, flags=re.S)
+
+
 def _para_end(body: str) -> int:
     """body 첫 문단(안에 든 문단·표까지)의 끝 위치."""
     depth = 0
@@ -456,7 +463,7 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path, fit_pages: b
                     xml = re.sub(rf'{k["ref"]}="(\d+)"', lambda m, r=remap, a=k["ref"]: f'{a}="{r.get(m.group(1), m.group(1))}"', xml)
         paras = _top_paragraphs(xml)
         body_paras = paras[-len(f.paras):]  # 채우기는 문단 안만 바꾸므로 문단 수는 그대로 — 앞의 쪽 설정 문단은 뺌
-        body = _drop_blank_tail(xml[body_paras[0].start:body_paras[-1].end])
+        body = _drop_blank_tail(_drop_sec_pr(xml[body_paras[0].start:body_paras[-1].end]))
         bodies.setdefault(f.section, []).append((f, body))
     kept = [s for s in sec_names if s in bodies]
     if not kept:

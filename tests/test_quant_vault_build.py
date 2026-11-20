@@ -4334,6 +4334,29 @@ def test_merge_moves_sec_pr_into_first_form_paragraph(tmp_path: Path):
         assert "lineseg" not in head
 
 
+def test_merge_keeps_one_sec_pr_per_section(tmp_path: Path):
+    """11/20 사용자 제보 '이 상태에서 문서 열람이 멈췄어'(장성 통합서식): 잘라 낸 서식마다 첫 문단에 쪽 설정(secPr)을 품어
+    그대로 이으면 구역 하나에 쪽 설정이 서식 수만큼(첫 문단엔 2개) 들어가 한글이 둘째 서식 뒤에서 멈췄음 → 통합서식은 구역마다 하나."""
+    from quantdocs import forms_cut
+
+    para = lambda t, brk="0": f'<hp:p paraPrIDRef="0" pageBreak="{brk}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    first = '<hp:p paraPrIDRef="9"><hp:run charPrIDRef="7"><hp:secPr/><hp:ctrl><hp:colPr/></hp:ctrl><hp:t>표지</hp:t></hp:run></hp:p>'
+    src = tmp_path / "rfp.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", '<hh:head xmlns:hh="h" secCnt="1"><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+        z.writestr("Contents/section0.xml", f'<hs:sec>{first}{para("목차")}{para("〈서식 1〉 참가신청서", "1")}{para("내용 1")}'
+                                            f'{para("〈서식 2〉 위임장", "1")}{para("내용 2")}{para("〈서식 3〉 서약서", "1")}{para("내용 3")}</hs:sec>')
+    forms = forms_cut.cut(src, tmp_path / "cut")
+    assert len(forms) == 3
+    out = forms_cut.merge(src, [(f, tmp_path / "cut" / f.file) for f in forms], tmp_path / "merged.hwpx", fit_pages=False)
+    xml = zipfile.ZipFile(out).read("Contents/section0.xml").decode()
+    assert xml.count("<hp:secPr/>") == 1 and xml.count("<hp:colPr/>") == 1
+    assert xml.index("<hp:secPr/>") < xml.index("</hp:p>")  # 첫 문단에
+    for t in ("내용 1", "내용 2", "내용 3"):
+        assert t in xml
+
+
 def test_joint_supply_form_recognized_by_body(tmp_path: Path):
     """11/20 사용자 '공동수급 관련 문서는 기입 대상이 아니야': 이름엔 '공동수급'이 없는 '대표자 선임계'
     ('…참여업체의 대표자를 … 선임하고 모든 권한을 공동수급체 대표자에게 위임합니다. ※ 단독 참가시는 필요 없음.')도 공란 서식."""

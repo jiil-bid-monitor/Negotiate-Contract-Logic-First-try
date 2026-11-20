@@ -20,6 +20,8 @@ from typing import Any
 from nego import fields as F
 from nego.region import sido_of
 
+from . import xlsxfit
+
 KST = timezone(timedelta(hours=9))
 STATE_FILE = "postaward.json"
 GIVE_UP_DAYS = 60  # 추가(개찰)한 뒤 이만큼 지나도 낙찰자가 없으면 '결과 없음'
@@ -193,6 +195,7 @@ def add_reissue_sheet(xlsx: Path, rows: list[tuple[str, str]]) -> None:
     ws.cell(len(rows) + 5, 1, "공고문에 서류 이름이 나와서 표시함(자동) — 제출 요구인지는 공고문 원문과 대조")
     ws.column_dimensions["A"].width, ws.column_dimensions["B"].width, ws.column_dimensions["C"].width = 26, 24, 60
     wb.save(xlsx)
+    xlsxfit.fit(xlsx)  # 넣은 값이 칸보다 길면 줄 높이·줄바꿈 맞춤(11/20 사용자 '글씨 잘림 없게')
 
 
 # 착공·착수 표준틀 v5(차장님 확인 11/11) — 회사 정보가 들어 있어 저장소 밖 NAS 공유 폴더 '낙찰후서류/_표준틀' 한 곳에 둠
@@ -398,6 +401,7 @@ def fill_done(source: Path, target: Path, values: dict[str, Any], prev: dict[str
     if changed or fresh:
         target.parent.mkdir(parents=True, exist_ok=True)
         wb.save(target)
+        xlsxfit.fit(target)  # 넣은 값이 칸보다 길면 줄 높이·줄바꿈 맞춤(11/20 사용자 '글씨 잘림 없게')
     return done, changed
 
 
@@ -475,6 +479,7 @@ def fill_basic(template: Path, target: Path, values: dict) -> None:
         ws.cell(row, 3).value = f"[자동] {source}"
     target.parent.mkdir(parents=True, exist_ok=True)
     wb.save(target)
+    xlsxfit.fit(target)  # 넣은 값이 칸보다 길면 줄 높이·줄바꿈 맞춤(11/20 사용자 '글씨 잘림 없게')
 
 
 # 적격심사 표준틀(11/16 — 공사·물품 × 추정가격 10억 미만/이상, 11/17 용역 = 지역·분야·금액별) → 0_적격심사/적격심사서류.xlsx.
@@ -545,6 +550,7 @@ def fill_qual(template: Path, target: Path, values: dict[str, Any]) -> list[str]
             ws.cell(r, 3).value = note
     target.parent.mkdir(parents=True, exist_ok=True)
     wb.save(target)
+    xlsxfit.fit(target)  # 넣은 값이 칸보다 길면 줄 높이·줄바꿈 맞춤(11/20 사용자 '글씨 잘림 없게')
     return done
 
 

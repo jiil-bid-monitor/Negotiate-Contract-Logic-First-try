@@ -4215,3 +4215,40 @@ def test_center_sign_block_seal_line_drops_padding(tmp_path: Path):
              for p in re.findall(r"<hp:p\b[^>]*>(.*?)</hp:p>", out, re.S)]
     rep = next(t for t in texts if "대 표 자" in t)
     assert rep.endswith("홍길동 (인)"), repr(rep)
+
+
+def test_general_status_unit_slots_paren_phone_fax_number_and_bare_rep(tmp_path: Path):
+    """11/20 사용자 제보 4가지: ① 서명 묶음 '대    표 :      (인)'('자' 없이) 대표자 이름 빔 ② 표 밖 '전화번호 :   (FAX번호 :   )' 둘 다 빔
+    ③ 일반현황 소재지 칸 '(전화 :   )'만 빔(FAX는 들어감) ④ '직 원 수 |   명 (상근직 만 해당)'·'자 본 금 | 백만원' — 단위가 미리 적힌 칸이 빔.
+    작성자 칸은 개인 칸이라 그대로 비움."""
+    from quantdocs.fill import _text, fill_hwpx
+
+    P = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    multi = lambda col, row, ts: (f'<hp:tc><hp:subList>{"".join(P(t) for t in ts)}</hp:subList>'
+                                  f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선", "전화번호": "031-000-1111",
+                              "팩스번호": "031-000-2222", "종업원 수": "18", "자본금": "500,000,000"})
+    body = (P("업체명 : ") + P("대    표 :              (인)")
+            + P("전화번호 :                 (FAX번호 :                 )") + P("작 성 자 :               (연락처: 휴대폰, 이메일 기재)")
+            + _tbl([[_c(0, 0, "소 재 지"), multi(1, 0, ["주소 : ", "(전화 :            )", "(FAX :            )"])],
+                    [_c(0, 1, "직 원 수"), _c(1, 1, "   명 (상근직 만 해당)       *용역인력보유현황 :     명")],
+                    [_c(0, 2, "자 본 금(납입)"), _c(1, 2, "백만원")]]))
+    fill_hwpx(_mini_hwpx(tmp_path / "g.hwpx", body), tmp_path / "go.hwpx", v)
+    t = re.sub(r"\s+", " ", _text(zipfile.ZipFile(tmp_path / "go.hwpx").read("Contents/section0.xml").decode()))
+    assert re.search(r"대 표 : 홍길동 +\(인\)", t), t
+    assert re.search(r"전화번호 : 031-000-1111 +\(FAX번호 : 031-000-2222", t), t
+    assert "(전화 : 031-000-1111" in t and "(FAX : 031-000-2222" in t
+    assert "18명 (상근직 만 해당)" in t and "용역인력보유현황 : 명" in t
+    assert "500 백만원" in t
+    assert re.search(r"작 성 자 : \(연락처", t)  # 작성자는 비움
+
+
+def test_none_rule_bare_quoted_instruction(tmp_path: Path):
+    """11/20 사용자 요청: 안내 문구에 '“해당 없음”을 기재'만 있어도(앞에 '없을 경우' 없이) 위 빈 표에 '해당 없음'."""
+    from quantdocs.fill import fill_hwpx
+
+    body = (_tbl([[_c(i, 0, h) for i, h in enumerate(["참여분야", "성 명", "처분기관"])], [_c(i, 1, "") for i in range(3)],
+                  [_c(0, 2, "계")] + [_c(i, 2, "") for i in (1, 2)]])
+            + '<hp:p><hp:run charPrIDRef="0"><hp:t>※ 처분 사실은 “해당 없음”으로 기재</hp:t></hp:run></hp:p>')
+    fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", body), tmp_path / "no.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    assert zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode().count("해당 없음") == 2  # 안내 글 + 표 칸

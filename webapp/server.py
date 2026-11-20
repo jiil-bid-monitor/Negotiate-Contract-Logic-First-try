@@ -418,7 +418,8 @@ def make_handler(app: App):
                 # zip = 단계 폴더 하나를 묶어서(제출용, 11/16)
                 try:
                     if url.path.endswith("/zip"):
-                        name, body = pa.zip(q.get("key", [""])[0], q.get("path", [""])[0])
+                        since = q.get("since", [""])[0]
+                        name, body = pa.zip(q.get("key", [""])[0], q.get("path", [""])[0], float(since) if since else None)
                     else:
                         target = pa.file(q.get("key", [""])[0], q.get("path", [""])[0])
                         name, body = target.name, target.read_bytes()
@@ -561,11 +562,17 @@ def make_handler(app: App):
                     return self._json({"ok": True, "items": app.postaward_test.items()})
                 if url.path == "/api/postaward/folder":
                     # 폴더는 공유 폴더 맨 위 '낙찰후서류'(NAS: \\jiilserver\jiil-webapp\낙찰후서류), POSTAWARD_DIR로 바꿈 — 시험은 '낙찰후서류_테스트'
+                    import time
+
                     from .postaward import template_dir
+                    key = str(data.get("key") or "")
+                    v0 = next((x for x in pa.items() if f"{x.get('no')}-{x.get('ord')}" == key or x.get("no") == key), {})
+                    # 이미 폴더가 있으면(적격심사 서류를 받은 공고 등) 이번에 더해진 파일만 zip으로 — 화면이 since로 받음(11/20 사용자)
+                    since = time.time() - 5 if v0.get("folder") else None
                     # 표준틀은 운영 폴더 것 — 시험 폴더(낙찰후서류_테스트)엔 _표준틀이 없음(NAS 컨테이너는 공유 폴더 주소로 틀을 못 찾아 root/_표준틀을 봄)
-                    folder, _ = pa.prepare(str(data.get("key") or ""), app.award_root(test), qual_only=data.get("stage") == "qual",
+                    folder, _ = pa.prepare(key, app.award_root(test), qual_only=data.get("stage") == "qual",
                                            templates=template_dir(app.award_root(False)), contract_lookup=contract_lookup())
-                    return self._json({"ok": True, "folder": str(folder), "items": pa.items()})
+                    return self._json({"ok": True, "folder": str(folder), "since": since, "items": pa.items()})
                 if url.path == "/api/postaward/delete":
                     pa.remove(str(data.get("key") or ""))
                     return self._json({"ok": True, "items": pa.items()})

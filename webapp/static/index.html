@@ -1537,7 +1537,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 
   <!-- 낙찰 후 서류(2026-11-10) — 투찰 기록·직접 넣은 공고의 낙찰자 확인(webapp/postaward.py), 공사 / 물품·용역 구분, 공고 폴더 만들기 -->
   <section id="tab-award" hidden>
-    <p class="award-test-note" id="awardTestNote" hidden>시험 페이지예요 — 운영 목록·폴더와 따로 씁니다. 과거 수주 사업 <b>광양시 교통안전체험관(R25BK01125448)</b>이 들어 있어요.
+    <p class="award-test-note" id="awardTestNote" hidden>시험 페이지예요 — 운영 목록·폴더와 따로 씁니다. 과거 수주 사업 <b>광양시 교통안전체험관(R25BK01125448)</b>은 '지금 낙찰자 확인'을 누를 때마다
+      한 단계씩(① 개찰 결과 → ② 낙찰 확인 → ③ 계약 등록) 진행되고, 기다림·끝난 공고 예시는 운영 투찰 기록에서 복사해 넣었어요.
       만든 폴더는 <code>\\jiilserver\jiil-webapp\낙찰후서류_테스트</code>에 생깁니다. <button type="button" id="awardReset">처음으로 되돌리기</button></p>
     <p class="award-lead">투찰한 공고가 저절로 올라옵니다. 투찰 기록이 없는 공고(협상 등)는 공고번호를 넣으세요.</p>
     <div class="search">
@@ -4063,7 +4064,7 @@ function awardKind(v) {
 function awardStage(v, kind) {
   const o = v.opening, rank = o ? o.rank : null, d = awardDesignated(v);
   const cdate = (v.contract || {}).date;  // 나라장터 계약정보에 계약이 올라오면(22시·'지금 낙찰자 확인') 착공·착수 단계로
-  if (v.status === "낙찰" && cdate) return ["착공·착수 서류", 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결 — 서류 현황에서 착공·착수 서류를 확인하세요`];
+  if (v.status === "낙찰" && cdate) return ["착공·착수 서류", 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결 — ${v.folder && !v.qualOnly ? "서류 현황에서 착공·착수 서류를 확인하세요" : "'낙찰 서류 만들기'를 누르세요"}`];
   if (v.status === "낙찰") return v.folder && !v.qualOnly ? ["계약 서류", 2, "나라장터에 계약이 올라오면 착공·착수 단계로 넘어갑니다"] : ["낙찰 — 계약 서류 만들기", 2, ""];
   if (v.folder) return ["적격심사 서류", 1, "심사 서류를 내고 낙찰을 기다립니다"];
   if (kind === "todo") return ["적격심사 대상", 1, "개찰 1순위 — 심사 통보를 확인하세요"];
@@ -4183,7 +4184,7 @@ async function awardAct(btn, path, body, done) {
   btn.disabled = false;
 }
 $("awardAdd").onclick = (e) => awardAct(e.target, AWARD_API, { no: $("awardNo").value }, () => { $("awardNo").value = ""; return "넣었습니다 — '지금 낙찰자 확인'을 누르면 바로 확인합니다."; });
-$("awardCheck").onclick = (e) => awardAct(e.target, AWARD_API + "/check", {}, (d) => `낙찰 ${d.won} · 다른 업체 ${d.lost} · 아직 없음 ${d.waiting}`);
+$("awardCheck").onclick = (e) => awardAct(e.target, AWARD_API + "/check", {}, (d) => d.message || `낙찰 ${d.won} · 다른 업체 ${d.lost} · 아직 없음 ${d.waiting}`);
 $("awardList").onclick = (e) => {
   const open = e.target.closest("[data-award-open]");
   if (open) {

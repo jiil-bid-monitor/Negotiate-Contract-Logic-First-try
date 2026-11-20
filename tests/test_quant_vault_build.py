@@ -4161,3 +4161,16 @@ def test_merge_sec_pr_paragraph_drops_stale_lineseg(tmp_path: Path):
     for f in forms:  # 잘라 낸 서식 파일 맨 앞 쪽 설정 문단도 같음
         part = zipfile.ZipFile(tmp_path / "cut" / f.file).read("Contents/section0.xml").decode()
         assert "lineseg" not in part[:part.index("</hp:p>")]
+
+
+def test_rep_line_with_seal_and_extra_paren(tmp_path: Path):
+    """11/20 사용자 제보: '대 표 자 :          (인)(사용인감)'에 대표자 이름이 빠짐 — (인) 뒤 '(사용인감)' 괄호 때문에 서명 줄로 못 알아봄."""
+    from quantdocs.fill import fill_hwpx, _text
+
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"})
+    for line in ("대 표 자 :                    (인)(사용인감)", "대 표 자 :                    (인) (사용인감)"):
+        body = para("업 체 명 :           ") + para(line) + para("주       소 :           ")
+        fill_hwpx(_mini_hwpx(tmp_path / "p.hwpx", body), tmp_path / "o.hwpx", v)
+        t = re.sub(r"\s+", " ", _text(zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+        assert re.search(r"대 표 자 : 홍길동 \(인\) ?\(사용인감\)", t), t

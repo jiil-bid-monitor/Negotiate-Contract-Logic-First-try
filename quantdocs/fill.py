@@ -1406,9 +1406,10 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                     continue
         # '업 체 명 :' 또는 서명 줄 '대표자 :          (인)'(11/04 서식 8·9) · '신청인(대표자) :      (인 또는 서명)'(서식 1)
         # 쌍점 뒤에 '(대표사)'가 미리 적힌 줄 '업 체 명 :  (대표사)'(11/13 사용자 지적: 부산 업사이클센터 — 업체명이 빔)도 — 값은 '(대표사)' 앞에
-        m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL}|[(（]\s*(?:공\s*동\s*)?대\s*표\s*사\s*[)）])?\s*", text)
+        # (인) 뒤 덧붙인 괄호 '대 표 자 :      (인)(사용인감)'(11/20 사용자 제보 — 대표자 이름이 빠졌음)도 서명 줄
+        m = re.fullmatch(rf"\s*(.{{2,16}}?)\s*[:：]\s*({_SEAL_TAIL}(?:\s*[(（][^()（）]{{1,8}}[)）])*|[(（]\s*(?:공\s*동\s*)?대\s*표\s*사\s*[)）])?\s*", text)
         if m:
-            cands.append((s, e, m.group(1), bool(m.group(2)) and bool(re.fullmatch(_SEAL_TAIL, m.group(2))), False, n))
+            cands.append((s, e, m.group(1), bool(m.group(2)) and bool(re.match(_SEAL_TAIL, m.group(2))), False, n))
         elif _bare_label(text):  # 표 칸 안 줄은 머리글일 수 있어 — 칸 안이면 바로 옆 줄이 서명 줄일 때만(아래에서 거름)
             in_cell = any(cs <= s and e <= ce for cs, ce in cells)
             cands.append((s, e, _bare_label(text), False, "cell" if in_cell else True, n))

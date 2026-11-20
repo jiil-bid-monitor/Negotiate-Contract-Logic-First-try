@@ -963,6 +963,17 @@ tr.nobody td { color: var(--faint); }
   .jump .n { font-size: 11px; }
   #tab-live { padding-bottom: 140px; }
 }
+/* 칸이 하나뿐이라 '맨 위로'만 있을 때(세부품명 보기 등) — 왼쪽 선·구분선 없이 둥근 버튼 하나 (11/20 사용자 요청) */
+.jump.solo { border: 0; padding: 0; min-width: 0; background: none; box-shadow: none; }
+.jump.solo a[data-jump="top"] {
+  margin: 0; padding: 7px 14px; border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--panel); color: var(--muted); font-size: 12.5px; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.jump.solo a[data-jump="top"]:hover { color: var(--ink-strong); border-color: var(--ink-strong); }
+@media (max-width: 1520px) {
+  .jump.solo { border: 0; padding: 0; background: none; box-shadow: none; }
+  .jump.solo a[data-jump="top"] { padding: 6px 12px; font-size: 12px; margin: 0; }
+}
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 
 /* ── 추천등급 ─────────────────────────────────────────────── */
@@ -2393,6 +2404,7 @@ function renderJumpNav() {
   // 칸이 하나뿐이면 칸 이동은 의미가 없지만, 목록이 길 수 있으니 '맨 위로'는 남긴다
   nav.innerHTML = '<a href="#" data-jump="top"><span>↑ 맨 위로</span></a>' + (links.length >= 2 ? links.join("") : "");
   nav.hidden = links.length === 0;
+  nav.classList.toggle("solo", links.length < 2);
   markJump();
 }
 /** 첫 화면보다 아래로 내려갔을 때만 보이고, 지금 보고 있는 칸을 진하게 */

@@ -185,12 +185,12 @@ _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴�
 
 _SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|직인|날인)[)）]?$")
 _INLINE_LABELS = {"TEL": "전화번호", "Tel": "전화번호", "전화": "전화번호", "전화번호": "전화번호",
-                  "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "팩스번호": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일",
+                  "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "팩스번호": "팩스번호", "FAX번호": "팩스번호", "Fax번호": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일",
                   "업태": "업태", "종목": "종목"}
 # 이름표는 글자 사이 띄어쓰기를 무시하고 읽음 — '전    화 :'·'팩 스 :'(11/12 필암 — 같은 줄 '(팩스: …)'만 채우고 전화가 비었음,
 # 사용자 요청 "요청서 읽을 때 띄어쓰기 제외하고 단어 읽기")
 _SPACED = lambda w: r"[  　]*".join(w)
-_INLINE_LABS = "|".join([r"(?i:TEL)", r"(?i:FAX)", r"(?i:E-?MAIL)", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스번호"), _SPACED("팩스"), _SPACED("이메일"),
+_INLINE_LABS = "|".join([r"(?i:TEL)", r"(?i:FAX)[  　]*번[  　]*호", r"(?i:FAX)", r"(?i:E-?MAIL)", _SPACED("전화번호"), _SPACED("전화"), _SPACED("팩스번호"), _SPACED("팩스"), _SPACED("이메일"),
                          _SPACED("업태"), _SPACED("종목")])
 _INLINE_RE = re.compile(rf"(?P<lab>{_INLINE_LABS})(?P<colon>\s*[:：])(?P<sp>[  　]*)(?=(?:{_INLINE_LABS})|$)")
 
@@ -212,7 +212,7 @@ def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
 
         def rep(mm):
             lab = re.sub(r"[  　]", "", mm.group("lab"))
-            key = _INLINE_LABELS.get(lab) or {"TEL": "전화번호", "FAX": "팩스번호", "EMAIL": "이메일", "E-MAIL": "이메일"}.get(lab.upper(), "")  # 소문자 fax·tel(11/13)
+            key = _INLINE_LABELS.get(lab) or {"TEL": "전화번호", "FAX": "팩스번호", "FAX번호": "팩스번호", "EMAIL": "이메일", "E-MAIL": "이메일"}.get(lab.upper(), "")  # 소문자 fax·tel(11/13)
             value = _value(key, vault) if key else ""
             if not value:
                 return mm.group(0)
@@ -402,6 +402,46 @@ def _value(key: str, vault) -> str:
     if key == "자본금" and v and re.fullmatch(r"[\d,]+", v):
         return f"{int(v.replace(',', '')):,}원"
     return v
+
+
+_UNIT_MUL = {"명": 1, "원": 1, "천원": 10 ** 3, "만원": 10 ** 4, "백만원": 10 ** 6, "천만원": 10 ** 7, "억원": 10 ** 8}
+
+
+def _won(v) -> int | None:
+    """'500,000,000'·'500000000원'·'5억원'·'5억 2천만원' → 원 단위 정수. 못 읽으면 None."""
+    t = re.sub(r"[\s,]", "", str(v or ""))
+    if re.fullmatch(r"\d+원?", t):
+        return int(t.rstrip("원"))
+    m = re.fullmatch(r"(?:(\d+(?:\.\d+)?)억)?(?:(\d+(?:\.\d+)?)천만)?(?:(\d+(?:\.\d+)?)백만)?(?:(\d+(?:\.\d+)?)만)?원?", t)
+    if not m or not any(m.groups()):
+        return None
+    return int(sum(float(x or 0) * u for x, u in zip(m.groups(), (10 ** 8, 10 ** 7, 10 ** 6, 10 ** 4))))
+
+
+def _unit_slot(seg: str, key: str, vault) -> tuple[str, str] | None:
+    """단위 글자가 미리 적힌 값 칸 '   명 (상근직 만 해당)'·'백만원'(11/20 사용자 제보 — 일반현황 직원 수·자본금이 빔) —
+    칸 맨 앞 단위 바로 앞에 숫자만 넣음(뒤 안내 글은 그대로). 칸에 숫자가 이미 있거나 값이 없으면 None."""
+    if re.search(r"\d", _text(seg)):
+        return None
+    m = re.search(r"(<(?:[\w.-]+:)?t\b[^>/]*>)([  \u3000]*)(명|백\s*만\s*원|천\s*만\s*원|천\s*원|만\s*원|억\s*원|원)", seg)
+    if not m or _sq(_text(seg[:m.start()])):
+        return None
+    unit = re.sub(r"\s", "", m.group(3))
+    if key == "종업원 수":
+        if unit != "명":
+            return None
+        n = re.search(r"\d[\d,]*", str(vault.info.get(key) or ""))
+        num = n.group(0) if n else ""
+    else:
+        won = _won(vault.info.get(key)) if unit != "명" else None
+        if won is None:
+            return None
+        q = won / _UNIT_MUL[unit]
+        num = f"{int(q):,}" if q == int(q) else f"{q:,.2f}".rstrip("0").rstrip(".")
+    if not num:
+        return None
+    seg = seg[:m.end(1)] + _mark(num) + ("" if unit == "명" else " ") + seg[m.end(2):]
+    return re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S), f"{num} {unit}"
 
 
 def _money(v) -> str:
@@ -991,7 +1031,12 @@ def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None
     ns = open_m.group(1) or ""
     if use_left:
         new_open = open_m.group(0).replace(f'paraPrIDRef="{pid}"', f'paraPrIDRef="{chars.left_at(pid, max(left, 0) + offset)}"', 1)
-        out = new_open + no_lines(seg[open_m.end():i] + _mark(lines[0]) + seg[j + 1:])
+        tail_out = seg[j + 1:]
+        if len(lines) == 1 and unescape(re.sub(r"<[^>]+>", "", tail_out)).strip():
+            # (11/20 사용자 지적: '대 표 자 : 이운봉' 뒤 (인)이 다음 줄로 — ':' 자리는 지킨 채 값 뒤 오른쪽 빈칸을 줄임) 왼쪽 정렬로 바꾼 줄은
+            # 줄 길이를 맞출 까닭이 없음 → (인) 뒤 빈칸은 지우고 이름과 (인) 사이는 한 칸(원래 가운데 정렬 길이를 맞추던 빈칸이 줄을 넘겼음)
+            tail_out = _shrink_tail(tail_out, 10 ** 6)
+        out = new_open + no_lines(seg[open_m.end():i] + _mark(lines[0]) + tail_out)
         for x in lines[1:]:
             out += f"{new_open}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>"
         return out
@@ -1009,6 +1054,42 @@ def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None
     for x in lines[1:]:
         out += pad(f"{open_m.group(0)}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>", pw + _cjk_width(x, h))
     return out
+
+
+def _shrink_tail(tail_xml: str, cut: int) -> str:
+    """값 뒤 글('      (인)   ' — 첫 조각은 이미 열린 글 조각 안)에서 빈칸을 cut개까지 뺌: 줄 끝 빈칸 먼저, 그다음 값과 다음 글 사이(한 칸은 남김)."""
+    parts = re.split(r"(<[^>]+>)", tail_xml)
+    texts, in_t = [], True
+    for k, part in enumerate(parts):
+        if part.startswith("<"):
+            if re.match(r"<(?:[\w.-]+:)?t\b", part):
+                in_t = True
+            elif re.match(r"</(?:[\w.-]+:)?t>", part):
+                in_t = False
+        elif in_t and part:
+            texts.append(k)
+    for k in reversed(texts):  # 줄 끝 빈칸
+        if cut <= 0:
+            break
+        keep = parts[k].rstrip(" ")
+        n = min(cut, len(parts[k]) - len(keep))
+        parts[k] = parts[k][:len(parts[k]) - n]
+        cut -= n
+        if keep:
+            break
+    left_keep = 1
+    for k in texts:  # 값과 다음 글 사이 — 한 칸은 남김
+        if cut <= 0:
+            break
+        body = parts[k]
+        lead = len(body) - len(body.lstrip(" "))
+        n = min(cut, max(0, lead - left_keep))
+        parts[k] = body[n:]
+        cut -= n
+        left_keep = max(0, left_keep - (lead - n))
+        if body.strip(" "):
+            break
+    return "".join(parts)
 
 
 def _line_width(xml: str, s: int, cells: list[tuple[int, int]]) -> int | None:
@@ -1390,7 +1471,9 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 rep.filled.append(f"서명 줄 자리표시 → {company} 대표자 {name}")
             continue
         # 한 줄에 이름표가 둘 이상인 '전화번호 :      (FAX :      )'(11/05 국민안전체험관 서식 12) — 빈자리마다 값
-        if len(_INLINE_LOOSE.findall(text)) >= 2 or re.search(r"[(（]\s*(?:FAX|Fax|팩스|E-?mail|이메일)\s*[:：]", text):
+        # 괄호 안 '(전화 :      )'도(11/20 사용자 제보 — 일반현황 소재지 칸 '(전화 : ) / (FAX : …)'에서 FAX만 들어감) — '(인)' 붙은 줄(증명서 발급기관)은 빼고
+        if len(_INLINE_LOOSE.findall(text)) >= 2 or re.search(r"[(（]\s*(?:FAX|Fax|팩스|E-?mail|이메일)\s*(?:번\s*호\s*)?[:：]", text) \
+                or re.search(r"[(（]\s*(?:전\s*화(?:\s*번\s*호)?|TEL|Tel)\s*[:：]\s*[)）]?\s*$", text) and not re.search(r"[(（]\s*인\s*[)）]", text):
             seg, done = _fill_inline(xml[s:e], vault, loose=True)
             if done:
                 edits.append((s, e, seg))
@@ -1444,6 +1527,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         if not key and _sq(label) == "기관명" and re.search(r"각\s*서|확\s*약\s*서|서\s*약\s*서", _text(xml)) \
                 and not any(cs <= s and e <= ce for cs, ce in single):
             key = "회사명"  # 각서·확약서 끝 '기관명 :  / 대표자 : (인)' = 입찰자(11/05 창업진흥원 서식 7) — 증명서 발급기관 칸(한 줄 칸)은 아님
+        if not key and seal and _sq(label) == "대표":
+            key = "대표자"  # 서명 묶음 '업체명 : / 대    표 :      (인)'('자' 없이 — 11/20 사용자 제보)
         if not key and seal and re.fullmatch(r"신청(?:인|자)|제안(?:자|인)|입찰(?:자|인)|응모(?:자|인)", _sq(label)):
             key = "대표자"  # 서명 줄 '신 청 인 :        (인)'(11/10 경남교육청 입찰참가신청서) — (인)이 붙은 줄만, 대표자 이름
         # 보안각서 끝 서명 묶음 '주 소 : / 생 년 월 일 : / 기 술 분 야 : / 성 명 :  (인)'(11/16 사용자 결정: 대표자가 서명) —
@@ -2896,7 +2981,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
-            none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S)
+            # 앞 조건 없이 '“해당 없음”을 기재'·'‘해당없음’으로 표기'만 적힌 안내도(11/20 사용자 요청 — 문구에 '해당 없음 기재'가 있으면 위 표에)
+            none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S) \
+                or re.search(r"[\"“”'‘’「]\s*해\s*당\s*(?:사\s*항\s*)?없\s*음\s*[\"“”'‘’」]\s*(?:을|를|으로|로|이라고|라고)?\s*(?:기재|표기|기입|작성|적)", _text(xml))
             tally = {"sum": 0.0, "n": 0, "missing": False}  # 이 서식에서 넣은 자기평점 합(따로 놓인 합계 표용, 11/13)
             seen_party: set = set()  # 회사 정보 표 모양 — 같은 모양이 또 나오면 공동수급 구성원용 사본이라 비움(11/13)
             for tbl in _all_tables(xml):
@@ -3112,8 +3199,19 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         continue
                     if check_cols and target.col in check_cols:
                         continue  # 점검표 '적용·해당없음' 열 — 회사 정보 칸이 아님(11/13)
+                    if key == "신용평가등급" and any(
+                            o.row < target.row and o.col <= target.col < o.col + o.colspan
+                            and re.sub(r"\(.*?\)", "", _sq(o.text)) in ("배점", "총배점", "배점한도", "평점", "자기평점", "자체평점", "점수", "평가점수")
+                            for o in cells):
+                        continue  # 평가표 '배점·평점' 열엔 등급 글자를 넣지 않음 — 배점 칸은 비우고 평점은 자기평점이 채움(11/20 사용자 지적: 배점 칸에 'BB+')
                     if target.col in qty_cols and not _QTY_KEY.search(key) and target.row > min(x.row for x in cells):
                         continue  # '건수·금액·점수' 열에 누리집·주소·이름 같은 글을 넣지 않음(11/13)
+                    if key in ("종업원 수", "자본금") and not target.blank:
+                        hit = _unit_slot(xml[target.start:target.end], key, vault)
+                        if hit:
+                            edits.append((target, None, hit[0]))
+                            rep.filled.append(f"{_sq(c.text)} → {hit[1]}")
+                            continue
                     seal = _sq(target.text)
                     ref = _REF_SLOT.search(xml[target.start:target.end])
                     # 기관 이름 없는 '제2026-   호'는 이름표에 '번호'가 없는 칸('입찰(제안) 공고' — 11/18)만 — '…공고번호 | 제 2026 - 호'는 11/04대로 나라장터 번호

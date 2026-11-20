@@ -4191,3 +4191,87 @@ def test_seal_line_trims_right_spaces_keeps_colon(tmp_path: Path):
         assert "홍길동 (인)" in got, got
         assert got.index(":") == orig.index(":")  # ':' 자리 그대로(앞 들여쓰기 안 줄임)
         assert _span(got) <= _span(orig + tail)   # 줄이 원래보다 길어지지 않음
+
+
+def test_center_sign_block_seal_line_drops_padding(tmp_path: Path):
+    """11/20 사용자 지적(두 번째): 가운데 정렬 서명 묶음 '대 표 자 : 이운봉' 뒤 (인)이 여전히 다음 줄로 — 이 묶음은 왼쪽 정렬로 바꾸는
+    경로(`_center_keep`)라 앞의 고침을 안 거쳤음. 왼쪽 정렬로 바꾼 줄은 가운데 정렬 길이를 맞추던 빈칸이 필요 없으니 이름과 (인) 사이 한 칸,
+    (인) 뒤 빈칸 없음 — ':' 자리는 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="1"><hh:paraPr id="57"><hh:align horizontal="CENTER"/>'
+              '<hh:margin><hc:intent value="0"/><hc:left value="0"/><hc:right value="0"/></hh:margin></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1200"></hh:charPr></hh:charProperties></hh:head>')
+    sec = '<hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin left="8504" right="8504" top="5668" bottom="4252"/></hp:pagePr></hp:secPr>'
+    para = lambda t: f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    orig = ["업 체 명:" + " " * 12, "대 표 자:" + " " * 20 + "(인)" + " " * 10]
+    body = f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0">{sec}<hp:t>20  년    월    일</hp:t></hp:run></hp:p>' + "".join(para(x) for x in orig)
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    out = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    texts = [re.sub(r"<[^>]+>", "", "".join(re.findall(r"<hp:t\b[^>]*>(.*?)</hp:t>", p, re.S)))
+             for p in re.findall(r"<hp:p\b[^>]*>(.*?)</hp:p>", out, re.S)]
+    rep = next(t for t in texts if "대 표 자" in t)
+    assert rep.endswith("홍길동 (인)"), repr(rep)
+
+
+def test_general_status_unit_slots_paren_phone_fax_number_and_bare_rep(tmp_path: Path):
+    """11/20 사용자 제보 4가지: ① 서명 묶음 '대    표 :      (인)'('자' 없이) 대표자 이름 빔 ② 표 밖 '전화번호 :   (FAX번호 :   )' 둘 다 빔
+    ③ 일반현황 소재지 칸 '(전화 :   )'만 빔(FAX는 들어감) ④ '직 원 수 |   명 (상근직 만 해당)'·'자 본 금 | 백만원' — 단위가 미리 적힌 칸이 빔.
+    작성자 칸은 개인 칸이라 그대로 비움."""
+    from quantdocs.fill import _text, fill_hwpx
+
+    P = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    multi = lambda col, row, ts: (f'<hp:tc><hp:subList>{"".join(P(t) for t in ts)}</hp:subList>'
+                                  f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선", "전화번호": "031-000-1111",
+                              "팩스번호": "031-000-2222", "종업원 수": "18", "자본금": "500,000,000"})
+    body = (P("업체명 : ") + P("대    표 :              (인)")
+            + P("전화번호 :                 (FAX번호 :                 )") + P("작 성 자 :               (연락처: 휴대폰, 이메일 기재)")
+            + _tbl([[_c(0, 0, "소 재 지"), multi(1, 0, ["주소 : ", "(전화 :            )", "(FAX :            )"])],
+                    [_c(0, 1, "직 원 수"), _c(1, 1, "   명 (상근직 만 해당)       *용역인력보유현황 :     명")],
+                    [_c(0, 2, "자 본 금(납입)"), _c(1, 2, "백만원")]]))
+    fill_hwpx(_mini_hwpx(tmp_path / "g.hwpx", body), tmp_path / "go.hwpx", v)
+    t = re.sub(r"\s+", " ", _text(zipfile.ZipFile(tmp_path / "go.hwpx").read("Contents/section0.xml").decode()))
+    assert re.search(r"대 표 : 홍길동 +\(인\)", t), t
+    assert re.search(r"전화번호 : 031-000-1111 +\(FAX번호 : 031-000-2222", t), t
+    assert "(전화 : 031-000-1111" in t and "(FAX : 031-000-2222" in t
+    assert "18명 (상근직 만 해당)" in t and "용역인력보유현황 : 명" in t
+    assert "500 백만원" in t
+    assert re.search(r"작 성 자 : \(연락처", t)  # 작성자는 비움
+
+
+def test_none_rule_bare_quoted_instruction(tmp_path: Path):
+    """11/20 사용자 요청: 안내 문구에 '“해당 없음”을 기재'만 있어도(앞에 '없을 경우' 없이) 위 빈 표에 '해당 없음'."""
+    from quantdocs.fill import fill_hwpx
+
+    body = (_tbl([[_c(i, 0, h) for i, h in enumerate(["참여분야", "성 명", "처분기관"])], [_c(i, 1, "") for i in range(3)],
+                  [_c(0, 2, "계")] + [_c(i, 2, "") for i in (1, 2)]])
+            + '<hp:p><hp:run charPrIDRef="0"><hp:t>※ 처분 사실은 “해당 없음”으로 기재</hp:t></hp:run></hp:p>')
+    fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", body), tmp_path / "no.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    assert zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode().count("해당 없음") == 2  # 안내 글 + 표 칸
+
+
+def test_credit_grade_not_in_points_column(tmp_path: Path):
+    """11/20 사용자 지적: 자기평가표 '경영상태 | 기업신용평가등급 | __(배점) | __(평점)' — 배점 칸에 'BB+'가 들어감.
+    배점 칸은 비우고, 평점 칸에 등급에 맞는 점수(BB+ → 'BB+ ~ BB-' 5.4)."""
+    import datetime as _dt
+
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    def c(col, row, t, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "평가항목"), c(1, 0, "평가기준"), c(2, 0, "배점"), c(3, 0, "평점")],
+            [c(0, 1, "경영상태", 4), c(1, 1, "기업신용평가등급"), c(2, 1, ""), c(3, 1, "", 4)],
+            [c(1, 2, "BBB- 이상"), c(2, 2, "6.0")], [c(1, 3, "BB+ ~ BB-"), c(2, 3, "5.4")], [c(1, 4, "B+ 이하"), c(2, 4, "4.8")]]
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+"})
+    fill_hwpx(_mini_hwpx(tmp_path / "c.hwpx", _tbl(rows)), tmp_path / "co.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 20)))
+    out = zipfile.ZipFile(tmp_path / "co.hwpx").read("Contents/section0.xml").decode()
+    cell = lambda col, row: re.sub(r"<[^>]+>", "", re.search(
+        rf'<hp:tc>((?:(?!</hp:tc>).)*colAddr="{col}" rowAddr="{row}"(?:(?!</hp:tc>).)*)</hp:tc>', out, re.S).group(1))
+    assert "BB+" not in out.replace("BB+ ~ BB-", "")
+    assert cell(2, 1) == "" and cell(3, 1) == "5.4"

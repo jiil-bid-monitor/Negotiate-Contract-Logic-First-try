@@ -162,10 +162,20 @@ def guess_method(standard: str, range_lo: float | None, range_hi: float | None,
 
 # 첨부 공고문에서 읽는 값 — 늘 읽는다(2026-10-23 사용자 요청). 나라장터 값이 있으면 그대로 두고 빈 칸만 채우며, 다르면 안내.
 # "※ 기초금액 : 금 | 139,000,000원"(hwpx 표 칸 구분 |), "기초금액(부가세 포함): 139,000,000원" 등
-_BASIS_TEXT_RE = re.compile(r"기초\s*금액\s*(?:\([^)]{0,20}\))?[\s|:：]*(?:금\s*)?[\s|]*([\d,]{7,})\s*원")
-_RATE_TEXT_RE = re.compile(r"낙찰\s*하한율[^\d\n]{0,15}(\d{2}(?:\.\d+)?)\s*%")
+# 이름표는 글자 사이 띄움·줄바꿈을 늘 허용(`_sp`) — 공고문 표가 "7) 기  초  금  액 : 금 723,349,000 원"처럼 글자를 띄워 적음
+# (11/20 한국농어촌공사 R26BK01833366 — 붙여 쓴 이름표만 알아봐서 기초금액을 놓쳤음). 새 이름표를 더할 때도 `_sp`로 쓸 것.
+def _sp(word: str) -> str:
+    """'기초금액' → 글자마다 빈칸 허용 패턴 — 글자 사이 빈칸·줄바꿈이 있어도 같은 이름표로."""
+    return r"\s*".join(re.escape(ch) for ch in word)
+
+
+_BASIS_TEXT_RE = re.compile(_sp("기초금액") + r"\s*(?:\([^)]{0,20}\))?[\s|:：]*(?:금\s*)?[\s|]*([\d,]{7,})\s*원")
+_RATE_TEXT_RE = re.compile(_sp("낙찰하한율") + r"[^\d]{0,15}?(\d{2}(?:\.\d+)?)\s*%")
 # "기초금액의 ±3%" · "기초금액 대비 ±2%" · "기초금액의 ±3퍼센트"
-_RANGE_TEXT_RE = re.compile(r"기초\s*금액(?:의|\s*대비)?\s*[±+\-]\s*(\d(?:\.\d+)?)\s*(?:%|퍼센트)")
+_RANGE_TEXT_RE = re.compile(_sp("기초금액") + r"(?:의|\s*대비)?\s*[±+\-]\s*(\d(?:\.\d+)?)\s*(?:%|퍼센트)")
+# "기초금액을 기준으로 G2B 복수예비가격 작성프로그램에서 작성된 ±2% 범위내의 복수예비가격"(11/20 같은 공고) —
+# 기초금액·예비가격 뒤 100자 안(숫자 % 없이)에 "±N% 범위"
+_RANGE_TEXT2_RE = re.compile("(?:" + _sp("기초금액") + "|" + _sp("예비가격") + r")[^%±]{0,100}?±\s*(\d(?:\.\d+)?)\s*(?:%|퍼센트)\s*범위")
 
 # 순공사원가 조건 — 공고문 문장 그대로 읽음(10/29 사용자 결정: 98%를 고정 조건으로 두지 않음). 예) "예정가격이 100억원 미만인
 # 공사인 경우, 입찰가격을 … 순공사원가의 100분의 98 미만으로 입찰한 자는 심사대상에서 제외"
@@ -240,7 +250,7 @@ def parse_notice_text(text: str) -> dict:
         rate = _num(m.group(1))
         if rate and 50 <= rate < 100:
             out["lower_rate"] = rate
-    if m := _RANGE_TEXT_RE.search(text):
+    if m := (_RANGE_TEXT_RE.search(text) or _RANGE_TEXT2_RE.search(text)):
         width = _num(m.group(1))
         if width and width <= 5:
             out["range_lo"], out["range_hi"] = -width, width

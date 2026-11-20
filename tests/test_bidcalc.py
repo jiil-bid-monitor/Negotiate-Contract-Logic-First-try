@@ -137,6 +137,19 @@ class LookupTest(unittest.TestCase):
                          {"basis": 85300000, "lower_rate": 87.745, "range_lo": -2, "range_hi": 2})
         self.assertEqual(bidcalc.parse_notice_text("기초금액은 개찰 전 나라장터에 공개합니다."), {})
 
+    def test_parse_notice_text_spaced_labels_and_range_sentence(self):
+        # 11/20 한국농어촌공사 R26BK01833366 공고문 모양 — 글자 띄운 이름표, 줄바꿈 뒤 하한율, "±2% 범위내의 복수예비가격"
+        text = ("6) 추  정  금  액 : 금 744,857,000 원\n - 추 정 가 격  :  금 657,590,000 원\n"
+                "7) 기  초  금  액 : 금 723,349,000 원\n"
+                "예정가격 이하로서 낙찰하한율\n(89.745%) 이상의 최저가격 입찰한 자\n"
+                "5) (예정가격) 기초금액을 기준으로 G2B 복수예비가격 작성프로그램에서 작성된 ±2% 범위내의 복수\n예비가격 15개")
+        self.assertEqual(bidcalc.parse_notice_text(text),
+                         {"basis": 723349000, "lower_rate": 89.745, "range_lo": -2, "range_hi": 2})
+        # 추정가격·추정금액은 기초금액으로 읽지 않음
+        self.assertNotIn("basis", bidcalc.parse_notice_text("추 정 가 격 : 금 657,590,000 원"))
+        # '범위' 없이 ±만 있는 다른 문장(실적·하한율 오차 등)은 변동폭으로 안 봄
+        self.assertNotIn("range_lo", bidcalc.parse_notice_text("예비가격 산정 시 오차 ±5% 이내 실적"))
+
     def test_guess_method(self):
         self.assertEqual(bidcalc.guess_method("", -2, 2), "pps")
         self.assertEqual(bidcalc.guess_method("", -3, 3), "mois")

@@ -176,6 +176,19 @@ class BidLog:
             self._write(rows)
             return row
 
+    def fill_outsource(self, entry_id: str, amount: float) -> bool:
+        """외주 금액 칸이 빈 기록에 개찰 결과의 지일 실제 투찰 금액을 넣음 — 웹앱 금액과 다르면 그 금액이 외주 추천 금액이라
+        (11/20 사용자 요청). 한 번만(`outsourceAuto`) — 담당자가 지운 뒤엔 다시 넣지 않음."""
+        with self._lock:
+            rows = self._read()
+            row = next((r for r in rows if r.get("id") == entry_id), None)
+            if row is None or row.get("outsource") or row.get("outsourceAuto"):
+                return False
+            row["outsourceAuto"] = True
+            self._write(rows)
+        self.update(entry_id, {"outsource": amount, "actual": "out"})
+        return True
+
     def set_result(self, entry_id: str, result: dict[str, Any]) -> None:
         """개찰 결과(`webapp/bidresult.py`)를 그 기록에 저장 — 지운 기록이면 아무것도 안 함."""
         with self._lock:

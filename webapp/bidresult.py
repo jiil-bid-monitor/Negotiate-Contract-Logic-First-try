@@ -250,6 +250,14 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
         sim = recorded_sim(bidders, e, res)
         if sim != old:
             log.set_result_field(e["id"], "recorded", sim)
+    # 외주 금액이 빈 기록인데 지일 실제 투찰 금액이 웹앱 금액과 다르면 — 그 금액이 외주 추천 금액(11/20 사용자 요청)
+    for e in log.entries():
+        res = e.get("result") or {}
+        own = res.get("own") or {}
+        amt = own.get("amount")
+        if res.get("status") == "완료" and amt and not e.get("outsource") and not e.get("outsourceAuto") \
+                and e.get("bid") is not None and abs(float(amt) - float(e["bid"])) >= 1:
+            log.fill_outsource(e["id"], amt)
     # 외주 금액 비교(11/16) — 개찰 뒤에 외주 금액을 넣었거나 고친 기록도
     for e in log.entries():
         res = e.get("result") or {}

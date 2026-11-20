@@ -3328,6 +3328,40 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 for c in cells:  # '(회사)☎ / (H.P)☎'·'자본금      매출액'(쌍점 없는 칸 안 이름표, 11/18 봉평)
                     if c.start in targets:
                         continue
+                    # 자리표시 '총 ○○명'(11/20 사용자 요청: 일반현황 '인력 구성현황 | 총 ○○명 / ※ 보유인력 내역서 별도첨부') = 종업원 수
+                    left = by_pos.get((c.row, c.col - 1)) or next((o for o in cells if o.row == c.row and o.col + o.colspan == c.col), None)
+                    staff_n = re.sub(r"명$", "", _value("종업원 수", vault) or "")
+                    if staff_n and re.search(rf"총\s*{_PH}\s*명", c.text) and (
+                            re.search(r"인력|직원|종업원|근로자", _sq(left.text) if left else "") or re.search(r"인력|직원|종업원", _sq(c.text))):
+                        new_seg = re.sub(rf"(총\s*){_PH}(\s*명)", lambda mm: mm.group(1) + _mark(staff_n) + mm.group(2), xml[c.start:c.end], count=1)
+                        if new_seg != xml[c.start:c.end]:
+                            edits.append((c, None, re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", new_seg, flags=re.S)))
+                            targets.add(c.start)
+                            rep.filled.append(f"총 인원 → {staff_n}명")
+                            continue
+                    # '□ 주요연혁 <간략기재>' 아래 글머리만 있는 '○' 문단(같은 칸에 '□ 회사소개 / ○'도 있음, 11/20 사용자 지적 — 연혁이 빠짐)
+                    # → 그 '○' 자리에 연혁을 한 줄씩('○ 2009. 09  설립'), 회사소개는 그대로
+                    if vault.history and "연혁" in _sq(c.text):
+                        seg = xml[c.start:c.end]
+                        ps = _spans(seg, "p")
+                        for i in range(len(ps) - 1):
+                            head_t, next_t = _text(seg[ps[i][0]:ps[i][1]]), _text(seg[ps[i + 1][0]:ps[i + 1][1]])
+                            if re.fullmatch(r"\s*[□■◇◆▣○●]?\s*(?:주\s*요\s*)?연\s*혁.{0,20}", head_t) and re.fullmatch(r"\s*[○●◦]\s*", next_t):
+                                tmpl = seg[ps[i + 1][0]:ps[i + 1][1]]
+                                bullet = next_t.strip()
+                                open_tag = re.match(r"<(?:[\w.-]+:)?p\b[^>]*>", tmpl).group()
+                                pre = re.match(r"<([\w.-]+:)?p\b", tmpl).group(1) or ""
+                                ch = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', tmpl)
+                                ch = ch.group(1) if ch else "0"
+                                lines = [f"{_fmt_ymd(h.get('연월일'))}  {h.get('내용') or ''}".strip() for h in vault.history]
+                                paras = "".join(f'{open_tag}<{pre}run charPrIDRef="{ch}"><{pre}t> {bullet} {_mark(ln)}</{pre}t></{pre}run></{pre}p>' for ln in lines)
+                                seg = seg[:ps[i + 1][0]] + paras + seg[ps[i + 1][1]:]
+                                edits.append((c, None, seg))
+                                targets.add(c.start)
+                                rep.filled.append(f"연혁 → {len(lines)}줄")
+                                break
+                        if c.start in targets:
+                            continue
                     new_seg, done = _fill_marks(xml[c.start:c.end], vault)
                     if done:
                         edits.append((c, None, new_seg))

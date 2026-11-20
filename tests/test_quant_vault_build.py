@@ -4440,3 +4440,21 @@ def test_subtotal_row_score_also_in_item_score_cell(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
     assert "경영상태 소계|5|4.5|" in text and "BBB0 이상|5.0|4.5|" in text, text
     assert "신인도 소계|4|4|" in text and "2점|4|" in text, text
+
+
+def test_staff_total_placeholder_and_history_bullet(tmp_path: Path):
+    """11/20 사용자 요청·지적(제안업체 일반현황 및 연혁): '인력 구성현황 | 총 ○○명 / ※ 보유인력 내역서 별도첨부' → '총 18명',
+    '□ 주요연혁 <간략기재> / ○ / □ 회사소개 / ○' 칸에 연혁이 빠짐 → 연혁 아래 '○' 자리에 한 줄씩, 회사소개는 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    multi = lambda col, row, ts, span=1: (f'<hp:tc><hp:subList>{"".join(p(t) for t in ts)}</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+                                          f'<hp:cellSpan colSpan="{span}" rowSpan="1"/><hp:cellSz width="9000" height="1000"/></hp:tc>')
+    body = _tbl([[_c(0, 0, "인력 구성현황"), multi(1, 0, ["총 ○○명", " ※ 보유인력 내역서 별도첨부"])],
+                 [multi(0, 1, ["□ 주요연혁 &lt;간략기재&gt;", " ○", "", "□ 회사소개", " ○ "], 2)]])
+    v = vault.Vault({}, info={"회사명": "(주)가상", "종업원 수": "18"})
+    v.history = [{"연월일": "2009-09-01", "내용": "법인 설립"}, {"연월일": "2015-03-01", "내용": "공장 등록"}]
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "총 18명" in text and "○○" not in text, text
+    assert re.search(r"주요연혁 &lt;간략기재&gt;\| ○ 2009\D+09\S*\s+법인 설립\| ○ 2015\D+03\S*\s+공장 등록\|□ 회사소개\| ○ \|", text), text

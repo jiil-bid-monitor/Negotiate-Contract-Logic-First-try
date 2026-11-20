@@ -4339,8 +4339,8 @@ $("awardList").onclick = (e) => {
     // 시험 페이지는 시험 목록의 zip, 이미 있던 폴더면 이번에 더해진 파일만(since)
     a.href = `${AWARD_API}/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=${d.since ? "&since=" + d.since : ""}`;
     document.body.appendChild(a); a.click(); a.remove();
-    return d.since ? "같은 공고 폴더에 이번 서류를 더했습니다 — 더해진 파일만 '…_추가.zip'으로 받았습니다. 먼저 받은 zip과 같은 곳에 풀면 한 폴더로 합쳐집니다."
-      : "폴더를 만들고 첨부를 받았습니다 — 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 채울 칸은 '서류 현황'에서 볼 수 있습니다.";
+    return d.since ? "같은 공고 폴더에 이번 서류를 더했습니다 — 더해진 파일만 '…_추가.zip'으로 받았습니다. 먼저 받은 zip과 같은 곳에 풀면 한 폴더로 합쳐집니다. 엑셀을 처음 열면 위의 '편집 사용'을 눌러야 서식 칸이 계산됩니다."
+      : "폴더를 만들고 첨부를 받았습니다 — 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 채울 칸은 '서류 현황'에서 볼 수 있습니다. 엑셀을 처음 열면 위의 '편집 사용'을 눌러야 서식 칸이 계산됩니다.";
   });
   const del = e.target.closest("[data-award-del]");
   if (del && confirm("목록에서 뺄까요? (만든 폴더는 지우지 않습니다)")) awardAct(del, AWARD_API + "/delete", { key: del.dataset.awardDel });

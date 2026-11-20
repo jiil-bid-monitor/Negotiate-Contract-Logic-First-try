@@ -4106,7 +4106,9 @@ function renderAward(items) {
       `<button type="button" data-award-del="${esc(key)}">목록에서 빼기</button>`].join("");
     const detail = AWARD_OPEN.has(key) ? `<tr class="award-detail"><td colspan="${kind === "done" ? 3 : 4}"><div id="awardDetail-${esc(key)}" class="award-panel">불러오는 중…</div></td></tr>` : "";
     const reissue = (v.reissue || []).length ? ` <span class="badge urgentb" title="${esc(v.reissue.map((r) => r.kind + ' (가진 것 ' + r.have + ')').join(', '))}">⚠ 새로 발급 ${v.reissue.length}</span>` : "";
-    const meta = [v.institution, v.work, bid.at ? "투찰 " + bid.at.slice(5).replace("-", "/") : ""].filter(Boolean).map(esc).join(" · ");
+    // 계약 종류(일반·제한·지명경쟁, 수의계약 — 투찰 기록의 나라장터 계약방법, 11/20 사용자)
+    const method = bid.method || (v.private ? "수의계약" : "");
+    const meta = [v.institution, v.work, method, bid.at ? "투찰 " + bid.at.slice(5).replace("-", "/") : ""].filter(Boolean).map(esc).join(" · ");
     return `<tr><td class="award-name"><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener" title="${esc(key)} — 나라장터에서 보기">${esc(v.title || key)}</a>${reissue}<div class="sub">${meta}</div></td>
       <td class="award-money">${bid.amount ? `<b title="${Number(bid.amount).toLocaleString()}원">${won(Number(bid.amount))}</b>` : `<span class="sub">투찰 기록 없음</span><br>`}${result}${kind === "done" && v.status === "대기" && rank != null && rank > awardLimit(v) ? `<div class="sub">${awardDesignated(v) ? "지명경쟁은 1등만 가능성이 있음" : "5등 밖 — 차례가 오지 않음"}</div>` : ""}</td>
       ${kind === "done" ? "" : `<td>${steps}</td>`}

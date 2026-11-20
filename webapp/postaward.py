@@ -260,7 +260,33 @@ def _contract_info(row: dict) -> dict[str, str]:
     d = _date(row.get("cntrctDate") or row.get("cntrctCnclsDate"))
     due = _date(row.get("thtmScmpltDate"))  # 준공(완료)예정일(물품 계약은 비어 있을 때가 많음)
     return {"no": str(row.get("untyCntrctNo") or ""), "url": str(row.get("cntrctDtlInfoUrl") or ""),
-            "date": d.strftime("%Y-%m-%d") if d else "", "due": due.strftime("%Y-%m-%d") if due else ""}
+            "date": d.strftime("%Y-%m-%d") if d else "", "due": due.strftime("%Y-%m-%d") if due else "",
+            # 변경계약 따라가기(11/20 사용자) — 금액·변경일이 바뀌면 준공·청구 서류 파란 칸을 고침
+            "amount": _digits(row.get("thtmCntrctAmt") or row.get("totCntrctAmt")), "chg": str(row.get("chgDt") or "")[:16]}
+
+
+def read_progress(xlsx: Path, label: str) -> str:
+    """서류 기본사항에서 그 이름 칸(제출일·청구일)이 채워졌으면 'YYYY-MM-DD' — 담당자가 서류를 다 써서 낸 것으로 봄(11/20 사용자
+    '착공·준공·청구는 사람이 확인하기 전엔 모름' → 서류 날짜로 단계). 수식·빈칸이면 ''."""
+    from openpyxl import load_workbook
+
+    try:
+        wb = load_workbook(xlsx, read_only=True)
+    except Exception:  # noqa: BLE001 — 열려 있거나 깨진 파일은 다음에
+        return ""
+    try:  # 읽기 전용은 파일을 잡고 있음 — 꼭 닫아야 담당자가 그 파일을 저장할 수 있음
+        if "기본사항" not in wb.sheetnames:
+            return ""
+        for row in wb["기본사항"].iter_rows(min_row=1, max_row=80, max_col=2, values_only=True):
+            if str(row[0] or "").strip() == label:
+                v = row[1]
+                if isinstance(v, datetime):
+                    return v.strftime("%Y-%m-%d")
+                d = _date(v) if isinstance(v, str) and not v.startswith("=") else None
+                return d.strftime("%Y-%m-%d") if d else ""
+        return ""
+    finally:
+        wb.close()
 
 
 def contract_values(row: dict) -> dict[str, Any]:
@@ -638,6 +664,7 @@ def lookup(client: Any, base_url: str, no: str, ord_: str, work: str) -> tuple[s
 
 class PostAward:
     def __init__(self, data_dir: Path, bidlog=None, own_bizno: str = "", now=_now):
+        self._prog_cache: dict[str, tuple[float, str]] = {}
         self.path = Path(data_dir) / STATE_FILE
         self.bidlog = bidlog
         self.own = _digits(own_bizno)
@@ -661,11 +688,36 @@ class PostAward:
         """화면용 — 공사 / 물품·용역 / 업무 미확인 순, 그 안에선 최근 추가 먼저."""
         order = {"공사": 0, "물품·용역": 1}
         opened, bids = self._opened(), self._bids()
-        rows = [{**v, "group": group_of(v.get("work", "")),
+        rows = [{**v, "group": group_of(v.get("work", "")), **({"progress": self._progress(v)} if v.get("folder") and not v.get("qualOnly") else {}),
                  **({"opening": opened[k]} if k in opened else {}),
                  **({"bid": bids.get(k) or bids.get(v.get("no", ""))} if bids.get(k) or bids.get(v.get("no", "")) else {})}
                 for k, v in self._read().items()]
         return sorted(rows, key=lambda v: (order.get(v["group"], 2), v.get("added", "")), reverse=False)
+
+    def _progress(self, v: dict) -> dict[str, str]:
+        """착수(착공)·납품(준공·완료)·청구 서류의 제출일·청구일 — 파일 저장 시각이 같으면 지난번 값(목록을 자주 그려서)."""
+        folder = Path(v["folder"])
+        out = {}
+        work = v.get("work", "")
+        docs = []
+        if work in TEMPLATES:
+            _, st, doc = TEMPLATES[work]
+            docs.append(("start", folder / st / doc, "제출일"))
+        if work in DONE_TEMPLATES:
+            docs.append(("done", folder / done_dir(folder, work) / DONE_TEMPLATES[work][2], "제출일"))
+        docs.append(("claim", folder / CLAIM_TEMPLATE[1] / CLAIM_TEMPLATE[2], "청구일"))
+        for k, f, label in docs:
+            try:
+                m = f.stat().st_mtime
+            except OSError:
+                continue
+            hit = self._prog_cache.get(str(f))
+            if not hit or hit[0] != m:
+                hit = (m, read_progress(f, label))
+                self._prog_cache[str(f)] = hit
+            if hit[1]:
+                out[k] = hit[1]
+        return out
 
     def _opened(self) -> dict[str, dict]:
         """투찰 기록의 개찰 결과 중 지일 등수 — 낙찰자 확정 전에도 탈락·등수를 보이게(11/12 사용자 요청). 표시만, 상태는 안 바꿈."""
@@ -676,7 +728,7 @@ class PostAward:
             if res.get("status") != "완료" or not own or not e.get("noticeNo"):
                 continue
             o = {"rank": own.get("rank"), "underRank": own.get("underRank"), "bidders": res.get("bidderCount"),
-                 "remark": own.get("remark") or ""}
+                 "remark": own.get("remark") or "", "at": (e.get("openingAt") or "")[:10]}  # 개찰일 — 2등 기다림이 길어지는지(11/20)
             out.setdefault(f'{e["noticeNo"]}-{(e.get("noticeOrd") or "")[:3]}', o)
             out.setdefault(e["noticeNo"], o)
         return out
@@ -1044,7 +1096,8 @@ class PostAward:
             self._write(items)
         return contract_values(row), [f"  나라장터 계약정보 찾음(통합계약번호 {row.get('untyCntrctNo')}) — 계약일·착수일·준공예정일 등을 채움(파란 칸)"]
 
-    def _fill_done(self, key: str, folder: Path, nf, templates: Path, cv: dict | None = None, contract_notes=None) -> list[str]:
+    def _fill_done(self, key: str, folder: Path, nf, templates: Path, cv: dict | None = None, contract_notes=None,
+                   force: set[str] | frozenset = frozenset()) -> list[str]:
         """3_준공(준공계·납품계·완료계)·4_청구(청구서) 기본사항 파란 칸 — 공고·낙찰 값(수요기관·공고명·낙찰금액) <
         나라장터 계약정보(contract_lookup(공고) → 계약정보 한 줄: 계약일·착수일·준공예정일·금액·담당부서, 계약 뒤에 생김) <
         담당자가 착공·착수서류에 적은 값 순으로(11/18). 담당자가 고친 칸은 안 건드림. 안내 줄을 돌려줌."""
@@ -1075,6 +1128,7 @@ class PostAward:
             if k in cv and k != "gwiha" and _key(cv[k]) != _key(val):
                 lines.append(f"  확인: {DONE_NAMES[k]} — {stage0}/{doc0} '{_key(val)}', 나라장터 계약정보 '{_key(cv[k])}' (계약서로 확인)")
         values.update(got)
+        values.update({k: cv[k] for k in force if cv.get(k) not in (None, "")})  # 변경계약 — 착수서류(원계약) 값보다 새 계약 값
         auto, head = dict(v.get("autoFill") or {}), []
         name0, _, doc0d = DONE_TEMPLATES[work]
         for name, stage, doc in ((name0, done_dir(folder, work), doc0d), CLAIM_TEMPLATE):
@@ -1109,7 +1163,10 @@ class PostAward:
             return 0
         found = 0
         for key, v in self._read().items():
-            if v.get("status") != "낙찰" or (v.get("contract") or {}).get("date"):
+            if v.get("status") != "낙찰":
+                continue
+            if (v.get("contract") or {}).get("date"):
+                self._follow_change(key, v, contract_lookup)
                 continue
             try:
                 row = contract_lookup(v)
@@ -1128,6 +1185,52 @@ class PostAward:
                         items[key]["contractScan"] = nxt.strftime("%Y-%m-%d")
                 self._write(items)
         return found
+
+    def _follow_change(self, key: str, v: dict, contract_lookup) -> bool:
+        """계약이 올라온 공고 — 나라장터 계약정보를 다시 보고 계약금액·준공예정일이 바뀌었으면(변경계약) 남기고 준공·청구 서류
+        파란 칸을 새 값으로(담당자가 고친 칸은 그대로), 서류_확인.txt에 한 줄(11/20 사용자 '변경계약도 자동으로')."""
+        old = v.get("contract") or {}
+        try:
+            row = contract_lookup(v)
+        except Exception:  # noqa: BLE001
+            return False
+        if not row:
+            return False
+        new = _contract_info(row)
+        if "amount" not in old:  # 예전 기록 — 이번 값을 기준으로 남기기만
+            with self._lock:
+                items = self._read(); items[key]["contract"] = {**old, **new}; self._write(items)
+            return False
+        changed = {k: (old.get(k, ""), new[k]) for k in ("amount", "due") if new.get(k) and new[k] != old.get(k, "")}
+        if not changed:
+            return False
+        today = datetime.now().strftime("%Y-%m-%d")
+        say = {"amount": "계약금액", "due": "준공예정일"}
+        fmt = lambda k, x: f"{int(x):,}원" if k == "amount" and x else (x or "-")  # noqa: E731
+        line = f"변경계약 반영 {today}: " + ", ".join(f"{say[k]} {fmt(k, a)} → {fmt(k, b)}" for k, (a, b) in changed.items())
+        with self._lock:
+            items = self._read()
+            items[key]["contract"] = {**old, **new}
+            items[key].setdefault("changes", []).append({"at": today, **{k: b for k, (_, b) in changed.items()}})
+            self._write(items)
+        folder = Path(v["folder"]) if v.get("folder") else None
+        if folder and folder.is_dir() and not v.get("qualOnly") and v.get("templates") and Path(v["templates"]).is_dir():
+            from types import SimpleNamespace
+            nf = SimpleNamespace(title=v.get("title", ""), institution=v.get("institution", ""), raw={})
+            cv = contract_values(row)
+            force = {"amount", "total"} if "amount" in changed else set()
+            force |= {"due"} if "due" in changed else set()
+            try:
+                self._fill_done(key, folder, nf, Path(v["templates"]), cv, [f"  {line}"], force=force)
+            except Exception:  # noqa: BLE001 — 서류를 못 고쳐도 계약 값은 남김
+                line += " — 서류는 못 고침(파일이 열려 있으면 닫고 '첨부 다시 받기')"
+            note = folder / "공고문서" / "서류_확인.txt"
+            try:
+                with note.open("a", encoding="utf-8") as f:
+                    f.write("\n" + line + " — 준공·청구 서류 파란 칸을 새 값으로(직접 고친 칸은 그대로). 착수서류는 원계약 그대로.\n")
+            except OSError:
+                pass
+        return True
 
     def check(self, client: Any, base_url: str, keys: list[str] | None = None) -> dict[str, int]:
         """'대기' 공고의 낙찰자를 확인. keys를 주면 그 공고만(상태와 상관없이 다시)."""
@@ -1384,7 +1487,8 @@ def selfcheck() -> None:
         look = lambda v: (calls.append(v["no"]), row5 if k5.startswith(v["no"]) else None)[1]  # noqa: E731 — 다른 낙찰 공고는 아직 계약 없음
         assert pa.check_contracts(look) == 1 and pa._read()[k5]["contract"]["date"] == "2025-03-12"
         n = len(calls)
-        assert pa.check_contracts(look) == 0 and len(calls) == n + (n - 1)  # 계약일이 생긴 공고는 다시 안 부름
+        # 계약일이 생긴 공고도 다시 봄 — 변경계약(금액·준공예정일)을 따라가려고(11/20). 같으면 아무것도 안 바꿈
+        assert pa.check_contracts(look) == 0 and len(calls) == 2 * n and "changes" not in pa._read()[k5]
         assert pa.check_contracts(None) == 0
         # 착수서류를 안 채워도 나라장터 계약정보로 날짜·수신자(계약기관+담당부서), 조달청 대행이면 수신자는 그대로
         k6 = "R26BK00000006-000"

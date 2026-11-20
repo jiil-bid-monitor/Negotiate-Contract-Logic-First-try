@@ -561,8 +561,10 @@ def make_handler(app: App):
                     return self._json({"ok": True, "items": app.postaward_test.items()})
                 if url.path == "/api/postaward/folder":
                     # 폴더는 공유 폴더 맨 위 '낙찰후서류'(NAS: \\jiilserver\jiil-webapp\낙찰후서류), POSTAWARD_DIR로 바꿈 — 시험은 '낙찰후서류_테스트'
+                    from .postaward import template_dir
+                    # 표준틀은 운영 폴더 것 — 시험 폴더(낙찰후서류_테스트)엔 _표준틀이 없음(NAS 컨테이너는 공유 폴더 주소로 틀을 못 찾아 root/_표준틀을 봄)
                     folder, _ = pa.prepare(str(data.get("key") or ""), app.award_root(test), qual_only=data.get("stage") == "qual",
-                                           contract_lookup=contract_lookup())
+                                           templates=template_dir(app.award_root(False)), contract_lookup=contract_lookup())
                     return self._json({"ok": True, "folder": str(folder), "items": pa.items()})
                 if url.path == "/api/postaward/delete":
                     pa.remove(str(data.get("key") or ""))

@@ -162,9 +162,9 @@ class App:
         log._write(rows)
         self.postaward_test.sync_bidlog()
 
-    def fill_award_test_sample(self, key: str, folder: Path, since: float) -> list[str]:
+    def fill_award_test_sample(self, key: str, folder: Path, before: set[str]) -> list[str]:
         """시험 공고(광양) 서류를 만든 직후 — 이번에 새로 생긴 서류만 다 채운 예시로 바꿈('2_다 채운 예시/<단계>_<서류>_다채운예시.xlsx').
-        담당자가 이미 고친(먼저 있던) 파일은 안 건드림. 착수서류를 바꿨으면 준공·청구로 다시 옮기지 않게 저장 시각을 맞춤."""
+        before = 이번에 만들기 전에 이미 있던 서류(경로) — 그건 안 건드림(먼저 만든 적격심사서류가 '…_추가.zip'에 또 들어가지 않게, 11/20). 착수서류를 바꿨으면 준공·청구로 다시 옮기지 않게 저장 시각을 맞춤."""
         import shutil
 
         if not key.startswith(AWARD_TEST_SEED["noticeNo"]):
@@ -174,7 +174,7 @@ class App:
         for f in sorted(src.glob("*_다채운예시.xlsx")) if src else []:
             doc = f.name.split("_", 2)[2].replace("_다채운예시", "")
             for target in folder.glob(f"*/{doc}"):
-                if target.stat().st_mtime >= since:
+                if str(target) not in before:
                     shutil.copyfile(f, target)
                     done.append(f"{target.parent.name}/{doc}")
         pa = self.postaward_test
@@ -602,12 +602,12 @@ def make_handler(app: App):
                     v0 = next((x for x in pa.items() if f"{x.get('no')}-{x.get('ord')}" == key or x.get("no") == key), {})
                     # 이미 폴더가 있으면(적격심사 서류를 받은 공고 등) 이번에 더해진 파일만 zip으로 — 화면이 since로 받음(11/20 사용자)
                     since = time.time() - 5 if v0.get("folder") else None
-                    started = time.time() - 30  # NAS 시계가 조금 달라도 이번에 만든 파일을 잡게
+                    before = {str(x) for x in Path(v0["folder"]).rglob("*.xlsx")} if v0.get("folder") and Path(v0["folder"]).is_dir() else set()
                     # 표준틀은 운영 폴더 것 — 시험 폴더(낙찰후서류_테스트)엔 _표준틀이 없음(NAS 컨테이너는 공유 폴더 주소로 틀을 못 찾아 root/_표준틀을 봄)
                     folder, _ = pa.prepare(key, app.award_root(test), qual_only=data.get("stage") == "qual",
                                            templates=template_dir(app.award_root(False)), contract_lookup=contract_lookup())
                     if test:
-                        app.fill_award_test_sample(key, folder, started)
+                        app.fill_award_test_sample(key, folder, before)
                     return self._json({"ok": True, "folder": str(folder), "since": since, "items": pa.items()})
                 if url.path == "/api/postaward/delete":
                     pa.remove(str(data.get("key") or ""))

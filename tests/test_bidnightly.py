@@ -93,8 +93,8 @@ class NightlyTest(unittest.TestCase):
 
     def test_bidlog_notices_watched(self):
         self.run = run_with()
-        self.log.add({"noticeNo": "R26BK00000005", "bid": 100000000, "recordedAt": "x"})
-        self.night.run_once(datetime(2026, 11, 20, 22, 0, tzinfo=KST))
+        self.log.add({"noticeNo": "R26BK00000005", "bid": 100000000})
+        self.night.run_once(datetime.now(KST) + timedelta(days=2))  # 기록 시각 = 지금(add가 정함), 개찰 = 다음 날
         self.assertEqual(self.calls, ["R26BK00000005-000"])
         self.assertEqual(json.loads((self.tmp / "out" / LIVE_FILE).read_text(encoding="utf-8"))["source"], "투찰")
 

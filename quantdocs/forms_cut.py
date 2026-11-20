@@ -74,6 +74,39 @@ def _squash(s: str) -> str:
     return re.sub(r"\s+", "", s)
 
 
+def _with_sec_pr(prefix: str, body: str) -> str:
+    """쪽 설정 문단(prefix)의 secPr run을 body 첫 문단 안으로 옮기고 그 빈 문단은 뺌(11/20 사용자 '1페이지 여백이 너무 많아' —
+    장성 서식 1: 빈 문단이 원본 앞 글의 문단 모양(20pt·줄 간격 290%)을 그대로 가져 첫 쪽 위에 2cm 빈 줄이 생겨 본 표가 다음 쪽으로 밀렸음).
+    옮긴 run은 글(t)을 빼고 글자 모양을 받는 문단 첫 run과 같게(빈 run이 줄 높이를 키우지 않게), 받는 문단 줄 배치는 지움(한글이 다시 계산).
+    옮길 수 없으면 예전처럼 prefix + body."""
+    if not prefix:
+        return body
+    whole = re.search(r"<((?:[\w.-]+:)?run)\b[^>]*>(?:(?!</\1>).)*?<(?:[\w.-]+:)?secPr\b.*?</\1>", prefix, re.S)
+    head = re.match(r"<(?:[\w.-]+:)?p\b[^>]*>", body)
+    if not whole or not head:
+        return prefix + body
+    run = re.sub(r"<((?:[\w.-]+:)?t)\b[^>]*>\s*</\1>|<(?:[\w.-]+:)?t\b[^>]*/>", "", whole.group(0))
+    first_p = body[:_para_end(body)]
+    char = re.search(r'<(?:[\w.-]+:)?run\b[^>]*\bcharPrIDRef="(\d+)"', first_p)
+    if char:
+        run = re.sub(r'(<(?:[\w.-]+:)?run\b[^>]*\bcharPrIDRef=")\d+(")', rf"\g<1>{char.group(1)}\2", run, count=1)
+    first_p = first_p[:head.end()] + run + first_p[head.end():]
+    first_p = re.sub(r"<((?:[\w.-]+:)?linesegarray)\b[^>]*>.*?</\1>|<(?:[\w.-]+:)?linesegarray\b[^>]*/>", "", first_p, flags=re.S)
+    return first_p + body[_para_end(body):]
+
+
+def _para_end(body: str) -> int:
+    """body 첫 문단(안에 든 문단·표까지)의 끝 위치."""
+    depth = 0
+    for m in re.finditer(r"<(/?)((?:[\w.-]+:)?p)\b[^>]*?(/?)>", body):
+        if m.group(3):
+            continue
+        depth += -1 if m.group(1) else 1
+        if depth == 0:
+            return m.end()
+    return len(body)
+
+
 def _sec_pr_para(xml: str, first: Para) -> str:
     """구역 첫 문단에서 쪽 설정(secPr·단 설정 ctrl)이 든 run만 남긴 문단 — 원래 글·표는 뺌."""
     seg = xml[first.start:first.end]
@@ -285,7 +318,7 @@ def cut(path: Path, out_dir: Path, names: dict[str, str] | None = None) -> list[
         body = re.sub(r'^(<(?:[\w.-]+:)?p\b[^>]*?)\bpageBreak="1"', r'\1pageBreak="0"', body, count=1)  # 빈 첫 쪽 방지
         first = all_paras[0]
         prefix = "" if f.paras[0].start == first.start else _sec_pr_para(xml, first)
-        new_xml = head + prefix + body + tail
+        new_xml = head + _with_sec_pr(prefix, body) + tail
         if names and names.get(f.no):  # 하위 서식('4-1')은 이름에 그 번호가 따로 있을 때만(PDF 서식 다시 만들기가 줌)
             f.title = names[f.no]
         f.file = f"서식{f.no.replace('-', '_')}_{_safe(f.title)}.hwpx"
@@ -444,7 +477,7 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path, fit_pages: b
             preview.append(_text(body))
         starts_at_first = bodies[sec][0][0].paras[0].start == first.start
         prefix = "" if starts_at_first else _sec_pr_para(xml, first)
-        new_sections[sec] = xml[:first.start] + prefix + "".join(chunks) + xml[all_paras[-1].end:]
+        new_sections[sec] = xml[:first.start] + _with_sec_pr(prefix, "".join(chunks)) + xml[all_paras[-1].end:]
 
     out.parent.mkdir(parents=True, exist_ok=True)
     replace = {"Preview/PrvText.txt": " ".join(preview)[:1000].encode("utf-8")}

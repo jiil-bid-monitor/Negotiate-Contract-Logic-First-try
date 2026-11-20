@@ -57,6 +57,8 @@ VIEWER_MESSAGE = "이 서버는 결과 보기 전용입니다 — 수집은 서�
 AWARD_TEST_SEED = {"noticeNo": "R25BK01125448", "noticeOrd": "000", "title": "광양시 교통안전체험관 제작 및 설치",
                    "workType": "물품", "contractMethod": "제한경쟁", "bid": 390144500}
 AWARD_TEST_FOLDER = "낙찰후서류_테스트"
+# 광양 실제 낸 서류(계약서·착수계·납품계·선급금 청구서) 값으로 다 채운 예시 — 시험 페이지에서 서류를 만들면 이 파일이 폴더에 들어감(11/20 사용자)
+AWARD_TEST_SAMPLE = "낙찰후서류_테스트_예시"
 
 
 def static_version() -> str:
@@ -159,6 +161,31 @@ class App:
                 rows.append({**e, "memo": f"[시험] {case} — 운영 투찰 기록에서 복사"})
         log._write(rows)
         self.postaward_test.sync_bidlog()
+
+    def fill_award_test_sample(self, key: str, folder: Path, since: float) -> list[str]:
+        """시험 공고(광양) 서류를 만든 직후 — 이번에 새로 생긴 서류만 다 채운 예시로 바꿈('2_다 채운 예시/<단계>_<서류>_다채운예시.xlsx').
+        담당자가 이미 고친(먼저 있던) 파일은 안 건드림. 착수서류를 바꿨으면 준공·청구로 다시 옮기지 않게 저장 시각을 맞춤."""
+        import shutil
+
+        if not key.startswith(AWARD_TEST_SEED["noticeNo"]):
+            return []
+        src = next((self.award_root(True).parent / AWARD_TEST_SAMPLE).glob("*/2_다 채운 예시"), None)
+        done = []
+        for f in sorted(src.glob("*_다채운예시.xlsx")) if src else []:
+            doc = f.name.split("_", 2)[2].replace("_다채운예시", "")
+            for target in folder.glob(f"*/{doc}"):
+                if target.stat().st_mtime >= since:
+                    shutil.copyfile(f, target)
+                    done.append(f"{target.parent.name}/{doc}")
+        pa = self.postaward_test
+        with pa._lock:
+            items = pa._read()
+            v = items.get(key) or {}
+            start = next(folder.glob("2_*/착수서류.xlsx"), None)
+            if v and start is not None:
+                v["startMtime"] = round(start.stat().st_mtime, 1)
+                pa._write(items)
+        return done
 
     def step_award_test(self, client: Any, base: str, own_bizno: str) -> dict[str, Any]:
         """시험 페이지 '지금 낙찰자 확인' — 광양을 실제 순서대로 한 단계씩: ① 개찰 결과 ② 낙찰 확인 ③ 계약 등록.
@@ -395,8 +422,8 @@ def make_handler(app: App):
                 return self._json(mview.search(q.get("q", [""])[0], app.latest_run(), app.past, app.held_raw()))
             if url.path == "/api/corpus":
                 return self._json(mview.corpus(app.past))
-            if url.path == "/api/past-live":  # 서버 PC가 받아 가는 지금 사업 목록(webapp/pastlive.py)
-                return self._json({"rows": [p for p in app.past.projects if p.get("source") == "낙찰 후 서류"]})
+            if url.path == "/api/past-live":  # 2026년~ 사업 폴더 목록(webapp/pastlive.py)
+                return self._json({"rows": [p for p in app.past.projects if p.get("source") == "사업 폴더"]})
             if url.path == "/api/project":
                 pid = q.get("id", [""])[0]
                 p = app.past.projects[int(pid)] if pid.isdigit() and int(pid) < len(app.past.projects) else {}
@@ -555,6 +582,9 @@ def make_handler(app: App):
                 if url.path == "/api/bidlog":
                     entry = app.bidlog.add(data)
                     return self._json({"ok": True, "entry": entry, "entries": app.bidlog.entries()})
+                if url.path == "/api/past-live":  # 서버 PC가 사업 폴더로 만든 과거사업 목록을 보냄(webapp/pastlive.py)
+                    from . import pastlive
+                    return self._json({"ok": True, "rows": pastlive.receive(app, data.get("rows") or [])})
                 if url.path == "/api/postaward":
                     pa.add(str(data.get("no") or ""), str(data.get("title") or ""), str(data.get("work") or ""))
                     return self._json({"ok": True, "items": pa.items()})
@@ -571,9 +601,12 @@ def make_handler(app: App):
                     v0 = next((x for x in pa.items() if f"{x.get('no')}-{x.get('ord')}" == key or x.get("no") == key), {})
                     # 이미 폴더가 있으면(적격심사 서류를 받은 공고 등) 이번에 더해진 파일만 zip으로 — 화면이 since로 받음(11/20 사용자)
                     since = time.time() - 5 if v0.get("folder") else None
+                    started = time.time() - 30  # NAS 시계가 조금 달라도 이번에 만든 파일을 잡게
                     # 표준틀은 운영 폴더 것 — 시험 폴더(낙찰후서류_테스트)엔 _표준틀이 없음(NAS 컨테이너는 공유 폴더 주소로 틀을 못 찾아 root/_표준틀을 봄)
                     folder, _ = pa.prepare(key, app.award_root(test), qual_only=data.get("stage") == "qual",
                                            templates=template_dir(app.award_root(False)), contract_lookup=contract_lookup())
+                    if test:
+                        app.fill_award_test_sample(key, folder, started)
                     return self._json({"ok": True, "folder": str(folder), "since": since, "items": pa.items()})
                 if url.path == "/api/postaward/delete":
                     pa.remove(str(data.get("key") or ""))
@@ -597,12 +630,6 @@ def make_handler(app: App):
                         keys = [str(k) for k in data.get("keys") or []] or None
                         done = pa.check(client, base, keys)
                         done["contracts"] = pa.check_contracts(contract_lookup())  # 계약이 올라왔으면 단계를 착공·착수로
-                        if done["contracts"] and not app.team_remote:  # 계약이 새로 올라오면 과거사업 목록 '진행 중'에도 바로(webapp/pastlive.py)
-                            from . import pastlive
-                            try:
-                                pastlive.refresh(app)
-                            except Exception:  # noqa: BLE001 — 목록 갱신을 못 해도 낙찰자 확인 결과는 그대로
-                                logging.exception("과거사업 목록 갱신 실패")
                     except (ConfigError, ApiError) as err:
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
@@ -804,7 +831,7 @@ def main(argv: list[str] | None = None) -> int:
         bot.start()
     # 예외 낱말 후보 HTML '제출' 파일(다운로드 폴더) → jiil 반영·묶음 다시 잠금·병합 (webapp/exclusionsync.py)
     ExclusionSync().start()
-    # 과거사업 목록에 지금 사업(낙찰 후 서류에서 계약이 올라온 것) — NAS는 만들고, 서버 PC는 NAS에서 받음(webapp/pastlive.py, 11/20)
+    # 과거사업 목록에 2026년~ 사업 폴더(진행 중·실행완료) — 서버 PC가 만들어 NAS로 보내고, NAS는 받은 목록을 씀(webapp/pastlive.py, 11/20)
     from . import pastlive
     pastlive.start(app)
     # 낙찰 후 서류 폴더 NAS ↔ 사내 공유 폴더 맞추기 — 서버 PC .env POSTAWARD_SHARE_DIR가 있을 때만 (webapp/awardsync.py, 11/17)

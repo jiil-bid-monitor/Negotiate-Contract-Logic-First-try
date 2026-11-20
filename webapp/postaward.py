@@ -216,9 +216,17 @@ START = ("표준틀_착수서류(물품·용역).xlsx", "2_착수", "착수서�
 TEMPLATES = {"공사": ("표준틀_착공서류(공사).xlsx", "2_착공", "착공서류.xlsx"), "물품": START, "용역": START}
 # 준공·청구 표준틀(11/18) — 업무 3개로 고름(공사 준공계 · 물품 납품계 · 용역 완료계, 폴더 구분 2개와 따로), 청구서는 공통.
 # 기본사항 A열 이름으로 채움(틀마다 줄 위치가 달라도 코드 하나). 파란 칸(계약서 값)을 자동으로.
+# 단계 폴더 이름도 업무대로 — 물품 3_납품, 용역 3_완료(11/20 사용자). 예전에 만든 3_준공 폴더는 그대로 씀(done_dir)
 DONE_TEMPLATES = {"공사": ("표준틀_준공계.xlsx", "3_준공", "준공계.xlsx"),
-                  "물품": ("표준틀_납품계.xlsx", "3_준공", "납품계.xlsx"),
-                  "용역": ("표준틀_완료계.xlsx", "3_준공", "완료계.xlsx")}
+                  "물품": ("표준틀_납품계.xlsx", "3_납품", "납품계.xlsx"),
+                  "용역": ("표준틀_완료계.xlsx", "3_완료", "완료계.xlsx")}
+DONE_DIRS = {"3_준공", "3_납품", "3_완료"}
+
+
+def done_dir(folder: Path, work: str) -> str:
+    """준공(납품·완료) 단계 폴더 이름 — 예전 폴더에 3_준공이 있으면 그것, 없으면 업무대로."""
+    new = DONE_TEMPLATES[work][1]
+    return "3_준공" if not (folder / new).exists() and (folder / "3_준공").exists() else new
 CLAIM_TEMPLATE = ("표준틀_대금청구서.xlsx", "4_청구", "청구서.xlsx")
 DONE_LABELS = {"to": ("수신자",), "title": ("공사명", "사업명", "용역명"), "amount": ("계약금액",), "total": ("준공금액",),
                "contract": ("계약년월일",), "start": ("착공년월일",), "due": ("준공예정년월일", "완료기한"),
@@ -247,7 +255,7 @@ def _date(text: Any) -> datetime | None:
 def _contract_info(row: dict) -> dict[str, str]:
     """postaward.json에 남길 계약 — 통합계약번호(다음 조회를 한 번에)·상세 주소·계약일(화면 단계 '착공·착수')."""
     d = _date(row.get("cntrctDate") or row.get("cntrctCnclsDate"))
-    due = _date(row.get("thtmScmpltDate"))  # 준공(완료)예정일 — 과거사업 목록 '진행 중/끝남' 기준(물품 계약은 비어 있을 때가 많음)
+    due = _date(row.get("thtmScmpltDate"))  # 준공(완료)예정일(물품 계약은 비어 있을 때가 많음)
     return {"no": str(row.get("untyCntrctNo") or ""), "url": str(row.get("cntrctDtlInfoUrl") or ""),
             "date": d.strftime("%Y-%m-%d") if d else "", "due": due.strftime("%Y-%m-%d") if due else ""}
 
@@ -561,8 +569,8 @@ def qual_todo(xlsx: Path) -> tuple[list[str], list[list[str]]]:
 
 
 # 서류 현황(화면 '서류 현황' 칸) — 단계 폴더마다 무엇이 만들어졌는지. 표준틀은 착공·착수만, 나머지는 샘플을 받은 뒤(11/11)
-STAGE_NAME = {"0_적격심사": "적격심사", "1_계약": "계약", "2_착공": "착공", "2_착수": "착수", "3_준공": "준공", "4_청구": "청구"}
-READY_STAGES = {"2_착공", "2_착수", "3_준공", "4_청구"}  # 표준틀이 있는 단계(3·4는 11/18)
+STAGE_NAME = {"0_적격심사": "적격심사", "1_계약": "계약", "2_착공": "착공", "2_착수": "착수", "3_준공": "준공", "3_납품": "납품", "3_완료": "완료", "4_청구": "청구"}
+READY_STAGES = {"2_착공", "2_착수", "3_준공", "3_납품", "3_완료", "4_청구"}  # 표준틀이 있는 단계(3·4는 11/18)
 # 기본사항에서 담당자가 꼭 넣을 칸(행 번호 — 이름은 A열에서 읽어 틀 이름이 바뀌어도 맞음). 공사는 21행 공사위치도
 REQUIRED_ROWS = (6, 8, 9, 10, 12, 15, 16, 17, 18, 19, 20)
 
@@ -723,7 +731,8 @@ class PostAward:
                 raise ValueError("목록에 없는 공고입니다")
             name = re.sub(r'[\\/:*?"<>|\s]+', " ", f"{key}_{v.get('title') or ''}").strip()[:90].rstrip(" ._")
             folder = Path(root) / group_of(v.get("work", "")) / name
-            stages = ["0_적격심사", "1_계약", "2_착공" if v.get("work") == "공사" else "2_착수", "3_준공", "4_청구", "공고문서"]
+            stages = ["0_적격심사", "1_계약", "2_착공" if v.get("work") == "공사" else "2_착수",
+                      done_dir(folder, v["work"]) if v.get("work") in DONE_TEMPLATES else "3_준공", "4_청구", "공고문서"]
             if qual_only:
                 stages = ["0_적격심사", "공고문서"]
             elif v.get("private"):  # 수의계약 — 적격심사 없이 바로 계약(11/12 사용자 결정)
@@ -853,7 +862,7 @@ class PostAward:
         for d in sorted(p for p in folder.iterdir() if p.is_dir() and p.name in STAGE_NAME):
             files = sorted(f.name for f in d.iterdir() if f.is_file() and not f.name.startswith("~$"))
             stage = {"dir": d.name, "name": STAGE_NAME[d.name], "files": files, "ready": d.name in READY_STAGES}
-            qual, done = d.name == "0_적격심사", d.name in ("3_준공", "4_청구")
+            qual, done = d.name == "0_적격심사", d.name in DONE_DIRS | {"4_청구"}
             doc = d / (QUAL_DOC if qual else CLAIM_TEMPLATE[2] if d.name == "4_청구"
                        else DONE_TEMPLATES.get(v.get("work", ""), ("", "", "-"))[2] if done else TEMPLATES["공사" if gong else "용역"][2])
             if (qual or d.name in READY_STAGES) and doc.is_file():
@@ -1061,7 +1070,8 @@ class PostAward:
                 lines.append(f"  확인: {DONE_NAMES[k]} — {stage0}/{doc0} '{_key(val)}', 나라장터 계약정보 '{_key(cv[k])}' (계약서로 확인)")
         values.update(got)
         auto, head = dict(v.get("autoFill") or {}), []
-        for name, stage, doc in (DONE_TEMPLATES[work], CLAIM_TEMPLATE):
+        name0, _, doc0d = DONE_TEMPLATES[work]
+        for name, stage, doc in ((name0, done_dir(folder, work), doc0d), CLAIM_TEMPLATE):
             rel = f"{stage}/{doc}"
             if not (templates / name).exists():
                 head.append(f"[준공·청구] 표준틀 '{name}'이 {templates}에 없어 {rel}를 만들지 않음")
@@ -1334,7 +1344,7 @@ def selfcheck() -> None:
         pa._write(items)
         f5, _ = pa.prepare(k5, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2, contract_lookup=lambda v: None)
         assert "아직 계약이 등록되지 않음" in (f5 / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
-        ws = load_workbook(f5 / "3_준공" / "완료계.xlsx")["기본사항"]
+        ws = load_workbook(f5 / "3_완료" / "완료계.xlsx")["기본사항"]
         assert [ws.cell(r, 2).value for r in (5, 6, 7, 8, 14)] == ["예", "강원특별자치도 홍천군", "D 설계 용역", 19710000, "강원특별자치도 홍천군"]
         assert ws["B10"].value is None and ws["B9"].value.startswith("=")
         # 담당자: 착수서류에 계약 값, 완료계 수신자는 손으로 고침
@@ -1344,13 +1354,13 @@ def selfcheck() -> None:
                           16: ("착수일", datetime(2025, 3, 12)), 17: ("준공예정일", datetime(2025, 8, 18))}.items():
             s.cell(r, 1, a), s.cell(r, 2, b)
         sx.save(f5 / "2_착수" / "착수서류.xlsx")
-        w = load_workbook(f5 / "3_준공" / "완료계.xlsx")
+        w = load_workbook(f5 / "3_완료" / "완료계.xlsx")
         w["기본사항"]["B6"] = "홍천군 세무회계과"
-        w.save(f5 / "3_준공" / "완료계.xlsx")
+        w.save(f5 / "3_완료" / "완료계.xlsx")
         row5 = {"untyCntrctNo": "R25TE1", "cntrctNm": "D 설계 용역", "thtmCntrctAmt": "19700000", "cntrctDate": "2025-03-12",
                 "wbgnDate": "2025-03-12", "thtmScmpltDate": "2025-07-09", "cntrctInsttNm": "강원특별자치도 홍천군", "cntrctInsttChrgDeptNm": "세무회계과"}
         pa.prepare(k5, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2, contract_lookup=lambda v: row5)
-        ws = load_workbook(f5 / "3_준공" / "완료계.xlsx")["기본사항"]
+        ws = load_workbook(f5 / "3_완료" / "완료계.xlsx")["기본사항"]
         assert ws["B6"].value == "홍천군 세무회계과" and ws["B8"].value == 19700000 and ws["B14"].value == "홍천군 분임재무관"
         assert [ws.cell(r, 2).value.date().isoformat() for r in (10, 11, 12)] == ["2025-03-11", "2025-03-12", "2025-08-18"]
         assert ws["B9"].value.startswith("=") and ws["B13"].value is None
@@ -1374,7 +1384,7 @@ def selfcheck() -> None:
         k6 = "R26BK00000006-000"
         pa.add(k6)
         f6, _ = pa.prepare(k6, Path(d) / "out", fetch=lambda k, t: _NF4(), templates=tpl2, contract_lookup=lambda v: row5)
-        ws = load_workbook(f6 / "3_준공" / "완료계.xlsx")["기본사항"]
+        ws = load_workbook(f6 / "3_완료" / "완료계.xlsx")["기본사항"]
         assert ws["B6"].value == "강원특별자치도 홍천군 세무회계과" and ws["B8"].value == 19700000, ws["B6"].value
         assert [ws.cell(r, 2).value.date().isoformat() for r in (10, 11, 12)] == ["2025-03-12", "2025-03-12", "2025-07-09"]
         assert ws["B10"].fill.fgColor.rgb == _BLUE and ws["B13"].fill.fgColor.rgb == _YELLOW  # 자동으로 채운 노란 칸만 파랑
@@ -1410,8 +1420,8 @@ def selfcheck() -> None:
         assert find_contract(cc, "R25BK2", "용역", "") is None and find_contract(cc, "R25BK1", "모름", "") is None
         assert find_contract(cc, "R25BK1", "용역", "", known="R25TE9")["cntrctNm"] == "D"
         by5 = {x["dir"]: x for x in pa.status(k5)["stages"]}
-        assert by5["3_준공"]["doc"] == "완료계.xlsx" and by5["3_준공"]["todo"] == ["제출일"], by5["3_준공"]
-        assert ["계약금액", "19,700,000"] in by5["3_준공"]["auto"] and "수신자" not in [a for a, _ in by5["3_준공"]["auto"]]
+        assert by5["3_완료"]["doc"] == "완료계.xlsx" and by5["3_완료"]["todo"] == ["제출일"], by5["3_완료"]
+        assert ["계약금액", "19,700,000"] in by5["3_완료"]["auto"] and "수신자" not in [a for a, _ in by5["3_완료"]["auto"]]
         assert by5["4_청구"]["doc"] == "청구서.xlsx" and by5["4_청구"]["todo"] == []
         assert share_path("/work/낙찰후서류/공사/A") == "\\\\jiilserver\\jiil-webapp\\낙찰후서류\\공사\\A"
 

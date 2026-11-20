@@ -1796,18 +1796,16 @@ function renderCorpus() {
     .filter((p) => (!q || p.name.replace(/\s+/g, "").toLowerCase().includes(q)) && (!year || String(p.year) === year))
     .sort((a, b) => b.year - a.year || a.name.localeCompare(b.name, "ko"));
   // 11/19 화면 정리(개선안 ③): 연도는 묶음 머리로 한 번만(최근 연도만 펼침, 찾는 중엔 모두), 늘 같은 값이던 '과업 내용'·'사업비' 칸 대신 분야·과업
-  // 11/20 사용자: 지금 하는 사업도 목록에 — 낙찰 후 서류에서 계약이 올라온 공고(진행 중 = 준공예정일 전, 끝남 = 지남). 진행 중은 맨 위 묶음
+  // 11/20 사용자: 2026년부터는 사업 폴더 기준 — 'YYYY 프로젝트' 바로 아래 = 진행 중(맨 위 묶음), '실행완료' 아래 = 끝남(연도 묶음)
   const ongoing = rows.filter((p) => p.live === "진행 중"), past = rows.filter((p) => p.live !== "진행 중");
   const years = [...new Set(past.map((p) => p.year))];
-  const md = (d) => (d ? String(d).slice(5, 10).replace("-", "/") : "");
   const line = (p) => `<tr class="${p.hasBody || p.live ? "" : "nobody"}">
       <td>${p.hasBody ? `<button type="button" class="linkish proj" data-proj="${esc(p.id)}">${esc(p.name)}</button><div class="proj-body" hidden></div>` : esc(p.name)}
-        ${p.live ? `<div class="sub">${esc([p.institution, p.contractDate ? `계약 ${String(p.contractDate).slice(0, 4)}/${md(p.contractDate)}` : "",
-          p.dueDate ? `준공 ${p.live === "끝남" ? "" : "예정 "}${md(p.dueDate)}` : "준공예정일 모름", "낙찰 후 서류에서"].filter(Boolean).join(" · "))}</div>` : ""}</td>
+        ${p.live ? `<div class="sub">${esc([p.note, String(p.where || "").replace(/^(\d{4})\//, "$1 프로젝트 › ").replace("실행완료/", "실행완료 › ")].filter(Boolean).join(" · "))}</div>` : ""}</td>
       <td class="sub">${esc((p.fields || []).join(" · "))}</td><td class="sub">${esc((p.kinds || []).join(" · "))}</td></tr>`;
   const table = (list) => `<div class="scroll"><table class="corpus-table"><thead><tr><th>사업명</th><th>분야</th><th>과업</th></tr></thead><tbody>${list.map(line).join("")}</tbody></table></div>`;
   $("corpusRows").innerHTML = rows.length
-    ? (ongoing.length ? `<details class="corpus-year corpus-ongoing" open><summary>진행 중인 사업 <span class="sub">${ongoing.length}건 · 계약 뒤 준공 전</span></summary>${table(ongoing)}</details>` : "")
+    ? (ongoing.length ? `<details class="corpus-year corpus-ongoing" open><summary>진행 중인 사업 <span class="sub">${ongoing.length}건 · 준공 전(준공계가 생기거나 실행완료로 옮기면 끝난 사업)</span></summary>${table(ongoing)}</details>` : "")
       + years.map((y, i) => {
         const ys = past.filter((p) => p.year === y);
         return `<details class="corpus-year"${q || year || (i === 0 && !ongoing.length) ? " open" : ""}><summary>${esc(y)}년 <span class="sub">${ys.length}건</span></summary>${table(ys)}</details>`;
@@ -4067,7 +4065,9 @@ function awardWaiting(o, lim = 5) {
 }
 // 11/19 화면 정리(사용자 승인 — 개선안 ①): 할 일 → 기다림 → 끝남 세 묶음, 한 줄에 버튼은 다음 할 일 하나, 나머지는 '더 보기'.
 // 열 순서는 투찰내역과 같게(공고 → 투찰금액·개찰 → 단계). 꺼진 버튼은 안 보이고 그 이유는 '더 보기' 안에 한 줄로.
-const AWARD_STEPS = ["개찰", "적격심사", "계약", "착공·착수", "준공", "청구"];
+// 단계 이름은 업무대로 — 공사 착공·준공, 물품 착수·납품, 용역 착수·완료(11/20 사용자 '물품인데 왜 준공계·착공계라 해')
+const awardWords = (v) => (v.work === "공사" ? ["착공", "준공"] : v.work === "물품" ? ["착수", "납품"] : v.work === "용역" ? ["착수", "완료"] : ["착공·착수", "준공"]);
+const awardSteps = (v) => ["개찰", "적격심사", "계약", ...awardWords(v), "청구"];
 // 적격심사 서류 = 개찰 1등만(11/20 사용자). 2~5등은 앞 순위가 심사에서 떨어져 차례가 넘어올 때만 — 나라장터로는 알 수 없어
 // 담당자가 심사 통보를 받으면 '더 보기'에서 만듦. 지명경쟁은 지명 업체끼리 몰아주는 구조라 2등부터 끝난 공고.
 const awardDesignated = (v) => ((v.bid || {}).method || "").includes("지명");
@@ -4083,8 +4083,9 @@ function awardKind(v) {
 function awardStage(v, kind) {
   const o = v.opening, rank = o ? o.rank : null, d = awardDesignated(v);
   const cdate = (v.contract || {}).date;  // 나라장터 계약정보에 계약이 올라오면(22시·'지금 낙찰자 확인') 착공·착수 단계로
-  if (v.status === "낙찰" && cdate) return ["착공·착수 서류", 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결 — ${v.folder && !v.qualOnly ? "서류 현황에서 착공·착수 서류를 확인하세요" : "'낙찰 서류 만들기'를 누르세요"}`];
-  if (v.status === "낙찰") return v.folder && !v.qualOnly ? ["계약 서류", 2, "나라장터에 계약이 올라오면 착공·착수 단계로 넘어갑니다"]
+  const [ws] = awardWords(v);
+  if (v.status === "낙찰" && cdate) return [`${ws} 서류`, 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결 — ${v.folder && !v.qualOnly ? `서류 현황에서 ${ws} 서류를 확인하세요` : "'낙찰 서류 만들기'를 누르세요"}`];
+  if (v.status === "낙찰") return v.folder && !v.qualOnly ? ["계약 서류", 2, `나라장터에 계약이 올라오면 ${ws} 단계로 넘어갑니다`]
     : ["낙찰 — 계약 등록 기다림", 2, "나라장터에 계약이 올라오면 '낙찰 서류 만들기'가 켜집니다 — 계약서를 먼저 받았으면 '더 보기'에서 만드세요"];
   if (v.folder) return ["적격심사 서류", 1, "심사 서류를 내고 낙찰을 기다립니다"];
   if (kind === "todo") return ["적격심사 대상", 1, "개찰 1순위 — 심사 통보를 확인하세요"];
@@ -4112,7 +4113,7 @@ function renderAward(items) {
       : v.status === "대기" ? awardWaiting(o, awardLimit(v)) : `<span class="badge">${esc(v.status || "")}</span>`;
     // 단계 칸(모든 줄): 단계 이름 → 단계 줄(지나온 단계·지금 단계 칠함, 끝난 공고는 흐리게) → 설명 한 줄
     const [stageName, now, stageSub] = awardStage(v, kind);
-    const steps = `<div class="award-stage ${kind}">${esc(stageName)}</div><ol class="award-steps${kind === "done" ? " off" : ""}">${AWARD_STEPS.map((s, i) => `<li class="${now < 0 ? "" : i < now ? "done" : i === now ? "now" : ""}">${s}</li>`).join("")}</ol>${stageSub ? stageSub.split(" — ").map((s) => `<div class="sub">${esc(s)}</div>`).join("") : ""}`;
+    const steps = `<div class="award-stage ${kind}">${esc(stageName)}</div><ol class="award-steps${kind === "done" ? " off" : ""}">${awardSteps(v).map((s, i) => `<li class="${now < 0 ? "" : i < now ? "done" : i === now ? "now" : ""}">${s}</li>`).join("")}</ol>${stageSub ? stageSub.split(" — ").map((s) => `<div class="sub">${esc(s)}</div>`).join("") : ""}`;
     const stage = v.qualOnly ? ` data-award-stage="qual"` : "";
     const canQual = kind === "todo" && !v.private && !v.folder && !isWon && rank === 1;
     const lateQual = kind === "wait" && !v.private && !v.folder && rank != null && rank > 1;  // 2~5등: 심사 통보받으면 '더 보기'에서

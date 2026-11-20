@@ -4275,3 +4275,37 @@ def test_credit_grade_not_in_points_column(tmp_path: Path):
         rf'<hp:tc>((?:(?!</hp:tc>).)*colAddr="{col}" rowAddr="{row}"(?:(?!</hp:tc>).)*)</hp:tc>', out, re.S).group(1))
     assert "BB+" not in out.replace("BB+ ~ BB-", "")
     assert cell(2, 1) == "" and cell(3, 1) == "5.4"
+
+
+def test_credit_grade_below_ranges_and_staff_zero_placeholder(tmp_path: Path):
+    """11/20 사용자 제보: 자기평가표 '경영상태 | 회사채 · 기업어음 · 기업신용평가등급 / A- 이상 6.0 / A-미만 BBB-이상 5.0 / BBB-미만 B-이상 4.0 …' —
+    '미만'을 몰라 BB+가 어느 줄에도 안 맞아 평점이 빔. '기술능력(6점) | 기술사 1.0 … 초급 0.2 | 0' — 평점 칸에 원본부터 '0'이 있어 건너뛰고,
+    상한 줄이 없어 상한을 0점으로 읽음(10명 골라도 0점)."""
+    import datetime as _dt
+
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    def c(col, row, t, rs=1, cs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "평가항목"), c(1, 0, "평가요소"), c(2, 0, "평가기준", cs=3), c(5, 0, "배점"), c(6, 0, "평점")],
+            [c(0, 1, "경영상태평 가(6점)", rs=6), c(1, 1, "신용상태평가", rs=6), c(2, 1, "회사채"), c(3, 1, "기업어음"),
+             c(4, 1, "기업신용평가등급"), c(5, 1, ""), c(6, 1, "", rs=6)],
+            [c(2, 2, "A- 이상"), c(3, 2, "A2- 이상"), c(4, 2, "A- 이상"), c(5, 2, "6.0")],
+            [c(2, 3, "A-미만 BBB-이상"), c(3, 3, "A2-미만 A3-이상"), c(4, 3, "A-미만 BBB-이상"), c(5, 3, "5.0")],
+            [c(2, 4, "BBB-미만 B-이상"), c(3, 4, "A3-미만 B-이상"), c(4, 4, "BBB-미만 B-이상"), c(5, 4, "4.0")],
+            [c(2, 5, "CCC+ 이하"), c(3, 5, "C 이하"), c(4, 5, "CCC+ 이하"), c(5, 5, "3.0")],
+            [c(2, 6, "미제출"), c(3, 6, "미제출"), c(4, 6, "미제출"), c(5, 6, "2.0")],
+            [c(0, 7, "기술능력(6점)", rs=5), c(1, 7, "전문인력", rs=5), c(2, 7, "기술사", cs=3), c(5, 7, "1.0"), c(6, 7, "0", rs=5)],
+            [c(2, 8, "특급기술자", cs=3), c(5, 8, "0.8")], [c(2, 9, "고급기술자", cs=3), c(5, 9, "0.6")],
+            [c(2, 10, "중급기술자", cs=3), c(5, 10, "0.4")], [c(2, 11, "초급기술자", cs=3), c(5, 11, "0.2")]]
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+"})
+    v.staff = [{"이름": f"가{i}", "입사일": "2015-01-01", "등급": g} for i, g in enumerate(["특급"] * 4 + ["고급"] * 3 + ["중급"] * 3)]
+    fill_hwpx(_mini_hwpx(tmp_path / "e.hwpx", _tbl(rows)), tmp_path / "eo.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 20)))
+    out = zipfile.ZipFile(tmp_path / "eo.hwpx").read("Contents/section0.xml").decode()
+    cell = lambda col, row: re.sub(r"<[^>]+>", "", re.search(
+        rf'<hp:tc>((?:(?!</hp:tc>).)*colAddr="{col}" rowAddr="{row}"(?:(?!</hp:tc>).)*)</hp:tc>', out, re.S).group(1))
+    assert cell(6, 1) == "4"  # BB+ → 'BBB-미만 B-이상' 4.0
+    assert cell(6, 7) == "6"  # 6.2점 → 상한 6점
+    assert cell(5, 1) == ""   # 배점 칸은 비움

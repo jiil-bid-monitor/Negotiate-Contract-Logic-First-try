@@ -676,6 +676,15 @@ def _rule_hit(rule: str, grade: str) -> bool:
     if not got:
         return False
     scale, rank = got
+    # 'BBB-미만 B-이상'·'A-미만'(11/20 사용자 제보 — '미만'을 몰라 BB+가 어느 줄에도 안 맞았음) — 미만 = 그 등급보다 낮음(뺌)
+    for m in re.finditer(r"([A-D][A-D0-9+\-]*)\s*미만(?:\s*[~∼～]?\s*([A-D][A-D0-9+\-]*)\s*(이상)?)?", rule.upper().replace("O", "0")):
+        hi, lo = _grade_rank(m.group(1)), _grade_rank(m.group(2)) if m.group(2) else None
+        if not hi or hi[0] is not scale:
+            continue
+        if rank > hi[1] and (lo is None or (lo[0] is scale and rank <= lo[1])):
+            return True
+    if "미만" in rule:
+        return False
     # 쉼표 없이 줄이 바뀐 'AA- A+'(11/13)도 나눔 — 'BB- ~ BBB-' 범위는 그대로
     for part in re.split(r"[,，/]|(?<=[A-D0-9+\-])\s+(?=[A-D])|(?<=[+\-])(?=[A-D])", rule):
         part = part.strip().upper().replace("O", "0")
@@ -927,8 +936,8 @@ def read_form(cells) -> list[FormRow]:
                     by_points.setdefault(pv, sc)
             target = target if target is not None and target.blank else next(iter(by_points.values()), None)
         first_label = " ".join(_sq(c.text) for c in first if c.col < min(pcol, scol))
-        zero_total = target is not None and re.fullmatch(r"계|합계|소계|총점", first_label) \
-            and re.fullmatch(r"\s*0(?:\.0+)?\s*점?\s*", target.text or "")  # 합계 칸에 원본부터 '0'(11/18 사용자 제보 — 합계가 그대로 0)
+        # 평점 칸에 원본부터 '0'(11/18 합계 칸 — 합계가 그대로 0, 11/20 항목 칸도 — 기술능력 평점이 '0'으로 남음)은 빈 칸으로 봄
+        zero_total = target is not None and re.fullmatch(r"\s*0(?:\.0+)?\s*점?\s*", target.text or "") is not None
         if target is None or not (target.blank or zero_total):
             continue
         def is_label(t: str) -> bool:  # 줄 이름 — 구간('70억 이상')·등급·해당없음 칸은 뺌
@@ -1026,6 +1035,11 @@ def read_form(cells) -> list[FormRow]:
             hg, col_cells, zero_cells = _horizontal(rs, rows, pcol, scol, crit)
             grade_cells = grade_cells or hg
         points = cap if cap is not None else (max(nums) if nums else None)
+        if points is None or (crit.per_grade and cap is None):
+            # 상한 줄 없이 등급별 1인당 점수만 있는 표 — 항목 이름 '기술능력(6점)'의 괄호 점수가 상한(11/20 사용자 제보: 상한 0점으로 읽어 0점)
+            lp = re.search(r"[(（]\s*(\d+(?:\.\d+)?)\s*점\s*[)）]", label)
+            if lp:
+                points = float(lp.group(1))
         crit.points = points or 0.0
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
         if grade_cells and cap_cell is not None:

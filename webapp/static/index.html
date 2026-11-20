@@ -612,8 +612,19 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 @media (hover: hover) { .log-line [data-pundo] { visibility: hidden; } .log-line:hover [data-pundo], .log-line:focus-within [data-pundo] { visibility: visible; } }
 .log-go { background: var(--brand); color: var(--on-brand); border: 1px solid var(--brand); font-weight: 600; padding: 4px 12px; cursor: pointer; }
 .log-missed > summary { padding: 10px 18px; cursor: pointer; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); }
+/* 판단 기록 맨 위 — 오늘 들어온 공고 · 마감 전 판단할 공고(11/20) */
+.log-sec { border-bottom: 1px solid var(--line-strong); }
+.log-sec-title { margin: 0; padding: 10px 18px; font-family: var(--head); font-size: 14.5px; font-weight: 600; color: var(--ink-strong); background: var(--bg); border-top: 1px solid var(--line); }
+.log-sec:first-of-type .log-sec-title, .log-bulk + .log-sec .log-sec-title { border-top: 0; }
+.log-sec-past { border-top: 1px solid var(--line-strong); }
+.log-bulk { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 10px 18px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.log-bulk label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.log-bulk .pbtn { padding: 2px 10px; font-size: 12.5px; }
+.log-bulk .pbtn[disabled] { opacity: .45; cursor: default; }
+.log-badge { display: inline-flex; gap: 6px; align-items: center; justify-self: start; margin-top: 2px; }
+.log-line.pickable { grid-template-columns: 86px minmax(0, 1fr) 130px 120px; }
 @media (max-width: 760px) {
-  .log-line { grid-template-columns: 56px minmax(0, 1fr); }
+  .log-line, .log-line.pickable { grid-template-columns: 76px minmax(0, 1fr); }
   .log-due, .log-act { grid-column: 2; }
 }
 .corpus-year { margin-top: 10px; background: var(--panel); border: 1px solid var(--line); }
@@ -1533,6 +1544,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         <option value="판단">판단 (참가·보류·불참)</option>
         <option value="미판단">미판단</option>
         <option value="놓침">놓침</option>
+        <option value="참고">참고 (사전규격)</option>
         <option value="참가">참가</option>
         <option value="보류">보류</option>
         <option value="불참">불참</option>
@@ -3072,7 +3084,7 @@ const partOf = (n) => {
 // ── 참가여부 · 담당자 · 대화 (같은 링크로 보는 사람 모두 공유) ────────────────
 let participation = {};
 const PART_STATUSES = ["참가", "보류", "불참"];  // 검토중 버튼은 2026-11-18 사용자 결정으로 뺌
-const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted", 미판단: "todo", 놓침: "missed" };
+const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted", 미판단: "todo", 놓침: "missed", 참고: "muted" };
 
 async function loadParticipation() {
   try {
@@ -3311,14 +3323,21 @@ const LOG_AGG_MIN = 30;
 /**
  * 판단 기록 탭에 보이는 상태 — 참가·보류·불참, 또는 텔레그램으로 보고됐는데 아직 판단하지 않았으면 '미판단',
  * 판단 없이 마감이 지났으면 '놓침' (2026-10-19, 4단계). 보고되지 않았고 판단도 없으면 null (싣지 않는다).
- * 서버 nego/report_log.py log_status와 같은 규칙.
+ * 서버 nego/report_log.py log_status와 같은 규칙 — 다만 사전규격은 화면에서만 '참고'(11/20, 시트·CSV는 그대로).
  */
 function logStatusOf(p) {
   if (DECISIONS.includes(p.status)) return p.status;
   if (!p.reports?.length) return null;
+  // 사전규격은 판단할 대상이 아니라 참고 — 본공고가 나오면 그때 판단(11/20 사용자: 사전규격 71건이 한 건도 판단 없이 놓침이 됐음)
+  if (p.meta?.sourceType === "사전규격") return "참고";
   return deadlineAt(p.meta?.deadline) < Date.now() ? "놓침" : "미판단";
 }
-const UNDECIDED = ["미판단", "놓침"];
+const UNDECIDED = ["미판단", "놓침", "참고"];
+/** 여러 건 한꺼번에 불참할 때 고르는 사유 — 불참 사유는 '과업 성격 다름'이 대부분(11/20 집계 26건 중 23건) */
+const BULK_TAGS = ["과업 성격 다름", "운영·유지보수 위주", "금액 적음", "자격·면허 부족"];
+/** 판단 기록에서 체크한 미판단 공고 — 다시 그려도 유지 */
+const LOG_PICK = new Set();
+const todayText = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 /** 판단 기록 탭에 싣는 공고와 그 상태 — 최근 순 (판단한 공고는 판단 시각, 판단 전 공고는 마지막 보고일) */
 const logKey = (e) => (UNDECIDED.includes(e.st) ? e.p.reports.at(-1).date : String(e.p.decidedAt || e.p.updatedAt || ""));
 function logEntriesOf() {
@@ -3346,6 +3365,15 @@ const reportsText = (p) => (p.reports || []).map((r) => `${r.date.slice(5).repla
 
 /** 판단 기록 주 묶음을 사용자가 접고 편 상태 {주 key: 펼침?} — 다시 그려도 유지(이 화면을 연 동안) */
 const LOG_WEEK_OPEN = {};
+$("logList").addEventListener("change", (ev) => {
+  if (ev.target.id === "logPickAll") {
+    document.querySelectorAll("#logList .log-pick").forEach((c) => { c.checked = ev.target.checked; LOG_PICK[c.checked ? "add" : "delete"](c.dataset.pick); });
+  } else if (ev.target.classList.contains("log-pick")) {
+    LOG_PICK[ev.target.checked ? "add" : "delete"](ev.target.dataset.pick);
+  } else return;
+  $("logPickN").textContent = LOG_PICK.size;
+  document.querySelectorAll("#logList [data-bulk]").forEach((b) => { b.disabled = !LOG_PICK.size; });
+});
 $("logList").addEventListener("toggle", (ev) => {
   const box = ev.target.closest && ev.target.closest("details.log-week");
   if (box && box.dataset.week && !$("logQ").value.trim()) LOG_WEEK_OPEN[box.dataset.week] = box.open;
@@ -3373,7 +3401,7 @@ function renderLog() {
   const all = entries.filter((e) => !UNDECIDED.includes(e.st)).map((e) => e.p);
   const count = (s) => entries.filter((e) => e.st === s).length;
   $("logMeta").innerHTML =
-    `판단 기록 <b>${num(entries.length)}</b>건 — ${[...UNDECIDED, ...DECISIONS].filter((s) => s !== "놓침" || count(s)).map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
+    `판단 기록 <b>${num(entries.length)}</b>건 — ${[...UNDECIDED, ...DECISIONS].filter((s) => (s !== "놓침" && s !== "참고") || count(s)).map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
     `<button type="button" class="linkish" id="logCsv">${logFilterOn() ? `CSV 내려받기 (고른 ${num(logFiltered(entries).length)}건)` : "CSV 내려받기"}</button>` +
     "";
   $("logAggNote").textContent = all.length >= LOG_AGG_MIN ? "아래 키워드 조정용 집계는 판단할 때 공고에 걸린 관심 키워드 기준입니다." : "";
@@ -3385,6 +3413,7 @@ function renderLog() {
   const list = logFiltered(entries);
   const byNo = new Map(lastItems.map((n) => [n.noticeNo, n]));
   // 11/19 화면 정리(개선안 ④): 한 줄 = 판단 · 공고(이름 + 기관·금액·판단자·사유) · 마감(요일) · 할 일 — 공고번호는 이름에 커서를 대면
+  const picking = !logFilterOn() || stf === "미판단";
   const row = ({ p, st }) => {
     const n = byNo.get(p.noticeNo);
     const url = n?.detailUrl || p.meta?.detailUrl;
@@ -3400,8 +3429,9 @@ function renderLog() {
       .filter(Boolean).join(" · ");
     const act = st === "미판단" ? `<button type="button" class="log-go" data-goto="${esc(p.noticeNo)}">판단하기</button>`
       : inList ? `<button type="button" class="linkish" data-goto="${esc(p.noticeNo)}">목록에서 보기</button>` : "";
-    return `<div class="log-row log-line" data-part="${esc(p.noticeNo)}" data-title="${esc(p.title || "")}">
-      <span class="badge pstat ${PART_TONE[st]}">${esc(st)}</span>
+    const pick = st === "미판단" && picking ? `<input type="checkbox" class="log-pick" data-pick="${esc(p.noticeNo)}"${LOG_PICK.has(p.noticeNo) ? " checked" : ""} aria-label="한꺼번에 불참할 공고로 고르기">` : "";
+    return `<div class="log-row log-line${pick ? " pickable" : ""}" data-part="${esc(p.noticeNo)}" data-title="${esc(p.title || "")}">
+      <span class="log-badge">${pick}<span class="badge pstat ${PART_TONE[st]}">${esc(st)}</span></span>
       <div class="log-main"><h3>${title}</h3><p class="log-meta">${sub}</p>${undecided ? "" : `<p class="log-why">${why || `<span class="faint-note">사유 없음</span>`}</p>`}
         ${inList || st !== "미판단" ? "" : `<span class="log-judge" hidden>${DECISIONS.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p.status === s ? "on" : ""}" data-pstatus="${s}">${s}</button>`).join("")}</span>`}
         ${!undecided && !p.reason && !(p.tags || []).length ? decisionRow(p) : ""}</div>
@@ -3409,9 +3439,23 @@ function renderLog() {
       <div class="log-act">${act}${!undecided && p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단으로 되돌립니다">되돌리기</button>` : ""}</div>
     </div>`;
   };
+  // 11/20 사용자: 판단할 것을 먼저 — 조건 없이 볼 때는 맨 위에 '오늘 들어온 공고' · '마감 전 판단할 공고'(마감 빠른 순),
+  // 주 묶음엔 판단한 것과 놓침·참고(접음)만. 미판단은 체크해서 한꺼번에 불참할 수 있음
+  const triage = !logFilterOn();
+  const byDue = (a, b) => deadlineAt(a.p.meta?.deadline) - deadlineAt(b.p.meta?.deadline);
+  const todo = triage ? list.filter((e) => e.st === "미판단") : [];
+  const today = todo.filter((e) => (e.p.reports.at(-1)?.date || "").slice(0, 10) === todayText()).sort(byDue);
+  const rest0 = todo.filter((e) => !today.includes(e)).sort(byDue);
+  for (const no of [...LOG_PICK]) if (!todo.some((e) => e.p.noticeNo === no)) LOG_PICK.delete(no);
+  const section = (title, note, items) => items.length
+    ? `<section class="log-sec"><h3 class="log-sec-title">${title} <span class="faint-note">${items.length}건 · ${note}</span></h3>${items.map(row).join("")}</section>` : "";
+  const bulk = todo.length ? `<div class="log-bulk"><label><input type="checkbox" id="logPickAll"${todo.length && todo.every((e) => LOG_PICK.has(e.p.noticeNo)) ? " checked" : ""}> 모두 고르기</label>
+      <span class="faint-note">고른 <b id="logPickN">${LOG_PICK.size}</b>건을 한꺼번에 불참:</span>
+      ${BULK_TAGS.map((g) => `<button type="button" class="pbtn muted" data-bulk="${esc(g)}"${LOG_PICK.size ? "" : " disabled"}>${esc(g)}</button>`).join("")}</div>` : "";
+  const top = triage ? bulk + section("오늘 들어온 공고", "오늘 보고된 것 · 마감 빠른 순", today) + section("마감 전 판단할 공고", "마감 빠른 순", rest0) : "";
   // 주마다 접기 — 가장 최근 주만 펼치고, 찾기 중이면 모두 펼친다
   const weeks = [];
-  for (const e of list) {
+  for (const e of triage ? list.filter((x) => x.st !== "미판단") : list) {
     const w = weekOf(logKey(e));
     if (weeks.at(-1)?.key !== w.key) weeks.push({ ...w, items: [] });
     weeks.at(-1).items.push(e);
@@ -3420,13 +3464,16 @@ function renderLog() {
     const cnt = [...UNDECIDED, ...DECISIONS].map((s) => [s, w.items.filter((e) => e.st === s).length]).filter(([, c]) => c).map(([s, c]) => `${s} ${c}`).join(" · ");
     // 사용자가 직접 접거나 편 주는 그대로 — 판단 기록은 1분마다 다시 그려져 접어도 저절로 펼쳐졌음(11/16 사용자 제보)
     const open = q ? true : w.key in LOG_WEEK_OPEN ? LOG_WEEK_OPEN[w.key] : i === 0;
-    const missed = w.items.filter((e) => e.st === "놓침"), rest = w.items.filter((e) => e.st !== "놓침");
-    const missedHtml = !missed.length ? "" : stf === "놓침" || q ? missed.map(row).join("")
-      : `<details class="log-missed"><summary>판단 없이 마감된 공고(놓침) ${missed.length}건</summary>${missed.map(row).join("")}</details>`;
-    return `<details class="log-week" data-week="${esc(w.key)}"${open ? " open" : ""}><summary><b>${esc(w.label)}</b> · ${w.items.length}건 <span class="faint-note">${esc(cnt)}</span></summary>${rest.map(row).join("")}${missedHtml}</details>`;
+    const missed = w.items.filter((e) => e.st === "놓침"), ref = w.items.filter((e) => e.st === "참고");
+    const rest = w.items.filter((e) => e.st !== "놓침" && e.st !== "참고");
+    const fold = (items, label, show) => !items.length ? "" : show || q ? items.map(row).join("")
+      : `<details class="log-missed"><summary>${label} ${items.length}건</summary>${items.map(row).join("")}</details>`;
+    return `<details class="log-week" data-week="${esc(w.key)}"${open ? " open" : ""}><summary><b>${esc(w.label)}</b> · ${w.items.length}건 <span class="faint-note">${esc(cnt)}</span></summary>${rest.map(row).join("")}`
+      + `${fold(missed, "판단 없이 마감된 공고(놓침)", stf === "놓침")}${fold(ref, "사전규격 — 참고(본공고가 나오면 판단)", stf === "참고")}</details>`;
   };
   $("logList").innerHTML = entries.length
-    ? list.length ? weeks.map(weekHtml).join("") : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
+    ? list.length ? top + (top && weeks.length ? '<h3 class="log-sec-title log-sec-past">지난 기록 <span class="faint-note">판단한 공고 · 놓침 · 사전규격(참고)</span></h3>' : "") + weeks.map(weekHtml).join("")
+      : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
     : "";
   $("logAgg").innerHTML = all.length >= LOG_AGG_MIN ? logAggHtml(all) : "";
 }
@@ -4397,6 +4444,24 @@ document.addEventListener("click", (ev) => {
         document.querySelector(`.part[data-part="${CSS.escape(noticeNo)}"] .reason-form input`)?.focus();
       }
     });
+  }
+
+  // 판단 기록 — 고른 미판단 공고를 한꺼번에 불참(사유 하나), 11/20 사용자
+  const bulkBtn = ev.target.closest("[data-bulk]");
+  if (bulkBtn && LOG_PICK.size) {
+    const tag = bulkBtn.dataset.bulk, nos = [...LOG_PICK];
+    if (!myName()) { $("judge").focus(); return void alert("위쪽 '내 이름' 칸에 이름을 먼저 입력해 주세요."); }
+    bulkBtn.disabled = true;
+    (async () => {
+      let ok = 0;
+      for (const no of nos) {
+        const box = { dataset: { part: no, title: participation[no]?.title || "" } };
+        if (await postParticipation(box, { status: "불참", tags: [tag], ...(decisionMeta(no) ? { meta: decisionMeta(no) } : {}) })) { ok += 1; LOG_PICK.delete(no); }
+      }
+      renderLog();
+      if (ok < nos.length) alert(`${nos.length}건 중 ${ok}건만 저장했습니다 — 나머지는 다시 눌러 주세요.`);
+    })();
+    return;
   }
 
   // 되돌리기 — 바로 앞 판단·담당으로 (카드와 판단 기록 탭 모두)

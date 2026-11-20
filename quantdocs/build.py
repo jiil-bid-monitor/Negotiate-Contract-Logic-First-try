@@ -369,6 +369,22 @@ def _fill_appendix(src: Path, dst: Path, vault, title: str):
     return rep
 
 
+# 이름엔 '공동수급'이 없어도 본문이 공동수급 서류인 서식(11/20 사용자 '공동수급 관련 문서는 기입 대상이 아니야' — 장성 '대표자 선임계':
+# '…참여업체의 대표자를 … 선임하고 모든 권한을 공동수급체 대표자에게 위임합니다. ※ 단독 참가시는 필요 없음.')
+_JOINT_BODY = re.compile(r"공동수급체(?:의)?대표자에게위임|공동수급체대표자로선임|단독(?:으로)?참가(?:시|하는경우|할경우)(?:는|에는)?(?:제출)?(?:이)?필요(?:가)?없")
+
+
+def _joint_body(path: Path) -> bool:
+    from .fill import _text
+
+    try:
+        with zipfile.ZipFile(path) as z:
+            text = "".join(_text(z.read(n).decode("utf-8")) for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n))
+    except (OSError, zipfile.BadZipFile, KeyError):
+        return False
+    return bool(_JOINT_BODY.search(re.sub(r"\s+", "", text)))
+
+
 def is_manual(name: str) -> bool:
     return bool(_MANUAL_FORM.search(name or "") or _BLANK_FORM.search(name or ""))
 
@@ -463,9 +479,10 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 a.notes.append(f"{f.name}: 한글(HWPX) 파일이 아니라 서식을 자르지 못함 — 원본을 한글에서 HWPX로 저장해 확인")
                 continue
             for c in sorted(cut(src, forms_dir, cut_names), key=lambda c: [int(n) for n in re.findall(r"\d+", c.no)]):
-                if is_manual(c.title):  # 양식 그대로 — 내려받은 뒤 직접 기입
+                joint = not _BLANK_FORM.search(c.title) and _joint_body(forms_dir / c.file)
+                if is_manual(c.title) or joint:  # 양식 그대로 — 내려받은 뒤 직접 기입
                     manual_dir.mkdir(parents=True, exist_ok=True)
-                    if _BLANK_FORM.search(c.title):  # 질의서·공동수급 서식은 공란(11/05)
+                    if _BLANK_FORM.search(c.title) or joint:  # 질의서·공동수급 서식은 공란(11/05, 본문으로 알아본 공동수급 서식도 — 11/20)
                         rep = _fill_appendix(forms_dir / c.file, manual_dir / c.file, vault, notice_title)
                         if rep is None:
                             shutil.copyfile(forms_dir / c.file, manual_dir / c.file)

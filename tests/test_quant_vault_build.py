@@ -4332,3 +4332,16 @@ def test_merge_moves_sec_pr_into_first_form_paragraph(tmp_path: Path):
         assert "<hp:secPr/>" in head and "서식 1" in head and "표지 글" not in head  # 빈 쪽 설정 문단이 따로 없음
         assert 'charPrIDRef="7"' not in head and 'paraPrIDRef="9"' not in xml  # 앞 글의 글자·문단 모양은 안 따라옴
         assert "lineseg" not in head
+
+
+def test_joint_supply_form_recognized_by_body(tmp_path: Path):
+    """11/20 사용자 '공동수급 관련 문서는 기입 대상이 아니야': 이름엔 '공동수급'이 없는 '대표자 선임계'
+    ('…참여업체의 대표자를 … 선임하고 모든 권한을 공동수급체 대표자에게 위임합니다. ※ 단독 참가시는 필요 없음.')도 공란 서식."""
+    from quantdocs.build import _joint_body
+
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    joint = _mini_hwpx(tmp_path / "j.hwpx", para("대표자 선임계") + para("「가상 사업」 참여업체의 대표자를 아래와 같이 선임하고 모든 권한을 공동수급체 대표자에게 위임합니다.")
+                       + para("※ 단독 참가시는 필요 없음."))
+    assert _joint_body(joint)
+    single = _mini_hwpx(tmp_path / "s.hwpx", para("입찰참가 신청서") + para("※ 공동수급의 경우 대표사가 제출"))
+    assert not _joint_body(single)

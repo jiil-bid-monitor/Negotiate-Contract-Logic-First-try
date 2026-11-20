@@ -4129,6 +4129,8 @@ function awardWaiting(o, lim = 5) {
 // 단계 이름은 업무대로 — 공사 착공·준공, 물품 착수·납품, 용역 착수·완료(11/20 사용자 '물품인데 왜 준공계·착공계라 해')
 const awardWords = (v) => (v.work === "공사" ? ["착공", "준공"] : v.work === "물품" ? ["착수", "납품"] : v.work === "용역" ? ["착수", "완료"] : ["착공·착수", "준공"]);
 const awardSteps = (v) => ["개찰", "적격심사", "계약", ...awardWords(v), "청구"];
+/** 개찰 뒤 이만큼 지나도 낙찰자가 안 나오면 '1순위 심사가 길어짐'(2~5등) — 차장님께 보통 기간을 여쭤 고칠 값 */
+const AWARD_LONG_WAIT = 10;
 // 적격심사 서류 = 개찰 1등만(11/20 사용자). 2~5등은 앞 순위가 심사에서 떨어져 차례가 넘어올 때만 — 나라장터로는 알 수 없어
 // 담당자가 심사 통보를 받으면 '더 보기'에서 만듦. 지명경쟁은 지명 업체끼리 몰아주는 구조라 2등부터 끝난 공고.
 const awardDesignated = (v) => ((v.bid || {}).method || "").includes("지명");
@@ -4144,7 +4146,12 @@ function awardKind(v) {
 function awardStage(v, kind) {
   const o = v.opening, rank = o ? o.rank : null, d = awardDesignated(v);
   const cdate = (v.contract || {}).date;  // 나라장터 계약정보에 계약이 올라오면(22시·'지금 낙찰자 확인') 착공·착수 단계로
-  const [ws] = awardWords(v);
+  const [ws, wd] = awardWords(v);
+  const pg = v.progress || {}, mdd = (s) => String(s).slice(5, 10).split("-").map(Number).join("/");
+  // 11/20 사용자: 착수·납품·청구는 서류 날짜로 단계 — 담당자가 서류의 제출일·청구일을 채워 저장하면 다음 단계로
+  if (v.status === "낙찰" && cdate && pg.claim) return ["청구 완료", 6, `청구서 ${mdd(pg.claim)} — 대금 지급을 기다림`];
+  if (v.status === "낙찰" && cdate && pg.done) return ["청구 서류", 5, `${wd}계 ${mdd(pg.done)} 제출 — 청구서의 청구일을 채우면 청구 완료`];
+  if (v.status === "낙찰" && cdate && pg.start) return [`${wd} 서류`, 4, `${ws}계 ${mdd(pg.start)} 제출${(v.contract || {}).due ? ` · ${wd} 기한 ${mdd(v.contract.due)}` : ""} — ${wd}계의 제출일을 채우면 다음 단계`];
   if (v.status === "낙찰" && cdate) return [`${ws} 서류`, 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결 — ${v.folder && !v.qualOnly ? `서류 현황에서 ${ws} 서류를 확인하세요` : "'낙찰 서류 만들기'를 누르세요"}`];
   if (v.status === "낙찰") return v.folder && !v.qualOnly ? ["계약 서류", 2, `나라장터에 계약이 올라오면 ${ws} 단계로 넘어갑니다`]
     : ["낙찰 — 계약 등록 기다림", 2, "나라장터에 계약이 올라오면 '낙찰 서류 만들기'가 켜집니다 — 계약서를 먼저 받았으면 '더 보기'에서 만드세요"];
@@ -4157,6 +4164,10 @@ function awardStage(v, kind) {
     return ["끝남", -1, ""];
   }
   if (o && v.private && rank === 1) return ["개찰 1등 — 낙찰 확인 기다림", 0, "수의계약 — 적격심사 없이, 낙찰이 확인되면 '낙찰 서류 만들기'가 켜집니다"];
+  // 11/20 사용자: 2등 차례는 나라장터로 알 수 없음 — 개찰 뒤 오래 낙찰자가 안 나오면 1순위 심사가 길어지는 것으로 보고 미리 표시
+  const waited = o && o.at ? Math.floor((Date.now() - new Date(o.at + "T00:00:00")) / 86400000) : 0;
+  if (o && waited >= AWARD_LONG_WAIT) return [`개찰 ${rank}등 — 1순위 심사가 길어짐`, v.private ? 0 : 1,
+    `개찰 뒤 ${waited}일째 낙찰자가 안 나옴 — 1순위가 포기·탈락하면 차례가 옵니다. 발주처 연락을 받으면 '더 보기'에서 ${v.private ? "낙찰 서류" : "적격심사 서류"} 만들기`];
   if (o) return [`개찰 ${rank}등 — 차례 기다림`, v.private ? 0 : 1, v.private ? "앞 순위가 계약을 못 하면 차례가 옵니다 — 낙찰이 확인되면 '낙찰 서류 만들기'"
     : "앞 순위가 심사에서 떨어지면 차례가 옵니다 — 심사 통보를 받으면 '더 보기'에서 적격심사 서류 만들기"];
   if (v.status === "대기") return ["개찰 결과 기다림", 0, v.private ? "수의계약 — 적격심사 없이 낙찰이 확인되면 계약" : "개찰 1순위면 적격심사 서류를 만들 수 있습니다"];

@@ -898,9 +898,11 @@ class PostAward:
             raise ValueError("폴더가 비어 있습니다" if since is None else "새로 더해진 파일이 없습니다")
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            # zip 안은 공고 폴더 이름 아래 — '_전체.zip'·'_추가.zip'을 같은 곳에 풀면 한 폴더로 합쳐짐(11/20 사용자)
             for f in files:
-                z.write(f, f.relative_to(target).as_posix())
-        return f"{key}_{STAGE_NAME.get(target.name, target.name) if rel else '추가' if since is not None else '전체'}.zip", buf.getvalue()
+                z.write(f, f"{folder.name}/{f.relative_to(folder).as_posix()}")
+        # 파일 이름도 폴더 이름(공고번호_공고명) — 받은 zip만 봐도 어느 공고인지(11/20 사용자)
+        return f"{folder.name}_{STAGE_NAME.get(target.name, target.name) if rel else '추가' if since is not None else '전체'}.zip", buf.getvalue()
 
     def _fill_qual(self, key: str, folder: Path, nf, templates: Path) -> list[str]:
         """적격심사 표준틀을 0_적격심사에 복사하고 공고·투찰 기록 값을 채움. 이미 있으면 담당자 파일이라 그대로. 안내 줄을 돌려줌."""
@@ -1218,9 +1220,9 @@ def selfcheck() -> None:
         zf = pa.make_folder("R26BK00000001-000", Path(d) / "out")
         (zf / "0_적격심사" / "a.txt").write_text("x", encoding="utf-8")
         name, body = pa.zip("R26BK00000001-000", "0_적격심사")
-        assert name == "R26BK00000001-000_적격심사.zip" and _zip.ZipFile(_io.BytesIO(body)).namelist() == ["a.txt"], name
+        assert name == f"{zf.name}_적격심사.zip" and _zip.ZipFile(_io.BytesIO(body)).namelist() == [f"{zf.name}/0_적격심사/a.txt"], name
         name, body = pa.zip("R26BK00000001-000", "")  # 공고 폴더 전체 묶음(폴더 만들기 때, 11/17)
-        assert name == "R26BK00000001-000_전체.zip" and "0_적격심사/a.txt" in _zip.ZipFile(_io.BytesIO(body)).namelist(), name
+        assert name == f"{zf.name}_전체.zip" and f"{zf.name}/0_적격심사/a.txt" in _zip.ZipFile(_io.BytesIO(body)).namelist(), name
         (zf / "0_적격심사" / "a.txt").unlink()
         try:
             pa.zip("R26BK00000001-000", "..")

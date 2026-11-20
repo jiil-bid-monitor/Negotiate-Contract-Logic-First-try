@@ -52,6 +52,13 @@ MAX_IMPORT = 500_000_000  # 서버 PC가 보내는 수집 결과 — 제외 공�
 VIEWER_MESSAGE = "이 서버는 결과 보기 전용입니다 — 수집은 서버 PC 화면에서 하세요"
 
 
+# 시험 페이지에 미리 넣는 공고 — 광양시 교통안전체험관 제작 및 설치(2025, 물품 제한경쟁 적격심사 → 지일 낙찰 390,144,500원).
+# 2025-11 실제 적격심사 제출본(2026 프로젝트\실행완료\광양시교통안전체험관)과 웹앱이 만든 서류를 견주어 볼 수 있음
+AWARD_TEST_SEED = {"noticeNo": "R25BK01125448", "noticeOrd": "000", "title": "광양시 교통안전체험관 제작 및 설치",
+                   "workType": "물품", "contractMethod": "제한경쟁", "bid": 390144500}
+AWARD_TEST_FOLDER = "낙찰후서류_테스트"
+
+
 def static_version() -> str:
     """화면 파일(index.html·js) 지문 — 서버를 새 코드로 다시 켜면 바뀐다. 열려 있던 페이지가 예전 화면 코드로
     새 결과를 그리는 걸 알아채고 "새로고침" 안내를 띄우는 데 쓴다(10/1·10/12 두 번 헷갈림)."""
@@ -90,6 +97,10 @@ class App:
         # 낙찰 후 서류 — 낙찰 여부 확인 목록(2026-11-10), data/postaward.json
         from nego.bidrecommend import default_own_bizno
         self.postaward = PostAward(store.path.parent, self.bidlog, default_own_bizno())
+        # 낙찰 후 서류 시험 페이지(/award-test, 11/20 사용자 — 팀원도 시험해 보게): 목록·투찰 기록·폴더를 운영과 따로(data/award_test,
+        # 폴더는 낙찰후서류_테스트), 과거 수주 사업 광양 교통안전체험관(물품 적격심사 → 낙찰)을 미리 넣어 둠
+        self.award_test_dir = store.path.parent / "award_test"
+        self.reset_award_test(clear=False)
         self._run_cache: tuple[int | None, dict[str, Any] | None] = (None, None)
         self._held_raw: dict[str, Any] | None = None
         # 결과 보기 전용(NAS, WEBAPP_ROLE=viewer) — 수집 버튼을 숨기고 서버 PC가 보낸 결과를 받는다
@@ -99,6 +110,78 @@ class App:
         self.push: ResultPush | None = None
         # 서버 PC — 판단 기록은 NAS 한 곳에 저장(2026-11-09 사용자 결정). (NAS 주소, 토큰) — 있으면 /api/participation을 NAS로 넘긴다
         self.team_remote: tuple[str, str] | None = None
+
+    def award_root(self, test: bool = False) -> Path:
+        """낙찰 후 서류 폴더를 만들 곳 — 공유 폴더 맨 위 '낙찰후서류'(POSTAWARD_DIR로 바꿈), 시험 페이지는 그 옆 '낙찰후서류_테스트'."""
+        base = Path(os.environ.get("POSTAWARD_DIR", "").strip() or self.store.path.resolve().parents[2] / "낙찰후서류")
+        return base.parent / AWARD_TEST_FOLDER if test else base
+
+    def reset_award_test(self, clear: bool = True) -> None:
+        """시험 페이지를 처음 상태로 — clear면 시험 목록·투찰 기록·만든 시험 폴더를 지움. 공고는 시험 API를 처음 쓸 때 넣음(seed_award_test)."""
+        import shutil
+
+        from nego.bidrecommend import default_own_bizno
+
+        from .bidlog import BIDDERS_DIR
+        from .bidlog import FILE_NAME as BIDLOG_FILE
+        from .postaward import STATE_FILE
+
+        d = self.award_test_dir
+        if clear:
+            for name in (STATE_FILE, BIDLOG_FILE):
+                (d / name).unlink(missing_ok=True)
+            shutil.rmtree(d / BIDDERS_DIR, ignore_errors=True)
+            root = self.award_root(test=True)
+            if root.name == AWARD_TEST_FOLDER:  # 시험 폴더만 지움(운영 '낙찰후서류'는 건드리지 않음)
+                shutil.rmtree(root, ignore_errors=True)
+        self.bidlog_test = BidLog(d)
+        self.postaward_test = PostAward(d, self.bidlog_test, default_own_bizno())
+
+    def seed_award_test(self) -> None:
+        """시험 목록이 비었으면 공고를 넣음 — 광양(결과 없이, '지금 낙찰자 확인'으로 한 단계씩) + 운영 투찰 기록에서 경우마다 한 건씩
+        (수의계약 2~5등 · 2~5등 · 하한선 미달 · 6등 밖, 개찰 결과까지 그대로 복사 — 기다림·끝난 공고 묶음이 다 보이게, 11/20 사용자).
+        운영 기록은 시작한 뒤에야 다 붙어서(서버 PC 사본) 시작할 때가 아니라 시험 API를 처음 쓸 때 넣음."""
+        log = self.bidlog_test
+        if log.entries():
+            return
+        log.add(dict(AWARD_TEST_SEED))
+        picked, rows = set(), log._read()
+        for e in self.bidlog.entries():  # 최근 기록 먼저
+            res = e.get("result") or {}
+            own = res.get("own")
+            if res.get("status") != "완료" or not own or e.get("noticeNo") == AWARD_TEST_SEED["noticeNo"]:
+                continue
+            rank, private = own.get("rank"), "수의" in (e.get("contractMethod") or "")
+            case = ("수의 2~5등" if private and rank and 2 <= rank <= 5 else "2~5등" if rank and 2 <= rank <= 5
+                    else "하한선 미달" if rank is None else "6등 밖" if rank > 5 else None)
+            if case and case not in picked:
+                picked.add(case)
+                rows.append({**e, "memo": f"[시험] {case} — 운영 투찰 기록에서 복사"})
+        log._write(rows)
+        self.postaward_test.sync_bidlog()
+
+    def step_award_test(self, client: Any, base: str, own_bizno: str) -> dict[str, Any]:
+        """시험 페이지 '지금 낙찰자 확인' — 광양을 실제 순서대로 한 단계씩: ① 개찰 결과 ② 낙찰 확인 ③ 계약 등록.
+        다른 경우 공고는 ②에서 같이 낙찰자를 확인(다른 업체 낙찰 등)."""
+        from .bidresult import fill_results
+        from .server import contract_lookup as _lookup
+
+        pa, key = self.postaward_test, f"{AWARD_TEST_SEED['noticeNo']}-{AWARD_TEST_SEED['noticeOrd']}"
+        v = next((x for x in pa.items() if f"{x.get('no')}-{x.get('ord')}" == key), None)
+        if v is None:
+            return {"message": "광양 공고가 목록에 없습니다 — '처음으로 되돌리기'를 누르세요"}
+        if not v.get("opening"):
+            seed = [e["id"] for e in self.bidlog_test.entries() if e.get("noticeNo") == AWARD_TEST_SEED["noticeNo"]]
+            fill_results(self.bidlog_test, client, base, own_bizno, ids=seed)
+            return {"message": "① 개찰 결과를 받았습니다 — 개찰 1등이면 '적격심사 서류 만들기'가 켜집니다. 다시 누르면 ② 낙찰 확인"}
+        if v.get("status") == "대기":
+            done = pa.check(client, base)
+            return {**done, "message": f"② 낙찰자를 확인했습니다(낙찰 {done['won']} · 다른 업체 {done['lost']}) — 다시 누르면 ③ 계약 등록 확인"}
+        if not (v.get("contract") or {}).get("date"):
+            n = pa.check_contracts(_lookup())
+            return {"contracts": n, "message": "③ 나라장터에 계약이 올라와 단계가 착공·착수로 넘어갔습니다" if n
+                    else "③ 나라장터에 아직 계약이 없습니다"}
+        return {"message": "광양은 마지막 단계(착공·착수)까지 왔습니다 — '처음으로 되돌리기'로 다시 시작"}
 
     def _titles(self) -> dict[str, str]:
         run = self.store.latest_run() or {}
@@ -200,6 +283,10 @@ def make_handler(app: App):
             if not self._authorized():
                 return self._json({"error": "접속 토큰이 필요합니다 — 담당자에게 받은 주소(?t=… 포함)로 다시 여세요.",
                                    "unauthorized": True}, HTTPStatus.UNAUTHORIZED)
+            pa = app.postaward
+            if url.path.startswith("/api/test/postaward"):  # 시험 페이지(/award-test)
+                url, pa = url._replace(path=url.path.replace("/api/test/", "/api/", 1)), app.postaward_test
+                app.seed_award_test()
             if url.path.startswith("/api/quant/"):
                 return self._quant("GET", url.path[len("/api/quant"):], None)
             q = parse_qs(url.query)
@@ -322,18 +409,18 @@ def make_handler(app: App):
             if url.path == "/api/bidlog":
                 return self._json({"entries": app.bidlog.entries()})
             if url.path == "/api/postaward":
-                return self._json({"items": app.postaward.items()})
+                return self._json({"items": pa.items()})
             if url.path == "/api/postaward/status":
                 # 서류 현황(11/11) — 단계별 파일·담당자가 채울 칸·첨부 제출서류
-                return self._json(app.postaward.status(q.get("key", [""])[0]))
+                return self._json(pa.status(q.get("key", [""])[0]))
             if url.path in ("/api/postaward/file", "/api/postaward/zip"):
                 # 공고 폴더 안 파일 내려받기 — 브라우저는 윈도우 폴더를 열 수 없고 다른 PC는 서버 PC 디스크에 못 들어가서.
                 # zip = 단계 폴더 하나를 묶어서(제출용, 11/16)
                 try:
                     if url.path.endswith("/zip"):
-                        name, body = app.postaward.zip(q.get("key", [""])[0], q.get("path", [""])[0])
+                        name, body = pa.zip(q.get("key", [""])[0], q.get("path", [""])[0])
                     else:
-                        target = app.postaward.file(q.get("key", [""])[0], q.get("path", [""])[0])
+                        target = pa.file(q.get("key", [""])[0], q.get("path", [""])[0])
                         name, body = target.name, target.read_bytes()
                 except ValueError as err:
                     return self._json({"error": str(err)}, 404)
@@ -378,6 +465,8 @@ def make_handler(app: App):
             name = "index.html" if path in ("", "/") else path.lstrip("/")
             if name in ("v2", "v2/"):  # 새 화면 시험판(2026-11-16) — 기존 화면(/)은 그대로
                 name = "v2/index.html"
+            if name in ("award-test", "award-test/"):  # 낙찰 후 서류 시험 페이지(11/20) — 같은 화면, 낙찰 후 서류 탭만
+                name = "index.html"
             target = (STATIC / name).resolve()
             if STATIC not in target.parents or not target.is_file():
                 return self._error(HTTPStatus.NOT_FOUND, "없는 파일")
@@ -397,6 +486,10 @@ def make_handler(app: App):
             url = urlparse(self.path)
             if not self._authorized():
                 return self._error(HTTPStatus.UNAUTHORIZED, "접속 토큰이 필요합니다")
+            pa, test = app.postaward, url.path.startswith("/api/test/postaward")
+            if test:  # 시험 페이지(/award-test) — 운영 목록·폴더와 따로
+                url, pa = url._replace(path=url.path.replace("/api/test/", "/api/", 1)), app.postaward_test
+                app.seed_award_test()
             try:
                 if url.path == "/api/import-run":
                     return self._import_run()
@@ -460,17 +553,20 @@ def make_handler(app: App):
                     entry = app.bidlog.add(data)
                     return self._json({"ok": True, "entry": entry, "entries": app.bidlog.entries()})
                 if url.path == "/api/postaward":
-                    app.postaward.add(str(data.get("no") or ""), str(data.get("title") or ""), str(data.get("work") or ""))
-                    return self._json({"ok": True, "items": app.postaward.items()})
+                    pa.add(str(data.get("no") or ""), str(data.get("title") or ""), str(data.get("work") or ""))
+                    return self._json({"ok": True, "items": pa.items()})
+                if url.path == "/api/postaward/reset" and test:  # 시험 페이지를 처음 상태로
+                    app.reset_award_test()
+                    app.seed_award_test()
+                    return self._json({"ok": True, "items": app.postaward_test.items()})
                 if url.path == "/api/postaward/folder":
-                    # 폴더는 공유 폴더 맨 위 '낙찰후서류'(NAS: \\jiilserver\jiil-webapp\낙찰후서류), POSTAWARD_DIR로 바꿈
-                    root = Path(os.environ.get("POSTAWARD_DIR", "").strip() or app.store.path.resolve().parents[2] / "낙찰후서류")
-                    folder, _ = app.postaward.prepare(str(data.get("key") or ""), root, qual_only=data.get("stage") == "qual",
-                                                      contract_lookup=contract_lookup())
-                    return self._json({"ok": True, "folder": str(folder), "items": app.postaward.items()})
+                    # 폴더는 공유 폴더 맨 위 '낙찰후서류'(NAS: \\jiilserver\jiil-webapp\낙찰후서류), POSTAWARD_DIR로 바꿈 — 시험은 '낙찰후서류_테스트'
+                    folder, _ = pa.prepare(str(data.get("key") or ""), app.award_root(test), qual_only=data.get("stage") == "qual",
+                                           contract_lookup=contract_lookup())
+                    return self._json({"ok": True, "folder": str(folder), "items": pa.items()})
                 if url.path == "/api/postaward/delete":
-                    app.postaward.remove(str(data.get("key") or ""))
-                    return self._json({"ok": True, "items": app.postaward.items()})
+                    pa.remove(str(data.get("key") or ""))
+                    return self._json({"ok": True, "items": pa.items()})
                 if url.path == "/api/postaward/check":
                     # 지금 낙찰자 확인 — keys를 주면 그 공고만(다시), 없으면 '대기' 전부
                     from nego import fields as F
@@ -479,16 +575,21 @@ def make_handler(app: App):
                         if not config.api.service_key:
                             return self._error(HTTPStatus.CONFLICT, "서버에 나라장터 인증키(NARA_SERVICE_KEY)가 없습니다")
                         base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
+                        client = bidcalc.make_client(config.api)
+                        if test:  # 시험 페이지 — 광양을 한 단계씩(개찰 → 낙찰 → 계약)
+                            from nego.bidrecommend import default_own_bizno
+                            done = app.step_award_test(client, base, default_own_bizno())
+                            return self._json({"ok": True, **done, "items": pa.items()})
                         if getattr(app, "bidlog_pull", None):
                             app.bidlog_pull.pull()
-                        app.postaward.sync_bidlog()
+                        pa.sync_bidlog()
                         keys = [str(k) for k in data.get("keys") or []] or None
-                        done = app.postaward.check(bidcalc.make_client(config.api), base, keys)
-                        done["contracts"] = app.postaward.check_contracts(contract_lookup())  # 계약이 올라왔으면 단계를 착공·착수로
+                        done = pa.check(client, base, keys)
+                        done["contracts"] = pa.check_contracts(contract_lookup())  # 계약이 올라왔으면 단계를 착공·착수로
                     except (ConfigError, ApiError) as err:
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
-                    return self._json({"ok": True, **done, "items": app.postaward.items()})
+                    return self._json({"ok": True, **done, "items": pa.items()})
                 if url.path == "/api/bidlog/update":
                     app.bidlog.update(str(data.get("id") or ""), data)
                     return self._json({"ok": True, "entries": app.bidlog.entries()})
@@ -571,7 +672,8 @@ def contract_lookup():
 
     # 계약정보 목록은 하루 7~8천 건(용역) — 서버 기본 max_pages(5쪽 ≈ 5천 건)로는 지일 계약이 잘려 나갈 수 있음(11/18 모의 테스트)
     client, own = bidcalc.make_client(dataclasses.replace(config.api, max_pages=40)), default_own_bizno()
-    return lambda v: find_contract(client, v.get("no", ""), v.get("work", ""), own, (v.get("contract") or {}).get("no", ""))
+    return lambda v: find_contract(client, v.get("no", ""), v.get("work", ""), own, (v.get("contract") or {}).get("no", ""),
+                                   since=(v.get("winner") or {}).get("date", ""))
 
 
 def decisions_csv(rows: list[dict[str, Any]]) -> str:

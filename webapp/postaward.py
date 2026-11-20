@@ -210,8 +210,10 @@ def contract_values(row: dict) -> dict[str, Any]:
     return {k: v for k, v in out.items() if v not in (None, "")}
 
 
-def find_contract(client: Any, no: str, work: str, own_bizno: str, known: str = "") -> dict | None:
-    """공고의 나라장터 계약정보 한 줄(없으면 None — 아직 계약 전). known = 지난번 찾은 통합계약번호."""
+def find_contract(client: Any, no: str, work: str, own_bizno: str, known: str = "", since: str = "") -> dict | None:
+    """공고의 나라장터 계약정보 한 줄(없으면 None — 아직 계약 전). known = 지난번 찾은 통합계약번호.
+    since = 낙찰일 — 조달청이 대신 맺은 계약(계약번호 R…TA…)은 계약과정 통합공개에 안 나와 계약일을 몰라서, 그때는
+    낙찰일부터 계약 목록을 봄(11/20 시험: 광양 교통안전체험관 낙찰 11/25 → 계약 11/26, 목록의 공고번호로 찾음)."""
     op = CNTRCT_OPS.get(work)
     if not op:
         return None
@@ -228,6 +230,8 @@ def find_contract(client: Any, no: str, work: str, own_bizno: str, known: str = 
                 if (d := _date(parts[7])) is not None:
                     days.append(d)
     refs.discard("")
+    if not days and (d := _date(since)) is not None:
+        days.append(d)
     if not days:
         return None
     own = _digits(own_bizno)
@@ -727,7 +731,7 @@ class PostAward:
                     write_summary(summary, key, v, nf)
                 except Exception as err:  # noqa: BLE001 — 요약을 못 만들어도 폴더·서류는 그대로
                     basic.append(f"[공고요약] {SUMMARY}를 만들지 못함({err.__class__.__name__})")
-        lines = [f"⚠ 새로 발급 필요: {k} (보유본 {h})" for k, h in reissue] + ([""] if reissue else [])  # 맨 위(11/19 사용자)
+        lines = [f"⚠ 새로 발급 필요: {k} ({h if h.startswith('보유본') else '보유본 ' + h})" for k, h in reissue] + ([""] if reissue else [])  # 맨 위(11/19 사용자)
         lines += [f"{key} {v.get('title') or nf.title} — 첨부에서 읽은 제출서류 (자동, 원문과 대조하세요)", ""]
         lines += basic + [""]
         if not nf.title:
@@ -897,6 +901,9 @@ class PostAward:
         cv = cv or {}
         if cv.get("gwiha"):
             values[6] = (cv["gwiha"], "나라장터 계약기관 — '○○ 귀하' 자리, 분임재무관 등으로 바꿔야 하면 고침")
+        raw = getattr(nf, "raw", None) or {}
+        if "조달청" in str(raw.get("ntceInsttNm") or ""):  # 조달청이 대신 계약 — 착수계는 조달청장에게(광양 실제 착수계 2025-12, 11/20 사용자)
+            values[6] = ("조달청장", "조달청 대행 계약 — 착수(착공)계 수신은 조달청장")
         for row, k, what in ((15, "contract", "계약일"), (16, "start", "착수일"), (17, "due", "준공예정일")):
             if cv.get(k):  # 폴더 만들 때 나라장터에 계약이 이미 있으면 한 번에(11/18 사용자 — 두 번 받기는 비효율)
                 values[row] = (cv[k], f"나라장터 계약정보 {what}")

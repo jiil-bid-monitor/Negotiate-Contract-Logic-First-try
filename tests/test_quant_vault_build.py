@@ -4191,3 +4191,27 @@ def test_seal_line_trims_right_spaces_keeps_colon(tmp_path: Path):
         assert "홍길동 (인)" in got, got
         assert got.index(":") == orig.index(":")  # ':' 자리 그대로(앞 들여쓰기 안 줄임)
         assert _span(got) <= _span(orig + tail)   # 줄이 원래보다 길어지지 않음
+
+
+def test_center_sign_block_seal_line_drops_padding(tmp_path: Path):
+    """11/20 사용자 지적(두 번째): 가운데 정렬 서명 묶음 '대 표 자 : 이운봉' 뒤 (인)이 여전히 다음 줄로 — 이 묶음은 왼쪽 정렬로 바꾸는
+    경로(`_center_keep`)라 앞의 고침을 안 거쳤음. 왼쪽 정렬로 바꾼 줄은 가운데 정렬 길이를 맞추던 빈칸이 필요 없으니 이름과 (인) 사이 한 칸,
+    (인) 뒤 빈칸 없음 — ':' 자리는 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:paraProperties itemCnt="1"><hh:paraPr id="57"><hh:align horizontal="CENTER"/>'
+              '<hh:margin><hc:intent value="0"/><hc:left value="0"/><hc:right value="0"/></hh:margin></hh:paraPr></hh:paraProperties>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1200"></hh:charPr></hh:charProperties></hh:head>')
+    sec = '<hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin left="8504" right="8504" top="5668" bottom="4252"/></hp:pagePr></hp:secPr>'
+    para = lambda t: f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    orig = ["업 체 명:" + " " * 12, "대 표 자:" + " " * 20 + "(인)" + " " * 10]
+    body = f'<hp:p paraPrIDRef="57"><hp:run charPrIDRef="0">{sec}<hp:t>20  년    월    일</hp:t></hp:run></hp:p>' + "".join(para(x) for x in orig)
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    out = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    texts = [re.sub(r"<[^>]+>", "", "".join(re.findall(r"<hp:t\b[^>]*>(.*?)</hp:t>", p, re.S)))
+             for p in re.findall(r"<hp:p\b[^>]*>(.*?)</hp:p>", out, re.S)]
+    rep = next(t for t in texts if "대 표 자" in t)
+    assert rep.endswith("홍길동 (인)"), repr(rep)

@@ -991,7 +991,12 @@ def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None
     ns = open_m.group(1) or ""
     if use_left:
         new_open = open_m.group(0).replace(f'paraPrIDRef="{pid}"', f'paraPrIDRef="{chars.left_at(pid, max(left, 0) + offset)}"', 1)
-        out = new_open + no_lines(seg[open_m.end():i] + _mark(lines[0]) + seg[j + 1:])
+        tail_out = seg[j + 1:]
+        if len(lines) == 1 and unescape(re.sub(r"<[^>]+>", "", tail_out)).strip():
+            # (11/20 사용자 지적: '대 표 자 : 이운봉' 뒤 (인)이 다음 줄로 — ':' 자리는 지킨 채 값 뒤 오른쪽 빈칸을 줄임) 왼쪽 정렬로 바꾼 줄은
+            # 줄 길이를 맞출 까닭이 없음 → (인) 뒤 빈칸은 지우고 이름과 (인) 사이는 한 칸(원래 가운데 정렬 길이를 맞추던 빈칸이 줄을 넘겼음)
+            tail_out = _shrink_tail(tail_out, 10 ** 6)
+        out = new_open + no_lines(seg[open_m.end():i] + _mark(lines[0]) + tail_out)
         for x in lines[1:]:
             out += f"{new_open}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>"
         return out
@@ -1009,6 +1014,42 @@ def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None
     for x in lines[1:]:
         out += pad(f"{open_m.group(0)}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>", pw + _cjk_width(x, h))
     return out
+
+
+def _shrink_tail(tail_xml: str, cut: int) -> str:
+    """값 뒤 글('      (인)   ' — 첫 조각은 이미 열린 글 조각 안)에서 빈칸을 cut개까지 뺌: 줄 끝 빈칸 먼저, 그다음 값과 다음 글 사이(한 칸은 남김)."""
+    parts = re.split(r"(<[^>]+>)", tail_xml)
+    texts, in_t = [], True
+    for k, part in enumerate(parts):
+        if part.startswith("<"):
+            if re.match(r"<(?:[\w.-]+:)?t\b", part):
+                in_t = True
+            elif re.match(r"</(?:[\w.-]+:)?t>", part):
+                in_t = False
+        elif in_t and part:
+            texts.append(k)
+    for k in reversed(texts):  # 줄 끝 빈칸
+        if cut <= 0:
+            break
+        keep = parts[k].rstrip(" ")
+        n = min(cut, len(parts[k]) - len(keep))
+        parts[k] = parts[k][:len(parts[k]) - n]
+        cut -= n
+        if keep:
+            break
+    left_keep = 1
+    for k in texts:  # 값과 다음 글 사이 — 한 칸은 남김
+        if cut <= 0:
+            break
+        body = parts[k]
+        lead = len(body) - len(body.lstrip(" "))
+        n = min(cut, max(0, lead - left_keep))
+        parts[k] = body[n:]
+        cut -= n
+        left_keep = max(0, left_keep - (lead - n))
+        if body.strip(" "):
+            break
+    return "".join(parts)
 
 
 def _line_width(xml: str, s: int, cells: list[tuple[int, int]]) -> int | None:

@@ -1494,6 +1494,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <details class="group off-group rescue-group" id="reviewGroup" hidden>
       <summary><h2>검토필요 <span class="group-n" id="reviewN"></span></h2></summary>
       <p class="group-note">제목에 <b>관심 키워드</b>와 <b>제외 키워드</b>가 함께 있어 목록에서 뺀 공고입니다. 다른 조건(마감·금액·자격·지역 등)은 모두 통과했습니다. 우리 공고라고 판단되면 <b>목록에 올리기</b>를 누르세요 — 본공고·사전규격 목록에 들어가고 팀원 모두에게 보입니다.</p>
+      <div class="cat-tabs review-cats" id="reviewCats" role="tablist" aria-label="검토필요 낙찰방법"></div>
       <div id="reviewList"></div>
     </details>
     <nav class="jump" id="jumpNav" aria-label="목록 바로가기" hidden></nav>
@@ -2127,13 +2128,23 @@ document.addEventListener("click", (ev) => {
 // ── 검토필요 — 제목에 관심 키워드와 제외 키워드가 함께 있는 공고 (2026-10-15 요청) ─────
 const reviewOf = () => lastTitleExcluded.filter((n) => (n.interestKeywords || []).length > 0);
 
+// 검토필요 칸 안 낙찰방법 탭 — 위 대분류 탭과 같은 칸·모양, 고른 값은 따로 (2026-11-20 사용자 요청)
+let reviewCat = "all";
 function renderReview() {
   const box = $("reviewGroup");
   const past = (n) => deadlineAt(n.deadline) < Date.now();
-  const list = reviewOf().sort((a, b) => past(a) - past(b) || deadlineAt(a.deadline) - deadlineAt(b.deadline));
-  box.hidden = list.length === 0;
-  $("reviewN").textContent = list.length + "건";
-  $("reviewList").innerHTML = list.map(renderReviewRow).join("");
+  const all = reviewOf().sort((a, b) => past(a) - past(b) || deadlineAt(a.deadline) - deadlineAt(b.deadline));
+  box.hidden = all.length === 0;
+  $("reviewN").textContent = all.length + "건";
+  const tab = ([v, note, sub]) => {
+    const n = v === "all" ? all.length : all.filter((x) => categoryOf(x) === v).length;
+    const tip = [sub, note].filter(Boolean).join(" — ");
+    return `<button type="button" role="tab" class="cat-tab ${reviewCat === v ? "on" : ""}" aria-selected="${reviewCat === v}" data-rcat="${v}" ${n === 0 && v !== "all" ? "disabled" : ""} ${tip ? `title="${esc(tip)}"` : ""}>` +
+      `<span class="cat-name">${esc(v === "all" ? "전체" : v)}<span class="n">${num(n)}</span></span></button>`;
+  };
+  $("reviewCats").innerHTML = `<div class="cat-main">${[["all", null, null], ...CATEGORIES].map(tab).join("")}</div>`;
+  const list = reviewCat === "all" ? all : all.filter((x) => categoryOf(x) === reviewCat);
+  $("reviewList").innerHTML = list.length ? list.map(renderReviewRow).join("") : `<p class="group-note">이 낙찰방법의 검토필요 공고가 없습니다.</p>`;
   renderJumpNav();
 }
 
@@ -4023,6 +4034,12 @@ $("filters").onclick = (ev) => {
 // 드롭다운 바깥을 누르거나 Esc를 누르면 닫는다
 document.addEventListener("click", (ev) => { if (!ev.target.closest?.(".dd")) closeDropdowns(); });
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeDropdowns(); });
+$("reviewCats").onclick = (ev) => {
+  const btn = ev.target.closest("[data-rcat]");
+  if (!btn || btn.disabled) return;
+  reviewCat = btn.dataset.rcat;
+  renderReview();
+};
 $("catTabs").onclick = (ev) => {
   const btn = ev.target.closest("[data-cat]");
   if (!btn) return;

@@ -735,9 +735,12 @@
     if (!mine(res)) return "";
     const w = webRank(res);
     const cls = (k) => (k == null ? "" : k > 0 ? "rank" : "res-bad");
-    // '▶ 웹앱이 나음·외주가 나음·같음' 줄은 뺌(11/18 사용자 요청) — 웹앱·외주 등수 두 줄만
-    return `<span class="vs-lines"><span class="sub nowrap">웹앱 <b class="${cls(w)}">${shortPlace(w)}</b></span>`
-      + (s ? `<span class="sub nowrap">외주 <b class="${cls(s.rank)}">${shortPlace(s.rank)}</b></span>` : "") + `</span>`;
+    // 실제로 낸 쪽(투찰금액·외주 금액) 등수는 오른쪽 '지일 등수' 칸에만 — 왼쪽엔 안 낸 쪽 줄만(11/20 사용자 요청 — 같은 등수가 두 번 보였음)
+    const a = actualSide(r), sent = a && !a.plan ? a.kind : null;
+    const lines = (sent !== "web" ? `<span class="sub nowrap">웹앱 <b class="${cls(w)}">${shortPlace(w)}</b></span>` : "")
+      + (s && sent !== "out" ? `<span class="sub nowrap">외주 <b class="${cls(s.rank)}">${shortPlace(s.rank)}</b></span>` : "");
+    // '▶ 웹앱이 나음·외주가 나음·같음' 줄은 뺌(11/18 사용자 요청)
+    return lines ? `<span class="vs-lines">${lines}</span>` : "";
   }
   // 펼친 결과 — 외주 금액으로 투찰했다면(11/16)
   function outsourceBlock(r) {
@@ -797,18 +800,17 @@
   function rateCell(r) {
     const res = r.result;
     if (!res || res.status !== "완료" || res.assessmentRate == null) return "-";
-    const d = res.rateDiff;
     // 지일 등수·하한선 통과/미달을 먼저, 실제 사정률은 부가 정보로(11/10 사용자 요청) — 등수는 하한선 위면 N등, 미달이면 -N등
     // 오른쪽 칸 = 지일 실제 투찰 등수(11/20 — 비교 기록도 '웹앱' 대신 실제 등수, 웹앱 등수는 개찰 결과 칸 '웹앱 N등' 줄)
     const o = res.own, place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
-    const pass = o && o.rank != null ? true : place ? false : d != null ? d >= 0 : null;
     // 하한선 통과/미달은 옆 개찰 결과 칸(낙찰·탈락 아래)과 겹쳐 등수만(11/10) — 지일이 참가 안 한 공고만 기준 대비 통과/미달
     // 오른쪽 칸은 등수만(11/13 사용자 요청 — 참가 수는 개찰 결과 칸 '실제 투찰 N등 / M곳'에만)
+    // 오른쪽 칸은 늘 등수만(11/20 사용자 요청 — '하한선 통과·미달' 글은 안 씀), 나라장터 결과에 지일 순위가 없으면 '순위 없음'(이유는 커서를 대면)
     const main = place ? `<span class="rank-who">지일</span><span class="nowrap">${place}</span>` :  // 웹앱·지일은 등수 바로 위 작은 글씨(11/13 사용자 요청)
-      pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
+      o ? `<span class="rank-who">지일</span><span class="nowrap res-none" title="${esc((o.remark || "").replace("낙찰하한선미달", "낙찰하한선 미달") || "나라장터 결과에 순위 없음")}">순위 없음</span>` : "";
     // 아래 줄의 실제·웹앱 사정률·기준 차이는 뺌(11/13 사용자 요청 — 펼친 결과 칸에 있음, 표가 좌우로 넘침)
     // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색
-    return main ? `<span class="rate-main ${place ? "rank" : pass ? "ok" : "ng"}">${main}</span>` : pct3(res.assessmentRate);
+    return main ? `<span class="rate-main rank">${main}</span>` : "-";
   }
   // 낙찰하한가 = A값 + (실제 예정가격 − A값) × 하한율, 원 미만 올림(11/11 사용자 요청 — 투찰 계산기 하한선 금액과 같은 식)
   function floorPrice(r) {

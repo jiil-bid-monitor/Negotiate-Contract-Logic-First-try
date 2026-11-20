@@ -53,8 +53,49 @@ def group_of(work: str) -> str:
 TEMPLATE_DOCS = ("공문", "착수계", "착공계", "준공계", "납품계", "완료계", "청구서", "조직도", "선임신고서", "보안각서", "재직증명서", "참여기술자")
 
 
+# 단계별 제출서류(11/20 사용자 '첨부를 처음부터 끝까지 읽으라 했잖아' — 광양 조달청 공고서가 '제출서류 목록 못 찾음'이었음):
+# 조달청 공고서는 '3-1. 제출서류' 아래 구분선(-----) 뒤에 '입찰참여 시 제출할 서류' / '적격(계약이행능력)심사 시 제출할 서류: …'
+# 소제목 + ①② 항목으로 적어서 정량평가서의 제출서류 읽기(제목 바로 아래 목록)로는 안 읽혔음. 과업지시서는 '준공계 제출 시 … 제출하여야'.
+_STAGE_HEAD = re.compile(r"^(?P<when>[^:：○]{2,30}?)\s*시\s*제출할\s*서류\s*[:：]?\s*(?P<rest>.*)$")
+_STAGE_ITEM = re.compile(r"^(?:[①-⑳]|\d{1,2}\))\s*(?P<text>.+)$")
+_STAGE_SENT = re.compile(r"(?P<when>착수|착공|준공|납품|완료|기성)\S*\s*제출\s*시")
+
+
+def stage_docs(text: str) -> list[tuple[str, str]]:
+    """[(언제, 서류)] — '○○ 시 제출할 서류' 소제목 아래 ①·1) 항목('1) 제출서류 : …'은 그 값), 항목이 없으면 바로 다음 짧은 줄.
+    과업지시서의 '준공계 제출 시에는 …을 제출하여야 한다' 같은 문장도(그 문장 그대로)."""
+    lines = [ln.strip() for ln in text.splitlines()]
+    out: list[tuple[str, str]] = []
+    for i, ln in enumerate(lines):
+        m = _STAGE_HEAD.match(ln)
+        if not m:
+            continue
+        when, items, short = re.sub(r"\s+", " ", m.group("when")).strip(" -·"), [], ""
+        for s in lines[i + 1:i + 20]:
+            if not s:
+                continue
+            if s in ("○", "●", "◦") or _STAGE_HEAD.match(s) or re.match(r"^\d+-\d+\.", s) or re.fullmatch(r"[-=_─━]+", s):
+                break
+            mi = _STAGE_ITEM.match(s)
+            if mi:
+                body = mi.group("text")
+                kv = re.match(r"^제출서류\s*[:：]\s*(.+)$", body)
+                if kv:
+                    items.append(kv.group(1))
+                elif not re.match(r"^(제출기한|제출방법|접수담당자|제출처)\s*[:：]", body):
+                    items.append(body)
+                continue
+            if not items and not short and len(s) <= 30 and not s.startswith(("※", "*", "-")):
+                short = s  # '단체표준인증 확인서류'
+        out += [(when, x) for x in (items or ([short] if short else []))]
+    for ln in lines:
+        if _STAGE_SENT.search(ln) and re.search(r"제출하여야|제출한다|제출할 것", ln) and len(ln) <= 160:
+            out.append((_STAGE_SENT.search(ln).group("when"), re.sub(r"^\s*(?:\d+\)|[가-하]\.|[①-⑳])\s*", "", ln)))
+    return out
+
+
 def required_docs(files: list[Path]) -> list[dict]:
-    """첨부가 요구하는 제출서류(정량평가서의 제출서류 읽기 quantdocs.notice.read_submit_items). 같은 이름은 한 번."""
+    """첨부가 요구하는 제출서류 — 정량평가서의 제출서류 읽기(quantdocs.notice.read_submit_items) + 단계별 제출서류(stage_docs). 같은 이름은 한 번."""
     from quantdocs.notice import doc_text, read_submit_items
 
     out, seen = [], set()
@@ -63,9 +104,15 @@ def required_docs(files: list[Path]) -> list[dict]:
         if f.suffix.lower() not in (".hwp", ".hwpx", ".pdf", ".docx"):
             continue
         try:
-            items = read_submit_items(doc_text(f), f.name, [])
+            text = doc_text(f)
+            items = read_submit_items(text, f.name, [])
         except Exception:  # noqa: BLE001 — 한 첨부를 못 읽어도 나머지로
             continue
+        for when, body in stage_docs(text):
+            name = re.sub(r"\s+", "", body)
+            if name[:20] not in seen:
+                seen.add(name[:20])
+                out.append({"text": f"[{when} 시] {body}", "source": f.name, "covered": any(w in name for w in TEMPLATE_DOCS)})
         for it in items:
             name = re.sub(r"\s+", "", it.text)
             if not re.search(r"[가-힣A-Za-z]", name) or name[:20] in seen:  # 구분선 '-----', 한글·PDF 같은 줄
@@ -232,8 +279,8 @@ def find_contract(client: Any, no: str, work: str, own_bizno: str, known: str = 
     refs.discard("")
     today = datetime.now()
     if not days and (d := _date(since)) is not None:
-        # 계약일을 모름 — 낙찰일부터, 다만 매일 확인하므로 오늘 앞 CONTRACT_SCAN_DAYS일만(낙찰 뒤 열흘 넘어 맺은 계약도 그날 목록에서 찾게)
-        days.append(max(d, today - timedelta(days=CONTRACT_SCAN_DAYS)))
+        # 계약일을 모름 — since(낙찰일, 또는 지난번까지 찾아본 다음 날 — check_contracts가 contractScan에 남김)부터 CONTRACT_SCAN_DAYS일
+        days.append(d)
     if not days:
         return None
     own = _digits(own_bizno)
@@ -1009,12 +1056,18 @@ class PostAward:
                 row = contract_lookup(v)
             except Exception:  # noqa: BLE001 — 나라장터가 안 되면 다음 확인 때
                 continue
-            if row:
-                with self._lock:
-                    items = self._read()
+            with self._lock:
+                items = self._read()
+                if row:
                     items[key]["contract"] = _contract_info(row)
-                    self._write(items)
-                found += 1
+                    items[key].pop("contractScan", None)
+                    found += 1
+                else:  # 못 찾음 — 다음엔 그다음 날부터(낙찰 뒤 늦게 맺은 계약도, 오래된 낙찰도 차례로 찾게, 오늘을 넘지 않음)
+                    start = _date(v.get("contractScan") or (v.get("winner") or {}).get("date"))
+                    if start is not None:
+                        nxt = min(start + timedelta(days=CONTRACT_SCAN_DAYS + 1), datetime.now())
+                        items[key]["contractScan"] = nxt.strftime("%Y-%m-%d")
+                self._write(items)
         return found
 
     def check(self, client: Any, base_url: str, keys: list[str] | None = None) -> dict[str, int]:

@@ -890,6 +890,8 @@ class PostAward:
                 except Exception as err:  # noqa: BLE001 — 요약을 못 만들어도 폴더·서류는 그대로
                     basic.append(f"[공고요약] {SUMMARY}를 만들지 못함({err.__class__.__name__})")
         lines = [f"⚠ 새로 발급 필요: {k} ({h if h.startswith('보유본') else '보유본 ' + h})" for k, h in reissue] + ([""] if reissue else [])  # 맨 위(11/19 사용자)
+        # 받은 엑셀은 '보호된 보기'로 열려 수식 칸이 비어 보임 — 계산은 엑셀에 맡김(11/20 사용자: NAS에서 미리 계산하면 자원을 많이 씀)
+        lines += ["※ 엑셀을 처음 열면 맨 위 노란 줄의 '편집 사용'을 누르세요 — 그래야 서식 칸(제목·건명·금액·점수)이 계산되어 보입니다.", ""]
         lines += [f"{key} {v.get('title') or nf.title} — 첨부에서 읽은 제출서류 (자동, 원문과 대조하세요)", ""]
         lines += basic + [""]
         if not nf.title:

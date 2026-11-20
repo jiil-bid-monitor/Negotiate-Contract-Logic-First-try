@@ -390,6 +390,8 @@ body {
 .tabbar .tabs { border-bottom: 0; margin-bottom: 0; flex-wrap: wrap; }
 .tabbar .tabs { flex: 1 1 auto; justify-content: space-between; column-gap: 24px; flex-wrap: wrap-reverse; }
 .tabs .tab-group { display: flex; flex-wrap: wrap; }
+/* 좁은 화면에서 오른쪽 묶음이 윗줄로 올라가면(.wrapped) 그 묶음 글자를 조금 작게 (11/20 사용자 요청) */
+.tabs.wrapped .tab-group + .tab-group button { font-size: 12.5px; padding: 8px 16px; }
 .tab-search {
   flex: 0 1 340px; min-width: 0; height: 36px; padding: 4px 12px; margin: 4px 0;
   font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 4px;
@@ -4643,5 +4645,19 @@ boot();
 <!-- 투찰 계산기 — 계산은 bidcalc.js(BidCalc), 화면은 bidcalc_ui.js (2026-10-15, 21라인 복수예가산출프로그램 모양) -->
 <script src="bidcalc.js"></script>
 <script src="bidcalc_ui.js"></script>
+<script>
+// 탭 줄이 두 줄로 나뉘었는지(오른쪽 묶음이 윗줄로) — 나뉘면 .wrapped (11/20 사용자 요청: 그때 오른쪽 묶음 글자를 작게)
+(() => {
+  const bar = document.querySelector(".tabbar .tabs");
+  const groups = bar ? bar.querySelectorAll(".tab-group") : [];
+  if (groups.length < 2) return;
+  const check = () => {
+    bar.classList.remove("wrapped");
+    if (groups[1].offsetTop !== groups[0].offsetTop) bar.classList.add("wrapped");
+  };
+  new ResizeObserver(check).observe(bar);
+  check();
+})();
+</script>
 </body>
 </html>

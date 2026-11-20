@@ -2049,6 +2049,23 @@ def test_lead_and_joint_member_blocks(tmp_path: Path):
     assert "업 체 명 : (주)가상" in tail and "홍길동" in tail  # 묶음이 끝난 뒤 서명 줄은 그대로 채움
 
 
+def test_joint_proposer_blocks_left_blank(tmp_path: Path):
+    """11/20 제보(식약처 청렴계약 이행서약서 둘째 쪽): '○ 공동제안 대표자' 아래만 지일, '○ 공동제안자' 세 묶음은 다른 회사 칸이라 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    def p(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    block = p("   업 체 명:") + p("   소 재 지:") + p("   대 표 자:           (인)") + p("")
+    body = p("2026년    월    일") + p("○ 공동제안 대표자") + block + (p("○ 공동제안자") + block) * 3 + p("식품의약품안전처장 귀하")
+    src = _mini_hwpx(tmp_path / "jp.hwpx", body)
+    fill_hwpx(src, tmp_path / "jpo.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"}))
+    out = zipfile.ZipFile(tmp_path / "jpo.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", out))
+    lead, rest = text.split("○ 공동제안자", 1)
+    assert "(주)가상" in lead and "홍길동" in lead and "강원 정선" in lead
+    assert "(주)가상" not in rest and "홍길동" not in rest and "강원" not in rest
+
+
 def test_unfilled_slots_finds_blank_company_labels():
     """11/06 사용자 결정: 채운 뒤에도 회사 정보 이름표가 빈 자리를 찾아 '확인 필요' 알림·검사 묶음에 씀 —
     다른 쪽이 적는 칸(대리인 묶음·공동참여자 묶음·발행자 줄)은 세지 않음."""

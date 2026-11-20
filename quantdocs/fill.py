@@ -1623,7 +1623,8 @@ def _party_head(text: str) -> tuple[str | None, str] | None:
     if not hm or re.search(r"[:：]", hm.group(1)):
         return None
     head = _sq(hm.group(1))
-    if re.search(r"구성원|참여사|분담|공동참여자|공동참가자|공동응모자|대리인|수임인|발행자|제조사", head):
+    # '공동제안자'(대표 아님)도 다른 회사 칸 — '공동제안 대표자'만 지일(11/20 사용자 제보, 식약처 청렴계약 이행서약서 둘째 쪽)
+    if re.search(r"구성원|참여사|분담|공동참여자|공동참가자|공동응모자|공동제안자|공동수급인|공동도급인|대리인|수임인|발행자|제조사", head):
         party = "other"
     elif re.search(r"대표|주관사|주계약자|입찰자|신청|제출자|서약자|제안자|확약자", head):
         party = "own"

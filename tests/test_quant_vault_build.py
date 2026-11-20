@@ -2882,6 +2882,28 @@ def test_none_rule_ignores_total_row(tmp_path: Path):
     assert 'colAddr="1" rowAddr="1"' in cell, cell
 
 
+def test_none_rule_sinindo_form_skips_first_column(tmp_path: Path):
+    """11/20 사용자 요청: 신인도 서식 '2. 기술자격정지 및 업무정지기간' 표 '참여분야 | 성 명 | 처분기관 | … / __ / 계'에서
+    '해당 없음'이 첫 열(참여분야)에 들어갔음 → 신인도 서식에 한해 첫 열은 건너뛰고 성명 칸에. 다른 서식은 그대로 첫 칸."""
+    from quantdocs.fill import fill_hwpx
+
+    heads = ["참여분야", "성 명", "처분기관", "처분일자", "기술자격 및 업무정지기간(개월수)", "기술자격 및 업무정지사유(관계 법령)", "비 고"]
+    rows = [[_c(i, 0, h) for i, h in enumerate(heads)], [_c(i, 1, "") for i in range(7)],
+            [_c(0, 2, "계")] + [_c(i, 2, "") for i in range(1, 7)]]
+    note = '<hp:p><hp:run><hp:t>※ 해당사항이 없을 경우에는 “해당 없음”을 기재</hp:t></hp:run></hp:p>'
+    cell = lambda sec: re.search(r'<hp:tc>(?:(?!</hp:tc>).)*해당 없음(?:(?!</hp:tc>).)*</hp:tc>', sec, re.S).group(0)
+    title = '<hp:p><hp:run><hp:t>신인도 평가 확인서</hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "a.hwpx", title + _tbl(rows) + note)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert sec.count("해당 없음") == 2 and 'colAddr="1" rowAddr="1"' in cell(sec)  # 안내 글 + 칸 하나
+    # 신인도 서식이 아니면 예전처럼 첫 칸
+    src2 = _mini_hwpx(tmp_path / "b.hwpx", _tbl(rows) + note)
+    fill_hwpx(src2, tmp_path / "p.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    sec = zipfile.ZipFile(tmp_path / "p.hwpx").read("Contents/section0.xml").decode()
+    assert 'colAddr="0" rowAddr="1"' in cell(sec)
+
+
 def test_agency_ref_no_appended_keeps_form_text(tmp_path: Path):
     """11/18 사용자: '입찰(지명)공고 | 평창군 공고 제2026-' — 서식 글은 고치지 말고, 나라장터 참조번호
     '평창군 공고 제2026-1703호'의 번호만 '-' 뒤에(#472처럼 칸을 나라장터 번호로 바꾸지 않음)."""

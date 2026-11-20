@@ -727,13 +727,16 @@
     return `${won(r.outsource)}${rt != null ? `<span class="sub nowrap">사정률 약 ${rt.toFixed(2)}%</span>` : ""}`;
   }
   function versusLines(r) {
-    const res = r.result || {}, v = versus(res);
-    if (!v) return "";
-    const w = webRank(res), s = res.outsource;
+    const res = r.result || {};
+    if (!res || res.status !== "완료") return "";
+    const s = res.outsource;
+    // 외주 금액이 없는 비교 기록도 웹앱 줄은 보임(11/20 사용자 요청 — 개찰 결과 칸 '탈락 / 웹앱 N등 / 외주 M등'으로 통일)
+    if (!s && !res.recorded) return "";
+    const w = webRank(res);
     const cls = (k) => (k == null ? "" : k > 0 ? "rank" : "res-bad");
     // '▶ 웹앱이 나음·외주가 나음·같음' 줄은 뺌(11/18 사용자 요청) — 웹앱·외주 등수 두 줄만
     return `<span class="vs-lines"><span class="sub nowrap">웹앱 <b class="${cls(w)}">${shortPlace(w)}</b></span>`
-      + `<span class="sub nowrap">외주 <b class="${cls(s.rank)}">${shortPlace(s.rank)}</b></span></span>`;
+      + (s ? `<span class="sub nowrap">외주 <b class="${cls(s.rank)}">${shortPlace(s.rank)}</b></span>` : "") + `</span>`;
   }
   // 펼친 결과 — 외주 금액으로 투찰했다면(11/16)
   function outsourceBlock(r) {
@@ -759,22 +762,11 @@
       ? `<span class="res-open nowrap">개찰 ${esc(day(r.openingAt))}</span>`
       : `<span class="res-wait">개찰 전</span><span class="sub">${esc(day(res.fetchedAt))} 확인</span>`;
     if (res.status === "오류") return `<span class="res-bad">받지 못함</span><span class="sub">${esc((res.error || "").slice(0, 40))}</span>`;
-    const o = mine(res), n = res.bidderCount, real = res.own;
-    // 기록 금액이 실제 투찰 금액과 다르면 비교 분석용 기록(11/13 사용자 요청 — 외주 금액으로 투찰하고 계산기 금액을 기록) — 결과는 웹앱 기록 금액 기준, 실제 투찰은 작게
-    const realPlace = real ? (real.rank != null ? `${real.rank}등` : real.underRank != null ? `${real.underRank}등` : "순위 없음") : "참가 안 함";
-    // 비교 기록 노란 칩은 뺌(11/13 사용자 요청 — 위 '분석용 웹앱' 고르기 칩으로 구분)
-    const cmp = res.recorded ? `<span class="sub">실제 투찰 ${realPlace}</span>` : "";
-    if (!o) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${n}곳</span>${cmp}`;
-    // 개찰 결과는 '낙찰'(지일 1순위) / '탈락'(그 밖 — 하한선 미달 포함)으로(11/10 사용자 요청), 등수는 옆 칸
-    if (o.recorded) {   // 비교 기록 — 실제로 낸 금액이 아니라서 '낙찰·탈락' 대신 웹앱 금액으로 본 자리
-      const lab = o.rank === 1 ? `<b class="res-win">1순위</b>` : o.rank != null ? `<b class="rank">${o.rank}등</b>` : `<b class="res-bad">하한선 미달</b>`;
-      // '비교 기록' 칩은 결과 바로 아래, 그 밑에 참가 수·실제 투찰 등수만(11/13 사용자 요청 — '웹앱 금액' 글은 칩과 겹쳐 뺌)
-      // 참가 수는 등수 옆에 '등수 / 참가 수'로(11/13 사용자 요청) — 따로 줄은 뺌
-      return `${lab}<span class="sub"><span class="nowrap">실제 투찰 ${realPlace}</span>${real && n ? ` <span class="nowrap">/ ${n}곳</span>` : ""}</span>`;
-    }
-    // 참가 수는 옆 '지일 등수' 칸에 '등수 / 참가 수'로(11/13 사용자 요청)
-    return (o.rank === 1 ? `<b class="res-win">낙찰</b>`
-      : `<b class="res-bad">탈락</b>${o.rank == null ? `<span class="sub">${esc((o.remark || "순위 없음").replace("낙찰하한선미달", "하한선 미달"))}</span>` : ""}`) + cmp;
+    // 개찰 결과 칸은 늘 '낙찰'(지일 실제 1순위) / '탈락'만, 등수는 옆 '지일 등수' 칸, 그 아래 웹앱·외주 등수 줄(11/20 사용자 요청 — 비교 기록도 같은 모양으로 통일,
+    // 11/13 '비교 기록은 웹앱 금액 기준 N등 + 실제 투찰 N등 / M곳'과 '탈락 아래 하한선 미달' 줄을 대체)
+    const real = res.own;
+    if (!real) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${res.bidderCount}곳</span>`;
+    return real.rank === 1 ? `<b class="res-win">낙찰</b>` : `<b class="res-bad">탈락</b>`;
   }
   // 비교 기록이면 표·펼침 칸의 '지일' 숫자(등수·투찰금액·투찰률)는 웹앱 기록 금액 기준, 실제(외주) 투찰은 비교 상자에(11/13 사용자 요청)
   function mine(res) {
@@ -806,11 +798,12 @@
     if (!res || res.status !== "완료" || res.assessmentRate == null) return "-";
     const d = res.rateDiff;
     // 지일 등수·하한선 통과/미달을 먼저, 실제 사정률은 부가 정보로(11/10 사용자 요청) — 등수는 하한선 위면 N등, 미달이면 -N등
-    const o = mine(res), place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
+    // 오른쪽 칸 = 지일 실제 투찰 등수(11/20 — 비교 기록도 '웹앱' 대신 실제 등수, 웹앱 등수는 개찰 결과 칸 '웹앱 N등' 줄)
+    const o = res.own, place = o ? (o.rank != null ? `${o.rank}등` : o.underRank != null ? `${o.underRank}등` : "") : "";
     const pass = o && o.rank != null ? true : place ? false : d != null ? d >= 0 : null;
     // 하한선 통과/미달은 옆 개찰 결과 칸(낙찰·탈락 아래)과 겹쳐 등수만(11/10) — 지일이 참가 안 한 공고만 기준 대비 통과/미달
     // 오른쪽 칸은 등수만(11/13 사용자 요청 — 참가 수는 개찰 결과 칸 '실제 투찰 N등 / M곳'에만)
-    const main = place ? `<span class="rank-who">${o.recorded ? "웹앱" : "지일"}</span><span class="nowrap">${place}</span>` :  // 웹앱·지일은 등수 바로 위 작은 글씨(11/13 사용자 요청)
+    const main = place ? `<span class="rank-who">지일</span><span class="nowrap">${place}</span>` :  // 웹앱·지일은 등수 바로 위 작은 글씨(11/13 사용자 요청)
       pass == null ? "" : pass ? "하한선 통과" : "하한선 미달";
     // 아래 줄의 실제·웹앱 사정률·기준 차이는 뺌(11/13 사용자 요청 — 펼친 결과 칸에 있음, 표가 좌우로 넘침)
     // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색

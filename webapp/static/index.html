@@ -4204,7 +4204,7 @@ $("awardList").onclick = (e) => {
     AWARD_OPEN.add(f.dataset.awardFolder); loadAward();
     // 묶음 zip 바로 내려받기(11/17 사용자) — 같은 폴더가 NAS와 사내 공유 폴더(서버 PC가 1분마다 복사)에도 있음
     const a = document.createElement("a");
-    a.href = `/api/postaward/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=`;
+    a.href = `${AWARD_API}/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=`;  // 시험 페이지는 시험 목록의 zip
     document.body.appendChild(a); a.click(); a.remove();
     return "폴더를 만들고 첨부를 받았습니다 — 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 아래 '서류 현황'에서 채울 칸을 확인하세요.";
   });

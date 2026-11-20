@@ -2984,6 +2984,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             # 앞 조건 없이 '“해당 없음”을 기재'·'‘해당없음’으로 표기'만 적힌 안내도(11/20 사용자 요청 — 문구에 '해당 없음 기재'가 있으면 위 표에)
             none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S) \
                 or re.search(r"[\"“”'‘’「]\s*해\s*당\s*(?:사\s*항\s*)?없\s*음\s*[\"“”'‘’」]\s*(?:을|를|으로|로|이라고|라고)?\s*(?:기재|표기|기입|작성|적)", _text(xml))
+            sinindo = "신인도" in _sq(_text(xml))  # 신인도 서식 — '해당 없음'은 첫 열을 건너뜀(11/20)
             tally = {"sum": 0.0, "n": 0, "missing": False}  # 이 서식에서 넣은 자기평점 합(따로 놓인 합계 표용, 11/13)
             seen_party: set = set()  # 회사 정보 표 모양 — 같은 모양이 또 나오면 공동수급 구성원용 사본이라 비움(11/13)
             for tbl in _all_tables(xml):
@@ -3334,6 +3335,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                      if re.search(r"용역명|사업명|공사명|계약명|건명", _sq(h.text))), None)
                         if tcol is not None:
                             first = next((c for c in sorted(body, key=lambda c: c.row) if c.col == tcol), first)
+                        elif sinindo:
+                            # 신인도 서식은 첫 열(참여분야 등 구분 칸)엔 안 넣고 다음 칸에(11/20 사용자 요청 —
+                            # '참여분야 | 성 명 | 처분기관 …' 기술자격정지 표에서 '해당 없음'이 참여분야 칸에 들어갔음 → 성명 칸)
+                            lead = min(c.col for c in body)
+                            first = next((c for c in sorted(body, key=lambda c: (c.row, c.col)) if c.col > lead), first)
                         edits.append((first, ["해당 없음"], False))
                         rep.filled.append("표가 비어 '해당 없음' 기재 — 해당 사항이 있으면 고칠 것")
                     elif head and any(_sq(c.text) for c in head) and body:

@@ -1335,12 +1335,14 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .award-steps li.done { color: var(--brand); border-color: var(--brand); }
 .award-steps li.now { color: var(--on-brand); background: var(--brand); border-color: var(--brand); font-weight: 600; }
 .award-more { margin-top: 6px; }
+.award-note { font-size: 14px; color: var(--ink); }
 .award-more > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .award-more[open] { white-space: normal; max-width: 220px; }
 .award-more p { margin: 4px 0; }
 .award-act { white-space: nowrap; }
-.award-act button { margin: 0 4px 4px 0; }
-.award-act button.award-main { background: var(--brand); color: var(--on-brand); border-color: var(--brand); font-weight: 600; }
+.award-act button { margin: 0 4px 4px 0; font-family: var(--head); font-size: 13px; font-weight: 500; padding: 6px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.award-act button.award-main { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
+.award-act button.award-main:hover { background: var(--brand-hover); border-color: var(--brand-hover); }
 .award-act button:disabled { opacity: .45; cursor: not-allowed; }
 .award-act .qual button:disabled { pointer-events: none; } /* 꺼진 버튼 위에서도 설명 상자가 뜨게 */
 /* 표가 가로 스크롤 틀(.scroll) 안이라 설명 상자가 틀 밖으로 나가면 스크롤 막대가 생겼다 사라지며 화면이 흔들림 → 화면 기준(fixed)으로 띄움(placeAwardTip) */
@@ -4021,23 +4023,41 @@ async function awardPost(path, body) {
 // 서류 현황(11/11) — 폴더를 만든 공고는 줄 아래로 펼쳐 단계별 서류·담당자가 채울 칸·첨부 제출서류·파일 내려받기를 봄
 const AWARD_OPEN = new Set();
 // 낙찰자 확정 전이라도 투찰내역의 개찰 결과가 있으면 지일 등수를 보임(11/12 사용자 요청) — 순위 없음(하한선 미달 등)은 '탈락'
-function awardWaiting(o) {
+function awardWaiting(o, lim = 5) {
   if (!o) return `<span class="badge warn">대기</span><div class="sub">낙찰자 확정 전</div>`;
   const n = o.bidders != null ? ` / ${o.bidders}곳` : "";
   if (o.rank == null) return `<span class="badge">탈락</span><div class="sub">개찰 ${esc((o.remark || "순위 없음").replace("낙찰하한선", "하한선"))}${o.underRank != null ? ` (${o.underRank}등)` : ""}</div>`;
   // 5등 밖은 차례가 올 일이 사실상 없어 '탈락'(11/12 사용자 결정 — 투찰내역 '5위 안'과 같은 기준)
-  if (o.rank > 5) return `<span class="badge">탈락</span><div class="sub">개찰 ${o.rank}등${n}</div>`;
+  if (o.rank > lim) return `<span class="badge">탈락</span><div class="sub">개찰 ${o.rank}등${n}</div>`;
   return `<span class="badge warn">대기</span><div class="sub">개찰 ${o.rank}등${n} · 낙찰자 확정 전</div>`;
 }
 // 11/19 화면 정리(사용자 승인 — 개선안 ①): 할 일 → 기다림 → 끝남 세 묶음, 한 줄에 버튼은 다음 할 일 하나, 나머지는 '더 보기'.
 // 열 순서는 투찰내역과 같게(공고 → 투찰금액·개찰 → 단계). 꺼진 버튼은 안 보이고 그 이유는 '더 보기' 안에 한 줄로.
 const AWARD_STEPS = ["개찰", "적격심사", "계약", "착공·착수", "준공", "청구"];
+// 적격심사 서류를 만들 등수 — 지명경쟁은 지명 업체끼리 몰아주는 구조라 1등만(11/20 사용자), 그 밖은 5등 안
+const awardDesignated = (v) => ((v.bid || {}).method || "").includes("지명");
+const awardLimit = (v) => (awardDesignated(v) ? 1 : 5);
 function awardKind(v) {
-  const rank = v.opening ? v.opening.rank : null;
+  const rank = v.opening ? v.opening.rank : null, lim = awardLimit(v);
   if (v.status === "낙찰" || v.folder) return "todo";
-  if (v.status === "대기" && rank != null && rank <= 5 && !v.private) return "todo";
-  if (v.status === "다른 업체 낙찰" || (v.status === "대기" && v.opening && (rank == null || rank > 5))) return "done";
+  if (v.status === "대기" && rank != null && rank <= lim && !v.private) return "todo";
+  if (v.status === "다른 업체 낙찰" || (v.status === "대기" && v.opening && (rank == null || rank > lim))) return "done";
   return "wait";
+}
+/** 단계 칸 — 기다림·끝남 공고가 왜 그 묶음인지, 다음에 무엇이 일어나는지 한두 줄(11/20 사용자 '친절하게') */
+function awardNote(v, kind) {
+  const o = v.opening, rank = o ? o.rank : null, lim = awardLimit(v), d = awardDesignated(v);
+  const cut = d ? "지명경쟁은 1등만" : "5등 안이면";
+  if (kind === "done") {
+    if (v.status === "다른 업체 낙찰") return ["다른 업체가 낙찰됨", "할 일 없음"];
+    if (o && rank == null) return ["낙찰 하한선 미달로 탈락", "할 일 없음"];
+    if (o) return [`개찰 ${rank}등 — ${d ? "지명경쟁은 1등이 아니면 낙찰 가능성이 없음" : "5등 밖이라 적격심사 대상 아님"}`, "할 일 없음"];
+    return ["끝남", ""];
+  }
+  if (v.private) return ["수의계약 — 적격심사 없음", "낙찰이 확인되면 '낙찰 서류 만들기'가 생깁니다"];
+  if (v.status === "대기" && o) return [`개찰 ${rank}등 — 낙찰자 확정 전`, "매일 22시에 나라장터 낙찰현황을 확인합니다"];
+  if (v.status === "대기") return ["개찰 결과를 기다리는 중", `개찰 뒤 ${cut} 적격심사 서류를 만들 수 있습니다`];
+  return [v.status || "결과 기다리는 중", ""];
 }
 function renderAward(items) {
   const row = (v) => {
@@ -4048,12 +4068,12 @@ function renderAward(items) {
     const kind = awardKind(v);
     const result = isWon ? `<span class="badge okb">낙찰</span><div class="sub">${esc(w.date || "")}${w.amount ? " · " + Number(w.amount).toLocaleString() + "원" : ""}</div>`
       : v.status === "다른 업체 낙찰" ? `<span class="badge">다른 업체 낙찰</span><div class="sub">${esc(w.name || "")}</div>`
-      : v.status === "대기" ? awardWaiting(o) : `<span class="badge">${esc(v.status || "")}</span>`;
+      : v.status === "대기" ? awardWaiting(o, awardLimit(v)) : `<span class="badge">${esc(v.status || "")}</span>`;
     // 단계 줄(할 일 묶음만): 지금 단계 = 낙찰·낙찰 서류 폴더 → 계약, 적격심사 폴더·개찰 5등 안 → 적격심사
     const now = isWon || (v.folder && !v.qualOnly) ? 2 : 1;
     const steps = kind === "todo" ? `<ol class="award-steps">${AWARD_STEPS.map((s, i) => `<li class="${i < now ? "done" : i === now ? "now" : ""}">${s}</li>`).join("")}</ol>` : "";
     const stage = v.qualOnly ? ` data-award-stage="qual"` : "";
-    const canQual = !v.private && !v.folder && !isWon && rank != null && rank <= 5;
+    const canQual = kind === "todo" && !v.private && !v.folder && !isWon && rank != null && rank <= awardLimit(v);  // 끝난 공고(다른 업체 낙찰)엔 안 보임
     const canAward = isWon && !(v.folder && !v.qualOnly);
     const toggle = (main) => `<button type="button" class="award-toggle${main ? " award-main" : ""}" data-award-open="${esc(key)}" aria-expanded="${AWARD_OPEN.has(key)}">서류 현황 ${AWARD_OPEN.has(key) ? "▴" : "▾"}</button>`;
     const main = canAward ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" title="계약·착공(착수)·준공·청구 단계와 표준틀까지 만듦">낙찰 서류 만들기</button>`
@@ -4062,7 +4082,8 @@ function renderAward(items) {
         + `<div class="sub">${rank === 1 ? "1순위 — 심사 통보 확인" : "심사 통보받으면 만들기"}</div>` : "";
     const why = isWon || v.folder || kind === "done" ? ""
       : v.private ? "수의계약 — 적격심사 없이, 낙찰이 확인되면 '낙찰 서류 만들기'가 생깁니다."
-      : "지일이 개찰 5등 안이면 적격심사 서류, 낙찰이 확인되면 낙찰 서류를 만들 수 있습니다.";
+      : `지일이 개찰 ${awardDesignated(v) ? "1등(지명경쟁)" : "5등 안"}이면 적격심사 서류, 낙찰이 확인되면 낙찰 서류를 만들 수 있습니다.`;
+    const [noteHead, noteSub] = awardNote(v, kind);
     const more = [v.folder && canAward ? toggle(false) : "",
       v.folder ? `<button type="button" data-award-folder="${esc(key)}"${stage} title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀. 착공·착수서류에 넣은 계약 값을 준공·청구 서류의 파란 칸에 채움(담당자가 고친 칸은 안 덮어씀)">첨부 다시 받기</button>` : "",
       `<button type="button" data-award-del="${esc(key)}">목록에서 빼기</button>`].join("");
@@ -4071,7 +4092,7 @@ function renderAward(items) {
     const meta = [v.institution, v.work, bid.at ? "투찰 " + bid.at.slice(5).replace("-", "/") : ""].filter(Boolean).map(esc).join(" · ");
     return `<tr><td class="award-name"><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener" title="${esc(key)} — 나라장터에서 보기">${esc(v.title || key)}</a>${reissue}<div class="sub">${meta}</div></td>
       <td class="award-money">${bid.amount ? `<b title="${Number(bid.amount).toLocaleString()}원">${won(Number(bid.amount))}</b>` : `<span class="sub">투찰 기록 없음</span><br>`}${result}</td>
-      <td>${steps || `<span class="sub">${kind === "wait" ? "결과 기다리는 중" : "끝남"}</span>`}</td>
+      <td>${steps || `<div class="award-note">${esc(noteHead)}</div>${noteSub ? `<div class="sub">${esc(noteSub)}</div>` : ""}`}</td>
       <td class="award-act">${main}<details class="award-more"><summary>더 보기</summary>${why ? `<p class="sub">${why}</p>` : ""}${more}</details></td></tr>${detail}`;
   };
   const table = (rows) => `<div class="scroll"><table class="award-table"><thead><tr><th>공고</th><th>투찰금액 · 개찰</th><th>단계</th><th></th></tr></thead><tbody>${rows.map(row).join("")}</tbody></table></div>`;

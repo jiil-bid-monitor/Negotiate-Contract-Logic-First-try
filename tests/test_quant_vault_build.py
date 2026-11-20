@@ -4417,3 +4417,26 @@ def test_capital_label_cell_keeps_value_in_next_cell(tmp_path: Path):
     cells = [re.sub(r"<[^>]+>", "", t) for t in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S)]
     assert re.sub(r"\s", "", cells[2]) == "자본금", cells
     assert "1,000,000,000" in cells[3], cells
+
+
+def test_subtotal_row_score_also_in_item_score_cell(tmp_path: Path):
+    """11/20 사용자 지적: 자기평가표 '경영상태 소계 | 5 | 4.5' 줄엔 점수가 들어가는데 그 아래 등급 줄들을 세로로 합친 평점 칸('회사채에 대한
+    신용평가 등급 | BBB0 이상 5.0 …')과 신인도 '입찰참가제한, 영업정지기간 평가 | 최고 4점 최저 2점' 평점 칸은 빔 — 소계 칸에만 넣지 말고 그 칸에도."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항 목"), c(1, 0, "세 부 항 목", 2), c(3, 0, "배 점"), c(4, 0, "평 점")],
+            [c(0, 1, "경영상태\n(5점)", 1, 5), c(1, 1, "경영상태 소계", 2), c(3, 1, "5"), c(4, 1, "")],
+            [c(1, 2, "회사채에 대한\n신용평가 등급", 1, 4), c(2, 2, "BBB0 이상"), c(3, 2, "5.0"), c(4, 2, "", 1, 4)],
+            [c(2, 3, "BBB-, BB+, BB-"), c(3, 3, "4.5")], [c(2, 4, "B+, B0, B-"), c(3, 4, "4.0")], [c(2, 5, "CCC+ 이하"), c(3, 5, "3.5")],
+            [c(0, 6, "신인도\n(4점)", 1, 2), c(1, 6, "신인도 소계", 2), c(3, 6, "4"), c(4, 6, "")],
+            [c(1, 7, "입찰참가제한,\n영업정지기간\n평가"), c(2, 7, "최저임금 위반, 임금체불\n고용개선 조치 미이행,\n부정당업자 제재"), c(3, 7, "최고\n4점\n최저\n2점"), c(4, 7, "")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 20)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "경영상태 소계|5|4.5|" in text and "BBB0 이상|5.0|4.5|" in text, text
+    assert "신인도 소계|4|4|" in text and "2점|4|" in text, text

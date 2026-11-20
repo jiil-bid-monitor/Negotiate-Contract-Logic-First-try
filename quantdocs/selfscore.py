@@ -899,9 +899,19 @@ def read_form(cells) -> list[FormRow]:
     split_cells: dict[int, dict] = {}
     def score_cell(r):
         return next((c for c in rows[r] if c.col <= scol < c.col + c.colspan), None)
+    sub_cells: dict[int, object] = {}  # '경영상태 소계' 줄 묶음 → 그 아래 세부 줄 평점 칸(11/20)
+    def sub_label(r):
+        return "".join(_sq(c.text) for c in rows[r] if c.col < min(pcol, scol) and c.rowspan <= 1)
     for rs in blocks:
         ic = item_cell(rs[0])
         sc = score_cell(rs[0])
+        # '경영상태 소계 | 5 | __' 아래 '회사채에 대한 신용평가 등급 | BBB0 이상 5.0 … | __'(평점 칸 따로) — 한 항목으로 묶고
+        # 아래 평점 칸에도 같은 점수(11/20 사용자 지적: 소계 칸에만 들어감)
+        if merged and ic is not None and item_cell(merged[-1][0]) is ic and "소계" in sub_label(merged[-1][0]) \
+                and len(merged[-1]) == 1 and merged[-1][0] not in sub_cells and sc is not None and sc.blank:
+            sub_cells[merged[-1][0]] = sc
+            merged[-1] += rs
+            continue
         # 평점 칸이 여러 줄을 합친 칸이면 줄마다 따로 평점 칸이 있는 표가 아님 — 묶지 않음
         # ('참여인력의 전문성 | 사업총괄책임자 3 / 참여인력 3'처럼 큰 항목 아래 작은 항목마다 평점 칸, 11/18)
         if merged and ic is not None and item_cell(merged[-1][0]) is ic and (sc is None or sc.rowspan <= 1):
@@ -1044,6 +1054,7 @@ def read_form(cells) -> list[FormRow]:
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
         if grade_cells and cap_cell is not None:
             target = cap_cell
+        cap_cell = cap_cell if cap_cell is not None else sub_cells.get(rs[0])
         out.append(FormRow(label, points, target, crit if has else None, by_points=by_points, grade_cells=grade_cells,
                            none_cells=none_cells, cap_cell=cap_cell, col_cells=col_cells, zero_cells=zero_cells))
     return out

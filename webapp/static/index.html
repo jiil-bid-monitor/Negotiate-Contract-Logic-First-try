@@ -4092,7 +4092,12 @@ function renderAward(items) {
     const toggle = (main) => `<button type="button" class="award-toggle${main ? " award-main" : ""}" data-award-open="${esc(key)}" aria-expanded="${AWARD_OPEN.has(key)}">서류 현황 ${AWARD_OPEN.has(key) ? "▴" : "▾"}</button>`;
     const main = canAward ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" title="계약·착공(착수)·준공·청구 단계와 표준틀까지 만듦">낙찰 서류 만들기</button>`
       : v.folder ? toggle(true)
-      : canQual ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" data-award-stage="qual">적격심사 서류 만들기</button>` : "";
+      : canQual ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" data-award-stage="qual">적격심사 서류 만들기</button>`
+      // 기다림 줄: 다음에 쓸 버튼을 꺼 둔 채로 보임(11/20 사용자) — 수의계약은 적격심사가 없어 '낙찰 서류', 그 밖은 '적격심사 서류'
+      : kind === "wait" ? (v.private
+        ? `<button type="button" class="award-main" disabled title="지일이 낙찰자로 확인되면 켜집니다">낙찰 서류 만들기</button>`
+        : `<button type="button" class="award-main" disabled title="개찰 1등이면 켜집니다 — 2등부터는 심사 통보를 받으면 '더 보기'에서 만듭니다">적격심사 서류 만들기</button>`)
+      : "";
     const more = [v.folder && canAward ? toggle(false) : "",
       lateQual ? `<button type="button" data-award-folder="${esc(key)}" data-award-stage="qual" title="앞 순위가 심사에서 떨어져 지일이 심사 통보를 받았을 때만">심사 통보받음 — 적격심사 서류 만들기</button>` : "",
       v.folder ? `<button type="button" data-award-folder="${esc(key)}"${stage} title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀. 착공·착수서류에 넣은 계약 값을 준공·청구 서류의 파란 칸에 채움(담당자가 고친 칸은 안 덮어씀)">첨부 다시 받기</button>` : "",

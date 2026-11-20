@@ -1280,6 +1280,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
     # 표 밖 서명 줄은 '발행자 상호 :'처럼 다른 쪽 이름표가 붙어도 채움(11/05 사용자 요청: 서식 28 확약서 포함, 대표자 서명이 있는 서식엔 자동 기재 —
     # 11/04의 '발행자 서명 줄 비움'을 바꿈). 표 안 발행자·제조사 줄(_other_party_cells)은 그대로 비움.
     order = sorted(paras)
+    lab_ph_at = -9  # 바로 앞에서 채운 '서 약 자: 회사명 ○○○' 줄 차례 — 다음 줄 '대 표 ○○○ (인)'을 같은 묶음으로(11/20)
     for n, (s, e) in enumerate(order):
         if any(ts >= s and te <= e for ts, te in tbls) or any(cs <= s and e <= ce for cs, ce in single + other):
             continue
@@ -1451,6 +1452,30 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                 edits.append((s, e, seg))
                 rep.filled.append(f"서명 줄 → {corp} 대표자 성명 {name}")
+            continue
+        # 이름표 뒤에 자리표시가 오는 서명 묶음 '서 약 자:  회사명  ○ ○ ○' / '대  표  ○ ○ ○  (인)'(11/20 군산 청렴계약 이행서약서 —
+        # 예전 규칙은 '○○○회사 대표 ○○○'처럼 자리표시가 앞인 한 줄만 알았음). 회사 줄은 서약자·신청인 등 이름표가 붙을 때만,
+        # 대표 줄은 같은 줄이나 바로 앞 두 줄 안에서 회사 줄을 채웠을 때만(봉투 예시 '대표이사 ○○○ (인)'은 그대로 — 11/04 결정)
+        signer = r"(?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)\s*[:：]?"
+        co_lab = r"(?:회\s*사\s*명|업\s*체\s*명|상\s*호|회\s*사)\s*[:：]?"
+        rep_lab = r"대\s*표(?:\s*자|\s*이\s*사)?\s*[:：]?"
+        co_ph = re.fullmatch(rf"\s*{signer}\s*{co_lab}\s*{_PH}\s*(?:{rep_lab}\s*{_PH}\s*(?:{_SEAL_TAIL})?\s*)?", text)
+        rep_ph = re.fullmatch(rf"\s*{rep_lab}\s*{_PH}\s*(?:{_SEAL_TAIL})?\s*", text) if n - lab_ph_at <= 2 else None
+        if co_ph or rep_ph:
+            company, name = _value("회사명", vault), _value("대표자", vault)
+            vals = ([(co_lab, company)] if co_ph else []) + ([(rep_lab, name)] if rep_ph or (co_ph and re.search(rf"{rep_lab}\s*{_PH}", text)) else [])
+            seg = xml[s:e]
+            for lab, val in vals:
+                if not val:
+                    continue
+                seg = re.sub(rf"({lab}\s*)({_PH})", lambda mm: mm.group(1) + _mark(val) + " " * max(1, _span(mm.group(2)) - _span(val)),
+                             seg, count=1)
+            if seg != xml[s:e]:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 자리표시 → {' · '.join(v for _l, v in vals if v)}")
+                if co_ph:
+                    lab_ph_at = n
             continue
         # 서식에 '○○○업체 대표자 :   ○○○ (인)'처럼 자리표시가 미리 적힌 서명 줄(11/04 서식 19)
         # (11/13 사용자 요청) 앞에 이름표가 붙고 쌍점 없는 '서 약 자 : ○○○회사    대표 ○○○ (서명 또는 날인)'도

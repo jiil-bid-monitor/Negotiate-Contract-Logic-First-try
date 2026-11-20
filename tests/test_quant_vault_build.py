@@ -4390,3 +4390,18 @@ def test_joint_supply_form_recognized_by_body(tmp_path: Path):
     assert _joint_body(joint)
     single = _mini_hwpx(tmp_path / "s.hwpx", para("입찰참가 신청서") + para("※ 공동수급의 경우 대표사가 제출"))
     assert not _joint_body(single)
+
+
+def test_signer_label_then_placeholder_two_lines(tmp_path: Path):
+    """11/20 사용자 지적(군산 청렴계약 이행서약서): '서 약 자:  회사명   ○ ○ ○' / '대  표   ○ ○ ○   (인)' — 이름표 뒤에 자리표시가 오고
+    두 줄로 나뉜 모양이라 비었음. 회사 줄 = 회사명, 바로 다음 대표 줄 = 대표자. 서약자 이름표 없는 '대표이사 ○○○ (인)'(봉투 예시)은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = p("                       서 약 자:  회사명   ○ ○ ○     ") + p("                                        대  표   ○ ○ ○   (인)") \
+        + p("본문") * 5 + p("대표이사 ○○○ (인)")
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    text = re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"회사명\s+\(주\)가상", text) and re.search(r"대  표\s+홍길동\s+\(인\)", text), text
+    assert "대표이사 ○○○ (인)" in text

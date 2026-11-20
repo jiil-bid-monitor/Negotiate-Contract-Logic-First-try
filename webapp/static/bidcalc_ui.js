@@ -928,11 +928,7 @@
       ? `${rows.length}건${q || LOG_KIND !== "all" ? ` (전체 ${LOG.length}건 중)` : ""} · 투찰금액 합계 ${won(total)}원`
         + (ranks.length ? ` · 개찰 ${ranks.length}건 중 1순위 ${ranks.filter((k) => k === 1).length} · 5위 안 ${ranks.filter((k) => k <= 5).length}` : "")
       : "";
-    // 외주 vs 웹앱(11/16) — 외주 금액이 있고 개찰된 기록만
-    const vs = rows.map((r) => versus(r.result)).filter(Boolean);
-    $("#bidlogVersus").hidden = !vs.length;
-    $("#bidlogVersus").innerHTML = vs.length ? `<b>외주 vs 웹앱</b> (개찰된 ${vs.length}건, 외주 금액이 있는 공고만) — 웹앱이 더 좋은 등수 <b class="vs-web">${vs.filter((v) => v === "web").length}건</b>`
-      + ` · 외주가 더 좋은 등수 <b class="vs-out">${vs.filter((v) => v === "out").length}건</b> · 같음 ${vs.filter((v) => v === "same").length}건` : "";
+    // 위 '외주 vs 웹앱 — 웹앱이 더 좋은 등수 …' 요약 줄은 뺌(11/20 사용자 요청 — 줄마다 웹앱·외주 등수가 있음)
     if (!rows.length) {
       $("#bidlogRows").innerHTML = `<tr><td colspan="8" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
       return;

@@ -2362,6 +2362,8 @@ function applyFilters() {
  * 지금 목록에 있는 칸만 건수와 함께 보여 주고, 접힌 칸은 누르면 펼치면서 간다.
  */
 const JUMPS = [
+  // '따로 보기 · 세부품명으로만 걸린 공고'는 목록 하나뿐이라 칸 이동은 없고 '맨 위로'만 뜬다(11/20 사용자 요청)
+  { id: "grpProduct", label: "세부품명 공고" },
   { id: "grpMain", label: "본공고" },
   { id: "grpPre", label: "사전규격" },
   // 화면에 놓인 순서와 같아야 한다 — markJump가 이 순서로 '지금 보는 칸'을 고른다

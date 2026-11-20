@@ -197,8 +197,10 @@ def _apply(path: Path, fixes: dict[str, dict]) -> None:
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
             for n, b in data.items():
                 out.writestr(infos[n], b, compress_type=zipfile.ZIP_DEFLATED)
-        from openpyxl import load_workbook
-        load_workbook(tmp)  # 열리는지 확인 — 못 열면 원래 파일 그대로
+        # 고친 XML만 확인(16MB 적격심사 파일을 통째로 다시 여는 데 2초 넘게 걸려서, 11/20) — 깨졌으면 원래 파일 그대로
+        import xml.etree.ElementTree as ET
+        for n in list(fixes) + (["xl/styles.xml"] if "xl/styles.xml" in data else []):
+            ET.fromstring(data[n])
         shutil.move(tmp, path)
     finally:
         if os.path.exists(tmp):

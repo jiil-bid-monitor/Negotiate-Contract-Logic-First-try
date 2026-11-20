@@ -289,10 +289,14 @@ def read_progress(xlsx: Path, label: str) -> str:
         wb.close()
 
 
-def contract_values(row: dict) -> dict[str, Any]:
-    """계약정보 한 줄 → 준공·청구 틀 값 이름. 빈 값은 뺌."""
+def contract_values(row: dict, notice_inst: str = "") -> dict[str, Any]:
+    """계약정보 한 줄 → 준공·청구 틀 값 이름. 빈 값은 뺌. notice_inst = 공고의 수요기관 이름 — 계약기관이 같은 기관이면
+    (끝말이 같으면 — '전라남도 광양시' ↔ '전남광주통합특별시 광양시') 공고에 나온 이름을 씀(11/20 사용자 '공고 나온 대로')."""
     amt = lambda k: int(_digits(row.get(k)) or 0) or None  # noqa: E731
     inst, dept = str(row.get("cntrctInsttNm") or "").strip(), str(row.get("cntrctInsttChrgDeptNm") or "").strip()
+    ni = (notice_inst or "").strip()
+    if len(ni.split()) >= 2 and inst and inst != ni and inst.split()[-1] == ni.split()[-1]:  # 공고 이름이 '홍천군'처럼 짧으면 계약 이름 그대로
+        inst = ni
     to = inst if dept and dept in inst else " ".join(x for x in (inst, dept) if x)  # 에코팜랜드: 기관 이름에 부서 이름이 이미 있음
     out = {"title": str(row.get("cntrctNm") or "").strip(), "amount": amt("thtmCntrctAmt"), "total": amt("totCntrctAmt"),
            "contract": _date(row.get("cntrctDate") or row.get("cntrctCnclsDate")), "start": _date(row.get("wbgnDate")),
@@ -331,14 +335,24 @@ def find_contract(client: Any, no: str, work: str, own_bizno: str, known: str = 
     if not days:
         return None
     own = _digits(own_bizno)
-    for n in range(CONTRACT_SCAN_DAYS + 1):
-        if min(days) + timedelta(days=n) > today:  # 앞날 목록은 비어 있음
-            break
-        day = (min(days) + timedelta(days=n)).strftime("%Y%m%d")
-        for row in client.fetch_all_pages(CNTRCT_BASE_URL, op, {"inqryDiv": "1", "inqryBgnDt": day + "0000", "inqryEndDt": day + "2359"}, "계약정보"):
-            if str(row.get("ntceNo") or "") == no or ({str(row.get("cntrctRefNo") or ""), str(row.get("dcsnCntrctNo") or "")} & refs):
-                if not own or own in _digits(row.get("corpList")):
-                    return row
+    dates = [min(days) + timedelta(days=n) for n in range(CONTRACT_SCAN_DAYS + 1)]
+    dates = [d for d in dates if d <= today]  # 앞날 목록은 비어 있음
+
+    def day_rows(d):
+        day = d.strftime("%Y%m%d")
+        return client.fetch_all_pages(CNTRCT_BASE_URL, op, {"inqryDiv": "1", "inqryBgnDt": day + "0000", "inqryEndDt": day + "2359"}, "계약정보")
+
+    def mine(row):
+        return (str(row.get("ntceNo") or "") == no or ({str(row.get("cntrctRefNo") or ""), str(row.get("dcsnCntrctNo") or "")} & refs))             and (not own or own in _digits(row.get("corpList")))
+
+    # 하루 목록이 수천 건이라 하루씩 차례로 보면 15초 넘게 걸렸음(11/20 광양) — 4일씩 같이 받고, 앞날짜부터 확인
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for i in range(0, len(dates), 4):
+            for rows in pool.map(day_rows, dates[i:i + 4]):
+                hit = next((r for r in rows if mine(r)), None)
+                if hit:
+                    return hit
     return None
 
 
@@ -818,8 +832,22 @@ class PostAward:
         v = {**(self._read().get(key) or {})}
         if not v:
             raise ValueError("목록에 없는 공고입니다")
+        # 이미 만든 폴더(적격심사 서류를 받은 공고 등)면 받아 둔 공고문서를 다시 씀 — 첨부를 또 받지 않게(11/20 사용자 '느림')
+        old_docs = Path(v["folder"]) / "공고문서" if v.get("folder") else None
+        reuse = [f for f in sorted(old_docs.iterdir()) if f.is_file() and f.name not in (SUMMARY, "서류_확인.txt") and not f.name.startswith("~$")]             if old_docs and old_docs.is_dir() else []
         with tempfile.TemporaryDirectory(prefix="postaward_") as tmp:
-            nf = fetch(key, Path(tmp))
+            nf = None
+            if reuse:
+                try:
+                    nf = fetch(key, Path(tmp), skip_files=True, work=v.get("work", ""), licenses=False)
+                    nf.files = reuse
+                except TypeError:  # skip_files를 모르는 fetch(시험용)
+                    nf = None
+            if nf is None:
+                try:  # 업무를 알면 그것부터 찾음(공사·용역·물품 차례로 묻지 않게)
+                    nf = fetch(key, Path(tmp), work=v.get("work", ""))
+                except TypeError:
+                    nf = fetch(key, Path(tmp))
             private = "수의" in (getattr(nf, "contract_method", "") or "")
             with self._lock:
                 items = self._read()
@@ -1094,7 +1122,7 @@ class PostAward:
             items = self._read()
             items[key]["contract"] = _contract_info(row)
             self._write(items)
-        return contract_values(row), [f"  나라장터 계약정보 찾음(통합계약번호 {row.get('untyCntrctNo')}) — 계약일·착수일·준공예정일 등을 채움(파란 칸)"]
+        return contract_values(row, v.get("institution", "")), [f"  나라장터 계약정보 찾음(통합계약번호 {row.get('untyCntrctNo')}) — 계약일·착수일·준공예정일 등을 채움(파란 칸)"]
 
     def _fill_done(self, key: str, folder: Path, nf, templates: Path, cv: dict | None = None, contract_notes=None,
                    force: set[str] | frozenset = frozenset()) -> list[str]:
@@ -1217,7 +1245,7 @@ class PostAward:
         if folder and folder.is_dir() and not v.get("qualOnly") and v.get("templates") and Path(v["templates"]).is_dir():
             from types import SimpleNamespace
             nf = SimpleNamespace(title=v.get("title", ""), institution=v.get("institution", ""), raw={})
-            cv = contract_values(row)
+            cv = contract_values(row, v.get("institution", ""))
             force = {"amount", "total"} if "amount" in changed else set()
             force |= {"due"} if "due" in changed else set()
             try:

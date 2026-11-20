@@ -92,8 +92,10 @@ def _save(data: bytes, name: str, out_dir: Path, attachments) -> list[Path]:
     return [p]
 
 
-def fetch_notice(notice_no: str, out_dir: Path) -> NoticeFiles:
-    """공고번호로 공고 행을 찾아 정보·면허제한·첨부 파일을 받는다. 못 찾으면 title이 빈 결과."""
+def fetch_notice(notice_no: str, out_dir: Path, skip_files: bool = False, work: str = "", licenses: bool = True) -> NoticeFiles:
+    """공고번호로 공고 행을 찾아 정보·면허제한·첨부 파일을 받는다. 못 찾으면 title이 빈 결과.
+    skip_files면 첨부는 안 받음(낙찰 후 서류가 이미 받아 둔 공고문서를 다시 쓸 때 — 11/20, 같은 첨부를 두 번 받느라 6초).
+    work = 아는 업무(공사·용역·물품)면 그것부터 찾고, licenses=False면 면허제한 조회를 건너뜀(낙찰 후 서류는 안 씀 — 하루치 목록이라 느림)."""
     import requests
 
     nego = _import_nego()  # 경로 설정
@@ -109,7 +111,7 @@ def fetch_notice(notice_no: str, out_dir: Path) -> NoticeFiles:
     client = DataGoKrClient(ApiConfig(service_key=key, timeout_sec=30.0, max_retries=1, max_pages=5))
     out = NoticeFiles(no)
     row = None
-    for wt in bidcalc.WORK_TYPES:
+    for wt in sorted(bidcalc.WORK_TYPES, key=lambda w: w != work):
         try:
             rows = client.fetch_all_pages(F.BID_NOTICE_BASE_URL, F.BID_NOTICE_OPERATIONS[wt],
                                           {"inqryDiv": "2", "bidNtceNo": no}, f"정량평가 공고/{wt}")
@@ -133,12 +135,12 @@ def fetch_notice(notice_no: str, out_dir: Path) -> NoticeFiles:
         out.budget = int(float(str(row.get("asignBdgtAmt") or 0).replace(",", ""))) or None
     except ValueError:
         out.budget = None
-    lic_rows = bidcalc.license_rows(client, row, no, out.ord)
+    lic_rows = bidcalc.license_rows(client, row, no, out.ord) if licenses else []
     out.licenses = bidcalc.license_names(lic_rows)
     out.license_groups = license_groups(lic_rows, no)
     out_dir.mkdir(parents=True, exist_ok=True)
     session = requests.Session()
-    for att in F.extract_attachments(row):
+    for att in [] if skip_files else F.extract_attachments(row):
         name = att.get("file_name") or f"첨부{att.get('seq')}"
         if not att.get("url"):
             continue

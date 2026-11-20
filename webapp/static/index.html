@@ -2175,6 +2175,9 @@ function renderProductView(shown) {
 }
 
 /** 검토필요·보유 품목 카드의 공통 윗부분 — 배지, 제목(강조할 낱말), 마감·수요기관·사업금액 */
+// 사전규격은 낙찰방법이 아직 없음 — 비워 두지 않고 '낙찰방법 미정'(2026-11-20 사용자 요청 — 검토필요 카드도 낙찰방법 표기)
+const methodPendingBadge = () => tipBadge("", "낙찰방법 미정", "낙찰 방식",
+  "<p>사전규격은 공고 전 단계라 나라장터에 낙찰방법(협상·입찰 등)이 아직 없습니다.<br>본공고가 나오면 그 공고에서 확인합니다.</p>");
 function bigCardHead(n, markWord) {
   let titleHtml = esc(n.title);
   if (markWord) {
@@ -2191,7 +2194,7 @@ function bigCardHead(n, markWord) {
     ["사업금액", esc(money(n))],
   ].filter(Boolean);
   const method = bidMethodOf(n);
-  return `<div class="badges">${exDueBadge(n)}${method ? bidMethodBadge({ ...n, bidMethodCategory: method }) : ""}${businessTypeBadge(n)}${n.sourceType === "사전규격" ? sourceTypeBadge(n) : ""}${n.reNotice ? reNoticeBadge() : ""}</div>
+  return `<div class="badges">${exDueBadge(n)}${method ? bidMethodBadge({ ...n, bidMethodCategory: method }) : n.sourceType === "사전규격" ? methodPendingBadge() : ""}${businessTypeBadge(n)}${n.sourceType === "사전규격" ? sourceTypeBadge(n) : ""}${n.reNotice ? reNoticeBadge() : ""}</div>
         <h3>${title}${noticeNoTag(n.noticeNo)}</h3>
         <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
 }

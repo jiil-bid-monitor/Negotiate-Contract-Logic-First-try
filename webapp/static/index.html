@@ -2137,8 +2137,11 @@ function renderReview() {
   const box = $("reviewGroup");
   const past = (n) => deadlineAt(n.deadline) < Date.now();
   const order = LIVE_SORTS[reviewSort] || LIVE_SORTS.deadline;
-  const all = reviewOf().sort((a, b) => past(a) - past(b) || order(a, b));
+  // 위 찾기 칸 글자로도 거름(2026-11-20 사용자 요청 — 검토필요 공고가 찾기에서 안 나왔음), 찾는 글자가 있고 걸린 공고가 있으면 칸을 펼침
+  const searching = !!($("liveQ").value || "").trim();
+  const all = reviewOf().filter(matchesLiveQuery).sort((a, b) => past(a) - past(b) || order(a, b));
   box.hidden = all.length === 0;
+  if (searching && all.length) box.open = true;
   $("reviewN").textContent = all.length + "건";
   const tab = ([v, note, sub]) => {
     const n = v === "all" ? all.length : all.filter((x) => categoryOf(x) === v).length;
@@ -4115,6 +4118,7 @@ $("liveQ").oninput = () => {
   }
   if ($("tab-live").hidden) showTab("live");
   applyFilters();
+  renderReview();
 };
 $("corpusQ").oninput = () => renderCorpus();
 $("corpusYear").onchange = () => renderCorpus();

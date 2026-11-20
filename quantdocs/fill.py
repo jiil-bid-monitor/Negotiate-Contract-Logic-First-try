@@ -255,7 +255,9 @@ def _fill_marks(seg: str, vault) -> tuple[str, list[str]]:
     flat = _sq(_text(seg))
     done: list[str] = []
     marks = _MARKS if re.fullmatch(r"(?:\((?:회사|H\.?P\.?|휴대폰|휴대전화|핸드폰)\)(?:☎|☏|TEL|Tel|전화)?)+", flat) else []
-    money = _MONEY_LABS if re.fullmatch(r"(?:자본금|매출액)+", flat) else []
+    # 이름표 '자 본 금'만 있는 칸은 값이 오른쪽 칸에 따로 들어감 — 매출액과 한 칸에 같이 놓인 모양에서만(11/20 사용자 지적:
+    # 일반현황 '자 본 금 | 375,000,000원'에서 이름표 칸에도 금액이 들어감)
+    money = _MONEY_LABS if re.fullmatch(r"(?:자본금|매출액)+", flat) and "매출액" in flat else []
     for rx, key in marks + money:
         value = _value(key, vault)
         if not value:

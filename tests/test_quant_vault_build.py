@@ -4405,3 +4405,15 @@ def test_signer_label_then_placeholder_two_lines(tmp_path: Path):
     text = re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert re.search(r"회사명\s+\(주\)가상", text) and re.search(r"대  표\s+홍길동\s+\(인\)", text), text
     assert "대표이사 ○○○ (인)" in text
+def test_capital_label_cell_keeps_value_in_next_cell(tmp_path: Path):
+    """11/20 사용자 지적(제안업체 일반현황 및 연혁): '자 본 금 | __' — 값 칸 말고 이름표 칸에도 '375,000,000원'이 들어감.
+    이름표 칸은 그대로, 값은 오른쪽 칸에만. ('자본금   매출액'이 한 칸에 같이 있는 모양은 예전처럼 그 칸 안에.)"""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "설 립 일"), _c(1, 0, ""), _c(2, 0, "자 본 금"), _c(3, 0, "")]])
+    v = vault.Vault({}, info={"회사명": "(주)가상", "자본금": "1,000,000,000"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    cells = [re.sub(r"<[^>]+>", "", t) for t in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S)]
+    assert re.sub(r"\s", "", cells[2]) == "자본금", cells
+    assert "1,000,000,000" in cells[3], cells

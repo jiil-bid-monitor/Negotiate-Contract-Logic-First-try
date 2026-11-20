@@ -38,9 +38,6 @@
   .flist li { break-inside:avoid; display:flex; align-items:baseline; gap:10px; padding:7px 2px; border-bottom:1px solid var(--line); min-width:0 }
   .flist .fno { flex:none; width:30px; color:var(--mute); font-size:13px; text-align:right; font-variant-numeric:tabular-nums }
   .flist .fname { flex:1; min-width:0; overflow-wrap:anywhere }
-  .flist .ftag { flex:none; font-size:12px; padding:1px 8px; border-radius:99px; white-space:nowrap }
-  .flist .ftag.auto { background:var(--chip); font-weight:600 }
-  .flist .ftag.manual { color:var(--warn); border:1px solid currentColor }
   .flist .empty { color:var(--mute); border:0 }
   .chip.hwpneed { background:transparent; color:var(--bad); border:1px solid var(--bad); font-size:12px; font-weight:600; vertical-align:middle }
   [hidden] { display:none !important }  /* .chip 등 display를 준 요소도 hidden이면 숨김(11/06 — 한글 파일 필요 칩이 늘 보였음) */
@@ -93,7 +90,6 @@
     <details class="card fold">
       <summary><h2>2. 필요 서식 <span id="fcount" class="fprog"></span> <span id="hwpneed" class="chip hwpneed" hidden>한글 파일 필요</span></h2><span class="tog"></span></summary>
       <p id="hwpneedmsg" class="warn" hidden>서식이 PDF에만 있는 공고입니다 — 통합서식(한글)을 만들지 않습니다. 나라장터·발주기관에서 한글(HWP/HWPX) 서식을 받아 직접 작성하세요.</p>
-      <p class="muted"><b>자동</b> = 회사 정보·연혁·실적을 채워 드림 · <span class="warn">직접 기입</span> = 양식만 넣어 드림(가격·인력·확약 등 공고마다 정하는 값) — 둘 다 통합서식.hwpx 안에 있음</p>
       <ul id="forms" class="flist"></ul>
     </details>
 
@@ -229,11 +225,9 @@ function render(j) {
   $("#notes").innerHTML = (s.notes.length || n.skipped.length) ?
     `<div class="card"><ul>${s.notes.concat(n.skipped).map(x => `<li class="warn">${esc(x)}</li>`).join("")}</ul></div>` : "";
   $("#hwpneed").hidden = $("#hwpneedmsg").hidden = !s.hwp_needed;
-  const nAuto = s.forms.filter(f => f.auto).length;
-  $("#fcount").textContent = s.forms.length ? `${s.forms.length}개` + (s.hwp_needed ? "" : ` · 자동 ${nAuto} · 직접 기입 ${s.forms.length - nAuto}`) : "";
+  $("#fcount").textContent = s.forms.length ? `${s.forms.length}개` : "";
   $("#forms").innerHTML = s.forms.length ? s.forms.map(f => `<li title="${esc(f.kind)}"><span class="fno">${esc(String(f.no))}</span>
-      <span class="fname">${esc(f.name)}</span>${s.hwp_needed ? '<span class="ftag manual">한글 파일 필요</span>'
-      : f.auto ? '<span class="ftag auto">자동</span>' : '<span class="ftag manual">직접 기입</span>'}</li>`).join("")
+      <span class="fname">${esc(f.name)}</span></li>`).join("")
     : '<li class="empty">공고 자료에서 서식 목록을 찾지 못했습니다</li>';
   $("#quals").innerHTML = "<tr><th>조건</th><th>자격</th><th>지일</th><th>첨부할 서류</th></tr>" +
     (s.quals.length ? s.quals.map(q => q.items.map((it, i) => `<tr><td>${i ? "" : esc(q.kind)}</td>

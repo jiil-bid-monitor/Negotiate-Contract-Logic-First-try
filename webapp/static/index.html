@@ -1315,6 +1315,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 #awardMsg { flex: 0 0 100%; min-height: 1.5em; }
 .award-table td { vertical-align: top; }
 .award-lead { margin: 0 0 10px; font-size: 15px; }
+.award-test-note { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; line-height: 1.7; }
+.award-test-note button { margin-left: 6px; }
 #tab-award h3 { font-size: 17px; margin: 18px 0 8px; }
 .award-group { margin-top: 18px; }
 .award-group > summary { cursor: pointer; font-size: 16px; font-weight: 600; padding: 6px 0; }
@@ -1535,6 +1537,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 
   <!-- 낙찰 후 서류(2026-11-10) — 투찰 기록·직접 넣은 공고의 낙찰자 확인(webapp/postaward.py), 공사 / 물품·용역 구분, 공고 폴더 만들기 -->
   <section id="tab-award" hidden>
+    <p class="award-test-note" id="awardTestNote" hidden>시험 페이지예요 — 운영 목록·폴더와 따로 씁니다. 과거 수주 사업 <b>광양시 교통안전체험관(R25BK01125448)</b>이 들어 있어요.
+      만든 폴더는 <code>\\jiilserver\jiil-webapp\낙찰후서류_테스트</code>에 생깁니다. <button type="button" id="awardReset">처음으로 되돌리기</button></p>
     <p class="award-lead">투찰한 공고가 저절로 올라옵니다. 투찰 기록이 없는 공고(협상 등)는 공고번호를 넣으세요.</p>
     <div class="search">
       <input id="awardNo" type="search" placeholder="공고번호 — 예: R26BK01800345-000" autocomplete="off" aria-label="공고번호">
@@ -4127,12 +4131,12 @@ function renderAward(items) {
 async function loadAwardDetail(key) {
   const box = document.getElementById("awardDetail-" + key);
   if (!box) return;
-  try { box.innerHTML = awardDetailHtml(key, await getJson("/api/postaward/status?key=" + encodeURIComponent(key))); }
+  try { box.innerHTML = awardDetailHtml(key, await getJson(AWARD_API + "/status?key=" + encodeURIComponent(key))); }
   catch (err) { box.textContent = err.message; }
 }
 function awardDetailHtml(key, s) {
   if (!s.folder) return `<p class="sub">폴더가 없습니다 — '첨부 다시 받기'로 다시 만드세요.</p>`;
-  const link = (rel, name) => `<a href="/api/postaward/file?key=${encodeURIComponent(key)}&path=${encodeURIComponent(rel)}">${esc(name)}</a>`;
+  const link = (rel, name) => `<a href="${AWARD_API}/file?key=${encodeURIComponent(key)}&path=${encodeURIComponent(rel)}">${esc(name)}</a>`;
   const local = !s.folder.startsWith("\\\\");
   const stages = s.stages.map((st) => {
     const state = st.doc ? (st.todo.length ? `<span class="badge warn">채울 칸 ${st.todo.length}</span>` : `<span class="badge okb">모두 채움</span>`)
@@ -4152,7 +4156,7 @@ function awardDetailHtml(key, s) {
   const notes = s.notes.length ? `<div class="award-box"><h4>확인할 것</h4><ul>${s.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>` : "";
   const docs = `<div class="award-box"><h4>공고문 제출서류</h4>${s.docList.length ? `<ul class="award-docs">${s.docList.map((d) =>
       `<li class="${d.covered ? "ok" : "no"}">${d.covered ? "✓ 틀에 있음" : "✗ 따로 준비"} — ${esc(d.text)}</li>`).join("")}</ul>` : `<p class="sub">첨부에서 제출서류 목록을 찾지 못함 — 공고문 확인</p>`}</div>`;
-  const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="/api/postaward/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}">zip으로 모두 받기</a></li>`),
+  const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="${AWARD_API}/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}">zip으로 모두 받기</a></li>`),
     s.attach.length ? `<li><b>공고문서</b> ${s.attach.map((f) => link("공고문서/" + f, f)).join(" · ")}</li>` : ""].join("");
   return `<div class="award-path"><span>폴더</span><code>${esc(s.folder)}</code>
       <button type="button" data-award-copy="${esc(s.folder)}">경로 복사</button>
@@ -4163,8 +4167,11 @@ function awardDetailHtml(key, s) {
     ${files ? `<div class="award-box"><h4>파일 내려받기</h4><ul class="award-files">${files}</ul></div>` : ""}`;
 }
 async function loadAward() {
-  try { renderAward((await getJson("/api/postaward")).items || []); } catch (err) { $("awardMsg").textContent = err.message; }
+  try { renderAward((await getJson(AWARD_API)).items || []); } catch (err) { $("awardMsg").textContent = err.message; }
 }
+// 시험 페이지(/award-test, 11/20) — 낙찰 후 서류 탭만, 운영과 따로인 시험 목록(/api/test/postaward…)
+const AWARD_TEST = location.pathname.replace(/\/$/, "") === "/award-test";
+const AWARD_API = AWARD_TEST ? "/api/test/postaward" : "/api/postaward";
 async function awardAct(btn, path, body, done) {
   btn.disabled = true;
   $("awardMsg").textContent = "";
@@ -4175,8 +4182,8 @@ async function awardAct(btn, path, body, done) {
   } catch (err) { $("awardMsg").textContent = err.message; }
   btn.disabled = false;
 }
-$("awardAdd").onclick = (e) => awardAct(e.target, "/api/postaward", { no: $("awardNo").value }, () => { $("awardNo").value = ""; return "넣었습니다 — '지금 낙찰자 확인'을 누르면 바로 확인합니다."; });
-$("awardCheck").onclick = (e) => awardAct(e.target, "/api/postaward/check", {}, (d) => `낙찰 ${d.won} · 다른 업체 ${d.lost} · 아직 없음 ${d.waiting}`);
+$("awardAdd").onclick = (e) => awardAct(e.target, AWARD_API, { no: $("awardNo").value }, () => { $("awardNo").value = ""; return "넣었습니다 — '지금 낙찰자 확인'을 누르면 바로 확인합니다."; });
+$("awardCheck").onclick = (e) => awardAct(e.target, AWARD_API + "/check", {}, (d) => `낙찰 ${d.won} · 다른 업체 ${d.lost} · 아직 없음 ${d.waiting}`);
 $("awardList").onclick = (e) => {
   const open = e.target.closest("[data-award-open]");
   if (open) {
@@ -4191,7 +4198,7 @@ $("awardList").onclick = (e) => {
     return;
   }
   const f = e.target.closest("[data-award-folder]");
-  if (f) return awardAct(f, "/api/postaward/folder", { key: f.dataset.awardFolder, stage: f.dataset.awardStage || "" }, () => {
+  if (f) return awardAct(f, AWARD_API + "/folder", { key: f.dataset.awardFolder, stage: f.dataset.awardStage || "" }, () => {
     AWARD_OPEN.add(f.dataset.awardFolder); loadAward();
     // 묶음 zip 바로 내려받기(11/17 사용자) — 같은 폴더가 NAS와 사내 공유 폴더(서버 PC가 1분마다 복사)에도 있음
     const a = document.createElement("a");
@@ -4200,7 +4207,7 @@ $("awardList").onclick = (e) => {
     return "폴더를 만들고 첨부를 받았습니다 — 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 아래 '서류 현황'에서 채울 칸을 확인하세요.";
   });
   const del = e.target.closest("[data-award-del]");
-  if (del && confirm("목록에서 뺄까요? (만든 폴더는 지우지 않습니다)")) awardAct(del, "/api/postaward/delete", { key: del.dataset.awardDel });
+  if (del && confirm("목록에서 뺄까요? (만든 폴더는 지우지 않습니다)")) awardAct(del, AWARD_API + "/delete", { key: del.dataset.awardDel });
 };
 // 정량평가서 탭: iframe 높이를 안 내용 높이에 맞춰 페이지 스크롤 하나로 — 스크롤바는 다른 탭과 같은 페이지 것(11/20 사용자 요청: 탭마다 모양 통일).
 // 11/04 '스크롤 2개 불편' 때 페이지 스크롤을 껐더니 이 탭만 스크롤바가 없었음 → iframe 안 스크롤을 끄고 높이를 내용에 맞춤(같은 출처라 읽을 수 있음)
@@ -4449,7 +4456,15 @@ setInterval(loadParticipation, 10000);
 // 텔레그램 '판단하러 가기' 링크(…#log) — 판단 기록 탭으로 바로
 // 주소 끝 #탭이름으로 그 탭을 바로 연다(#log 그대로) — 새 화면 시험판(/v2/)의 도구 단추가 쓴다(2026-11-16).
 // #calc=공고번호 는 투찰 계산기에 번호를 넣고 불러오기까지 누른다
+if (AWARD_TEST) {  // 시험 페이지: 탭 줄을 숨기고 낙찰 후 서류 탭만
+  document.title = "낙찰 후 서류 시험";
+  document.querySelector(".tabs").style.display = "none";  // .tabs 의 display:flex 가 hidden 을 덮어서
+  $("awardTestNote").hidden = false;
+  $("awardReset").onclick = (e) => awardAct(e.target, AWARD_API + "/reset", {}, () => "처음 상태로 되돌렸습니다 — 광양 공고만 남고 시험 폴더는 지웠습니다.");
+  showTab("award");
+}
 (function openHashTab() {
+  if (AWARD_TEST) return;
   const [tab, arg] = decodeURIComponent(location.hash.slice(1)).split("=");
   if (!["live", "excluded", "corpus", "log", "calc", "quant", "award"].includes(tab)) return;
   showTab(tab);

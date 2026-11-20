@@ -727,7 +727,7 @@ class PostAward:
                     write_summary(summary, key, v, nf)
                 except Exception as err:  # noqa: BLE001 — 요약을 못 만들어도 폴더·서류는 그대로
                     basic.append(f"[공고요약] {SUMMARY}를 만들지 못함({err.__class__.__name__})")
-        lines = [f"⚠ 새로 발급 필요: {k} (보유본 {h})" for k, h in reissue] + ([""] if reissue else [])  # 맨 위(11/19 사용자)
+        lines = [f"⚠ 새로 발급 필요: {k} ({h if h.startswith('보유본') else '보유본 ' + h})" for k, h in reissue] + ([""] if reissue else [])  # 맨 위(11/19 사용자)
         lines += [f"{key} {v.get('title') or nf.title} — 첨부에서 읽은 제출서류 (자동, 원문과 대조하세요)", ""]
         lines += basic + [""]
         if not nf.title:

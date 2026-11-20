@@ -484,6 +484,7 @@ def make_handler(app: App):
                         app.postaward.sync_bidlog()
                         keys = [str(k) for k in data.get("keys") or []] or None
                         done = app.postaward.check(bidcalc.make_client(config.api), base, keys)
+                        done["contracts"] = app.postaward.check_contracts(contract_lookup())  # 계약이 올라왔으면 단계를 착공·착수로
                     except (ConfigError, ApiError) as err:
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))

@@ -188,6 +188,13 @@ def _date(text: Any) -> datetime | None:
         return None
 
 
+def _contract_info(row: dict) -> dict[str, str]:
+    """postaward.json에 남길 계약 — 통합계약번호(다음 조회를 한 번에)·상세 주소·계약일(화면 단계 '착공·착수')."""
+    d = _date(row.get("cntrctDate") or row.get("cntrctCnclsDate"))
+    return {"no": str(row.get("untyCntrctNo") or ""), "url": str(row.get("cntrctDtlInfoUrl") or ""),
+            "date": d.strftime("%Y-%m-%d") if d else ""}
+
+
 def contract_values(row: dict) -> dict[str, Any]:
     """계약정보 한 줄 → 준공·청구 틀 값 이름. 빈 값은 뺌."""
     amt = lambda k: int(_digits(row.get(k)) or 0) or None  # noqa: E731
@@ -915,7 +922,7 @@ class PostAward:
             return {}, ["  나라장터 계약정보: 아직 계약이 등록되지 않음 — 계약일·착수일·준공예정일은 계약서 보고 노란 칸에 적으세요"]
         with self._lock:
             items = self._read()
-            items[key]["contract"] = {"no": str(row.get("untyCntrctNo") or ""), "url": str(row.get("cntrctDtlInfoUrl") or "")}
+            items[key]["contract"] = _contract_info(row)
             self._write(items)
         return contract_values(row), [f"  나라장터 계약정보 찾음(통합계약번호 {row.get('untyCntrctNo')}) — 계약일·착수일·준공예정일 등을 채움(파란 칸)"]
 
@@ -975,6 +982,27 @@ class PostAward:
             items[key]["autoFill"] = auto
             self._write(items)
         return head + lines
+
+    def check_contracts(self, contract_lookup) -> int:
+        """낙찰한 공고의 계약이 나라장터 계약정보에 올라왔는지 — 올라오면 계약일을 남겨 화면 단계가 '착공·착수'로 넘어감(11/20 사용자).
+        계약 등록 전엔 그대로(담당자에게 따로 알리지 않음). 찾은 공고 수."""
+        if contract_lookup is None:
+            return 0
+        found = 0
+        for key, v in self._read().items():
+            if v.get("status") != "낙찰" or (v.get("contract") or {}).get("date"):
+                continue
+            try:
+                row = contract_lookup(v)
+            except Exception:  # noqa: BLE001 — 나라장터가 안 되면 다음 확인 때
+                continue
+            if row:
+                with self._lock:
+                    items = self._read()
+                    items[key]["contract"] = _contract_info(row)
+                    self._write(items)
+                found += 1
+        return found
 
     def check(self, client: Any, base_url: str, keys: list[str] | None = None) -> dict[str, int]:
         """'대기' 공고의 낙찰자를 확인. keys를 주면 그 공고만(상태와 상관없이 다시)."""
@@ -1225,6 +1253,14 @@ def selfcheck() -> None:
         # 착수서류(담당자)가 우선 — 나라장터 계약정보와 다른 날짜는 알림
         assert "확인: 계약년월일" in text and "'2025-03-11', 나라장터 계약정보 '2025-03-12'" in text and "확인: 준공예정일" in text, text
         assert pa._read()[k5]["contract"]["no"] == "R25TE1"
+        # 계약이 올라오면 계약일을 남김(화면 단계 '착공·착수') — 낙찰한 공고만, 이미 있으면 다시 안 부름
+        items = pa._read(); items[k5]["status"] = "낙찰"; items[k5]["contract"].pop("date", None); pa._write(items)
+        calls = []
+        look = lambda v: (calls.append(v["no"]), row5 if k5.startswith(v["no"]) else None)[1]  # noqa: E731 — 다른 낙찰 공고는 아직 계약 없음
+        assert pa.check_contracts(look) == 1 and pa._read()[k5]["contract"]["date"] == "2025-03-12"
+        n = len(calls)
+        assert pa.check_contracts(look) == 0 and len(calls) == n + (n - 1)  # 계약일이 생긴 공고는 다시 안 부름
+        assert pa.check_contracts(None) == 0
         # 착수서류를 안 채워도 나라장터 계약정보로 날짜·수신자(계약기관+담당부서), 조달청 대행이면 수신자는 그대로
         k6 = "R26BK00000006-000"
         pa.add(k6)

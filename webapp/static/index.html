@@ -4058,7 +4058,9 @@ function awardKind(v) {
 /** 단계 칸 — [단계 이름, 지금 단계 번호(AWARD_STEPS, -1 = 없음), 설명 한 줄](11/20 사용자 '친절하게', 시안 모양) */
 function awardStage(v, kind) {
   const o = v.opening, rank = o ? o.rank : null, d = awardDesignated(v);
-  if (v.status === "낙찰") return v.folder && !v.qualOnly ? ["계약 서류", 2, "서류 현황에서 채울 칸을 확인하세요"] : ["낙찰 — 계약 서류 만들기", 2, ""];
+  const cdate = (v.contract || {}).date;  // 나라장터 계약정보에 계약이 올라오면(22시·'지금 낙찰자 확인') 착공·착수 단계로
+  if (v.status === "낙찰" && cdate) return ["착공·착수 서류", 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결 — 서류 현황에서 착공·착수 서류를 확인하세요`];
+  if (v.status === "낙찰") return v.folder && !v.qualOnly ? ["계약 서류", 2, "나라장터에 계약이 올라오면 착공·착수 단계로 넘어갑니다"] : ["낙찰 — 계약 서류 만들기", 2, ""];
   if (v.folder) return ["적격심사 서류", 1, "심사 서류를 내고 낙찰을 기다립니다"];
   if (kind === "todo") return ["적격심사 대상", 1, "개찰 1순위 — 심사 통보를 확인하세요"];
   if (kind === "done") {

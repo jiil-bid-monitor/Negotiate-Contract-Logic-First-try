@@ -730,8 +730,9 @@
     const res = r.result || {};
     if (!res || res.status !== "완료") return "";
     const s = res.outsource;
-    // 외주 금액이 없는 비교 기록도 웹앱 줄은 보임(11/20 사용자 요청 — 개찰 결과 칸 '탈락 / 웹앱 N등 / 외주 M등'으로 통일)
-    if (!s && !res.recorded) return "";
+    // 웹앱 줄은 지일 결과(실제 또는 비교 기록)가 있는 모든 기록에, 외주 줄은 외주 금액이 있을 때만(11/20 사용자 요청 — '탈락 / 웹앱 N등 / 외주 M등'으로 통일,
+    // 외주 금액이 없는 기록도 '탈락'만 남지 않게 — 실제 투찰 = 웹앱 금액이면 웹앱 등수 = 지일 등수)
+    if (!mine(res)) return "";
     const w = webRank(res);
     const cls = (k) => (k == null ? "" : k > 0 ? "rank" : "res-bad");
     // '▶ 웹앱이 나음·외주가 나음·같음' 줄은 뺌(11/18 사용자 요청) — 웹앱·외주 등수 두 줄만
@@ -927,11 +928,7 @@
       ? `${rows.length}건${q || LOG_KIND !== "all" ? ` (전체 ${LOG.length}건 중)` : ""} · 투찰금액 합계 ${won(total)}원`
         + (ranks.length ? ` · 개찰 ${ranks.length}건 중 1순위 ${ranks.filter((k) => k === 1).length} · 5위 안 ${ranks.filter((k) => k <= 5).length}` : "")
       : "";
-    // 외주 vs 웹앱(11/16) — 외주 금액이 있고 개찰된 기록만
-    const vs = rows.map((r) => versus(r.result)).filter(Boolean);
-    $("#bidlogVersus").hidden = !vs.length;
-    $("#bidlogVersus").innerHTML = vs.length ? `<b>외주 vs 웹앱</b> (개찰된 ${vs.length}건, 외주 금액이 있는 공고만) — 웹앱이 더 좋은 등수 <b class="vs-web">${vs.filter((v) => v === "web").length}건</b>`
-      + ` · 외주가 더 좋은 등수 <b class="vs-out">${vs.filter((v) => v === "out").length}건</b> · 같음 ${vs.filter((v) => v === "same").length}건` : "";
+    // 위 '외주 vs 웹앱 — 웹앱이 더 좋은 등수 …' 요약 줄은 뺌(11/20 사용자 요청 — 줄마다 웹앱·외주 등수가 있음)
     if (!rows.length) {
       $("#bidlogRows").innerHTML = `<tr><td colspan="8" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다 — '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
       return;

@@ -1382,8 +1382,19 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .award-auto { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; font-size: 12px; }
 .award-auto dt { color: var(--muted); }
 .award-auto dd { margin: 0; min-width: 0; word-break: break-all; }
-.award-docs li.ok { color: var(--brand); }
-.award-docs li.no { color: var(--urgent); }
+.award-panel { display: grid; gap: 12px; }
+.award-docgroup + .award-docgroup { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.award-docgroup h5 { margin: 0 0 6px; font-size: 14px; color: var(--ink-strong); }
+.award-docs { list-style: none; padding: 0 !important; margin: 0 0 4px !important; display: grid; gap: 6px; }
+.award-docs li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14px; line-height: 1.6; }
+.award-doctext { word-break: keep-all; overflow-wrap: anywhere; }
+.award-docstate { font-size: 12px; font-weight: 600; text-align: center; padding: 1px 0; border: 1px solid; }
+.award-docstate.ok { color: var(--brand); border-color: var(--brand); }
+.award-docstate.no { color: var(--warn); border-color: var(--warn); background: var(--warn-tint); }
+.award-notes li { margin-bottom: 4px; word-break: keep-all; overflow-wrap: anywhere; }
+.award-autobox { margin-top: 6px; }
+.award-autobox > summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+@media (max-width: 760px) { .award-docs li { grid-template-columns: 1fr; gap: 2px; } .award-docstate { justify-self: start; padding: 1px 8px; } }
 .award-files li { margin-bottom: 4px; word-break: break-all; }
 </style>
 </head>
@@ -4158,25 +4169,38 @@ function awardDetailHtml(key, s) {
       : st.ready ? `<span class="badge warn">틀 없음</span>` : `<span class="badge award-wait">틀 준비 중</span>`;
     return `<li><b>${esc(st.name)}</b> ${state}</li>`;
   }).join("");
-  // 서류가 있는 단계마다 한 상자(적격심사서류·착공/착수서류)
+  // 서류가 있는 단계마다 한 상자(적격심사서류·착공/착수서류) — 채울 칸만 보이고, 자동으로 채운 칸은 접어 둠
   const todo = s.stages.filter((st) => st.doc || st.error).map((doc) => doc.doc ? `
-    <div class="award-box todo"><h4>담당자가 채울 칸 <span class="sub">${esc(doc.dir)}/${esc(doc.doc)} · 기본사항</span></h4>
+    <div class="award-box todo"><h4>${esc(doc.name)} — 담당자가 채울 칸 <span class="sub">${esc(doc.dir)}/${esc(doc.doc)}</span></h4>
       ${doc.todo.length ? `<ul class="award-chips">${doc.todo.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p>필수 칸을 모두 채웠습니다.</p>`}
-      ${doc.auto.length ? `<h4>자동으로 채운 칸 <span class="sub">원문과 대조</span></h4><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl>` : ""}
+      ${doc.auto.length ? `<details class="award-autobox"><summary>자동으로 채운 칸 ${doc.auto.length}개 — 원문과 대조</summary><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl></details>` : ""}
     </div>` : `<div class="award-box todo"><p>${esc(doc.error)}</p></div>`).join("");
   // 공고문이 요구한 '새로 발급할 서류'(11/19) — 맨 앞 붉은 상자
   const reissue = (s.reissue || []).length ? `<div class="award-box reissue"><h4>⚠ 새로 발급할 서류 <span class="sub">공고문에 이름이 나옴 — 원문의 발급 기준 확인</span></h4><ul>${s.reissue.map((r) => `<li><b>${esc(r.kind)}</b> — 가진 것: ${esc(r.have)}</li>`).join("")}</ul></div>` : "";
-  const notes = s.notes.length ? `<div class="award-box"><h4>확인할 것</h4><ul>${s.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>` : "";
-  const docs = `<div class="award-box"><h4>공고문 제출서류</h4>${s.docList.length ? `<ul class="award-docs">${s.docList.map((d) =>
-      `<li class="${d.covered ? "ok" : "no"}">${d.covered ? "✓ 틀에 있음" : "✗ 따로 준비"} — ${esc(d.text)}</li>`).join("")}</ul>` : `<p class="sub">첨부에서 제출서류 목록을 찾지 못함 — 공고문 확인</p>`}</div>`;
-  const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="${AWARD_API}/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}">zip으로 모두 받기</a></li>`),
+  const notes = s.notes.length ? `<div class="award-box"><h4>확인할 것</h4><ul class="award-notes">${s.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>` : "";
+  // 공고문 제출서류 — '[입찰참여 시] …' 앞말로 단계별 묶음, 줄마다 '표준틀에 있음 / 따로 준비' + 서류 이름, 어느 첨부에서 읽었는지는 묶음 아래 작게
+  const groups = new Map();
+  for (const d of s.docList) {
+    const m = /^\[(.+?) 시\]\s*/.exec(d.text);
+    const when = m ? m[1].replace(/\(.*?\)/g, "").trim() + " 때" : "그 밖에 공고문에 적힌 서류";
+    if (!groups.has(when)) groups.set(when, []);
+    groups.get(when).push({ ...d, text: m ? d.text.slice(m[0].length) : d.text });
+  }
+  const docs = `<div class="award-box award-wide"><h4>공고문 제출서류 <span class="sub">첨부를 끝까지 읽은 결과 — 원문과 대조하세요</span></h4>${s.docList.length
+    ? [...groups].map(([when, list]) => `<div class="award-docgroup"><h5>${esc(when)}</h5><ul class="award-docs">${list.map((d) =>
+        `<li><span class="award-docstate ${d.covered ? "ok" : "no"}">${d.covered ? "표준틀에 있음" : "따로 준비"}</span><span class="award-doctext">${esc(d.text)}</span></li>`).join("")}</ul>
+        <p class="sub">출처: ${esc([...new Set(list.map((d) => d.source).filter(Boolean))].join(" · ") || "첨부")}</p></div>`).join("")
+    : `<p class="sub">첨부에서 제출서류 목록을 찾지 못했습니다 — 공고문을 직접 확인하세요.</p>`}</div>`;
+  const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="${AWARD_API}/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}">zip으로 받기</a></li>`),
     s.attach.length ? `<li><b>공고문서</b> ${s.attach.map((f) => link("공고문서/" + f, f)).join(" · ")}</li>` : ""].join("");
   return `<div class="award-path"><span>폴더</span><code>${esc(s.folder)}</code>
       <button type="button" data-award-copy="${esc(s.folder)}">경로 복사</button>
-      <span class="sub">${local ? "서버 PC 안 폴더라 다른 PC에서는 열리지 않습니다 — 아래 파일을 내려받으세요." : "탐색기 주소창에 붙여 넣으면 열립니다. 여기서 파일을 열어 채우고 저장하면 서버에 그대로 남습니다."}</span>
-      <span class="sub">지금은 시험 위치(낙찰후서류)에 만들어집니다 — 002 진행프로젝트에 보이게 하려면 부장님(NAS 관리자)의 폴더 연결 설정이 필요합니다.</span></div>
+      <span class="sub">${local ? "서버 PC 안 폴더라 다른 PC에서는 열리지 않습니다 — 아래 파일을 내려받으세요." : "탐색기 주소창에 붙여 넣으면 열립니다. 여기서 파일을 열어 채우고 저장하면 그대로 남습니다."}</span></div>
     <ul class="award-stages">${stages}</ul>
-    <div class="award-grid">${reissue}${todo}${notes}${docs}</div>
+    ${reissue}
+    ${todo ? `<div class="award-grid">${todo}</div>` : ""}
+    ${docs}
+    ${notes}
     ${files ? `<div class="award-box"><h4>파일 내려받기</h4><ul class="award-files">${files}</ul></div>` : ""}`;
 }
 async function loadAward() {
@@ -4213,12 +4237,12 @@ $("awardList").onclick = (e) => {
   if (e.target.closest("[data-award-sim]")) return $("awardCheck").click();  // 시험 페이지 '다음 단계'
   const f = e.target.closest("[data-award-folder]");
   if (f) return awardAct(f, AWARD_API + "/folder", { key: f.dataset.awardFolder, stage: f.dataset.awardStage || "" }, () => {
-    AWARD_OPEN.add(f.dataset.awardFolder); loadAward();
+    loadAward();
     // 묶음 zip 바로 내려받기(11/17 사용자) — 같은 폴더가 NAS와 사내 공유 폴더(서버 PC가 1분마다 복사)에도 있음
     const a = document.createElement("a");
     a.href = `${AWARD_API}/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=`;  // 시험 페이지는 시험 목록의 zip
     document.body.appendChild(a); a.click(); a.remove();
-    return "폴더를 만들고 첨부를 받았습니다 — 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 아래 '서류 현황'에서 채울 칸을 확인하세요.";
+    return "폴더를 만들고 첨부를 받았습니다 — 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 채울 칸은 '서류 현황'에서 볼 수 있습니다.";
   });
   const del = e.target.closest("[data-award-del]");
   if (del && confirm("목록에서 뺄까요? (만든 폴더는 지우지 않습니다)")) awardAct(del, AWARD_API + "/delete", { key: del.dataset.awardDel });

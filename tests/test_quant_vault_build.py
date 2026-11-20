@@ -4174,3 +4174,20 @@ def test_rep_line_with_seal_and_extra_paren(tmp_path: Path):
         fill_hwpx(_mini_hwpx(tmp_path / "p.hwpx", body), tmp_path / "o.hwpx", v)
         t = re.sub(r"\s+", " ", _text(zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
         assert re.search(r"대 표 자 : 홍길동 \(인\) ?\(사용인감\)", t), t
+
+
+def test_seal_line_trims_right_spaces_keeps_colon(tmp_path: Path):
+    """11/20 사용자 결정: '대 표 자 : 이운봉' 뒤 (인)이 다음 줄로 넘어감 — ':' 자리는 지킨 채 값 뒤 오른쪽 빈칸을 줄임
+    (이름과 (인) 사이는 한 칸까지, 모자라면 (인) 뒤 줄 끝 빈칸 — 뒤 글 조각에 있어도)."""
+    from quantdocs.fill import fill_hwpx, _span
+
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    for orig, tail in (("   대 표 자 :   (인)      ", ""), ("   대 표 자 :   (인)", "        ")):
+        body = f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{orig}</hp:t></hp:run>'
+        body += (f'<hp:run charPrIDRef="0"><hp:t>{tail}</hp:t></hp:run>' if tail else "") + "</hp:p>"
+        fill_hwpx(_mini_hwpx(tmp_path / "p.hwpx", body), tmp_path / "o.hwpx", v)
+        x = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+        got = re.sub(r"<[^>]+>", "", "".join(re.findall(r"<hp:t\b[^>]*>(.*?)</hp:t>", x, re.S)))
+        assert "홍길동 (인)" in got, got
+        assert got.index(":") == orig.index(":")  # ':' 자리 그대로(앞 들여쓰기 안 줄임)
+        assert _span(got) <= _span(orig + tail)   # 줄이 원래보다 길어지지 않음

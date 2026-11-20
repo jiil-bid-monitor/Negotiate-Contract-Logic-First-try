@@ -687,6 +687,7 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
     """문단(또는 한 문단짜리 칸) 글 속 첫 쌍점 뒤에 값. 쌍점이 없으면 맨 끝 글 뒤에 ' : 값'. 못 넣으면 None."""
     ts = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", seg, re.S))
     hit = next((t for t in ts if re.search(r"[:：]", re.sub(r"<[^>]*>", "", t.group(2)))), None)
+    need_cut = 0
     if hit is None:
         if not ts:
             return None
@@ -705,16 +706,33 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
             # 뒤 (인)이 다음 줄로 넘어감 — 예전엔 글자 수만큼만 빼서 줄이 넘쳤음)
             need = _span(value) + 1 + -(-_span(value) // 10)
             room = len(mm.group(3))
-            short.append(max(0, need + (2 if seal else 0) - room) if seal else 0)
-            return f"{mm.group(2)} {_mark(value)}" + " " * max(2 if seal else 0, room - need)
+            # (11/20 사용자 결정: ':' 자리는 지킨 채 값 뒤 오른쪽 빈칸을 줄임) 이름과 (인) 사이는 한 칸까지 줄이고, 그래도 모자라면 줄 끝 빈칸에서 뺌
+            short.append(max(0, need + 1 - room) if seal else 0)
+            return f"{mm.group(2)} {_mark(value)}" + " " * max(1 if seal else 0, room - need)
         last = hit
         body = re.sub(r"(<[^>]*>)|([:：])( *)", put, hit.group(2))
         # (11/16 사용자 지적: '대 표 자:' 줄만 ':'가 왼쪽으로 — 기본 서식의 ':' 자리는 절대 옮기지 말 것) 빈칸이 모자라도 줄 앞 들여쓰기
-        # 빈칸은 줄이지 않음(예전엔 (인)을 같은 줄에 두려고 앞 빈칸을 줄여 ':'가 밀렸음) — 대신 '(인)' 뒤 줄 끝 빈칸만 그만큼 줄임
-        if short and short[0]:
+        # 빈칸은 줄이지 않음 — 대신 '(인)' 뒤 줄 끝 빈칸을 그만큼 줄임(같은 글 조각, 모자라면 뒤 글 조각들의 빈칸도 — 11/20 (인)이 다음 줄로 넘어감)
+        need_cut = short[0] if short else 0
+        if need_cut:
             tail = len(body) - len(body.rstrip(" "))
-            body = body[:len(body) - min(tail, short[0])] if tail else body
-    seg = seg[:last.start(2)] + body + seg[last.end(2):]
+            cut = min(tail, need_cut)
+            body = body[:len(body) - cut] if cut else body
+            need_cut -= cut
+    after = seg[last.end(2):]
+    if hit is not None and need_cut:
+        def trim(mm):
+            nonlocal need_cut
+            inner = mm.group(2)
+            if not need_cut:
+                return mm.group(0)
+            keep = inner.rstrip(" ")
+            spaces = len(inner) - len(keep)
+            cut = min(spaces, need_cut)
+            need_cut -= cut
+            return mm.group(1) + inner[:len(inner) - cut] + mm.group(3)
+        after = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", trim, after, flags=re.S)
+    seg = seg[:last.start(2)] + body + after
     return re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
 
 

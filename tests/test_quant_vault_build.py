@@ -3931,8 +3931,9 @@ def test_phone_right_after_company_label_before_line_break(tmp_path: Path):
 
 
 def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
-    """11/16 사용자 요청: 대표님 휴대폰(.env QUANT_REP_MOBILE → 회사정보 '대표자 휴대폰')은 대표자 줄의 휴대폰 칸에만 —
-    선임계 '대표자명 | 이름 | 연 락 처 | 회 사 / 휴대폰'(휴대폰 글자 바로 옆), 위임장 '대 표 자 | 휴대폰 | __'. 대리인 줄 휴대폰 칸은 비움 — 단 '회 사 / 휴대폰' 연락처 칸은 대리인 줄이어도 대표님 번호(11/16)."""
+    """11/20 사용자 요청(위임장 대표자 연락처에 대표님 휴대폰이 들어감): 대표님 개인 번호는 어느 서식에도 넣지 않음 —
+    예전에 대표자 휴대폰을 넣던 칸(선임계 '회 사 / 휴대폰'의 휴대폰 옆, 위임장 대표자 줄 '휴대폰', '응모 대표자' 연락처)엔 모두 회사 전화.
+    대리인 줄 따로 놓인 '휴대폰' 칸은 예전처럼 비움(11/16·11/18 'QUANT_REP_MOBILE = 대표자 휴대폰'을 대체)."""
     from quantdocs.fill import fill_hwpx
 
     P = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
@@ -3941,34 +3942,25 @@ def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
         return (f'<hp:tc><hp:subList>{"".join(P(x) for x in paras)}</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
                 f'<hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
     tbl = lambda rows: '<hp:p><hp:run><hp:tbl>' + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + '</hp:tbl></hp:run></hp:p>'
+    info = {"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222", "대표자 휴대폰": "010-0000-1111"}
+    run = lambda name, body: (fill_hwpx(_mini_hwpx(tmp_path / f"{name}.hwpx", body), tmp_path / f"{name}o.hwpx", vault.Vault({}, info=info)),
+                              zipfile.ZipFile(tmp_path / f"{name}o.hwpx").read("Contents/section0.xml").decode())[1]
     body = (tbl([[cell(0, 0, "대표자명"), cell(1, 0, ""), cell(2, 0, "연 락 처"), cell(3, 0, "회  사", "휴대폰")]])
             + tbl([[cell(0, 0, "대 표 자", rs=2), cell(1, 0, "성 명"), cell(2, 0, "")], [cell(1, 1, "휴대폰"), cell(2, 1, "")],
                    [cell(0, 2, "대 리 인", rs=2), cell(1, 2, "성 명"), cell(2, 2, "")], [cell(1, 3, "휴대폰"), cell(2, 3, "")]]))
-    info = {"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222", "대표자 휴대폰": "010-0000-1111"}
-    fill_hwpx(_mini_hwpx(tmp_path / "m.hwpx", body), tmp_path / "mo.hwpx", vault.Vault({}, info=info))
-    out = zipfile.ZipFile(tmp_path / "mo.hwpx").read("Contents/section0.xml").decode()
-    assert re.search(r"휴대폰  (?:<[^>]+>)*010-0000-1111", out)  # 선임계 휴대폰 글자 옆
-    assert out.count("010-0000-1111") == 2  # 선임계 + 위임장 대표자 줄만, 대리인 줄은 비움
-    info.pop("대표자 휴대폰")
-    fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", body), tmp_path / "no.hwpx", vault.Vault({}, info=info))
-    assert "010-" not in zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode()
-    # (11/16 사용자 요청) 위임장 대리인 '업체명 | (주)… | 연락처 | 회 사 / 휴대폰' — '휴대폰'이라 적혀 있으면 대표님 번호
+    out = run("m", body)
+    assert "010-" not in out, out
+    assert re.search(r"휴대폰  (?:<[^>]+>)*033-111-2222", out)  # 선임계 휴대폰 글자 옆도 회사 전화
+    assert out.count("033-111-2222") == 3  # 선임계 회사·휴대폰 + 위임장 대표자 줄, 대리인 줄은 비움
     agent = tbl([[cell(0, 0, "대리인", rs=2), cell(1, 0, "성 명"), cell(2, 0, ""), cell(3, 0, "주민등록번호"), cell(4, 0, "")],
                  [cell(1, 1, "업체명"), cell(2, 1, ""), cell(3, 1, "연락처"), cell(4, 1, "회  사", "휴대폰")]])
-    info["대표자 휴대폰"] = "010-0000-1111"
-    fill_hwpx(_mini_hwpx(tmp_path / "a.hwpx", agent), tmp_path / "ao.hwpx", vault.Vault({}, info=info))
-    out = zipfile.ZipFile(tmp_path / "ao.hwpx").read("Contents/section0.xml").decode()
-    assert re.search(r"회  사  (?:<[^>]+>)*033-111-2222", out) and re.search(r"휴대폰  (?:<[^>]+>)*010-0000-1111", out), out
-
-    # (11/18 사용자 요청) 위임장 '응모 대표자 | 성 명 … / 업체명 | __ | 연 락 처 | __' — 대표자 묶음의 연락처 = 대표자 휴대폰
+    out = run("a", agent)
+    assert "010-" not in out and re.search(r"회  사  (?:<[^>]+>)*033-111-2222", out), out
+    # 위임장 '응모 대표자 | 성 명 … / 업체명 | __ | 연 락 처 | __' — 대표자 묶음의 연락처도 회사 전화
     deleg = tbl([[cell(0, 0, "응모 대표자", rs=2), cell(1, 0, "성 명"), cell(2, 0, ""), cell(3, 0, "생년월일"), cell(4, 0, "")],
                  [cell(1, 1, "업체명"), cell(2, 1, ""), cell(3, 1, "연 락 처"), cell(4, 1, "")]])
-    fill_hwpx(_mini_hwpx(tmp_path / "d.hwpx", deleg), tmp_path / "do.hwpx", vault.Vault({}, info=info))
-    out = zipfile.ZipFile(tmp_path / "do.hwpx").read("Contents/section0.xml").decode()
-    assert "010-0000-1111" in out and "033-111-2222" not in out, out
-    info.pop("대표자 휴대폰")
-    fill_hwpx(_mini_hwpx(tmp_path / "e.hwpx", deleg), tmp_path / "eo.hwpx", vault.Vault({}, info=info))
-    assert "033-111-2222" in zipfile.ZipFile(tmp_path / "eo.hwpx").read("Contents/section0.xml").decode()  # 휴대폰이 없으면 회사 전화
+    out = run("d", deleg)
+    assert "010-" not in out and "033-111-2222" in out, out
 
 
 def test_bond_amount_label_and_form_rate(tmp_path: Path):
@@ -4034,7 +4026,7 @@ def test_contact_marks_capital_sales_and_history_in_parens(tmp_path: Path):
     v.history = [{"연월일": "2009-09-01", "내용": "법인 설립"}]
     fill_hwpx(src, tmp_path / "o.hwpx", v)
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
-    assert "(회사)☎ 033-000-0000" in text and "010-0000-0000" in text, text
+    assert "(회사)☎ 033-000-0000" in text and "(H.P)☎ 033-000-0000" in text and "010-" not in text, text
     assert "자본금 1,000,000,000원" in text and "매출액" in text and "5,000" not in text, text
     assert "주요 이력(연혁)" in text and "법인 설립" in text, text
 

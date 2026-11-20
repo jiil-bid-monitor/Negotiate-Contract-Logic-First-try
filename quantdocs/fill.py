@@ -371,6 +371,10 @@ def _fmt_date(v) -> str:
 
 
 def _value(key: str, vault) -> str:
+    if key == "대표자 휴대폰":
+        # (11/20 사용자 요청) 대표님 개인 번호는 어느 서식에도 넣지 않음 — 위임장 대표자 연락처·'(H.P)☎'·'휴대폰' 칸 모두 회사 전화
+        # (11/16·11/18 'QUANT_REP_MOBILE = 대표자 휴대폰'을 대체, .env 값은 읽어도 안 씀)
+        return _value("전화번호", vault)
     if key == "_co_rep":
         co, rep = _value("회사명", vault), _value("대표자", vault)
         return f"{co} / {rep}" if co and rep else co or rep

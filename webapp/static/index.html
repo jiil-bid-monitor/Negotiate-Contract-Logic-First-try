@@ -388,7 +388,7 @@ body {
 /* 탭 줄 — 오른쪽에 목록 검색 */
 .tabbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
 .tabbar .tabs { border-bottom: 0; margin-bottom: 0; flex-wrap: wrap; }
-.tabbar .tabs { flex: 1 1 auto; justify-content: space-between; column-gap: 24px; }
+.tabbar .tabs { flex: 1 1 auto; justify-content: space-between; column-gap: 24px; flex-wrap: wrap-reverse; }
 .tabs .tab-group { display: flex; flex-wrap: wrap; }
 .tab-search {
   flex: 0 1 340px; min-width: 0; height: 36px; padding: 4px 12px; margin: 4px 0;
@@ -1445,11 +1445,11 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <button role="tab" aria-selected="false" data-tab="quant">정량평가서</button>
       <button role="tab" aria-selected="false" data-tab="award">낙찰 후 서류</button>
       </span>
-      <!-- 기록·참고 탭은 오른쪽으로 뗌 (2026-11-20 사용자 요청) — 좁은 화면에선 묶음째 다음 줄로 -->
+      <!-- 기록·참고 탭은 오른쪽으로 뗌 (2026-11-20 사용자 요청) — 좁은 화면에선 묶음째 윗줄로(자주 보는 왼쪽 묶음이 목록 바로 위) -->
       <span class="tab-group">
+      <button role="tab" aria-selected="false" data-tab="log">판단 기록</button>
       <button role="tab" aria-selected="false" data-tab="excluded">제외된 공고</button>
       <button role="tab" aria-selected="false" data-tab="corpus">과거사업 목록</button>
-      <button role="tab" aria-selected="false" data-tab="log">판단 기록</button>
       </span>
     </div>
   </div>

@@ -676,7 +676,7 @@
   const signed = (v, unit, d = 3) => (v == null ? "" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${unit === "원" ? won(Math.abs(v)) : Math.abs(v).toFixed(d)}${unit}`);
   // 외주 금액 비교(11/16 사용자 요청 — 3억 미만 공고 외주 추천 금액 vs 웹앱 금액) — 등수가 작을수록 좋고, 미달은 통과보다 나쁨(미달끼리는 하한선에 가까운 쪽)
   const placeKey = (rank) => (rank == null ? Infinity : rank > 0 ? rank : 100000 - rank);
-  const webRank = (res) => { const o = mine(res); return o ? (o.rank != null ? o.rank : o.underRank) : null; };
+  const webRank = (res) => { const o = webOwn(res); return o ? (o.rank != null ? o.rank : o.underRank) : null; };
   function versus(res) {
     const s = res && res.status === "완료" ? res.outsource : null;
     if (!s) return null;
@@ -772,13 +772,16 @@
     if (!real) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${res.bidderCount}곳</span>`;
     return real.rank === 1 ? `<b class="res-win">낙찰</b>` : `<b class="res-bad">탈락</b>`;
   }
-  // 비교 기록이면 표·펼침 칸의 '지일' 숫자(등수·투찰금액·투찰률)는 웹앱 기록 금액 기준, 실제(외주) 투찰은 비교 상자에(11/13 사용자 요청)
-  function mine(res) {
+  // 웹앱 기록 금액 기준 '지일' 줄 — 비교 기록이면 웹앱 금액으로 셈한 등수·투찰률, 아니면 실제 투찰(= 웹앱 금액)
+  function webOwn(res) {
     const s = res && res.recorded;
     if (!s) return res && res.own;
     return { rank: s.rank > 0 ? s.rank : null, underRank: s.rank < 0 ? s.rank : null, amount: s.amount, rate: s.bidRate,
       remark: s.rank < 0 ? "낙찰하한선미달" : "", recorded: true };
   }
+  // 표·펼침 칸의 '지일' 숫자(등수·투찰금액·투찰률) = 지일이 실제로 투찰한 금액 기준(11/20 사용자 요청 — 11/13 '비교 기록은 웹앱 금액 기준'을 대체),
+  // 지일이 참가하지 않은 공고만 웹앱 기록 금액 기준(웹앱 금액은 비교 상자·'웹앱 N등' 줄에)
+  const mine = (res) => (res && res.own) || webOwn(res);
   const simPlace = (s) => (s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}등` : `하한선 미달(${s.rank}등)`);
   // 비교 기록 펼침 칸 — 기록 금액으로 투찰했다면 순위·낙찰하한가와 차이·1순위와 차이(11/13)
   function compareBlock(r) {
@@ -786,6 +789,14 @@
     if (!s) return "";
     const gap = (v, lab) => (v == null ? "" : `<div><span>${lab}</span><b>${v >= 0 ? "+" : "−"}${won(Math.abs(v))}원</b></div>`);
     const real = res.own, fl = s.floor;
+    if (real) return `<div class="res-compare"><div class="res-compare-head">웹앱 기록 금액(${won(s.amount)}원)으로 투찰했다면 — 위 결과는 실제 투찰 기준</div>
+      <div class="res-grid">
+        <div><span>웹앱 금액 순위</span><b>${s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}위 / ${res.bidderCount}곳` : `하한선 미달 (${s.rank}등)`}</b></div>
+        <div><span>웹앱 금액 − 낙찰하한가</span><b>${s.gapToFloor != null ? `${s.gapToFloor >= 0 ? "+" : "−"}${won(Math.abs(s.gapToFloor))}원` : "-"}</b></div>
+        ${gap(s.gapToWinner, "웹앱 금액 − 실제 1순위")}
+        <div><span>웹앱 금액 사정률</span><b>${s.rate != null ? pct3(s.rate) : "-"}</b></div>
+        <div><span>웹앱 금액 투찰률</span><b>${s.bidRate != null ? pct3(s.bidRate) : "-"}</b></div>
+      </div></div>`;
     const realPlace = real ? (real.rank != null ? `${real.rank}위 / ${res.bidderCount}곳` : real.underRank != null ? `하한선 미달 (${real.underRank}등)` : esc(real.remark || "순위 없음")) : "참가 안 함";
     return `<div class="res-compare"><div class="res-compare-head">비교 기록 — 위 결과는 웹앱 기록 금액(${won(s.amount)}원) 기준, 아래는 실제 투찰${real ? "" : "(지일 참가 없음)"}</div>
       <div class="res-grid">
@@ -859,7 +870,8 @@
         .sort((a, b) => b.amount - a.amount);
       const neg = new Map();
       let k = 0;
-      under.forEach((b) => neg.set(b, sim && b.own ? "실제" : -(++k)));
+      const realOwn = got.some((b) => b.own);   // 지일이 실제로 냈으면 번호는 실제 금액 기준, 웹앱 줄은 '웹앱'(11/20)
+      under.forEach((b) => neg.set(b, sim && (realOwn ? b.ghost : b.own) ? (realOwn ? "웹앱" : "실제") : -(++k)));
       const top3 = list.filter((b) => !neg.has(b)).sort((a, b) =>   // 순위 있는 줄(가상 줄 포함)은 금액 순, 그 밖(순위·미달 아님)은 뒤
         (a.rank == null) - (b.rank == null) || (a.rank == null ? 0 : a.amount - b.amount));
       const shown = [...top3, ...under];   // 순위 있는 업체 → 그 밖 → 미달(-1부터)
@@ -874,7 +886,7 @@
       const rateAt = (amt) => (basis && lower ? (a + (amt - a) / (lower / 100)) / basis * 100 : null);
       const row = (b) => {
         const amt = b.amount, rt = amt != null ? rateAt(amt) : null;
-        const rank = b.rank ?? neg.get(b) ?? "-";
+        const rank = b.ghost && realOwn ? "웹앱" : b.rank ?? neg.get(b) ?? "-";   // 실제 투찰 기준이면 웹앱 가상 줄은 번호 대신 '웹앱'
         return `<tr class="${b.own ? "own" : ""}${b.ghost ? " ghost" : ""}${b.rank == null ? " unranked" : ""}">`
           + `<td class="${neg.has(b) ? "under" : ""}">${rank}</td>`
           + `<td class="name">${esc(b.name || "-")}</td>`
@@ -927,7 +939,7 @@
     renderKindChips(found);
     const rows = found.filter((r) => LOG_KIND === "all" || (LOG_KIND === "web") === isWebRecord(r));
     const total = rows.reduce((s, r) => s + (r.bid || 0), 0);
-    // 비교 기록은 웹앱 기록 금액 기준 등수로 셈(11/13)
+    // 등수는 지일 실제 투찰 기준(11/20), 지일이 참가하지 않은 기록만 웹앱 기록 금액 기준
     const ranks = rows.filter((r) => r.result && r.result.status === "완료" && mine(r.result) && mine(r.result).rank != null).map((r) => mine(r.result).rank);
     $("#bidlogSummary").textContent = LOG.length
       ? `${rows.length}건${q || LOG_KIND !== "all" ? ` (전체 ${LOG.length}건 중)` : ""} · 투찰금액 합계 ${won(total)}원`

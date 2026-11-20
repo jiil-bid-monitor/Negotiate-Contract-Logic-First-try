@@ -230,12 +230,16 @@ def find_contract(client: Any, no: str, work: str, own_bizno: str, known: str = 
                 if (d := _date(parts[7])) is not None:
                     days.append(d)
     refs.discard("")
+    today = datetime.now()
     if not days and (d := _date(since)) is not None:
-        days.append(d)
+        # 계약일을 모름 — 낙찰일부터, 다만 매일 확인하므로 오늘 앞 CONTRACT_SCAN_DAYS일만(낙찰 뒤 열흘 넘어 맺은 계약도 그날 목록에서 찾게)
+        days.append(max(d, today - timedelta(days=CONTRACT_SCAN_DAYS)))
     if not days:
         return None
     own = _digits(own_bizno)
     for n in range(CONTRACT_SCAN_DAYS + 1):
+        if min(days) + timedelta(days=n) > today:  # 앞날 목록은 비어 있음
+            break
         day = (min(days) + timedelta(days=n)).strftime("%Y%m%d")
         for row in client.fetch_all_pages(CNTRCT_BASE_URL, op, {"inqryDiv": "1", "inqryBgnDt": day + "0000", "inqryEndDt": day + "2359"}, "계약정보"):
             if str(row.get("ntceNo") or "") == no or ({str(row.get("cntrctRefNo") or ""), str(row.get("dcsnCntrctNo") or "")} & refs):
@@ -902,8 +906,10 @@ class PostAward:
         if cv.get("gwiha"):
             values[6] = (cv["gwiha"], "나라장터 계약기관 — '○○ 귀하' 자리, 분임재무관 등으로 바꿔야 하면 고침")
         raw = getattr(nf, "raw", None) or {}
-        if "조달청" in str(raw.get("ntceInsttNm") or ""):  # 조달청이 대신 계약 — 착수계는 조달청장에게(광양 실제 착수계 2025-12, 11/20 사용자)
-            values[6] = ("조달청장", "조달청 대행 계약 — 착수(착공)계 수신은 조달청장")
+        # 조달청이 대신 계약한 물품·용역 — 착수계는 조달청장에게(광양 물품 실제 착수계 2025-12, 11/20 사용자).
+        # 공사 착공계는 확인한 실제 서류가 없어 그대로(수요기관)
+        if work != "공사" and "조달청" in str(raw.get("ntceInsttNm") or ""):
+            values[6] = ("조달청장", "조달청 대행 계약 — 착수계 수신은 조달청장")
         for row, k, what in ((15, "contract", "계약일"), (16, "start", "착수일"), (17, "due", "준공예정일")):
             if cv.get(k):  # 폴더 만들 때 나라장터에 계약이 이미 있으면 한 번에(11/18 사용자 — 두 번 받기는 비효율)
                 values[row] = (cv[k], f"나라장터 계약정보 {what}")

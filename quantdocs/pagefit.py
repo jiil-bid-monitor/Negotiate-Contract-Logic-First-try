@@ -131,6 +131,12 @@ def _problem(form: _Form, lines: list, chars: _Chars, body: int) -> tuple[str, i
         return None
     if used[pages[0]] <= SMALL:  # 제목만 남은 쪽을 먼저 — 표가 올라오면 끝 넘침도 같이 풀리는 일이 많음(필암 서식 16)
         return "제목만", used[pages[0]], pages[1]
+    # 제목 + 작은 표(접수번호 칸)만 첫 쪽에 남고 큰 표가 통째로 다음 쪽(11/20 사용자 '1페이지 여백이 너무 많아' — 장성 서식 1, 첫 쪽 42mm)
+    # — 첫 쪽을 본문 4분의 1 안만 썼고 다음 쪽 첫 문단이 나뉘지 않는 표면, 표 칸 여유를 먼저 줄여 보고 안 되면 나눔
+    first_next = next((seg for seg, ls in zip(form.paras, lines) if ls and ls[0].page == pages[1]), None)
+    tb = _top_table(first_next) if first_next else None
+    if used[pages[0]] <= body // 4 and tb is not None and not _is_split(tb):
+        return "앞쪽 빔", used[pages[0]], pages[1]
     if used[pages[-1]] <= SMALL:
         return "넘침", used[pages[-1]], pages[-1]
     return None
@@ -204,7 +210,9 @@ def _step(form: _Form, prob: tuple[str, int, int], lines: list, chars: _Chars, h
     제목만: 표 나누기 → (못 나누면) 아래와 같음. 넘침: 빈 문단 하나로 → 표 줄 여유 줄이기(넘친 만큼, 안 맞으면 조금씩 더) → 빈 문단 빼기."""
     kind, used, page = prob
     plan = ["blank1"] + [f"shrink{i}" for i in range(len(SHRINK_TRIES))] + ["blank_all"]
-    if kind == "제목만":
+    if kind == "앞쪽 빔":  # 표가 한 쪽에 들어가게 칸 여유부터, 그래도 안 되면 나눔(나누면 끝이 다음 쪽으로 넘어가므로 나중에)
+        plan = [f"shrink{i}" for i in range(len(SHRINK_TRIES))] + ["split"]
+    elif kind == "제목만":
         # 11/06 사용자 결정: 표는 그대로 두고 제목 아래에서 시작해 넘치는 부분만 다음 쪽으로(그 쪽은 그대로, 다음 서식은 새 쪽).
         # 나눌 수 없는 표(표지·4cm 미만)일 때만 빈 줄·칸 여유 줄이기로
         plan = ["split"] + plan
@@ -230,7 +238,7 @@ def _step(form: _Form, prob: tuple[str, int, int], lines: list, chars: _Chars, h
         elif step.startswith("shrink"):
             extra = round(SHRINK_TRIES[int(step[6:])] * MM)
             idx = [k for k, p in enumerate(form.paras) if (tb := _top_table(p)) and not _is_split(tb)]
-            if kind == "제목만":  # 다음 쪽으로 넘어간 표가 첫 쪽에 들어갈 만큼
+            if kind in ("제목만", "앞쪽 빔"):  # 다음 쪽으로 넘어간 표가 첫 쪽에 들어갈 만큼
                 idx = [k for k in idx if lines[k] and lines[k][0].page == page][:1]
                 amount = max(0, used + sum(_table_height(_top_table(form.paras[k]), chars) for k in idx) - body) + MARGIN + extra
             else:  # 넘친 만큼 — 서식 안 표들에서 모아
@@ -247,7 +255,7 @@ def _step(form: _Form, prob: tuple[str, int, int], lines: list, chars: _Chars, h
                 form.done.append(f"빈 줄 {len(form.paras) - len(kept)}개 더 뺌")
                 form.paras = kept
                 return True
-        elif step == "split" and kind == "제목만":
+        elif step == "split" and kind in ("제목만", "앞쪽 빔"):
             for k, p in enumerate(form.paras):
                 tbl = _top_table(p)
                 if (tbl and lines[k] and lines[k][0].page == page and not _is_split(tbl) and not _COVER.search(tbl[:tbl.find(">") + 1])
@@ -271,8 +279,52 @@ def _estimate(files: dict[str, bytes], secs: list[_Section]):
             z.writestr(name, data, compress_type=zipfile.ZIP_STORED if name == "mimetype" else zipfile.ZIP_DEFLATED)
     est = estimate_pages(buf.getvalue())
     if est.pages is None:
-        return None
+        return _estimate_each(files, secs)
     return list(est.lines)
+
+
+_SEC_RUN = re.compile(r"<((?:[\w.-]+:)?run)\b[^>]*>(?:(?!</\1>).)*?<(?:[\w.-]+:)?secPr\b.*?</\1>", re.S)
+
+
+def _estimate_each(files: dict[str, bytes], secs: list[_Section]):
+    """문서 전체를 가늠하지 못할 때(다른 서식의 표 하나가 가늠 도구에 안 맞으면 전체를 포기함 — 11/20 장성 월남 참전 기념탑
+    서식 12의 쪽에서 나뉘는 표 때문에 서식 1 쪽 맞춤도 안 됐음) 서식마다 따로 가늠. 서식은 늘 새 쪽에서 시작하니 따로 재도 같음.
+    못 잰 서식은 빈 줄 목록(손대지 않음)."""
+    from hwpx.layout.pages import estimate_pages
+
+    out: list = []
+    any_ok = False
+    for sec in secs:
+        sec_run = next((m.group(0) for f in sec.forms for p in f.paras for m in [_SEC_RUN.search(p)] if m), None)
+        for form in sec.forms:
+            paras = [_LINESEGS.sub("", p) for p in form.paras]
+            if paras and sec_run and not _SEC_RUN.search(paras[0]):
+                head = re.match(r"<(?:[\w.-]+:)?p\b[^>]*>", paras[0])
+                if head is None:
+                    out.extend([] for _ in form.paras)
+                    continue
+                first = _PB1.sub(r"\g<1>0\2", paras[0])
+                hl = len(re.match(r"<(?:[\w.-]+:)?p\b[^>]*>", first).group(0))
+                paras[0] = first[:hl] + sec_run + first[hl:]
+            xml = (sec.prefix + "".join(paras) + sec.suffix).replace('textWrap="SQUARE"', 'textWrap="TOP_AND_BOTTOM"')
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                for name, data in files.items():
+                    if name == sec.name:
+                        data = xml.encode("utf-8")
+                    elif _SEC.fullmatch(name):
+                        continue
+                    z.writestr(name, data, compress_type=zipfile.ZIP_STORED if name == "mimetype" else zipfile.ZIP_DEFLATED)
+            try:
+                est = estimate_pages(buf.getvalue())
+            except Exception:  # noqa: BLE001
+                est = None
+            if est is None or est.pages is None or len(est.lines) != len(form.paras):
+                out.extend([] for _ in form.paras)
+                continue
+            any_ok = True
+            out.extend(list(est.lines))
+    return out if any_ok else None
 
 
 def fit(path: Path) -> list[str]:

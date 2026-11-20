@@ -4309,3 +4309,26 @@ def test_credit_grade_below_ranges_and_staff_zero_placeholder(tmp_path: Path):
     assert cell(6, 1) == "4"  # BB+ → 'BBB-미만 B-이상' 4.0
     assert cell(6, 7) == "6"  # 6.2점 → 상한 6점
     assert cell(5, 1) == ""   # 배점 칸은 비움
+
+
+def test_merge_moves_sec_pr_into_first_form_paragraph(tmp_path: Path):
+    """11/20 사용자 '1페이지 여백이 너무 많아'(장성 서식 1): 쪽 설정만 담은 빈 문단이 원본 앞 글의 문단 모양(20pt·줄 간격 290%)을 가져
+    첫 쪽 위에 2cm 빈 줄이 생기고 본 표가 다음 쪽으로 밀렸음 → 쪽 설정을 서식 첫 문단 안으로 옮기고 빈 문단은 뺌(글자 모양은 그 문단 첫 run 것)."""
+    from quantdocs import forms_cut
+
+    para = lambda t, brk="0", ch="0": f'<hp:p paraPrIDRef="0" pageBreak="{brk}"><hp:run charPrIDRef="{ch}"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    first = ('<hp:p paraPrIDRef="9"><hp:run charPrIDRef="7"><hp:secPr/><hp:ctrl><hp:colPr/></hp:ctrl><hp:t>표지 글</hp:t></hp:run>'
+             '<hp:linesegarray><hp:lineseg textpos="0"/></hp:linesegarray></hp:p>')
+    src = tmp_path / "rfp.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", '<hh:head xmlns:hh="h" secCnt="1"><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+        z.writestr("Contents/section0.xml", f'<hs:sec>{first}{para("목차")}{para("〈서식 1〉 참가신청서", "1", "3")}{para("내용")}</hs:sec>')
+    forms = forms_cut.cut(src, tmp_path / "cut")
+    out = forms_cut.merge(src, [(f, tmp_path / "cut" / f.file) for f in forms], tmp_path / "merged.hwpx", fit_pages=False)
+    for xml in [zipfile.ZipFile(out).read("Contents/section0.xml").decode()] + [
+            zipfile.ZipFile(tmp_path / "cut" / f.file).read("Contents/section0.xml").decode() for f in forms]:
+        head = xml[:xml.index("</hp:p>")]
+        assert "<hp:secPr/>" in head and "서식 1" in head and "표지 글" not in head  # 빈 쪽 설정 문단이 따로 없음
+        assert 'charPrIDRef="7"' not in head and 'paraPrIDRef="9"' not in xml  # 앞 글의 글자·문단 모양은 안 따라옴
+        assert "lineseg" not in head

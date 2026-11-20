@@ -763,6 +763,8 @@ class PostAward:
                 if not target.exists():  # 담당자가 고쳤을 수 있어 덮어쓰지 않음
                     shutil.copyfile(f, target)
             tdir = Path(templates) if templates else template_dir(root)
+            with self._lock:  # 서류 현황에서 착공·착수 값을 준공·청구로 옮길 때 같은 표준틀을 씀(시험 폴더엔 _표준틀이 없음)
+                items = self._read(); items[key]["templates"] = str(tdir); self._write(items)
             basic = [] if private else self._fill_qual(key, folder, nf, tdir)
             basic += (["[적격심사] 낙찰 전 — 0_적격심사·공고문서만 만듦(계약·착공 서류는 낙찰 뒤 '낙찰 서류 만들기')"] if qual_only
                       else self._fill_both(key, folder, nf, tdir, contract_lookup))
@@ -797,14 +799,41 @@ class PostAward:
             items = self._read()
             items[key]["docs"] = {"found": len(docs), "missing": sum(not d["covered"] for d in docs), "files": len(nf.files)}
             # 서류 현황 화면용 — 첨부 제출서류(틀에 있음/없음)와 기본사항 안내(공고문 기간·해당 시 서류)
-            items[key]["docList"] = [{"text": d["text"][:120], "covered": d["covered"]} for d in docs][:40]
+            items[key]["docList"] = [{"text": d["text"][:200], "covered": d["covered"], "source": d["source"]} for d in docs][:40]
             items[key]["notes"] = [n.strip() for n in basic if n.startswith("  ") and "직접 넣으세요" not in n]
             items[key]["reissue"] = [{"kind": k, "have": h} for k, h in reissue]
             self._write(items)
         return folder, docs
 
+    def carry_start(self, key: str) -> bool:
+        """담당자가 착공·착수서류를 고쳐 저장했으면 그 값을 준공·청구 서류 파란 칸으로 옮김 — '첨부 다시 받기'를 따로 누르지 않아도
+        (11/20 사용자 '일 두 번 만들지 말고'). 착공·착수서류 저장 시각이 지난번과 같으면 안 함. 담당자가 고친 칸은 그대로(fill_done 규칙).
+        shortcut: 사내 공유 폴더에서 막 고친 준공·청구 파일이 1분 맞추기 전이면 NAS 쪽이 더 새 파일이 되어 그 고침이 밀릴 수 있음 — 리빌드로 한 폴더가 되면 사라짐."""
+        from types import SimpleNamespace
+
+        v = self._read().get(key) or {}
+        folder = Path(v["folder"]) if v.get("folder") else None
+        if folder is None or v.get("qualOnly") or v.get("work") not in TEMPLATES or not v.get("templates"):
+            return False
+        _, stage0, doc0 = TEMPLATES[v["work"]]
+        start = folder / stage0 / doc0
+        if not start.exists() or not Path(v["templates"]).is_dir():
+            return False
+        mtime = round(start.stat().st_mtime, 1)
+        if v.get("startMtime") == mtime:
+            return False
+        nf = SimpleNamespace(title=v.get("title", ""), institution=v.get("institution", ""), raw={})
+        self._fill_done(key, folder, nf, Path(v["templates"]))
+        with self._lock:
+            items = self._read(); items[key]["startMtime"] = mtime; self._write(items)
+        return True
+
     def status(self, key: str) -> dict:
         """서류 현황 — 단계 폴더마다 파일, 착공·착수서류의 빈 필수 칸·자동 칸, 첨부 제출서류, 확인할 것."""
+        try:
+            self.carry_start(key)
+        except Exception:  # noqa: BLE001 — 옮기지 못해도 현황은 보임(파일이 열려 있는 등)
+            pass
         v = self._read().get(key) or {}
         folder = Path(v["folder"]) if v.get("folder") else None
         if folder is None or not folder.is_dir():

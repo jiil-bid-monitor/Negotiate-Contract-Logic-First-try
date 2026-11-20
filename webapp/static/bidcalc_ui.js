@@ -730,8 +730,9 @@
     const res = r.result || {};
     if (!res || res.status !== "완료") return "";
     const s = res.outsource;
-    // 외주 금액이 없는 비교 기록도 웹앱 줄은 보임(11/20 사용자 요청 — 개찰 결과 칸 '탈락 / 웹앱 N등 / 외주 M등'으로 통일)
-    if (!s && !res.recorded) return "";
+    // 웹앱 줄은 지일 결과(실제 또는 비교 기록)가 있는 모든 기록에, 외주 줄은 외주 금액이 있을 때만(11/20 사용자 요청 — '탈락 / 웹앱 N등 / 외주 M등'으로 통일,
+    // 외주 금액이 없는 기록도 '탈락'만 남지 않게 — 실제 투찰 = 웹앱 금액이면 웹앱 등수 = 지일 등수)
+    if (!mine(res)) return "";
     const w = webRank(res);
     const cls = (k) => (k == null ? "" : k > 0 ? "rank" : "res-bad");
     // '▶ 웹앱이 나음·외주가 나음·같음' 줄은 뺌(11/18 사용자 요청) — 웹앱·외주 등수 두 줄만

@@ -3199,6 +3199,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         continue
                     if check_cols and target.col in check_cols:
                         continue  # 점검표 '적용·해당없음' 열 — 회사 정보 칸이 아님(11/13)
+                    if key == "신용평가등급" and any(
+                            o.row < target.row and o.col <= target.col < o.col + o.colspan
+                            and re.sub(r"\(.*?\)", "", _sq(o.text)) in ("배점", "총배점", "배점한도", "평점", "자기평점", "자체평점", "점수", "평가점수")
+                            for o in cells):
+                        continue  # 평가표 '배점·평점' 열엔 등급 글자를 넣지 않음 — 배점 칸은 비우고 평점은 자기평점이 채움(11/20 사용자 지적: 배점 칸에 'BB+')
                     if target.col in qty_cols and not _QTY_KEY.search(key) and target.row > min(x.row for x in cells):
                         continue  # '건수·금액·점수' 열에 누리집·주소·이름 같은 글을 넣지 않음(11/13)
                     if key in ("종업원 수", "자본금") and not target.blank:

@@ -4252,3 +4252,26 @@ def test_none_rule_bare_quoted_instruction(tmp_path: Path):
             + '<hp:p><hp:run charPrIDRef="0"><hp:t>※ 처분 사실은 “해당 없음”으로 기재</hp:t></hp:run></hp:p>')
     fill_hwpx(_mini_hwpx(tmp_path / "n.hwpx", body), tmp_path / "no.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
     assert zipfile.ZipFile(tmp_path / "no.hwpx").read("Contents/section0.xml").decode().count("해당 없음") == 2  # 안내 글 + 표 칸
+
+
+def test_credit_grade_not_in_points_column(tmp_path: Path):
+    """11/20 사용자 지적: 자기평가표 '경영상태 | 기업신용평가등급 | __(배점) | __(평점)' — 배점 칸에 'BB+'가 들어감.
+    배점 칸은 비우고, 평점 칸에 등급에 맞는 점수(BB+ → 'BB+ ~ BB-' 5.4)."""
+    import datetime as _dt
+
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    def c(col, row, t, rs=1):
+        return (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "평가항목"), c(1, 0, "평가기준"), c(2, 0, "배점"), c(3, 0, "평점")],
+            [c(0, 1, "경영상태", 4), c(1, 1, "기업신용평가등급"), c(2, 1, ""), c(3, 1, "", 4)],
+            [c(1, 2, "BBB- 이상"), c(2, 2, "6.0")], [c(1, 3, "BB+ ~ BB-"), c(2, 3, "5.4")], [c(1, 4, "B+ 이하"), c(2, 4, "4.8")]]
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+"})
+    fill_hwpx(_mini_hwpx(tmp_path / "c.hwpx", _tbl(rows)), tmp_path / "co.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 20)))
+    out = zipfile.ZipFile(tmp_path / "co.hwpx").read("Contents/section0.xml").decode()
+    cell = lambda col, row: re.sub(r"<[^>]+>", "", re.search(
+        rf'<hp:tc>((?:(?!</hp:tc>).)*colAddr="{col}" rowAddr="{row}"(?:(?!</hp:tc>).)*)</hp:tc>', out, re.S).group(1))
+    assert "BB+" not in out.replace("BB+ ~ BB-", "")
+    assert cell(2, 1) == "" and cell(3, 1) == "5.4"

@@ -621,6 +621,7 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 .corpus-table { width: 100%; font-size: 15px; }
 .corpus-table th:nth-child(1) { width: 56%; }
 .corpus-table tr.nobody td:first-child { color: var(--muted); }
+.corpus-ongoing > summary { color: var(--brand); }
 .log-row:first-child { border-top: 0; }
 .log-week + .log-week { border-top: 1px solid var(--line-strong); }
 .log-week > summary { padding: 10px 18px; cursor: pointer; background: var(--bg); font-size: 13.5px; color: var(--ink-strong); }
@@ -1795,16 +1796,22 @@ function renderCorpus() {
     .filter((p) => (!q || p.name.replace(/\s+/g, "").toLowerCase().includes(q)) && (!year || String(p.year) === year))
     .sort((a, b) => b.year - a.year || a.name.localeCompare(b.name, "ko"));
   // 11/19 화면 정리(개선안 ③): 연도는 묶음 머리로 한 번만(최근 연도만 펼침, 찾는 중엔 모두), 늘 같은 값이던 '과업 내용'·'사업비' 칸 대신 분야·과업
-  const years = [...new Set(rows.map((p) => p.year))];
-  const line = (p) => `<tr class="${p.hasBody ? "" : "nobody"}">
-      <td>${p.hasBody ? `<button type="button" class="linkish proj" data-proj="${esc(p.id)}">${esc(p.name)}</button><div class="proj-body" hidden></div>` : esc(p.name)}</td>
+  // 11/20 사용자: 지금 하는 사업도 목록에 — 낙찰 후 서류에서 계약이 올라온 공고(진행 중 = 준공예정일 전, 끝남 = 지남). 진행 중은 맨 위 묶음
+  const ongoing = rows.filter((p) => p.live === "진행 중"), past = rows.filter((p) => p.live !== "진행 중");
+  const years = [...new Set(past.map((p) => p.year))];
+  const md = (d) => (d ? String(d).slice(5, 10).replace("-", "/") : "");
+  const line = (p) => `<tr class="${p.hasBody || p.live ? "" : "nobody"}">
+      <td>${p.hasBody ? `<button type="button" class="linkish proj" data-proj="${esc(p.id)}">${esc(p.name)}</button><div class="proj-body" hidden></div>` : esc(p.name)}
+        ${p.live ? `<div class="sub">${esc([p.institution, p.contractDate ? `계약 ${String(p.contractDate).slice(0, 4)}/${md(p.contractDate)}` : "",
+          p.dueDate ? `준공 ${p.live === "끝남" ? "" : "예정 "}${md(p.dueDate)}` : "준공예정일 모름", "낙찰 후 서류에서"].filter(Boolean).join(" · "))}</div>` : ""}</td>
       <td class="sub">${esc((p.fields || []).join(" · "))}</td><td class="sub">${esc((p.kinds || []).join(" · "))}</td></tr>`;
+  const table = (list) => `<div class="scroll"><table class="corpus-table"><thead><tr><th>사업명</th><th>분야</th><th>과업</th></tr></thead><tbody>${list.map(line).join("")}</tbody></table></div>`;
   $("corpusRows").innerHTML = rows.length
-    ? years.map((y, i) => {
-      const ys = rows.filter((p) => p.year === y);
-      return `<details class="corpus-year"${q || year || i === 0 ? " open" : ""}><summary>${esc(y)}년 <span class="sub">${ys.length}건</span></summary>
-        <div class="scroll"><table class="corpus-table"><thead><tr><th>사업명</th><th>분야</th><th>과업</th></tr></thead><tbody>${ys.map(line).join("")}</tbody></table></div></details>`;
-    }).join("")
+    ? (ongoing.length ? `<details class="corpus-year corpus-ongoing" open><summary>진행 중인 사업 <span class="sub">${ongoing.length}건 · 계약 뒤 준공 전</span></summary>${table(ongoing)}</details>` : "")
+      + years.map((y, i) => {
+        const ys = past.filter((p) => p.year === y);
+        return `<details class="corpus-year"${q || year || (i === 0 && !ongoing.length) ? " open" : ""}><summary>${esc(y)}년 <span class="sub">${ys.length}건</span></summary>${table(ys)}</details>`;
+      }).join("")
     : `<p class="empty">찾는 사업이 없습니다.</p>`;
   if (q || year) $("stats").dataset.filtered = "1";
 }

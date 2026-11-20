@@ -247,8 +247,9 @@ def _date(text: Any) -> datetime | None:
 def _contract_info(row: dict) -> dict[str, str]:
     """postaward.json에 남길 계약 — 통합계약번호(다음 조회를 한 번에)·상세 주소·계약일(화면 단계 '착공·착수')."""
     d = _date(row.get("cntrctDate") or row.get("cntrctCnclsDate"))
+    due = _date(row.get("thtmScmpltDate"))  # 준공(완료)예정일 — 과거사업 목록 '진행 중/끝남' 기준(물품 계약은 비어 있을 때가 많음)
     return {"no": str(row.get("untyCntrctNo") or ""), "url": str(row.get("cntrctDtlInfoUrl") or ""),
-            "date": d.strftime("%Y-%m-%d") if d else ""}
+            "date": d.strftime("%Y-%m-%d") if d else "", "due": due.strftime("%Y-%m-%d") if due else ""}
 
 
 def contract_values(row: dict) -> dict[str, Any]:

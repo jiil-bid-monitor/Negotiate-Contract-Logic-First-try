@@ -318,7 +318,11 @@ def corpus(past) -> dict[str, Any]:
         return list(v.get(kind) or [])[:3] if isinstance(v, dict) else []
     projects = [{"id": i, "name": p.get("title"), "year": p.get("year"), "budgetAmount": None,
                  "fields": tags(p, "시설·주제"), "kinds": tags(p, "과업유형"),
-                 "hasBody": bool(p.get("overview") or p.get("exhibition"))} for i, p in enumerate(past.projects)]
+                 "hasBody": bool(p.get("overview") or p.get("exhibition")),
+                 # 낙찰 후 서류에서 더한 지금 사업(webapp/pastlive.py) — 진행 중 / 끝남, 계약일·준공예정일
+                 **({"live": p.get("status"), "contractDate": p.get("contractDate"), "dueDate": p.get("dueDate"),
+                     "institution": p.get("institution")} if p.get("source") == "낙찰 후 서류" else {})}
+                for i, p in enumerate(past.projects)]
     years = sorted({p["year"] for p in projects if p["year"]})
     return {
         "total": len(projects), "withBody": sum(p["hasBody"] for p in projects), "withBudget": 0,

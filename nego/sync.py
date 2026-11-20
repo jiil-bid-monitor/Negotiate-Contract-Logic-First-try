@@ -93,11 +93,19 @@ class PastIndex:
             return index
 
         index._tp = tp
-        index.projects = json.loads(path.read_text(encoding="utf-8"))
-        index._profiles = [tp.TaskProfile(tags=p["tags"], counts=p.get("counts", {})) for p in index.projects]
-        index._idf = tp.idf_weights(index._profiles)
+        index._base = json.loads(path.read_text(encoding="utf-8"))
+        index.set_live([])
         index.available = True
         return index
+
+    def set_live(self, rows: list[dict[str, Any]]) -> None:
+        """지금 하는 사업(낙찰 후 서류에서 계약이 올라온 것, webapp/pastlive.py)을 기존 목록 뒤에 더함 — 싱크로율도 같이(11/20 사용자)."""
+        base = getattr(self, "_base", None)
+        if base is None:
+            base = self._base = list(self.projects)
+        self.projects = list(base) + [r for r in rows if isinstance(r, dict) and r.get("tags")]
+        self._profiles = [self._tp.TaskProfile(tags=p["tags"], counts=p.get("counts", {})) for p in self.projects]
+        self._idf = self._tp.idf_weights(self._profiles)
 
     def score(self, title: str, text: str = "", top: int = 5) -> dict[str, Any]:
         """공고명(+과업 원문)으로 싱크로율과 가장 비슷한 과거 실적을 돌려준다.

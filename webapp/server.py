@@ -395,6 +395,8 @@ def make_handler(app: App):
                 return self._json(mview.search(q.get("q", [""])[0], app.latest_run(), app.past, app.held_raw()))
             if url.path == "/api/corpus":
                 return self._json(mview.corpus(app.past))
+            if url.path == "/api/past-live":  # 서버 PC가 받아 가는 지금 사업 목록(webapp/pastlive.py)
+                return self._json({"rows": [p for p in app.past.projects if p.get("source") == "낙찰 후 서류"]})
             if url.path == "/api/project":
                 pid = q.get("id", [""])[0]
                 p = app.past.projects[int(pid)] if pid.isdigit() and int(pid) < len(app.past.projects) else {}
@@ -595,6 +597,12 @@ def make_handler(app: App):
                         keys = [str(k) for k in data.get("keys") or []] or None
                         done = pa.check(client, base, keys)
                         done["contracts"] = pa.check_contracts(contract_lookup())  # 계약이 올라왔으면 단계를 착공·착수로
+                        if done["contracts"] and not app.team_remote:  # 계약이 새로 올라오면 과거사업 목록 '진행 중'에도 바로(webapp/pastlive.py)
+                            from . import pastlive
+                            try:
+                                pastlive.refresh(app)
+                            except Exception:  # noqa: BLE001 — 목록 갱신을 못 해도 낙찰자 확인 결과는 그대로
+                                logging.exception("과거사업 목록 갱신 실패")
                     except (ConfigError, ApiError) as err:
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
@@ -796,6 +804,9 @@ def main(argv: list[str] | None = None) -> int:
         bot.start()
     # 예외 낱말 후보 HTML '제출' 파일(다운로드 폴더) → jiil 반영·묶음 다시 잠금·병합 (webapp/exclusionsync.py)
     ExclusionSync().start()
+    # 과거사업 목록에 지금 사업(낙찰 후 서류에서 계약이 올라온 것) — NAS는 만들고, 서버 PC는 NAS에서 받음(webapp/pastlive.py, 11/20)
+    from . import pastlive
+    pastlive.start(app)
     # 낙찰 후 서류 폴더 NAS ↔ 사내 공유 폴더 맞추기 — 서버 PC .env POSTAWARD_SHARE_DIR가 있을 때만 (webapp/awardsync.py, 11/17)
     from .awardsync import AwardShareSync
     award_sync = AwardShareSync.from_env()

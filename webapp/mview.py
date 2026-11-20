@@ -319,9 +319,8 @@ def corpus(past) -> dict[str, Any]:
     projects = [{"id": i, "name": p.get("title"), "year": p.get("year"), "budgetAmount": None,
                  "fields": tags(p, "시설·주제"), "kinds": tags(p, "과업유형"),
                  "hasBody": bool(p.get("overview") or p.get("exhibition")),
-                 # 낙찰 후 서류에서 더한 지금 사업(webapp/pastlive.py) — 진행 중 / 끝남, 계약일·준공예정일
-                 **({"live": p.get("status"), "contractDate": p.get("contractDate"), "dueDate": p.get("dueDate"),
-                     "institution": p.get("institution")} if p.get("source") == "낙찰 후 서류" else {})}
+                 # 2026년~ 사업 폴더에서 더한 사업(webapp/pastlive.py) — 진행 중(YYYY 프로젝트 바로 아래) / 끝남(실행완료 아래)
+                 **({"live": p.get("status"), "where": p.get("key"), "note": p.get("note")} if p.get("source") == "사업 폴더" else {})}
                 for i, p in enumerate(past.projects)]
     years = sorted({p["year"] for p in projects if p["year"]})
     return {

@@ -807,7 +807,10 @@
     // 오른쪽 칸은 등수만(11/13 사용자 요청 — 참가 수는 개찰 결과 칸 '실제 투찰 N등 / M곳'에만)
     // 오른쪽 칸은 늘 등수만(11/20 사용자 요청 — '하한선 통과·미달' 글은 안 씀), 나라장터 결과에 지일 순위가 없으면 '순위 없음'(이유는 커서를 대면)
     const main = place ? `<span class="rank-who">지일</span><span class="nowrap">${place}</span>` :  // 웹앱·지일은 등수 바로 위 작은 글씨(11/13 사용자 요청)
-      o ? `<span class="rank-who">지일</span><span class="nowrap res-none" title="${esc((o.remark || "").replace("낙찰하한선미달", "낙찰하한선 미달") || "나라장터 결과에 순위 없음")}">순위 없음</span>` : "";
+      o ? (() => {  // 등수가 없으면 그 이유(나라장터 비고 — 오기입으로 '예가초과' 등, 11/20 사용자 확인)를 짧게, 비고도 없으면 '순위 없음'
+        const why = (o.remark || "").replace("낙찰하한선미달", "하한선 미달").trim();
+        return `<span class="rank-who">지일</span><span class="nowrap res-none" title="${esc(why || "나라장터 결과에 순위 없음")}">${esc(why && why.length <= 10 ? why : "순위 없음")}</span>`;
+      })() : "";
     // 아래 줄의 실제·웹앱 사정률·기준 차이는 뺌(11/13 사용자 요청 — 펼친 결과 칸에 있음, 표가 좌우로 넘침)
     // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색
     return main ? `<span class="rate-main rank">${main}</span>` : "-";

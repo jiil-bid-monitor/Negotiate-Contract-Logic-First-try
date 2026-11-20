@@ -86,6 +86,24 @@ class TestSummarize(unittest.TestCase):
         head, rows = log.table()
         self.assertIn("외주 금액", head)
 
+    def test_actual_amount_fills_empty_outsource(self):
+        """11/20 사용자 요청: 외주 금액 칸이 빈 기록인데 지일 실제 투찰 금액이 웹앱 금액과 다르면 그 금액이 외주 추천 금액 —
+        외주 금액 칸에 넣고 외주 순위도 셈. 같으면 그대로, 담당자가 지운 뒤엔 다시 안 넣음."""
+        log = BidLog(Path(tempfile.mkdtemp()))
+        e = log.add({"noticeNo": "R26BK01815406", "bid": 105_425_350, "lowerRate": 89.745})
+        same = log.add({"noticeNo": "R26BK01824015", "bid": 173_200_000, "lowerRate": 89.745})
+        bidders = lambda amt: [Bidder(1, "가나건설", "111-11-11111", 106_056_000, 90.49, ""),  # noqa: E731
+                               Bidder(None, "지일", OWN, amt, 88.8, "낙찰하한선미달")]
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(bidders(104_106_058 if n.notice_no == "R26BK01815406" else 173_200_000)))
+        rows = {r["id"]: r for r in log.entries()}
+        self.assertEqual(rows[e["id"]]["outsource"], 104_106_058)
+        self.assertEqual(rows[e["id"]]["actual"], "out")
+        self.assertIn("outsource", rows[e["id"]]["result"])
+        self.assertIsNone(rows[same["id"]].get("outsource"))     # 웹앱 금액으로 냈으면 그대로
+        log.update(e["id"], {"outsource": ""})                     # 담당자가 지우면
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(bidders(104_106_058)))
+        self.assertIsNone({r["id"]: r for r in log.entries()}[e["id"]].get("outsource"))  # 다시 안 넣음
+
     def test_actual_side(self):
         """11/16 사용자 요청: 개찰 결과의 지일 실제 금액으로 웹앱·외주 중 어느 금액으로 투찰했는지."""
         from webapp.bidlog import actual_side

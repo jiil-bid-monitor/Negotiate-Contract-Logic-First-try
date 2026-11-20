@@ -601,7 +601,7 @@ class PostAward:
         for e in (self.bidlog.entries() if self.bidlog is not None else []):  # 최근 기록 먼저
             if not e.get("noticeNo") or not e.get("bid"):
                 continue
-            b = {"amount": e.get("bid"), "at": (e.get("recordedAt") or "")[:10]}
+            b = {"amount": e.get("bid"), "at": (e.get("recordedAt") or "")[:10], "method": e.get("contractMethod") or ""}
             out.setdefault(f'{e["noticeNo"]}-{(e.get("noticeOrd") or "")[:3]}', b)
             out.setdefault(e["noticeNo"], b)
         return out

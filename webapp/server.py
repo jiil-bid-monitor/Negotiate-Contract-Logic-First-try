@@ -284,7 +284,8 @@ def make_handler(app: App):
 
         def _body(self) -> dict[str, Any]:
             length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_BODY:
+            # 과거사업 목록(서버 PC → NAS)은 사업마다 근거 글이 붙어 큼 — 그 길만 넉넉히(사업 수가 늘어도)
+            if length > (MAX_BODY * 25 if self.path.startswith("/api/past-live") else MAX_BODY):
                 raise ValueError("요청이 너무 큽니다")
             raw = self.rfile.read(length) if length else b"{}"
             data = json.loads(raw.decode("utf-8") or "{}")

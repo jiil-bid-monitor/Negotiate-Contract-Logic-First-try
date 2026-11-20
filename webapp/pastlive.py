@@ -228,7 +228,12 @@ def start(app, every: int = 3600) -> None:
                 rows = build(app.store.path.parent, app.past._tp, getattr(app.past, "_base", app.past.projects))
                 app.past.set_live(rows)
                 base_url, token = app.team_remote
-                requests.post(base_url + "/api/past-live", json={"rows": rows}, headers={"X-App-Token": token}, timeout=60)
+                # 한글을 그대로 보냄 — json=으로 보내면 한글이 이스케이프돼 3배로 커져 NAS 요청 크기 한도에 걸렸음(11/20, 15건 126KB → 400)
+                body = json.dumps({"rows": rows}, ensure_ascii=False).encode("utf-8")
+                res = requests.post(base_url + "/api/past-live", data=body, timeout=60,
+                                    headers={"X-App-Token": token, "Content-Type": "application/json"})
+                if res.status_code != 200:
+                    log.warning("과거사업 목록을 NAS로 못 보냄: %s %s", res.status_code, res.text[:200])
             except Exception:  # noqa: BLE001 — 다음 시간에 다시
                 log.exception("과거사업 목록(2026년~ 사업 폴더) 갱신 실패")
             threading.Event().wait(every)

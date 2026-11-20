@@ -1317,6 +1317,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .award-lead { margin: 0 0 10px; font-size: 15px; }
 .award-test-note { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; line-height: 1.7; }
 .award-test-note button { margin-left: 6px; }
+.award-act button.award-sim { display: block; border-style: dashed; margin-bottom: 6px; }
 #tab-award h3 { font-size: 17px; margin: 18px 0 8px; }
 .award-group { margin-top: 18px; }
 .award-group > summary { cursor: pointer; font-size: 16px; font-weight: 600; padding: 6px 0; }
@@ -4098,6 +4099,10 @@ function renderAward(items) {
     const lateQual = kind === "wait" && !v.private && !v.folder && rank != null && rank > 1;  // 2~5등: 심사 통보받으면 '더 보기'에서
     const canAward = isWon && !(v.folder && !v.qualOnly);
     const toggle = (main) => `<button type="button" class="award-toggle${main ? " award-main" : ""}" data-award-open="${esc(key)}" aria-expanded="${AWARD_OPEN.has(key)}">서류 현황 ${AWARD_OPEN.has(key) ? "▴" : "▾"}</button>`;
+    // 시험 페이지: 광양 줄에 '다음 단계' 버튼(나라장터 다음 단계를 불러옴 — ① 개찰 결과 ② 낙찰 확인 ③ 계약 등록, 11/20 사용자)
+    const sim = AWARD_TEST && v.no === "R25BK01125448"
+      ? (!o ? "① 개찰 결과 받기" : v.status === "대기" ? "② 낙찰 확인하기" : !(v.contract || {}).date ? "③ 계약 등록 확인하기" : "") : "";
+    const simBtn = sim ? `<button type="button" class="award-sim" data-award-sim>다음 단계: ${sim}</button>` : "";
     const main = canAward ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" title="계약·착공(착수)·준공·청구 단계와 표준틀까지 만듦">낙찰 서류 만들기</button>`
       : v.folder ? toggle(true)
       : canQual ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" data-award-stage="qual">적격심사 서류 만들기</button>`
@@ -4118,7 +4123,7 @@ function renderAward(items) {
     return `<tr><td class="award-name"><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener" title="${esc(key)} — 나라장터에서 보기">${esc(v.title || key)}</a>${reissue}<div class="sub">${meta}</div></td>
       <td class="award-money">${bid.amount ? `<b title="${Number(bid.amount).toLocaleString()}원">${won(Number(bid.amount))}</b>` : `<span class="sub">투찰 기록 없음</span><br>`}${result}${kind === "done" && v.status === "대기" && rank != null && rank > awardLimit(v) ? `<div class="sub">${awardDesignated(v) ? "지명경쟁은 1등만 가능성이 있음" : "5등 밖 — 차례가 오지 않음"}</div>` : ""}</td>
       ${kind === "done" ? "" : `<td>${steps}</td>`}
-      <td class="award-act">${main}<details class="award-more"><summary>더 보기</summary>${more}</details></td></tr>${detail}`;
+      <td class="award-act">${simBtn}${main}<details class="award-more"><summary>더 보기</summary>${more}</details></td></tr>${detail}`;
   };
   const table = (rows, done) => `<div class="scroll"><table class="award-table${done ? " done" : ""}"><thead><tr><th>공고</th><th>투찰금액 · 개찰</th>${done ? "" : "<th>단계</th>"}<th></th></tr></thead><tbody>${rows.map(row).join("")}</tbody></table></div>`;
   const pick = (k) => items.filter((v) => awardKind(v) === k);
@@ -4199,6 +4204,7 @@ $("awardList").onclick = (e) => {
       () => { $("awardMsg").textContent = "복사하지 못했습니다 — 경로를 직접 선택해 복사하세요."; });
     return;
   }
+  if (e.target.closest("[data-award-sim]")) return $("awardCheck").click();  // 시험 페이지 '다음 단계'
   const f = e.target.closest("[data-award-folder]");
   if (f) return awardAct(f, AWARD_API + "/folder", { key: f.dataset.awardFolder, stage: f.dataset.awardStage || "" }, () => {
     AWARD_OPEN.add(f.dataset.awardFolder); loadAward();

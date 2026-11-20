@@ -675,7 +675,7 @@ def contract_lookup():
     # 계약정보 목록은 하루 7~8천 건(용역) — 서버 기본 max_pages(5쪽 ≈ 5천 건)로는 지일 계약이 잘려 나갈 수 있음(11/18 모의 테스트)
     client, own = bidcalc.make_client(dataclasses.replace(config.api, max_pages=40)), default_own_bizno()
     return lambda v: find_contract(client, v.get("no", ""), v.get("work", ""), own, (v.get("contract") or {}).get("no", ""),
-                                   since=(v.get("winner") or {}).get("date", ""))
+                                   since=v.get("contractScan") or (v.get("winner") or {}).get("date", ""))
 
 
 def decisions_csv(rows: list[dict[str, Any]]) -> str:

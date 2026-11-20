@@ -2130,10 +2130,14 @@ const reviewOf = () => lastTitleExcluded.filter((n) => (n.interestKeywords || []
 
 // 검토필요 칸 안 낙찰방법 탭 — 위 대분류 탭과 같은 칸·모양, 고른 값은 따로 (2026-11-20 사용자 요청)
 let reviewCat = "all";
+// 검토필요 정렬 — 위 목록 정렬과 같은 선택지, 고른 값은 따로 (2026-11-20 사용자 요청). 마감 지난 공고는 늘 맨 뒤
+let reviewSort = "deadline";
+const REVIEW_SORT_OPTS = [["deadline", "자격등록 마감 순"], ["bid", "투찰 마감 임박 순"], ["score", "싱크로율 높은 순"], ["amount", "금액 큰 순"], ["posted", "최근 게시 순"]];
 function renderReview() {
   const box = $("reviewGroup");
   const past = (n) => deadlineAt(n.deadline) < Date.now();
-  const all = reviewOf().sort((a, b) => past(a) - past(b) || deadlineAt(a.deadline) - deadlineAt(b.deadline));
+  const order = LIVE_SORTS[reviewSort] || LIVE_SORTS.deadline;
+  const all = reviewOf().sort((a, b) => past(a) - past(b) || order(a, b));
   box.hidden = all.length === 0;
   $("reviewN").textContent = all.length + "건";
   const tab = ([v, note, sub]) => {
@@ -2142,7 +2146,9 @@ function renderReview() {
     return `<button type="button" role="tab" class="cat-tab ${reviewCat === v ? "on" : ""}" aria-selected="${reviewCat === v}" data-rcat="${v}" ${n === 0 && v !== "all" ? "disabled" : ""} ${tip ? `title="${esc(tip)}"` : ""}>` +
       `<span class="cat-name">${esc(v === "all" ? "전체" : v)}<span class="n">${num(n)}</span></span></button>`;
   };
-  $("reviewCats").innerHTML = `<div class="cat-main">${[["all", null, null], ...CATEGORIES].map(tab).join("")}</div>`;
+  $("reviewCats").innerHTML = `<div class="cat-main">${[["all", null, null], ...CATEGORIES].map(tab).join("")}</div>` +
+    `<label class="sort-box">정렬 <select id="reviewSort" aria-label="검토필요 정렬">${REVIEW_SORT_OPTS.map(([v, t]) =>
+      `<option value="${v}" ${reviewSort === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>`;
   const list = reviewCat === "all" ? all : all.filter((x) => categoryOf(x) === reviewCat);
   $("reviewList").innerHTML = list.length ? list.map(renderReviewRow).join("") : `<p class="group-note">이 낙찰방법의 검토필요 공고가 없습니다.</p>`;
   renderJumpNav();
@@ -4034,6 +4040,11 @@ $("filters").onclick = (ev) => {
 // 드롭다운 바깥을 누르거나 Esc를 누르면 닫는다
 document.addEventListener("click", (ev) => { if (!ev.target.closest?.(".dd")) closeDropdowns(); });
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeDropdowns(); });
+$("reviewCats").onchange = (ev) => {
+  if (ev.target.id !== "reviewSort") return;
+  reviewSort = ev.target.value;
+  renderReview();
+};
 $("reviewCats").onclick = (ev) => {
   const btn = ev.target.closest("[data-rcat]");
   if (!btn || btn.disabled) return;

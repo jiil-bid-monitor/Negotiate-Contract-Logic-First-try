@@ -4969,3 +4969,27 @@ def test_wide_spacing_value_never_left_of_colon(tmp_path: Path):
     assert got[i + 1][1].startswith(" " * 14), got                                                 # 다음 줄은 ':' 오른쪽 자리
     pid = got[i][0]
     assert pid == got[i + 1][0] != "0" and re.search(rf'<hh:paraPr id="{pid}".*?horizontal="LEFT".*?intent value="-\d+"', head, re.S), head
+
+
+def test_seal_cell_stays_one_line(tmp_path: Path):
+    """11/23 사용자: '대 표 : | 이름 (서명 또는 날인)' 칸이 '이름 (서명 또는 날' / '인)' 두 줄로 나뉨 — 서명란(도장 글이 같이 있는 칸)은 줄바꿈 없이 글자를 줄여 한 줄에."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:fontfaces><hh:fontface lang="HANGUL" fontCnt="1"><hh:font id="0" face="휴먼명조" type="TTF"/></hh:fontface>'
+              '<hh:fontface lang="LATIN" fontCnt="1"><hh:font id="0" face="휴먼명조" type="TTF"/></hh:fontface></hh:fontfaces>'
+              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000" textColor="#000000"><hh:fontRef hangul="0" latin="0"/></hh:charPr></hh:charProperties>'
+              '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="LEFT"/><hh:lineSpacing type="PERCENT" value="160"/></hh:paraPr></hh:paraProperties></hh:head>')
+    c = lambda col, t, w: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                           f'<hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="{w}" height="1500"/>'
+                           '<hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+    body = "<hp:p><hp:run><hp:tbl><hp:tr>" + c(0, "대    표 :", 6000) + c(1, "(서명 또는 날인)", 12000) + "</hp:tr></hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    z = zipfile.ZipFile(tmp_path / "o.hwpx")
+    sec, hdr = z.read("Contents/section0.xml").decode(), z.read("Contents/header.xml").decode()
+    m = re.search(r'charPrIDRef="(\d+)"><hp:t>(홍길동\s+\(서명 또는 날인\))</hp:t>', sec)
+    assert m, sec
+    h = int(re.search(rf'<hh:charPr id="{m.group(1)}" height="(\d+)"', hdr).group(1))
+    assert h < 1100, h  # 11pt면 칸(약 4.1cm)에 안 들어감 — 줄여서 한 줄

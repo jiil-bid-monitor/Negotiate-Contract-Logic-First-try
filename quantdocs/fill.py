@@ -1007,27 +1007,36 @@ def _break_value(seg: str, chars: "_Chars | None", line_w: int | None) -> str:
     intent, left = chars.margins(open_m.group(2))
     # 첫 줄 너비 = 줄 너비 − 왼쪽 여백 − 들여쓰기(양수일 때만). 내어쓰기(음수)는 둘째 줄부터라 첫 줄을 넓히지 않음
     # (11/23 사용자 — 내어쓰기 −4535 문단에서 첫 줄이 넓다고 셈해 끊지 않아 주소 끝 '층)'이 줄 맨 앞으로 넘어갔음)
-    avail = (line_w - left - max(intent, 0) - pw) * 0.97
+    avail = (line_w - left - max(intent, 0) - pw) * 0.95
     h = max(chars.height(cur), FILL_HEIGHT)
     value = unescape(seg[i + 1:j])
-    if _cjk_width(value, h) <= avail:
-        return seg
+
+    def width(t: str) -> float:
+        # 글자 모양의 장평·자간까지(11/23 사용자 — 자간이 넓은 '주 소 : 강 원 특 별 자 치 도 …' 줄을 들어간다고 셈해 끊지 않았고,
+        # 한글이 줄을 넘겨 '64(공장1층)'이 ':'보다 왼쪽에서 시작했음)
+        return max(_cjk_width(t, h), sum(chars.char_width(cur, ch) for ch in t) * h / max(1, chars.height(cur)))
+    # (11/23 사용자 — 무조건 규칙) 값이 넘어가면 어떤 경우에도 ':' 오른쪽 값 시작 자리에서 이어짐: 문단 모양을 '왼쪽 정렬 + 내어쓰기 = 앞부분 너비' 사본으로 —
+    # 어림이 틀려 한글이 줄을 넘겨도 둘째 줄은 값 시작 자리. 미리 끊은 다음 문단(앞부분 빈칸)에도 같은 모양
+    hang = chars.left_hang(open_m.group(2), pw) if pw > 0 else open_m.group(2)
+    open_tag = re.sub(r'(\bparaPrIDRef=")\d+(")', rf"\g<1>{hang}\2", open_m.group(0), count=1)
+    no_lines = lambda x: re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", x, flags=re.S)
+    if width(value) <= avail:
+        return open_tag + no_lines(seg[open_m.end():]) if hang != open_m.group(2) else seg
     lines, line = [], ""
     for word in value.split(" "):
         test = f"{line} {word}" if line else word
-        if line and _cjk_width(test, h) > avail:
+        if line and width(test) > avail:
             lines.append(line)
             line = word
         else:
             line = test
     lines.append(line)
     blank = _blank_prefix(prefix, chars)
-    if len(lines) < 2 or blank is None or _cjk_width(lines[0], h) > avail:
-        return seg
+    if len(lines) < 2 or blank is None or width(lines[0]) > avail:
+        return open_tag + no_lines(seg[open_m.end():])
     ns = open_m.group(1) or ""
-    no_lines = lambda x: re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", x, flags=re.S)
-    first = no_lines(seg[:i] + _mark(lines[0]) + seg[j + 1:])
-    rest = "".join(f"{open_m.group(0)}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>" for x in lines[1:])
+    first = no_lines(open_tag + seg[open_m.end():i] + _mark(lines[0]) + seg[j + 1:])
+    rest = "".join(f"{open_tag}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>" for x in lines[1:])
     return first + rest
 
 
@@ -1743,6 +1752,10 @@ def _party_head(text: str) -> tuple[str | None, str] | None:
         party = "other"
     else:
         party = None
+        # 글자를 넓게 띄운 이름표 '○ 주     소 :'(11/23)를 머리 '주' + '소 :'로 나누지 않음 — 이어 붙이면 아는 이름표면 머리 없음
+        lab = re.split(r"[:：]", hm.group(2) or "")[0]
+        if lab.strip() and _label_key(head + _sq(lab)) and not _label_key(_sq(lab)):
+            return None
     return party, (hm.group(2) or "")
 
 

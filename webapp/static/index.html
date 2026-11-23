@@ -2135,6 +2135,7 @@ function renderNotices(items, titleExcluded = [], held = [], heldProducts = []) 
   lastTitleExcluded = titleExcluded;
   applyFilters();
   renderReview();
+  renderJudgeBell();  // 📋는 이 목록에 있는 공고만 셈 — 목록이 바뀌면 다시
   // 텔레그램 링크(#log)로 바로 들어오면 목록보다 판단 기록이 먼저 그려져 '판단하러 가기'가 빠졌음
   if (!$("tab-log").hidden) renderLog();
 }
@@ -4921,8 +4922,11 @@ wireDocs($("docBellPop"));
 function renderJudgeBell() {
   // 보고된 지 7일 지난 공고는 뺌 — 수집 기간(최근 7일) 밖이라 실제 공고 탭에도 없음(11/23 사용자)
   const week = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  // 웹앱 실제 공고 탭에 나오는 공고만(11/23 사용자) — 보고엔 나갔지만 지금 목록(마지막 수집)에 없는 공고는 판단하러 갈 카드가 없어서
+  const shown = new Set([...(lastItems || []), ...(lastTitleExcluded || []), ...(lastHeld || [])]
+    .map((n) => String(n.noticeNo || "").split("-")[0]));
   const todo = Object.values(participation)
-    .filter((p) => logStatusOf(p) === "미판단" && (p.reports.at(-1)?.date || "").slice(0, 10) >= week)
+    .filter((p) => logStatusOf(p) === "미판단" && (p.reports.at(-1)?.date || "").slice(0, 10) >= week && shown.has(p.noticeNo))
     .sort((a, b) => deadlineAt(a.meta?.deadline) - deadlineAt(b.meta?.deadline));
   // 입찰(매일 보고)과 협상·규격가격(주간 보고) 따로(11/23 사용자) — 7일 안 매일 보고에 나갔으면 입찰 칸
   const daily = todo.filter((p) => p.reports.some((r) => r.kind === "daily" && (r.date || "").slice(0, 10) >= week));

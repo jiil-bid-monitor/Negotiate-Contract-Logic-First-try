@@ -368,11 +368,15 @@ body {
 }
 .docbell-pop h3 { margin: 0 0 8px; font-size: 14px; color: var(--ink-strong); }
 .docbell-pop ul { list-style: none; margin: 0; padding: 0; }
-.docbell-pop li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.docbell-pop li { padding: 8px 0; border-top: 1px solid var(--line); word-break: keep-all; }
 .docbell-pop li:first-child { border-top: 0; }
-.docbell-pop .when { flex: none; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
-.docbell-pop .when b { color: #d93025; }
-.docbell-pop p { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.docbell-pop .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.docbell-pop .name { font-weight: 600; color: var(--ink-strong); }
+.docbell-pop .dd { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.docbell-pop .dd.urgent { color: #d93025; }
+.docbell-pop .row2 { margin-top: 2px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.docbell-pop .how { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); line-height: 1.6; word-break: keep-all; }
+.docbell-pop .how b { color: var(--ink-strong); }
 @media (max-width: 760px) { .docbell-pop { right: auto; left: 0; } }  /* 좁은 화면은 종이 왼쪽에 있어서 */
 /* 바로가기 — 나라장터·21라인 (10/26 사용자 요청: 본문 오른쪽 빈 곳에 사이트 아이콘과 블록으로).
    본문 오른쪽에 자리가 없으면(1520px 이하) 본문 맨 위 줄 오른쪽에 한 줄로. */
@@ -4701,10 +4705,13 @@ async function loadDocBell() {
   try { docs = (await getJson("/api/docs-alert")).docs || []; } catch { return; }
   $("docBell").hidden = !docs.length;
   $("docBellN").textContent = docs.length;
-  const when = (d) => d.left < 0 ? `<b>만료 뒤 ${-d.left}일</b>` : d.left === 0 ? "<b>오늘 만료</b>" : (d.left <= 7 ? `<b>D-${d.left}</b>` : `D-${d.left}`);
+  const when = (d) => d.left < 0 ? `만료 뒤 ${-d.left}일` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
   $("docBellPop").innerHTML = `<h3>회사 서류 갱신 알림 ${docs.length}건</h3><ul>`
-    + docs.map((d) => `<li><span>${esc(d.kind)}</span><span class="when">${esc(d.end)} · ${when(d)}${d.state ? `<br>${esc(d.state)}` : ""}</span></li>`).join("")
-    + "</ul><p>갱신했으면 텔레그램 '지일 입찰 공고' 방에서 /docs → 서류 버튼 → '갱신 완료'로 새 서류 PDF를 올려 주세요.</p>";
+    + docs.map((d) => `<li><div class="row1"><span class="name">${esc(d.kind)}</span>`
+      + `<span class="dd${d.left <= 7 ? " urgent" : ""}">${when(d)}</span></div>`
+      + `<div class="row2">만료일 ${esc(d.end)}${d.state ? ` · ${esc(d.state)}` : ""}</div></li>`).join("")
+    + "</ul><p class=\"how\"><b>갱신했으면</b> 텔레그램 '지일 입찰 공고' 방에서<br>"
+    + "/docs → 서류 버튼 → <b>갱신 완료</b> → 새 서류 PDF 보내기</p>";
 }
 $("docBellBtn").onclick = (e) => {
   e.stopPropagation();

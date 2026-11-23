@@ -86,6 +86,9 @@ def _sq(s: str) -> str:
 _GUIDE_TEXT = re.compile(r"[(\[]?(?:※)?공동(?:도급|수급|이행)(?:으로)?(?:참여|참가|입찰)?(?:시|의경우|인경우|할경우)?(?:에는)?"
                          r"(?:대표(?:사|업체|자|사명)?)(?:기재|기입|작성|명)?[)\]]?")
 
+# 값 칸에 미리 적힌 안내 '공고명을 기입하세요'(11/23 한가람 재개관전 입찰참가신청서 — 빨간 글) = 빈 칸(안내는 지우고 값)
+_FILL_ASK = re.compile(r"[가-힣()·]{1,15}(?:을|를)?(?:기입|기재|입력|작성)(?:하세요|하십시오|바랍니다|해주세요|하여주십시오)\.?")
+
 # 이름표 뒤에 끼워 넣은 값 표시(11/05 사용자 결정: 채운 글은 11pt) — 섹션을 다 채운 뒤 _apply_marks가 그 값만 11pt 글자 모양으로 떼어 냄
 _VS, _VE = "\ue000", "\ue001"
 
@@ -109,7 +112,7 @@ class Cell:
         """빈 칸 — 글이 없거나, 숫자 없는 자리표시('년 월', '총 명', '원', '건')뿐, 또는 작성 안내 글('공동도급참여시 대표사')뿐."""
         t = _sq(self.text)
         return (t == "" or (not re.search(r"\d", t) and re.fullmatch(r"[년월일총명원건～~\-.:/()]*", t) is not None)
-                or _GUIDE_TEXT.fullmatch(t) is not None)
+                or _GUIDE_TEXT.fullmatch(t) is not None or _FILL_ASK.fullmatch(t) is not None)
 
 
 def _cells(xml: str, tbl: tuple[int, int]) -> list[Cell]:
@@ -335,6 +338,8 @@ def _label_key(text: str) -> str | None:
         return "회사명"  # '기관(회사)명 :'(11/13 위탁·수탁 서명란) — 기관 아닌 회사 쪽은 지일
     if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호|입찰공고(?:\(지명\))?|입찰\((?:지명|제안)\)공고(?:번호)?|입찰공고\((?:지명|제안)\)", t):  # '입찰공고 | 제2026- 호'(11/13 제천)  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
         return "_notice_no"
+    if t in ("기관공고번호", "발주기관공고번호", "기관공고"):
+        return "_agency_no"  # '기 관 공 고 번 호 | -'(11/23 한가람 — 나라장터 번호가 아니라 기관 공고번호 '제2026-N호')
     if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
         return "전화번호"
     if "사업자등록번호" in t and re.match(r"생년월일|법인등록번호|법인번호", t):
@@ -350,7 +355,7 @@ def _label_key(text: str) -> str | None:
         return "사업자등록번호"
     if re.match(r"법인등기", t):  # '법인등기부등본(생년월일)' = 법인등록번호(11/13 사용자 제보 — 국립아시아문화전당 서식 13호, 법인은 생년월일 = 법인등록번호)
         return "법인등록번호"
-    if t in ("서약자", "서약인", "각서인", "확약자"):  # 청렴계약 이행서약서 '서 약 자 :   (인)' = 대표자 이름(11/05)
+    if t in ("서약자", "서약인", "각서인", "확약자", "위임자", "위임인"):  # 위임장 끝 '위 임 자 | (인)'(11/23 한가람) · 청렴계약 이행서약서 '서 약 자 :   (인)' = 대표자 이름(11/05)
         return "대표자"
     if "전화" in t and re.search(r"전자우편|이메일|e-?mail", t, re.I):
         return "_tel_mail"  # '접수자전화(전자우편)' = 전화 + 이메일(11/11 사용자 요청 — 전화만 들어갔음)
@@ -379,6 +384,43 @@ def _fmt_date(v) -> str:
         return f"{v.year}년 {v.month}월"
     m = re.match(r"(\d{4})[-./년\s]+(\d{1,2})", str(v))
     return f"{m.group(1)}년 {int(m.group(2))}월" if m else str(v)
+
+
+_CLICK = re.compile(
+    r"<(?P<ns>[\w.-]+:)?run\b[^>]*>(?P<pre>(?:(?!</(?:[\w.-]+:)?run>).)*?)<(?:[\w.-]+:)?ctrl>\s*<(?:[\w.-]+:)?fieldBegin\b[^>]*\bid=\"(?P<id>\d+)\"[^>]*\btype=\"CLICK_HERE\""
+    r"(?:(?!</(?:[\w.-]+:)?fieldBegin>).)*?Direction:wstring:\d+:(?P<dir>[^<]*?)\s+HelpState(?:(?!</(?:[\w.-]+:)?fieldBegin>).)*</(?:[\w.-]+:)?fieldBegin>\s*</(?:[\w.-]+:)?ctrl>"
+    r"(?P<post>(?:(?!</(?:[\w.-]+:)?run>).)*?)</(?:[\w.-]+:)?run>"
+    r"(?P<body>(?:(?!fieldEnd).)*?)"
+    r"<(?P=ns)?run\b(?P<eattr>[^>]*)>(?P<epre>(?:(?!</(?:[\w.-]+:)?run>).)*?)<(?:[\w.-]+:)?ctrl>\s*<(?:[\w.-]+:)?fieldEnd\b[^>]*\bbeginIDRef=\"(?P=id)\"[^>]*/>\s*</(?:[\w.-]+:)?ctrl>",
+    re.S)
+
+
+def _drop_click_here(xml: str, title: str = "") -> tuple[str, int]:
+    """누름틀(CLICK_HERE) 안에 안내 글만 든 자리(11/23 한가람 재개관전 제안요청서 — 보안서약서 값 칸 '회사명'·'주소'·'대표자'·'생년월일',
+    서명 줄 '서약자 [서약자성명] 인(사용인감)', 위임장 본문 '“ 공고명을 기입하세요 ”', 붉은 기울임 글씨)는 누름틀째 지움 — 그러면 빈 칸·빈자리로 보여
+    다른 칸처럼 채워짐(사용자 '붉은 글씨 제거하고 적정 값으로 대체'). 공고명 안내 자리는 그 자리에 공고명. 안내 글이 아닌 값이 든 누름틀은 그대로.
+    돌려줌: (새 xml, 지운 누름틀 수)."""
+    count = 0
+
+    def sub(m: re.Match) -> str:
+        nonlocal count
+        guide = _sq(m.group("dir"))
+        inner = _sq(re.sub(r"<[^>]+>", "", re.sub(r"<(?:[\w.-]+:)?ctrl>.*?</(?:[\w.-]+:)?ctrl>", "", m.group("body"), flags=re.S)))
+        if not guide or inner != guide:
+            return m.group(0)
+        count += 1
+        ns = m.group("ns") or ""
+        head = re.match(r"<[^>]+>", m.group(0)).group(0)
+        fill = ""
+        if title and re.search(r"공고명|사업명|용역명|입찰건명|건명", guide):
+            fill = f"<{ns}t>{_mark(title)}</{ns}t>"
+        # 누름틀 앞 글(pre)·뒤 글(post)·끝 표시 뒤 글은 그대로 둠
+        return f"{head}{m.group('pre')}{fill}{m.group('post')}</{ns}run><{ns}run{m.group('eattr')}>{m.group('epre')}"
+    while True:  # 한 run에 누름틀 끝·다음 누름틀 시작이 같이 있으면('서약월 … 월 [서약일]') 한 번에 안 잡혀서 다시
+        before = count
+        xml = _CLICK.sub(sub, xml)
+        if count == before:
+            return xml, count
 
 
 def _value(key: str, vault) -> str:
@@ -3147,7 +3189,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
     # 나라장터 번호를 모를 때만 공고문의 기관 공고번호('제2026-1129호')
     no_text = g2b_no or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")
     if title or no_text:
-        vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text}, docs=vault.docs, history=vault.history)
+        vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text,
+                                      "_agency_no": f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else ""},
+                                docs=vault.docs, history=vault.history)
     zin = zipfile.ZipFile(src)
     out_entries = {}
     chars = _Chars(zin.read("Contents/header.xml").decode("utf-8"), face) if "Contents/header.xml" in zin.namelist() else None
@@ -3155,6 +3199,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
         data = zin.read(name)
         if re.fullmatch(r"Contents/section\d+\.xml", name):
             xml = data.decode("utf-8")
+            xml, n_click = _drop_click_here(xml, title)
+            if n_click:
+                rep.filled.append(f"누름틀 안내 글(붉은 글씨) {n_click}곳을 지움 — 공고명 자리는 공고명, 나머지는 칸 규칙대로 채움")
             edits: list[tuple[Cell, list[str], bool]] = []
             valign: dict[int, str] = {}  # 칸 시작 위치 → 세로 정렬(TOP/BOTTOM) — ':' 이름표 옆 값 칸(11/13)
             para_override: dict[int, str] = {}  # 칸 시작 위치 → 쓸 문단 모양(번호 칸 가운데 정렬 맞춤)

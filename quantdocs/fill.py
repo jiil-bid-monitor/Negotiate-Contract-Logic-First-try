@@ -671,6 +671,27 @@ def _row_group(cells: list[Cell], c: Cell) -> str | None:
     return None
 
 
+def _column_heads(cells: list[Cell], by_pos: dict) -> dict[int, Cell]:
+    """이름표가 가로로 늘어선 줄 + 바로 아래 빈 값 줄('대표자 | 성 명 | 생년월일 | 전화번호(회사) : / __ | __ | __') — {이름표 칸 시작: 아래 값 칸}.
+    왼쪽에 세로로 묶은 머리 칸(대표자·연락처 등)이 두 줄을 함께 덮을 때만(실적·하도급 업체 목록처럼 머리 줄 아래 빈 줄이 여럿인 표는 안 건드림).
+    (11/23 사용자 지적: 풍납동토성 서식 29 사업설명회 참가 신청서 — 값 줄은 비고 '전화번호(회사) :' 이름표 칸에 번호가 붙음)"""
+    lines: dict[int, list[Cell]] = {}
+    for c in cells:
+        lines.setdefault(c.row, []).append(c)
+    out: dict[int, Cell] = {}
+    for r, line in lines.items():
+        heads = [c for c in line if c.rowspan == 1 and not c.blank]
+        if len(heads) < 2:
+            continue
+        lead = min(c.col for c in heads)
+        if not any(o.rowspan >= 2 and o.col < lead and o.row <= r and r + 1 < o.row + o.rowspan and not o.blank for o in cells):
+            continue
+        below = [by_pos.get((r + 1, c.col)) for c in heads]
+        if all(b is not None and b.blank and b.colspan == c.colspan and b.rowspan == 1 for c, b in zip(heads, below)):
+            out.update({c.start: b for c, b in zip(heads, below)})
+    return out
+
+
 def _agent_rows(xml: str, cells: list[Cell]) -> set[int]:
     """'대리인'·'수임인' 칸이 세로로 묶은 줄 번호(위임장 — 대리인 주소는 개인 주소라 비움)."""
     out: set[int] = set()
@@ -3047,6 +3068,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     continue
                 by_pos = {(c.row, c.col): c for c in cells}
                 colon_vals: dict[int, str] = {}  # ':'로 끝나는 이름표 옆 값 칸 → 원래 문단 모양(11/23 줄맞춤)
+                col_heads = _column_heads(cells, by_pos)  # 이름표 줄 → 바로 아래 값 칸(11/23)
                 other_rows = _other_rows(cells)
                 repeat_rows = _repeat_party_rows(cells)
                 if repeat_rows and not any("되풀이된 회사·대표자 줄" in x for x in rep.filled):
@@ -3166,7 +3188,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             o.row == c.row and _sq(o.text).startswith("대표자") for o in cells)):
                         # 신청인 '대 표 자 | 이름 | 생년월일 | __'(11/10 경남교육청 입찰참가신청서) — 대표자 주민등록번호 앞 6자리로, 대리인 줄은 비움
                         birth = _birth(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
-                        target = by_pos.get((c.row, c.col + c.colspan))
+                        target = col_heads.get(c.start) or by_pos.get((c.row, c.col + c.colspan))
                         if birth and target is not None and target.blank:
                             edits.append((target, [birth], False))
                             rep.filled.append(f"대표자 생년월일 → {birth}")
@@ -3217,7 +3239,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         continue  # 목록 줄 항목 이름('- 인터넷 전화 보안') — 이름표 아님
                     if key == "주소" and c.row in agent_rows:
                         continue
-                    target = by_pos.get((c.row, c.col + c.colspan))
+                    target = col_heads.get(c.start) or by_pos.get((c.row, c.col + c.colspan))
                     if target is None and key == "신용평가등급":
                         # 머리 칸 '기업신용 평가등급' 아래 빈 칸이 값 칸(11/10 경남교육청 서식 19)
                         below = by_pos.get((c.row + c.rowspan, c.col))
@@ -3231,6 +3253,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         value = f"{value} 대표자 {_value('대표자', vault)}"
                     if not value:
                         continue
+                    below = by_pos.get((c.row + c.rowspan, c.col))
+                    head_cell = below is not None and below.blank and below.colspan == c.colspan and c.colspan == 1 \
+                        and any(o.row == c.row and o.col < c.col and not o.blank for o in cells)
+                    if target is None and head_cell:
+                        continue  # 맨 오른쪽 머리 칸('업체명 | 대표자 | 주 소' / 빈 줄) — 이름표 칸엔 값을 붙이지 않음(11/23 사용자 지적)
                     if target is None and not any(o.row == c.row and o.col > c.col for o in cells) \
                             and len(_spans(xml, "p", c.start, c.end)) == 1 \
                             and re.fullmatch(r"[^:：]{1,20}[:：]?", c.text.strip()):  # 이름표 하나뿐('TEL : FAX :'는 칸 안 채우기가 함)
@@ -3388,8 +3415,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         targets.add(c.start)
                         rep.filled += done
                 for c in cells:  # 'TEL :      FAX :'처럼 칸 안에 이름표와 빈자리가 같이 있는 칸
-                    if c.start in targets or ":" not in c.text and "：" not in c.text:
-                        continue
+                    if c.start in targets or c.start in col_heads or ":" not in c.text and "：" not in c.text:
+                        continue  # 이름표 줄 칸('전화번호(회사) :')엔 값을 안 붙임 — 값은 아래 칸(11/23)
                     if _INLINE_RE.fullmatch(c.text.strip()) and (c.row, c.col + 1) in filled_at:
                         continue  # '전 화 :' 이름표만 있는 칸 — 값은 이미 오른쪽 칸에(같은 번호가 두 번 들어가지 않게)
                     new_seg, done = _fill_inline(xml[c.start:c.end], vault)

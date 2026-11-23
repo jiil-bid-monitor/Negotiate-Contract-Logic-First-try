@@ -324,7 +324,9 @@ function qualLine(n) {
   if (n.sourceType === "사전규격" && !q.checked) return { cls: "mute", text: "자격 확인 전 — 규격서로 판단" };
   if (!q.checked) return { cls: "mute", text: "업종 제한 없음 · 공고문 확인" };
   if (!(q.missing || []).length) return { cls: "ok", text: "✓ 자격 충족" + (q.summary ? " · " + q.summary : "") };
-  const joint = (n.joint || {}).allowed;
+  // 공동수급 정보 없음('정보 없음'·빈 괄호 '()공동수급불허' — 11/23)이면 가능·불허를 붙이지 않음(예전엔 정보 없음도 '불허'로 보였음)
+  const jl = (n.joint || {}).label || "";
+  const joint = !jl || jl === "정보 없음" || /^\(\s*\)/.test(jl) ? undefined : (n.joint || {}).allowed;
   return { cls: "warn", text: "! 자격 일부 부족 — " + (q.missing || []).join(", ") + (joint === true ? " · 공동수급 가능" : joint === false ? " · 공동수급 불허" : "") };
 }
 const qualOk = (n) => { const q = n.qual || {}; return q.checked && !(q.missing || []).length; };

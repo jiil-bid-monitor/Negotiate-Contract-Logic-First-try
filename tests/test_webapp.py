@@ -72,6 +72,19 @@ class TestFormatInSync(unittest.TestCase):
         self.assertIn("checkPageVersion(data.static_version)", html)
 
 
+class TestJointEmptyParenScreen(unittest.TestCase):
+    def test_old_results_show_no_info(self):
+        """11/23: 고치기 전에 저장된 수집 결과의 '()공동수급불허'도 화면이 '정보 없음'으로(실제 공고 탭 칩·자격 배지, 새 화면 /v2/)."""
+        root = Path(__file__).resolve().parent.parent / "webapp" / "static"
+        html = (root / "index.html").read_text(encoding="utf-8")
+        self.assertIn("function jointLabel(n)", html)
+        self.assertIn(r"/^\(\s*\)/.test(label)", html)
+        self.assertIn("label: jointLabel(n)", html)
+        self.assertIn("/불허/.test(jointLabel(n))", html)
+        v2 = (root / "v2" / "index.html").read_text(encoding="utf-8")
+        self.assertIn(r'jl === "정보 없음" || /^\(\s*\)/.test(jl)', v2)
+
+
 class TestSyncLevel(unittest.TestCase):
     def test_levels(self):
         self.assertEqual(level(None), "판정 불가")

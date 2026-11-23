@@ -509,7 +509,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                     rows, why = form_tracks(years.group(0) if years else c.title, vault.tracks, notice_date or date.today())
                     a.notes += [f"{c.file}: {w}" for w in why]
                 rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title,
-                                agency_no, notice_no, score_ctx, basis[0] if basis else None)
+                                agency_no, notice_no, score_ctx, basis[0] if basis else None, ref_no=ref_no)
                 reports.append(rep)
                 _note_unfilled(a, c, filled_dir / c.file, False)
                 parts.append((c, filled_dir / c.file))

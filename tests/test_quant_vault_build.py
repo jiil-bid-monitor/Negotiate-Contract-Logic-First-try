@@ -4780,6 +4780,11 @@ def test_agency_notice_no_and_fill_ask_title(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
     assert "|기 관 공 고 번 호|제2026-321호|입   찰   건   명|가상 전시연출 용역|" in text, text
     assert "기입하세요" not in text and "R26BK" not in text
+    # 나라장터 참조번호가 '제Y-N호' 모양이 아니어도 그대로(11/23 사용자 — 참조번호 '전시사업부-1363'인데 '-'로 남았음)
+    fill_hwpx(_mini_hwpx(tmp_path / "s2.hwpx", body), tmp_path / "o2.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}),
+              title="가상 전시연출 용역", ref_no="전시사업부-1363", g2b_no="R26BK01800000-000")
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()))
+    assert "|기 관 공 고 번 호|전시사업부-1363|" in text, text
 
 
 def test_click_here_guides_replaced_and_delegator_seal(tmp_path: Path):
@@ -4805,3 +4810,27 @@ def test_click_here_guides_replaced_and_delegator_seal(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
     assert "CLICK_HERE" not in sec and "fieldEnd" not in sec and "기입하세요" not in text, text
     assert "|회사명|(주)가상|대표자|홍길동|위 임 자|홍길동" in text and "“|가상 전시연출 용역|”의 입찰" in text, text
+
+
+def test_value_size_from_inner_table_label(tmp_path: Path):
+    """11/23 사용자: 한가람 확약서 '회 사 명 | (주)지일'만 글자가 21pt — 서명 표가 쪽 테두리 표 안의 표인데 이름표를 바깥 표에서 찾아
+    바깥 표 제목 칸('확 약 서' 21pt)을 이름표로 읽었음. 값 크기는 안쪽 표의 이름표(10pt) 기준 → 11pt."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:fontfaces><hh:fontface lang="HANGUL" fontCnt="1"><hh:font id="0" face="휴먼명조" type="TTF"/></hh:fontface>'
+              '<hh:fontface lang="LATIN" fontCnt="1"><hh:font id="0" face="휴먼명조" type="TTF"/></hh:fontface></hh:fontfaces>'
+              '<hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000" textColor="#000000"><hh:fontRef hangul="0" latin="0"/></hh:charPr>'
+              '<hh:charPr id="1" height="2100" textColor="#000000"><hh:fontRef hangul="0" latin="0"/></hh:charPr></hh:charProperties></hh:head>')
+    c = lambda col, row, inner, cid="0": (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="{cid}">{inner}</hp:run></hp:p></hp:subList>'
+                                          f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                                          f'<hp:cellSz width="20000" height="2000"/></hp:tc>')
+    inner = "<hp:tbl><hp:tr>" + c(0, 0, "<hp:t>회 사 명</hp:t>") + c(1, 0, "<hp:t/>") + "</hp:tr></hp:tbl>"
+    outer = "<hp:tbl><hp:tr>" + c(0, 0, "<hp:t>확 약 서</hp:t>", "1") + "</hp:tr><hp:tr>" + c(0, 1, inner) + "</hp:tr></hp:tbl>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", f"<hp:p><hp:run>{outer}</hp:run></hp:p>")
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    z = zipfile.ZipFile(tmp_path / "o.hwpx")
+    sec, hdr = z.read("Contents/section0.xml").decode(), z.read("Contents/header.xml").decode()
+    cid = re.search(r'charPrIDRef="(\d+)"><hp:t>\(주\)가상<', sec).group(1)
+    assert re.search(rf'<hh:charPr id="{cid}" height="1100"', hdr), (cid, sec, hdr)

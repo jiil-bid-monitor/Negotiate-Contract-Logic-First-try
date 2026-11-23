@@ -4763,8 +4763,12 @@ async function docUpload(li, file) {
       box.innerHTML = "<p>저장하는 중…</p>";
       try {
         const s = await awardPost("/api/docs-upload", { action: "save", kind: d.kind, pdf, end: end || null });
-        box.innerHTML = `<p class="ok">✓ 저장했습니다: ${esc(s.saved)}${s.cert ? `<br>${esc(s.cert)}` : ""}</p>`;
-        setTimeout(() => { DOC_BELL = s.docs || []; renderDocBell(); }, 2500);
+        // 정리 안내('[회사 서류] … 옮김 1건 - 옛 파일 → [이전 서류]')에서 제목 줄만 빼고 보임 — 옛 파일이 어디로 갔는지
+        const moved = (s.notes || []).join("\n").split("\n").filter((l) => l.startsWith("- ") && l.includes("[이전 서류]"));
+        box.innerHTML = `<p class="ok">✓ 저장했습니다: ${esc(s.saved)}${s.cert ? `<br>${esc(s.cert)}` : ""}`
+          + (moved.length ? `<br>옛 서류는 [이전 서류]로 옮겼습니다:<br>${moved.map((l) => esc(l.slice(2).split(" → ")[0])).join("<br>")}` : "")
+          + "</p>";
+        setTimeout(() => { DOC_BELL = s.docs || []; renderDocBell(); }, moved.length ? 6000 : 2500);
       } catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
     };
   } catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }

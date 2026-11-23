@@ -4747,7 +4747,7 @@ boot();
 // → 서류에 적힌 유효기간을 사람이 골라 저장(텔레그램 /upload와 같은 저장, 서버 /api/docs-upload).
 // '전체 서류 관리' 창(#docMgr)에서 새 서류 추가·유효기간 수정·빼기(/api/docs-all·/api/docs-manage) — 텔레그램 /upload·/remove와 같은 일
 let DOC_BELL = [], DOC_ALL = [], DOC_READY = false;
-const ddText = (d) => d.left == null ? "유효기간 없음" : d.left < 0 ? `만료 뒤 ${-d.left}일` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
+const ddText = (d) => d.left == null ? "유효기간 없음" : d.left < 0 ? `유효기간 ${-d.left}일 지남` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
 const UP = `<label class="upbtn">새 서류 올리기<input type="file" accept="application/pdf,.pdf" hidden></label>`;
 function docItem(d, extra = "") {
   return `<li data-kind="${esc(d.kind)}"><div class="row1"><span class="name">${esc(d.kind)}</span>`

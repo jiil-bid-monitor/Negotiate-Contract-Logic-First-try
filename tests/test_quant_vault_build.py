@@ -3069,15 +3069,20 @@ def test_colon_label_centered_values_all_left(tmp_path: Path):
     cell = lambda col, row, t, w, pid: (f'<hp:tc><hp:subList vertAlign="CENTER"><hp:p paraPrIDRef="{pid}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
                                         f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
                                         f'<hp:cellSz width="{w}" height="2757"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
-    rows = [("소       속(업   체   명) :", ""), ("성  명(업체인 경우 대표자) :", "(인)"), ("주                    소 :", "")]
+    rows = [("소       속(업   체   명) :", ""), ("주민등록번호(법인등록번호) :", ""), ("성  명(업체인 경우 대표자) :", "(인)"),
+            ("주                    소 :", ""), ("연   락   처(전화 및 Fax) :", "")]
     body = "<hp:p><hp:run><hp:tbl>" + "".join(f"<hp:tr>{cell(0, r, a, 16018, 0)}{cell(1, r, b, 14886, 1)}</hp:tr>"
                                               for r, (a, b) in enumerate(rows)) + "</hp:tbl></hp:run></hp:p>"
     src = _mini_hwpx(tmp_path / "c.hwpx", body)
     with zipfile.ZipFile(src, "a") as z:
         z.writestr("Contents/header.xml", header)
-    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "대표자": "홍길동"})
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "대표자": "홍길동",
+                              "법인등록번호": "110111-1234567", "전화번호": "033-111-2222", "팩스번호": "033-111-3333"})
     fill_hwpx(src, tmp_path / "o.hwpx", v)
     out = zipfile.ZipFile(tmp_path / "o.hwpx")
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", out.read("Contents/section0.xml").decode()))  # 칸이 좁아 '전화 / 팩스'가 두 줄이어도
+    # 같은 표 두 칸(11/23 같은 제보): '주민등록번호(법인등록번호)' = 법인등록번호, '연락처(전화 및 Fax)' = 전화 / 팩스
+    assert "110111-1234567" in text and "033-111-2222 / 033-111-3333" in text
     sec, head = out.read("Contents/section0.xml").decode(), out.read("Contents/header.xml").decode()
     align = lambda pid: re.search(rf'<hh:paraPr id="{pid}">.*?<hh:align horizontal="(\w+)"', head, re.S).group(1)
     for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S):
@@ -3085,7 +3090,7 @@ def test_colon_label_centered_values_all_left(tmp_path: Path):
             continue
         paras = re.findall(r'<hp:p\b[^>]*paraPrIDRef="(\d+)"[^>]*>(.*?)</hp:p>', m, re.S)
         assert all(align(pid) == "LEFT" for pid, _ in paras), [(align(p), re.sub(r"<[^>]+>", "", t)) for p, t in paras]
-        if 'rowAddr="2"' in m:
+        if 'rowAddr="3"' in m:
             assert len(paras) >= 2  # 주소가 여러 줄로 나뉜 칸도 줄마다 왼쪽
 
 

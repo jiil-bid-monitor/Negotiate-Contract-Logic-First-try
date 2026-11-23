@@ -4505,6 +4505,31 @@ def test_subtotal_row_score_also_in_item_score_cell(tmp_path: Path):
     assert "신인도 소계|4|4|" in text and "2점|4|" in text, text
 
 
+def test_column_head_row_values_go_below(tmp_path: Path):
+    """11/23 사용자 지적: 사업설명회 참가 신청서 '대표자 | 성 명 | 생년월일 | 전화번호(회사) : / __ | __ | __' — 값 줄은 비고
+    '전화번호(회사) :' 이름표 칸에 번호가 붙음. 이름표 줄이면 값은 바로 아래 칸에, 이름표 칸엔 안 넣음.
+    머리 묶음 칸 없이 머리 줄 아래 빈 줄만 있는 목록 표(하도급 업체 등)는 그대로 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+                                           f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "업체명"), c(1, 0, "", 3)],
+            [c(0, 1, "대표자", 1, 2), c(1, 1, "성 명"), c(2, 1, "생년월일"), c(3, 1, "전화번호(회사) :")],
+            [c(1, 2, ""), c(2, 2, ""), c(3, 2, "")],
+            [c(0, 3, "연락처", 1, 2), c(1, 3, "전화번호(휴대폰)"), c(2, 3, "전자메일"), c(3, 3, "")],
+            [c(1, 4, ""), c(2, 4, ""), c(3, 4, "")]]
+    other = [[c(0, 0, "업체명"), c(1, 0, "대표자"), c(2, 0, "주 소")], [c(0, 1, ""), c(1, 1, ""), c(2, 1, "")]]
+    tbl = lambda rs: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rs) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 어딘가 1", "전화번호": "033-111-2222",
+                              "이메일": "a@b.c", "대표자 주민등록번호": "650312-1******"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", tbl(rows) + tbl(other)), tmp_path / "o.hwpx", v)
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "|전화번호(회사) :|홍길동|1965. 03. 12.|033-111-2222|" in text, text
+    # 연락처 줄(11/23 사용자 결정): 휴대폰 = 회사 전화, 전자메일 = 회사 이메일
+    assert "|전화번호(휴대폰)|전자메일|033-111-2222|a@b.c|" in text, text
+    assert "|업체명|대표자|주 소|" in text and text.count("홍길동") == 1 and "강원 어딘가 1" not in text, text
+
+
 def test_foot_score_row_gets_item_score(tmp_path: Path):
     """11/23 사용자 지적: 항목마다 맨 아래 칠해진 '점 수 | 6.0점 | __' 소계 칸 — 신인도만 들어가고 기술인력·경영상태는 빔
     (그 줄을 배점 줄로 읽었음. 신인도는 배점 2.0이 점수와 같아 우연히 들어감). 소계 칸 = 항목 점수, 등급 줄 칸은 그대로."""

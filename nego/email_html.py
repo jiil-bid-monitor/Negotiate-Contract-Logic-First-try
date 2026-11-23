@@ -222,27 +222,41 @@ def split_body(candidates: list[Candidate]) -> tuple[list[Candidate], dict[str, 
     관심 키워드가 '통신' 하나뿐인 공고, 공고명이 운영·관리 용역·전산 사업인 공고도 뺌. 뺀 공고는 첨부 리포트에만(지우지 않음).
     싱크로율을 못 구한 공고는 본문에 둠(과거 실적 자료를 못 읽은 주에 본문이 비지 않게)."""
     body: list[Candidate] = []
-    low = f"싱크로율 {round(BODY_MIN_SYNC * 100)}% 미만"
-    design = "설계 용역(제작·설치 없음)"
-    hidden = {"통신 키워드만": 0, **{k: 0 for k in BODY_SKIP_WORDS}, "소프트웨어 품목만": 0, design: 0, low: 0}
+    hidden = {"통신 키워드만": 0, **{k: 0 for k in BODY_SKIP_WORDS}, "소프트웨어 품목만": 0, DESIGN_ONLY: 0, LOW_SYNC: 0}
     for c in candidates:
-        score = (getattr(c, "sync", None) or {}).get("score")
-        title = c.notice.title.replace(" ", "")
-        keep = any(w in title for w in BODY_KEEP_WORDS)
-        skip = None if keep else next((k for k, words in BODY_SKIP_WORDS.items() if any(w in title for w in words)), None)
-        if c.screen_result.matched_keywords == ["통신"]:
-            hidden["통신 키워드만"] += 1
-        elif skip:
+        skip = body_skip(c.notice.title, c.screen_result.matched_keywords, c.screen_result.matched_product_codes,
+                         (getattr(c, "sync", None) or {}).get("score"))
+        if skip:
             hidden[skip] += 1
-        elif not c.screen_result.matched_keywords and set(c.screen_result.matched_product_codes or []) <= SW_PRODUCTS                 and c.screen_result.matched_product_codes:
-            hidden["소프트웨어 품목만"] += 1
-        elif not keep and "설계" in title and "용역" in title and "제작" not in title and "설치" not in title:
-            hidden[design] += 1  # 지일은 설계~제작·설치 통합 발주를 선호(대리님 9/9 인수인계)
-        elif score is not None and score < BODY_MIN_SYNC:
-            hidden[low] += 1
         else:
             body.append(c)
     return body, hidden
+
+
+LOW_SYNC = f"싱크로율 {round(BODY_MIN_SYNC * 100)}% 미만"
+DESIGN_ONLY = "설계 용역(제작·설치 없음)"
+
+
+def body_skip(title: str, keywords, product_codes, score) -> str | None:
+    """메일 본문에서 뺄 이유(없으면 None) — 메일(split_body)과 판단 기록(주간 보고는 본문 공고만, report_log.merge)이 같이 씀.
+    score는 0~1(싱크로율). 판단 기록엔 0~100으로 남아 있어 1 넘으면 %로 봄."""
+    title = (title or "").replace(" ", "")
+    keywords, codes = list(keywords or []), set(product_codes or [])
+    if isinstance(score, (int, float)) and score > 1:
+        score = score / 100
+    keep = any(w in title for w in BODY_KEEP_WORDS)
+    skip = None if keep else next((k for k, words in BODY_SKIP_WORDS.items() if any(w in title for w in words)), None)
+    if keywords == ["통신"]:
+        return "통신 키워드만"
+    if skip:
+        return skip
+    if not keywords and codes and codes <= SW_PRODUCTS:
+        return "소프트웨어 품목만"
+    if not keep and "설계" in title and "용역" in title and "제작" not in title and "설치" not in title:
+        return DESIGN_ONLY  # 지일은 설계~제작·설치 통합 발주를 선호(대리님 9/9 인수인계)
+    if score is not None and score < BODY_MIN_SYNC:
+        return LOW_SYNC
+    return None
 
 
 def split_parts(candidates: list[Candidate]) -> list[tuple[str, list[Candidate]]]:

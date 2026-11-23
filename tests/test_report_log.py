@@ -316,3 +316,23 @@ class TestReportSync(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWeeklyBodyOnly(unittest.TestCase):
+    """주간 보고는 메일 본문 공고만 판단 기록에(2026-11-23) — 보고 파일을 다시 읽어도 되살아나지 않음."""
+
+    def test_attachment_only_weekly_not_kept(self):
+        def notice(no, title, score):
+            return {"noticeNo": no, "title": title, "meta": {"keywords": ["전시"], "products": [], "score": score,
+                                                             "deadline": "2099-01-02T18:00"}}
+        entry = {"kind": "weekly", "date": "2026-11-23", "notices": [
+            notice("A", "○○체험관 전시물 제작 설치", 80), notice("B", "○○관 시설 유지관리 용역", 80), notice("C", "△△ 전시 기획", 20)]}
+        records: dict = {}
+        R.merge(records, entry, "now")
+        self.assertEqual(list(records), ["A"], "운영·관리 용역(B)·싱크로율 낮음(C)은 안 쌓음")
+        records["D"] = {"noticeNo": "D", "title": "□□ 유지관리 용역", "status": None, "reports": [{"date": "2026-11-23", "kind": "weekly"}],
+                        "meta": {"keywords": ["전시"]}}
+        records["E"] = {**records["D"], "noticeNo": "E", "status": "불참"}
+        records["F"] = {**records["D"], "noticeNo": "F", "reports": [{"date": "2026-11-23", "kind": "daily"}]}
+        R.merge(records, entry, "now")
+        self.assertEqual(sorted(records), ["A", "E", "F"], "이미 쌓인 첨부 전용(D)은 지움, 판단한 것(E)·매일 보고(F)는 그대로")

@@ -126,6 +126,37 @@ def _stale(p: dict[str, Any], cutoff: datetime) -> bool:
     return due is not None and due < cutoff
 
 
+def _codes_of(names: list[str]) -> list[str]:
+    """판단 기록 meta.products(품목 이름) → 세부품명번호 — 메일 본문 규칙의 '소프트웨어 품목만'을 보려고."""
+    global _NAME_TO_CODE
+    if _NAME_TO_CODE is None:
+        try:
+            from .config import load_config
+
+            held = (load_config().held_raw or {}).get("heldProducts", [])
+            _NAME_TO_CODE = {str(p.get("name") or ""): str(p.get("code") or "") for p in held}
+        except Exception:  # noqa: BLE001 — 설정을 못 읽으면 이름 그대로(그 규칙만 안 걸림)
+            _NAME_TO_CODE = {}
+    return [_NAME_TO_CODE.get(n, n) for n in names]
+
+
+_NAME_TO_CODE: dict[str, str] | None = None
+
+
+def _weekly_attachment_only(p: dict[str, Any]) -> bool:
+    """주간 보고에만 나갔고 메일 본문 기준에 안 맞는(첨부 리포트에만 있던) 공고 — 판단·담당·대화·사유가 없을 때만.
+    판단 기록·📋에 안 둠(2026-11-23 사용자 — 한 주 260건은 피로). 보고 파일을 다시 읽어도 되살아나지 않게 merge에서 늘 거름."""
+    reports = p.get("reports") or []
+    if not reports or any(r.get("kind") != "weekly" for r in reports):
+        return False
+    if p.get("status") in DECISIONS or p.get("owner") or p.get("comments") or p.get("reason") or p.get("tags") or p.get("prev"):
+        return False
+    from .email_html import body_skip
+
+    m = p.get("meta") or {}
+    return bool(body_skip(p.get("title") or "", m.get("keywords"), _codes_of(list(m.get("products") or [])), m.get("score")))
+
+
 def merge(records: dict[str, dict[str, Any]], entry: dict[str, Any], now: str,
           today: datetime | None = None) -> bool:
     """보고 기록을 판단 기록에 합친다. 이미 있는 공고는 판단·담당·대화를 건드리지 않고 보고 표시만 더한다.
@@ -138,7 +169,8 @@ def merge(records: dict[str, dict[str, Any]], entry: dict[str, Any], now: str,
         ref = {"date": entry["date"], "kind": entry["kind"]}
         meta = dict(n.get("meta") or {})
         p = records.get(no)
-        if p is None and _stale({"reports": [ref], "meta": meta}, cutoff):
+        if p is None and (_stale({"reports": [ref], "meta": meta}, cutoff)
+                          or _weekly_attachment_only({"reports": [ref], "meta": meta, "title": n["title"]})):
             continue
         if p is None:
             records[no] = {"noticeNo": no, "title": n["title"], "status": None, "owner": "",
@@ -156,7 +188,7 @@ def merge(records: dict[str, dict[str, Any]], entry: dict[str, Any], now: str,
         if not p.get("meta"):
             p["meta"] = meta
             changed = True
-    for no in [no for no, p in records.items() if _stale(p, cutoff)]:
+    for no in [no for no, p in records.items() if _stale(p, cutoff) or _weekly_attachment_only(p)]:
         del records[no]
         changed = True
     return changed

@@ -1,0 +1,176 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-23",
+ "reportedAt": "2026-11-22T23:58:56+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01845866",
+   "title": "2027~2028년 서울역사박물관  어린이박물관  운영 인력 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "서울특별시 서울역사박물관",
+    "budgetAmount": 863787273.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "박물관"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 49,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01845866&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01844406",
+   "title": "노후 민방위 경보시설 교체 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "경상남도 창원시",
+    "budgetAmount": 149070000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 46,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01844406&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01846218",
+   "title": "신동대박장터 공연장 LED 스크린 및 음향장비 설치공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도 정선군",
+    "budgetAmount": 145450909.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "수의계약",
+    "score": 41,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01846218&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01842805",
+   "title": "강릉국유림관리소 산불대응센터 신축공사(통신) 입찰공고",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "산림청 동부지방산림청 강릉국유림관리소",
+    "budgetAmount": 27986364.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 19,
+    "deadline": "2026-11-27T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01842805&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01845116",
+   "title": "[대학혁신]글로벌센터 6층 환경개선 공사(건축)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "가천대학교",
+    "budgetAmount": 87818182.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 52,
+    "deadline": "2026-12-07T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01845116&bidPbancOrd=001"
+   }
+  },
+  {
+   "noticeNo": "R26BK01845207",
+   "title": "국제캠퍼스 종합관 211호 마루운동실 환경개선공사 중 건축공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "연세대학교",
+    "budgetAmount": 41818182.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 19,
+    "deadline": "2026-12-07T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01845207&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01844467",
+   "title": "부산도시철도 사상~하단선 1,3,5공구 통신설비공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "부산교통공사",
+    "budgetAmount": 2093570000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 28,
+    "deadline": "2026-12-07T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01844467&bidPbancOrd=000"
+   }
+  }
+ ]
+}

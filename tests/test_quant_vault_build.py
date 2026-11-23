@@ -2881,6 +2881,22 @@ def test_bizno_with_rrn_paren_label(tmp_path: Path):
     assert "123-45-67890" in sec
 
 
+def test_rrn_corp_paren_bizno_label(tmp_path: Path):
+    """11/23 사용자 제보: 봉평 서식 21 보안서약서 '주민(법인)등록번호 (사업자등록번호) | __'이 빔 — '주민'이 든 이름표를 개인 칸 비움 규칙이 걸렀음.
+    회사 칸이라 '법인등록번호 (사업자등록번호)', 같은 표 대표자 줄 '주민등록번호'는 예전대로 대표자 번호(앞 6자리)."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "성명(상호)"), _c(1, 0, ""), _c(2, 0, "주민(법인)등록번호\n(사업자등록번호)"), _c(3, 0, "")],
+                 [_c(0, 1, "대 표 자"), _c(1, 1, ""), _c(2, 1, "주민등록번호"), _c(3, 1, "")]])
+    src = _mini_hwpx(tmp_path / "a.hwpx", body)
+    info = {"회사명": "(주)가상", "대표자": "홍길동", "법인등록번호": "110111-1234567",
+            "사업자등록번호": "123-45-67890", "대표자 주민등록번호": "650312-1******"}
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info=info))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert "110111-1234567" in sec and "123-45-67890" in sec
+    assert "650312-*******" in sec
+
+
 def test_none_rule_ignores_total_row(tmp_path: Path):
     """11/18 사용자 제보: 행정처분 내용 표 '업 체 명 | 용 역 명 | … / __ / 계 | __' — 값 없는 '계' 줄 때문에 빈 표로 안 봐
     '해당사항이 없을 경우에는 “해당없음”을 기재'인데 '해당 없음'이 빠짐."""

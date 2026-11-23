@@ -37,6 +37,7 @@ COMMANDS = [("notice", "공고번호로 공고 요약 — /notice R26BK01234567"
             ("docs", "회사 서류 유효기간 (인증서갱신.xlsx)"),
             ("upload", "회사 서류 PDF 넣기 (봇 메시지에 답장으로)"),
             ("remove", "필요 없는 서류를 목록·알림에서 빼기"),
+            ("expiry", "곧 끝나는 서류 유효기간을 한꺼번에 고치기"),
             ("help", "명령어 목록")]
 _NO = re.compile(r"[A-Z0-9]{10,14}", re.I)
 
@@ -216,7 +217,7 @@ class TelegramBot:
     def handle_apply(self, cb: dict) -> bool:
         """서류 '상태 표시' 버튼 — 신청해야 함·신청 중·지우기를 묻고 적는다(2026-11-12 사용자 요청)."""
         chat = str(((cb.get("message") or {}).get("chat") or {}).get("id", ""))
-        if not re.match(r"^[as]:[0-9a-f]{12}", cb.get("data") or "") or chat not in self.chats:
+        if not re.match(r"^[as]:([0-9a-f]{12}|all:)", cb.get("data") or "") or chat not in self.chats:
             return False
         self._api("answerCallbackQuery", callback_query_id=cb["id"])
         text, markup = docexpiry.apply_callback(docexpiry.read_docs(docexpiry.docs_dir()), cb["data"]) or (

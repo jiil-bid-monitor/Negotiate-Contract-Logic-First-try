@@ -130,3 +130,23 @@ class DocExpiryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBulk(unittest.TestCase):
+    """한꺼번에 상태 표시·유효기간 고치기 (2026-11-23 사용자 요청 — 그리다 서류 5건)."""
+
+    def test_all_buttons_and_dates(self):
+        from webapp import docupload
+
+        docs = [("(그리다) 가", date(2026, 11, 30)), ("(그리다) 나", date(2026, 12, 1)), ("먼 서류", date(2027, 6, 1))]
+        kb = D.apply_buttons(docs, date(2026, 11, 23), {})["inline_keyboard"]
+        self.assertEqual(len(kb), 3)
+        self.assertEqual([b["callback_data"] for b in kb[-1]], ["s:all:n", "s:all:p", "s:all:x"])
+        self.assertEqual(len(D.apply_buttons(docs[:1], date(2026, 11, 23), {})["inline_keyboard"]), 1, "1건이면 '모두' 없음")
+        path = Path(tempfile.mkdtemp()) / "applying.json"
+        D.apply_callback(docs, "s:all:p", path, date(2026, 11, 23))
+        self.assertEqual(set(D.load_states(path).values()), {"p"})
+        self.assertEqual(len(D.load_states(path)), 2, "30일 밖 서류는 안 건드림")
+        pairs, bad = docupload.parse_dates("1 2027-11-30\n2. 2027.12.1\n9 2027-1-1\n아무말", docs[:2])
+        self.assertEqual(pairs, [("(그리다) 가", date(2027, 11, 30)), ("(그리다) 나", date(2027, 12, 1))])
+        self.assertEqual(bad, ["9 2027-1-1", "아무말"])

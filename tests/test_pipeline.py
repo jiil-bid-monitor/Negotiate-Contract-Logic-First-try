@@ -158,6 +158,13 @@ class TestJointSupply(unittest.TestCase):
         joint = qualify.parse_joint_supply(None)
         self.assertEqual(joint.label, "정보 없음")
 
+    def test_empty_submit_paren_is_no_info(self):
+        # 11/23 R26BK01836944 — '()공동수급불허'(나라장터 화면 칸은 비어 있음)는 불허가 아니라 정보 없음
+        joint = qualify.parse_joint_supply("()공동수급불허")
+        self.assertEqual(joint.label, "정보 없음")
+        self.assertIsNone(joint.raw_value)
+        self.assertIsNone(qualify.parse_joint_supply("( )공동수급불허").raw_value)
+
 
 class TestQualification(unittest.TestCase):
     """자격 판정 규칙. 이름 비교는 부분일치가 아니라 코드 비교 + 이름 완전일치(2026-09-30 변경)."""

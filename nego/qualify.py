@@ -1364,6 +1364,10 @@ def parse_joint_supply(value: str | None) -> JointSupply:
         return JointSupply(allowed=False, submit_type=None, exec_type=None, raw_value=None)
 
     text = value.strip()
+    if re.match(r"\(\s*\)", text):
+        # 제출 방식이 빈 괄호 '()공동수급불허'(11/23 R26BK01836944 상용SW 제3자단가 수의시담) — 나라장터 화면 칸이 통째로 비어 있음.
+        # 뒤 '공동수급불허'는 정보가 없을 때 붙는 기본값으로 보고 불허로 확정하지 않음 = 정보 없음(사용자 결정)
+        return JointSupply(allowed=False, submit_type=None, exec_type=None, raw_value=None)
     match = _JOINT_PATTERN.match(text)
     submit_type = match.group("submit") if match else None
     exec_type = match.group("exec").strip() if match else text

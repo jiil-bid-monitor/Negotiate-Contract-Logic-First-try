@@ -26,7 +26,7 @@ UNDECIDED = ("미판단", "놓침")
 METHOD = {"협상": "협상", "규격가격동시입찰": "규격가격동시", "입찰": "입찰", "수의계약": "수의"}
 
 
-def collect_paths(keywords: list[str], products: list[str], licenses: list[str]) -> list[str]:
+def collect_paths(keywords: list[str], products: list[str], licenses: list[str], local: str | None = None) -> list[str]:
     """이 공고가 어떤 경로로 수집됐나 — 판단 기록으로 수집 조건을 조금씩 고칠 때 원인을 묶는 데 쓴다(11/16 사용자 요청).
     화면 쪽 같은 규칙은 index.html `collectPaths`."""
     out = []
@@ -36,6 +36,8 @@ def collect_paths(keywords: list[str], products: list[str], licenses: list[str])
         out.append("세부품명")
     if licenses:
         out.append("보유 면허")
+    if local:
+        out.append("정선 사업")
     return out
 
 
@@ -68,7 +70,7 @@ def reported_notice(candidate: Any, held_names: dict[str, str]) -> dict[str, Any
             "keywords": list(sr.matched_keywords or []),
             "products": [held_names.get(p, p) for p in (sr.matched_product_codes or [])],
             "paths": collect_paths(list(sr.matched_keywords or []), list(sr.matched_product_codes or []),
-                                   list(getattr(sr, "license_match", None) or [])),
+                                   list(getattr(sr, "license_match", None) or []), getattr(sr, "local_match", None)),
             "licenses": list(getattr(sr, "license_match", None) or []),
             "contractMethod": n.contract_method,
             "score": round(score * 100) if isinstance(score, (int, float)) else None,

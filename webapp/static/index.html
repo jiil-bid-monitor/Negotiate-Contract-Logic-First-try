@@ -340,7 +340,7 @@ body {
 .score-why .note { margin: 8px 0 0; font-size: 11.5px; color: var(--faint); }
 
 /* 상단바: 제목 아래 과거 실적 요약, 오른쪽에 내 이름 */
-.topbar .brand-text { flex: 1 1 320px; min-width: 0; }
+.topbar .brand-text { flex: 1 1 180px; min-width: 0; }  /* 320 → 180: 알림 버튼에 글자를 붙여도 한 줄에(11/23) */
 .topbar .corpus-sum { margin: 2px 0 0; font-size: 12px; color: rgba(255,255,255,.66); line-height: 1.4; font-variant-numeric: tabular-nums; }
 .me-top { display: flex; flex: none; align-items: center; gap: 8px; font-size: 13px; color: rgba(255,255,255,.88); font-weight: 600; }
 .me-top input {
@@ -352,13 +352,15 @@ body {
 .topbar .me-top + .theme { margin-left: 0; flex: none; }
 /* 회사 서류 갱신 알림 종 (2026-11-23 사용자 요청 — 텔레그램을 안 열어도 웹앱에서 보이게) */
 .docbell { position: relative; flex: none; }
+/* 아이콘 + 글자 + 건수(11/23 사용자 — 그림만으로는 무엇인지 안 보여서) */
 .docbell > button {
-  position: relative; font-size: 18px; line-height: 1; padding: 6px 8px; cursor: pointer;
+  position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 15px; line-height: 1; padding: 6px 10px; cursor: pointer;
   background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.24); border-radius: 4px; color: #fff;
 }
 .docbell > button:hover, .docbell > button[aria-expanded="true"] { border-color: rgba(255,255,255,.7); }
+.docbell .lb { font-size: 13px; font-weight: 600; }
 .docbell .n {
-  position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
   background: #d93025; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
 }
 .docbell-pop {
@@ -1481,11 +1483,11 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     </div>
 
     <div class="docbell" id="judgeBell" hidden>
-      <button type="button" id="judgeBellBtn" aria-haspopup="true" aria-expanded="false" title="판단할 공고 (텔레그램 보고에 나간 공고)">📋<span class="n" id="judgeBellN"></span></button>
+      <button type="button" id="judgeBellBtn" aria-haspopup="true" aria-expanded="false" title="판단할 공고 (텔레그램 보고에 나간 공고)">📋 <span class="lb">판단할 공고</span><span class="n" id="judgeBellN"></span></button>
       <div class="docbell-pop" id="judgeBellPop" hidden></div>
     </div>
     <div class="docbell" id="docBell" hidden>
-      <button type="button" id="docBellBtn" aria-haspopup="true" aria-expanded="false" title="회사 서류 갱신 알림">🔔<span class="n" id="docBellN"></span></button>
+      <button type="button" id="docBellBtn" aria-haspopup="true" aria-expanded="false" title="회사 서류 갱신 알림">🔔 <span class="lb">회사 서류</span><span class="n" id="docBellN"></span></button>
       <div class="docbell-pop" id="docBellPop" hidden></div>
     </div>
     <label class="me-top">내 이름 <input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></label>

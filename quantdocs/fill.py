@@ -186,7 +186,7 @@ _SENTENCE = re.compile(r"^(?:[※*＊]|주\))|(?:다|함|음|요|것|바람|기�
 _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
 
 
-_SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|직인|날인)[)）]?$")
+_SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|직인|날인|서명또는날인|날인또는서명)[)）]?$")  # '(서명 또는 날인)'(11/23)
 _INLINE_LABELS = {"TEL": "전화번호", "Tel": "전화번호", "전화": "전화번호", "전화번호": "전화번호",
                   "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "팩스번호": "팩스번호", "FAX번호": "팩스번호", "Fax번호": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일",
                   "업태": "업태", "종목": "종목"}
@@ -791,6 +791,8 @@ def _other_party_cells(xml: str) -> list[tuple[int, int]]:
     return out
 
 
+_SIGN_REP = re.compile(r"대표[:：]")  # 서명 줄 '대 표 :'(자·이사 없이, 쌍점 있음 — 11/23)
+_SIGNER_LAB = re.compile(r"(?:서약자|서약인|확약자|각서인|신청인|신청자|제안자|입찰자|제출자)[:：]?")
 _SEAL_TAIL = r"(?:[(（](?:인|서명)[^()（）]{0,8}[)）]|[\u327f\U000F0000-\U000FFFFD])"  # '(인)'·'(인 또는 서명)'·도장 글자 ㉿(한글 기호 글꼴은 사용자 영역 문자, 11/06 청주 신청서)
 # 쌍점 없이 이름표만 있는 줄 — 이런 줄이 둘 이상 잇달아 있을 때만(서식 21 '주  소 / 상  호 / 대표자')
 _BARE_LABELS = {"주소": "주소", "소재지": "주소", "상호": "회사명", "업체명": "회사명", "회사명": "회사명",
@@ -1478,7 +1480,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             continue
         # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름
         # '신청인(대표사)          (인)'(11/13 운리단길 별지서식 1 입찰참가신청서)도 같은 모양
-        bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)(?:\s*성\s*명)?|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{{1,10}}\))?))(\s{{3,}})((?:{_SEAL_TAIL}|인(?=\s*$)).*)", text, re.S)  # 괄호 없는 '서 약 자      인'(11/13 제천)
+        bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)(?:\s*성\s*명)?|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{{1,10}}\))?))(\s{{3,}})((?:{_SEAL_TAIL}|인(?=\s*(?:[(（][^()（）]{{1,8}}[)）]\s*)*$)).*)", text, re.S)  # 괄호 없는 '서 약 자      인'(11/13 제천)·'인(사용인감)'(11/23 안성시)
         if bare:
             sign_at.add(n)
         if bare and _value("대표자", vault):
@@ -1551,6 +1553,27 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         # 예전 규칙은 '○○○회사 대표 ○○○'처럼 자리표시가 앞인 한 줄만 알았음). 회사 줄은 서약자·신청인 등 이름표가 붙을 때만,
         # 대표 줄은 같은 줄이나 바로 앞 두 줄 안에서 회사 줄을 채웠을 때만(봉투 예시 '대표이사 ○○○ (인)'은 그대로 — 11/04 결정)
         signer = r"(?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)\s*[:：]?"
+        # '서약자:          대    표 :          (서명 또는 날인)'(11/23 사용자 — 띄어쓰기 무시하고 서명란에 '대표'가 있으면 대표자 성함):
+        # 서약자 뒤 = 회사명, '대 표 :' 뒤 = 대표자. 한 글 조각 안에 있을 때만(빈칸·탭)
+        seal2 = r"(?:" + _SEAL_TAIL + r"|[(（]\s*서\s*명\s*또\s*는\s*날\s*인\s*[)）])"
+        if re.fullmatch(rf"\s*{signer}\s+대\s*표\s*[:：]\s+{seal2}\s*", text) and _value("대표자", vault):
+            company, name = _value("회사명", vault), _value("대표자", vault)
+
+            def two(mm):
+                body = mm.group(2)
+                m2 = re.fullmatch(rf"(\s*{signer})([ \t]+)(대\s*표\s*[:：])([ \t]+)({seal2}.*)", body, re.S)
+                if not m2:
+                    return mm.group(0)
+                g1 = " " * max(2, len(m2.group(2)) - _span(company) - 1) if company else m2.group(2)
+                g2 = " " * max(2, len(m2.group(4)) - _span(name) - 1)
+                body = (m2.group(1) + (" " + _mark(company) if company else "") + g1 + m2.group(3) + " " + _mark(name) + g2 + m2.group(5))
+                return mm.group(1) + body + mm.group(3)
+            seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", two, xml[s:e], flags=re.S)
+            if seg != xml[s:e]:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 → {company} · 대표 {name}")
+                continue
         co_lab = r"(?:회\s*사\s*명|업\s*체\s*명|상\s*호|회\s*사)\s*[:：]?"
         rep_lab = r"대\s*표(?:\s*자|\s*이\s*사)?\s*[:：]?"
         co_ph = re.fullmatch(rf"\s*{signer}\s*{co_lab}\s*{_PH}\s*(?:{rep_lab}\s*{_PH}\s*(?:{_SEAL_TAIL})?\s*)?", text)
@@ -2616,9 +2639,18 @@ _HIST_DATE_HEAD = re.compile(r"(?:년월일|연월일|년월|연월|일자|일�
 HIST_GAP = 567  # 이름표 아래 연혁 칸 위·아래 여백(HWPUNIT, 2mm)
 
 
-def _history_grid(cells: list[Cell]) -> tuple[Cell, Cell, list[int]] | None:
+def _titled_before(xml: str, ts: int) -> bool:
+    """표 바로 앞 글(표 밖 문단 — 앞 표가 끝난 뒤, 400자 안)에 '연혁'이 있는지. '2. 회사연혁' 문단 아래 '연월일 | 내 용 | 비 고' 표(11/23 안성시 —
+    제목이 표 칸이 아니라 표 밖 문단이라 연혁 표로 못 봤음)."""
+    prev = max((te for tts, te in _all_tables(xml) if te <= ts), default=0)
+    text = _sq(re.sub(r"<[^>]+>", " ", xml[max(prev, ts - 6000):ts]))
+    return "연혁" in text[-40:]
+
+
+def _history_grid(cells: list[Cell], titled: bool = False) -> tuple[Cell, Cell, list[int]] | None:
     """연혁을 줄마다 적는 표('년 월 일 | 내 용 | 비 고' 머리 + 빈 줄) — (날짜 머리 칸, 내용 머리 칸, 빈 줄 번호들).
-    머리 줄 바로 위가 '주요연혁'·'연혁' 칸일 때만(11/23 사용자 요청: 창원산업진흥원 별지 제5호 일반현황 — 연혁을 '주요연혁' 칸에 통째로 넣었음)."""
+    머리 줄 바로 위가 '주요연혁'·'연혁' 칸일 때만(11/23 사용자 요청: 창원산업진흥원 별지 제5호 일반현황 — 연혁을 '주요연혁' 칸에 통째로 넣었음),
+    또는 표 바로 앞 문단이 연혁 제목일 때(titled — `_titled_before`, 11/23 안성시 '2. 회사연혁')."""
     for date in cells:
         if not _HIST_DATE_HEAD.fullmatch(_sq(date.text)):
             continue
@@ -2626,7 +2658,7 @@ def _history_grid(cells: list[Cell]) -> tuple[Cell, Cell, list[int]] | None:
         if body is None:
             continue
         above = [c for c in cells if c.row + c.rowspan == date.row]
-        if not any("연혁" in _sq(c.text) for c in above):
+        if not titled and not any("연혁" in _sq(c.text) for c in above):
             continue
         rows = []
         r = date.row + 1
@@ -2668,7 +2700,7 @@ def _expand_history_rows(xml: str, need: int) -> tuple[str, bool]:
     빈 줄이 둘 이상이면 끝에서 둘째 줄을 복사해 마지막 줄 앞에 넣음. 뒤 줄 번호·표 줄 수·표 높이를 함께 고침. 늘렸으면 (새 xml, True)."""
     for ts, te in _all_tables(xml):
         cells = _cells(xml, (ts, te))
-        grid = _history_grid(cells)
+        grid = _history_grid(cells, _titled_before(xml, ts))
         if grid is None or len(grid[2]) >= need:
             continue
         last = grid[2][-2] if len(grid[2]) >= 2 else grid[2][-1]  # 복사할 줄(그 뒤에 사본을 넣음)
@@ -3254,7 +3286,19 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 by_pos = {(c.row, c.col): c for c in cells}
                 colon_vals: dict[int, str] = {}  # ':'로 끝나는 이름표 옆 값 칸 → 원래 문단 모양(11/23 줄맞춤)
                 col_heads = _column_heads(cells, by_pos)  # 이름표 줄 → 바로 아래 값 칸(11/23)
-                hist_grid = _history_grid(cells) if vault.history else None  # '년 월 일 | 내 용' 연혁 표(11/23)
+                hist_grid = _history_grid(cells, _titled_before(xml, tbl[0])) if vault.history else None  # '년 월 일 | 내 용' 연혁 표(11/23)
+                if hist_grid is not None and not any("연혁" in _sq(x.text) for x in cells):
+                    # 표 안에 '연혁' 칸이 없고 제목이 표 밖 문단('2. 회사연혁')인 표(11/23 안성시) — 칸 규칙(아래 '연혁' 이름표)을 안 거치므로 여기서 줄마다
+                    date_h, body_h, grid_rows = hist_grid
+                    for h, r in zip(vault.history, grid_rows):
+                        for head, val in ((date_h, _fmt_ymd(h.get("연월일"))), (body_h, str(h.get("내용") or "").strip())):
+                            cell = by_pos.get((r, head.col))
+                            if cell is not None and val:
+                                edits.append((cell, [val], False))
+                                pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[cell.start:cell.end])
+                                if pm and chars is not None:
+                                    para_override[cell.start] = chars.left_any(pm.group(1))
+                    rep.filled.append(f"연혁 표(표 앞 제목) → {min(len(vault.history), len(grid_rows))}줄")
                 other_rows = _other_rows(cells)
                 repeat_rows = _repeat_party_rows(cells)
                 if repeat_rows and not any("되풀이된 회사·대표자 줄" in x for x in rep.filled):
@@ -3320,6 +3364,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if sign_only and _row_group(cells, c) != "신청인":
                         continue
                     key = _label_key(c.text)
+                    # 한 줄 서명 표 '서약자: | __ | 대 표 : | (서명 또는 날인)'(11/23 사용자: 띄어쓰기 무시하고 서명란에 '대표'가 있으면 대표자 성함) —
+                    # '대 표 :' 칸 = 대표자, 같은 줄 서약자·신청인 등 칸 = 회사명(대표자 이름이 두 번 들어가지 않게)
+                    row_rep = any(o.row == c.row and _SIGN_REP.fullmatch(_sq(o.text)) for o in cells)
+                    if row_rep and _SIGN_REP.fullmatch(_sq(c.text)):
+                        key = "대표자"
+                    elif row_rep and key == "대표자" and _SIGNER_LAB.fullmatch(_sq(c.text)):
+                        key = "회사명"
                     # 왼쪽 세로 묶음 칸('대 표 자' | 성명 / 주소 / 연락처)의 사람 칸(11/06 제보: 청주 위임장 대표자 성명·연락처가 빔)
                     group = _row_group(cells, c)
                     if group == "대표자":
@@ -3352,6 +3403,15 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if key is None and _sq(c.text) == "성명" and group is None \
                             and any(_sq(o.text) == "접수번호" for o in cells) and any(_label_key(o.text) == "회사명" for o in cells):
                         key = "대표자"  # 접수증 '접수번호 | 2026 - | 업체명 | __ / 주 소 / 성 명 | __ | 제출자'(11/18 사용자 요청 — 성명 = 대표자, 제출자는 비움)
+                    if key is None and _sq(c.text) == "접수번호" and notice_no:
+                        # '접 수 번 호 | 안성시 2026-'(11/23 사용자 요청) — 나라장터 참조번호 '안성시 공고 제2026-3071호'의 번호를 '-' 뒤에(서식 글 그대로, 연도가 같을 때만)
+                        right = by_pos.get((c.row, c.col + c.colspan))
+                        seg_r = xml[right.start:right.end] if right is not None else ""
+                        rm = re.search(r"(\d{4})(\s*[-–])\s*(?=(?:호\s*)?</(?:[\w.-]+:)?t>)", seg_r)
+                        if rm and rm.group(1) == notice_no[0] and re.fullmatch(r"\s*[가-힣()]{0,12}\s*(?:제\s*)?\d{4}\s*[-–]\s*호?\s*", right.text):
+                            edits.append((right, None, seg_r[:rm.end(2)] + _mark(notice_no[1]) + seg_r[rm.end():]))
+                            rep.filled.append(f"접수번호 → {right.text.strip()}{notice_no[1]}(서식 글 그대로)")
+                            continue
                     if key is None and re.fullmatch(r"기관명|대표", _sq(c.text)) and _sign_table(cells, by_pos):
                         # 각서·신청서 끝 서명 표 '제 출 일 | 2026년 월 일 / 기 관 명 | __ / 대    표 | (인)'(11/18 봉평) — 기관명 = 지일(입찰자), 대표 = 대표자
                         key = "회사명" if _sq(c.text) == "기관명" else "대표자"

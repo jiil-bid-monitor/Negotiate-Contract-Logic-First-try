@@ -4887,3 +4887,54 @@ def test_joint_participant_rows_left_blank(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
     assert text.count("(주)가상") == 1 and text.count("강원 어딘가 1") == 1 and text.count("033-111-2222") == 1, text
     assert unfilled_slots(sec) == [], unfilled_slots(sec)
+
+
+def test_signer_and_bare_rep_line(tmp_path: Path):
+    """11/23 사용자: '서약자:   ○○○   대 표 :        (서명 또는 날인)' — '대 표 :'(자 없이)를 몰라 대표 자리가 비고 서약자 칸에 대표자 이름이 들어감.
+    띄어쓰기 무시하고 서명란에 '대표'가 있으면 대표자 성함, 같은 줄 서약자 자리는 회사명(표 칸·한 줄 문단 둘 다)."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, t: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                        f'<hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    tbl = "<hp:p><hp:run><hp:tbl><hp:tr>" + c(0, "서약자:") + c(1, "") + c(2, "대    표 :") + c(3, "(서명 또는 날인)") + "</hp:tr></hp:tbl></hp:run></hp:p>"
+    para = '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>서약자:                    대    표 :              (서명 또는 날인)</hp:t></hp:run></hp:p>'
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", tbl + para), tmp_path / "o.hwpx", v)
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "|서약자:|(주)가상|대    표 :|홍길동" in text and "(서명 또는 날인)" in text, text
+    assert re.search(r"서약자: \(주\)가상\s+대    표 : 홍길동\s+\(서명 또는 날인\)", text), text
+
+
+def test_ansung_signer_receipt_credit_sanction_history(tmp_path: Path):
+    """11/23 사용자 지적(안성시 키즈헬스케어센터): ① '서 약 자      인(사용인감)' — '인' 뒤 괄호 덧붙임이 있어 서명 줄로 못 봄
+    ② '접 수 번 호 | 안성시 2026-' — 참조번호 '안성시 공고 제2026-3071호'의 번호를 '-' 뒤에
+    ③ 경영상태 '신용상태평가 | AAA~BBB0 | 4.0점 …'(종류 칸 없이 등급 범위만) — 등급은 썼는데 점수 칸이 빔
+    ④ '신인도(6점) … 신뢰도(기술보유)' — '기술보유' 낱말로 특허 항목이 돼 만점이 안 들어감(신인도는 늘 만점), '총계' 줄도 합계
+    ⑤ '2. 회사연혁' 문단 아래 '연월일 | 내 용 | 비 고' 표 — 제목이 표 밖이라 연혁 표로 못 봄."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, cs=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                         f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/></hp:tc>')
+    tbl = lambda rows: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    receipt = tbl([[c(0, 0, "접 수 번 호"), c(1, 0, " 안성시 2026-")], [c(0, 1, "업체명"), c(1, 1, "")]])
+    ev = [[c(0, 0, "항목"), c(1, 0, "세부항목", 2), c(3, 0, "배점"), c(4, 0, "점수"), c(5, 0, "비 고")],
+          [c(0, 1, "총계", 3), c(3, 1, "10.0점"), c(4, 1, ""), c(5, 1, "")],
+          [c(0, 2, "경영상태평가(4점)", 1, 4), c(1, 2, "신용상태평가", 1, 4), c(2, 2, "AAA~BBB0"), c(3, 2, "4.0점"), c(4, 2, "", 1, 4), c(5, 2, "", 1, 4)],
+          [c(2, 3, "BBB-~BB-"), c(3, 3, "3.8점")], [c(2, 4, "B+~B-"), c(3, 4, "3.6점")], [c(2, 5, "배 점"), c(3, 5, "총 4.0점")],
+          [c(0, 6, "신인도(6점)", 1, 3), c(1, 6, "품질관리 등 신뢰도(기술보유)", 1, 3), c(2, 6, "해당 0점"), c(3, 6, ""), c(4, 6, "", 1, 3), c(5, 6, "", 1, 3)],
+          [c(2, 7, "해당없음 2점"), c(3, 7, "")], [c(2, 8, "배 점"), c(3, 8, "총 6.0점")]]
+    hist = tbl([[c(0, 0, "연월일"), c(1, 0, "내 용"), c(2, 0, "비 고")]] + [[c(0, r, ""), c(1, r, ""), c(2, r, "")] for r in (1, 2, 3)])
+    body = receipt + tbl(ev) + para("2. 회사연혁") + hist + para("                서 약 자                 인(사용인감)")
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "신용평가등급": "BB+"})
+    v.history = [{"연월일": "2009.09", "내용": "법인 설립"}, {"연월일": "2012.08", "내용": "사업자 등록"}]
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v, notice_no=("2026", "3071"),
+              self_scores=SelfScore([], v, _dt.date(2026, 11, 23)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "| 안성시 2026-3071|" in text, text                                    # ②
+    assert "|총계|10.0점|9.8|" in text and "|AAA~BBB0|4.0점|3.8|" in text, text    # ③ ④ 총계
+    assert "|신인도(6점)|품질관리 등 신뢰도(기술보유)|해당 0점|6|" in text, text    # ④ 신인도 만점
+    assert "|연월일|내 용|비 고|2009.09|법인 설립|2012.08|사업자 등록|" in text, text  # ⑤
+    assert re.search(r"서 약 자\s+홍길동\s+인\(사용인감\)", text), text              # ①

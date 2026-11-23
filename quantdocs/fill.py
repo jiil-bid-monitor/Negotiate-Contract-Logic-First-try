@@ -2566,6 +2566,9 @@ def _page_slack(xml: str, tbl_end: int) -> int | None:
 _HIST_DATE_HEAD = re.compile(r"(?:년월일|연월일|년월|연월|일자|일시|날짜)")
 
 
+HIST_GAP = 567  # 이름표 아래 연혁 칸 위·아래 여백(HWPUNIT, 2mm)
+
+
 def _history_grid(cells: list[Cell]) -> tuple[Cell, Cell, list[int]] | None:
     """연혁을 줄마다 적는 표('년 월 일 | 내 용 | 비 고' 머리 + 빈 줄) — (날짜 머리 칸, 내용 머리 칸, 빈 줄 번호들).
     머리 줄 바로 위가 '주요연혁'·'연혁' 칸일 때만(11/23 사용자 요청: 창원산업진흥원 별지 제5호 일반현황 — 연혁을 '주요연혁' 칸에 통째로 넣었음)."""
@@ -2607,20 +2610,21 @@ def _history_grid(cells: list[Cell]) -> tuple[Cell, Cell, list[int]] | None:
             rows.append(r)
             r += 1
         if len(rows) >= 2:
-            return right[0], right[1], rows
+            # (11/23 사용자 — 주황 동그라미) 연혁은 이름표 아래 줄부터: 연월 = 이름표 아래 칸, 내용 = 그 오른쪽 칸(이름표 줄·맨 오른쪽 칸은 비움)
+            return lab, right[0], rows[1:]
     return None
 
 
 def _expand_history_rows(xml: str, need: int) -> tuple[str, bool]:
     """연혁 표의 빈 줄이 연혁보다 적으면 가운데 빈 줄을 같은 모양으로 늘림(원래 넣던 연혁을 빼지 않게 — 11/13 규칙). 칸은 지우거나 합치지 않음
     (11/23 사용자: '칸 자체를 없애면 안 되지' — 합친 칸은 한글에서 깨졌음). 마지막 줄은 아래 테두리가 있어서 복사하면 중간에 가로선이 생김 —
-    줄이 셋 이상이면 끝에서 둘째 줄을 복사해 마지막 줄 앞에 넣음. 뒤 줄 번호·표 줄 수·표 높이를 함께 고침. 늘렸으면 (새 xml, True)."""
+    빈 줄이 둘 이상이면 끝에서 둘째 줄을 복사해 마지막 줄 앞에 넣음. 뒤 줄 번호·표 줄 수·표 높이를 함께 고침. 늘렸으면 (새 xml, True)."""
     for ts, te in _all_tables(xml):
         cells = _cells(xml, (ts, te))
         grid = _history_grid(cells)
         if grid is None or len(grid[2]) >= need:
             continue
-        last = grid[2][-2] if len(grid[2]) >= 3 else grid[2][-1]  # 복사할 줄(그 뒤에 사본을 넣음)
+        last = grid[2][-2] if len(grid[2]) >= 2 else grid[2][-1]  # 복사할 줄(그 뒤에 사본을 넣음)
         trs = _spans(xml, "tr", ts + 1, te)
         own = [(s0, e0) for s0, e0 in trs if not any(a < s0 and e0 < b for a, b in trs if (a, b) != (s0, e0))]
         row_of = lambda seg: int(re.findall(r'rowAddr="(\d+)"', seg)[-1]) if re.search(r'rowAddr="\d+"', seg) else -1
@@ -3156,6 +3160,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             para_override: dict[int, str] = {}  # 칸 시작 위치 → 쓸 문단 모양(번호 칸 가운데 정렬 맞춤)
             base_char: dict[int, str] = {}  # 칸 시작 위치 → 쓸 글자 모양(안내 글 칸은 이름표 칸 모양으로)
             track_marks: list[str] = []  # 실적을 넣은 칸의 글 — 그 표가 한 쪽보다 길면 쪽에서 나뉘게(11/12)
+            hist_gap: set[int] = set()  # 이름표 아래 연혁 칸 — 위 정렬 + 칸 위·아래 여백(연혁마다 간격, 11/23)
             hist_at: set[int] = set()  # 연혁을 넣은 칸 시작 위치 — 왼쪽 정렬 + 날짜 뒤에 맞춘 내어쓰기(11/11)
             rep.one_line.clear()  # 칸 위치는 구역마다 다름
             rep.word_cells.clear()
@@ -3313,6 +3318,8 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                     pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[cell.start:cell.end])
                                     if pm and chars is not None:  # 연월·내용 칸은 왼쪽 정렬(11/23 사용자 — 가운데면 줄마다 시작 위치가 달라 보임)
                                         para_override[cell.start] = chars.left_any(pm.group(1))
+                                    if date_h.start == c.start:  # 이름표 아래 모양 — 연혁마다 간격(11/23 사용자 '가독성 좋게')
+                                        hist_gap.add(cell.start)
                         rep.filled.append(f"연혁 표 → {min(len(vault.history), len(grid_rows))}줄")
                         continue
                     if "연혁" in core and len(core) <= 8 and vault.history:
@@ -3637,6 +3644,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     continue
                 if cell.start in valign:
                     seg = _set_valign(seg, valign[cell.start])
+                if cell.start in hist_gap:
+                    # 연월이 내용 첫 줄과 같은 높이에 오게 위 정렬, 칸 위·아래 여백 2mm씩(연혁 사이 4mm) — 이 칸만 따로 여백(hasMargin)
+                    seg = _set_valign(seg, "TOP")
+                    seg = re.sub(r'(<(?:[\w.-]+:)?tc\b[^>]*\bhasMargin=")\d(")', r"\g<1>1\2", seg, count=1)
+                    seg = re.sub(r'(<(?:[\w.-]+:)?cellMargin\b[^>]*\btop=")\d+("[^>]*\bbottom=")\d+(")',
+                                 rf"\g<1>{HIST_GAP}\g<2>{HIST_GAP}\3", seg, count=1)
                 if cell.start in para_override:
                     seg = re.sub(r'(<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef=")\d+(")', rf"\g<1>{para_override[cell.start]}\2", seg, count=1)
                 elif chars is not None and cell.start in rep.word_cells:

@@ -599,6 +599,11 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                     edits.append((c, [f"총 실적 금액 : {_in_unit(total, amount_head)} {unit}"], False))
                 elif _sq(c.text) == "건":  # '실적 누계 | 건 | 천원' 줄(11/05 국민안전체험관 서식 7)
                     edits.append((c, [f"{n}건"], False))
+                elif re.fullmatch(r"건/(?:천원|백만원|원)", _sq(c.text)):
+                    # '계 | 건 / 천 원' 한 칸(11/23 사용자 지적: 장수군 유사용역 실적표 — 계 줄이 비었음). 건수와 합계 금액을 한 칸에,
+                    # 금액은 다른 줄처럼 원 단위 숫자만(11/12 '합계도 숫자만 — 다른 줄과 같게')
+                    edits.append((c, [f"{n}건 / {_in_unit(total, amount_head)}"], False))
+                    rep.one_line.add(c.start)
                 elif _sq(c.text) in ("원", "천원", "백만원"):  # 합계도 숫자만 — 다른 줄과 같게(11/12 사용자 요청)
                     edits.append((c, [_in_unit(total, amount_head)], False))
                     rep.one_line.add(c.start)

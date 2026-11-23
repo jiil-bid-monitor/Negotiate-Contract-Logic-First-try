@@ -4624,6 +4624,22 @@ def test_history_rows_without_header_and_license_label(tmp_path: Path):
     assert 'rowCnt="5"' in sec
 
 
+def test_track_total_count_and_amount_one_cell(tmp_path: Path):
+    """11/23 사용자 지적: 유사용역 실적표 끝 '계 | 건 / 천 원'(한 칸에 건수·금액 자리표시)이 비었음 → 'N건 / 합계'(금액은 다른 줄처럼 원 단위 숫자)."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t, span=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                     f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/></hp:tc>')
+    heads = ["연번", "용 역 명", "용역기간(완료구분)", "계약금액(천원)", "발주처"]
+    rows = [[c(i, 0, h) for i, h in enumerate(heads)]]
+    rows += [[c(0, r, str(r))] + [c(i, r, "") for i in range(1, 5)] for r in (1, 2)]
+    rows.append([c(0, 3, "계"), c(1, 3, "건  /     천 원", 4)])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    tracks = [{"사업명": "가 사업", "계약금액(원)": 1000000000, "준공일": "2025-01-01"},
+              {"사업명": "나 사업", "계약금액(원)": 250000000, "준공일": "2025-06-01"}]
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}), tracks=tracks)
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "|계|2건 / 1,250,000,000|" in text, text
 def test_history_blank_area_merged_and_lines(tmp_path: Path):
     """11/23 사용자: '별도 표 없이 빈 여백이면 기존 규칙대로 「연도.월  내용」' — '주요연혁' 옆·아래가 안쪽 선이 모두 없는 숨은 칸(편집 화면에만 점선)이면
     표로 보지 않고 칸을 하나로 합쳐 한 줄씩. 바깥 테두리(오른쪽·위·아래)는 원래 칸 것. 안쪽 선이 보이는 표는 앞 규칙(연월·내용 칸에 나눠)."""

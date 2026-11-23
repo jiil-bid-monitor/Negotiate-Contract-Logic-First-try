@@ -860,12 +860,16 @@ def _blank_prefix(prefix: str, chars: "_Chars") -> str | None:
             # 같은 너비의 전각 빈칸(U+3000)으로 바꿈(어림 없이 같은 너비). 쌍점·숫자 같은 반각 글자만 너비를 어림해 빈칸으로
             # (예전엔 모든 글자를 너비 어림으로 빈칸 수를 셈 — 한글에서 줄이 몇 mm 오른쪽으로 밀렸음)
             sp = chars.char_width(cur, " ") or 1
+            # (11/23 사용자 지적: 서약서 '주    소 : 강원특별자치도 / 정선군 남면'의 둘째 줄이 '강'보다 반 글자쯤 왼쪽) — 전각 빈칸(U+3000)은
+            # 한글에서 한글 한 글자보다 좁게 찍힘(캡처로 재면 약 3/4). '글꼴에 어울리는 빈칸'이 꺼진 글자 모양은 빈칸 = 글자 크기 절반이라
+            # 한글 한 글자 = 빈칸 둘(장평·자간도 똑같이 받음 — 정확히 같은 너비). 켜진 모양만 예전처럼 전각 빈칸
+            full = "  " if 'useFontSpace="1"' not in chars._block(cur) else "\u3000"
             buf, rest = [], 0.0
             for ch in unescape(part):
                 if ch == " ":
                     buf.append(" ")
                 elif _full_width(ch):
-                    buf.append("\u3000")
+                    buf.append(full)
                 else:
                     rest += chars.char_width(cur, ch)
                     if rest >= sp / 2:

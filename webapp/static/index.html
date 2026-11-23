@@ -608,6 +608,8 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 .decision-reason b { color: var(--muted); font-weight: 600; margin-right: 4px; }
 .decision-who { margin-left: auto; color: var(--muted); }
 .decision-who b { color: var(--ink-strong); }
+.pbtn.next-step { border-color: var(--brand); color: var(--brand); font-weight: 600; margin-right: 10px; }
+.pbtn.next-step:hover { background: var(--brand); color: #fff; }
 .decision .linkish { padding-left: 8px; }
 .reason-form { display: flex; gap: 6px; flex: 1 1 360px; min-width: 0; }
 .reason-form input {
@@ -2016,6 +2018,7 @@ async function loadNotices(refresh) {
     if (data.job?.running && !jobTimer) watchJob(data.job, false);
     // 결과 보기 전용 서버(NAS)엔 수집 버튼이 없다 — 수집은 서버 PC 화면에서 (webapp/resultpush.py)
     const viewer = data.canCollect === false;
+    IS_VIEWER = viewer;
     $("refresh").style.display = $("days").style.display = $("load").style.display = viewer ? "none" : "";
     $("customRange").hidden = viewer || $("days").value !== "custom";  // 판단은 10초마다 저절로 받음
     // 투찰 계산기·정량평가서는 서버 PC에서만 — 투찰 기록이 두 곳에 쌓이지 않게, 정량평가서는 NAS에 OCR이 없어서 (11/11 사용자 결정)
@@ -3232,7 +3235,31 @@ const REASON_HINT = {
  * 참가여부 버튼 아래 한 줄 — 누가 언제 무엇으로 판단했고 사유가 무엇인지, 되돌리기.
  * 판단했는데 사유가 비어 있으면 사유 입력칸을 바로 보여 준다 (판단 기록에 사유와 함께 쌓이게).
  */
-function decisionRow(p) {
+/** 보기 전용(NAS) 화면 — 투찰 계산기·정량평가서가 없어 다음 일 버튼도 안 보임 */
+let IS_VIEWER = false;
+/** 참가로 정한 공고만 — 다음 일로 바로(11/23 사용자): 협상·규격가격 → 정량평가서, 그 밖(입찰·수의) → 투찰 계산기. 공고번호를 채워 불러옴 */
+function nextStepButton(p) {
+  if (IS_VIEWER || p?.status !== "참가" || p.meta?.sourceType === "사전규격") return "";
+  const quant = ["협상", "규격가격동시"].includes(p.meta?.bidMethod);
+  return `<button type="button" class="pbtn next-step" data-next="${quant ? "quant" : "calc"}" data-next-no="${esc(p.noticeNo)}">${quant ? "정량평가서 만들기 ›" : "투찰 계산 ›"}</button>`;
+}
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-next]");
+  if (!b) return;
+  const no = b.dataset.nextNo;
+  if (b.dataset.next === "calc") {
+    showTab("calc");
+    $("cNo").value = no;
+    return void $("cLookup").click();
+  }
+  showTab("quant");  // 정량평가서는 같은 출처 iframe — 다 뜬 뒤 공고번호를 넣고 불러오기
+  const f = $("quantFrame");
+  const fill = () => { const d = f.contentDocument; if (d?.getElementById("no")) { d.getElementById("no").value = no; d.getElementById("go").click(); } };
+  if (f.contentDocument?.readyState === "complete" && f.contentDocument.getElementById("no")) fill();
+  else f.addEventListener("load", fill, { once: true });
+});
+
+function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 일 버튼은 그 줄 오른쪽에 따로)
   if (!p) return "";
   const decided = DECISIONS.includes(p.status);
   // 되돌리기는 참가·보류·불참으로 판단한 카드에만 (2026-11-18 사용자 요청 — 판단 전 카드엔 안 보임, 판단 기록 탭과 같은 규칙)
@@ -3254,7 +3281,7 @@ function decisionRow(p) {
     ${p.reason
       ? `<span class="decision-reason"><b>${esc(p.status)} 사유</b> ${esc(p.reason)}</span><button type="button" class="linkish" data-preason>사유 고치기</button>`
       : form}
-    <span class="decision-who">${who}${undo}</span>
+    <span class="decision-who">${next ? nextStepButton(p) : ""}${who}${undo}</span>
     ${p.reason ? `<div class="reason-edit" hidden>${form}</div>` : ""}
   </div>`;
 }
@@ -3549,13 +3576,13 @@ function renderLog() {
         : [`${esc(p.decidedBy || p.owner || "—")}${p.decidedAt ? ` ${esc(fmtDT(p.decidedAt).slice(5, 10).replace("-", "/"))}` : ""}`])
       .filter(Boolean).join(" · ");
     const act = st === "미판단" ? `<button type="button" class="log-go" data-goto="${esc(p.noticeNo)}">판단하기</button>`
-      : inList ? `<button type="button" class="linkish" data-goto="${esc(p.noticeNo)}">목록에서 보기</button>` : "";
+      : nextStepButton(p) + (inList ? `<button type="button" class="linkish" data-goto="${esc(p.noticeNo)}">목록에서 보기</button>` : "");
     const pick = st === "미판단" && picking ? `<input type="checkbox" class="log-pick" data-pick="${esc(p.noticeNo)}"${LOG_PICK.has(p.noticeNo) ? " checked" : ""} aria-label="한꺼번에 불참할 공고로 고르기">` : "";
     return `<div class="log-row log-line${pick ? " pickable" : ""}" data-part="${esc(p.noticeNo)}" data-title="${esc(p.title || "")}">
       <span class="log-badge">${pick}<span class="badge pstat ${PART_TONE[st]}">${esc(st)}</span></span>
       <div class="log-main"><h3>${title}</h3><p class="log-meta">${sub}</p>${undecided ? "" : `<p class="log-why">${why || `<span class="faint-note">사유 없음</span>`}</p>`}
         ${inList || st !== "미판단" ? "" : `<span class="log-judge" hidden>${DECISIONS.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p.status === s ? "on" : ""}" data-pstatus="${s}">${s}</button>`).join("")}</span>`}
-        ${!undecided && !p.reason && !(p.tags || []).length ? decisionRow(p) : ""}</div>
+        ${!undecided && !p.reason && !(p.tags || []).length ? decisionRow(p, false) : ""}</div>
       <div class="log-due${m.deadline && new Date(m.deadline) < new Date() ? " past" : ""}">${dueText(m.deadline)}</div>
       <div class="log-act">${act}${!undecided && p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단으로 되돌립니다">되돌리기</button>` : ""}</div>
     </div>`;

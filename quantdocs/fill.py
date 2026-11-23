@@ -3005,6 +3005,35 @@ def _one_dec(v: float) -> str:
     return t if "." in t else t + ".0"
 
 
+def _staff_count_edits(cells: list[Cell], vault, rep: FillReport) -> list[tuple[Cell, list[str], bool]]:
+    """기술자 보유현황 표 '계' 열 — 등급별 인원(화면에서 고른 사람, 안 골랐으면 인력목록 재직자), '계' 줄 = 합(11/23 사용자 요청).
+    분야별 칸(정보통신·소프트웨어 …)은 인력 자료에 분야가 없어 비움. 기술사 줄이 없으면 기술사는 특급에 셈."""
+    from .selfscore import staff_count_table, staff_status
+
+    found = staff_count_table(cells)
+    if found is None or not (getattr(vault, "staff", None) or getattr(vault, "staff_pick_from_screen", False)):
+        return []
+    col, rows = found
+    count = {g: 0 for g in rows if g != "계"}
+    for p in staff_status(None, vault, date.today()):
+        if not p["counted"]:
+            continue
+        g = p["등급"] if p["등급"] in count else ("특급" if p["등급"] == "기술사" and "특급" in count else None)
+        if g:
+            count[g] += 1
+    by_pos = {(c.row, c.col): c for c in cells}
+    out = []
+    for g, r in rows.items():
+        cell = by_pos.get((r, col))
+        if cell is None or not cell.blank:
+            continue
+        n = sum(count.values()) if g == "계" else count[g]
+        out.append((cell, [str(n)], False))
+    if out:
+        rep.filled.append("기술자 보유현황 계 → " + " · ".join(f"{g} {n}명" for g, n in count.items()) + f" (계 {sum(count.values())}명, 분야별 칸은 직접)")
+    return out
+
+
 def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | None = None) -> list[tuple[Cell, list[str], bool]]:
     """자기평가 심사표('자기평점'·'평점' 칸)에 점수 — 제안요청서 배점표·계산 조건대로, 서식 배점 기준과 다르면 서식 기준,
     계산식끼리 다르면 유리한 쪽(11/05 사용자 결정, `selfscore.score_form`). '계' = 모든 줄 점수가 있을 때만 합계."""
@@ -3201,6 +3230,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 score_cells = {id(e[0]) for e in scored} | {id(r.cell) for r in _rf(cells) if r.cell is not None}
                 if not sign_only:
                     edits += _deduction_edits(cells, rep, tally)
+                    edits += _staff_count_edits(cells, vault, rep)  # 기술자 보유현황 표 '계' 열(11/23)
                     if not scored:  # 자기평가표 아래 따로 놓인 '합 계 | 20 점 | __' 표
                         edits += _total_edits(cells, tally, rep)
                 for c in cells:

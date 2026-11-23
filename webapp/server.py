@@ -337,7 +337,16 @@ def make_handler(app: App):
                 })
             if url.path == "/api/docs-alert":
                 # 상단 바 종 아이콘 — 텔레그램 갱신 알림과 같은 서류(30일 안에 끝나거나 상태를 표시해 둔 지난 서류) (2026-11-23)
-                return self._json({"docs": docexpiry.web_alert(datetime.now().date())})
+                # ready = 서류 폴더가 보임 — 갱신할 서류가 없어도 종을 띄워 '전체 서류 관리'로 들어가게
+                return self._json({"docs": docexpiry.web_alert(datetime.now().date()),
+                                   "ready": (docexpiry.docs_dir() / "[최신 서류]").is_dir()})
+            if url.path == "/api/docs-all":  # 서류 관리 창 — 전체 서류(2026-11-23)
+                from . import docupload
+
+                folder = docexpiry.docs_dir()
+                if not (folder / "[최신 서류]").is_dir():
+                    return self._json({"docs": [], "error": "회사서류_최신 폴더를 찾지 못했습니다"})
+                return self._json({"docs": docupload.all_docs(folder, datetime.now().date())})
             if url.path == "/api/bidcalc":
                 # 투찰 계산기 — 공고번호로 기초금액·하한율·A값 불러오기 (서비스키는 서버에만)
                 no = q.get("no", [""])[0].strip()
@@ -535,6 +544,8 @@ def make_handler(app: App):
                     return self._quant("POST", url.path[len("/api/quant"):], data)
                 if url.path == "/api/docs-upload":
                     return self._json(docs_upload(data))
+                if url.path == "/api/docs-manage":
+                    return self._json(docs_manage(data))
                 if url.path == "/api/collect":
                     if app.viewer:
                         raise RuntimeError(VIEWER_MESSAGE)
@@ -720,10 +731,7 @@ def docs_upload(data: dict[str, Any]) -> dict[str, Any]:
     folder = docexpiry.docs_dir()
     if not (folder / "[최신 서류]").is_dir():
         raise RuntimeError("회사서류_최신/[최신 서류] 폴더를 찾지 못했습니다 — NAS 웹앱에서 올려 주세요")
-    kind = str(data.get("kind") or "")
-    current = dict(docexpiry.read_docs(folder))
-    if kind not in current and kind not in docupload.kinds(folder):  # 파일 이름이 되므로 아는 종류만
-        raise ValueError("모르는 서류 종류입니다")
+    kind = _known_kind(folder, data, allow_new=bool(data.get("new")))
     try:
         pdf = base64.b64decode(str(data.get("pdf") or ""), validate=True)
     except ValueError as err:
@@ -731,14 +739,45 @@ def docs_upload(data: dict[str, Any]) -> dict[str, Any]:
     if not pdf.startswith(b"%PDF"):
         raise ValueError("PDF 파일만 올릴 수 있습니다")
     today = datetime.now().date()
-    if data.get("action") == "read":
-        base = current.get(kind)
-        found = docupload.found_expiry(docupload.pdf_text(pdf))
-        return {"found": found.isoformat() if found else None,
-                "cands": [docupload.plus_years(base, n).isoformat() for n in (1, 2)] if base else []}
+    if data.get("action") == "read":  # PDF인지만 보고 만료일 후보 — 날짜는 PDF에서 읽지 않고 사람이 고름(2026-11-23 사용자 결정)
+        base = docupload.date_base(folder, kind, today)
+        return {"cands": [docupload.plus_years(base, n).isoformat() for n in (1, 2)]}
     end = date.fromisoformat(str(data["end"])) if data.get("end") else None
     saved, cert, notes = docupload.save_doc(folder, kind, pdf, end, today)
     return {"saved": saved, "cert": cert, "notes": notes, "docs": docexpiry.web_alert(today)}
+
+
+def _known_kind(folder: Path, data: dict[str, Any], allow_new: bool = False) -> str:
+    """요청의 서류 종류 — 파일 이름이 되므로 아는 종류만, '새 서류 추가'면 쓸 수 있는 이름만."""
+    from . import docupload
+
+    kind = str(data.get("kind") or "")
+    if kind in dict(docexpiry.read_docs(folder)) or kind in docupload.kinds(folder):
+        return kind
+    if allow_new and (name := docupload.new_kind_name(kind)):
+        return name
+    raise ValueError("서류 이름을 다시 적어 주세요 (40자 안, 파일 이름에 못 쓰는 기호 빼고)" if allow_new else "모르는 서류 종류입니다")
+
+
+def docs_manage(data: dict[str, Any]) -> dict[str, Any]:
+    """서류 관리 창 — 'edit' = 새 파일 없이 유효기간만 고치기, 'remove' = 목록·알림에서 빼기(파일은 [이전 서류]로) (2026-11-23)."""
+    from datetime import date
+
+    from . import docupload
+
+    folder = docexpiry.docs_dir()
+    if not (folder / "[최신 서류]").is_dir():
+        raise RuntimeError("회사서류_최신/[최신 서류] 폴더를 찾지 못했습니다 — NAS 웹앱에서 해 주세요")
+    kind, today = _known_kind(folder, data), datetime.now().date()
+    if data.get("action") == "edit":
+        end = date.fromisoformat(str(data["end"])) if data.get("end") else None
+        message = docupload.edit_doc(folder, kind, end, today)
+    elif data.get("action") == "remove":
+        moved, cert = docupload.remove_doc(folder, kind, today)
+        message = f"파일 {moved}개를 [이전 서류]로 옮겼습니다." + (f"\n{cert}" if cert else "")
+    else:
+        raise ValueError("action은 edit·remove")
+    return {"message": message, "docs": docupload.all_docs(folder, today), "alert": docexpiry.web_alert(today)}
 
 
 def contract_lookup():

@@ -171,28 +171,26 @@ class TestBulk(unittest.TestCase):
                 r.json = lambda: {"ok": True, "result": {"message_id": len(sent)}}
                 return r
 
-        texts = iter(["유효기간 : 2025.11.30 ~ 2027.11.30", "스캔본"])
-        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder), "TELEGRAM_CHAT_ID": "-1"}),                 mock.patch.object(docupload, "pdf_text", lambda data: next(texts)),                 mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"):
+        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder), "TELEGRAM_CHAT_ID": "-1"}),                                  mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"):
             bot = tb.TelegramBot("T", {"-1"}, lambda: None, Session())
             bot.uploader.download = lambda file_id: b"%PDF-1.4"
             chat = {"chat": {"id": -1}}
             self.assertTrue(bot.handle_apply({"id": "1", "data": "e:all", "message": chat}))
             self.assertIn("1건 더", sent[-1]["text"])
             pdf = {"file_name": "a.pdf", "mime_type": "application/pdf", "file_id": "f"}
-            # 첫 서류: PDF 글자에서 날짜를 읽어 '맞음' 버튼
+            # 첫 서류: 날짜는 PDF에서 읽지 않고 버튼으로(11/23 사용자 결정) — 지금 만료일 2026-11-30에서 1년 뒤
             bot.uploader.handle_message({**chat, "document": pdf, "message_id": 50, "reply_to_message": {"message_id": len(sent)}})
-            self.assertIn("2027-11-30", sent[-1]["text"])
-            self.assertTrue(bot.uploader.handle_callback({"id": "2", "data": "x:ok", "message": {**chat, "message_id": len(sent)}}))
+            self.assertEqual(sent[-1]["reply_markup"]["inline_keyboard"][0][0]["text"], "1년 → 2027-11-30")
+            self.assertTrue(bot.uploader.handle_callback({"id": "2", "data": "x:y1", "message": {**chat, "message_id": len(sent)}}))
             self.assertIn("(그리다) 나", sent[-1]["text"], "다음 서류를 이어서 묻는다")
-            # 둘째 서류: 못 읽으면 답장으로 날짜
+            # 둘째 서류: 직접 입력 → 답장으로 날짜
             bot.uploader.handle_message({**chat, "document": pdf, "message_id": 51, "reply_to_message": {"message_id": len(sent)}})
-            self.assertIn("못 읽었습니다", sent[-1]["text"])
-            self.assertEqual(sent[-1]["reply_markup"]["inline_keyboard"][0][0]["text"], "1년 → 2027-12-01", "지금 만료일에서 1년 뒤")
-            self.assertTrue(bot.uploader.handle_callback({"id": "3", "data": "x:y1", "message": {**chat, "message_id": len(sent)}}))
+            self.assertEqual(sent[-1]["reply_markup"]["inline_keyboard"][0][0]["text"], "1년 → 2027-12-01")
+            self.assertTrue(bot.uploader.handle_callback({"id": "3", "data": "x:type", "message": {**chat, "message_id": len(sent)}}))
+            bot.uploader.handle_message({**chat, "text": "2027-12-01", "message_id": 52, "reply_to_message": {"message_id": len(sent)}})
         got = dict(D.read_cert(self.folder / D.CERT_FILE))
         self.assertEqual((got["(그리다) 가"], got["(그리다) 나"]), (date(2027, 11, 30), date(2027, 12, 1)))
         self.assertEqual(len(list((self.folder / "[최신 서류]").glob("*.pdf"))), 2)
-        self.assertEqual(docupload.found_expiry("유 효 기 간: 2026-04-01 ~ 2027-03-31"), date(2027, 3, 31))
 
     def test_web_alert(self):
         import os
@@ -215,10 +213,9 @@ class TestBulk(unittest.TestCase):
 
         pdf = base64.b64encode(b"%PDF-1.4 test").decode()
         with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder)}), \
-                mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"), \
-                mock.patch.object(docupload, "pdf_text", lambda data: "유효기간 : 2025.12.01 ~ 2027.12.01"):
+                mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"):
             got = server.docs_upload({"action": "read", "kind": "(그리다) 나", "pdf": pdf})
-            self.assertEqual(got, {"found": "2027-12-01", "cands": ["2027-12-01", "2028-12-01"]})
+            self.assertEqual(got, {"cands": ["2027-12-01", "2028-12-01"]}, "날짜는 PDF에서 읽지 않고 1년·2년 뒤 후보만")
             saved = server.docs_upload({"action": "save", "kind": "(그리다) 나", "pdf": pdf, "end": "2027-12-01"})
             self.assertIn("2027-12-01로 고쳤습니다", saved["cert"])
             for bad in ({"kind": "../../x", "pdf": pdf}, {"kind": "(그리다) 나", "pdf": base64.b64encode(b"hello").decode()}):
@@ -226,3 +223,54 @@ class TestBulk(unittest.TestCase):
                     server.docs_upload({"action": "read", **bad})
         self.assertEqual(dict(D.read_cert(self.folder / D.CERT_FILE))["(그리다) 나"], date(2027, 12, 1))
         self.assertTrue(any(p.name.startswith("(그리다) 나_") for p in (self.folder / "[최신 서류]").glob("*.pdf")))
+
+
+class TestDocManage(unittest.TestCase):
+    """서류 관리(2026-11-23): 표 이름 ≠ 파일 종류일 때 옛 파일을 찾고, 추가·수정·빼기."""
+
+    def setUp(self):
+        from under100m import docs
+
+        self.f = Path(tempfile.mkdtemp())
+        (self.f / "[최신 서류]").mkdir()
+        wb = openpyxl.Workbook()
+        for row in [("신용평가", "27.6.15", None, None), ("이노비즈", "29.7.2", None, None)]:
+            wb.active.append(row)
+        wb.save(self.f / D.CERT_FILE)
+        for name in ["신용평가등급확인서_2026-06-16_유효2027-06-15.pdf", "기술혁신형 중소기업(이노비즈) 확인서_2026-08-07_유효2029-07-02.pdf",
+                     "이노비즈 인증서_2026-06-16_유효2027-06-15.pdf", "사업자등록증_2026-01-05.pdf"]:
+            (self.f / "[최신 서류]" / name).write_bytes(b"%PDF")
+        docs.run(self.f, date(2026, 11, 1), lambda t: None, settle=-1, alert_due=False)
+
+    def test_table_name_maps_to_file_kind(self):
+        from webapp import docupload as U
+
+        self.assertEqual(U.file_kind(self.f, "신용평가"), "신용평가등급확인서")
+        self.assertEqual(U.file_kind(self.f, "이노비즈"), "기술혁신형 중소기업(이노비즈) 확인서", "표 날짜와 같은 유효기간의 파일")
+        U.save_doc(self.f, "신용평가", b"%PDF new", date(2028, 6, 15), date(2026, 11, 23))
+        latest = sorted(p.name for p in (self.f / "[최신 서류]").glob("신용*"))
+        self.assertEqual(latest, ["신용평가등급확인서_2026-11-23_유효2028-06-15.pdf"], "예전엔 '신용평가_…' 새 종류가 생기고 옛 파일이 남았음")
+        self.assertTrue((self.f / "[이전 서류]" / "신용평가등급확인서_2026-06-16_유효2027-06-15.pdf").exists())
+
+    def test_edit_remove_and_list(self):
+        from webapp import docupload as U
+
+        msg = U.edit_doc(self.f, "신용평가", date(2027, 6, 30), date(2026, 11, 23))
+        self.assertIn("신용평가등급확인서_2026-06-16_유효2027-06-30.pdf", msg)
+        self.assertEqual(dict(D.read_cert(self.f / D.CERT_FILE))["신용평가"], date(2027, 6, 30))
+        with mock_states():
+            kinds = [d["kind"] for d in U.all_docs(self.f, date(2026, 11, 23))]
+        self.assertIn("사업자등록증", kinds, "날짜 없는 서류도 관리 목록에")
+        self.assertNotIn("신용평가등급확인서", kinds, "표 이름(신용평가)과 겹치는 파일 종류는 한 번만")
+        moved, _ = U.remove_doc(self.f, "사업자등록증", date(2026, 11, 23))
+        self.assertEqual(moved, 1)
+        self.assertTrue((self.f / "[이전 서류]" / "사업자등록증_2026-01-05.pdf").exists())
+        self.assertEqual(U.new_kind_name("  조경식재공사업  등록증 "), "조경식재공사업 등록증")
+        for bad in ("", "../x", "a/b", "가" * 41):
+            self.assertIsNone(U.new_kind_name(bad))
+
+
+def mock_states():
+    from unittest import mock
+
+    return mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json")

@@ -389,6 +389,16 @@ body {
 .docbell-pop .choices button { font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); border-radius: 4px; }
 .docbell-pop .choices button[data-end]:not([data-end=""]):not([data-end="pick"]) { border-color: var(--brand); background: var(--brand); color: #fff; }
 .docbell-pop .choices input[type=date] { font: inherit; font-size: 12px; padding: 2px 4px; }
+.docbell-pop .linkbtn { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--brand); background: none; border: 0; padding: 0; cursor: pointer; }
+.docbell-pop .act { font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); border-radius: 4px; }
+.docbell-pop .choices button.danger { border-color: #d93025; background: #d93025; color: #fff; }
+.docbell-pop .err { color: #d93025; }
+.docmgr { padding: 0; border: 0; background: transparent; max-width: calc(100vw - 32px); }
+.docmgr::backdrop { background: rgba(0,0,0,.35); }
+.docmgr .docbell-pop { position: static; width: 560px; max-width: 100%; max-height: 80vh; overflow: auto; box-sizing: border-box; }
+.docmgr .mgrhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.docmgr .newname { font: inherit; font-size: 12.5px; padding: 4px 8px; flex: 1 1 220px; min-width: 0; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel); color: var(--ink); }
+.docmgr .mgrq { font: inherit; font-size: 12.5px; width: 100%; box-sizing: border-box; padding: 5px 8px; margin: 10px 0 2px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel); color: var(--ink); }
 @media (max-width: 760px) { .docbell-pop { right: auto; left: 0; } }  /* 좁은 화면은 종이 왼쪽에 있어서 */
 /* 바로가기 — 나라장터·21라인 (10/26 사용자 요청: 본문 오른쪽 빈 곳에 사이트 아이콘과 블록으로).
    본문 오른쪽에 자리가 없으면(1520px 이하) 본문 맨 위 줄 오른쪽에 한 줄로. */
@@ -4712,25 +4722,67 @@ if (AWARD_TEST) {  // 시험 페이지: 탭 줄을 숨기고 낙찰 후 서류 �
 boot();
 
 // 회사 서류 갱신 알림 종 — 텔레그램 알림과 같은 서류(2026-11-23). 새 서류 PDF는 여기서 바로 올림(끌어다 놓기·고르기)
-// → PDF에서 유효기간을 읽어 확인받고 저장(텔레그램 /upload와 같은 저장, 서버 /api/docs-upload)
-let DOC_BELL = [];
-const ddText = (d) => d.left < 0 ? `만료 뒤 ${-d.left}일` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
+// → 서류에 적힌 유효기간을 사람이 골라 저장(텔레그램 /upload와 같은 저장, 서버 /api/docs-upload).
+// '전체 서류 관리' 창(#docMgr)에서 새 서류 추가·유효기간 수정·빼기(/api/docs-all·/api/docs-manage) — 텔레그램 /upload·/remove와 같은 일
+let DOC_BELL = [], DOC_ALL = [], DOC_READY = false;
+const ddText = (d) => d.left == null ? "유효기간 없음" : d.left < 0 ? `만료 뒤 ${-d.left}일` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
+const UP = `<label class="upbtn">새 서류 올리기<input type="file" accept="application/pdf,.pdf" hidden></label>`;
+function docItem(d, extra = "") {
+  return `<li data-kind="${esc(d.kind)}"><div class="row1"><span class="name">${esc(d.kind)}</span>`
+    + `<span class="dd${d.left != null && d.left <= 7 ? " urgent" : ""}">${ddText(d)}</span></div>`
+    + (d.end ? `<div class="row2">만료일 ${esc(d.end)}${d.state ? ` · ${esc(d.state)}` : ""}</div>` : "")
+    + `<div class="up">${UP}${extra}</div><div class="upbox"></div></li>`;
+}
 function renderDocBell() {
-  $("docBell").hidden = !DOC_BELL.length;
+  $("docBell").hidden = !DOC_READY && !DOC_BELL.length;
   $("docBellN").textContent = DOC_BELL.length;
-  $("docBellPop").innerHTML = `<h3>회사 서류 갱신 알림 ${DOC_BELL.length}건</h3><ul>`
-    + DOC_BELL.map((d, i) => `<li data-i="${i}"><div class="row1"><span class="name">${esc(d.kind)}</span>`
-      + `<span class="dd${d.left <= 7 ? " urgent" : ""}">${ddText(d)}</span></div>`
-      + `<div class="row2">만료일 ${esc(d.end)}${d.state ? ` · ${esc(d.state)}` : ""}</div>`
-      + `<div class="up"><label class="upbtn">새 서류 올리기<input type="file" accept="application/pdf,.pdf" hidden></label>`
-      + `<span class="uphint">또는 PDF를 이 줄에 끌어다 놓기</span></div><div class="upbox"></div></li>`).join("")
-    + "</ul><p class=\"how\"><b>갱신했으면</b> 새로 받은 서류 PDF를 그 서류 줄에 올려 주세요.<br>"
-    + "PDF에서 유효기간을 읽어 확인한 뒤 저장하고, 인증서갱신.xlsx도 고칩니다.</p>";
+  $("docBellN").hidden = !DOC_BELL.length;
+  $("docBellPop").innerHTML = (DOC_BELL.length ? `<h3>회사 서류 갱신 알림 ${DOC_BELL.length}건</h3>` : "<h3>지금 갱신할 회사 서류가 없습니다</h3>") + "<ul>"
+    + DOC_BELL.map((d) => docItem(d, `<span class="uphint">또는 PDF를 이 줄에 끌어다 놓기</span>`)).join("")
+    + "</ul>" + (DOC_BELL.length ? "<p class=\"how\"><b>갱신했으면</b> 새로 받은 서류 PDF를 그 서류 줄에 올려 주세요.<br>"
+    + "서류에 적힌 유효기간을 골라 저장하면 인증서갱신.xlsx도 고칩니다.</p>" : "")
+    + `<p class="how"><button type="button" class="linkbtn" data-open-mgr>전체 서류 관리 (추가 · 수정 · 빼기) ›</button></p>`;
 }
 async function loadDocBell() {
-  if ($("docBellPop").querySelector(".upbox:not(:empty)")) return;  // 올리는 중엔 다시 그리지 않음
-  try { DOC_BELL = (await getJson("/api/docs-alert")).docs || []; } catch { return; }
+  if (document.querySelector("#docBellPop .upbox:not(:empty)")) return;  // 올리는 중엔 다시 그리지 않음
+  try { const r = await getJson("/api/docs-alert"); DOC_BELL = r.docs || []; DOC_READY = !!r.ready; } catch { return; }
   renderDocBell();
+}
+function renderDocMgr() {
+  const q = ($("docMgrQ")?.value || "").replace(/\s+/g, "");
+  const rows = DOC_ALL.filter((d) => !q || d.kind.replace(/\s+/g, "").includes(q));
+  $("docMgrList").innerHTML = rows.map((d) => docItem(d, `<button type="button" class="act" data-edit>날짜 수정</button>`
+    + `<button type="button" class="act" data-remove>빼기</button>`)).join("") || "<li>찾는 서류가 없습니다.</li>";
+}
+async function openDocMgr() {
+  if (!$("docMgr")) {
+    document.body.insertAdjacentHTML("beforeend", `<dialog id="docMgr" class="docmgr"><div class="docbell-pop">
+      <div class="mgrhead"><h3>전체 회사 서류</h3><button type="button" class="act" data-close>닫기</button></div>
+      <ul><li data-new="1"><div class="row1"><span class="name">새 서류 추가</span></div>
+        <div class="up"><input class="newname" placeholder="서류 이름 (예: 조경식재공사업 등록증)" maxlength="40">${UP}</div>
+        <div class="upbox"></div></li></ul>
+      <input id="docMgrQ" class="mgrq" placeholder="서류 찾기"><ul id="docMgrList"></ul>
+      <p class="how">빼기는 목록과 알림에서만 빼고, 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p></div></dialog>`);
+    wireDocs($("docMgr"));
+    $("docMgrQ").oninput = renderDocMgr;
+    $("docMgr").addEventListener("click", (ev) => { if (ev.target.closest("[data-close]") || ev.target === $("docMgr")) $("docMgr").close(); });
+  }
+  $("docBellPop").hidden = true;
+  $("docMgrList").innerHTML = "<li>불러오는 중…</li>";
+  $("docMgr").showModal();
+  try {
+    const r = await getJson("/api/docs-all");
+    DOC_ALL = r.docs || [];
+    renderDocMgr();
+    if (r.error) $("docMgrList").innerHTML = `<li class="err">${esc(r.error)}</li>`;
+  } catch (err) { $("docMgrList").innerHTML = `<li class="err">${esc(err.message)}</li>`; }
+}
+function afterSave() {  // 저장·수정·빼기 뒤 종과 관리 창 목록을 새로
+  (async () => {
+    try { DOC_BELL = (await getJson("/api/docs-alert")).docs || []; } catch {}
+    renderDocBell();
+    if ($("docMgr")?.open) { try { DOC_ALL = (await getJson("/api/docs-all")).docs || []; } catch {} renderDocMgr(); }
+  })();
 }
 function pdfBase64(file) {
   return new Promise((ok, bad) => {
@@ -4741,17 +4793,18 @@ function pdfBase64(file) {
   });
 }
 async function docUpload(li, file) {
-  const d = DOC_BELL[+li.dataset.i], box = li.querySelector(".upbox");
+  const isNew = !!li.dataset.new, box = li.querySelector(".upbox");
+  const kind = isNew ? li.querySelector(".newname").value.trim() : li.dataset.kind;
+  if (isNew && !kind) { box.innerHTML = `<p class="err">서류 이름을 먼저 적어 주세요.</p>`; return; }
   if (!file || !/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { box.innerHTML = `<p class="err">PDF 파일만 올릴 수 있습니다.</p>`; return; }
-  box.innerHTML = "<p>PDF를 읽는 중…</p>";
+  box.innerHTML = "<p>올리는 중…</p>";
   try {
     const pdf = await pdfBase64(file);
-    const r = await awardPost("/api/docs-upload", { action: "read", kind: d.kind, pdf });
+    // 만료일은 PDF에서 읽지 않고 늘 고르게(2026-11-23 사용자 결정 — 잘못 읽으면 엑셀을 다시 고쳐야 해서)
+    const r = await awardPost("/api/docs-upload", { action: "read", kind, pdf, new: isNew });
     const btn = (end, label) => `<button type="button" data-end="${end}">${esc(label)}</button>`;
-    box.innerHTML = (r.found
-      ? `<p>PDF에서 읽은 유효기간 끝나는 날: <b>${esc(r.found)}</b><br>서류와 같은지 확인해 주세요.</p><div class="choices">${btn(r.found, `맞음 — ${r.found}`)}</div>`
-      : `<p>PDF에서 유효기간을 못 읽었습니다(스캔본이면 글자가 없습니다).<br>서류에 적힌 유효기간 끝나는 날을 골라 주세요.</p>`
-        + `<div class="choices">${r.cands.map((c, n) => btn(c, `${n + 1}년 → ${c}`)).join("")}</div>`)
+    box.innerHTML = `<p><b>${esc(file.name)}</b><br>서류에 적힌 유효기간 끝나는 날을 골라 주세요.</p>`
+      + `<div class="choices">${r.cands.map((c, n) => btn(c, `${n + 1}년 → ${c}`)).join("")}</div>`
       + `<div class="choices other">다른 날짜 <input type="date" value="${esc(r.cands[0] || "")}"> <button type="button" data-end="pick">저장</button>`
       + ` ${btn("", "유효기간 없는 서류")} <button type="button" data-cancel>취소</button></div>`;
     box.onclick = async (ev) => {
@@ -4762,35 +4815,67 @@ async function docUpload(li, file) {
       if (b.dataset.end === "pick" && !end) return;
       box.innerHTML = "<p>저장하는 중…</p>";
       try {
-        const s = await awardPost("/api/docs-upload", { action: "save", kind: d.kind, pdf, end: end || null });
-        // 정리 안내('[회사 서류] … 옮김 1건 - 옛 파일 → [이전 서류]')에서 제목 줄만 빼고 보임 — 옛 파일이 어디로 갔는지
+        const s = await awardPost("/api/docs-upload", { action: "save", kind, pdf, end: end || null, new: isNew });
+        // 정리 안내('[회사 서류] … 옮김 1건 - 옛 파일 → [이전 서류]')에서 옮긴 파일만 — 옛 파일이 어디로 갔는지
         const moved = (s.notes || []).join("\n").split("\n").filter((l) => l.startsWith("- ") && l.includes("[이전 서류]"));
         box.innerHTML = `<p class="ok">✓ 저장했습니다: ${esc(s.saved)}${s.cert ? `<br>${esc(s.cert)}` : ""}`
           + (moved.length ? `<br>옛 서류는 [이전 서류]로 옮겼습니다:<br>${moved.map((l) => esc(l.slice(2).split(" → ")[0])).join("<br>")}` : "")
           + "</p>";
-        setTimeout(() => { DOC_BELL = s.docs || []; renderDocBell(); }, moved.length ? 6000 : 2500);
+        if (isNew) li.querySelector(".newname").value = "";
+        setTimeout(() => { box.innerHTML = ""; afterSave(); }, moved.length ? 6000 : 2500);
       } catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
     };
   } catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
 }
-$("docBellPop").addEventListener("change", (ev) => {
-  if (ev.target.type === "file") docUpload(ev.target.closest("li"), ev.target.files[0]);
-});
-$("docBellPop").addEventListener("dragover", (ev) => {
-  const li = ev.target.closest("li");
-  if (!li) return;
-  ev.preventDefault();
-  $("docBellPop").querySelectorAll("li.drop").forEach((x) => x !== li && x.classList.remove("drop"));
-  li.classList.add("drop");
-});
-$("docBellPop").addEventListener("dragleave", (ev) => ev.target.closest?.("li")?.classList.remove("drop"));
-$("docBellPop").addEventListener("drop", (ev) => {
-  const li = ev.target.closest("li");
-  if (!li) return;
-  ev.preventDefault();
-  li.classList.remove("drop");
-  docUpload(li, ev.dataTransfer.files[0]);
-});
+function docManage(li, action) {
+  const box = li.querySelector(".upbox"), kind = li.dataset.kind, d = DOC_ALL.find((x) => x.kind === kind) || {};
+  box.innerHTML = action === "edit"
+    ? `<p>새 파일 없이 유효기간만 고칩니다(잘못 적었을 때).</p><div class="choices other">유효기간 끝 <input type="date" value="${esc(d.end || "")}">`
+      + ` <button type="button" data-go="date">저장</button> <button type="button" data-go="none">유효기간 없는 서류</button> <button type="button" data-cancel>취소</button></div>`
+    : `<p><b>${esc(kind)}</b> — 목록과 알림에서 뺄까요?<br>파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>`
+      + `<div class="choices"><button type="button" data-go="remove" class="danger">빼기</button> <button type="button" data-cancel>취소</button></div>`;
+  box.onclick = async (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.hasAttribute("data-cancel")) { box.innerHTML = ""; return; }
+    const end = b.dataset.go === "date" ? box.querySelector("input[type=date]").value : null;
+    if (b.dataset.go === "date" && !end) return;
+    box.innerHTML = "<p>바꾸는 중…</p>";
+    try {
+      const r = await awardPost("/api/docs-manage", { action: action === "edit" ? "edit" : "remove", kind, end });
+      box.innerHTML = `<p class="ok">✓ ${esc(r.message).replace(/\n/g, "<br>")}</p>`;
+      setTimeout(() => { box.innerHTML = ""; afterSave(); }, 2500);
+    } catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+  };
+}
+function wireDocs(root) {  // 종 창·관리 창 같이 — 파일 고르기·끌어다 놓기·수정·빼기
+  root.addEventListener("change", (ev) => {
+    if (ev.target.type !== "file") return;
+    docUpload(ev.target.closest("li"), ev.target.files[0]);
+    ev.target.value = "";  // 같은 파일을 다시 골라도 다시 읽게
+  });
+  root.addEventListener("dragover", (ev) => {
+    const li = ev.target.closest("li[data-kind], li[data-new]");
+    if (!li) return;
+    ev.preventDefault();
+    root.querySelectorAll("li.drop").forEach((x) => x !== li && x.classList.remove("drop"));
+    li.classList.add("drop");
+  });
+  root.addEventListener("dragleave", (ev) => ev.target.closest?.("li")?.classList.remove("drop"));
+  root.addEventListener("drop", (ev) => {
+    const li = ev.target.closest("li[data-kind], li[data-new]");
+    if (!li) return;
+    ev.preventDefault();
+    li.classList.remove("drop");
+    docUpload(li, ev.dataTransfer.files[0]);
+  });
+  root.addEventListener("click", (ev) => {
+    if (ev.target.closest("[data-open-mgr]")) return void openDocMgr();
+    const act = ev.target.closest("[data-edit], [data-remove]");
+    if (act) docManage(act.closest("li"), act.hasAttribute("data-edit") ? "edit" : "remove");
+  });
+}
+wireDocs($("docBellPop"));
 $("docBellBtn").onclick = (e) => {
   e.stopPropagation();
   const pop = $("docBellPop");

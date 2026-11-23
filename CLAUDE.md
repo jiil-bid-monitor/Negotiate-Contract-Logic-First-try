@@ -56,7 +56,7 @@
 - 계기: 담당자가 웹앱은 매일 보는데 텔레그램은 안 열 때가 있음. 상단 바 이름 칸 왼쪽 🔔 + 빨간 건수 → 누르면 서류 목록(만료일·D-N, 7일 안·지남은 빨강, 상태 표시)
   + '텔레그램에서 /docs → 서류 버튼 → 갱신 완료' 안내. 처리는 텔레그램 버튼에서(웹앱에서 올리기는 안 만듦).
 - 대상 = 텔레그램 버튼과 같은 서류(`docexpiry.web_alert` = `_button_docs` — 30일 안 + 상태 표시한 지난 서류), `/api/docs-alert`, 10분마다 다시 읽음.
-  서류 폴더가 없는 웹앱(서버 PC)은 종이 안 보임 — NAS 웹앱에서만. 시험 `test_web_alert`. 브라우저로 1400·390px 확인. 서버 코드도 바뀜 — 웹앱 다시 켜기.
+  서버 PC 웹앱에서도 보이게(브랜치 `claude/doc-bell-server-pc`): 서버 PC `.env`에 `COMPANY_DOCS_DIR=//jiilserver/jiil-webapp/회사서류_최신`·`DOC_STATES_FILE=//jiilserver/jiil-webapp/Negotiate-Contract-Logic-First-try/data/doc_applying.json`(슬래시로 — start.sh가 .env를 bash로 읽어 역슬래시가 사라짐). 없으면 종이 안 보임. 시험 `test_web_alert`. 브라우저로 1400·390px 확인. 서버 코드도 바뀜 — 웹앱 다시 켜기.
 
 ## 2026-11-23 — 회사 서류 상태·갱신 버튼만으로 (#584 + 브랜치 `claude/docs-renew-upload`, 사용자 요청 — 그리다 5건)
 

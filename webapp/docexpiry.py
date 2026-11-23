@@ -152,7 +152,8 @@ def read_list(folder: Path) -> list[tuple[str, date]]:
 
 # 서류 상태 표시 (2026-11-12 사용자 요청) — '신청해야 함'(아직 신청 전)·'신청 중'(신청은 했고 서류만 아직 안 나옴).
 # 기록은 {'종류|날짜': 'n'|'p'}라 /upload로 새 날짜가 들어오면 저절로 풀린다. 알림·/docs 메시지의 버튼으로 바꾼다.
-APPLY_PATH = Path("data") / "doc_applying.json"
+# 서버 PC 웹앱은 NAS 웹앱 폴더의 기록을 읽게 DOC_STATES_FILE로 위치를 준다 — 종 아이콘(2026-11-23)
+APPLY_PATH = Path(os.environ.get("DOC_STATES_FILE") or Path("data") / "doc_applying.json")
 STATES = {"n": ("신청해야 함", "신청해야 함 — 갱신 신청을 해 주세요 (신청했으면 '신청 중'으로 바꿔 주세요)"),
           "p": ("신청 중", "신청 중 — 발급 받으면 /upload 로 최신 서류를 올려 주세요")}
 

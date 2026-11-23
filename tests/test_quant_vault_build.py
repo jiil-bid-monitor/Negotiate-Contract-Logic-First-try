@@ -999,9 +999,10 @@ def test_label_paragraph_value_wraps_under_value(tmp_path: Path):
     got = [(pid, text(x)) for pid, x in paras]
     i = next(k for k, (_p, t) in enumerate(got) if "강원특별자치도" in t)
     assert got[i][1].rstrip().endswith("무릉2로") and got[i + 1][1].strip() == "64(공장1층)", got
-    assert got[i][0] == got[i + 1][0] == "0"  # 문단 모양은 원래 것 그대로
+    # (11/23 사용자 무조건 규칙) 두 문단 모두 같은 '왼쪽 정렬 + 내어쓰기(앞부분 너비)' 사본 — 한글이 줄을 넘겨도 ':' 오른쪽에서 이어짐
+    assert got[i][0] == got[i + 1][0] != "0"
     assert '<hp:tab width="20000"' in paras[i + 1][1] and re.search(r"<hp:t><hp:tab[^>]*/> {6,}<", paras[i + 1][1])  # 값 시작 위치에 맞춤 — 한글 자리는 빈칸 둘(11/23, 11/16 전각 빈칸을 대체)
-    assert 'paraProperties itemCnt="1"' in head and "intent value=\"-" not in head
+    assert 'paraProperties itemCnt="2"' in head and "intent value=\"-" in head
     assert any("(주)가상" in t for _p, t in got)
 
 
@@ -4836,7 +4837,7 @@ def test_hanging_indent_value_wraps_and_rep_name_line(tmp_path: Path):
     fill_hwpx(src, tmp_path / "ho.hwpx", vault.Vault({}, info={"주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)",
                                                                "회사명": "(주)가상", "대표자": "홍길동"}))
     out = zipfile.ZipFile(tmp_path / "ho.hwpx").read("Contents/section0.xml").decode()
-    got = [re.sub(r"<[^>]+>", "", x) for x in re.findall(r'<hp:p paraPrIDRef="0">((?:(?!</hp:p>).)*)</hp:p>', out, re.S)]
+    got = [re.sub(r"<[^>]+>", "", x) for x in re.findall(r'<hp:p paraPrIDRef="\d+">((?:(?!</hp:p>).)*)</hp:p>', out, re.S)]
     i = next(k for k, t in enumerate(got) if "강원특별자치도" in t)
     assert "64(공장1층)" not in got[i] and got[i + 1].strip().endswith("64(공장1층)"), got
     # 다음 줄은 '강' 자리에서 시작 — 앞 빈칸 28 + '주'(빈칸 둘) + 빈칸 둘 + '소'(둘) + ' : '(셋) = 37
@@ -4938,6 +4939,36 @@ def test_ansung_signer_receipt_credit_sanction_history(tmp_path: Path):
     assert "|신인도(6점)|품질관리 등 신뢰도(기술보유)|해당 0점|6|" in text, text    # ④ 신인도 만점
     assert "|연월일|내 용|비 고|2009.09|법인 설립|2012.08|사업자 등록|" in text, text  # ⑤
     assert re.search(r"서 약 자\s+홍길동\s+인\(사용인감\)", text), text              # ①
+
+
+def test_wide_spacing_value_never_left_of_colon(tmp_path: Path):
+    """11/23 사용자: '○ 주     소 : 강 원 특 별 자 치 도 … 무 릉 2 로' / '64(공장1층)'이 ':'보다 왼쪽(줄 맨 앞)에서 시작 — 자간이 넓은 글자 모양인데
+    너비를 자간 없이 셈해 한 줄에 든다고 봤음. **무조건 규칙**: 값은 ':' 오른쪽 시작 자리에서만 이어짐 — 너비에 장평·자간을 넣어 미리 끊고,
+    문단 모양을 '왼쪽 정렬 + 내어쓰기 = 앞부분 너비' 사본으로(한글이 줄을 넘겨도 그 자리)."""
+    from quantdocs.fill import fill_hwpx
+
+    margin = lambda f: (f'<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/>'
+                        f'<hc:right value="0" unit="HWPUNIT"/></hh:margin>')
+    header = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1100" useFontSpace="0"><hh:ratio hangul="100"/>'
+              '<hh:spacing hangul="50"/></hh:charPr></hh:charProperties>'
+              '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/><hp:switch><hp:case>'
+              f'{margin(1)}</hp:case><hp:default>{margin(2)}</hp:default></hp:switch></hh:paraPr></hh:paraProperties></hh:head>')
+    page = ('<hp:p><hp:run><hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin header="2834" footer="2834" left="5669" '
+            'right="5669" top="5669" bottom="5669"/></hp:pagePr></hp:secPr></hp:run></hp:p>')
+    body = page + '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>    ○ 주     소 : </hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "h.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "ho.hwpx", vault.Vault({}, info={"주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)"}))
+    zo = zipfile.ZipFile(tmp_path / "ho.hwpx")
+    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+    paras = re.findall(r'<hp:p paraPrIDRef="(\d+)">((?:(?!</hp:p>).)*)</hp:p>', out, re.S)
+    got = [(pid, re.sub(r"<[^>]+>", "", x)) for pid, x in paras]
+    i = next(k for k, (_p, t) in enumerate(got) if "강원특별자치도" in t)
+    assert "64(공장1층)" not in got[i][1] and got[i + 1][1].strip().endswith("64(공장1층)"), got   # 미리 끊음
+    assert got[i + 1][1].startswith(" " * 14), got                                                 # 다음 줄은 ':' 오른쪽 자리
+    pid = got[i][0]
+    assert pid == got[i + 1][0] != "0" and re.search(rf'<hh:paraPr id="{pid}".*?horizontal="LEFT".*?intent value="-\d+"', head, re.S), head
 
 
 def test_seal_cell_stays_one_line(tmp_path: Path):

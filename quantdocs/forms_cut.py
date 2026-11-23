@@ -176,6 +176,8 @@ def page_title(body_xml: str, heights: dict[str, int], source: str = "") -> str:
                 parts.append(t)
                 h = max(h, heights.get(cid, 0))
         text = re.sub(r"[「『][^」』]*[」』]", " ", " ".join(parts)).strip()
+        # 제목과 한 문단에 붙은 '[붙임 4] 수행조직 및 업무분장'의 머리는 뗌(11/23 사용자 — 화면 서식 이름에 '[붙임 N]'이 딸려 옴)
+        text = re.sub(r"^[^\w\s]\s*붙\s*임\s*\d+\s*[^\w\s]\s*", "", text)
         if not keyof(text):
             continue
         ok = not (_HEAD.match(_squash(text)) or _NOT_TITLE.search(text))
@@ -190,8 +192,8 @@ def page_title(body_xml: str, heights: dict[str, int], source: str = "") -> str:
     i = next(k for k, (h, _, ok) in enumerate(paras) if ok and h == best)
     lines = [paras[i][1]]
     for h, t, ok in paras[i + 1:i + 4]:  # 줄이 넘어간 제목
-        if h != best or not ok:
-            break
+        if h != best or not ok or re.match(r"\s*(?:\d{1,2}|[가-하])\s*[.)]\s|\s*[①-⑳]", t):
+            break  # 번호 붙은 항목('1. 프로젝트 수행 조직도')은 제목이 넘어간 줄이 아님(11/23)
         lines.append(t)
     words = " ".join(lines).split()
     if len(src) >= 8:  # 파일 이름에 이어서 나오는 낱말 묶음(공고명)은 뺌

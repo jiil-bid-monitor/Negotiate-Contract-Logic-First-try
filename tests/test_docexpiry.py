@@ -133,16 +133,20 @@ if __name__ == "__main__":
 
 
 
-class TestBulk(unittest.TestCase):
-    """버튼만으로 한꺼번에 상태 표시·갱신 완료 (2026-11-23 사용자 요청 — 그리다 서류 5건, 명령어 없이)."""
 
-    def test_all_buttons_and_renew(self):
-        folder = Path(tempfile.mkdtemp())
+class TestBulk(unittest.TestCase):
+    """버튼만으로 한꺼번에 상태 표시 + '갱신 완료' = 새 PDF를 받아 유효기간 확인 (2026-11-23 사용자 요청 — 그리다 서류 5건)."""
+
+    def setUp(self):
+        self.folder = Path(tempfile.mkdtemp())
+        (self.folder / "[최신 서류]").mkdir()
         wb = openpyxl.Workbook()
         for row in [("지일", "만료일", "그리다", "만료일"), ("조형물", "27.6.17", "가", "26.11.30"), ("책장", "27.1.2", "나", "26.12.1")]:
             wb.active.append(row)
-        wb.save(folder / D.CERT_FILE)
-        docs = D.read_docs(folder)
+        wb.save(self.folder / D.CERT_FILE)
+
+    def test_all_buttons(self):
+        docs = D.read_docs(self.folder)
         today = date(2026, 11, 23)
         kb = D.apply_buttons(docs, today, {})["inline_keyboard"]
         self.assertEqual([b["callback_data"] for b in kb[-2] + kb[-1]], ["s:all:n", "s:all:p", "e:all", "s:all:x"])
@@ -150,32 +154,14 @@ class TestBulk(unittest.TestCase):
         path = Path(tempfile.mkdtemp()) / "applying.json"
         D.apply_callback(docs, "s:all:p", path, today)
         self.assertEqual(len(D.load_states(path)), 2, "30일 밖 서류(조형물 27.6.17)는 안 건드림")
-        # 모두 갱신 완료 → 바뀔 날짜 미리 보기 → 1년 연장
-        text, markup = D.renew_callback(docs, "e:all", folder, today, path)
-        self.assertIn("2026-11-30 → 2027-11-30", text)
-        text, _ = D.renew_callback(docs, "e:all:1", folder, today, path)
-        self.assertEqual(text.count("✓"), 2)
-        got = dict(D.read_cert(folder / D.CERT_FILE))
-        self.assertEqual((got["(그리다) 가"], got["(그리다) 나"], got["조형물"]),
-                         (date(2027, 11, 30), date(2027, 12, 1), date(2027, 6, 17)))
-        # 한 건: 1년·2년·직접 입력 버튼
-        code = kb[0][0]["callback_data"][2:]
-        one = D.renew_callback(D.read_docs(folder), f"e:{code}", folder, today)
-        self.assertIsNone(one, "날짜가 바뀐 서류는 옛 버튼으로 못 찾음")
-        k, d = D.read_docs(folder)[0]
-        _, m = D.renew_callback(D.read_docs(folder), "e:" + D._apply_id(k, d), folder, today)
-        self.assertEqual([r[0]["text"] for r in m["inline_keyboard"]],
-                         [f"1년 연장 → {D.plus_years(d, 1)}", f"2년 연장 → {D.plus_years(d, 2)}", "다른 날짜 직접 입력"])
-        self.assertEqual(D.plus_years(date(2028, 2, 29), 1), date(2029, 2, 28))
+        self.assertEqual(D.renew_kinds(docs, "e:all", today, path), ["(그리다) 가", "(그리다) 나"])
 
-    def test_bot_direct_date(self):
+    def test_renew_uploads_pdf_and_confirms_date(self):
         import os
         from unittest import mock
 
-        folder = Path(tempfile.mkdtemp())
-        wb = openpyxl.Workbook()
-        wb.active.append(("책장", "26.12.1", None, None))
-        wb.save(folder / D.CERT_FILE)
+        from webapp import docupload
+
         sent = []
 
         class Session:
@@ -185,12 +171,24 @@ class TestBulk(unittest.TestCase):
                 r.json = lambda: {"ok": True, "result": {"message_id": len(sent)}}
                 return r
 
-        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(folder), "TELEGRAM_CHAT_ID": "-1"}):
+        texts = iter(["유효기간 : 2025.11.30 ~ 2027.11.30", "스캔본"])
+        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder), "TELEGRAM_CHAT_ID": "-1"}),                 mock.patch.object(docupload, "pdf_text", lambda data: next(texts)),                 mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"):
             bot = tb.TelegramBot("T", {"-1"}, lambda: None, Session())
-            code = D._apply_id("책장", date(2026, 12, 1))
-            self.assertTrue(bot.handle_apply({"id": "1", "data": f"e:{code}:d", "message": {"chat": {"id": -1}}}))
-            ask = len(sent)
-            self.assertIn("답장", sent[-1]["text"])
-            self.assertTrue(bot.uploader.handle_message({"chat": {"id": -1}, "text": "2028-12-01", "message_id": 9,
-                                                         "reply_to_message": {"message_id": ask}}))
-        self.assertEqual(D.read_cert(folder / D.CERT_FILE), [("책장", date(2028, 12, 1))])
+            bot.uploader.download = lambda file_id: b"%PDF-1.4"
+            chat = {"chat": {"id": -1}}
+            self.assertTrue(bot.handle_apply({"id": "1", "data": "e:all", "message": chat}))
+            self.assertIn("1건 더", sent[-1]["text"])
+            pdf = {"file_name": "a.pdf", "mime_type": "application/pdf", "file_id": "f"}
+            # 첫 서류: PDF 글자에서 날짜를 읽어 '맞음' 버튼
+            bot.uploader.handle_message({**chat, "document": pdf, "message_id": 50, "reply_to_message": {"message_id": len(sent)}})
+            self.assertIn("2027-11-30", sent[-1]["text"])
+            self.assertTrue(bot.uploader.handle_callback({"id": "2", "data": "x:ok", "message": {**chat, "message_id": len(sent)}}))
+            self.assertIn("(그리다) 나", sent[-1]["text"], "다음 서류를 이어서 묻는다")
+            # 둘째 서류: 못 읽으면 답장으로 날짜
+            bot.uploader.handle_message({**chat, "document": pdf, "message_id": 51, "reply_to_message": {"message_id": len(sent)}})
+            self.assertIn("못 읽었습니다", sent[-1]["text"])
+            bot.uploader.handle_message({**chat, "text": "2027-12-01", "message_id": 52, "reply_to_message": {"message_id": len(sent)}})
+        got = dict(D.read_cert(self.folder / D.CERT_FILE))
+        self.assertEqual((got["(그리다) 가"], got["(그리다) 나"]), (date(2027, 11, 30), date(2027, 12, 1)))
+        self.assertEqual(len(list((self.folder / "[최신 서류]").glob("*.pdf"))), 2)
+        self.assertEqual(docupload.found_expiry("유 효 기 간: 2026-04-01 ~ 2027-03-31"), date(2027, 3, 31))

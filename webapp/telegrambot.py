@@ -220,16 +220,15 @@ class TelegramBot:
         if not re.match(r"^([as]:([0-9a-f]{12}|all:)|e:([0-9a-f]{12}|all))", data) or chat not in self.chats:
             return False
         self._api("answerCallbackQuery", callback_query_id=cb["id"])
-        folder = docexpiry.docs_dir()
-        docs = docexpiry.read_docs(folder)
-        if data.startswith("e:") and data.endswith(":d"):  # 다른 날짜 — 답장으로 받는다
-            hit = docexpiry.find_doc(docs, data.split(":")[1])
-            if hit and self.uploader.ask_date(chat, hit[0]):
+        docs = docexpiry.read_docs(docexpiry.docs_dir())
+        if data.startswith("e:"):  # 갱신 완료 — 새 PDF를 받아 유효기간을 확인받는다
+            kinds = docexpiry.renew_kinds(docs, data)
+            if kinds and self.uploader.start_renew(chat, kinds):
                 return True
-            data = "x"
-        result = (docexpiry.renew_callback(docs, data, folder) if data.startswith("e:")
-                  else docexpiry.apply_callback(docs, data) if data != "x" else None)
-        text, markup = result or ("그 서류는 이미 새 서류로 바뀌었습니다 — /docs 로 확인해 주세요.", None)
+            result = None
+        else:
+            result = docexpiry.apply_callback(docs, data)
+        text, markup = result or ("그 서류는 이미 새 서류로 바뀌었거나 담당자 방이 아닙니다 — /docs 로 확인해 주세요.", None)
         self._api("sendMessage", chat_id=chat, text=text, parse_mode="HTML", **({"reply_markup": markup} if markup else {}))
         return True
 

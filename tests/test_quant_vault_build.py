@@ -4599,6 +4599,31 @@ def test_staff_count_table_total_column(tmp_path: Path):
     assert sm["staff_on"] and len(sm["staff"]) == 6 and "기술자 보유현황" in sm["staff_rule"], sm["staff_rule"]
 
 
+def test_history_rows_without_header_and_license_label(tmp_path: Path):
+    """11/23 사용자 지적: 일반현황 '주요연혁 | (연월) | (내용) | (비고)' 줄 + 같은 모양 빈 줄(머리 줄 없음) — 연혁 21줄을 이름표 옆 좁은 칸 하나에 몰아넣었음.
+    줄마다 연월·내용 칸에, 모자라면 줄을 늘림. 같은 표 '면허/허가/등록 중 보유현황'('증'이 아니라 '중')도 보유 면허·등록증 목록."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t, span=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                     f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/>'
+                                     f'<hp:cellSz width="9000" height="1500"/></hp:tc>')
+    rows = [[c(0, 0, "면허/허가/등록 중 보유현황", 2), c(2, 0, "", 7)],
+            [c(0, 1, "주  요  연  혁", 2), c(2, 1, "", 2), c(4, 1, "", 4), c(8, 1, "")]]
+    rows += [[c(0, r, "", 2), c(2, r, "", 2), c(4, r, "", 4), c(8, r, "")] for r in (2,)]
+    rows += [[c(0, 3, "참여기술자 보유현황", 2), c(2, 3, "(단위 : 명)", 7)]]
+    body = ('<hp:p><hp:run><hp:tbl rowCnt="4" colCnt="9" pageBreak="NONE"><hp:sz width="40000" height="6000"/>'
+            + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>")
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    v.history = [{"연월일": "2009.09", "내용": "법인 설립"}, {"연월일": "2012.08", "내용": "사업자 등록"}, {"연월일": "2015.03", "내용": "공장 등록"}]
+    v.docs = [{"서류 이름": "실내건축공사업 등록증", "서류 종류": "면허"}]
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+    assert "|면허/허가/등록 중 보유현황|실내건축공사업 등록증|" in text, text
+    assert "|주  요  연  혁|2009.09|법인 설립|2012.08|사업자 등록|2015.03|공장 등록|참여기술자 보유현황|" in text, text
+    assert 'rowCnt="5"' in sec
+
+
 def test_column_head_row_values_go_below(tmp_path: Path):
     """11/23 사용자 지적: 사업설명회 참가 신청서 '대표자 | 성 명 | 생년월일 | 전화번호(회사) : / __ | __ | __' — 값 줄은 비고
     '전화번호(회사) :' 이름표 칸에 번호가 붙음. 이름표 줄이면 값은 바로 아래 칸에, 이름표 칸엔 안 넣음.

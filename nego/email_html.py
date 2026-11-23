@@ -210,6 +210,8 @@ BODY_SKIP_WORDS = {"운영·관리 용역": ("유지관리", "유지보수", "�
                    "전산 사업": ("시스템", "플랫폼", "누리집", "홈페이지", "네트워크", "인프라", "데이터")}
 # (11/23) 키워드 없이 이 소프트웨어 세부품명으로만 들어온 공고는 본문에서 뺌 — 보유 등록이라 자격 판정엔 그대로 씀
 SW_PRODUCTS = {"8111159801", "8111159901", "8111229901"}
+# (11/23 사용자 결정) 공고명에 이 낱말이 있으면 운영·관리 용역·설계만 용역이어도 본문에 둠 — 실감콘텐츠 유지관리·놀이터 설계는 지일 일
+BODY_KEEP_WORDS = ("실감", "놀이터", "놀이시설", "미디어아트", "체험콘텐츠")
 BODY_MIN_SYNC = 0.50  # (11/23 사용자 결정) 이번 주 290건으로 본문 약 30건이 되는 선
 
 
@@ -224,14 +226,15 @@ def split_body(candidates: list[Candidate]) -> tuple[list[Candidate], dict[str, 
     for c in candidates:
         score = (getattr(c, "sync", None) or {}).get("score")
         title = c.notice.title.replace(" ", "")
-        skip = next((k for k, words in BODY_SKIP_WORDS.items() if any(w in title for w in words)), None)
+        keep = any(w in title for w in BODY_KEEP_WORDS)
+        skip = None if keep else next((k for k, words in BODY_SKIP_WORDS.items() if any(w in title for w in words)), None)
         if c.screen_result.matched_keywords == ["통신"]:
             hidden["통신 키워드만"] += 1
         elif skip:
             hidden[skip] += 1
         elif not c.screen_result.matched_keywords and set(c.screen_result.matched_product_codes or []) <= SW_PRODUCTS                 and c.screen_result.matched_product_codes:
             hidden["소프트웨어 품목만"] += 1
-        elif "설계" in title and "용역" in title and "제작" not in title and "설치" not in title:
+        elif not keep and "설계" in title and "용역" in title and "제작" not in title and "설치" not in title:
             hidden[design] += 1  # 지일은 설계~제작·설치 통합 발주를 선호(대리님 9/9 인수인계)
         elif score is not None and score < BODY_MIN_SYNC:
             hidden[low] += 1

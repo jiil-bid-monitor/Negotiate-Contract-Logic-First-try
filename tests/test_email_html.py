@@ -86,6 +86,9 @@ class TestEmailHtml(unittest.TestCase):
         self.assertEqual(split_body([c])[1]["설계 용역(제작·설치 없음)"], 1)
         c.notice = dataclasses.replace(c.notice, title="○○전시관 전시 설계 및 제작·설치 용역")
         self.assertEqual(split_body([c])[0], [c], "설계+제작·설치는 본문")
+        for keep in ("○○ 해양생태놀이터 조성사업 기본·실시설계 용역", "○○박물관 실감콘텐츠 통합유지관리 용역"):
+            c.notice = dataclasses.replace(c.notice, title=keep)
+            self.assertEqual(split_body([c])[0], [c], f"11/23 사용자: 본문에 둠 — {keep}")
         c.screen_result = dataclasses.replace(c.screen_result, matched_keywords=[], matched_product_codes=["8111159901"])
         self.assertEqual(split_body([c])[1]["소프트웨어 품목만"], 1)
 

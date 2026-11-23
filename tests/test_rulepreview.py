@@ -54,6 +54,26 @@ class RulePreviewTest(unittest.TestCase):
         self.assertIn("다시 확인", got["R5"][10])
         self.assertNotIn("R6", got)  # 면허 단계로 빠진 공고는 키워드를 바꿔도 그대로
 
+    def test_work_type_rules_drop_non_construction(self):
+        """11/23: '통신'은 공사만(--keyword-work 통신=공사), 보유 면허 경로는 공사만(--license-work 공사)."""
+        pay = self.payload()
+        pay["candidates"].append(_row("R8", "속초 체육센터 건립공사(통신)", True, work_type="공사"))
+        pay["candidates"].append(_row("R9", "낙석방지책 설치공사", True, work_type="공사", license_match=["금속창호·지붕건축물조립공사업(4991)"]))
+        change = R.Change(keyword_work=["통신=공사"], license_work=["공사"])
+        rows = R.report(R.compare(pay, self.cfg, R.apply_change(self.cfg, change)), {})
+        got = {r[1]: (r[0], r[8]) for r in rows}
+        self.assertEqual(got["R3"][0], "새로 빠짐")  # 용역의 '통신'만 — 빠짐
+        self.assertEqual(got["R4"], ("새로 빠짐", "빠짐 — 보유 면허 경로 업무 한정(용역)"))  # 용역 공고는 면허만으로 안 받음
+        self.assertNotIn("R8", got)  # 공사의 '통신'은 그대로
+        self.assertNotIn("R9", got)  # 공사 공고는 보유 면허로 그대로
+        self.assertNotIn("R2", got)
+        # 예외 낱말(전시·미디어 등)이 공고명에 있으면 용역도 보유 면허로 남음(11/23 — 미디어파사드·전시연출 용역)
+        pay["candidates"].append(_row("R10", "옛 전남도청 미디어파사드 제작 및 설치", True, license_match=["정보통신공사업(0036)"]))
+        rows = R.report(R.compare(pay, self.cfg, R.apply_change(self.cfg, R.Change(license_work=["공사"], license_keep=["미디어", "전시"]))), {})
+        got = {r[1] for r in rows}
+        self.assertIn("R4", got)
+        self.assertNotIn("R10", got)
+
     def test_cli_writes_csv(self):
         d = Path(tempfile.mkdtemp())
         store = Store(d / "web.sqlite3")

@@ -1133,6 +1133,36 @@ class TestLicenseRoute20261112(unittest.TestCase):
 
 
 
+class TestWorkTypeRules20261123(unittest.TestCase):
+    """2026-11-23 판단 기록 26건(제안요청서·과업지시서로 확인): '통신' 참가 3건은 모두 공사, 보유 면허로 들어온 12건은 모두 불참(11건 물품·용역
+    장비 납품·유지보수) → keywordWorkTypes {"통신": ["공사"]}, licenseRouteWorkTypes ["공사"]. 설정은 미리 보기 뒤 켬(기본은 꺼짐 = 예전 그대로)."""
+
+    def _run(self, title, work, rows=None, on=True):
+        from dataclasses import replace as _replace
+        config = load_config()
+        if on:
+            config = _replace(config, screen=_replace(config.screen, keyword_work_types={"통신": ["공사"]}, license_work_types=["공사"],
+                                                      license_keep_words=["전시", "연출", "미디어파사드"]))
+        n = notice_from_raw(fixtures.notice("R26BK09990002", title=title, award=fixtures.QUALIFY, cntrctCnclsMthdNm="제한경쟁"), work)
+        groups = {"R26BK09990002": [qualify.LicenseGroup("1", rows=rows)]} if rows else {}
+        return build_candidates([n], config, groups, {}, NOW, RunStats())
+
+    def test_tongsin_keyword_only_for_construction(self):
+        self.assertEqual(len(self._run("속초 반다비체육센터 건립공사(통신)", "공사")), 1)
+        self.assertEqual(self._run("위성통신 3D프린팅 실험실 환경개선", "물품"), [])
+        self.assertEqual(len(self._run("위성통신 3D프린팅 실험실 환경개선", "물품", on=False)), 1)  # 꺼 두면 예전 그대로
+
+    def test_license_route_only_for_construction(self):
+        rows = [["정보통신공사업/0036"]]
+        self.assertEqual(self._run("2027년 경비함정 레이더 정밀점검 용역", "용역", rows), [])
+        # 예외 낱말 — 미디어파사드 제작·설치 용역은 보유 면허로 그대로(11/23 미리 보기에서 빠졌던 지일 일)
+        self.assertEqual(len(self._run("옛 전남도청 미디어파사드 제작 및 설치", "용역", rows)), 1)
+        self.assertEqual(len(self._run("2027년 경비함정 레이더 정밀점검 용역", "용역", rows, on=False)), 1)
+        got = self._run("지방도 낙석방지책 설치공사", "공사", [["금속창호·지붕건축물조립공사업/4991"]])
+        self.assertEqual(len(got), 1)
+        self.assertTrue(got[0].screen_result.license_match)
+
+
 class TestLocalRoute20261123(unittest.TestCase):
     """2026-11-23 사용자 결정: 사업 규모와 상관없이 '입찰' 공고이면서 정선 기관(수요·공고기관)이 낸 공고는 키워드 없이도 일반 공고로 수집
     (나중에 만들 1억 미만 간소화 규칙에서도 뺌). 무조건 제외 키워드는 그대로, 협상·수의계약은 해당 없음."""

@@ -362,7 +362,7 @@ class Collector:
             from nego.screen import _match_keywords
 
             def interest(n, sc=config.screen):
-                return _match_keywords(n, list(sc.keywords), sc.keyword_skip_when)
+                return _match_keywords(n, list(sc.keywords), sc.keyword_skip_when, sc.keyword_work_types)
             payload = {
                 "format": RESULT_FORMAT,
                 # 미매칭 설명에 쓰는 관심 키워드 목록 — 공고마다 같아서 결과에 한 번만

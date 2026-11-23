@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .bundle import Pick, merge, pick
 from .catalog import load_catalog
-from .selfscore import AUTO_KINDS, Criterion as SelfCriterion, SelfScore, fmt, form_staff_grades, patent_scope, patent_status, read_criteria, score as score_items, staff_status
+from .selfscore import AUTO_KINDS, Criterion as SelfCriterion, SelfScore, fmt, form_staff_grades, has_staff_count_table, patent_scope, patent_status, read_criteria, score as score_items, staff_status
 from .fill import FillReport, agency_notice_no, basis_amount, fill_hwpx, unfilled_slots
 from .forms_cut import cut, find_forms, merge as merge_forms, page_titles
 from .g2b import qualification_rows
@@ -250,6 +250,11 @@ def analyze(files: list[Path], vault, notice_date: date | None = None, work: Pat
         crit.per_grade = {**form_grades, **{g: p for g, p in crit.per_grade.items() if g not in form_grades}}
     a.staff = staff_status(crit, vault, ref)
     a.staff_on = bool(crit is not None and crit.per_grade)
+    if not a.staff_on and has_staff_count_table(_rfp_first(files, converted)):
+        # 배점 기준이 없어도 서식에 '기술자 보유현황' 표(구분 | 계 | … / 특급기술자 …)가 있으면 고르기 칸(11/23 사용자 요청) — 고른 인원은 표 '계' 칸에
+        a.staff_on = True
+        a.staff_rule = "기술자 보유현황 표 — 고른 인원을 등급별 '계' 칸에 넣음(분야별 칸은 직접)"
+        return a
     if crit is not None:
         rule = ", ".join(f"{g} {p:g}점" for g, p in crit.per_grade.items())
         months = re.search(r"\d+\s*개월\s*이상", crit.note)

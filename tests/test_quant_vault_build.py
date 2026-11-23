@@ -4571,6 +4571,34 @@ def test_rep_group_with_paren_contact(tmp_path: Path):
     assert "|연락처|033-111-2222|" in text and text.count("033-111-2222") == 1, text
 
 
+def test_staff_count_table_total_column(tmp_path: Path):
+    """11/23 사용자 요청: 자기평가표가 없어도 '기술자 보유현황 (단위 : 명)' 표(구 분 | 계 | 전문분야(정보통신·소프트웨어·○○) | 기타분야 /
+    계 · 특급기술자 · 고급 · 중급 · 초급)가 있으면 화면 기술인력 고르기 칸을 띄우고, 고른 인원으로 '계' 열(등급별)과 '계' 줄 합을 채움."""
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import has_staff_count_table
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+                                           f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "구 분", 1, 2), c(1, 0, "계", 1, 2), c(2, 0, "전문분야", 3), c(5, 0, "기타분야", 1, 2)],
+            [c(2, 1, "정보통신분야"), c(3, 1, "소프트웨어분야"), c(4, 1, "○○분야")]]
+    for r, g in enumerate(["계", "특급기술자", "고급기술자", "중급기술자", "초급기술자"], 2):
+        rows.append([c(0, r, g)] + [c(k, r, "") for k in range(1, 6)])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    assert has_staff_count_table([src])
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    v.staff = [{"이름": n, "입사일": "2010-01-01", "등급": g} for n, g in
+               [("가", "기술사"), ("나", "특급"), ("다", "고급"), ("라", "고급"), ("마", "초급")]] + [{"이름": "바", "등급": "중급", "재직": "퇴사"}]
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    # 기술사는 특급에, 퇴사자는 빼고 — 계 5, 특급 2, 고급 2, 중급 0, 초급 1. 분야별 칸은 비움
+    assert "|○○분야|계|5|특급기술자|2|고급기술자|2|중급기술자|0|초급기술자|1|" in text, text
+    # 화면: 배점 기준이 없는 공고도 이 표가 있으면 기술인력 고르기 칸
+    from quantdocs.build import analyze, summary
+    sm = summary(analyze([src], v, dt.date(2026, 11, 23), tmp_path / "w"))
+    assert sm["staff_on"] and len(sm["staff"]) == 6 and "기술자 보유현황" in sm["staff_rule"], sm["staff_rule"]
+
+
 def test_column_head_row_values_go_below(tmp_path: Path):
     """11/23 사용자 지적: 사업설명회 참가 신청서 '대표자 | 성 명 | 생년월일 | 전화번호(회사) : / __ | __ | __' — 값 줄은 비고
     '전화번호(회사) :' 이름표 칸에 번호가 붙음. 이름표 줄이면 값은 바로 아래 칸에, 이름표 칸엔 안 넣음.

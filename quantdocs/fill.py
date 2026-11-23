@@ -1001,7 +1001,9 @@ def _break_value(seg: str, chars: "_Chars | None", line_w: int | None) -> str:
     prefix = seg[open_m.end():i]
     pw, cur = _prefix_width(prefix, chars)
     intent, left = chars.margins(open_m.group(2))
-    avail = (line_w - left - intent - pw) * 0.97
+    # 첫 줄 너비 = 줄 너비 − 왼쪽 여백 − 들여쓰기(양수일 때만). 내어쓰기(음수)는 둘째 줄부터라 첫 줄을 넓히지 않음
+    # (11/23 사용자 — 내어쓰기 −4535 문단에서 첫 줄이 넓다고 셈해 끊지 않아 주소 끝 '층)'이 줄 맨 앞으로 넘어갔음)
+    avail = (line_w - left - max(intent, 0) - pw) * 0.97
     h = max(chars.height(cur), FILL_HEIGHT)
     value = unescape(seg[i + 1:j])
     if _cjk_width(value, h) <= avail:
@@ -1474,7 +1476,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             continue
         # 쌍점 없는 서명 줄 '서 약 자          (인) (사용인감)'(서식 18 보안서약서) — 이름표와 (인) 사이 빈칸에 대표자 이름
         # '신청인(대표사)          (인)'(11/13 운리단길 별지서식 1 입찰참가신청서)도 같은 모양
-        bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{{1,10}}\))?))(\s{{3,}})((?:{_SEAL_TAIL}|인(?=\s*$)).*)", text, re.S)  # 괄호 없는 '서 약 자      인'(11/13 제천)
+        bare = re.fullmatch(rf"\s*((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)(?:\s*성\s*명)?|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{{1,10}}\))?))(\s{{3,}})((?:{_SEAL_TAIL}|인(?=\s*$)).*)", text, re.S)  # 괄호 없는 '서 약 자      인'(11/13 제천)
         if bare:
             sign_at.add(n)
         if bare and _value("대표자", vault):
@@ -1485,7 +1487,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 body = mm.group(2)
                 if done:
                     return mm.group(0)
-                m2 = re.search(r"((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{1,10}\))?))( {3,})", body)
+                m2 = re.search(r"((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)(?:\s*성\s*명)?|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{1,10}\))?))( {3,})", body)
                 if not m2:
                     return mm.group(0)
                 done.append(1)

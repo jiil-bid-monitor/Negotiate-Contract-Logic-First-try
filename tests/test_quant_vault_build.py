@@ -4805,3 +4805,35 @@ def test_click_here_guides_replaced_and_delegator_seal(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
     assert "CLICK_HERE" not in sec and "fieldEnd" not in sec and "기입하세요" not in text, text
     assert "|회사명|(주)가상|대표자|홍길동|위 임 자|홍길동" in text and "“|가상 전시연출 용역|”의 입찰" in text, text
+
+
+def test_hanging_indent_value_wraps_and_rep_name_line(tmp_path: Path):
+    """11/23 사용자: 확약서 서명 묶음 '                            주  소 : 강원특별자치도 … 64(공장1' / '층)' — 문단이 내어쓰기(−4535)라
+    첫 줄을 그만큼 넓게 셈해 끊지 않았음 → 내어쓰기는 첫 줄 너비에 안 더함, '강' 시작 위치에 맞춰 다음 문단으로.
+    같은 서식 '대표자  성명                (인)'(쌍점 없음) = 대표자 이름."""
+    from quantdocs.fill import fill_hwpx
+
+    margin = lambda f: (f'<hh:margin><hc:intent value="{-4535 * f}" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/>'
+                        f'<hc:right value="0" unit="HWPUNIT"/></hh:margin>')
+    header = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1200" useFontSpace="0"><hh:ratio hangul="100"/>'
+              '<hh:spacing hangul="0"/></hh:charPr></hh:charProperties>'
+              '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/><hp:switch><hp:case>'
+              f'{margin(1)}</hp:case><hp:default>{margin(2)}</hp:default></hp:switch></hh:paraPr></hh:paraProperties></hh:head>')
+    page = ('<hp:p><hp:run><hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin header="2834" footer="2834" left="5669" '
+            'right="5669" top="5669" bottom="5669"/></hp:pagePr></hp:secPr></hp:run></hp:p>')
+    sp = " " * 28
+    body = page + (f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{sp}주  소 : </hp:t></hp:run></hp:p>'
+                   f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{sp}업체명 : </hp:t></hp:run></hp:p>'
+                   '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>대표자  성명                (인)</hp:t></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "h.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    fill_hwpx(src, tmp_path / "ho.hwpx", vault.Vault({}, info={"주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)",
+                                                               "회사명": "(주)가상", "대표자": "홍길동"}))
+    out = zipfile.ZipFile(tmp_path / "ho.hwpx").read("Contents/section0.xml").decode()
+    got = [re.sub(r"<[^>]+>", "", x) for x in re.findall(r'<hp:p paraPrIDRef="0">((?:(?!</hp:p>).)*)</hp:p>', out, re.S)]
+    i = next(k for k, t in enumerate(got) if "강원특별자치도" in t)
+    assert "64(공장1층)" not in got[i] and got[i + 1].strip().endswith("64(공장1층)"), got
+    # 다음 줄은 '강' 자리에서 시작 — 앞 빈칸 28 + '주'(빈칸 둘) + 빈칸 둘 + '소'(둘) + ' : '(셋) = 37
+    assert got[i + 1] == " " * 37 + "64(공장1층)", got
+    assert any(re.fullmatch(r"대표자  성명\s+홍길동\s+\(인\)", t) for t in got), got

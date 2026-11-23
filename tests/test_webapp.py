@@ -95,6 +95,16 @@ class TestProductViewCatTabs(unittest.TestCase):
         self.assertNotIn('filters.cat === "product"', html)
 
 
+class TestLogDecidedOnly(unittest.TestCase):
+    def test_log_tab_lists_decided_only(self):
+        """11/23 사용자 요청: 판단 기록 탭엔 담당자가 판단한 공고(참가·보류·불참)만 — 미판단·놓침·사전규격(참고)이 날마다 쌓였음."""
+        html = (Path(__file__).resolve().parent.parent / "webapp" / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn(".filter((e) => DECISIONS.includes(e.st))", html)
+        sel = html[html.index('<select id="logStatus"'):html.index("</select>", html.index('<select id="logStatus"'))]
+        self.assertNotIn("미판단", sel)
+        self.assertNotIn("놓침", sel)
+
+
 class TestSyncLevel(unittest.TestCase):
     def test_levels(self):
         self.assertEqual(level(None), "판정 불가")

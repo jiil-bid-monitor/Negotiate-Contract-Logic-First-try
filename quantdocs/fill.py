@@ -2153,7 +2153,8 @@ def _cjk_width(text: str, height: int) -> float:
 def _label_face(xml: str, cell: "Cell", chars: "_Chars") -> tuple[str, int]:
     """값을 넣을 칸의 이름표 칸(같은 줄 왼쪽 칸, 없으면 바로 위 칸) (글꼴 이름, 글자 크기) — 값도 양식 글꼴로(11/10 사용자 요청)."""
     tbl = None
-    for t in _spans(xml, "tbl"):
+    # 칸이 든 가장 안쪽 표 — 바깥(쪽 테두리) 표만 보면 그 표의 제목 칸('확 약 서' 21pt)을 이름표로 읽어 값이 21pt였음(11/23 한가람 확약서 회사명)
+    for t in _all_tables(xml):
         if t[0] <= cell.start < t[1] and (tbl is None or t[0] > tbl[0]):
             tbl = t
     if tbl is None:
@@ -3178,7 +3179,7 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
 
 def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, title: str = "",
               notice_no: tuple[str, str] | None = None, g2b_no: str = "", self_scores=None,
-              basis: int | None = None, sign_only: bool = False, face: str = "") -> FillReport:
+              basis: int | None = None, sign_only: bool = False, face: str = "", ref_no: str = "") -> FillReport:
     """src 서식(HWPX)을 채워 dst에 저장. tracks: 실적집계표에 넣을 실적(후보 순서대로). title: 공고 이름(입찰명 칸).
     sign_only: 직접 기입 서식(재직증명서 등) — 표는 건드리지 않고 표 밖 서명 줄('업 체 명 :'·'주 소 :'·'대 표 자 : (인)')만(11/05).
     face: 채운 글의 한글 글꼴 이름(통합서식 첫 서식의 채운 글 글꼴 — 11/10). 돌려주는 rep.face = 이 서식에서 쓴 글꼴."""
@@ -3188,9 +3189,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
     # 공고번호 = 나라장터 입찰공고번호('R26BK01806620-000', 11/04 사용자 정정 — 기관 공고번호를 넣었더니 오기입),
     # 나라장터 번호를 모를 때만 공고문의 기관 공고번호('제2026-1129호')
     no_text = g2b_no or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")
-    if title or no_text:
+    if title or no_text or ref_no:
         vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text,
-                                      "_agency_no": f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else ""},
+                                      # 기관공고번호 칸 = 나라장터 참조번호 그대로('전시사업부-1363' — 11/23 사용자, '제Y-N호' 모양이 아니어도),
+                                      # 없으면 공고문의 기관 공고번호
+                                      "_agency_no": ref_no.strip() or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")},
                                 docs=vault.docs, history=vault.history)
     zin = zipfile.ZipFile(src)
     out_entries = {}

@@ -164,8 +164,8 @@ class Uploader:
                 self._ask_kind(chat, state)
             return True
         if state["step"] == "newname":
-            name = re.sub(r"\s+", " ", text).strip()
-            if not name or len(name) > 40 or re.search(r'[\\/:*?"<>|]', name):
+            name = new_kind_name(text)
+            if not name:
                 state["ask"] = self._say(chat, "서류 이름을 다시 적어 주세요. (40자 안, 파일 이름에 못 쓰는 기호 빼고)",
                                          msg.get("message_id"), FORCE)
                 return True
@@ -291,21 +291,9 @@ class Uploader:
 
     def _remove(self, chat: str, kind: str) -> None:
         """그 종류 파일을 [이전 서류]로 옮기고(지우지 않음) 목록을 다시 쓴다 — 목록·/docs·만료 알림에서 빠짐."""
-        from under100m import docs
-
-        folder = self.folder()
-        old = folder / "[이전 서류]"
-        old.mkdir(exist_ok=True)
-        moved = 0
-        for path in (folder / "[최신 서류]").glob("*.pdf"):
-            doc = docs.parse_name(path.name)
-            if doc and doc.kind == kind:
-                path.replace(docs._unique(old / path.name))
-                moved += 1
         self.pending.pop(chat, None)
-        docs.run(folder, self.today(), lambda text: None, settle=0, alert_due=False)
-        cert = self._cert(kind, "사용 안 함")
-        self._say(chat, f"<b>{html.escape(kind)}</b> 뺐습니다 — 파일 {moved}개를 [이전 서류]로 옮김." + cert
+        moved, cert = remove_doc(self.folder(), kind, self.today())
+        self._say(chat, f"<b>{html.escape(kind)}</b> 뺐습니다 — 파일 {moved}개를 [이전 서류]로 옮김." + ("\n" + cert if cert else "")
                         + "\n다시 필요하면 /upload 로 넣으면 됩니다.")
 
     def _save(self, chat: str, state: dict, end: date | None, reply_to: int | None) -> None:
@@ -332,14 +320,92 @@ def cert_note(folder: Path, kind: str, value: date | str) -> str:
     return "인증서갱신.xlsx 만료일도 " + (f"{value}로 고쳤습니다." if isinstance(value, date) else f"'{value}'로 바꿨습니다.")
 
 
+def new_kind_name(text: str) -> str | None:
+    """새 서류 종류 이름 — 파일 이름이 되므로 40자 안, 못 쓰는 기호 없이. 안 되면 None (텔레그램·웹앱 같이)."""
+    name = re.sub(r"\s+", " ", text or "").strip()
+    return name if name and len(name) <= 40 and not re.search(r'[\\/:*?"<>|]', name) and name not in (".", "..") else None
+
+
+def file_kind(folder: Path, kind: str) -> str:
+    """인증서갱신.xlsx 이름('신용평가') → [최신 서류] 파일 종류('신용평가등급확인서') — 저장·빼기·고치기가 옛 파일을 찾게(2026-11-23).
+    표 이름이 파일 종류와 다른 지일 서류가 많음(직접생산확인증명서(…) 등). 여럿이면 표 날짜와 같은 유효기간의 파일, 없으면 그대로."""
+    try:
+        rows = json.loads((folder / "_목록.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        rows = []
+    files = {r["종류"]: r.get("유효기간") or "" for r in rows if r.get("종류")}
+    if kind in files:
+        return kind
+    hits = [k for k in files if docexpiry.same_doc(kind, k)]
+    if len(hits) > 1:
+        cert = dict(docexpiry.read_cert(folder / docexpiry.CERT_FILE)) if (folder / docexpiry.CERT_FILE).exists() else {}
+        hits = [k for k in hits if cert.get(kind) and files[k] == cert[kind].isoformat()] or hits[:1]
+    return hits[0] if hits else kind
+
+
 def save_doc(folder: Path, kind: str, data: bytes, end: date | None, today: date) -> tuple[str, str, list[str]]:
     """새 서류 PDF를 [최신 서류]/종류_오늘[_유효날짜].pdf로 저장하고 정리(옛 파일 → [이전 서류]) + 표 만료일 —
-    텔레그램 /upload·갱신 완료와 웹앱 종 창이 같이 쓴다(2026-11-23). → (저장한 파일 이름, 표 안내, 정리 안내들)"""
+    텔레그램 /upload·갱신 완료와 웹앱이 같이 쓴다(2026-11-23). → (저장한 파일 이름, 표 안내, 정리 안내들)"""
     from under100m import docs
 
-    name = f"{kind}_{today}" + (f"_유효{end}" if end else "") + ".pdf"
+    name = f"{file_kind(folder, kind)}_{today}" + (f"_유효{end}" if end else "") + ".pdf"
     target = docs._unique(folder / "[최신 서류]" / name)
     target.write_bytes(data)
     notes: list[str] = []
     docs.run(folder, today, notes.append, settle=0, alert_due=False)
     return target.name, cert_note(folder, kind, end) if end else "", notes
+
+
+def _latest(folder: Path, kind: str):
+    from under100m import docs
+
+    files = [(d, p) for p in (folder / "[최신 서류]").glob("*.pdf") if (d := docs.parse_name(p.name)) and d.kind == kind]
+    return [p for _, p in sorted(files, key=lambda x: x[0].issued)]
+
+
+def remove_doc(folder: Path, kind: str, today: date) -> tuple[int, str]:
+    """그 종류 파일을 모두 [이전 서류]로(지우지 않음) + 표 '사용 안 함' → (옮긴 수, 표 안내)."""
+    from under100m import docs
+
+    old = folder / "[이전 서류]"
+    old.mkdir(exist_ok=True)
+    paths = _latest(folder, file_kind(folder, kind))
+    for path in paths:
+        path.replace(docs._unique(old / path.name))
+    docs.run(folder, today, lambda text: None, settle=0, alert_due=False)
+    return len(paths), cert_note(folder, kind, "사용 안 함")
+
+
+def edit_doc(folder: Path, kind: str, end: date | None, today: date) -> str:
+    """새 파일 없이 유효기간만 고치기(잘못 적었을 때, 2026-11-23 사용자 요청) — 표 만료일 + 최신 파일 이름의 _유효 날짜.
+    고친 곳이 하나도 없으면 ValueError."""
+    from under100m import docs
+
+    done = []
+    paths = _latest(folder, file_kind(folder, kind))
+    if paths:
+        doc = docs.parse_name(paths[-1].name)
+        new = docs._unique(paths[-1].with_name(f"{doc.kind}_{doc.issued}" + (f"_유효{end}" if end else "") + ".pdf"))
+        if new.name != paths[-1].name:
+            paths[-1].replace(new)
+        done.append(f"파일 이름 → {new.name}")
+        docs.run(folder, today, lambda text: None, settle=0, alert_due=False)
+    cert = cert_note(folder, kind, end or "없음")
+    if cert:
+        done.append(cert)
+    if not done:
+        raise ValueError("고칠 파일도 인증서갱신.xlsx 줄도 없습니다 — 새 서류 올리기로 넣어 주세요")
+    return "\n".join(done)
+
+
+def all_docs(folder: Path, today: date) -> list[dict]:
+    """서류 관리 목록 — 만료일이 있는 서류(표·서류목록) + 날짜 없는 파일 종류. [{kind, end, left, state}]"""
+    states = docexpiry.load_states()
+    dated = docexpiry.read_docs(folder)
+    out = [{"kind": k, "end": d.isoformat(), "left": (d - today).days,
+            "state": docexpiry.STATES[states[docexpiry.apply_key(k, d)]][0] if docexpiry.apply_key(k, d) in states else ""}
+           for k, d in dated]
+    names = [k for k, _ in dated]
+    out += [{"kind": k, "end": None, "left": None, "state": ""} for k in kinds(folder)
+            if k not in names and not any(docexpiry.same_doc(c, k) for c in names)]
+    return out

@@ -226,3 +226,54 @@ class TestBulk(unittest.TestCase):
                     server.docs_upload({"action": "read", **bad})
         self.assertEqual(dict(D.read_cert(self.folder / D.CERT_FILE))["(그리다) 나"], date(2027, 12, 1))
         self.assertTrue(any(p.name.startswith("(그리다) 나_") for p in (self.folder / "[최신 서류]").glob("*.pdf")))
+
+
+class TestDocManage(unittest.TestCase):
+    """서류 관리(2026-11-23): 표 이름 ≠ 파일 종류일 때 옛 파일을 찾고, 추가·수정·빼기."""
+
+    def setUp(self):
+        from under100m import docs
+
+        self.f = Path(tempfile.mkdtemp())
+        (self.f / "[최신 서류]").mkdir()
+        wb = openpyxl.Workbook()
+        for row in [("신용평가", "27.6.15", None, None), ("이노비즈", "29.7.2", None, None)]:
+            wb.active.append(row)
+        wb.save(self.f / D.CERT_FILE)
+        for name in ["신용평가등급확인서_2026-06-16_유효2027-06-15.pdf", "기술혁신형 중소기업(이노비즈) 확인서_2026-08-07_유효2029-07-02.pdf",
+                     "이노비즈 인증서_2026-06-16_유효2027-06-15.pdf", "사업자등록증_2026-01-05.pdf"]:
+            (self.f / "[최신 서류]" / name).write_bytes(b"%PDF")
+        docs.run(self.f, date(2026, 11, 1), lambda t: None, settle=-1, alert_due=False)
+
+    def test_table_name_maps_to_file_kind(self):
+        from webapp import docupload as U
+
+        self.assertEqual(U.file_kind(self.f, "신용평가"), "신용평가등급확인서")
+        self.assertEqual(U.file_kind(self.f, "이노비즈"), "기술혁신형 중소기업(이노비즈) 확인서", "표 날짜와 같은 유효기간의 파일")
+        U.save_doc(self.f, "신용평가", b"%PDF new", date(2028, 6, 15), date(2026, 11, 23))
+        latest = sorted(p.name for p in (self.f / "[최신 서류]").glob("신용*"))
+        self.assertEqual(latest, ["신용평가등급확인서_2026-11-23_유효2028-06-15.pdf"], "예전엔 '신용평가_…' 새 종류가 생기고 옛 파일이 남았음")
+        self.assertTrue((self.f / "[이전 서류]" / "신용평가등급확인서_2026-06-16_유효2027-06-15.pdf").exists())
+
+    def test_edit_remove_and_list(self):
+        from webapp import docupload as U
+
+        msg = U.edit_doc(self.f, "신용평가", date(2027, 6, 30), date(2026, 11, 23))
+        self.assertIn("신용평가등급확인서_2026-06-16_유효2027-06-30.pdf", msg)
+        self.assertEqual(dict(D.read_cert(self.f / D.CERT_FILE))["신용평가"], date(2027, 6, 30))
+        with mock_states():
+            kinds = [d["kind"] for d in U.all_docs(self.f, date(2026, 11, 23))]
+        self.assertIn("사업자등록증", kinds, "날짜 없는 서류도 관리 목록에")
+        self.assertNotIn("신용평가등급확인서", kinds, "표 이름(신용평가)과 겹치는 파일 종류는 한 번만")
+        moved, _ = U.remove_doc(self.f, "사업자등록증", date(2026, 11, 23))
+        self.assertEqual(moved, 1)
+        self.assertTrue((self.f / "[이전 서류]" / "사업자등록증_2026-01-05.pdf").exists())
+        self.assertEqual(U.new_kind_name("  조경식재공사업  등록증 "), "조경식재공사업 등록증")
+        for bad in ("", "../x", "a/b", "가" * 41):
+            self.assertIsNone(U.new_kind_name(bad))
+
+
+def mock_states():
+    from unittest import mock
+
+    return mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json")

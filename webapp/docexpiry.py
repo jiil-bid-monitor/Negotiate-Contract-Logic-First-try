@@ -129,8 +129,9 @@ def read_list(folder: Path) -> list[tuple[str, date]]:
     path = folder / "서류목록.xlsx"
     if not path.exists():
         return []
-    ws = openpyxl.load_workbook(path, read_only=True, data_only=True).worksheets[0]
-    rows = ws.iter_rows(values_only=True)
+    book = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    rows = iter(list(book.worksheets[0].iter_rows(values_only=True)))
+    book.close()  # read_only는 파일을 열어 둠 — 윈도우에선 서류목록.xlsx를 다시 못 씀(서버 PC에서 웹앱으로 올릴 때)
     head = [str(c or "").strip() for c in next(rows, ())]
     if "종류" not in head or "유효기간(기준)" not in head:
         return []

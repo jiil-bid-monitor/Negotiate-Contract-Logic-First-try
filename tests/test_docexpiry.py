@@ -193,3 +193,14 @@ class TestBulk(unittest.TestCase):
         self.assertEqual((got["(그리다) 가"], got["(그리다) 나"]), (date(2027, 11, 30), date(2027, 12, 1)))
         self.assertEqual(len(list((self.folder / "[최신 서류]").glob("*.pdf"))), 2)
         self.assertEqual(docupload.found_expiry("유 효 기 간: 2026-04-01 ~ 2027-03-31"), date(2027, 3, 31))
+
+    def test_web_alert(self):
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder)}), \
+                mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"):
+            got = D.web_alert(date(2026, 11, 23))
+        self.assertEqual([(d["kind"], d["left"]) for d in got], [("(그리다) 가", 7), ("(그리다) 나", 8)])
+        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder / "없음")}):
+            self.assertEqual(D.web_alert(date(2026, 11, 23)), [], "서류 폴더가 없으면(서버 PC) 종 없음")

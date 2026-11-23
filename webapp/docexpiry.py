@@ -190,6 +190,17 @@ def apply_buttons(docs: list[tuple[str, date]], today: date, states: dict[str, s
     return {"inline_keyboard": rows} if rows else None
 
 
+def web_alert(today: date) -> list[dict]:
+    """웹앱 종 아이콘용 — [{kind, end, left, state}]. 서류 폴더가 없거나 표를 못 읽으면(서버 PC 등) 빈 목록."""
+    try:
+        docs, states = read_docs(docs_dir()), load_states()
+    except Exception:  # noqa: BLE001 — 알림 칸 하나 때문에 화면이 깨지지 않게
+        return []
+    return [{"kind": k, "end": d.isoformat(), "left": (d - today).days,
+             "state": STATES[states[apply_key(k, d)]][0] if apply_key(k, d) in states else ""}
+            for k, d in _button_docs(docs, today, states)]
+
+
 def renew_kinds(docs: list[tuple[str, date]], data: str, today: date | None = None,
                 states_path: Path | None = None) -> list[str]:
     """'갱신 완료' 버튼 값 'e:지문'·'e:all' → 새 PDF를 받을 서류 이름들(2026-11-23 사용자 요청 — 서류를 올려 유효기간을 확인받게).

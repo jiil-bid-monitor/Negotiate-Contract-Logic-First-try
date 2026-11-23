@@ -661,7 +661,8 @@ def _row_group(cells: list[Cell], c: Cell) -> str | None:
     for o in cells:
         if o is c or o.rowspan < 2 or o.col >= c.col or not (o.row <= c.row < o.row + o.rowspan):
             continue
-        t = _sq(o.text)
+        # 괄호 덧붙임은 떼고 봄 — '대표자 (법인)'(11/23 사용자 지적: 창원산업진흥원 위임장 대표자 연락처가 빔)
+        t = re.sub(r"[(（][^)）]*[)）]$", "", _sq(o.text)) or _sq(o.text)
         if re.fullmatch(r"(?:입찰|신청|제안|응모)?(?:대표자|대표이사)|위임자|위임인", t):  # '입찰 대표자'(11/10 경남교육청 위임장)
             return "대표자"
         if re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", t):
@@ -859,12 +860,16 @@ def _blank_prefix(prefix: str, chars: "_Chars") -> str | None:
             # 같은 너비의 전각 빈칸(U+3000)으로 바꿈(어림 없이 같은 너비). 쌍점·숫자 같은 반각 글자만 너비를 어림해 빈칸으로
             # (예전엔 모든 글자를 너비 어림으로 빈칸 수를 셈 — 한글에서 줄이 몇 mm 오른쪽으로 밀렸음)
             sp = chars.char_width(cur, " ") or 1
+            # (11/23 사용자 지적: 서약서 '주    소 : 강원특별자치도 / 정선군 남면'의 둘째 줄이 '강'보다 반 글자쯤 왼쪽) — 전각 빈칸(U+3000)은
+            # 한글에서 한글 한 글자보다 좁게 찍힘(캡처로 재면 약 3/4). '글꼴에 어울리는 빈칸'이 꺼진 글자 모양은 빈칸 = 글자 크기 절반이라
+            # 한글 한 글자 = 빈칸 둘(장평·자간도 똑같이 받음 — 정확히 같은 너비). 켜진 모양만 예전처럼 전각 빈칸
+            full = "  " if 'useFontSpace="1"' not in chars._block(cur) else "\u3000"
             buf, rest = [], 0.0
             for ch in unescape(part):
                 if ch == " ":
                     buf.append(" ")
                 elif _full_width(ch):
-                    buf.append("\u3000")
+                    buf.append(full)
                 else:
                     rest += chars.char_width(cur, ch)
                     if rest >= sp / 2:

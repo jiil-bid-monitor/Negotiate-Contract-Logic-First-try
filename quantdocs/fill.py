@@ -2427,7 +2427,7 @@ def _align_numbers(xml: str, edits: list, chars: "_Chars", override: dict[int, s
         if center is None or len(group) < 2:
             continue
         for cell, pid in group:
-            if chars.align(pid) != "CENTER":
+            if chars.align(pid) != "CENTER" and cell.start not in override:  # 앞서 정한 칸(연혁 연월 왼쪽 — 11/23)은 그대로
                 override[cell.start] = center
 
 
@@ -3310,6 +3310,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                                 cell = by_pos.get((r, head.col))
                                 if cell is not None and val:
                                     edits.append((cell, [val], False))
+                                    pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[cell.start:cell.end])
+                                    if pm and chars is not None:  # 연월·내용 칸은 왼쪽 정렬(11/23 사용자 — 가운데면 줄마다 시작 위치가 달라 보임)
+                                        para_override[cell.start] = chars.left_any(pm.group(1))
                         rep.filled.append(f"연혁 표 → {min(len(vault.history), len(grid_rows))}줄")
                         continue
                     if "연혁" in core and len(core) <= 8 and vault.history:

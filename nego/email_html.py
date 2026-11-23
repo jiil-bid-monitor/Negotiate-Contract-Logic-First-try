@@ -204,6 +204,8 @@ def _section(title: str, rows: list[Candidate]) -> str:
 
 
 INTEREST = "관심 공고"
+# (11/23 사용자 결정) 공고명에 이 낱말이 있으면 주간 메일 본문에서 뺌(첨부엔 남음) — 운영·관리 용역은 지일 사업이 아님
+BODY_SKIP_WORDS = ("유지관리", "청소", "환경미화", "시설관리", "모니터링", "경비")
 
 
 def split_body(candidates: list[Candidate]) -> tuple[list[Candidate], dict[str, int]]:
@@ -211,11 +213,17 @@ def split_body(candidates: list[Candidate]) -> tuple[list[Candidate], dict[str, 
     세부품명만·보유 면허로만 들어온 공고와 경계선 미만은 첨부 리포트에만(지우지 않음). 싱크로율을 못 구한 공고는 본문에 둠."""
     from .sync import BORDER
     body: list[Candidate] = []
-    hidden = {"세부품명으로만": 0, "보유 면허로만": 0, f"싱크로율 {round(BORDER * 100)}% 미만": 0}
+    hidden = {"세부품명으로만": 0, "보유 면허로만": 0, "통신 키워드만": 0, "운영·관리 용역": 0,
+              f"싱크로율 {round(BORDER * 100)}% 미만": 0}
     for c in candidates:
         sr = c.screen_result
         score = (getattr(c, "sync", None) or {}).get("score")
-        if getattr(sr, "section", "관심") == "세부품명":
+        title = c.notice.title.replace(" ", "")
+        if sr.matched_keywords == ["통신"]:
+            hidden["통신 키워드만"] += 1
+        elif any(w in title for w in BODY_SKIP_WORDS):
+            hidden["운영·관리 용역"] += 1
+        elif getattr(sr, "section", "관심") == "세부품명":
             hidden["세부품명으로만"] += 1
         elif getattr(sr, "license_match", None):
             hidden["보유 면허로만"] += 1

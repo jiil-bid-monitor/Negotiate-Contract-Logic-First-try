@@ -77,6 +77,11 @@ class TestEmailHtml(unittest.TestCase):
         for no in ("R26EM0001", "R26EM0002", "R26EM0003"):
             self.assertNotIn(no, html)
         self.assertEqual(split_body(self.cands[:1])[0], self.cands[:1], "싱크로율 없음 = 본문")
+        cands[0].screen_result = dataclasses.replace(cands[0].screen_result, matched_keywords=["통신"])
+        self.assertEqual(split_body(cands[:1])[1]["통신 키워드만"], 1)
+        cands[0].screen_result = dataclasses.replace(cands[0].screen_result, matched_keywords=["전시관"])
+        cands[0].notice = dataclasses.replace(cands[0].notice, title="○○전시관 시설 유지 관리 용역")
+        self.assertEqual(split_body(cands[:1])[1]["운영·관리 용역"], 1, "띄어 써도 걸림")
 
     def test_card_size(self):
         per_card = len(render_email_html(self.cands[:1], self.stats, NOW).encode()) - len(

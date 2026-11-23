@@ -50,6 +50,13 @@ def parse_expiry(text: str) -> date | None | str:
         return ""
 
 
+def found_expiry(text: str) -> date | None:
+    """PDF 글자의 '유효기간 : 2025.11.21 ~ 2027.11.20' → 끝 날짜(정량평가서 회사 서류 읽기와 같은 규칙)."""
+    from quantdocs.importer import validity_from_text
+
+    return validity_from_text(text or "")[1]
+
+
 def _norm(text: str) -> str:
     return re.sub(r"[\W_]+", "", text or "").lower()
 
@@ -142,7 +149,12 @@ class Uploader:
                 state["ask"] = self._say(chat, "PDF 파일을 답장으로 보내 주세요.", msg.get("message_id"), FORCE)
                 return True
             state.update(doc=doc, user_msg=msg.get("message_id"))
-            self._ask_kind(chat, state)
+            if state.get("kind"):  # '갱신 완료'에서 시작 — 종류는 이미 앎
+                state["data"] = self.download(doc["file_id"])
+                state["text"] = pdf_text(state["data"])
+                self._ask_expiry(chat, state)
+            else:
+                self._ask_kind(chat, state)
             return True
         if state["step"] == "newname":
             name = re.sub(r"\s+", " ", text).strip()
@@ -160,26 +172,18 @@ class Uploader:
                 return True
             self._save(chat, state, end, msg.get("message_id"))
             return True
-        if state["step"] == "setdate":
-            end = parse_expiry(text)
-            if not isinstance(end, date):
-                state["ask"] = self._say(chat, "날짜를 못 읽었습니다. 예) 2027-11-20", msg.get("message_id"), REPLY)
-                return True
-            self.pending.pop(chat, None)
-            cert = self._cert(state["kind"], end)
-            self._say(chat, f"<b>{html.escape(state['kind'])}</b>" + (cert or
-                      " — 인증서갱신.xlsx에 없는 서류라 날짜를 못 고쳤습니다. 새 PDF를 /upload 로 올려 주세요."),
-                      msg.get("message_id"))
-            return True
         return False
 
-    def ask_date(self, chat: str, kind: str) -> bool:
-        """'갱신 완료 → 다른 날짜 직접 입력' 버튼 — 새 만료일을 답장으로 받는다(2026-11-23). 담당자 방이 아니면 False."""
-        if chat not in self.chats:
+    def start_renew(self, chat: str, kinds: list[str]) -> bool:
+        """'갱신 완료' 버튼 — 그 서류의 새 PDF를 받는다(종류는 이미 앎). 여러 건이면 하나씩 차례로(2026-11-23 사용자 요청).
+        담당자 방이 아니거나 폴더가 없으면 False."""
+        if chat not in self.chats or not kinds or not (self.folder() / "[최신 서류]").is_dir():
             return False
-        self.pending[chat] = {"step": "setdate", "ask": None, "asks": set(), "kind": kind}
-        self.pending[chat]["ask"] = self._say(chat, f"<b>{html.escape(kind)}</b> — 새 유효기간 끝나는 날을 "
-                                                    "<b>이 메시지에 답장</b>으로 보내 주세요. 예) 2027-11-20", None, REPLY)
+        self.pending[chat] = {"step": "file", "ask": None, "asks": set(), "kind": kinds[0], "queue": kinds[1:]}
+        more = f"\n(이 서류 다음에 {len(kinds) - 1}건 더 차례로 받습니다)" if len(kinds) > 1 else ""
+        self.pending[chat]["ask"] = self._say(
+            chat, f"<b>{html.escape(kinds[0])}</b> — 새로 받은 서류 PDF를 <b>이 메시지에 답장</b>으로 보내 주세요.{more}\n"
+                  "(그만두려면 답장으로 '취소')", None, REPLY)
         return True
 
     def handle_callback(self, cb: dict) -> bool:
@@ -187,10 +191,16 @@ class Uploader:
         chat = str((msg.get("chat") or {}).get("id", ""))
         state = self.pending.get(chat)
         data = cb.get("data") or ""
-        step = {"k": "kind", "r": "remove"}.get(data[:1])
+        step = {"k": "kind", "r": "remove", "x": "expiry"}.get(data[:1])
         if not state or not step or state.get("step") != step or msg.get("message_id") not in state["asks"]:
             return False
         self.api("answerCallbackQuery", callback_query_id=cb["id"])
+        if step == "expiry":  # PDF에서 읽은 날짜 '맞음'·'다른 날짜'·'유효기간 없음'
+            if data == "x:other":
+                self._ask_date(chat, state)
+            else:
+                self._save(chat, state, state.get("found") if data == "x:ok" else None, state.get("user_msg"))
+            return True
         if data in ("k:x", "r:x"):
             self.pending.pop(chat, None)
             self._say(chat, "그만뒀습니다.")
@@ -217,18 +227,31 @@ class Uploader:
         return True
 
     def _ask_expiry(self, chat: str, state: dict) -> None:
+        """PDF 글자에서 유효기간을 찾으면 '맞음' 버튼으로 확인받고, 못 찾으면(스캔본 등) 서류를 보고 답장으로 받는다(2026-11-23)."""
         state["step"] = "expiry"
-        state["ask"] = self._say(chat, f"<b>{html.escape(state['kind'])}</b> — 유효기간 끝나는 날을 답장으로 보내 주세요.\n"
-                                       "예) 2028-11-09 · 유효기간이 없으면 '없음'", state.get("user_msg"), FORCE)
-        # ↑ PDF 보낸 사람 메시지에 답장으로 + force_reply → 그 사람 입력창이 이 질문에 대한 답장으로 바로 열린다(selective)
-        return True
+        found = state["found"] = found_expiry(state.get("text") or "")
+        name = f"<b>{html.escape(state['kind'])}</b>"
+        if found:
+            state["ask"] = self._say(chat, f"{name} — PDF에서 읽은 유효기간 끝나는 날: <b>{found}</b>\n서류와 같은지 확인해 주세요.",
+                                     state.get("user_msg"), {"inline_keyboard": [
+                                         [{"text": f"맞음 — {found}", "callback_data": "x:ok"}],
+                                         [{"text": "다른 날짜", "callback_data": "x:other"},
+                                          {"text": "유효기간 없는 서류", "callback_data": "x:none"}]]})
+            return
+        self._ask_date(chat, state, f"{name} — PDF에서 유효기간을 못 읽었습니다(스캔본이면 글자가 없습니다).\n")
+
+    def _ask_date(self, chat: str, state: dict, head: str = "") -> None:
+        # 텔레그램은 버튼과 답장 칸을 한 메시지에 같이 못 붙여서, 날짜를 칠 때는 답장 칸이 바로 열리는 질문으로
+        state["ask"] = self._say(chat, head + f"<b>{html.escape(state['kind'])}</b> — 서류에 적힌 유효기간 끝나는 날을 답장으로 "
+                                 "보내 주세요.\n예) 2028-11-09 · 유효기간이 없으면 '없음'",
+                                 state.get("user_msg"), FORCE if state.get("user_msg") else REPLY)
 
     def _ask_kind(self, chat: str, state: dict) -> None:
         """PDF를 받아 종류를 짐작 — 맞으면 버튼 하나로 끝, 아니면 전체 목록(두 줄씩)."""
         doc = state["doc"]
         state["data"] = self.download(doc["file_id"])
-        state.update(step="kind", kinds=kinds(self.folder()))
-        guess = guess_kind(state["kinds"], doc.get("file_name") or "", pdf_text(state["data"]))
+        state.update(step="kind", kinds=kinds(self.folder()), text=pdf_text(state["data"]))
+        guess = guess_kind(state["kinds"], doc.get("file_name") or "", state["text"])
         if guess is None:
             self._kind_list(chat, state)
             return
@@ -269,13 +292,15 @@ class Uploader:
         name = f"{state['kind']}_{self.today()}" + (f"_유효{end}" if end else "") + ".pdf"
         target = docs._unique(folder / "[최신 서류]" / name)
         target.write_bytes(state["data"])
-        self.pending.pop(chat, None)
+        queue = (self.pending.pop(chat, None) or {}).get("queue")
         notes: list[str] = []
         docs.run(folder, self.today(), notes.append, settle=0, alert_due=False)
         cert = self._cert(state["kind"], end) if end else ""
         self._say(chat, f"저장했습니다: <code>{html.escape(target.name)}</code>" + cert
                         + ("\n\n" + html.escape("\n".join(notes)) if notes else "")
                         + "\n\n/docs 로 유효기간을 확인할 수 있습니다.", reply_to)
+        if queue:
+            self.start_renew(chat, queue)
 
     def _cert(self, kind: str, value: date | str) -> str:
         """인증서갱신.xlsx(차장님 표)의 그 서류 만료일 칸도 고친다 — 알림·/docs가 이 표를 먼저 보므로(11/11 사용자 요청)."""

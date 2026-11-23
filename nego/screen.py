@@ -58,6 +58,12 @@ class ScreenConfig:
     # 관심 키워드를 무시할 조건 — {"공사 설계 용역": ["수리", "증축", …]}이면 공고명에 그 낱말이 있을 때 그 관심 키워드는 안 맞은 것으로 본다
     # (2026-10-14 사용자 요청: 공사 설계 용역은 새로 짓는 "신설"만 — 수리·증축 같은 부수적 설계 용역은 뺌).
     keyword_skip_when: dict[str, list[str]] = field(default_factory=dict)
+    # 관심 키워드를 이 업무(공사·물품·용역) 공고에서만 셈 — {"통신": ["공사"]}(2026-11-23 판단 기록 26건: '통신' 참가 3건은 모두 공사,
+    # 물품·용역의 '통신'은 장비·실험실·배부 등 불참). 비면 모든 업무
+    keyword_work_types: dict[str, list[str]] = field(default_factory=dict)
+    # '보유 면허' 경로(키워드 없이 공사 면허로 수집)를 이 업무 공고에서만 — ["공사"](2026-11-23: 보유 면허로 들어온 12건이 모두 불참,
+    # 그중 11건이 정보통신공사업을 요구하는 물품·용역의 장비 납품·유지보수). 비면 모든 업무(11/12 처음 규칙)
+    license_work_types: list[str] = field(default_factory=list)
     product_codes: list[dict[str, str]] = field(default_factory=list)
     industry_codes: list[dict[str, str]] = field(default_factory=list)
     # 제외 키워드와 관심 키워드가 공고명에 함께 있으면 빼지 않고 "검토 필요"로 남긴다(2026-09-30 사용자 결정 —
@@ -118,14 +124,19 @@ def _match_exclude(
     return None
 
 
-def _skipped(word: str, notice: Notice, skip_when: dict[str, list[str]] | None) -> bool:
+def _skipped(word: str, notice: Notice, skip_when: dict[str, list[str]] | None,
+             work_types: dict[str, list[str]] | None = None) -> bool:
+    allowed = (work_types or {}).get(word)
+    if allowed and notice.work_type not in allowed:
+        return True  # 이 업무 공고에선 그 관심 키워드를 안 셈(2026-11-23 '통신'은 공사만)
     title = _canonical_title(notice.title)
     return any(_squash(x) and _squash(x) in title for x in (skip_when or {}).get(word, []))
 
 
-def _match_keywords(notice: Notice, keywords: list[str], skip_when: dict[str, list[str]] | None = None) -> list[str]:
+def _match_keywords(notice: Notice, keywords: list[str], skip_when: dict[str, list[str]] | None = None,
+                    work_types: dict[str, list[str]] | None = None) -> list[str]:
     haystack = _canonical_title(notice.title) + _squash(notice.product_class_name)
-    return [w for w in keywords if _squash(w) and _squash(w) in haystack and not _skipped(w, notice, skip_when)]
+    return [w for w in keywords if _squash(w) and _squash(w) in haystack and not _skipped(w, notice, skip_when, work_types)]
 
 
 OVERSEAS_CONFIG = Path(__file__).resolve().parent.parent / "config" / "overseas.json"
@@ -292,7 +303,7 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
     if hard_word:
         return ScreenResult(matched=False, confidence=None, excluded_by="제외키워드", excluded_reason=hard_word)
     excluded_word = _match_exclude(notice, config.exclude_keywords, config.exclude_exceptions)
-    if excluded_word and config.review_conflicts and _match_keywords(notice, config.keywords, config.keyword_skip_when):
+    if excluded_word and config.review_conflicts and _match_keywords(notice, config.keywords, config.keyword_skip_when, config.keyword_work_types):
         # 관심 키워드도 있다 — 제외하지 않고 아래 해외 조건만 거친 뒤 "검토 필요"로 둔다.
         # (품명코드 일치만으로 올리는 건 2026-10-01 넣었다가 사용자 결정으로 뺌 — 관심 키워드가 있을 때만.)
         result = screen(notice, replace(config, exclude_keywords=[], review_conflicts=False))
@@ -320,7 +331,7 @@ def screen(notice: Notice, config: ScreenConfig) -> ScreenResult:
         )
 
     product_hits, industry_hits = _match_codes(notice, config)
-    keyword_hits = _match_keywords(notice, config.keywords, config.keyword_skip_when)
+    keyword_hits = _match_keywords(notice, config.keywords, config.keyword_skip_when, config.keyword_work_types)
 
     # 업종코드 단독 매칭은 결과에 포함하지 않는다 (기존 정책). 단, 몽골 해외관은
     # 키워드·코드가 하나도 안 맞아도 조용히 빼지 않는다 — 플래그를 달아 사람이
@@ -359,6 +370,8 @@ def license_route(notice: Notice, config: ScreenConfig, licenses: list[str], mis
     외주 추천 낙석방지책 '정비'공사가 그 낱말로 빠졌었음."""
     if not licenses or missed.excluded_by not in ("미매칭", "제외키워드"):
         return None
+    if config.license_work_types and notice.work_type not in config.license_work_types:
+        return None  # 이 업무(물품·용역 등) 공고는 면허만으로 안 받음(2026-11-23)
     if _match_exclude(notice, config.hard_exclude_keywords, config.exclude_exceptions):
         return None
     evidence = _overseas_exhibition_evidence(notice)

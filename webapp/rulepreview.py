@@ -6,6 +6,7 @@
 
     py -m webapp.rulepreview --add-exclude 영인 --add-exclude 배부
     py -m webapp.rulepreview --remove-keyword 통신 --run 12
+    py -m webapp.rulepreview --keyword-work 통신=공사 --license-work 공사     (11/23 — 관심 키워드·보유 면허 경로를 업무로 좁힘)
 
 결과: 화면에 요약, `output/규칙미리보기_날짜.csv`(BOM — 엑셀에서 바로 열림, 공고 정보와 판단 기록이 들어 있어 공개 저장소에 올리지 말 것).
 """
@@ -40,6 +41,8 @@ class Change:
     remove_exclude: list[str] = field(default_factory=list)
     add_hard: list[str] = field(default_factory=list)
     remove_hard: list[str] = field(default_factory=list)
+    keyword_work: list[str] = field(default_factory=list)  # "통신=공사" — 그 관심 키워드를 그 업무 공고에서만(11/23)
+    license_work: list[str] = field(default_factory=list)  # "공사" — 보유 면허 경로를 그 업무 공고에서만(11/23)
 
     def empty(self) -> bool:
         return not any(vars(self).values())
@@ -47,7 +50,8 @@ class Change:
     def describe(self) -> str:
         names = {"add_keyword": "관심 키워드 추가", "remove_keyword": "관심 키워드 삭제",
                  "add_exclude": "제외 키워드 추가", "remove_exclude": "제외 키워드 삭제",
-                 "add_hard": "무조건 제외 추가", "remove_hard": "무조건 제외 삭제"}
+                 "add_hard": "무조건 제외 추가", "remove_hard": "무조건 제외 삭제",
+                 "keyword_work": "관심 키워드 업무 한정", "license_work": "보유 면허 경로 업무 한정"}
         return " · ".join(f"{names[k]} {', '.join(v)}" for k, v in vars(self).items() if v)
 
 
@@ -57,11 +61,28 @@ def _edit(words: list[str], add: list[str], remove: list[str]) -> list[str]:
     return out + [w for w in add if S._squash(w) not in {S._squash(x) for x in out}]
 
 
+def _work_map(items: list[str]) -> dict[str, list[str]]:
+    """["통신=공사", "공간=공사,물품"] → {"통신": ["공사"], "공간": ["공사", "물품"]}."""
+    out: dict[str, list[str]] = {}
+    for it in items:
+        word, _, works = it.partition("=")
+        if word.strip() and works.strip():
+            out[word.strip()] = [w.strip() for w in works.split(",") if w.strip()]
+    return out
+
+
 def apply_change(config: S.ScreenConfig, change: Change) -> S.ScreenConfig:
     return replace(config,
                    keywords=_edit(config.keywords, change.add_keyword, change.remove_keyword),
                    exclude_keywords=_edit(config.exclude_keywords, change.add_exclude, change.remove_exclude),
-                   hard_exclude_keywords=_edit(config.hard_exclude_keywords, change.add_hard, change.remove_hard))
+                   hard_exclude_keywords=_edit(config.hard_exclude_keywords, change.add_hard, change.remove_hard),
+                   keyword_work_types={**config.keyword_work_types, **_work_map(change.keyword_work)},
+                   license_work_types=list(change.license_work) or list(config.license_work_types))
+
+
+def _license_kept(c: dict[str, Any], cfg: S.ScreenConfig) -> bool:
+    """수집 때 보유 면허 경로로 남은 공고가 이 규칙에서도 그 경로로 남나 — 업무 한정(11/23)이 있으면 그 업무만."""
+    return bool(c.get("license_match")) and (not cfg.license_work_types or (c.get("work_type") or "") in cfg.license_work_types)
 
 
 def notice_of(c: dict[str, Any]) -> Notice:
@@ -88,14 +109,22 @@ def compare(payload: dict[str, Any], old_cfg: S.ScreenConfig, new_cfg: S.ScreenC
     for c in payload.get("candidates") or []:
         n = notice_of(c)
         old, new = S.screen(n, old_cfg), S.screen(n, new_cfg)
+        if not old.matched and not new.matched and c.get("license_match") and _license_kept(c, old_cfg) \
+                and not _license_kept(c, new_cfg) and not c.get("local_match"):
+            # 키워드 없이 보유 면허로만 들어온 공고 — 경로를 업무로 좁히면 빠짐(11/23)
+            rows.append({"c": c, "before": "목록", "after": f"빠짐 — 보유 면허 경로 업무 한정({c.get('work_type') or '?'})", "note": ""})
+            continue
         if _place(old) == _place(new):
             continue
         before = "검토 필요" if c.get("confidence") == "검토필요" else "목록"
         after = _place(new)
-        if not new.matched and c.get("license_match") and new.excluded_by in ("미매칭", "제외키워드") \
+        if not new.matched and _license_kept(c, new_cfg) and new.excluded_by in ("미매칭", "제외키워드") \
                 and not S._match_exclude(n, new_cfg.hard_exclude_keywords, new_cfg.exclude_exceptions):
             after = "목록(보유 면허로 남음)"
-        if before == after or after.startswith("목록(보유"):
+        if not new.matched and c.get("local_match") and new.excluded_by in ("미매칭", "제외키워드") \
+                and not S._match_exclude(n, new_cfg.hard_exclude_keywords, new_cfg.exclude_exceptions):
+            after = "목록(정선 사업으로 남음)"
+        if before == after or after.startswith(("목록(보유", "목록(정선")):
             continue
         rows.append({"c": c, "before": before, "after": after, "note": ""})
     for c in payload.get("rejected") or []:
@@ -147,11 +176,16 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="py -m webapp.rulepreview", description="키워드 규칙을 바꾸면 최근 수집 결과에서 무엇이 달라지나")
     for flag in ("add-keyword", "remove-keyword", "add-exclude", "remove-exclude", "add-hard", "remove-hard"):
         ap.add_argument(f"--{flag}", action="append", default=[], metavar="낱말")
+    ap.add_argument("--keyword-work", action="append", default=[], metavar="낱말=업무",
+                    help="그 관심 키워드를 그 업무 공고에서만 셈 (예: 통신=공사, 여러 업무는 쉼표)")
+    ap.add_argument("--license-work", action="append", default=[], metavar="업무",
+                    help="보유 면허 경로를 그 업무 공고에서만 (예: 공사)")
     ap.add_argument("--db", default=os.environ.get("WEBAPP_DB", "data/webapp.sqlite3"))
     ap.add_argument("--run", type=int, help="수집 결과 번호 (없으면 최신)")
     ap.add_argument("--out", default=os.environ.get("OUTPUT_DIR", "output"))
     a = ap.parse_args(argv)
-    change = Change(a.add_keyword, a.remove_keyword, a.add_exclude, a.remove_exclude, a.add_hard, a.remove_hard)
+    change = Change(a.add_keyword, a.remove_keyword, a.add_exclude, a.remove_exclude, a.add_hard, a.remove_hard,
+                    a.keyword_work, a.license_work)
     if change.empty():
         ap.error("바꿀 조건을 하나 이상 주세요 (예: --add-exclude 영인)")
     db = Path(a.db)

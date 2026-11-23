@@ -59,6 +59,8 @@ def load_config(config_dir: Path | None = None) -> AppConfig:
         hard_exclude_keywords=list(keywords.get("hardExcludeKeywords", [])),
         exclude_exceptions=dict(keywords.get("excludeKeywordExceptions", {})),
         keyword_skip_when=dict(keywords.get("keywordSkipWhen", {})),
+        keyword_work_types={k: list(v) for k, v in dict(keywords.get("keywordWorkTypes", {})).items()},
+        license_work_types=list(keywords.get("licenseRouteWorkTypes", [])),
         # 물품 공고 수집 세부품명 = 등록증 유효 품목(held_qualifications.json) — 2026-10-19 통합 결정 9번
         product_codes=[{"code": str(e.get("code", "")).strip(), "name": e.get("name", "")}
                        for e in held.get("heldProducts", []) if str(e.get("code", "")).strip()],

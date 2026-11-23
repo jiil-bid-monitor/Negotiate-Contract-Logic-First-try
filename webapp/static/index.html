@@ -1547,10 +1547,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <input id="logQ" type="search" placeholder="공고명·공고번호·판단자·사유로 찾기" autocomplete="off" aria-label="판단 기록에서 찾기">
       <select id="logStatus" aria-label="판단">
         <option value="">전체</option>
-        <option value="판단">판단 (참가·보류·불참)</option>
-        <option value="미판단">미판단</option>
-        <option value="놓침">놓침</option>
-        <option value="참고">참고 (사전규격)</option>
         <option value="참가">참가</option>
         <option value="보류">보류</option>
         <option value="불참">불참</option>
@@ -1562,7 +1558,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       </select>
     </div>
     <div id="logList"></div>
-    <div class="log-empty" id="logEmpty" hidden>아직 판단 기록이 없습니다. 텔레그램으로 보고된 공고가 '미판단'으로 쌓이고, 실제 공고 카드에서 참가·보류·불참을 고르면 사유와 함께 남습니다.</div>
+    <div class="log-empty" id="logEmpty" hidden>아직 판단 기록이 없습니다. 실제 공고 카드에서 참가·보류·불참을 고르면 사유와 함께 여기에 남습니다.</div>
     <div id="logAgg"></div>
   </section>
 
@@ -3385,9 +3381,11 @@ const todayText = () => { const d = new Date(); return `${d.getFullYear()}-${Str
 /** 판단 기록 탭에 싣는 공고와 그 상태 — 최근 순 (판단한 공고는 판단 시각, 판단 전 공고는 마지막 보고일) */
 const logKey = (e) => (UNDECIDED.includes(e.st) ? e.p.reports.at(-1).date : String(e.p.decidedAt || e.p.updatedAt || ""));
 function logEntriesOf() {
+  // (11/23 사용자 요청) 담당자가 판단한 공고(참가·보류·불참)만 — 보고만 되고 판단 안 한 공고(미판단·놓침·사전규격 참고)가 날마다 쌓여
+  // 보기 어려웠음. 판단은 실제 공고 탭 카드에서. 보고 기록 자체(participation reports)는 그대로 남음(서버·시트 집계용)
   return Object.values(participation)
     .map((p) => ({ p, st: logStatusOf(p) }))
-    .filter((e) => e.st)
+    .filter((e) => DECISIONS.includes(e.st))
     .sort((a, b) => logKey(b).localeCompare(logKey(a)));
 }
 /** 그 날짜가 든 주(월~일) — 판단 기록을 주 단위로 묶어 보인다(2026-11-09 사용자 요청: 놓침이 쌓이면 보기 어려움) */
@@ -3445,7 +3443,7 @@ function renderLog() {
   const all = entries.filter((e) => !UNDECIDED.includes(e.st)).map((e) => e.p);
   const count = (s) => entries.filter((e) => e.st === s).length;
   $("logMeta").innerHTML =
-    `판단 기록 <b>${num(entries.length)}</b>건 — ${[...UNDECIDED, ...DECISIONS].filter((s) => (s !== "놓침" && s !== "참고") || count(s)).map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
+    `판단 기록 <b>${num(entries.length)}</b>건 — ${DECISIONS.map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
     `<button type="button" class="linkish" id="logCsv">${logFilterOn() ? `CSV 내려받기 (고른 ${num(logFiltered(entries).length)}건)` : "CSV 내려받기"}</button>` +
     "";
   $("logAggNote").textContent = all.length >= LOG_AGG_MIN ? "아래 키워드 조정용 집계는 판단할 때 공고에 걸린 관심 키워드 기준입니다." : "";
@@ -3516,7 +3514,7 @@ function renderLog() {
       + `${fold(missed, "판단 없이 마감된 공고(놓침)", stf === "놓침")}${fold(ref, "사전규격 — 참고(본공고가 나오면 판단)", stf === "참고")}</details>`;
   };
   $("logList").innerHTML = entries.length
-    ? list.length ? top + (top && weeks.length ? '<h3 class="log-sec-title log-sec-past">지난 기록 <span class="faint-note">판단한 공고 · 놓침 · 사전규격(참고)</span></h3>' : "") + weeks.map(weekHtml).join("")
+    ? list.length ? top + (top && weeks.length ? '<h3 class="log-sec-title log-sec-past">지난 기록 <span class="faint-note">판단한 공고</span></h3>' : "") + weeks.map(weekHtml).join("")
       : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
     : "";
   $("logAgg").innerHTML = all.length >= LOG_AGG_MIN ? logAggHtml(all) : "";
@@ -3575,7 +3573,7 @@ function downloadLogCsv() {
 }
 $("logMeta").addEventListener("click", (ev) => {
   if (ev.target.id !== "logCsv") return;
-  if (!logEntriesOf().length) return void alert("아직 판단 기록이 없습니다. 보고된 공고가 쌓이거나 실제 공고 카드에서 참가·보류·불참을 고르면 내려받을 수 있습니다.");
+  if (!logEntriesOf().length) return void alert("아직 판단 기록이 없습니다. 실제 공고 카드에서 참가·보류·불참을 고르면 내려받을 수 있습니다.");
   if (!logFiltered(logEntriesOf()).length) return void alert("고른 조건에 맞는 판단 기록이 없습니다 — 찾기 칸·판단·보고 고르기를 바꿔 보세요.");
   downloadLogCsv();
 });

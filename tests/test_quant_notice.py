@@ -431,3 +431,13 @@ def test_butim_form_heads():
         pos += len(seg)
     heads = _butim_heads(paras, xml)
     assert [(i, n) for i, n in heads] == [(6, "1"), (8, "2"), (10, "3")], heads
+
+
+def test_butim_page_title_drops_head_and_item():
+    """11/23 사용자: 화면 필요 서식 4~6번에 '[붙임 N]'이 딸려 옴 — 제목과 머리가 한 문단이었음. 머리는 떼고,
+    같은 크기로 이어지는 번호 항목('1. 프로젝트 수행 조직도 (예시)')은 제목이 넘어간 줄로 안 이음."""
+    from quantdocs.forms_cut import page_title
+
+    p = lambda cid, t: f'<hp:p><hp:run charPrIDRef="{cid}"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = p("1", "[붙임 4] 수행조직 및 업무분장") + p("1", "1. 프로젝트 수행 조직도 (예시)") + p("0", "본문 글") + p("0", "본문 글 둘")
+    assert page_title(body, {"0": 1000, "1": 1600}) == "수행조직 및 업무분장"

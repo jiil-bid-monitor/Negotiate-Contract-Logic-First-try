@@ -3599,11 +3599,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         value = f"{value}{' ' * (gap or 3)}{seal_text}"
                         if chars is not None and pm:
                             para_override[target.start] = chars.left_any(pm.group(1))
-                        # 이름 + '(서명 또는 날인)'·'(인)' 칸은 두 줄로 넘기지 않고 글자를 줄여 한 줄에(11/23 사용자 — '이운봉 (서명 또는 날' / '인)'으로
+                        # 이름 + '(서명 또는 날인)'·'(인)' 칸은 두 줄로 넘기지 않고 글자를 줄여 한 줄에(11/23 사용자 — '(이름) (서명 또는 날' / '인)'으로
                         # 나뉘어 형식이 무너졌음). 빈칸이 모자라면 이름과 도장 글 사이 한 칸
                         rep.one_line.add(target.start)
-                        if gap is None or gap < 1:
-                            value = f"{value.split(seal_text)[0].rstrip()}  {seal_text}"
+                        if gap is None and re.search(r"cellSz\b[^>]*width=", xml[target.start:target.end]):
+                            value = f"{value.split(seal_text)[0].rstrip()}  {seal_text}"  # 칸 너비를 아는데 빈칸이 모자람
                     lines = [value]
                     lead = re.fullmatch(r"\s*([:：])\s*", target.text)
                     if lead:

@@ -4505,6 +4505,43 @@ def test_subtotal_row_score_also_in_item_score_cell(tmp_path: Path):
     assert "신인도 소계|4|4|" in text and "2점|4|" in text, text
 
 
+def test_foot_score_row_gets_item_score(tmp_path: Path):
+    """11/23 사용자 지적: 항목마다 맨 아래 칠해진 '점 수 | 6.0점 | __' 소계 칸 — 신인도만 들어가고 기술인력·경영상태는 빔
+    (그 줄을 배점 줄로 읽었음. 신인도는 배점 2.0이 점수와 같아 우연히 들어감). 소계 칸 = 항목 점수, 등급 줄 칸은 그대로."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    grades = [("기 술 사", "각 1.0점"), ("특급기술자", "각 0.8점"), ("고급기술자", "각 0.6점"), ("중급기술자", "각 0.4점"), ("초급기술자", "각 0.2점")]
+    rows = [[c(0, 0, "항목"), c(1, 0, "세부항목", 4), c(5, 0, "배점"), c(6, 0, "평점"), c(7, 0, "비 고")]]
+    rows.append([c(0, 1, "참여인력 전문성", 1, 6), c(1, 1, "전문 인력", 1, 5), c(2, 1, grades[0][0], 3), c(5, 1, grades[0][1]), c(6, 1, ""), c(7, 1, "명 × 점 = 점")])
+    rows += [[c(2, r, g, 3), c(5, r, p), c(6, r, ""), c(7, r, "명 × 점 = 점")] for r, (g, p) in enumerate(grades[1:], 2)]
+    rows.append([c(1, 6, "점 수", 4), c(5, 6, "6.0점"), c(6, 6, ""), c(7, 6, "")])
+    credit = [("AAA AA+ A+ BBB+ BBB0", "4.0"), ("BBB- BB+, BB0 BB-", "3.8"), ("B+, B0, B-", "3.6"), ("CCC+ 이하", "2.8")]
+    rows.append([c(0, 7, "경영상태", 1, 6), c(1, 7, "신용 평가 등급", 1, 5), c(2, 7, "회사채에 대한 신용평가등급"), c(3, 7, "기업어음에 대한 신용평가등급"),
+                 c(4, 7, "기업신용평가 등급"), c(5, 7, "평점(점)"), c(6, 7, ""), c(7, 7, "")])
+    rows += [[c(2, r, g), c(3, r, "-"), c(4, r, g), c(5, r, p), c(6, r, ""), c(7, r, "")] for r, (g, p) in enumerate(credit, 8)]
+    rows.append([c(1, 12, "점 수", 4), c(5, 12, "4.0점"), c(6, 12, ""), c(7, 12, "")])
+    rows.append([c(0, 13, "신인도", 1, 3), c(1, 13, "행정처분"), c(2, 13, "입찰참가제한 및 영업정지 등", 3), c(5, 13, "각 0.2점 감점"), c(6, 13, ""), c(7, 13, "월 × 0.2 =")])
+    rows.append([c(1, 14, "계약이행의 성실도"), c(2, 14, "납품지연 및 불공정하도급거래", 3), c(5, 14, "지정점수 감점"), c(6, 14, ""), c(7, 14, "")])
+    rows.append([c(1, 15, "점 수", 4), c(5, 15, "2.0점"), c(6, 15, ""), c(7, 15, "")])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+"})
+    v.staff = [{"이름": n, "입사일": "2010-01-01", "등급": g} for n, g in
+               [("가", "특급"), ("나", "특급"), ("다", "특급"), ("라", "고급"), ("마", "고급"), ("바", "고급"), ("사", "고급"), ("아", "초급"), ("자", "초급"), ("차", "초급")]]
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 23)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    # 기술인력: 특급 3 × 0.8 + 고급 4 × 0.6 + 초급 3 × 0.2 = 5.4 → 소계 칸, 등급 줄 칸·비고는 그대로
+    assert "특급기술자|각 0.8점|2.4|3명 × 0.8점 = 2.4점|" in text, text
+    assert "점 수|6.0점|5.4|" in text, text
+    # 경영상태 BB+ → 3.8: 등급 줄과 소계 칸 둘 다
+    assert "BBB- BB+, BB0 BB-|3.8|3.8|" in text and "점 수|4.0점|3.8|" in text, text
+    # 신인도 = 만점 2 → 소계 칸(감점 줄 칸엔 안 넣음)
+    assert "점 수|2.0점|2|" in text and "입찰참가제한 및 영업정지 등|각 0.2점 감점|2|" not in text, text
+
+
 def test_staff_total_placeholder_and_history_bullet(tmp_path: Path):
     """11/20 사용자 요청·지적(제안업체 일반현황 및 연혁): '인력 구성현황 | 총 ○○명 / ※ 보유인력 내역서 별도첨부' → '총 18명',
     '□ 주요연혁 <간략기재> / ○ / □ 회사소개 / ○' 칸에 연혁이 빠짐 → 연혁 아래 '○' 자리에 한 줄씩, 회사소개는 그대로."""

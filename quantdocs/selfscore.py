@@ -933,12 +933,22 @@ def read_form(cells) -> list[FormRow]:
             grade_cols = cand
             break
     out = []
+    def foot_row(rs):
+        # 항목 맨 아래 '점 수 | 6.0점 | __'·'소 계' 줄 = 그 항목 소계 칸(11/23 사용자 지적: 칠해진 소계 칸에 신인도만 들어가고
+        # 기술인력·경영상태는 빔 — 이 줄을 배점 줄로 읽었음, 신인도는 배점 2.0이 점수와 같아 우연히 들어감)
+        if len(rs) < 2:
+            return None
+        lab = "".join(_sq(c.text) for c in rows[rs[-1]] if c.col < min(pcol, scol))
+        return rs[-1] if re.fullmatch(r"점수|소계", lab) else None
     for rs in blocks:
         first = sorted(rows[rs[0]], key=lambda c: c.col)
         target = next((c for c in first if c.col <= scol < c.col + c.colspan), None)
+        foot = foot_row(rs)
         by_points: dict = {}
         if rs[0] in split_cells:  # 줄마다 평점 칸 — {그 줄 배점: 평점 칸}
             for r in rs:
+                if r == foot:
+                    continue
                 line = rows[r]
                 sc = next((c for c in line if c.col <= scol < c.col + c.colspan), None)
                 pv = _num(next((c.text for c in line if c.col <= pcol < c.col + c.colspan), ""))
@@ -966,10 +976,17 @@ def read_form(cells) -> list[FormRow]:
         none_cells: list = []
         kinds: dict[int, str] = {}
         nums = []
+        foot_cell = None
         for r in rs:
             line = sorted(rows[r], key=lambda c: c.col)
             pts_text = next((c.text for c in line if c.col <= pcol < c.col + c.colspan), "")
             pts, per = _num(pts_text), _per_person(pts_text)
+            if r == foot:  # 소계 줄 — 그 배점이 항목 배점(상한), 평점 칸 = 항목 점수 자리
+                if pts is not None:
+                    cap = pts
+                foot_cell = next((c for c in line if c.col <= scol < c.col + c.colspan
+                                  and (c.blank or re.fullmatch(r"\s*0(?:\.0+)?\s*점?\s*", c.text or ""))), None)
+                continue
             crit.note += " ".join(c.text.strip() for c in line if c.col > scol and c.text.strip()) + "\n"
             texts = [(c.col, re.sub(r"\s+", " ", c.text).strip()) for c in line if c.col < min(pcol, scol) and c.text.strip()]
             if any("상한" in _sq(t) for _, t in texts) and not (texts and re.fullmatch(r"(?:해당)?없음", _sq(texts[-1][1]))):
@@ -1054,6 +1071,9 @@ def read_form(cells) -> list[FormRow]:
         has = crit.bands or crit.per_grade or crit.credit_rows or crit.sanction
         if grade_cells and cap_cell is not None:
             target = cap_cell
+        if foot_cell is not None:
+            # 항목 점수는 소계 칸에 — 구간·등급 줄마다 평점 칸이 있으면(경영상태 등급 줄) 맞는 줄에도(`by_points` + `cap_cell`)
+            target = cap_cell = foot_cell
         cap_cell = cap_cell if cap_cell is not None else sub_cells.get(rs[0])
         out.append(FormRow(label, points, target, crit if has else None, by_points=by_points, grade_cells=grade_cells,
                            none_cells=none_cells, cap_cell=cap_cell, col_cells=col_cells, zero_cells=zero_cells))

@@ -339,12 +339,48 @@ def save_doc(folder: Path, kind: str, data: bytes, end: date | None, today: date
     텔레그램 /upload·갱신 완료와 웹앱이 같이 쓴다(2026-11-23). → (저장한 파일 이름, 표 안내, 정리 안내들)"""
     from under100m import docs
 
-    name = f"{file_kind(folder, kind)}_{today}" + (f"_유효{end}" if end else "") + ".pdf"
+    fkind = file_kind(folder, kind)
+    notes: list[str] = []
+    # 같은 날 같은 서류를 또 올리면(잘못 올려 다시 올림) 앞 파일을 먼저 [이전 서류]로 — 발급일이 같으면 정리가 둘 다 남겨 중복이 됐음(2026-11-23)
+    for p in _latest(folder, fkind):
+        if docs.parse_name(p.name).issued == today:
+            notes.append(f"- {_set_aside(folder, p)} → [이전 서류] (같은 날 다시 올림)")
+    name = f"{fkind}_{today}" + (f"_유효{end}" if end else "") + ".pdf"
     target = docs._unique(folder / "[최신 서류]" / name)
     target.write_bytes(data)
-    notes: list[str] = []
     docs.run(folder, today, notes.append, settle=OURS, alert_due=False)
     return target.name, cert_note(folder, kind, end) if end else "", notes
+
+
+def _set_aside(folder: Path, path: Path) -> str:
+    """파일을 지우지 않고 [이전 서류]로 — 옮긴 파일 이름."""
+    from under100m import docs
+
+    (folder / "[이전 서류]").mkdir(exist_ok=True)
+    path.replace(docs._unique(folder / "[이전 서류]" / path.name))
+    return path.name
+
+
+def replace_doc(folder: Path, kind: str, data: bytes, today: date) -> str:
+    """잘못 올린 파일 바꾸기(2026-11-23 사용자 요청) — 지금 파일을 [이전 서류]로 빼고 같은 이름(발급일·유효기간 그대로)으로 새 PDF.
+    날짜가 틀렸으면 '날짜 수정'으로 따로. 바꿀 파일이 없으면 ValueError."""
+    from under100m import docs
+
+    paths = _latest(folder, file_kind(folder, kind))
+    if not paths:
+        raise ValueError("바꿀 파일이 없습니다 — '새 서류 올리기'로 넣어 주세요")
+    target = paths[-1]
+    _set_aside(folder, target)
+    target.write_bytes(data)
+    docs.run(folder, today, lambda text: None, settle=OURS, alert_due=False)
+    return f"파일을 바꿨습니다: {target.name}\n잘못 올린 파일은 지우지 않고 [이전 서류]로 옮겼습니다."
+
+
+def same_kind(folder: Path, name: str) -> str | None:
+    """새 서류 이름이 이미 있는 서류와 같은지(띄어쓰기·기호·대소문자 무시, 표 이름 포함) — 있으면 그 이름. 같은 서류가 두 줄로 생기지 않게.
+    글자 포함으로는 안 봄 — '사업자등록증'·'사업자등록증명'처럼 다른 서류가 실제로 있음."""
+    norm = _norm(name)
+    return next((k for k in kinds(folder) + [k for k, _ in docexpiry.read_docs(folder)] if _norm(k) == norm), None)
 
 
 def _latest(folder: Path, kind: str):
@@ -390,7 +426,8 @@ def edit_doc(folder: Path, kind: str, end: date | None, today: date) -> str:
 
 
 def all_docs(folder: Path, today: date) -> list[dict]:
-    """서류 관리 목록 — 만료일이 있는 서류(표·서류목록) + 날짜 없는 파일 종류. [{kind, end, left, state}]"""
+    """서류 관리 목록 — 만료일이 있는 서류(표·서류목록) + 날짜 없는 파일 종류. [{kind, end, left, state, file}]
+    file = [최신 서류]의 지금 파일 이름(어떤 파일이 올라가 있는지 보이게, 없으면 '')."""
     states = docexpiry.load_states()
     dated = docexpiry.read_docs(folder)
     out = [{"kind": k, "end": d.isoformat(), "left": (d - today).days,
@@ -399,4 +436,7 @@ def all_docs(folder: Path, today: date) -> list[dict]:
     names = [k for k, _ in dated]
     out += [{"kind": k, "end": None, "left": None, "state": ""} for k in kinds(folder)
             if k not in names and not any(docexpiry.same_doc(c, k) for c in names)]
+    for d in out:
+        paths = _latest(folder, file_kind(folder, d["kind"]))
+        d["file"] = paths[-1].name if paths else ""
     return out

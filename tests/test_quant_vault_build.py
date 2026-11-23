@@ -4866,3 +4866,24 @@ def test_value_size_from_inner_table_label(tmp_path: Path):
     sec, hdr = z.read("Contents/section0.xml").decode(), z.read("Contents/header.xml").decode()
     cid = re.search(r'charPrIDRef="(\d+)"><hp:t>\(주\)가상<', sec).group(1)
     assert re.search(rf'<hh:charPr id="{cid}" height="1100"', hdr), (cid, sec, hdr)
+
+
+def test_joint_participant_rows_left_blank(tmp_path: Path):
+    """11/23 사용자: 안성시 키즈헬스케어센터 [서식 제11호] 제안 참가 신청서 '대표사 / 공동 참여자 / 공동 참여자'(세로 묶음)에
+    공동 참여자 칸까지 지일 정보가 들어감 — 공동참여자 = 공동수급 대상, 대표업체 줄에만 값."""
+    from quantdocs.fill import fill_hwpx, unfilled_slots
+
+    c = lambda col, row, t, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                   f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="{rs}"/></hp:tc>')
+    rows = []
+    for k, head in enumerate(("대표사", "공동\n참여자", "공동\n참여자")):
+        r = k * 2
+        rows.append([c(0, r, head.replace("\n", " "), 2), c(1, r, "업체명"), c(2, r, ""), c(3, r, "대 표 자"), c(4, r, "(인)")])
+        rows.append([c(1, r + 1, "주  소"), c(2, r + 1, ""), c(3, r + 1, "전화번호"), c(4, r + 1, "")])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(x) + "</hp:tr>" for x in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 어딘가 1", "전화번호": "033-111-2222"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+    assert text.count("(주)가상") == 1 and text.count("강원 어딘가 1") == 1 and text.count("033-111-2222") == 1, text
+    assert unfilled_slots(sec) == [], unfilled_slots(sec)

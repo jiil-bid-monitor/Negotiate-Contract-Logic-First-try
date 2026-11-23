@@ -404,3 +404,30 @@ def test_yangsik_form_heads_and_appendix():
     heads = _yangsik_heads(paras, xml)
     assert [(lines[i], n) for i, n in heads] == [("【양식1】", "1"), ("【양식2】", "2"),
                                                   ("[양식1] 외주 용역사업 보안특약 서약서", "3")]
+
+
+def test_butim_form_heads():
+    """11/23 사용자 제보: 예술의전당 한가람 재개관전 연출 제안요청서 — 서식을 '[붙임 1] 입찰참가신청서 … [붙임 11] 청렴계약이행서약서'로 적어
+    '첨부 어디에서도 서식을 찾지 못함'. 줄 앞 '[붙임 N]'(목차 + 본문 머리)을 서식으로 — 목차 줄은 건너뜀, 문장 안 '([붙임 8])' 참조는 그대로.
+    서식 제목 낱말·'붙임 서식' 머리가 없는 '[붙임 N]'(참고 자료)은 서식으로 안 봄."""
+    import re
+    from quantdocs.forms_cut import Para, _butim_heads
+    from quantdocs.notice import butim_text
+
+    lines = ["보안서약서([붙임 8])를 제출받은 후 별도로 제공한다.", "붙임 서식", "[붙임 1] 입찰참가신청서", "[붙임 2] 위임장",
+             "[붙임 3] 참여 인력 총괄표", "", "[붙임 1] 입찰참가신청서", "입 찰 참 가 신 청 서", "[붙임 2] 위임장", "위 임 장",
+             "[붙임 3] 참여 인력 총괄표", "성명"]
+    got = {f.no: f.name for f in read_forms(butim_text("\n".join(lines)), "x.hwpx", load_catalog())}
+    assert got == {1: "입찰참가신청서", 2: "위임장", 3: "참여 인력 총괄표"}, got
+    assert "보안서약서([붙임 8])" in butim_text("\n".join(lines))
+    # 참고 자료 '[붙임 N]'은 그대로(서식 없음)
+    ref = "[붙임 1] 과업 내용 상세\n내용\n[붙임 2] 전시 공간 도면\n도면"
+    assert butim_text(ref) == ref and not read_forms(butim_text(ref), "x.hwpx", load_catalog())
+    xml = "".join(f"<hp:p>{'<hp:tbl/>' if t == '입 찰 참 가 신 청 서' else ''}<hp:t>{t}</hp:t></hp:p>" for t in lines)
+    paras, pos = [], 0
+    for t in lines:
+        seg = re.search(r"<hp:p>.*?</hp:p>", xml[pos:]).group()
+        paras.append(Para(pos, pos + len(seg), t))
+        pos += len(seg)
+    heads = _butim_heads(paras, xml)
+    assert [(i, n) for i, n in heads] == [(6, "1"), (8, "2"), (10, "3")], heads

@@ -222,6 +222,25 @@ _YHEAD = re.compile(rf"^\s*{_SYM}\s*양\s*식\s*(?:제\s*)?(\d+)\s*호?\s*(?:-\s
 _APPX_HEAD = re.compile(rf"^\s*{_SYM}\s*별\s*첨\s*{_SYM}\s*(?P<rest>.*)$")
 
 
+_BHEAD = re.compile(rf"^(\s*{_SYM}\s*)붙\s*임(\s*\d+\s*{_SYM})(.*)$")
+# '[붙임 N]'이 서식인지 — 서식 제목 낱말(신청서·위임장·서약서 …) 또는 '붙임 서식' 목차 머리(11/23 한가람 재개관전 연출 제안요청서)
+BUTIM_FORM_WORDS = re.compile(r"신청서|위임장|질의서|서약서|확약서|동의서|각서|확인서|협정서|총괄표|경력사항|내역서|명세서|현황")
+
+
+def butim_text(text: str) -> str:
+    """'[붙임 1] 입찰참가신청서 … [붙임 11] 청렴계약이행서약서'처럼 서식을 '붙임'으로 적은 문서(11/23 사용자 제보 — 예술의전당
+    한가람 재개관전 연출 제안요청서, '첨부 어디에서도 서식을 찾지 못함') → 줄 맨 앞 '[붙임 N]'을 '[서식 N]'으로 바꿔 같은 규칙으로 읽음.
+    '[서식 N]'·'양식 N' 머리가 이미 있는 문서와, 줄 앞 '[붙임 N]'이 둘 미만이거나 서식 제목 낱말·'붙임 서식' 머리가 없는 문서
+    (붙임 = 과업 내용 상세 같은 참고 자료)는 그대로. 문장 안의 '([붙임 8])' 참조도 그대로."""
+    lines = text.splitlines()
+    heads = [m for m in map(_BHEAD.match, lines) if m]
+    if len(heads) < 2 or re.search(rf"^\s*{_SYM}\s*(?:별\s*지\s*)?[서양]\s*식\s*(?:제\s*)?\d", text, re.M):
+        return text
+    if not (any(_squash(ln) in ("붙임서식", "붙임양식") for ln in lines) or any(BUTIM_FORM_WORDS.search(m.group(3)) for m in heads)):
+        return text
+    return "\n".join(_BHEAD.sub(r"\1서식\2\3", ln) for ln in lines)
+
+
 def yangsik_text(text: str) -> str:
     """'【양식1】'·'(양식 5)'처럼 서식을 '양식'으로 적은 문서(11/13 한국산업단지공단 제안요청서) → '서식'으로 바꿔 같은 규칙으로 읽음.
     본문 양식 번호가 다시 1부터 시작하면(뒤에 붙은 【별첨】 보안 서류 안의 '[양식1] 보안특약 서약서' 등) 그 뒤 양식은 별첨 하나로 —
@@ -870,7 +889,7 @@ def read_notice(paths: list[Path], catalog: list[Document] | None = None) -> Not
             continue
         name = Path(p).name
         texts[name] = text
-        ftext = yangsik_text(text)  # '【양식1】'로 적은 서식(11/13)
+        ftext = butim_text(yangsik_text(text))  # '【양식1】'(11/13)·'[붙임 N]'(11/23)으로 적은 서식
         got = read_forms(ftext, name, catalog)
         if got and not any(f.in_quant for f in got):  # 정량 묶음 제목이 없으면 제출서류 표의 '정량' 묶음으로
             q = submit_quant_forms(ftext)

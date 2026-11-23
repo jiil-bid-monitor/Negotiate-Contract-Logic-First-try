@@ -244,10 +244,13 @@ def find_forms(sections: dict[str, str], heights: dict[str, int] | None = None, 
             heads.append((idx, no + (f"-{sub_no}" if sub_no else "")))
         if not heads:
             heads = _yangsik_heads(paras, xml)
+        if not heads:
+            heads = _butim_heads(paras, xml)
         for k, (idx, no) in enumerate(heads):
             end = heads[k + 1][0] if k + 1 < len(heads) else len(paras)
             body = paras[idx:end]
             title = (page_title(xml[body[0].start:body[-1].end], heights, source) if heights else "") or _guess_title(body)
+            title = re.sub(r"^[^\w\s]\s*붙\s*임\s*\d+\s*[^\w\s]\s*", "", title)  # '[붙임 5] 참여 인력 총괄표' → 제목만(11/23)
             if no not in found:
                 order.append(no)
             found[no] = CutForm(no, title, name, body)  # 같은 번호는 뒤(본문) 것으로
@@ -275,6 +278,31 @@ def _yangsik_heads(paras: list[Para], xml: str) -> list[tuple[int, str]]:
             break
         prev, top = n, max(top, n)
         out.append((i, m.group(1) + (f"-{m.group(2)}" if m.group(2) else "")))
+    return out
+
+
+_BHEAD = re.compile(r"^[^\w\s]\s*붙임\s*(\d+)\s*[^\w\s]")
+
+
+def _butim_heads(paras: list[Para], xml: str) -> list[tuple[int, str]]:
+    """'[붙임 N]' 머리(서식·양식 머리가 하나도 없는 구역만, 11/23 한가람 재개관전 연출 제안요청서). 목차 줄(다음 머리까지 빈 문단뿐)은 건너뜀.
+    머리가 둘 이상이고 서식 제목 낱말(`notice.BUTIM_FORM_WORDS`)이나 '붙임 서식' 머리가 있을 때만 — `notice.butim_text`와 같은 기준."""
+    from .notice import BUTIM_FORM_WORDS
+    marks = [(i, _squash(p.text)) for i, p in enumerate(paras)]
+    sheet = any(sq in ("붙임서식", "붙임양식") for _i, sq in marks)
+    marks = [(i, sq) for i, sq in marks if _BHEAD.match(sq)]
+    if len(marks) < 2 or not (sheet or any(BUTIM_FORM_WORDS.search(sq) for _i, sq in marks)):
+        return []
+    nxt = {a: b for (a, _), (b, _) in zip(marks, marks[1:])}
+    out = []
+    for k, (i, sq) in enumerate(marks):
+        no = _BHEAD.match(sq).group(1)
+        body = paras[i + 1:nxt.get(i, i + 1)]
+        if i in nxt and all(not p.text.strip() and "tbl" not in xml[p.start:p.end] for p in body):
+            continue  # 목차 줄
+        if any(_BHEAD.match(s2).group(1) == no for _j, s2 in marks[k + 1:]):
+            continue  # 같은 번호가 뒤(본문)에 또 있음 — 목차 끝 줄(뒤에 '붙임 서식' 같은 글이 있어 빈 문단만은 아님)
+        out.append((i, no))
     return out
 
 

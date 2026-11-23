@@ -216,11 +216,19 @@ class TelegramBot:
     def handle_apply(self, cb: dict) -> bool:
         """서류 '상태 표시' 버튼 — 신청해야 함·신청 중·지우기를 묻고 적는다(2026-11-12 사용자 요청)."""
         chat = str(((cb.get("message") or {}).get("chat") or {}).get("id", ""))
-        if not re.match(r"^[as]:[0-9a-f]{12}", cb.get("data") or "") or chat not in self.chats:
+        data = cb.get("data") or ""
+        if not re.match(r"^([as]:([0-9a-f]{12}|all:)|e:([0-9a-f]{12}|all))", data) or chat not in self.chats:
             return False
         self._api("answerCallbackQuery", callback_query_id=cb["id"])
-        text, markup = docexpiry.apply_callback(docexpiry.read_docs(docexpiry.docs_dir()), cb["data"]) or (
-            "그 서류는 이미 새 서류로 바뀌었습니다 — /docs 로 확인해 주세요.", None)
+        docs = docexpiry.read_docs(docexpiry.docs_dir())
+        if data.startswith("e:"):  # 갱신 완료 — 새 PDF를 받아 유효기간을 확인받는다
+            kinds = docexpiry.renew_kinds(docs, data)
+            if kinds and self.uploader.start_renew(chat, kinds):
+                return True
+            result = None
+        else:
+            result = docexpiry.apply_callback(docs, data)
+        text, markup = result or ("그 서류는 이미 새 서류로 바뀌었거나 담당자 방이 아닙니다 — /docs 로 확인해 주세요.", None)
         self._api("sendMessage", chat_id=chat, text=text, parse_mode="HTML", **({"reply_markup": markup} if markup else {}))
         return True
 

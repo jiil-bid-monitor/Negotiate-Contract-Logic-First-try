@@ -174,32 +174,58 @@ def _apply_id(kind: str, end: date) -> str:
     return hashlib.sha1(apply_key(kind, end).encode()).hexdigest()[:12]
 
 
+def _button_docs(docs: list[tuple[str, date]], today: date, states: dict[str, str]) -> list[tuple[str, date]]:
+    """버튼을 다는 서류 — 30일 안에 끝나는 서류와, 만료가 지났어도 상태를 표시해 둔 서류."""
+    return [(k, d) for k, d in docs if 0 <= (d - today).days <= ALERT_MONTH or (d < today and apply_key(k, d) in states)]
+
+
 def apply_buttons(docs: list[tuple[str, date]], today: date, states: dict[str, str]) -> dict | None:
-    """서류마다 '상태 표시' 버튼 하나 — 30일 안에 끝나는 서류와, 만료가 지났어도 상태를 표시해 둔 서류. 없으면 None."""
+    """서류마다 '상태 표시' 버튼 하나 + 2건 이상이면 '모두' 한 줄(2026-11-23 사용자 요청). 없으면 None."""
+    hits = _button_docs(docs, today, states)
     rows = [[{"text": f"상태 표시: {k}" + (f" ({STATES[states[apply_key(k, d)]][0]})" if apply_key(k, d) in states else ""),
-              "callback_data": "a:" + _apply_id(k, d)}]
-            for k, d in docs if 0 <= (d - today).days <= ALERT_MONTH or (d < today and apply_key(k, d) in states)]
+              "callback_data": "a:" + _apply_id(k, d)}] for k, d in hits]
+    if len(hits) >= 2:
+        rows.append([{"text": f"모두 {label}", "callback_data": f"s:all:{key}"} for key, (label, _) in STATES.items()])
+        rows.append([{"text": "모두 갱신 완료", "callback_data": "e:all"}, {"text": "모두 표시 지우기", "callback_data": "s:all:x"}])
     return {"inline_keyboard": rows} if rows else None
 
 
-def apply_callback(docs: list[tuple[str, date]], data: str, path: Path | None = None) -> tuple[str, dict | None] | None:
-    """버튼 값 → (답 글, 버튼). 'a:지문' = 상태를 묻는다, 's:지문:n|p|x' = 그 상태로 적는다(x = 표시 지움).
-    그 서류가 목록에 없으면(새 서류로 바뀜) None."""
+def renew_kinds(docs: list[tuple[str, date]], data: str, today: date | None = None,
+                states_path: Path | None = None) -> list[str]:
+    """'갱신 완료' 버튼 값 'e:지문'·'e:all' → 새 PDF를 받을 서류 이름들(2026-11-23 사용자 요청 — 서류를 올려 유효기간을 확인받게).
+    'all' = 버튼이 달린 서류 전부(봇이 차례로 받는다). 없으면 빈 목록."""
+    code = data.split(":")[1]
+    if code == "all":
+        return [k for k, _ in _button_docs(docs, today or date.today(), load_states(states_path or APPLY_PATH))]
+    return [k for k, d in docs if _apply_id(k, d) == code][:1]
+
+
+def apply_callback(docs: list[tuple[str, date]], data: str, path: Path | None = None,
+                   today: date | None = None) -> tuple[str, dict | None] | None:
+    """버튼 값 → (답 글, 버튼). 'a:지문' = 상태를 묻는다, 's:지문:n|p|x' = 그 상태로 적는다(x = 표시 지움),
+    's:all:…' = 버튼이 달린 서류 전부. 그 서류가 목록에 없으면(새 서류로 바뀜) None."""
     kind, _, rest = data.partition(":")
     code, _, state = rest.partition(":")
-    hit = next(((k, d) for k, d in docs if _apply_id(k, d) == code), None)
-    if hit is None:
-        return None
-    name = f"<b>{html.escape(hit[0])}</b>"
+    path = path or APPLY_PATH
+    if code == "all":
+        hits = _button_docs(docs, today or date.today(), load_states(path))
+        if not hits:
+            return None
+    else:
+        hits = [hit for hit in docs if _apply_id(*hit) == code][:1]
+        if not hits:
+            return None
+    name = "\n".join(f"<b>{html.escape(k)}</b>" for k, _ in hits) + ("\n" if len(hits) > 1 else "")
     if kind == "a":
         return f"{name} — 지금 어떤 상태인가요?", {"inline_keyboard": [
             [{"text": label, "callback_data": f"s:{code}:{key}"} for key, (label, _) in STATES.items()],
+            [{"text": "갱신 완료 (새 서류 올리기)", "callback_data": f"e:{code}"}],
             [{"text": "표시 지우기", "callback_data": f"s:{code}:x"}]]}
-    path = path or APPLY_PATH
     states = load_states(path)
-    states.pop(apply_key(*hit), None)
-    if state in STATES:
-        states[apply_key(*hit)] = state
+    for hit in hits:
+        states.pop(apply_key(*hit), None)
+        if state in STATES:
+            states[apply_key(*hit)] = state
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(states, ensure_ascii=False, indent=1), encoding="utf-8")
     if state == "n":
@@ -249,8 +275,8 @@ def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str],
         lines += [f"• <b>{html.escape(k)}</b>", f"   {d} · " + ("오늘 만료" if d == today else f"D-{(d - today).days}" if d > today else f"만료 뒤 {(today - d).days}일")]
         if apply_key(k, d) in states:
             lines.append(f"   {STATES[states[apply_key(k, d)]][1]}")
-    lines += ["", "갱신했으면 → /upload 로 새 서류를 보내 주세요",
-              "   (만료일을 물어보고 인증서갱신.xlsx도 고칩니다)",
+    lines += ["", "갱신했으면 → 아래 서류 버튼 → '갱신 완료' → 새 서류 PDF 보내기",
+              "   (PDF에서 유효기간을 읽어 확인받고 인증서갱신.xlsx도 고칩니다)",
               "아직이면 → 아래 버튼으로 상태 표시 (신청해야 함 · 신청 중)",
               "안 쓰는 서류면 → /remove 로 빼 주세요"]
     return "\n".join(lines), [key(k, d) for k, d in rows]

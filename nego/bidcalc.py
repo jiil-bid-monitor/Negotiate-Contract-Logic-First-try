@@ -170,7 +170,13 @@ def _sp(word: str) -> str:
 
 
 _BASIS_TEXT_RE = re.compile(_sp("기초금액") + r"\s*(?:\([^)]{0,20}\))?[\s|:：]*(?:금\s*)?[\s|]*([\d,]{7,})\s*원")
-_RATE_TEXT_RE = re.compile(_sp("낙찰하한율") + r"[^\d]{0,15}?(\d{2}(?:\.\d+)?)\s*%")
+_RATE_TEXT_RE = re.compile(_sp("낙찰하한율") + r"([^\d]{0,15}?)(\d{2}(?:\.\d+)?)\s*%")
+# 이름표와 숫자 사이에 이런 말이 끼면 다른 값(11/23 — '낙찰하한율 :\n순공사원가 98% 미만'을 하한율 98로 읽었음)
+_RATE_GAP_BAD = re.compile(r"순공사원가|부가세|미만|이상|이하|초과|제외")
+# 금액 바로 뒤가 이것이면 조건 문장('기초금액 100,000,000원 이상인 공사')이라 기초금액 아님(11/23)
+_AMOUNT_COND_RE = re.compile(r"\s*(?:" + "|".join(_sp(w) for w in ("이상", "미만", "이하", "초과")) + ")")
+# '±N% 범위' 문장은 예정가격을 정하는 문장일 때만(11/23 — '예비가격 기초조사 … ±5% 범위에서 인정'을 변동폭으로 읽었음)
+_RANGE_CONTEXT_RE = re.compile(r"복수예비가격|예정가격(?:을|의)?(?:작성|결정)")
 # "기초금액의 ±3%" · "기초금액 대비 ±2%" · "기초금액의 ±3퍼센트"
 _RANGE_TEXT_RE = re.compile(_sp("기초금액") + r"(?:의|\s*대비)?\s*[±+\-]\s*(\d(?:\.\d+)?)\s*(?:%|퍼센트)")
 # "기초금액을 기준으로 G2B 복수예비가격 작성프로그램에서 작성된 ±2% 범위내의 복수예비가격"(11/20 같은 공고) —
@@ -238,19 +244,32 @@ def law_kind(text: str) -> tuple[str | None, str]:
     return found(flat)
 
 
+def _range_sentence(text: str):
+    """'… ±N% 범위' 문장 중 복수예비가격·예정가격 작성/결정 문장인 것(앞 10자 포함 — '복수예비가격'의 '예비가격'에서 시작해도)."""
+    for m in _RANGE_TEXT2_RE.finditer(text):
+        if _RANGE_CONTEXT_RE.search(re.sub(r"\s+", "", text[max(0, m.start() - 10):m.end()])):
+            return m
+    return None
+
+
 def parse_notice_text(text: str) -> dict:
     """공고문 원문 → {basis, lower_rate, range_lo, range_hi, law_kind, law_quote} 중 찾은 것만."""
     out: dict = {}
     for m in _BASIS_TEXT_RE.finditer(text):
+        if _AMOUNT_COND_RE.match(text, m.end()):
+            continue
         amount = _num(m.group(1))
         if amount and amount >= 1_000_000:
             out["basis"] = amount
             break
-    if m := _RATE_TEXT_RE.search(text):
-        rate = _num(m.group(1))
+    for m in _RATE_TEXT_RE.finditer(text):
+        if _RATE_GAP_BAD.search(re.sub(r"\s+", "", m.group(1))):
+            continue
+        rate = _num(m.group(2))
         if rate and 50 <= rate < 100:
             out["lower_rate"] = rate
-    if m := (_RANGE_TEXT_RE.search(text) or _RANGE_TEXT2_RE.search(text)):
+            break
+    if m := (_RANGE_TEXT_RE.search(text) or _range_sentence(text)):
         width = _num(m.group(1))
         if width and width <= 5:
             out["range_lo"], out["range_hi"] = -width, width

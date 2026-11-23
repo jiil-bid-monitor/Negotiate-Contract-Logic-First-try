@@ -4650,7 +4650,7 @@ def test_history_blank_area_keeps_cells(tmp_path: Path):
                 f'<hh:topBorder type="{top}" width="0.1 mm"/><hh:bottomBorder type="{bottom}" width="0.1 mm"/></hh:borderFill>')
     header = ('<hh:head><hh:borderFills itemCnt="3">' + bf(1, "SOLID", "NONE") + bf(2, "NONE", "NONE") + bf(3, "NONE", "SOLID")
               + '</hh:borderFills><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"/></hh:charProperties>'
-              '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="LEFT"/></hh:paraPr></hh:paraProperties></hh:head>')
+              '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="CENTER"/></hh:paraPr></hh:paraProperties></hh:head>')
     c = lambda col, row, t, span, b: (f'<hp:tc borderFillIDRef="{b}"><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
                                       f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/><hp:cellSz width="9000" height="1500"/></hp:tc>')
     rows = [[c(0, 0, "주  요  연  혁", 2, 1), c(2, 0, "", 2, 1), c(4, 0, "", 4, 1)]]
@@ -4670,6 +4670,13 @@ def test_history_blank_area_keeps_cells(tmp_path: Path):
     # 아래 테두리(3)는 마지막 줄에만, 늘린 줄은 가운데 줄 모양(2)
     last_row = re.findall(r'<hp:tc borderFillIDRef="(\d+)">(?:(?!</hp:tc>).)*rowAddr="(\d+)"', sec, re.S)
     assert {b for b, r in last_row if r == "4"} == {"3"} and {b for b, r in last_row if r in ("1", "2", "3")} == {"2"}, last_row
+    # 11/23 사용자 '왼쪽 정렬만 하면 완벽': 원본이 가운데 정렬이어도 연월·내용 칸은 왼쪽 정렬 사본
+    hdr = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/header.xml").decode()
+    left = re.search(r'<hh:paraPr id="(\d+)"(?:(?!</hh:paraPr>).)*horizontal="LEFT"', hdr, re.S)
+    assert left and left.group(1) != "0", hdr
+    for val in ("2010.01", "연혁 1", "2014.05", "연혁 5"):
+        assert re.search(rf'paraPrIDRef="{left.group(1)}"><hp:run[^>]*><hp:t>{val}<', sec), val
+    assert re.search(r'paraPrIDRef="0"><hp:run[^>]*><hp:t>주  요  연  혁<', sec)
 
 
 def test_column_head_row_values_go_below(tmp_path: Path):

@@ -285,7 +285,10 @@ def make_handler(app: App):
         def _body(self) -> dict[str, Any]:
             length = int(self.headers.get("Content-Length") or 0)
             # 과거사업 목록(서버 PC → NAS)은 사업마다 근거 글이 붙어 큼 — 그 길만 넉넉히(사업 수가 늘어도)
-            if length > (MAX_BODY * 25 if self.path.startswith("/api/past-live") else MAX_BODY):
+            # 회사 서류 PDF(웹앱 종 창, base64)도 큼 — 20MB까지
+            limit = (MAX_BODY * 100 if self.path.startswith("/api/docs-upload")
+                     else MAX_BODY * 25 if self.path.startswith("/api/past-live") else MAX_BODY)
+            if length > limit:
                 raise ValueError("요청이 너무 큽니다")
             raw = self.rfile.read(length) if length else b"{}"
             data = json.loads(raw.decode("utf-8") or "{}")
@@ -530,6 +533,8 @@ def make_handler(app: App):
                 data = self._body()
                 if url.path.startswith("/api/quant/"):
                     return self._quant("POST", url.path[len("/api/quant"):], data)
+                if url.path == "/api/docs-upload":
+                    return self._json(docs_upload(data))
                 if url.path == "/api/collect":
                     if app.viewer:
                         raise RuntimeError(VIEWER_MESSAGE)
@@ -702,6 +707,38 @@ def make_handler(app: App):
             return self._json({"run_id": run_id, "skipped": run_id is None})
 
     return Handler
+
+
+def docs_upload(data: dict[str, Any]) -> dict[str, Any]:
+    """웹앱 종 창에서 새 회사 서류 PDF 올리기(2026-11-23 사용자 요청 — 텔레그램 왔다 갔다 없이).
+    action 'read' = PDF에서 유효기간을 읽어 보여 주기만, 'save' = end(YYYY-MM-DD, 없으면 유효기간 없음)로 저장 — 텔레그램 /upload와 같은 저장."""
+    import base64
+    from datetime import date
+
+    from . import docupload
+
+    folder = docexpiry.docs_dir()
+    if not (folder / "[최신 서류]").is_dir():
+        raise RuntimeError("회사서류_최신/[최신 서류] 폴더를 찾지 못했습니다 — NAS 웹앱에서 올려 주세요")
+    kind = str(data.get("kind") or "")
+    current = dict(docexpiry.read_docs(folder))
+    if kind not in current and kind not in docupload.kinds(folder):  # 파일 이름이 되므로 아는 종류만
+        raise ValueError("모르는 서류 종류입니다")
+    try:
+        pdf = base64.b64decode(str(data.get("pdf") or ""), validate=True)
+    except ValueError as err:
+        raise ValueError("PDF를 읽지 못했습니다") from err
+    if not pdf.startswith(b"%PDF"):
+        raise ValueError("PDF 파일만 올릴 수 있습니다")
+    today = datetime.now().date()
+    if data.get("action") == "read":
+        base = current.get(kind)
+        found = docupload.found_expiry(docupload.pdf_text(pdf))
+        return {"found": found.isoformat() if found else None,
+                "cands": [docupload.plus_years(base, n).isoformat() for n in (1, 2)] if base else []}
+    end = date.fromisoformat(str(data["end"])) if data.get("end") else None
+    saved, cert, notes = docupload.save_doc(folder, kind, pdf, end, today)
+    return {"saved": saved, "cert": cert, "notes": notes, "docs": docexpiry.web_alert(today)}
 
 
 def contract_lookup():

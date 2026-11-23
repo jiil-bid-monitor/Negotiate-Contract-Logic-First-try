@@ -309,28 +309,37 @@ class Uploader:
                         + "\n다시 필요하면 /upload 로 넣으면 됩니다.")
 
     def _save(self, chat: str, state: dict, end: date | None, reply_to: int | None) -> None:
-        from under100m import docs
-
-        folder = self.folder()
-        name = f"{state['kind']}_{self.today()}" + (f"_유효{end}" if end else "") + ".pdf"
-        target = docs._unique(folder / "[최신 서류]" / name)
-        target.write_bytes(state["data"])
         queue = (self.pending.pop(chat, None) or {}).get("queue")
-        notes: list[str] = []
-        docs.run(folder, self.today(), notes.append, settle=0, alert_due=False)
-        cert = self._cert(state["kind"], end) if end else ""
-        self._say(chat, f"저장했습니다: <code>{html.escape(target.name)}</code>" + cert
+        saved, cert, notes = save_doc(self.folder(), state["kind"], state["data"], end, self.today())
+        self._say(chat, f"저장했습니다: <code>{html.escape(saved)}</code>" + ("\n" + cert if cert else "")
                         + ("\n\n" + html.escape("\n".join(notes)) if notes else "")
                         + "\n\n/docs 로 유효기간을 확인할 수 있습니다.", reply_to)
         if queue:
             self.start_renew(chat, queue)
 
     def _cert(self, kind: str, value: date | str) -> str:
-        """인증서갱신.xlsx(차장님 표)의 그 서류 만료일 칸도 고친다 — 알림·/docs가 이 표를 먼저 보므로(11/11 사용자 요청)."""
-        try:
-            hit = docexpiry.set_cert(self.folder() / docexpiry.CERT_FILE, kind, value)
-        except OSError:
-            return "\n⚠ 인증서갱신.xlsx가 열려 있어 못 고쳤습니다 — 엑셀을 닫고 직접 고쳐 주세요."
-        if not hit:
-            return ""
-        return "\n인증서갱신.xlsx 만료일도 " + (f"{value}로 고쳤습니다." if isinstance(value, date) else f"'{value}'로 바꿨습니다.")
+        return ("\n" + cert) if (cert := cert_note(self.folder(), kind, value)) else ""
+
+
+def cert_note(folder: Path, kind: str, value: date | str) -> str:
+    """인증서갱신.xlsx(차장님 표)의 그 서류 만료일 칸도 고친다 — 알림·/docs가 이 표를 먼저 보므로(11/11 사용자 요청)."""
+    try:
+        hit = docexpiry.set_cert(folder / docexpiry.CERT_FILE, kind, value)
+    except OSError:
+        return "⚠ 인증서갱신.xlsx가 열려 있어 못 고쳤습니다 — 엑셀을 닫고 직접 고쳐 주세요."
+    if not hit:
+        return ""
+    return "인증서갱신.xlsx 만료일도 " + (f"{value}로 고쳤습니다." if isinstance(value, date) else f"'{value}'로 바꿨습니다.")
+
+
+def save_doc(folder: Path, kind: str, data: bytes, end: date | None, today: date) -> tuple[str, str, list[str]]:
+    """새 서류 PDF를 [최신 서류]/종류_오늘[_유효날짜].pdf로 저장하고 정리(옛 파일 → [이전 서류]) + 표 만료일 —
+    텔레그램 /upload·갱신 완료와 웹앱 종 창이 같이 쓴다(2026-11-23). → (저장한 파일 이름, 표 안내, 정리 안내들)"""
+    from under100m import docs
+
+    name = f"{kind}_{today}" + (f"_유효{end}" if end else "") + ".pdf"
+    target = docs._unique(folder / "[최신 서류]" / name)
+    target.write_bytes(data)
+    notes: list[str] = []
+    docs.run(folder, today, notes.append, settle=0, alert_due=False)
+    return target.name, cert_note(folder, kind, end) if end else "", notes

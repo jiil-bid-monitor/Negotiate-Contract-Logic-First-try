@@ -362,7 +362,7 @@ body {
   background: #d93025; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
 }
 .docbell-pop {
-  position: absolute; z-index: 50; top: calc(100% + 8px); right: 0; width: 340px; max-width: calc(100vw - 32px);
+  position: absolute; z-index: 50; top: calc(100% + 8px); right: 0; width: 380px; max-width: calc(100vw - 32px);
   background: var(--panel); color: var(--ink); border: 1px solid var(--line-strong); box-shadow: 0 6px 20px rgba(0,0,0,.18);
   padding: 12px 14px; font-size: 13px;
 }
@@ -377,6 +377,18 @@ body {
 .docbell-pop .row2 { margin-top: 2px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .docbell-pop .how { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); line-height: 1.6; word-break: keep-all; }
 .docbell-pop .how b { color: var(--ink-strong); }
+.docbell-pop li.drop { outline: 2px dashed var(--brand); outline-offset: 2px; background: var(--brand-weak, rgba(27,110,67,.06)); }
+.docbell-pop .up { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.docbell-pop .upbtn { cursor: pointer; font-size: 12px; font-weight: 600; padding: 4px 10px; border: 1px solid var(--brand); color: var(--brand); border-radius: 4px; }
+.docbell-pop .upbtn:hover { background: var(--brand); color: #fff; }
+.docbell-pop .uphint { font-size: 11.5px; color: var(--faint, var(--muted)); }
+.docbell-pop .upbox p { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+.docbell-pop .upbox .ok { color: var(--good, #1b6e43); }
+.docbell-pop .upbox .err { color: #d93025; }
+.docbell-pop .choices { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; }
+.docbell-pop .choices button { font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); border-radius: 4px; }
+.docbell-pop .choices button[data-end]:not([data-end=""]):not([data-end="pick"]) { border-color: var(--brand); background: var(--brand); color: #fff; }
+.docbell-pop .choices input[type=date] { font: inherit; font-size: 12px; padding: 2px 4px; }
 @media (max-width: 760px) { .docbell-pop { right: auto; left: 0; } }  /* 좁은 화면은 종이 왼쪽에 있어서 */
 /* 바로가기 — 나라장터·21라인 (10/26 사용자 요청: 본문 오른쪽 빈 곳에 사이트 아이콘과 블록으로).
    본문 오른쪽에 자리가 없으면(1520px 이하) 본문 맨 위 줄 오른쪽에 한 줄로. */
@@ -4699,20 +4711,82 @@ if (AWARD_TEST) {  // 시험 페이지: 탭 줄을 숨기고 낙찰 후 서류 �
 })();
 boot();
 
-// 회사 서류 갱신 알림 종 — 텔레그램 알림과 같은 서류, 처리는 텔레그램 버튼에서(2026-11-23 사용자 결정)
-async function loadDocBell() {
-  let docs = [];
-  try { docs = (await getJson("/api/docs-alert")).docs || []; } catch { return; }
-  $("docBell").hidden = !docs.length;
-  $("docBellN").textContent = docs.length;
-  const when = (d) => d.left < 0 ? `만료 뒤 ${-d.left}일` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
-  $("docBellPop").innerHTML = `<h3>회사 서류 갱신 알림 ${docs.length}건</h3><ul>`
-    + docs.map((d) => `<li><div class="row1"><span class="name">${esc(d.kind)}</span>`
-      + `<span class="dd${d.left <= 7 ? " urgent" : ""}">${when(d)}</span></div>`
-      + `<div class="row2">만료일 ${esc(d.end)}${d.state ? ` · ${esc(d.state)}` : ""}</div></li>`).join("")
-    + "</ul><p class=\"how\"><b>갱신했으면</b> 텔레그램 '지일 입찰 공고' 방에서<br>"
-    + "/docs → 서류 버튼 → <b>갱신 완료</b> → 새 서류 PDF 보내기</p>";
+// 회사 서류 갱신 알림 종 — 텔레그램 알림과 같은 서류(2026-11-23). 새 서류 PDF는 여기서 바로 올림(끌어다 놓기·고르기)
+// → PDF에서 유효기간을 읽어 확인받고 저장(텔레그램 /upload와 같은 저장, 서버 /api/docs-upload)
+let DOC_BELL = [];
+const ddText = (d) => d.left < 0 ? `만료 뒤 ${-d.left}일` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
+function renderDocBell() {
+  $("docBell").hidden = !DOC_BELL.length;
+  $("docBellN").textContent = DOC_BELL.length;
+  $("docBellPop").innerHTML = `<h3>회사 서류 갱신 알림 ${DOC_BELL.length}건</h3><ul>`
+    + DOC_BELL.map((d, i) => `<li data-i="${i}"><div class="row1"><span class="name">${esc(d.kind)}</span>`
+      + `<span class="dd${d.left <= 7 ? " urgent" : ""}">${ddText(d)}</span></div>`
+      + `<div class="row2">만료일 ${esc(d.end)}${d.state ? ` · ${esc(d.state)}` : ""}</div>`
+      + `<div class="up"><label class="upbtn">새 서류 올리기<input type="file" accept="application/pdf,.pdf" hidden></label>`
+      + `<span class="uphint">또는 PDF를 이 줄에 끌어다 놓기</span></div><div class="upbox"></div></li>`).join("")
+    + "</ul><p class=\"how\"><b>갱신했으면</b> 새로 받은 서류 PDF를 그 서류 줄에 올려 주세요.<br>"
+    + "PDF에서 유효기간을 읽어 확인한 뒤 저장하고, 인증서갱신.xlsx도 고칩니다.</p>";
 }
+async function loadDocBell() {
+  if ($("docBellPop").querySelector(".upbox:not(:empty)")) return;  // 올리는 중엔 다시 그리지 않음
+  try { DOC_BELL = (await getJson("/api/docs-alert")).docs || []; } catch { return; }
+  renderDocBell();
+}
+function pdfBase64(file) {
+  return new Promise((ok, bad) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(",")[1] || "");
+    r.onerror = () => bad(new Error("파일을 읽지 못했습니다"));
+    r.readAsDataURL(file);
+  });
+}
+async function docUpload(li, file) {
+  const d = DOC_BELL[+li.dataset.i], box = li.querySelector(".upbox");
+  if (!file || !/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { box.innerHTML = `<p class="err">PDF 파일만 올릴 수 있습니다.</p>`; return; }
+  box.innerHTML = "<p>PDF를 읽는 중…</p>";
+  try {
+    const pdf = await pdfBase64(file);
+    const r = await awardPost("/api/docs-upload", { action: "read", kind: d.kind, pdf });
+    const btn = (end, label) => `<button type="button" data-end="${end}">${esc(label)}</button>`;
+    box.innerHTML = (r.found
+      ? `<p>PDF에서 읽은 유효기간 끝나는 날: <b>${esc(r.found)}</b><br>서류와 같은지 확인해 주세요.</p><div class="choices">${btn(r.found, `맞음 — ${r.found}`)}</div>`
+      : `<p>PDF에서 유효기간을 못 읽었습니다(스캔본이면 글자가 없습니다).<br>서류에 적힌 유효기간 끝나는 날을 골라 주세요.</p>`
+        + `<div class="choices">${r.cands.map((c, n) => btn(c, `${n + 1}년 → ${c}`)).join("")}</div>`)
+      + `<div class="choices other">다른 날짜 <input type="date" value="${esc(r.cands[0] || "")}"> <button type="button" data-end="pick">저장</button>`
+      + ` ${btn("", "유효기간 없는 서류")} <button type="button" data-cancel>취소</button></div>`;
+    box.onclick = async (ev) => {
+      const b = ev.target.closest("button");
+      if (!b) return;
+      if (b.hasAttribute("data-cancel")) { box.innerHTML = ""; return; }
+      const end = b.dataset.end === "pick" ? box.querySelector("input[type=date]").value : b.dataset.end;
+      if (b.dataset.end === "pick" && !end) return;
+      box.innerHTML = "<p>저장하는 중…</p>";
+      try {
+        const s = await awardPost("/api/docs-upload", { action: "save", kind: d.kind, pdf, end: end || null });
+        box.innerHTML = `<p class="ok">✓ 저장했습니다: ${esc(s.saved)}${s.cert ? `<br>${esc(s.cert)}` : ""}</p>`;
+        setTimeout(() => { DOC_BELL = s.docs || []; renderDocBell(); }, 2500);
+      } catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+    };
+  } catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+}
+$("docBellPop").addEventListener("change", (ev) => {
+  if (ev.target.type === "file") docUpload(ev.target.closest("li"), ev.target.files[0]);
+});
+$("docBellPop").addEventListener("dragover", (ev) => {
+  const li = ev.target.closest("li");
+  if (!li) return;
+  ev.preventDefault();
+  $("docBellPop").querySelectorAll("li.drop").forEach((x) => x !== li && x.classList.remove("drop"));
+  li.classList.add("drop");
+});
+$("docBellPop").addEventListener("dragleave", (ev) => ev.target.closest?.("li")?.classList.remove("drop"));
+$("docBellPop").addEventListener("drop", (ev) => {
+  const li = ev.target.closest("li");
+  if (!li) return;
+  ev.preventDefault();
+  li.classList.remove("drop");
+  docUpload(li, ev.dataTransfer.files[0]);
+});
 $("docBellBtn").onclick = (e) => {
   e.stopPropagation();
   const pop = $("docBellPop");
@@ -4720,7 +4794,8 @@ $("docBellBtn").onclick = (e) => {
   $("docBellBtn").setAttribute("aria-expanded", String(!pop.hidden));
 };
 document.addEventListener("click", (e) => {
-  if (!$("docBell").contains(e.target)) { $("docBellPop").hidden = true; $("docBellBtn").setAttribute("aria-expanded", "false"); }
+  // composedPath — 누른 버튼이 그 사이 다시 그려져 빠져도 창 안 클릭으로 봄
+  if (!e.composedPath().includes($("docBell"))) { $("docBellPop").hidden = true; $("docBellBtn").setAttribute("aria-expanded", "false"); }
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("docBellPop").hidden = true; });
 loadDocBell();

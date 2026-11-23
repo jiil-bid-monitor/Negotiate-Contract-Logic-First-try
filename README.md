@@ -91,7 +91,6 @@ cd "C:\Users\HJE\나라장터 수집\Negotiate-Contract-Logic-First-try" && git 
 | 문서 | 내용 |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 수집 흐름·판정 규칙·설정 (개발자용, 예전 README) |
-| [docs/user_guide.md](docs/user_guide.md) | 담당자용 웹앱 사용 안내 |
 | [docs/telegram.md](docs/telegram.md) | 텔레그램 보고·명령어 |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | 이어받을 때 읽는 요약 |
 | [CLAUDE.md](CLAUDE.md) | 날짜별 결정 기록 |

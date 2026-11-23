@@ -417,10 +417,15 @@ _CODE_REQUIREMENT_RE = re.compile(
     # PDF에선 "측지측량업 (5021)"처럼 괄호 앞에 공백 한 칸이 끼기도 한다(제천 공고문 — 5021을 못 읽어 5023의 "또는"이
     # 멀리 있는 측량용역(8115160401)에 이어졌음)
     r"|(?:(?<=[업자사소])|(?<=[업자사소] ))\((?P<short_code>[0-9]{4})\)(?!\s*년)"
+    # "소프트웨어사업자(컴퓨터관련서비스사업)(1468)" — 분야 괄호 바로 뒤 (4자리)도 업종코드(2026-11-23 제보: R26BD00303824)
+    r"|(?<=[가-힣]\))\((?P<paren_code>[0-9]{4})\)(?!\s*년)"
     # "세부품명번호 : 8111159901(정보시스템개발서비스) 또는 8111159801(패키지…)" — "또는" 뒤 번호 + (이름)도 세부품명번호.
     # 9자리는 원문 오기("811159801")로 보고 그대로 둔다 — 이름으로 보유를 확인한다(2026-10-20 제보: 울산안전체험관).
     # 줄에 "세부품명번호"가 먼저 나와야 한다(`_locate_code_requirements`).
     r"|(?:(?<=또는 )|(?<=혹은 ))(?P<or_code>[0-9]{9,10})(?=\s*\([가-힣])"
+    # "세부품명번호 5610150201(소파), 5610150701(책장), …" — 쉼표 뒤 번호 + (이름)도 같은 목록의 세부품명번호(2026-11-23 제보:
+    # 영축산 작은도서관 R26BD00302194 — 첫 번호만 읽고 회의용탁자·작업용의자·컴퓨터책상을 놓쳤음)
+    r"|(?:(?<=, )|(?<=,))(?P<list_code>[0-9]{10})(?=\s*\([가-힣])"
 )
 # 문서마다 괄호를 쓰는지 대괄호를 쓰는지, 코드 여러 개를 콤마로 나열하는지
 # 세미콜론이나 공백으로 나열하는지가 제각각이다 — 문서마다 정규식을 하나씩
@@ -505,7 +510,10 @@ def _or_scope(item: str) -> tuple[bool, list[tuple[str, bool]]]:
     """
     parts = _numbered_parts(item)
     if len(parts) == 1:
-        return _has_or_marker(item, _OR_MARKER_RE), [(item, False)]
+        # 하위 항목 없이 "다음의 업종* 중 하나 이상 … * 등록업종코드: A(7528), B(7529), C(1468)"도 항목 전체 OR(2026-11-23 제보:
+        # 상환능력 예측 모형 R26BD00303824). 단 "다음 각 호의 자격을 모두 갖춘"처럼 '모두'가 있으면 일부에만 걸린 표시라 안 봄
+        scoped = _has_or_marker(item, _SCOPED_OR_MARKER_RE) and not re.search(r"모\s*두", item)
+        return _has_or_marker(item, _OR_MARKER_RE) or scoped, [(item, False)]
     marked = lambda t: _has_or_marker(t, _OR_MARKER_RE) or _has_or_marker(t, _SCOPED_OR_MARKER_RE)
     # 머리말은 "어느 하나"만 본다 — "산업디자인(… 중 1개 이상)로 등록하고 다음을 모두 갖춘 자 1) … 2) …"가 통째로 OR이 되지 않게
     if _has_or_marker(parts[0], _OR_MARKER_RE):
@@ -549,7 +557,7 @@ _STRAY_NUMBER_RE = re.compile(r"(?<![0-9])[0-9]{8,11}(?![0-9])")
 # 같은 줄에 요건이 둘 이상 나열되면(PDF 등) 뒷 요건의 이름표 앞에 앞 요건의
 # 괄호와 접속어가 딸려온다 — 닫는 괄호 이후만 남기고 앞머리 접속어를 뗀다.
 # 줄바꿈으로 "…에\n따른 기술사사무소"처럼 연결어 뒷부분·조사만 줄머리에 남은 경우도 뗀다(2026-10-14 제보).
-_LEADING_CONJUNCTION_RE = re.compile(r"^(?:또는|혹은|및|그리고|따른|따라|의한|의하여|의거|의|로|으로)\s+")
+_LEADING_CONJUNCTION_RE = re.compile(r"^(?:(?:또는|혹은|및|그리고|따른|따라|의한|의하여|의거|의|로|으로|에)\s+)+")  # "나라장터(G2B)에 디자인서비스"의 "에"(11/23)
 _CONJUNCTION_ONLY_RE = re.compile(r"\s*(?:또는|혹은|및|그리고|등|/)?\s*")
 # 이름표에서 떼어낼 절차성 어구. 법령 인용("~에 따른/따라/의하여")과, 실측으로
 # 확인된 마감 안내 어구("~까지")를 둘 다 다룬다 — 실측(사용자 제보,
@@ -588,7 +596,7 @@ _ITEM_MARKER_RE = re.compile(r"^\s*(?:[가-하]\s*[.)]|[0-9]+\s*[.)]|\([가-하0
 def _last_name_chunk(text: str) -> str:
     """코드 괄호 바로 앞의 이름 조각. 앞 항목("…(코드1), ")은 버리되, 이름 자체가 괄호로
     끝나면("산업디자인전문회사(환경 디자인분야)[업종코드 4442]") 그 괄호까지 이름으로 남긴다."""
-    stripped = text.rstrip()
+    stripped = text.rstrip(" \t_")  # "설계업(종합설계)_(업종코드 1105)" — 이름 끝 밑줄(2026-11-23 제보: 이름표가 '_')
     if stripped.endswith(")"):
         depth = 0
         for i in range(len(stripped) - 1, -1, -1):
@@ -603,7 +611,7 @@ def _last_name_chunk(text: str) -> str:
                     if head.strip() and not re.fullmatch(r"[0-9]{4,10}", inner):
                         return f"{head}({inner})"
                     break
-    return re.split(r"[)\]]", text)[-1]
+    return re.split(r"[)\]]", stripped)[-1]
 
 
 # 이름 가운데 남은 항목 기호 — "자로 직접생산확인증명서 ①전시부스설치및디자인서비스"를 20자로 자르면 "①전시부스…"가 되고,
@@ -773,16 +781,22 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
             if any(_spans_overlap(match.span(), span) for span in consumed):
                 continue
             consumed.append(match.span())
-            code_group = next(g for g in ("code", "bare_code", "short_code", "or_code") if match.group(g))
+            code_group = next(g for g in ("code", "bare_code", "short_code", "or_code", "list_code", "paren_code") if match.group(g))
             code = match.group(code_group)
             prefix = line[: match.start()]
-            if code_group == "or_code":
+            if code_group in ("or_code", "list_code"):
                 if not re.search(r"세부\s*품명\s*번호", prefix):
                     continue
                 label = re.match(r"\s*\(([^()]*)\)", line[match.end():])
                 name = _truncate_label(label.group(1).strip()) if label else ""
                 start = base + match.start(code_group)
                 results.append((start, start + len(code), code, f"{name}({code})" if name else code))
+                continue
+            after = re.match(r"\s*\(([가-힣][^()]{0,30})\)", line[match.end():]) if code_group == "code" else None
+            if after:
+                # "세부품명번호 5610150201(소파), …" — 번호 바로 뒤 괄호가 이름(예전엔 앞 글 "반드시 G2B"를 이름으로 썼음)
+                start = base + match.start(code_group)
+                results.append((start, start + len(code), code, f"{_truncate_label(after.group(1).strip())}({code})"))
                 continue
             # 코드가 **아직 닫히지 않은** 괄호 안에 있을 때만 괄호 안쪽을 이름으로 본다.
             # 예전엔 앞에 "("가 있기만 하면 안쪽으로 봐서, "영상정보디스플레이장치(4511189301),
@@ -799,7 +813,7 @@ def _locate_code_requirements(item: str) -> tuple[str, list[tuple[int, int, str,
                 name = inside_paren
             else:
                 name = _name_before_bracket(prefix[:last_open] if is_inside else prefix, line, lines, line_no)
-            if code_group == "short_code" and name:
+            if code_group in ("short_code", "paren_code") and name:
                 # "…별표7에서 정하고 있는 공공측량업(5023)" — 꾸미는 말(…는/한/된/에서)까지는 떼고 업종명만
                 words = name.split()
                 cut = max((i + 1 for i, w in enumerate(words[:-1]) if re.search(r"[는은한된른서고여며를을에의]$", w)), default=0)
@@ -867,6 +881,7 @@ def _name_before_bracket(before_paren: str, line: str, lines: list[str], line_no
         if (tail and (len(tail.group(1)) <= 4 or len(name) <= 3)
                 and not _PARTICLE_END_RE.search(tail.group(1)) and tail.group(1) not in _WHOLE_WORD_ENDS):
             name = tail.group(1) + name
+    name = re.split(r"[:：]", name)[-1].rstrip(" ,，")  # "등록업종코드: 개인신용평가업(7528)" — 쌍점 앞은 이름표 머리(2026-11-23 제보: '이름 미확인')
     name = re.sub(r"^[\s,;，:：]+", "", name)  # "직접생산확인증명서 : 영상…"의 콜론
     name = name.strip("\"'“‘”’").strip()
     if outer and name:
@@ -935,7 +950,43 @@ def _or_groups_linked(item: str) -> list[list[tuple[str, str]]]:
             groups[-1].append(pair)
         else:
             groups.append([pair])
-    return groups
+    # "A, B 또는 A, C"(번갈아 적은 조합)는 "and"로 끊긴 구간마다 따로 본다 — 하위 항목 여럿이 한 항목에 있어도
+    out: list[list[tuple[str, str]]] = []
+    start = 0
+    for end in [i + 1 for i, link in enumerate(links) if link == "and"] + [len(pairs)]:
+        combo = _shared_combo_groups(pairs[start:end], links[start : end - 1])
+        if combo is not None:
+            out.extend(combo)
+        else:
+            out.extend(g for g in groups if _group_in(g, pairs, start, end))
+        start = end
+    return out
+
+
+def _group_in(group: list[tuple[str, str]], pairs: list[tuple[str, str]], start: int, end: int) -> bool:
+    return any(p is group[0] for p in pairs[start:end])
+
+
+def _shared_combo_groups(pairs: list[tuple[str, str]], links: list[str]) -> list[list[tuple[str, str]]] | None:
+    """"디자인서비스(A), 조형물(B) 또는 디자인서비스(A), 조립식구조물(C)" — "또는"으로 나뉜 조합마다 같은 코드(A)가 되풀이되면
+    A는 필수, 나머지(B·C)는 하나만 있으면 됨(2026-11-23 제보: 대농근린공원 R26BK01836754 — 예전엔 B 또는 A로 묶고 C를 필수로 봤음).
+    조합마다 공통 코드 말고 한 개씩만 다를 때만 — 그 밖의 모양은 None(기존 규칙)."""
+    segments: list[list[tuple[str, str]]] = [[pairs[0]]]
+    for link, pair in zip(links, pairs[1:]):
+        if link == "or":
+            segments.append([pair])
+        elif link == "comma":
+            segments[-1].append(pair)
+        else:
+            return None
+    if len(segments) < 2 or any(len(seg) < 2 for seg in segments):
+        return None
+    common = set.intersection(*({c for c, _ in seg} for seg in segments))
+    rest = [[p for p in seg if p[0] not in common] for seg in segments]
+    if not common or any(len(r) != 1 for r in rest):
+        return None
+    first = {c: (c, lbl) for c, lbl in segments[0]}
+    return [[first[c]] for c in sorted(common, key=lambda c: [p[0] for p in segments[0]].index(c))] + [[r[0] for r in rest]]
 
 
 UNNAMED_LABEL = "이름 미확인"

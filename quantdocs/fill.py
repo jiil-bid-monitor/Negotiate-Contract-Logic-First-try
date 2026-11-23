@@ -171,7 +171,7 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("자본금",), "자본금"),
     (("총직원수", "총종업원수", "종업원수", "직원수", "상시근로자수"), "종업원 수"),  # '총직원수 | 명'(11/05 사용자 요청)
     (("사업분야", "업태"), "사업분야"),
-    (("면허/허가/등록증", "면허보유", "등록증보유"), "_licenses"),
+    (("면허/허가/등록증", "면허/허가/등록", "면허보유", "등록증보유"), "_licenses"),  # '면허/허가/등록 중 보유현황'(11/23 장수군 — '증'이 아니라 '중')
     (("입찰명", "입찰건명", "공고명"), "_title"),
     # 신용평가등급 확인서(11/10 경남교육청 서식 19) — 신용평가 확인서 PDF에서 읽은 값(importer.read_credit)
     (("기업신용평가등급", "기업신용등급", "신용평가등급", "신용등급"), "신용평가등급"),
@@ -2585,6 +2585,24 @@ def _history_grid(cells: list[Cell]) -> tuple[Cell, Cell, list[int]] | None:
             r += 1
         if rows:
             return date, body, rows
+    # 머리 줄 없이 '주요연혁 | (연월) | (내용) | (비고)' 줄 + 같은 모양 빈 줄(11/23 사용자 지적: 장수군 일반현황 — 연혁 21줄을 이름표 옆 좁은 칸
+    # 하나에 몰아넣었음). 이름표 줄부터 같은 열 모양의 빈 줄이 이어지면 첫째 빈 칸 = 연월, 둘째 = 내용
+    for lab in cells:
+        if "연혁" not in _sq(lab.text) or lab.rowspan != 1 or len(_sq(lab.text)) > 8:
+            continue
+        right = sorted((c for c in cells if c.row == lab.row and c.col > lab.col), key=lambda c: c.col)
+        if len(right) < 2 or not all(c.blank and c.rowspan == 1 for c in right):
+            continue
+        shape = [(c.col, c.colspan) for c in sorted((c for c in cells if c.row == lab.row), key=lambda c: c.col)]
+        rows, r = [lab.row], lab.row + 1
+        while True:
+            line = sorted((c for c in cells if c.row == r), key=lambda c: c.col)
+            if not line or [(c.col, c.colspan) for c in line] != shape or not all(c.blank and c.rowspan == 1 for c in line):
+                break
+            rows.append(r)
+            r += 1
+        if len(rows) >= 2:
+            return right[0], right[1], rows
     return None
 
 
@@ -3278,7 +3296,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if "연혁" not in core and re.fullmatch(r"(?:주요)?이력\(연혁\)", _sq(c.text)):
                         core = "주요연혁"  # '주요 이력(연혁)'(11/18 봉평 서식 12 — 괄호를 떼면 '연혁'이 사라져 연혁을 못 넣었음)
                     if "연혁" in core and len(core) <= 8 and vault.history and hist_grid is not None \
-                            and any(x.row == c.row + c.rowspan for x in hist_grid[:2]):
+                            and any(x.row in (c.row, c.row + c.rowspan) for x in hist_grid[:2]):  # 머리 줄 아래 / 이름표 줄 옆(11/23)
                         # '주요연혁' 칸 아래 '년 월 일 | 내 용 | 비 고' 표 — 연혁은 줄마다 그 표에(11/23 사용자 요청), 제목 칸엔 안 넣음
                         date_h, body_h, grid_rows = hist_grid
                         for h, r in zip(vault.history, grid_rows):

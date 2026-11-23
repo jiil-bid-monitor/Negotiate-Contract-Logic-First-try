@@ -4780,3 +4780,28 @@ def test_agency_notice_no_and_fill_ask_title(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
     assert "|기 관 공 고 번 호|제2026-321호|입   찰   건   명|가상 전시연출 용역|" in text, text
     assert "기입하세요" not in text and "R26BK" not in text
+
+
+def test_click_here_guides_replaced_and_delegator_seal(tmp_path: Path):
+    """11/23 사용자: 한가람 보안서약서 값 칸의 붉은 누름틀 안내 글('회사명'·'대표자')·서명 줄 '서약자 [서약자성명] 인(사용인감)'·
+    위임장 본문 '“ [공고명을 기입하세요] ”'이 남고 값이 옆에 붙음 → 안내 누름틀은 지우고 값으로. 위임장 끝 '위 임 자 | (인)' = 대표자."""
+    from quantdocs.fill import fill_hwpx
+
+    def field(i, guide):
+        return (f'<hp:run charPrIDRef="0"><hp:ctrl><hp:fieldBegin id="{i}" type="CLICK_HERE" name="" editable="1"><hp:parameters cnt="2" name="">'
+                f'<hp:stringParam name="Command" xml:space="preserve">Clickhere:set:47:Direction:wstring:{len(guide)}:{guide} HelpState:wstring:0:  </hp:stringParam>'
+                f'</hp:parameters></hp:fieldBegin></hp:ctrl></hp:run><hp:run charPrIDRef="1"><hp:t>{guide}</hp:t></hp:run>'
+                f'<hp:run charPrIDRef="0"><hp:ctrl><hp:fieldEnd beginIDRef="{i}" fieldid="1"/></hp:ctrl><hp:t/></hp:run>')
+    c = lambda col, row, inner: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0">{inner}</hp:p></hp:subList>'
+                                 f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    t = lambda x: f'<hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run>'
+    rows = [[c(0, 0, t("회사명")), c(1, 0, field(1, "회사명"))], [c(0, 1, t("대표자")), c(1, 1, field(2, "대표자"))],
+            [c(0, 2, t("위 임 자")), c(1, 2, t("(인)"))]]
+    body = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl>' + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows)
+            + '</hp:tbl></hp:run></hp:p><hp:p paraPrIDRef="0">' + t("본인은 시행하는 “") + field(3, "공고명을 기입하세요") + t("”의 입찰") + "</hp:p>")
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v, title="가상 전시연출 용역")
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+    assert "CLICK_HERE" not in sec and "fieldEnd" not in sec and "기입하세요" not in text, text
+    assert "|회사명|(주)가상|대표자|홍길동|위 임 자|홍길동" in text and "“|가상 전시연출 용역|”의 입찰" in text, text

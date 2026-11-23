@@ -2907,10 +2907,19 @@ function flagBadges(n) {
   });
 }
 
+/**
+ * 공동수급 칸 이름 — 제출 방식 괄호가 빈 '()공동수급불허'는 '정보 없음'(11/23 사용자 결정, 나라장터 화면 칸이 비어 있음).
+ * 새 수집은 서버가 이미 '정보 없음'으로 주고, 이 함수는 그 전에 저장된 수집 결과도 F5만으로 같게 보이게.
+ */
+function jointLabel(n) {
+  const label = (n.joint || {}).label || "";
+  return !label || /^\(\s*\)/.test(label) ? "정보 없음" : label;
+}
+
 /** 공동수급 — 나라장터 "공동수급협정서 제출 및 구성방식" (본공고만) */
 function jointBadge(n) {
   if (n.sourceType !== "본공고") return "";
-  const j = n.joint || {};
+  const j = { ...(n.joint || {}), label: jointLabel(n) };
   if (!j.label || j.label === "정보 없음") return tipBadge("faint", "공동수급 정보 없음", "공동수급", `<p>나라장터 공동수급 정보가 없습니다. 공고 원문에서 공동수급 허용 여부를 확인하세요.</p>`);
   const short = j.label;
   // 허용이면 지역제한 충족 칩과 같은 초록 칩 '✓ 공동수급 가능 · 공동이행' (2026-11-18 사용자 결정), 불허는 노란 칩 그대로
@@ -3072,7 +3081,7 @@ function reqBlocksHtml(all, mixed) {
 
 function nQualBadges(n, noShare = false) {
   const parts = n.qual?.parts || [];
-  const denied = noShare || /불허/.test(n.joint?.label || "");
+  const denied = noShare || /불허/.test(jointLabel(n));
   return parts.map((p) => {
     const label = QUAL_LABEL[p.key]?.[p.status] || `${p.name} ${p.status}`;
     const tone = p.status === "충족" ? "ok" : p.status === "미달" ? (denied ? "block" : "fix") : "faint";

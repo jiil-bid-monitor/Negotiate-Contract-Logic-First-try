@@ -55,21 +55,30 @@ class TestEmailHtml(unittest.TestCase):
         self.assertIn(">자격</font>", body)
         self.assertIn(">사전규격 — 면허제한 정보 없음, 원문 확인</td>", body)
 
-    def test_split_parts_and_size(self):
-        """10/21 사용자 요청: 관심·세부품명 메일을 나눔. 지메일 잘림(약 102KB)을 피하려고 칸마다 붙는 스타일은 짧게."""
+    def test_body_only_related_rest_in_attachment(self):
+        """11/23 사용자 결정(주간 메일 269건): 본문 = 관심 키워드 + 싱크로율 55% 이상, 세부품명만·보유 면허로만·미만은 첨부에만.
+        싱크로율을 못 구한 공고는 본문에 둠."""
         import dataclasses
 
-        from nego.email_html import INTEREST, PRODUCT, split_parts
-        prod = self.cands[1]
-        prod.screen_result = dataclasses.replace(prod.screen_result, matched_keywords=[], matched_product_codes=["6012100201"])
-        self.assertEqual([n for n, _ in split_parts(self.cands)], [INTEREST, PRODUCT])
-        interest = render_email_html(self.cands, self.stats, NOW, INTEREST)
-        self.assertIn("R26EM0000", interest)
-        self.assertNotIn("R26EM0001", interest)
-        product = render_email_html(self.cands, self.stats, NOW, PRODUCT)
-        self.assertIn("R26EM0001", product)
-        self.assertNotIn("R26EM0000", product)
-        self.assertEqual([n for n, _ in split_parts(self.cands[:1])], [INTEREST], "세부품명 공고가 없으면 한 통")
+        from nego.email_html import split_body, split_parts
+        extra = [build_candidates([notice_from_raw(fixtures.notice(f"R26EM{i:04d}", title=f"○○전시관 {i}"), "용역")],
+                                  load_config(), {}, {}, datetime(2026, 9, 1), self.stats)[0] for i in (2, 3)]
+        cands = self.cands + extra
+        cands[0].sync = {"score": 0.7}
+        cands[1].screen_result = dataclasses.replace(cands[1].screen_result, matched_keywords=[], matched_product_codes=["6012100201"])
+        cands[2].screen_result = dataclasses.replace(cands[2].screen_result, license_match=["0036"])
+        cands[3].sync = {"score": 0.4}
+        body, hidden = split_body(cands)
+        self.assertEqual([c.notice.notice_no for c in body], ["R26EM0000"])
+        self.assertEqual(sum(hidden.values()), 3)
+        self.assertEqual(len(split_parts(cands)), 1, "메일은 한 통")
+        html = render_email_html(cands, self.stats, NOW)
+        self.assertIn("본문 1건 · 첨부 리포트에만 3건", html)
+        for no in ("R26EM0001", "R26EM0002", "R26EM0003"):
+            self.assertNotIn(no, html)
+        self.assertEqual(split_body(self.cands[:1])[0], self.cands[:1], "싱크로율 없음 = 본문")
+
+    def test_card_size(self):
         per_card = len(render_email_html(self.cands[:1], self.stats, NOW).encode()) - len(
             render_email_html([], self.stats, NOW).encode())
         self.assertLess(per_card, 2500, "카드 한 장이 커지면(예전 3KB) 40~50건에서 지메일이 본문을 자름")

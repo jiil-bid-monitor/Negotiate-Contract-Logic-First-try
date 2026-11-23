@@ -92,6 +92,8 @@ class ScreenResult:
     match_detail: dict = field(default_factory=dict)
     # 키워드·품명코드 대신 지일 공사 면허로 참가 조건을 다 채워 수집한 공고 — 그 면허 이름(2026-11-12 '보유 면허' 경로)
     license_match: list[str] = field(default_factory=list)
+    # 키워드와 상관없이 지일 소재지(정선) 사업 입찰 공고로 수집 — 맞은 기관 이름(2026-11-23 '정선 사업' 경로)
+    local_match: str | None = None
 
     @property
     def section(self) -> str | None:
@@ -366,6 +368,32 @@ def license_route(notice: Notice, config: ScreenConfig, licenses: list[str], mis
         matched=True,
         confidence="참고용",
         license_match=list(licenses),
+        overseas_suspect=_overseas_suspect(notice),
+    )
+
+
+# 지일 소재지 — 이 지역 기관(수요·공고기관)이 낸 '입찰' 공고는 키워드와 상관없이 수집(2026-11-23 사용자 결정)
+LOCAL_PLACE = "정선"
+
+
+def local_route(notice: Notice, config: ScreenConfig, missed: ScreenResult, category: str | None) -> ScreenResult | None:
+    """키워드·품명코드로 안 걸린(미매칭·조건부 제외 키워드) **입찰** 공고 중 수요기관·공고기관 이름에 '정선'이 있는 공고를 일반 후보로
+    (2026-11-23 사용자 결정 — 사업 규모와 상관없이, 나중에 만들 1억 미만 간소화 규칙에서도 빼고 일반 공고로).
+    무조건 제외 키워드와 해외 개최는 그대로 뺌(보유 면허 경로와 같은 방식). 협상·수의계약·사전규격은 해당 없음."""
+    if category != "입찰" or missed.excluded_by not in ("미매칭", "제외키워드"):
+        return None
+    institution = next((x for x in (notice.demand_institution, notice.notice_institution) if x and LOCAL_PLACE in _squash(x)), None)
+    if institution is None:
+        return None
+    if _match_exclude(notice, config.hard_exclude_keywords, config.exclude_exceptions):
+        return None
+    evidence = _overseas_exhibition_evidence(notice)
+    if evidence is not None and not _is_mongolia(notice):
+        return None
+    return ScreenResult(
+        matched=True,
+        confidence="참고용",
+        local_match=institution.strip(),
         overseas_suspect=_overseas_suspect(notice),
     )
 

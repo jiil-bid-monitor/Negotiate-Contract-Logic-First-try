@@ -104,6 +104,7 @@ class RunStats:
     cancelled: int = 0
     private_contract: int = 0  # 수집 범위 안 수의계약 공고 수(2026-11-12부터 수집 — 예전엔 뺀 수)
     license_route: int = 0  # 키워드 없이 지일 공사 면허로 수집한 공고 수(2026-11-12)
+    local_route: int = 0  # 키워드 없이 정선 기관 입찰 공고로 수집한 공고 수(2026-11-23)
     design_contest: int = 0  # 설계공모라 뺀 공고 (2026-10-16 통합 결정 5번)
     designated: int = 0  # 지명경쟁 본공고라 뺀 공고 (2026-11-18 — 사전규격 단계에서만 수집)
     other_category: int = 0  # 이번 실행 유형(--categories) 밖이라 뺀 공고
@@ -310,6 +311,13 @@ def build_candidates(
                 screen_result = routed
                 record.screen_result = routed
                 stats.license_route += 1
+        if not screen_result.matched:
+            # 지일 소재지(정선) 기관의 입찰 공고는 키워드와 상관없이 일반 공고로(2026-11-23 사용자 결정 — 사업 규모와 상관없이)
+            routed = screen.local_route(notice, config.screen, screen_result, record.category)
+            if routed is not None:
+                screen_result = routed
+                record.screen_result = routed
+                stats.local_route += 1
         if not screen_result.matched:
             reason = screen_result.excluded_by or "미매칭"
             detail = screen_result.excluded_reason or ""

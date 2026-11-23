@@ -85,6 +85,16 @@ class TestJointEmptyParenScreen(unittest.TestCase):
         self.assertIn(r'jl === "정보 없음" || /^\(\s*\)/.test(jl)', v2)
 
 
+class TestProductViewCatTabs(unittest.TestCase):
+    def test_product_view_keeps_category_tab(self):
+        """11/23 사용자 요청: '따로 보기 · 세부품명으로만 걸린 공고'에서도 협상·입찰·수의계약·사전규격 탭이 걸리게 — 보기 켬/끔(prodView)은 탭 값과 따로."""
+        html = (Path(__file__).resolve().parent.parent / "webapp" / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("let prodView = false;", html)
+        self.assertIn("const shown = (prodView ? productIn : items).filter((n) => listFilterPass(n) && catPass(n));", html)
+        self.assertIn("outsideShown().filter((n) => listFilterPass(n) && catPass(n))", html)
+        self.assertNotIn('filters.cat === "product"', html)
+
+
 class TestSyncLevel(unittest.TestCase):
     def test_levels(self):
         self.assertEqual(level(None), "판정 불가")

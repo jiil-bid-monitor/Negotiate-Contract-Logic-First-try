@@ -20,6 +20,7 @@ from . import docexpiry
 
 _DATE = re.compile(r"(\d{4})\D?(\d{1,2})\D?(\d{1,2})")
 FORCE = {"force_reply": True, "selective": True}
+REPLY = {"force_reply": True}  # 버튼에서 시작한 질문 — 누른 사람 메시지가 없어 selective를 못 씀
 
 
 def kinds(folder: Path) -> list[str]:
@@ -159,7 +160,27 @@ class Uploader:
                 return True
             self._save(chat, state, end, msg.get("message_id"))
             return True
+        if state["step"] == "setdate":
+            end = parse_expiry(text)
+            if not isinstance(end, date):
+                state["ask"] = self._say(chat, "날짜를 못 읽었습니다. 예) 2027-11-20", msg.get("message_id"), REPLY)
+                return True
+            self.pending.pop(chat, None)
+            cert = self._cert(state["kind"], end)
+            self._say(chat, f"<b>{html.escape(state['kind'])}</b>" + (cert or
+                      " — 인증서갱신.xlsx에 없는 서류라 날짜를 못 고쳤습니다. 새 PDF를 /upload 로 올려 주세요."),
+                      msg.get("message_id"))
+            return True
         return False
+
+    def ask_date(self, chat: str, kind: str) -> bool:
+        """'갱신 완료 → 다른 날짜 직접 입력' 버튼 — 새 만료일을 답장으로 받는다(2026-11-23). 담당자 방이 아니면 False."""
+        if chat not in self.chats:
+            return False
+        self.pending[chat] = {"step": "setdate", "ask": None, "asks": set(), "kind": kind}
+        self.pending[chat]["ask"] = self._say(chat, f"<b>{html.escape(kind)}</b> — 새 유효기간 끝나는 날을 "
+                                                    "<b>이 메시지에 답장</b>으로 보내 주세요. 예) 2027-11-20", None, REPLY)
+        return True
 
     def handle_callback(self, cb: dict) -> bool:
         msg = cb.get("message") or {}

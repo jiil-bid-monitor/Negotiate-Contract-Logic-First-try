@@ -86,6 +86,9 @@ def _sq(s: str) -> str:
 _GUIDE_TEXT = re.compile(r"[(\[]?(?:※)?공동(?:도급|수급|이행)(?:으로)?(?:참여|참가|입찰)?(?:시|의경우|인경우|할경우)?(?:에는)?"
                          r"(?:대표(?:사|업체|자|사명)?)(?:기재|기입|작성|명)?[)\]]?")
 
+# 값 칸에 미리 적힌 안내 '공고명을 기입하세요'(11/23 한가람 재개관전 입찰참가신청서 — 빨간 글) = 빈 칸(안내는 지우고 값)
+_FILL_ASK = re.compile(r"[가-힣()·]{1,15}(?:을|를)?(?:기입|기재|입력|작성)(?:하세요|하십시오|바랍니다|해주세요|하여주십시오)\.?")
+
 # 이름표 뒤에 끼워 넣은 값 표시(11/05 사용자 결정: 채운 글은 11pt) — 섹션을 다 채운 뒤 _apply_marks가 그 값만 11pt 글자 모양으로 떼어 냄
 _VS, _VE = "\ue000", "\ue001"
 
@@ -109,7 +112,7 @@ class Cell:
         """빈 칸 — 글이 없거나, 숫자 없는 자리표시('년 월', '총 명', '원', '건')뿐, 또는 작성 안내 글('공동도급참여시 대표사')뿐."""
         t = _sq(self.text)
         return (t == "" or (not re.search(r"\d", t) and re.fullmatch(r"[년월일총명원건～~\-.:/()]*", t) is not None)
-                or _GUIDE_TEXT.fullmatch(t) is not None)
+                or _GUIDE_TEXT.fullmatch(t) is not None or _FILL_ASK.fullmatch(t) is not None)
 
 
 def _cells(xml: str, tbl: tuple[int, int]) -> list[Cell]:
@@ -335,6 +338,8 @@ def _label_key(text: str) -> str | None:
         return "회사명"  # '기관(회사)명 :'(11/13 위탁·수탁 서명란) — 기관 아닌 회사 쪽은 지일
     if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호|입찰공고(?:\(지명\))?|입찰\((?:지명|제안)\)공고(?:번호)?|입찰공고\((?:지명|제안)\)", t):  # '입찰공고 | 제2026- 호'(11/13 제천)  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
         return "_notice_no"
+    if t in ("기관공고번호", "발주기관공고번호", "기관공고"):
+        return "_agency_no"  # '기 관 공 고 번 호 | -'(11/23 한가람 — 나라장터 번호가 아니라 기관 공고번호 '제2026-N호')
     if t in ("사무실", "사무실전화", "사무실전화번호"):  # '연락처 | 사무실 / FAX' 칸(공동수급 대표자 선임계)
         return "전화번호"
     if "사업자등록번호" in t and re.match(r"생년월일|법인등록번호|법인번호", t):
@@ -3147,7 +3152,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
     # 나라장터 번호를 모를 때만 공고문의 기관 공고번호('제2026-1129호')
     no_text = g2b_no or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")
     if title or no_text:
-        vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text}, docs=vault.docs, history=vault.history)
+        vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text,
+                                      "_agency_no": f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else ""},
+                                docs=vault.docs, history=vault.history)
     zin = zipfile.ZipFile(src)
     out_entries = {}
     chars = _Chars(zin.read("Contents/header.xml").decode("utf-8"), face) if "Contents/header.xml" in zin.namelist() else None

@@ -4764,3 +4764,19 @@ def test_staff_total_placeholder_and_history_bullet(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
     assert "총 18명" in text and "○○" not in text, text
     assert re.search(r"주요연혁 &lt;간략기재&gt;\| ○ 2009\D+09\S*\s+법인 설립\| ○ 2015\D+03\S*\s+공장 등록\|□ 회사소개\| ○ \|", text), text
+
+
+def test_agency_notice_no_and_fill_ask_title(tmp_path: Path):
+    """11/23 사용자: 한가람 재개관전 입찰참가신청서 '입찰개요 | 기 관 공 고 번 호 | - / 입 찰 건 명 | 공고명을 기입하세요'(빨간 안내 글)가 그대로 남음.
+    기관공고번호 = 기관 공고번호 '제2026-N호'(나라장터 번호 아님), '…을 기입하세요' 안내만 있는 칸 = 빈 칸 → 공고명."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                             f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    rows = [[c(0, 0, "기 관 공 고 번 호"), c(1, 0, "-")], [c(0, 1, "입   찰   건   명"), c(1, 1, "공고명을 기입하세요")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}),
+              title="가상 전시연출 용역", notice_no=("2026", "321"), g2b_no="R26BK01800000-000")
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "|기 관 공 고 번 호|제2026-321호|입   찰   건   명|가상 전시연출 용역|" in text, text
+    assert "기입하세요" not in text and "R26BK" not in text

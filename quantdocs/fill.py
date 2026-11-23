@@ -1779,9 +1779,6 @@ class _Chars:
                        re.finditer(r'<(?:[\w.-]+:)?charPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?charPr>', header, re.S)}
         self.paras = {m.group(1): m.group(0) for m in
                       re.finditer(r'<(?:[\w.-]+:)?paraPr\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?paraPr>', header, re.S)}
-        self.borders = {m.group(1): m.group(0) for m in
-                        re.finditer(r'<(?:[\w.-]+:)?borderFill\b[^>]*\bid="(\d+)".*?</(?:[\w.-]+:)?borderFill>', header, re.S)}
-        self.added_border: list[str] = []  # 칸을 합칠 때 새로 만든 테두리 모양(11/23 연혁 빈 여백)
         self.added: dict[tuple[str, int | None, str], str] = {}  # (원래 모양, 크기, 글꼴) → 사본 id
         self.added_para: dict[str, str] = {}  # 문단 모양 id → 가운데 정렬로 바꾼 사본 id
         self.added_left: dict[str, str] = {}  # 문단 모양 id → 왼쪽 정렬로 바꾼 사본 id(양쪽·배분 정렬 칸)
@@ -2022,32 +2019,8 @@ class _Chars:
         return bool(self.added or self.added_para or self.added_hang or self.added_left or self.added_left_hang or self.added_left_at
                     or self.font_added)
 
-    def border_type(self, bid: str, side: str) -> str:
-        """테두리 모양 bid의 한 변(left·right·top·bottom) 선 종류 — 'NONE'·'SOLID' 등, 모르면 ''."""
-        m = re.search(rf'<(?:[\w.-]+:)?{side}Border\b[^>]*\btype="(\w+)"', self.borders.get(bid, ""))
-        return m.group(1) if m else ""
-
-    def merged_border(self, left: str, right: str, top: str, bottom: str) -> str | None:
-        """네 변을 각 칸의 테두리 모양에서 가져온 새 테두리 모양 id(칸 합치기 — 바깥 테두리를 그대로 남기려고). 모르면 None."""
-        base = self.borders.get(left)
-        if not base or not all(self.borders.get(x) for x in (right, top, bottom)):
-            return None
-        for side, src in (("right", right), ("top", top), ("bottom", bottom)):
-            tag = re.search(rf'<(?:[\w.-]+:)?{side}Border\b[^>]*/>', self.borders[src])
-            if tag:
-                base = re.sub(rf'<(?:[\w.-]+:)?{side}Border\b[^>]*/>', lambda _m: tag.group(0), base, count=1)
-        new = str(max(int(x) for x in self.borders) + 1)
-        base = re.sub(r'\bid="\d+"', f'id="{new}"', base, count=1)
-        self.borders[new] = base
-        self.added_border.append(base)
-        return new
-
     def finish(self) -> str:
         header = self.header
-        if self.added_border:
-            header = re.sub(r"(</(?:[\w.-]+:)?borderFills>)", lambda m: "".join(self.added_border) + m.group(1), header, count=1)
-            header = re.sub(r'(<(?:[\w.-]+:)?borderFills\b[^>]*\bitemCnt=")(\d+)"',
-                            lambda m: f'{m.group(1)}{int(m.group(2)) + len(self.added_border)}"', header, count=1)
         if self.added_para or self.added_hang or self.added_left or self.added_left_hang or self.added_left_at:
             def aligned(pid, new, how):
                 return re.sub(r'\bhorizontal="\w+"', f'horizontal="{how}"', re.sub(r'\bid="\d+"', f'id="{new}"', self.paras[pid], count=1))
@@ -2638,90 +2611,16 @@ def _history_grid(cells: list[Cell]) -> tuple[Cell, Cell, list[int]] | None:
     return None
 
 
-def _merge_blank_history_area(xml: str, chars: "_Chars") -> str:
-    """'주요연혁' 이름표 옆·아래가 선 없는 빈 여백(안쪽 칸 경계가 모두 '없음' — 편집 화면에만 빨간 점선)이면 그 줄들을 **한 줄**로 줄이고
-    이름표 오른쪽에 넓은 칸 하나만 둠(11/23 사용자: '별도 표 없이 빈 여백이면 기존 규칙대로 「연도.월  내용」' → 처음엔 여러 줄에 걸친 합친 칸(rowSpan)으로
-    했더니 표가 쪽에서 나뉠 때 한글에서 깨짐 — '표 안에 기입해야지. 깨졌잖아'). 한 줄이라 한글이 글 길이에 맞춰 줄 높이를 늘리고 쪽에서도 그 줄을 나눔.
-    바깥 테두리는 각 변의 원래 칸 것(`_Chars.merged_border`). 그 뒤 연혁은 예전 규칙(오른쪽 빈 칸에 한 줄씩)."""
-    for ts, te in reversed(_all_tables(xml)):
-        cells = _cells(xml, (ts, te))
-        for lab in cells:
-            if "연혁" not in _sq(lab.text) or lab.rowspan != 1 or len(_sq(lab.text)) > 8:
-                continue
-            right = sorted((c for c in cells if c.row == lab.row and c.col > lab.col), key=lambda c: c.col)
-            if len(right) < 2 or not all(c.blank and c.rowspan == 1 for c in right):
-                continue
-            shape = [(c.col, c.colspan) for c in sorted((c for c in cells if c.row == lab.row), key=lambda c: c.col)]
-            rows, r = [lab.row], lab.row + 1
-            while True:
-                line = sorted((c for c in cells if c.row == r), key=lambda c: c.col)
-                if not line or [(c.col, c.colspan) for c in line] != shape or not all(c.blank and c.rowspan == 1 for c in line):
-                    break
-                rows.append(r)
-                r += 1
-            if len(rows) < 2 or any(c.rowspan > 1 and c.row < lab.row < c.row + c.rowspan for c in cells):
-                continue
-            bid = lambda c: (re.search(r'borderFillIDRef="(\d+)"', xml[c.start:c.end]) or [None, ""])[1]
-            area = [c for c in cells if c.row in rows and c.col >= right[0].col]
-            inner = [c for c in area if c.row != rows[0] and chars.border_type(bid(c), "top") not in ("", "NONE")] + \
-                    [c for c in area if c.col != right[0].col and chars.border_type(bid(c), "left") not in ("", "NONE")]
-            if inner:
-                continue  # 칸 사이 선이 보이는 진짜 표 — 줄마다 나눠 넣는 쪽(`_history_grid`)
-            last = sorted((c for c in cells if c.row == rows[-1]), key=lambda c: c.col)
-            lab_bid = chars.merged_border(bid(lab), bid(lab), bid(lab), bid(last[0]))
-            area_bid = chars.merged_border(bid(right[0]), bid(right[-1]), bid(right[0]), bid(last[1]) if len(last) > 1 else bid(right[0]))
-            if lab_bid is None or area_bid is None:
-                continue
-            size = lambda c, k: int(re.search(rf'cellSz\b[^>]*\b{k}="(\d+)"', xml[c.start:c.end]).group(1))
-            height = sum(size(c, "height") for c in cells if c.row in rows and c.col == lab.col)
-
-            def reshape(c: Cell, b: str, colspan: int, width: int) -> str:
-                seg = re.sub(r'borderFillIDRef="\d+"', f'borderFillIDRef="{b}"', xml[c.start:c.end], count=1)
-                seg = re.sub(r'(cellSpan\b[^>]*\bcolSpan=")\d+("[^>]*\browSpan=")\d+(")', lambda m: f"{m.group(1)}{colspan}{m.group(2)}1{m.group(3)}", seg, count=1)
-                return re.sub(r'(cellSz\b[^>]*\bwidth=")\d+("[^>]*\bheight=")\d+(")', lambda m: f"{m.group(1)}{width}{m.group(2)}{height}{m.group(3)}", seg, count=1)
-            new_lab = reshape(lab, lab_bid, lab.colspan, size(lab, "width"))
-            new_area = reshape(right[0], area_bid, sum(c.colspan for c in right), sum(size(c, "width") for c in right))
-            trs = _spans(xml, "tr", ts + 1, te)
-            own = [(a, b) for a, b in trs if not any(x < a and b < y for x, y in trs if (x, y) != (a, b))]
-            row_of = lambda a, b: int(re.findall(r'rowAddr="(\d+)"', xml[a:b])[-1]) if re.search(r'rowAddr="\d+"', xml[a:b]) else -1
-            tr_lab = next(((a, b) for a, b in own if row_of(a, b) == lab.row), None)
-            gone = [(a, b) for a, b in own if row_of(a, b) in rows[1:]]
-            if tr_lab is None or len(gone) != len(rows) - 1:
-                continue
-            open_tr = re.match(r"<[^>]+>", xml[tr_lab[0]:tr_lab[1]]).group(0)
-            ns = re.match(r"<([\w.-]+:)?tr\b", open_tr).group(1) or ""
-            row_xml = f"{open_tr}{new_lab}{new_area}</{ns}tr>"
-            drop = len(rows) - 1
-            tbl = xml[ts:te]
-            parts, pos = [], ts
-            for a, b in sorted([tr_lab] + gone):
-                parts.append(xml[pos:a])
-                if (a, b) == tr_lab:
-                    parts.append(row_xml)
-                pos = b
-            parts.append(xml[pos:te])
-            body = "".join(parts)
-            # 뒤 줄 번호를 줄인 줄 수만큼 당김, 표 줄 수도
-            tail_at = body.find(row_xml) + len(row_xml)
-            head, tail = body[:tail_at], body[tail_at:]
-            tail = re.sub(r'rowAddr="(\d+)"', lambda m: f'rowAddr="{int(m.group(1)) - drop if int(m.group(1)) > rows[-1] else int(m.group(1))}"', tail)
-            body = head + tail
-            body = re.sub(r'(<(?:[\w.-]+:)?tbl\b[^>]*\browCnt=")(\d+)(")', lambda m: f"{m.group(1)}{int(m.group(2)) - drop}{m.group(3)}", body, count=1)
-            del tbl
-            xml = xml[:ts] + body + xml[te:]
-            return _merge_blank_history_area(xml, chars)  # 칸 위치가 바뀌었으니 처음부터 다시
-    return xml
-
-
 def _expand_history_rows(xml: str, need: int) -> tuple[str, bool]:
-    """연혁 표의 빈 줄이 연혁보다 적으면 마지막 빈 줄을 같은 모양으로 늘림(원래 넣던 연혁을 빼지 않게 — 11/13 규칙).
-    뒤 줄 번호·표 줄 수·표 높이를 함께 고침. 늘렸으면 (새 xml, True)."""
+    """연혁 표의 빈 줄이 연혁보다 적으면 가운데 빈 줄을 같은 모양으로 늘림(원래 넣던 연혁을 빼지 않게 — 11/13 규칙). 칸은 지우거나 합치지 않음
+    (11/23 사용자: '칸 자체를 없애면 안 되지' — 합친 칸은 한글에서 깨졌음). 마지막 줄은 아래 테두리가 있어서 복사하면 중간에 가로선이 생김 —
+    줄이 셋 이상이면 끝에서 둘째 줄을 복사해 마지막 줄 앞에 넣음. 뒤 줄 번호·표 줄 수·표 높이를 함께 고침. 늘렸으면 (새 xml, True)."""
     for ts, te in _all_tables(xml):
         cells = _cells(xml, (ts, te))
         grid = _history_grid(cells)
         if grid is None or len(grid[2]) >= need:
             continue
-        last = grid[2][-1]
+        last = grid[2][-2] if len(grid[2]) >= 3 else grid[2][-1]  # 복사할 줄(그 뒤에 사본을 넣음)
         trs = _spans(xml, "tr", ts + 1, te)
         own = [(s0, e0) for s0, e0 in trs if not any(a < s0 and e0 < b for a, b in trs if (a, b) != (s0, e0))]
         row_of = lambda seg: int(re.findall(r'rowAddr="(\d+)"', seg)[-1]) if re.search(r'rowAddr="\d+"', seg) else -1
@@ -2733,7 +2632,7 @@ def _expand_history_rows(xml: str, need: int) -> tuple[str, bool]:
         src = xml[tr[0]:tr[1]]
         src = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", src, flags=re.S)
         h = max((int(x) for x in re.findall(r'<(?:[\w.-]+:)?cellSz\b[^>]*\bheight="(\d+)"', src)), default=0)
-        # 마지막 빈 줄 뒤 줄들의 번호를 add만큼 밀고(표 끝에서부터), 그 자리에 사본 줄을 넣음
+        # 복사할 줄 뒤 줄들(마지막 빈 줄 포함)의 번호를 add만큼 밀고, 그 자리에 사본 줄을 넣음
         rel = tr[1] - ts
         head, tail = tbl[:rel], tbl[rel:]
         tail = re.sub(r'rowAddr="(\d+)"', lambda m: f'rowAddr="{int(m.group(1)) + add if int(m.group(1)) > last else int(m.group(1))}"', tail)
@@ -3268,8 +3167,6 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     xml = _widen_track_cols(xml, _all_tables(xml)[i], tracks, chars)
             hist_grown = False
             if vault.history and not sign_only:  # 연혁 표 빈 줄이 모자라면 늘림(11/23)
-                if chars is not None:  # 선 없는 빈 여백은 칸을 합쳐 예전 규칙대로(11/23)
-                    xml = _merge_blank_history_area(xml, chars)
                 xml, hist_grown = _expand_history_rows(xml, len(vault.history))
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)

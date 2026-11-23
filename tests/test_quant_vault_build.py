@@ -4640,41 +4640,36 @@ def test_track_total_count_and_amount_one_cell(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}), tracks=tracks)
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
     assert "|계|2건 / 1,250,000,000|" in text, text
-def test_history_blank_area_merged_and_lines(tmp_path: Path):
-    """11/23 사용자: '별도 표 없이 빈 여백이면 기존 규칙대로 「연도.월  내용」' — '주요연혁' 옆·아래가 안쪽 선이 모두 없는 숨은 칸(편집 화면에만 점선)이면
-    표로 보지 않고 칸을 하나로 합쳐 한 줄씩. 바깥 테두리(오른쪽·위·아래)는 원래 칸 것. 안쪽 선이 보이는 표는 앞 규칙(연월·내용 칸에 나눠)."""
+def test_history_blank_area_keeps_cells(tmp_path: Path):
+    """11/23 사용자: '칸 자체를 없애면 안 되지' — 선 없는 빈 여백 연혁 영역도 칸은 그대로 두고 줄마다 연월 칸·내용 칸에(①).
+    칸을 합치면(rowSpan·한 줄로 줄이기) 한글에서 표가 깨졌음. 줄이 모자라면 가운데 줄을 복사 — 아래 테두리가 있는 마지막 줄은 끝에 그대로."""
     from quantdocs.fill import fill_hwpx
 
-    def bf(i, left, right, top, bottom):
-        return (f'<hh:borderFill id="{i}"><hh:leftBorder type="{left}" width="0.1 mm"/><hh:rightBorder type="{right}" width="0.1 mm"/>'
+    def bf(i, top, bottom):
+        return (f'<hh:borderFill id="{i}"><hh:leftBorder type="NONE" width="0.1 mm"/><hh:rightBorder type="NONE" width="0.1 mm"/>'
                 f'<hh:topBorder type="{top}" width="0.1 mm"/><hh:bottomBorder type="{bottom}" width="0.1 mm"/></hh:borderFill>')
-    header = ('<hh:head><hh:borderFills itemCnt="5">' + bf(1, "SOLID", "SOLID", "SOLID", "SOLID") + bf(2, "NONE", "NONE", "SOLID", "NONE")
-              + bf(3, "NONE", "SOLID", "SOLID", "NONE") + bf(4, "NONE", "NONE", "NONE", "NONE") + bf(5, "NONE", "NONE", "NONE", "SOLID")
+    header = ('<hh:head><hh:borderFills itemCnt="3">' + bf(1, "SOLID", "NONE") + bf(2, "NONE", "NONE") + bf(3, "NONE", "SOLID")
               + '</hh:borderFills><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"/></hh:charProperties>'
               '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="LEFT"/></hh:paraPr></hh:paraProperties></hh:head>')
     c = lambda col, row, t, span, b: (f'<hp:tc borderFillIDRef="{b}"><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
                                       f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/><hp:cellSz width="9000" height="1500"/></hp:tc>')
-    rows = [[c(0, 0, "주  요  연  혁", 2, 1), c(2, 0, "", 2, 2), c(4, 0, "", 4, 3)],
-            [c(0, 1, "", 2, 1), c(2, 1, "", 2, 4), c(4, 1, "", 4, 4)],
-            [c(0, 2, "", 2, 1), c(2, 2, "", 2, 5), c(4, 2, "", 4, 5)]]
+    rows = [[c(0, 0, "주  요  연  혁", 2, 1), c(2, 0, "", 2, 1), c(4, 0, "", 4, 1)]]
+    rows += [[c(0, r, "", 2, b), c(2, r, "", 2, b), c(4, r, "", 4, b)] for r, b in ((1, 2), (2, 3))]
     body = ('<hp:p><hp:run><hp:tbl rowCnt="3" colCnt="8"><hp:sz width="27000" height="4500"/>'
             + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>")
     src = _mini_hwpx(tmp_path / "s.hwpx", body)
     with zipfile.ZipFile(src, "a") as z:
         z.writestr("Contents/header.xml", header)
     v = vault.Vault({}, info={"회사명": "(주)가상"})
-    v.history = [{"연월일": "2009.09", "내용": "법인 설립"}, {"연월일": "2012.08", "내용": "사업자 등록"}, {"연월일": "2015.03", "내용": "공장 등록"},
-                 {"연월일": "2016.04", "내용": "옥외광고업 등록"}]
+    v.history = [{"연월일": f"20{10 + i}.0{i + 1}", "내용": f"연혁 {i + 1}"} for i in range(5)]
     fill_hwpx(src, tmp_path / "o.hwpx", v)
-    out = zipfile.ZipFile(tmp_path / "o.hwpx")
-    sec, head = out.read("Contents/section0.xml").decode(), out.read("Contents/header.xml").decode()
-    merged = re.search(r'<hp:tc borderFillIDRef="(\d+)">((?:(?!</hp:tc>).)*colAddr="2" rowAddr="0"(?:(?!</hp:tc>).)*)</hp:tc>', sec, re.S)
-    assert merged and 'colSpan="6" rowSpan="1"' in merged.group(2), sec  # 여러 줄에 걸친 칸(rowSpan)은 한글에서 쪽 나눔 때 깨져 한 줄로(11/23)
-    lines = [re.sub(r"<[^>]+>", "", p) for p in re.findall(r"<hp:p\b.*?</hp:p>", merged.group(2), re.S)]
-    assert lines[:2] == ["2009.09  법인 설립", "2012.08  사업자 등록"] and len(lines) == 4, lines
-    assert sec.count("<hp:tc ") == 2 and sec.count("<hp:tr>") == 1 and 'rowCnt="1"' in sec  # 이름표 + 넓은 칸 하나, 줄 하나
-    new = re.search(rf'<hh:borderFill id="{merged.group(1)}">.*?</hh:borderFill>', head, re.S).group(0)
-    assert 'rightBorder type="SOLID"' in new and 'topBorder type="SOLID"' in new and 'bottomBorder type="SOLID"' in new and 'borderFills itemCnt="7"' in head  # 이름표 칸·넓은 칸 테두리 2개 더함
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    assert 'rowCnt="5"' in sec and sec.count("<hp:tr>") == 5 and "rowSpan=\"1\"" in sec and 'colSpan="6"' not in sec
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+    assert "|주  요  연  혁|2010.01|연혁 1|2011.02|연혁 2|" in text and "|2014.05|연혁 5|" in text, text
+    # 아래 테두리(3)는 마지막 줄에만, 늘린 줄은 가운데 줄 모양(2)
+    last_row = re.findall(r'<hp:tc borderFillIDRef="(\d+)">(?:(?!</hp:tc>).)*rowAddr="(\d+)"', sec, re.S)
+    assert {b for b, r in last_row if r == "4"} == {"3"} and {b for b, r in last_row if r in ("1", "2", "3")} == {"2"}, last_row
 
 
 def test_column_head_row_values_go_below(tmp_path: Path):

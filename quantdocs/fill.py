@@ -3039,6 +3039,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 if sign_only and not any(_row_group(cells, x) == "신청인" for x in cells):
                     continue
                 by_pos = {(c.row, c.col): c for c in cells}
+                colon_vals: dict[int, str] = {}  # ':'로 끝나는 이름표 옆 값 칸 → 원래 문단 모양(11/23 줄맞춤)
                 other_rows = _other_rows(cells)
                 repeat_rows = _repeat_party_rows(cells)
                 if repeat_rows and not any("되풀이된 회사·대표자 줄" in x for x in rep.filled):
@@ -3314,6 +3315,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         # 이름표가 ':'로 끝나는 칸 옆 값 칸(11/13 사용자 요청 '값은 늘 : 옆에, 길면 첫 줄 시작 위치에 맞춰 줄바꿈') —
                         # 낱말 사이에서 줄을 나누고, 값 첫 줄(또는 한 줄 값)이 이름표의 ':' 줄과 같은 높이에 오게 칸 세로 정렬을 맞춤
                         lines, lab_v, val_v = _colon_layout(xml, c, target, value, chars)
+                        vm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[target.start:target.end])
+                        if vm:
+                            colon_vals[target.start] = vm.group(1)
                         if lab_v:
                             valign[c.start] = lab_v
                             edits.append((c, None, _set_valign(xml[c.start:c.end], lab_v)))
@@ -3386,9 +3390,17 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         edits.append((c, None, new_seg))
                         rep.filled += done
                 if chars is not None:
+                    before = set(para_override)
                     _align_numbers(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override)
                     _align_right_cells(xml, [e for e in edits if tbl[0] <= e[0].start < tbl[1]], chars, para_override,
                                        (_value("회사명", vault), _value("대표자", vault)))
+                    if len(colon_vals) >= 2:
+                        # '소 속 : | 값 / 주 소 : | 값 …' 묶음(11/23 사용자 지적 — 값 칸이 원본부터 가운데 정렬이라 줄마다 시작 위치가 다르고,
+                        # 세 줄로 나눈 주소도 줄마다 가운데로 모였음, '(인)' 줄만 왼쪽) — 값 칸은 모두 왼쪽 정렬(값은 ':' 옆에서 시작, 11/13 규칙).
+                        # 앞서 정한 칸(신용평가등급 가운데·'(인)' 칸)은 그대로
+                        for start, pid in colon_vals.items():
+                            if start not in before and chars.align(pid) != "LEFT":
+                                para_override[start] = chars.left_any(pid)
                 if none_rule and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
                     head = [c for c in cells if c.row == 0]
                     body = [c for c in cells if c.row > 0]

@@ -4505,6 +4505,29 @@ def test_subtotal_row_score_also_in_item_score_cell(tmp_path: Path):
     assert "신인도 소계|4|4|" in text and "2점|4|" in text, text
 
 
+def test_history_grid_rows_and_grow(tmp_path: Path):
+    """11/23 사용자 요청: 일반현황 '주요연혁' 칸 아래 '년 월 일 | 내 용 | 비 고' 표 + 빈 줄 — 연혁을 '주요연혁' 칸에 통째로 넣지 말고
+    줄마다 날짜·내용 칸에. 연혁이 빈 줄보다 많으면 같은 모양의 줄을 늘려 모두 넣음(원래 넣던 연혁을 빼지 않음), 늘린 표는 쪽에서 나뉘게."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t, span=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                     f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/>'
+                                     f'<hp:cellSz width="9000" height="1500"/></hp:tc>')
+    rows = [[c(0, 0, "주요연혁", 3)], [c(0, 1, "년 월 일"), c(1, 1, "내 용"), c(2, 1, "비 고")]]
+    rows += [[c(0, r, ""), c(1, r, ""), c(2, r, "")] for r in (2, 3)]
+    rows += [[c(0, 4, "※ 최근 순으로", 3)]]
+    body = ('<hp:p><hp:run><hp:tbl rowCnt="5" colCnt="3" pageBreak="NONE"><hp:sz width="27000" height="7500"/>'
+            + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>")
+    v = vault.Vault({}, info={"회사명": "(주)가상"})
+    v.history = [{"연월일": "2009.09", "내용": "법인 설립"}, {"연월일": "2012.08", "내용": "사업자 등록"}, {"연월일": "2015.03", "내용": "공장 등록"}]
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+    assert "|주요연혁|년 월 일|내 용|비 고|2009.09|법인 설립|2012.08|사업자 등록|2015.03|공장 등록|※ 최근 순으로|" in text, text
+    assert 'rowCnt="6"' in sec and 'pageBreak="TABLE"' in sec and 'height="9000"' in sec
+    assert re.search(r'rowAddr="5"/>.*?최근 순으로|최근 순으로.*?rowAddr="5"', sec, re.S)  # 아래 줄 번호도 밀림
+
+
 def test_column_head_row_values_go_below(tmp_path: Path):
     """11/23 사용자 지적: 사업설명회 참가 신청서 '대표자 | 성 명 | 생년월일 | 전화번호(회사) : / __ | __ | __' — 값 줄은 비고
     '전화번호(회사) :' 이름표 칸에 번호가 붙음. 이름표 줄이면 값은 바로 아래 칸에, 이름표 칸엔 안 넣음.

@@ -2553,6 +2553,71 @@ def _page_slack(xml: str, tbl_end: int) -> int | None:
     return body - vp - vs
 
 
+_HIST_DATE_HEAD = re.compile(r"(?:년월일|연월일|년월|연월|일자|일시|날짜)")
+
+
+def _history_grid(cells: list[Cell]) -> tuple[Cell, Cell, list[int]] | None:
+    """연혁을 줄마다 적는 표('년 월 일 | 내 용 | 비 고' 머리 + 빈 줄) — (날짜 머리 칸, 내용 머리 칸, 빈 줄 번호들).
+    머리 줄 바로 위가 '주요연혁'·'연혁' 칸일 때만(11/23 사용자 요청: 창원산업진흥원 별지 제5호 일반현황 — 연혁을 '주요연혁' 칸에 통째로 넣었음)."""
+    for date in cells:
+        if not _HIST_DATE_HEAD.fullmatch(_sq(date.text)):
+            continue
+        body = next((c for c in cells if c.row == date.row and c.col > date.col and _sq(c.text) == "내용"), None)
+        if body is None:
+            continue
+        above = [c for c in cells if c.row + c.rowspan == date.row]
+        if not any("연혁" in _sq(c.text) for c in above):
+            continue
+        rows = []
+        r = date.row + 1
+        while True:
+            line = [c for c in cells if c.row == r]
+            if not line or not all(c.blank and c.rowspan == 1 for c in line):
+                break
+            if not any(c.col == date.col for c in line) or not any(c.col == body.col for c in line):
+                break
+            rows.append(r)
+            r += 1
+        if rows:
+            return date, body, rows
+    return None
+
+
+def _expand_history_rows(xml: str, need: int) -> tuple[str, bool]:
+    """연혁 표의 빈 줄이 연혁보다 적으면 마지막 빈 줄을 같은 모양으로 늘림(원래 넣던 연혁을 빼지 않게 — 11/13 규칙).
+    뒤 줄 번호·표 줄 수·표 높이를 함께 고침. 늘렸으면 (새 xml, True)."""
+    for ts, te in _all_tables(xml):
+        cells = _cells(xml, (ts, te))
+        grid = _history_grid(cells)
+        if grid is None or len(grid[2]) >= need:
+            continue
+        last = grid[2][-1]
+        trs = _spans(xml, "tr", ts + 1, te)
+        own = [(s0, e0) for s0, e0 in trs if not any(a < s0 and e0 < b for a, b in trs if (a, b) != (s0, e0))]
+        row_of = lambda seg: int(re.findall(r'rowAddr="(\d+)"', seg)[-1]) if re.search(r'rowAddr="\d+"', seg) else -1
+        tr = next(((s0, e0) for s0, e0 in own if row_of(xml[s0:e0]) == last), None)
+        if tr is None:
+            continue
+        add = need - len(grid[2])
+        tbl = xml[ts:te]
+        src = xml[tr[0]:tr[1]]
+        src = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", src, flags=re.S)
+        h = max((int(x) for x in re.findall(r'<(?:[\w.-]+:)?cellSz\b[^>]*\bheight="(\d+)"', src)), default=0)
+        # 마지막 빈 줄 뒤 줄들의 번호를 add만큼 밀고(표 끝에서부터), 그 자리에 사본 줄을 넣음
+        rel = tr[1] - ts
+        head, tail = tbl[:rel], tbl[rel:]
+        tail = re.sub(r'rowAddr="(\d+)"', lambda m: f'rowAddr="{int(m.group(1)) + add if int(m.group(1)) > last else int(m.group(1))}"', tail)
+        copies = "".join(re.sub(r'rowAddr="\d+"', f'rowAddr="{last + k}"', src) for k in range(1, add + 1))
+        tbl = head + copies + tail
+        tbl = re.sub(r'(<(?:[\w.-]+:)?tbl\b[^>]*\browCnt=")(\d+)(")', lambda m: f"{m.group(1)}{int(m.group(2)) + add}{m.group(3)}", tbl, count=1)
+        tbl = re.sub(r'(<(?:[\w.-]+:)?tbl\b[^>]*>\s*<(?:[\w.-]+:)?sz\b[^>]*\bheight=")(\d+)(")',
+                     lambda m: f"{m.group(1)}{int(m.group(2)) + add * h}{m.group(3)}", tbl, count=1)
+        xml = xml[:ts] + tbl + xml[te:]
+        # 줄을 늘린 표는 쪽 끝에서 나뉘게(연혁이 많으면 한 쪽을 넘음 — 11/05 연혁 표 규칙과 같게)
+        return _make_breakable(xml, ts, ts + len(tbl)), True
+    return xml, False
+
+
 def _make_breakable(xml: str, ts: int, te: int) -> str:
     """표(xml[ts:te])를 쪽 경계에서 나뉘게 — '글자처럼 취급'을 풀고 '나눔'(TABLE), 표가 든 문단 줄 배치는 지워 한글이 다시 계산."""
     tbl = xml[ts:te]
@@ -3042,6 +3107,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     xml = _split_tall_rows(xml, _all_tables(xml)[i], len(tracks))
                 for i in range(len(_all_tables(xml))):  # 사업기간·금액 열이 좁으면 가장 넓은 열에서 너비를 받아 옴(11/12)
                     xml = _widen_track_cols(xml, _all_tables(xml)[i], tracks, chars)
+            hist_grown = False
+            if vault.history and not sign_only:  # 연혁 표 빈 줄이 모자라면 늘림(11/23)
+                xml, hist_grown = _expand_history_rows(xml, len(vault.history))
             before_fill = xml
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
@@ -3069,6 +3137,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                 by_pos = {(c.row, c.col): c for c in cells}
                 colon_vals: dict[int, str] = {}  # ':'로 끝나는 이름표 옆 값 칸 → 원래 문단 모양(11/23 줄맞춤)
                 col_heads = _column_heads(cells, by_pos)  # 이름표 줄 → 바로 아래 값 칸(11/23)
+                hist_grid = _history_grid(cells) if vault.history else None  # '년 월 일 | 내 용' 연혁 표(11/23)
                 other_rows = _other_rows(cells)
                 repeat_rows = _repeat_party_rows(cells)
                 if repeat_rows and not any("되풀이된 회사·대표자 줄" in x for x in rep.filled):
@@ -3173,6 +3242,17 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     core = re.sub(r"\(.*?\)|[^\w]", "", c.text)  # '〈 주요연혁(요약) 〉' → '주요연혁'
                     if "연혁" not in core and re.fullmatch(r"(?:주요)?이력\(연혁\)", _sq(c.text)):
                         core = "주요연혁"  # '주요 이력(연혁)'(11/18 봉평 서식 12 — 괄호를 떼면 '연혁'이 사라져 연혁을 못 넣었음)
+                    if "연혁" in core and len(core) <= 8 and vault.history and hist_grid is not None \
+                            and any(x.row == c.row + c.rowspan for x in hist_grid[:2]):
+                        # '주요연혁' 칸 아래 '년 월 일 | 내 용 | 비 고' 표 — 연혁은 줄마다 그 표에(11/23 사용자 요청), 제목 칸엔 안 넣음
+                        date_h, body_h, grid_rows = hist_grid
+                        for h, r in zip(vault.history, grid_rows):
+                            for head, val in ((date_h, _fmt_ymd(h.get("연월일"))), (body_h, str(h.get("내용") or "").strip())):
+                                cell = by_pos.get((r, head.col))
+                                if cell is not None and val:
+                                    edits.append((cell, [val], False))
+                        rep.filled.append(f"연혁 표 → {min(len(vault.history), len(grid_rows))}줄")
+                        continue
                     if "연혁" in core and len(core) <= 8 and vault.history:
                         lines = [f"{_fmt_ymd(h.get('연월일'))}  {h.get('내용') or ''}".strip() for h in vault.history]
                         right = by_pos.get((c.row, c.col + c.colspan))

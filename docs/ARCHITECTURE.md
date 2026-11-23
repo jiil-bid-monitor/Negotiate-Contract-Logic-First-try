@@ -179,7 +179,7 @@ bash webapp/start.sh
 
 - 담당자 이름·전화·메일은 저장 전에 제거합니다(`fields.PERSONAL_FIELDS`). `data/`·`output/`·`.env`는 `.gitignore`.
 - 과거 실적·지일 투찰 이력 같은 회사 자료는 이 레포에 올리지 않습니다(비공개 `jiil-past-contracts`, 암호화 묶음).
-- **이 레포는 비공개여야 합니다.**
+- **이 레포는 공개 저장소입니다** — 접속 토큰·사내 주소·직원 이름·회사 서류·판단 기록은 커밋하지 말 것(토큰은 `.env`·GitHub Secrets, 회사 자료는 비공개 레포·암호화 묶음).
 
 ---
 

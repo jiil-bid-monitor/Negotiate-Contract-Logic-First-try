@@ -4621,7 +4621,10 @@ def test_history_rows_without_header_and_license_label(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
     assert "|면허/허가/등록 중 보유현황|실내건축공사업 등록증|" in text, text
     assert "|주  요  연  혁|2009.09|법인 설립|2012.08|사업자 등록|2015.03|공장 등록|참여기술자 보유현황|" in text, text
-    assert 'rowCnt="5"' in sec
+    # (11/23 사용자) 연혁은 이름표 아래 줄부터 — 연월 = 이름표 열(0), 내용 = 그 오른쪽 칸(2), 이름표 줄 오른쪽은 비움
+    assert 'rowCnt="6"' in sec
+    assert re.search(r'<hp:t>2009\.09</hp:t>(?:(?!</hp:tc>).)*colAddr="0" rowAddr="2"', sec, re.S)
+    assert re.search(r'<hp:t>법인 설립</hp:t>(?:(?!</hp:tc>).)*colAddr="2" rowAddr="2"', sec, re.S)
 
 
 def test_track_total_count_and_amount_one_cell(tmp_path: Path):
@@ -4651,8 +4654,9 @@ def test_history_blank_area_keeps_cells(tmp_path: Path):
     header = ('<hh:head><hh:borderFills itemCnt="3">' + bf(1, "SOLID", "NONE") + bf(2, "NONE", "NONE") + bf(3, "NONE", "SOLID")
               + '</hh:borderFills><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"/></hh:charProperties>'
               '<hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="CENTER"/></hh:paraPr></hh:paraProperties></hh:head>')
-    c = lambda col, row, t, span, b: (f'<hp:tc borderFillIDRef="{b}"><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
-                                      f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/><hp:cellSz width="9000" height="1500"/></hp:tc>')
+    c = lambda col, row, t, span, b: (f'<hp:tc hasMargin="0" borderFillIDRef="{b}"><hp:subList vertAlign="CENTER"><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                      f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="1"/><hp:cellSz width="9000" height="1500"/>'
+                                      '<hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
     rows = [[c(0, 0, "주  요  연  혁", 2, 1), c(2, 0, "", 2, 1), c(4, 0, "", 4, 1)]]
     rows += [[c(0, r, "", 2, b), c(2, r, "", 2, b), c(4, r, "", 4, b)] for r, b in ((1, 2), (2, 3))]
     body = ('<hp:p><hp:run><hp:tbl rowCnt="3" colCnt="8"><hp:sz width="27000" height="4500"/>'
@@ -4664,12 +4668,15 @@ def test_history_blank_area_keeps_cells(tmp_path: Path):
     v.history = [{"연월일": f"20{10 + i}.0{i + 1}", "내용": f"연혁 {i + 1}"} for i in range(5)]
     fill_hwpx(src, tmp_path / "o.hwpx", v)
     sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
-    assert 'rowCnt="5"' in sec and sec.count("<hp:tr>") == 5 and "rowSpan=\"1\"" in sec and 'colSpan="6"' not in sec
+    assert 'rowCnt="6"' in sec and sec.count("<hp:tr>") == 6 and "rowSpan=\"1\"" in sec and 'colSpan="6"' not in sec
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
     assert "|주  요  연  혁|2010.01|연혁 1|2011.02|연혁 2|" in text and "|2014.05|연혁 5|" in text, text
     # 아래 테두리(3)는 마지막 줄에만, 늘린 줄은 가운데 줄 모양(2)
-    last_row = re.findall(r'<hp:tc borderFillIDRef="(\d+)">(?:(?!</hp:tc>).)*rowAddr="(\d+)"', sec, re.S)
-    assert {b for b, r in last_row if r == "4"} == {"3"} and {b for b, r in last_row if r in ("1", "2", "3")} == {"2"}, last_row
+    last_row = re.findall(r'<hp:tc hasMargin="\d" borderFillIDRef="(\d+)">(?:(?!</hp:tc>).)*rowAddr="(\d+)"', sec, re.S)
+    assert {b for b, r in last_row if r == "5"} == {"3"} and {b for b, r in last_row if r in ("1", "2", "3", "4")} == {"2"}, last_row
+    # 연혁 칸: 위 정렬 + 칸 위·아래 여백(연혁마다 간격, 11/23 사용자 '가독성 좋게'), 이름표 줄 칸은 그대로
+    tc = re.search(r'<hp:tc hasMargin="1"[^>]*>(?:(?!</hp:tc>).)*?<hp:t>연혁 1</hp:t>(?:(?!</hp:tc>).)*</hp:tc>', sec, re.S)
+    assert tc and 'vertAlign="TOP"' in tc.group(0) and 'top="567"' in tc.group(0), sec
     # 11/23 사용자 '왼쪽 정렬만 하면 완벽': 원본이 가운데 정렬이어도 연월·내용 칸은 왼쪽 정렬 사본
     hdr = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/header.xml").decode()
     left = re.search(r'<hh:paraPr id="(\d+)"(?:(?!</hh:paraPr>).)*horizontal="LEFT"', hdr, re.S)

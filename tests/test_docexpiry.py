@@ -204,3 +204,25 @@ class TestBulk(unittest.TestCase):
         self.assertEqual([(d["kind"], d["left"]) for d in got], [("(그리다) 가", 7), ("(그리다) 나", 8)])
         with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder / "없음")}):
             self.assertEqual(D.web_alert(date(2026, 11, 23)), [], "서류 폴더가 없으면(서버 PC) 종 없음")
+
+    def test_web_upload_read_and_save(self):
+        """웹앱 종 창에서 PDF 올리기(2026-11-23) — 읽기만 → 저장(표 만료일), 모르는 종류·PDF 아님은 거절."""
+        import base64
+        import os
+        from unittest import mock
+
+        from webapp import docupload, server
+
+        pdf = base64.b64encode(b"%PDF-1.4 test").decode()
+        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder)}), \
+                mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"), \
+                mock.patch.object(docupload, "pdf_text", lambda data: "유효기간 : 2025.12.01 ~ 2027.12.01"):
+            got = server.docs_upload({"action": "read", "kind": "(그리다) 나", "pdf": pdf})
+            self.assertEqual(got, {"found": "2027-12-01", "cands": ["2027-12-01", "2028-12-01"]})
+            saved = server.docs_upload({"action": "save", "kind": "(그리다) 나", "pdf": pdf, "end": "2027-12-01"})
+            self.assertIn("2027-12-01로 고쳤습니다", saved["cert"])
+            for bad in ({"kind": "../../x", "pdf": pdf}, {"kind": "(그리다) 나", "pdf": base64.b64encode(b"hello").decode()}):
+                with self.assertRaises(ValueError):
+                    server.docs_upload({"action": "read", **bad})
+        self.assertEqual(dict(D.read_cert(self.folder / D.CERT_FILE))["(그리다) 나"], date(2027, 12, 1))
+        self.assertTrue(any(p.name.startswith("(그리다) 나_") for p in (self.folder / "[최신 서류]").glob("*.pdf")))

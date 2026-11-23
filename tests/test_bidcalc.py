@@ -150,6 +150,23 @@ class LookupTest(unittest.TestCase):
         # '범위' 없이 ±만 있는 다른 문장(실적·하한율 오차 등)은 변동폭으로 안 봄
         self.assertNotIn("range_lo", bidcalc.parse_notice_text("예비가격 산정 시 오차 ±5% 이내 실적"))
 
+    def test_parse_notice_text_skips_lookalike_values(self):
+        # 11/23 — 글자 띄움·줄바꿈을 허용하면서 다른 값을 잡던 세 모양
+        parse = bidcalc.parse_notice_text
+        # ① 하한율 이름표 다음 줄의 순공사원가 % — 하한율 아님(그 뒤 진짜 하한율은 읽음)
+        self.assertNotIn("lower_rate", parse("낙찰하한율 :\n순공사원가 98% 미만 제외"))
+        self.assertNotIn("lower_rate", parse("낙찰하한율 | 순공사원가 98%"))
+        self.assertEqual(parse("낙찰하한율 | 순공사원가 98%\n낙찰하한율 : 87.745%")["lower_rate"], 87.745)
+        self.assertEqual(parse("낙찰하한율 : 예정가격 대비 87.745%")["lower_rate"], 87.745)
+        # ② 예정가격을 정하는 문장이 아닌 '±N% 범위'는 변동폭 아님
+        self.assertNotIn("range_lo", parse("예비가격 기초조사 결과 오차는 ±5% 범위에서 인정"))
+        self.assertEqual(parse("예정가격 결정 시 복수예비가격은 ±3% 범위")["range_lo"], -3)
+        self.assertEqual(parse("복수\n예비가격은 기초금액의 ±2% 범위 안")["range_hi"], 2)
+        # ③ 금액 뒤 '이상·미만·이하·초과' = 조건 문장 — 기초금액 아님(뒤 진짜 기초금액은 읽음)
+        self.assertNotIn("basis", parse("기초금액 100,000,000원 이상인 공사는 적격심사"))
+        self.assertNotIn("basis", parse("기 초 금 액 300,000,000 원 미 만"))
+        self.assertEqual(parse("기초금액 100,000,000원 이상인 공사\n7) 기  초  금  액 : 금 723,349,000 원")["basis"], 723349000)
+
     def test_guess_method(self):
         self.assertEqual(bidcalc.guess_method("", -2, 2), "pps")
         self.assertEqual(bidcalc.guess_method("", -3, 3), "mois")

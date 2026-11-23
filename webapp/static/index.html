@@ -350,6 +350,30 @@ body {
 .me-top input::placeholder { color: rgba(255,255,255,.45); }
 .me-top input:focus { outline: none; border-color: rgba(255,255,255,.7); }
 .topbar .me-top + .theme { margin-left: 0; flex: none; }
+/* 회사 서류 갱신 알림 종 (2026-11-23 사용자 요청 — 텔레그램을 안 열어도 웹앱에서 보이게) */
+.docbell { position: relative; flex: none; }
+.docbell > button {
+  position: relative; font-size: 18px; line-height: 1; padding: 6px 8px; cursor: pointer;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.24); border-radius: 4px; color: #fff;
+}
+.docbell > button:hover, .docbell > button[aria-expanded="true"] { border-color: rgba(255,255,255,.7); }
+.docbell .n {
+  position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  background: #d93025; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+.docbell-pop {
+  position: absolute; z-index: 50; top: calc(100% + 8px); right: 0; width: 340px; max-width: calc(100vw - 32px);
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line-strong); box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  padding: 12px 14px; font-size: 13px;
+}
+.docbell-pop h3 { margin: 0 0 8px; font-size: 14px; color: var(--ink-strong); }
+.docbell-pop ul { list-style: none; margin: 0; padding: 0; }
+.docbell-pop li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.docbell-pop li:first-child { border-top: 0; }
+.docbell-pop .when { flex: none; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.docbell-pop .when b { color: #d93025; }
+.docbell-pop p { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+@media (max-width: 760px) { .docbell-pop { right: auto; left: 0; } }  /* 좁은 화면은 종이 왼쪽에 있어서 */
 /* 바로가기 — 나라장터·21라인 (10/26 사용자 요청: 본문 오른쪽 빈 곳에 사이트 아이콘과 블록으로).
    본문 오른쪽에 자리가 없으면(1520px 이하) 본문 맨 위 줄 오른쪽에 한 줄로. */
 .me-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin: -16px 0 6px; }
@@ -1422,6 +1446,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <p class="corpus-sum" id="corpusSum" hidden>과거 실적을 불러오는 중…</p>
     </div>
 
+    <div class="docbell" id="docBell" hidden>
+      <button type="button" id="docBellBtn" aria-haspopup="true" aria-expanded="false" title="회사 서류 갱신 알림">🔔<span class="n" id="docBellN"></span></button>
+      <div class="docbell-pop" id="docBellPop" hidden></div>
+    </div>
     <label class="me-top">내 이름 <input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></label>
     <div class="theme" role="group" aria-label="화면 테마">
       <button type="button" data-theme-set="light" title="라이트 모드">라이트</button>
@@ -4666,6 +4694,30 @@ if (AWARD_TEST) {  // 시험 페이지: 탭 줄을 숨기고 낙찰 후 서류 �
   }
 })();
 boot();
+
+// 회사 서류 갱신 알림 종 — 텔레그램 알림과 같은 서류, 처리는 텔레그램 버튼에서(2026-11-23 사용자 결정)
+async function loadDocBell() {
+  let docs = [];
+  try { docs = (await getJson("/api/docs-alert")).docs || []; } catch { return; }
+  $("docBell").hidden = !docs.length;
+  $("docBellN").textContent = docs.length;
+  const when = (d) => d.left < 0 ? `<b>만료 뒤 ${-d.left}일</b>` : d.left === 0 ? "<b>오늘 만료</b>" : (d.left <= 7 ? `<b>D-${d.left}</b>` : `D-${d.left}`);
+  $("docBellPop").innerHTML = `<h3>회사 서류 갱신 알림 ${docs.length}건</h3><ul>`
+    + docs.map((d) => `<li><span>${esc(d.kind)}</span><span class="when">${esc(d.end)} · ${when(d)}${d.state ? `<br>${esc(d.state)}` : ""}</span></li>`).join("")
+    + "</ul><p>갱신했으면 텔레그램 '지일 입찰 공고' 방에서 /docs → 서류 버튼 → '갱신 완료'로 새 서류 PDF를 올려 주세요.</p>";
+}
+$("docBellBtn").onclick = (e) => {
+  e.stopPropagation();
+  const pop = $("docBellPop");
+  pop.hidden = !pop.hidden;
+  $("docBellBtn").setAttribute("aria-expanded", String(!pop.hidden));
+};
+document.addEventListener("click", (e) => {
+  if (!$("docBell").contains(e.target)) { $("docBellPop").hidden = true; $("docBellBtn").setAttribute("aria-expanded", "false"); }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("docBellPop").hidden = true; });
+loadDocBell();
+setInterval(loadDocBell, 10 * 60 * 1000);
 </script>
 <!-- 투찰 계산기 — 계산은 bidcalc.js(BidCalc), 화면은 bidcalc_ui.js (2026-10-15, 21라인 복수예가산출프로그램 모양) -->
 <script src="bidcalc.js"></script>

@@ -30,7 +30,7 @@ from nego import bidcalc, bidrecommend, feedback_sheet, scope
 from nego.config import ConfigError, load_config, redact
 from nego.http_client import ApiError
 
-from . import mview
+from . import docexpiry, mview
 from .autorestart import RestartAfterCollect
 from .bidlog import BidLog
 from .postaward import PostAward
@@ -332,6 +332,9 @@ def make_handler(app: App):
                     "has_ai_key": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
                     "can_collect": not app.viewer,
                 })
+            if url.path == "/api/docs-alert":
+                # 상단 바 종 아이콘 — 텔레그램 갱신 알림과 같은 서류(30일 안에 끝나거나 상태를 표시해 둔 지난 서류) (2026-11-23)
+                return self._json({"docs": docexpiry.web_alert(datetime.now().date())})
             if url.path == "/api/bidcalc":
                 # 투찰 계산기 — 공고번호로 기초금액·하한율·A값 불러오기 (서비스키는 서버에만)
                 no = q.get("no", [""])[0].strip()

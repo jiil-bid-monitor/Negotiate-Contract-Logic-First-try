@@ -1000,7 +1000,7 @@ def test_label_paragraph_value_wraps_under_value(tmp_path: Path):
     i = next(k for k, (_p, t) in enumerate(got) if "강원특별자치도" in t)
     assert got[i][1].rstrip().endswith("무릉2로") and got[i + 1][1].strip() == "64(공장1층)", got
     assert got[i][0] == got[i + 1][0] == "0"  # 문단 모양은 원래 것 그대로
-    assert '<hp:tab width="20000"' in paras[i + 1][1] and re.search(r"<hp:t><hp:tab[^>]*/>\u3000 +\u3000 {2,}<", paras[i + 1][1])  # 값 시작 위치에 맞춤 — 한글 자리는 전각 빈칸(11/16)
+    assert '<hp:tab width="20000"' in paras[i + 1][1] and re.search(r"<hp:t><hp:tab[^>]*/> {6,}<", paras[i + 1][1])  # 값 시작 위치에 맞춤 — 한글 자리는 빈칸 둘(11/23, 11/16 전각 빈칸을 대체)
     assert 'paraProperties itemCnt="1"' in head and "intent value=\"-" not in head
     assert any("(주)가상" in t for _p, t in got)
 
@@ -3496,7 +3496,8 @@ def test_center_aligned_sign_block_keeps_label_positions(tmp_path: Path):
     assert len(lines) == 4 and "강원특별자치도" in lines[1] and "64(공장1층)" in lines[2]
     colon = [_cjk_width(ln[:ln.index(":")], 1200) for ln in (lines[0], lines[1], lines[3])]
     assert max(colon) - min(colon) < 100  # 원본처럼 이름표 앞부분 너비가 같아 ':' 자리가 같음
-    assert lines[2].startswith("\u3000") or lines[2].lstrip(" ").startswith("\u3000")  # 둘째 줄 앞은 같은 너비 빈칸
+    # 둘째 줄 앞은 같은 너비 빈칸 — 한글 자리는 빈칸 둘(11/23, 예전 전각 빈칸은 한글에서 좁게 찍혔음)
+    assert "\u3000" not in lines[2] and re.match(r" {6,}무릉2로", lines[2])
 
 
 def test_center_sign_block_colons_stay_in_one_column(tmp_path: Path):
@@ -4503,6 +4504,35 @@ def test_subtotal_row_score_also_in_item_score_cell(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
     assert "경영상태 소계|5|4.5|" in text and "BBB0 이상|5.0|4.5|" in text, text
     assert "신인도 소계|4|4|" in text and "2점|4|" in text, text
+
+
+def test_wrapped_value_prefix_two_spaces_per_hangul(tmp_path: Path):
+    """11/23 사용자 지적: 서약서 서명 묶음 '주    소 : 강원특별자치도 / 정선군 남면 …' — 넘어간 줄이 '강'보다 반 글자쯤 왼쪽.
+    앞부분의 한글 자리를 전각 빈칸(U+3000)으로 채웠는데 한글에서 한글 한 글자보다 좁게 찍힘. '글꼴에 어울리는 빈칸'이 꺼진 글자 모양은
+    빈칸 = 글자 크기 절반이라 한글 한 글자 = 빈칸 둘(정확히 같은 너비)."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1400" useFontSpace="0"><hh:ratio hangul="100"/>'
+              '<hh:spacing hangul="0"/></hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0">'
+              '<hh:align horizontal="JUSTIFY"/><hh:margin><hc:intent value="0"/><hc:left value="0"/></hh:margin></hh:paraPr></hh:paraProperties></hh:head>')
+    lead = " " * 4
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    cell = (f'<hp:tc><hp:subList>{para(lead + "업 체 명 : ")}{para(lead + "주    소 : ")}{para(lead + "대 표 자 :            (인)")}</hp:subList>'
+            '<hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="30000" height="9000"/>'
+            '<hp:cellMargin left="510" right="510" top="141" bottom="141"/></hp:tc>')
+    src = _mini_hwpx(tmp_path / "c.hwpx", f"<hp:p><hp:run><hp:tbl><hp:tr>{cell}</hp:tr></hp:tbl></hp:run></hp:p>")
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    lines = [re.sub(r"<[^>]+>", "", x) for x in re.findall(r"<hp:p\b.*?</hp:p>", sec, re.S)]
+    i = next(k for k, t in enumerate(lines) if "주    소 :" in t)
+    assert "강원특별자치도" in lines[i] and len(lines) > i + 1 and lines[i + 1].strip() and "대 표 자" not in lines[i + 1], lines
+    pre = len(lines[i + 1]) - len(lines[i + 1].lstrip(" "))
+    assert "\u3000" not in lines[i + 1]
+    # 앞 빈칸 4 + 주(빈칸 2) + 빈칸 4 + 소(빈칸 2) + ' : '(빈칸 1 + 쌍점 어림 1 + 빈칸 1)
+    assert pre == 4 + 2 + 4 + 2 + 3, (pre, lines[i + 1])
 
 
 def test_column_head_row_values_go_below(tmp_path: Path):

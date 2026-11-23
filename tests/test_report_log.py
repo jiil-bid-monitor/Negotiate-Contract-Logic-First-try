@@ -93,6 +93,22 @@ class TestBuildEntry(unittest.TestCase):
         e = R.parse((config.output_dir / "report-log" / "2026-10-20-daily.json").read_text(encoding="utf-8"))
         self.assertEqual(e["notices"][0]["meta"]["products"], [held.get("name")], "품목은 코드가 아니라 이름으로")
 
+    def test_weekly_log_keeps_mail_body_only(self):
+        """주간 보고는 메일 본문 공고만 판단 기록에(11/23 사용자 — 첨부에만 있는 260건은 피로). 매일 보고는 그대로 전부."""
+        from unittest import mock
+
+        from nego import cli
+
+        config = load_config()
+        config.output_dir = Path(tempfile.mkdtemp())
+        cands = _candidates(3)
+        with mock.patch("nego.email_html.split_body", lambda cs: (cs[:1], {})):
+            cli._save_report_log("weekly", cands, config, datetime(2026, 11, 23, 9, 10))  # noqa: SLF001
+            cli._save_report_log("daily", cands, config, datetime(2026, 11, 23, 9, 0))  # noqa: SLF001
+        read = lambda k: R.parse((config.output_dir / "report-log" / f"2026-11-23-{k}.json").read_text(encoding="utf-8"))  # noqa: E731
+        self.assertEqual(len(read("weekly")["notices"]), 1)
+        self.assertEqual(len(read("daily")["notices"]), 3)
+
     def test_parse_rejects_other_shapes(self):
         self.assertIsNone(R.parse("not json"))
         self.assertIsNone(R.parse(json.dumps({"v": 2, "kind": "daily", "date": "x", "notices": []})))
@@ -300,3 +316,23 @@ class TestReportSync(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWeeklyBodyOnly(unittest.TestCase):
+    """주간 보고는 메일 본문 공고만 판단 기록에(2026-11-23) — 보고 파일을 다시 읽어도 되살아나지 않음."""
+
+    def test_attachment_only_weekly_not_kept(self):
+        def notice(no, title, score):
+            return {"noticeNo": no, "title": title, "meta": {"keywords": ["전시"], "products": [], "score": score,
+                                                             "deadline": "2099-01-02T18:00"}}
+        entry = {"kind": "weekly", "date": "2026-11-23", "notices": [
+            notice("A", "○○체험관 전시물 제작 설치", 80), notice("B", "○○관 시설 유지관리 용역", 80), notice("C", "△△ 전시 기획", 20)]}
+        records: dict = {}
+        R.merge(records, entry, "now")
+        self.assertEqual(list(records), ["A"], "운영·관리 용역(B)·싱크로율 낮음(C)은 안 쌓음")
+        records["D"] = {"noticeNo": "D", "title": "□□ 유지관리 용역", "status": None, "reports": [{"date": "2026-11-23", "kind": "weekly"}],
+                        "meta": {"keywords": ["전시"]}}
+        records["E"] = {**records["D"], "noticeNo": "E", "status": "불참"}
+        records["F"] = {**records["D"], "noticeNo": "F", "reports": [{"date": "2026-11-23", "kind": "daily"}]}
+        R.merge(records, entry, "now")
+        self.assertEqual(sorted(records), ["A", "E", "F"], "이미 쌓인 첨부 전용(D)은 지움, 판단한 것(E)·매일 보고(F)는 그대로")

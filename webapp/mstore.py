@@ -104,6 +104,10 @@ class TeamStore:
         """보고 기록 하나를 판단 기록에 합친다 (`report_log.merge`). 새로 생긴 공고 수를 돌려준다."""
         with self._lock:
             before = len(self.participation)
+            # 주간 보고 첨부에만 있던 공고를 처음 걷어낼 때(2026-11-23) 지우기 전 판단 기록을 한 번 남겨 둔다 — 덮어쓰지 않음
+            keep = self.part_path.with_name("participation_주간정리전.json")
+            if self.part_path.exists() and not keep.exists():
+                keep.write_text(self.part_path.read_text(encoding="utf-8"), encoding="utf-8")
             if report_log.merge(self.participation, entry, _now()):
                 self._save()
             return len(self.participation) - before

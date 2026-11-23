@@ -182,6 +182,10 @@ def _save_report_log(kind: str, candidates, config, now) -> None:
 
     held_names = {str(p.get("code") or "").strip(): p.get("name") or ""
                   for p in (config.held_raw or {}).get("heldProducts", []) if p.get("code")}
+    if kind == "weekly":  # 주간은 메일 본문 공고만 판단 기록에(첨부 리포트에만 있는 공고는 안 쌓음 — 11/23 사용자: 한 주 260건은 피로)
+        from .email_html import split_body
+
+        candidates = split_body(candidates)[0]
     try:
         path = report_log.write(Path(config.output_dir) / "report-log",
                                 report_log.build_entry(kind, candidates, now, held_names))

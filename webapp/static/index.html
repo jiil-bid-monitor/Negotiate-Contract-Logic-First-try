@@ -373,6 +373,8 @@ body {
 .docbell-pop li.judge-item { cursor: pointer; }
 .docbell-pop li.judge-item:hover .name { color: var(--brand); text-decoration: underline; }
 #judgeBellPop ul { max-height: 60vh; overflow: auto; }
+#judgeBellPop .judge-sec { margin: 12px 0 2px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-strong); }
+#judgeBellPop .judge-sec span { font-weight: 400; color: var(--muted); }
 .docbell-pop .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .docbell-pop .name { font-weight: 600; color: var(--ink-strong); }
 .docbell-pop .dd { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -4917,24 +4919,31 @@ wireDocs($("docBellPop"));
 // 📋 판단할 공고 — 텔레그램 매일·주간 보고에 나간 공고 중 아직 판단 안 한 것(마감 전, 사전규격 빼고 — 판단 기록 '미판단'과 같은 규칙).
 // 텔레그램을 잘 안 봐서 웹앱에서 보이게(2026-11-23 사용자 결정 — 종과 아이콘 따로, 판단하면 숫자가 줄어듦, 팀 전체 기준)
 function renderJudgeBell() {
-  const todo = Object.values(participation).filter((p) => logStatusOf(p) === "미판단")
+  // 보고된 지 7일 지난 공고는 뺌 — 수집 기간(최근 7일) 밖이라 실제 공고 탭에도 없음(11/23 사용자)
+  const week = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const todo = Object.values(participation)
+    .filter((p) => logStatusOf(p) === "미판단" && (p.reports.at(-1)?.date || "").slice(0, 10) >= week)
     .sort((a, b) => deadlineAt(a.meta?.deadline) - deadlineAt(b.meta?.deadline));
+  // 입찰(매일 보고)과 협상·규격가격(주간 보고) 따로(11/23 사용자) — 7일 안 매일 보고에 나갔으면 입찰 칸
+  const daily = todo.filter((p) => p.reports.some((r) => r.kind === "daily" && (r.date || "").slice(0, 10) >= week));
+  const weekly = todo.filter((p) => !daily.includes(p));
   $("judgeBell").hidden = !todo.length && !Object.values(participation).some((p) => p.reports?.length);
   $("judgeBellN").textContent = todo.length;
   $("judgeBellN").hidden = !todo.length;
-  const last = Object.values(participation).flatMap((p) => p.reports || []).map((r) => (r.date || "").slice(0, 10)).sort().at(-1);
   const md = (d) => d ? `${+d.slice(5, 7)}/${+d.slice(8, 10)}` : "";
-  $("judgeBellPop").innerHTML = (todo.length ? `<h3>판단할 공고 ${todo.length}건</h3>` : "<h3>판단할 공고가 없습니다</h3>")
-    + `<p class="row2">보고에 나간 공고 중 판단 안 한 것${last ? ` · 마지막 보고 ${md(last)}` : ""}</p>`
-    // 길게 늘어놓지 않게 마감이 가장 급한 3건만(11/23 사용자 — 나머지는 실제 공고 탭에서)
-    + "<ul>" + todo.slice(0, 3).map((p) => {
-      const m = p.meta || {}, left = Math.ceil((deadlineAt(m.deadline) - Date.now()) / 86400000);
-      const rep = (p.reports.at(-1)?.date || "").slice(0, 10);
-      return `<li class="judge-item" data-goto-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span>`
-        + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span></div>`
-        + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
-    }).join("") + "</ul>"
-    + (todo.length > 3 ? `<p class="how"><button type="button" class="linkbtn" data-all-todo>그 밖의 ${todo.length - 3}건은 실제 공고 탭에서 판단 ›</button></p>` : "")
+  const item = (p) => {
+    const m = p.meta || {}, left = Math.ceil((deadlineAt(m.deadline) - Date.now()) / 86400000);
+    const rep = (p.reports.at(-1)?.date || "").slice(0, 10);
+    return `<li class="judge-item" data-goto-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span>`
+      + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span></div>`
+      + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
+  };
+  // 칸마다 마감이 가장 급한 3건만(11/23 사용자 — 길게 늘어놓지 않게), 나머지는 실제 공고 탭 그 대분류 탭에서
+  const section = (title, list, cat) => `<h4 class="judge-sec">${title} <span>${list.length}건</span></h4>`
+    + (list.length ? `<ul>${list.slice(0, 3).map(item).join("")}</ul>` : `<p class="row2">판단할 공고가 없습니다.</p>`)
+    + (list.length > 3 ? `<p class="how"><button type="button" class="linkbtn" data-all-todo="${cat}">그 밖의 ${list.length - 3}건은 실제 공고 탭에서 판단 ›</button></p>` : "");
+  $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${todo.length}건</h3><p class="row2">보고에 나간 공고 중 판단 안 한 것 · 7일 안</p>`
+    + section("입찰 · 매일 보고", daily, "입찰") + section("협상 · 규격가격 · 주간 보고", weekly, "협상")
     + (todo.length ? `<p class="how">공고를 누르면 그 공고로 갑니다 — 판단하면 숫자가 줄어듭니다.</p>` : "");
 }
 $("judgeBellPop").addEventListener("click", (ev) => {
@@ -4943,6 +4952,7 @@ $("judgeBellPop").addEventListener("click", (ev) => {
     showTab("live");
     for (const k of Object.keys(filters)) filters[k] = "all";
     filters.part = "미지정";
+    filters.cat = ev.target.closest("[data-all-todo]").dataset.allTodo || "all";  // 입찰 · 협상 대분류 탭
     $("liveQ").value = "";
     return void applyFilters();
   }

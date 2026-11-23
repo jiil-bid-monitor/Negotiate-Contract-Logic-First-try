@@ -1171,6 +1171,28 @@ class TestWorkTypeRules20261123(unittest.TestCase):
         self.assertTrue(got[0].screen_result.license_match)
 
 
+class TestGaebosuException20261123(unittest.TestCase):
+    """2026-11-23 사용자 결정: '개보수공사'는 무조건 제외 '보수공사'로 치지 않음 — '○○병원 증축 및 개보수공사(통신)' 같은 공고가 빠졌음.
+    단순 수선 '보수공사'는 그대로 뺌."""
+
+    def _screen(self, title):
+        from dataclasses import replace as _replace
+        from nego.models import Notice
+        cfg = _replace(load_config().screen, review_conflicts=True)
+        return screen.screen(Notice(work_type="공사", notice_no="X", notice_ord="000", title=title, kind="본공고"), cfg)
+
+    def test_gaebosu_not_excluded(self):
+        got = self._screen("○○병원 증축 및 개보수공사(통신)")
+        self.assertTrue(got.matched)
+        self.assertEqual(got.matched_keywords, ["통신"])
+
+    def test_plain_bosu_still_excluded(self):
+        got = self._screen("○○권역 안전시설물 보수공사")
+        self.assertEqual((got.matched, got.excluded_reason), (False, "보수공사"))
+        got = self._screen("○○ 보수공사 및 개보수공사(통신)")  # 다른 자리에 '보수공사'가 또 있으면 그대로 제외
+        self.assertFalse(got.matched)
+
+
 class TestLocalRoute20261123(unittest.TestCase):
     """2026-11-23 사용자 결정: 사업 규모와 상관없이 '입찰' 공고이면서 정선 기관(수요·공고기관)이 낸 공고는 키워드 없이도 일반 공고로 수집
     (나중에 만들 1억 미만 간소화 규칙에서도 뺌). 무조건 제외 키워드는 그대로, 협상·수의계약은 해당 없음."""

@@ -258,6 +258,50 @@ def read_criteria(paths: list[Path]) -> list[Criterion]:
     return []
 
 
+_COUNT_GRADE = re.compile(r"(기술사|특급|고급|중급|초급)(?:기술자|기술인|숙련기술자|기능사)?")
+
+
+def staff_count_table(cells) -> tuple[int, dict[str, int]] | None:
+    """기술자 보유현황 표('구 분 | 계 | 전문분야 … | 기타분야' 머리, 줄 '계 / 특급기술자 / 고급기술자 …') — (계 열, {등급 또는 '계': 줄}).
+    자기평가표(배점·평점 칸)는 아님. (11/23 사용자 요청: 수행평가표가 없어도 이 표가 있으면 기술자 고르기 칸 + 계 칸)"""
+    if read_form(cells):
+        return None
+    grades: dict[str, int] = {}
+    label_col = None
+    for c in cells:
+        m = _COUNT_GRADE.fullmatch(_sq(c.text))
+        if m and c.rowspan == 1:
+            if label_col is not None and c.col != label_col:
+                continue
+            label_col = c.col
+            grades.setdefault(m.group(1), c.row)
+    if len(grades) < 2 or label_col is None:
+        return None
+    top = min(grades.values())
+    head = next((c for c in cells if _sq(c.text) == "계" and c.row < top and c.col > label_col), None)
+    if head is None:
+        return None
+    total = next((c for c in cells if _sq(c.text) == "계" and c.col == label_col and c.row >= top - 1 and c.row > head.row), None)
+    rows = dict(grades)
+    if total is not None:
+        rows["계"] = total.row
+    return head.col, rows
+
+
+def has_staff_count_table(paths: list[Path]) -> bool:
+    """서식에 기술자 보유현황 표가 있는지 — 화면 기술인력 고르기 칸을 띄울지(11/23)."""
+    for path in paths:
+        try:
+            xmls = _sections(Path(path))
+        except (zipfile.BadZipFile, KeyError, OSError):
+            continue
+        for xml in xmls:
+            for tbl in _spans(xml, "tbl"):
+                if staff_count_table(_cells(xml, tbl)) is not None:
+                    return True
+    return False
+
+
 def form_staff_grades(paths: list[Path]) -> tuple[dict[str, float], float]:
     """자기평가표 서식의 기술인력 (등급별 1인당 점수, 배점) — 첫 번째로 찾은 것. 화면 기술인력 목록이 서식 기준을 먼저 쓰게
     (11/12 사용자: '서식에서는 잘 나뉘어져 있잖아' — 서식 '특급기술자 | 1.0점/인', 채점도 서식 기준)."""

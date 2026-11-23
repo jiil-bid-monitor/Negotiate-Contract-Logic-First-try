@@ -57,11 +57,10 @@ def plus_years(d: date, n: int) -> date:
         return d.replace(year=d.year + n, day=28)
 
 
-def found_expiry(text: str) -> date | None:
-    """PDF 글자의 '유효기간 : 2025.11.21 ~ 2027.11.20' → 끝 날짜(정량평가서 회사 서류 읽기와 같은 규칙)."""
-    from quantdocs.importer import validity_from_text
-
-    return validity_from_text(text or "")[1]
+def date_base(folder: Path, kind: str, today: date) -> date:
+    """1년·2년 뒤 버튼의 기준 — 그 서류의 지금 만료일(표 이름·파일 종류 어느 쪽이든), 없으면 오늘 하루 전."""
+    old = next((d for k, d in docexpiry.read_docs(folder) if k == kind or docexpiry.same_doc(k, kind)), None)
+    return old or today - timedelta(days=1)
 
 
 def _norm(text: str) -> str:
@@ -158,14 +157,13 @@ class Uploader:
             state.update(doc=doc, user_msg=msg.get("message_id"))
             if state.get("kind"):  # '갱신 완료'에서 시작 — 종류는 이미 앎
                 state["data"] = self.download(doc["file_id"])
-                state["text"] = pdf_text(state["data"])
                 self._ask_expiry(chat, state)
             else:
                 self._ask_kind(chat, state)
             return True
         if state["step"] == "newname":
-            name = re.sub(r"\s+", " ", text).strip()
-            if not name or len(name) > 40 or re.search(r'[\\/:*?"<>|]', name):
+            name = new_kind_name(text)
+            if not name:
                 state["ask"] = self._say(chat, "서류 이름을 다시 적어 주세요. (40자 안, 파일 이름에 못 쓰는 기호 빼고)",
                                          msg.get("message_id"), FORCE)
                 return True
@@ -202,15 +200,13 @@ class Uploader:
         if not state or not step or state.get("step") != step or msg.get("message_id") not in state["asks"]:
             return False
         self.api("answerCallbackQuery", callback_query_id=cb["id"])
-        if step == "expiry":  # PDF에서 읽은 날짜 '맞음'·'다른 날짜'·'유효기간 없음'
-            if data == "x:other":
-                self._choose_date(chat, state)
-            elif data == "x:type":
+        if step == "expiry":  # 만료일 버튼 — 1년·2년 뒤·직접 입력·유효기간 없음
+            if data == "x:type":
                 self._ask_date(chat, state)
             elif data in ("x:y1", "x:y2") and state.get("cands"):
                 self._save(chat, state, state["cands"][int(data[-1]) - 1], state.get("user_msg"))
-            else:
-                self._save(chat, state, state.get("found") if data == "x:ok" else None, state.get("user_msg"))
+            elif data == "x:none":
+                self._save(chat, state, None, state.get("user_msg"))
             return True
         if data in ("k:x", "r:x"):
             self.pending.pop(chat, None)
@@ -238,26 +234,11 @@ class Uploader:
         return True
 
     def _ask_expiry(self, chat: str, state: dict) -> None:
-        """PDF 글자에서 유효기간을 찾으면 '맞음' 버튼으로 확인받고, 못 찾으면(스캔본 등) 서류를 보고 답장으로 받는다(2026-11-23)."""
+        """만료일은 PDF에서 읽지 않고 늘 사람이 고른다(2026-11-23 사용자 결정 — 잘못 읽으면 엑셀을 다시 고쳐야 해서).
+        버튼: 지금 만료일(없으면 오늘 하루 전)에서 1년·2년 뒤 · 직접 입력 · 유효기간 없음."""
         state["step"] = "expiry"
-        found = state["found"] = found_expiry(state.get("text") or "")
-        name = f"<b>{html.escape(state['kind'])}</b>"
-        if found:
-            state["ask"] = self._say(chat, f"{name} — PDF에서 읽은 유효기간 끝나는 날: <b>{found}</b>\n서류와 같은지 확인해 주세요.",
-                                     state.get("user_msg"), {"inline_keyboard": [
-                                         [{"text": f"맞음 — {found}", "callback_data": "x:ok"}],
-                                         [{"text": "다른 날짜", "callback_data": "x:other"},
-                                          {"text": "유효기간 없는 서류", "callback_data": "x:none"}]]})
-            return
-        self._choose_date(chat, state, f"{name} — PDF에서 유효기간을 못 읽었습니다(스캔본이면 글자가 없습니다).\n")
-
-    def _choose_date(self, chat: str, state: dict, head: str = "") -> None:
-        """만료일 버튼(2026-11-23 사용자 요청 — 날짜를 치지 않게): 지금 만료일(없으면 오늘 하루 전)에서 1년·2년 뒤.
-        버튼에 날짜를 적어 서류와 맞춰 보고 누르게, 안 맞으면 '직접 입력'."""
-        old = dict(docexpiry.read_docs(self.folder())).get(state["kind"])
-        base = old or self.today() - timedelta(days=1)
-        state["cands"] = [plus_years(base, n) for n in (1, 2)]
-        state["ask"] = self._say(chat, head + f"<b>{html.escape(state['kind'])}</b> — 서류에 적힌 유효기간 끝나는 날과 같은 버튼을 눌러 주세요.",
+        state["cands"] = [plus_years(date_base(self.folder(), state["kind"], self.today()), n) for n in (1, 2)]
+        state["ask"] = self._say(chat, f"<b>{html.escape(state['kind'])}</b> — 서류에 적힌 유효기간 끝나는 날과 같은 버튼을 눌러 주세요.",
                                  state.get("user_msg"), {"inline_keyboard": [
                                      [{"text": f"{n}년 → {d}", "callback_data": f"x:y{n}"} for n, d in zip((1, 2), state["cands"])],
                                      [{"text": "다른 날짜 직접 입력", "callback_data": "x:type"},
@@ -291,21 +272,9 @@ class Uploader:
 
     def _remove(self, chat: str, kind: str) -> None:
         """그 종류 파일을 [이전 서류]로 옮기고(지우지 않음) 목록을 다시 쓴다 — 목록·/docs·만료 알림에서 빠짐."""
-        from under100m import docs
-
-        folder = self.folder()
-        old = folder / "[이전 서류]"
-        old.mkdir(exist_ok=True)
-        moved = 0
-        for path in (folder / "[최신 서류]").glob("*.pdf"):
-            doc = docs.parse_name(path.name)
-            if doc and doc.kind == kind:
-                path.replace(docs._unique(old / path.name))
-                moved += 1
         self.pending.pop(chat, None)
-        docs.run(folder, self.today(), lambda text: None, settle=0, alert_due=False)
-        cert = self._cert(kind, "사용 안 함")
-        self._say(chat, f"<b>{html.escape(kind)}</b> 뺐습니다 — 파일 {moved}개를 [이전 서류]로 옮김." + cert
+        moved, cert = remove_doc(self.folder(), kind, self.today())
+        self._say(chat, f"<b>{html.escape(kind)}</b> 뺐습니다 — 파일 {moved}개를 [이전 서류]로 옮김." + ("\n" + cert if cert else "")
                         + "\n다시 필요하면 /upload 로 넣으면 됩니다.")
 
     def _save(self, chat: str, state: dict, end: date | None, reply_to: int | None) -> None:
@@ -332,14 +301,142 @@ def cert_note(folder: Path, kind: str, value: date | str) -> str:
     return "인증서갱신.xlsx 만료일도 " + (f"{value}로 고쳤습니다." if isinstance(value, date) else f"'{value}'로 바꿨습니다.")
 
 
-def save_doc(folder: Path, kind: str, data: bytes, end: date | None, today: date) -> tuple[str, str, list[str]]:
-    """새 서류 PDF를 [최신 서류]/종류_오늘[_유효날짜].pdf로 저장하고 정리(옛 파일 → [이전 서류]) + 표 만료일 —
-    텔레그램 /upload·갱신 완료와 웹앱 종 창이 같이 쓴다(2026-11-23). → (저장한 파일 이름, 표 안내, 정리 안내들)"""
+# 정리 때 "막 넣은 파일은 건너뜀"(담당자가 복사 중인 파일 보호) — 우리가 다 쓴 파일이라 바로 셈.
+# 0이면 파일 시각이 지금보다 조금 앞서(서버 PC↔NAS 시계 차이) 새 파일을 건너뛰고 옛 파일이 최신으로 남았음(2026-11-23)
+OURS = -600
+
+
+def new_kind_name(text: str) -> str | None:
+    """새 서류 종류 이름 — 파일 이름이 되므로 40자 안, 못 쓰는 기호 없이. 안 되면 None (텔레그램·웹앱 같이)."""
+    name = re.sub(r"\s+", " ", text or "").strip()
+    return name if name and len(name) <= 40 and not re.search(r'[\\/:*?"<>|]', name) and name not in (".", "..") else None
+
+
+def file_kind(folder: Path, kind: str) -> str:
+    """인증서갱신.xlsx 이름('신용평가') → [최신 서류] 파일 종류('신용평가등급확인서') — 저장·빼기·고치기가 옛 파일을 찾게(2026-11-23).
+    표 이름이 파일 종류와 다른 지일 서류가 많음(직접생산확인증명서(…) 등). 여럿이면 표 날짜와 같은 유효기간의 파일, 없으면 그대로."""
     from under100m import docs
 
-    name = f"{kind}_{today}" + (f"_유효{end}" if end else "") + ".pdf"
+    try:
+        rows = json.loads((folder / "_목록.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        rows = []
+    files = {r["종류"]: r.get("유효기간") or "" for r in rows if r.get("종류")}
+    for p in (folder / "[최신 서류]").glob("*.pdf"):  # 목록이 아직 없거나 낡았어도 실제 파일로
+        if (d := docs.parse_name(p.name)) and d.kind not in files:
+            files[d.kind] = d.expires.isoformat() if d.expires else ""
+    if kind in files:
+        return kind
+    hits = [k for k in files if docexpiry.same_doc(kind, k)]
+    if len(hits) > 1:
+        cert = dict(docexpiry.read_cert(folder / docexpiry.CERT_FILE)) if (folder / docexpiry.CERT_FILE).exists() else {}
+        hits = [k for k in hits if cert.get(kind) and files[k] == cert[kind].isoformat()] or hits[:1]
+    return hits[0] if hits else kind
+
+
+def save_doc(folder: Path, kind: str, data: bytes, end: date | None, today: date) -> tuple[str, str, list[str]]:
+    """새 서류 PDF를 [최신 서류]/종류_오늘[_유효날짜].pdf로 저장하고 정리(옛 파일 → [이전 서류]) + 표 만료일 —
+    텔레그램 /upload·갱신 완료와 웹앱이 같이 쓴다(2026-11-23). → (저장한 파일 이름, 표 안내, 정리 안내들)"""
+    from under100m import docs
+
+    fkind = file_kind(folder, kind)
+    notes: list[str] = []
+    # 같은 날 같은 서류를 또 올리면(잘못 올려 다시 올림) 앞 파일을 먼저 [이전 서류]로 — 발급일이 같으면 정리가 둘 다 남겨 중복이 됐음(2026-11-23)
+    for p in _latest(folder, fkind):
+        if docs.parse_name(p.name).issued == today:
+            notes.append(f"- {_set_aside(folder, p)} → [이전 서류] (같은 날 다시 올림)")
+    name = f"{fkind}_{today}" + (f"_유효{end}" if end else "") + ".pdf"
     target = docs._unique(folder / "[최신 서류]" / name)
     target.write_bytes(data)
-    notes: list[str] = []
-    docs.run(folder, today, notes.append, settle=0, alert_due=False)
+    docs.run(folder, today, notes.append, settle=OURS, alert_due=False)
     return target.name, cert_note(folder, kind, end) if end else "", notes
+
+
+def _set_aside(folder: Path, path: Path) -> str:
+    """파일을 지우지 않고 [이전 서류]로 — 옮긴 파일 이름."""
+    from under100m import docs
+
+    (folder / "[이전 서류]").mkdir(exist_ok=True)
+    path.replace(docs._unique(folder / "[이전 서류]" / path.name))
+    return path.name
+
+
+def replace_doc(folder: Path, kind: str, data: bytes, today: date) -> str:
+    """잘못 올린 파일 바꾸기(2026-11-23 사용자 요청) — 지금 파일을 [이전 서류]로 빼고 같은 이름(발급일·유효기간 그대로)으로 새 PDF.
+    날짜가 틀렸으면 '날짜 수정'으로 따로. 바꿀 파일이 없으면 ValueError."""
+    from under100m import docs
+
+    paths = _latest(folder, file_kind(folder, kind))
+    if not paths:
+        raise ValueError("바꿀 파일이 없습니다 — '새 서류 올리기'로 넣어 주세요")
+    target = paths[-1]
+    _set_aside(folder, target)
+    target.write_bytes(data)
+    docs.run(folder, today, lambda text: None, settle=OURS, alert_due=False)
+    return f"파일을 바꿨습니다: {target.name}\n잘못 올린 파일은 지우지 않고 [이전 서류]로 옮겼습니다."
+
+
+def same_kind(folder: Path, name: str) -> str | None:
+    """새 서류 이름이 이미 있는 서류와 같은지(띄어쓰기·기호·대소문자 무시, 표 이름 포함) — 있으면 그 이름. 같은 서류가 두 줄로 생기지 않게.
+    글자 포함으로는 안 봄 — '사업자등록증'·'사업자등록증명'처럼 다른 서류가 실제로 있음."""
+    norm = _norm(name)
+    return next((k for k in kinds(folder) + [k for k, _ in docexpiry.read_docs(folder)] if _norm(k) == norm), None)
+
+
+def _latest(folder: Path, kind: str):
+    from under100m import docs
+
+    files = [(d, p) for p in (folder / "[최신 서류]").glob("*.pdf") if (d := docs.parse_name(p.name)) and d.kind == kind]
+    return [p for _, p in sorted(files, key=lambda x: x[0].issued)]
+
+
+def remove_doc(folder: Path, kind: str, today: date) -> tuple[int, str]:
+    """그 종류 파일을 모두 [이전 서류]로(지우지 않음) + 표 '사용 안 함' → (옮긴 수, 표 안내)."""
+    from under100m import docs
+
+    old = folder / "[이전 서류]"
+    old.mkdir(exist_ok=True)
+    paths = _latest(folder, file_kind(folder, kind))
+    for path in paths:
+        path.replace(docs._unique(old / path.name))
+    docs.run(folder, today, lambda text: None, settle=OURS, alert_due=False)
+    return len(paths), cert_note(folder, kind, "사용 안 함")
+
+
+def edit_doc(folder: Path, kind: str, end: date | None, today: date) -> str:
+    """새 파일 없이 유효기간만 고치기(잘못 적었을 때, 2026-11-23 사용자 요청) — 표 만료일 + 최신 파일 이름의 _유효 날짜.
+    고친 곳이 하나도 없으면 ValueError."""
+    from under100m import docs
+
+    done = []
+    paths = _latest(folder, file_kind(folder, kind))
+    if paths:
+        doc = docs.parse_name(paths[-1].name)
+        new = docs._unique(paths[-1].with_name(f"{doc.kind}_{doc.issued}" + (f"_유효{end}" if end else "") + ".pdf"))
+        if new.name != paths[-1].name:
+            paths[-1].replace(new)
+        done.append(f"파일 이름 → {new.name}")
+        docs.run(folder, today, lambda text: None, settle=OURS, alert_due=False)
+    cert = cert_note(folder, kind, end or "없음")
+    if cert:
+        done.append(cert)
+    if not done:
+        raise ValueError("고칠 파일도 인증서갱신.xlsx 줄도 없습니다 — 새 서류 올리기로 넣어 주세요")
+    return "\n".join(done)
+
+
+def all_docs(folder: Path, today: date) -> list[dict]:
+    """서류 관리 목록 — 만료일이 있는 서류(표·서류목록) + 날짜 없는 파일 종류. [{kind, end, left, state, file}]
+    file = [최신 서류]의 지금 파일 이름(어떤 파일이 올라가 있는지 보이게, 없으면 '')."""
+    states = docexpiry.load_states()
+    dated = docexpiry.read_docs(folder)
+    out = [{"kind": k, "end": d.isoformat(), "left": (d - today).days,
+            "state": docexpiry.STATES[states[docexpiry.apply_key(k, d)]][0] if docexpiry.apply_key(k, d) in states else ""}
+           for k, d in dated]
+    names = [k for k, _ in dated]
+    out += [{"kind": k, "end": None, "left": None, "state": ""} for k in kinds(folder)
+            if k not in names and not any(docexpiry.same_doc(c, k) for c in names)]
+    for d in out:
+        paths = _latest(folder, file_kind(folder, d["kind"]))
+        d["file"] = paths[-1].name if paths else ""
+    return out

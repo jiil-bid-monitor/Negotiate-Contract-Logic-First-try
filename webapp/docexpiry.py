@@ -129,8 +129,9 @@ def read_list(folder: Path) -> list[tuple[str, date]]:
     path = folder / "서류목록.xlsx"
     if not path.exists():
         return []
-    ws = openpyxl.load_workbook(path, read_only=True, data_only=True).worksheets[0]
-    rows = ws.iter_rows(values_only=True)
+    book = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    rows = iter(list(book.worksheets[0].iter_rows(values_only=True)))
+    book.close()  # read_only는 파일을 열어 둠 — 윈도우에선 서류목록.xlsx를 다시 못 씀(서버 PC에서 웹앱으로 올릴 때)
     head = [str(c or "").strip() for c in next(rows, ())]
     if "종류" not in head or "유효기간(기준)" not in head:
         return []
@@ -288,7 +289,7 @@ def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str],
         if apply_key(k, d) in states:
             lines.append(f"   {STATES[states[apply_key(k, d)]][1]}")
     lines += ["", "갱신했으면 → 아래 서류 버튼 → '갱신 완료' → 새 서류 PDF 보내기",
-              "   (PDF에서 유효기간을 읽어 확인받고 인증서갱신.xlsx도 고칩니다)",
+              "   (서류에 적힌 유효기간을 골라 저장하면 인증서갱신.xlsx도 고칩니다)",
               "아직이면 → 아래 버튼으로 상태 표시 (신청해야 함 · 신청 중)",
               "안 쓰는 서류면 → /remove 로 빼 주세요"]
     return "\n".join(lines), [key(k, d) for k, d in rows]

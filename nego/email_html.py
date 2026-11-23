@@ -205,8 +205,11 @@ def _section(title: str, rows: list[Candidate]) -> str:
 
 INTEREST = "관심 공고"
 # (11/23 사용자 결정) 공고명에 이 낱말이 있으면 주간 메일 본문에서 뺌(첨부엔 남음) — 운영·관리 용역과 전산 사업은 지일 사업이 아님
-BODY_SKIP_WORDS = {"운영·관리 용역": ("유지관리", "유지보수", "청소", "환경미화", "시설관리", "모니터링", "경비", "파견"),
-                   "전산 사업": ("시스템", "플랫폼", "누리집", "네트워크", "인프라", "데이터")}
+BODY_SKIP_WORDS = {"운영·관리 용역": ("유지관리", "유지보수", "청소", "환경미화", "시설관리", "모니터링", "경비", "파견", "업무지원", "운영관리", "행사기획"),
+                   "구매·계획 수립": ("구매", "기본구상", "계획수립"),
+                   "전산 사업": ("시스템", "플랫폼", "누리집", "홈페이지", "네트워크", "인프라", "데이터")}
+# (11/23) 키워드 없이 이 소프트웨어 세부품명으로만 들어온 공고는 본문에서 뺌 — 보유 등록이라 자격 판정엔 그대로 씀
+SW_PRODUCTS = {"8111159801", "8111159901", "8111229901"}
 BODY_MIN_SYNC = 0.50  # (11/23 사용자 결정) 이번 주 290건으로 본문 약 30건이 되는 선
 
 
@@ -216,7 +219,8 @@ def split_body(candidates: list[Candidate]) -> tuple[list[Candidate], dict[str, 
     싱크로율을 못 구한 공고는 본문에 둠(과거 실적 자료를 못 읽은 주에 본문이 비지 않게)."""
     body: list[Candidate] = []
     low = f"싱크로율 {round(BODY_MIN_SYNC * 100)}% 미만"
-    hidden = {"통신 키워드만": 0, **{k: 0 for k in BODY_SKIP_WORDS}, low: 0}
+    design = "설계 용역(제작·설치 없음)"
+    hidden = {"통신 키워드만": 0, **{k: 0 for k in BODY_SKIP_WORDS}, "소프트웨어 품목만": 0, design: 0, low: 0}
     for c in candidates:
         score = (getattr(c, "sync", None) or {}).get("score")
         title = c.notice.title.replace(" ", "")
@@ -225,6 +229,10 @@ def split_body(candidates: list[Candidate]) -> tuple[list[Candidate], dict[str, 
             hidden["통신 키워드만"] += 1
         elif skip:
             hidden[skip] += 1
+        elif not c.screen_result.matched_keywords and set(c.screen_result.matched_product_codes or []) <= SW_PRODUCTS                 and c.screen_result.matched_product_codes:
+            hidden["소프트웨어 품목만"] += 1
+        elif "설계" in title and "용역" in title and "제작" not in title and "설치" not in title:
+            hidden[design] += 1  # 지일은 설계~제작·설치 통합 발주를 선호(대리님 9/9 인수인계)
         elif score is not None and score < BODY_MIN_SYNC:
             hidden[low] += 1
         else:

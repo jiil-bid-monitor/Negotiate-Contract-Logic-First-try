@@ -93,6 +93,22 @@ class TestBuildEntry(unittest.TestCase):
         e = R.parse((config.output_dir / "report-log" / "2026-10-20-daily.json").read_text(encoding="utf-8"))
         self.assertEqual(e["notices"][0]["meta"]["products"], [held.get("name")], "품목은 코드가 아니라 이름으로")
 
+    def test_weekly_log_keeps_mail_body_only(self):
+        """주간 보고는 메일 본문 공고만 판단 기록에(11/23 사용자 — 첨부에만 있는 260건은 피로). 매일 보고는 그대로 전부."""
+        from unittest import mock
+
+        from nego import cli
+
+        config = load_config()
+        config.output_dir = Path(tempfile.mkdtemp())
+        cands = _candidates(3)
+        with mock.patch("nego.email_html.split_body", lambda cs: (cs[:1], {})):
+            cli._save_report_log("weekly", cands, config, datetime(2026, 11, 23, 9, 10))  # noqa: SLF001
+            cli._save_report_log("daily", cands, config, datetime(2026, 11, 23, 9, 0))  # noqa: SLF001
+        read = lambda k: R.parse((config.output_dir / "report-log" / f"2026-11-23-{k}.json").read_text(encoding="utf-8"))  # noqa: E731
+        self.assertEqual(len(read("weekly")["notices"]), 1)
+        self.assertEqual(len(read("daily")["notices"]), 3)
+
     def test_parse_rejects_other_shapes(self):
         self.assertIsNone(R.parse("not json"))
         self.assertIsNone(R.parse(json.dumps({"v": 2, "kind": "daily", "date": "x", "notices": []})))

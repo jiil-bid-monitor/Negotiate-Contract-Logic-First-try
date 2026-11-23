@@ -4917,7 +4917,10 @@ wireDocs($("docBellPop"));
 // 📋 판단할 공고 — 텔레그램 매일·주간 보고에 나간 공고 중 아직 판단 안 한 것(마감 전, 사전규격 빼고 — 판단 기록 '미판단'과 같은 규칙).
 // 텔레그램을 잘 안 봐서 웹앱에서 보이게(2026-11-23 사용자 결정 — 종과 아이콘 따로, 판단하면 숫자가 줄어듦, 팀 전체 기준)
 function renderJudgeBell() {
-  const todo = Object.values(participation).filter((p) => logStatusOf(p) === "미판단")
+  // 보고된 지 7일 지난 공고는 뺌 — 수집 기간(최근 7일) 밖이라 실제 공고 탭에도 없음(11/23 사용자)
+  const week = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const todo = Object.values(participation)
+    .filter((p) => logStatusOf(p) === "미판단" && (p.reports.at(-1)?.date || "").slice(0, 10) >= week)
     .sort((a, b) => deadlineAt(a.meta?.deadline) - deadlineAt(b.meta?.deadline));
   $("judgeBell").hidden = !todo.length && !Object.values(participation).some((p) => p.reports?.length);
   $("judgeBellN").textContent = todo.length;

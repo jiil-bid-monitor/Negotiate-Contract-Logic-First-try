@@ -117,10 +117,10 @@ class DocExpiryTest(unittest.TestCase):
                 # 만료 뒤에도 표시해 둔 서류는 7일마다 다시(표시 안 한 지난 서류는 그대로 안 알림), 버튼도 남음
                 self.assertEqual(D.due_alert(docs, date(2026, 11, 17), set(), marked), (None, []))
                 late, keys = D.due_alert(docs, date(2026, 11, 18), set(), marked)
-                self.assertIn("만료 뒤 7일", late)
+                self.assertIn("유효기간 7일 지남", late)
                 self.assertNotIn("신용평가", late)
                 self.assertEqual(D.due_alert(docs, date(2026, 11, 20), set(keys), marked), (None, []))
-                self.assertIn("만료 뒤 14일", D.due_alert(docs, date(2026, 11, 25), set(keys), marked)[0])
+                self.assertIn("유효기간 14일 지남", D.due_alert(docs, date(2026, 11, 25), set(keys), marked)[0])
                 self.assertEqual(len(D.apply_buttons(docs, date(2026, 11, 18), marked)["inline_keyboard"]), 1)
                 self.assertIn("지웠습니다", press(clear)["text"])
                 self.assertEqual(D.load_states(), {})

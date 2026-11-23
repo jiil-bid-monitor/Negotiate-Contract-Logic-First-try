@@ -285,7 +285,7 @@ def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str],
     head = "유효기간이 지났는데 아직 갱신되지 않았습니다" if far < 0 else "오늘 유효기간이 끝납니다" if far == 0 else f"{ALERT_DAYS if far <= ALERT_DAYS else ALERT_MONTH}일 안에 유효기간이 끝납니다"
     lines = [f"<b>📄 회사 서류 갱신 알림</b>", head, ""]
     for k, d in rows:
-        lines += [f"• <b>{html.escape(k)}</b>", f"   {d} · " + ("오늘 만료" if d == today else f"D-{(d - today).days}" if d > today else f"만료 뒤 {(today - d).days}일")]
+        lines += [f"• <b>{html.escape(k)}</b>", f"   {d} · " + ("오늘 만료" if d == today else f"D-{(d - today).days}" if d > today else f"유효기간 {(today - d).days}일 지남")]
         if apply_key(k, d) in states:
             lines.append(f"   {STATES[states[apply_key(k, d)]][1]}")
     lines += ["", "갱신했으면 → 아래 서류 버튼 → '갱신 완료' → 새 서류 PDF 보내기",

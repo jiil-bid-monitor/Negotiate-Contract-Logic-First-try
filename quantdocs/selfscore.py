@@ -28,6 +28,20 @@ from .forms_cut import _top_paragraphs
 KINDS = [("track", re.compile(r"실적")), ("staff", re.compile(r"인력|기술자|기술\s*능력")),
          ("patent", re.compile(r"특허|보유\s*기술|전문\s*기술|기술\s*보유")), ("credit", re.compile(r"경영|신용|재무\s*상태")),
          ("sanction", re.compile(r"신인도|제재|성실성|성실도|사회적\s*책임"))]  # '사회적 책임 및 성실성'(11/12 당진 서식 4호)
+
+
+# 등급 범위 칸 'AAA~BBB0'·'BBB-~BB-'·'CCC+이하'·'A-이상'·'BB+,BB0'(띄어쓰기 뺀 글)
+_GRADE_EXPR = re.compile(r"(?:[A-D]{1,3}[0+\-°]?(?:이상|이하|미만)?[~,/·]?)+(?:등급)?")
+
+
+def kind_of(label: str, default=""):
+    """항목 이름 → 종류. '신인도'가 든 항목은 늘 신인도(11/23 안성시 — '신인도(6점) 품질관리 등 신뢰도(기술보유)'가 '기술보유' 낱말로
+    특허 항목이 돼 만점이 안 들어갔음; 사용자 '신인도는 무조건 만점')."""
+    if re.search(r"신\s*인\s*도", label or ""):
+        return "sanction"
+    return next((k for k, rx in KINDS if rx.search(label or "")), default)
+
+
 _START = re.compile(r"(?:정량|계량)\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
 _STOP = re.compile(r"^\s*주\s*\d+\s*\)|^\s*[\[【]\s*별\s*표|정성\S{0,4}\s*평가(?:\s*지표)?\S{0,4}\s*[:：]?\s*\(?\s*\d+(?:\.\d+)?\s*점")
 _MARK = re.compile(r"^\s*(\d+\)|\(\d+\)|[가-하]\.|[가-하]\)|\d+\.)")
@@ -357,7 +371,7 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
             break  # '2) 정량적 평가 지표: 20점' 다음의 '3) 입찰가격 평가: 10점' — 같은 차례 머리면 정량평가 절 끝(11/05 국민안전체험관)
         if head and i > start:
             name = head.group(1).strip()
-            kind = next((k for k, rx in KINDS if rx.search(name)), "")
+            kind = kind_of(name)
             cur = Criterion(name, float(head.group(2)), kind)
             out.append(cur)
             rest = text[head.end():].strip()
@@ -374,7 +388,7 @@ def _read_doc(xmls: list[str]) -> list[Criterion]:
                     name = next((v for v in vals if v and _num(v) is None and len(_sq(v)) <= 12
                                  and any(rx.search(v) for _, rx in KINDS)), None)
                     if name and pts is not None:
-                        k = next(k for k, rx in KINDS if rx.search(name))
+                        k = kind_of(name)
                         summary.setdefault(k, (name, pts))
                         summary_tbl.setdefault(k, (xml, tbl))
                 continue
@@ -426,7 +440,7 @@ def _read_doc_nopoints(items: list) -> list[Criterion]:
         if re.search(r"정성\S{0,3}\s*평가|기술\s*제안서\s*평가", text) and _HEAD_NOPTS.match(text):
             break
         head = _HEAD_NOPTS.match(text)
-        kind = next((k for k, rx in KINDS if head and rx.search(head.group(1))), "") if head else ""
+        kind = kind_of(head.group(1)) if head else ""
         if head and re.fullmatch(r"기술\s*능력(?:\s*평가)?", head.group(1).strip()):
             kind = "staff"  # '나) 기술 능력' = 참여기술자 점수(11/10 경남교육청)
         if head and kind:
@@ -1009,10 +1023,10 @@ def read_form(cells) -> list[FormRow]:
             return bool(q) and not (parse_range(t) and len(q) <= 20) and not any(g in q for g in GRADES) \
                 and q not in ("해당없음", "해당") and not re.search(r"회사채|기업어음|^[A-D][A-D0-9+\-]*", q)
         label = " ".join(re.sub(r"\s+", " ", c.text).strip() for c in first if c.col < min(pcol, scol) and is_label(c.text))
-        if re.fullmatch(r"\s*(?:계|합\s*계|소\s*계|총\s*점)\s*(?:[(（][^)）]*[)）])?\s*", label):  # '합 계(20점)'(11/18)
+        if re.fullmatch(r"\s*(?:계|합\s*계|소\s*계|총\s*계|총\s*점)\s*(?:[(（][^)）]*[)）])?\s*", label):  # '합 계(20점)'(11/18)
             out.append(FormRow(label, None, target, total=True))
             continue
-        kind = next((k for k, rx in KINDS if rx.search(_sq(label))), "")
+        kind = kind_of(_sq(label))
         crit = Criterion(label, 0.0, kind)
         cap = None
         cap_cell = None
@@ -1082,6 +1096,9 @@ def read_form(cells) -> list[FormRow]:
                 # 종류 이름 칸('기업신용평가등급')이 왼쪽에 세로로 합쳐져 있고 등급은 옆 칸('BBB0 이상 등급')(11/12 당진 서식 4호)
                 only = next(iter(kinds.values()))
                 rules = {only: t for col, t in texts if col not in kinds and re.search(r"(?<![가-힣])[A-D]{1,3}[0+\-]?", t)}
+            if not rules and kind == "credit" and not kinds:
+                # 종류 이름 칸 없이 등급 범위만 '신용상태평가 | AAA~BBB0 | 4.0점'(11/23 안성시 — 등급 칸만 있어 점수를 못 읽었음)
+                rules = {"기업신용평가등급": t for _, t in texts[-1:] if _GRADE_EXPR.fullmatch(_sq(t))}
             if rules:
                 crit.credit_rows.append((rules, pts))
                 continue
@@ -1141,7 +1158,7 @@ def score_form(rows: list[FormRow], criteria: list[Criterion], vault, ref: date)
         if row.total:
             continue
         label = _sq(row.label)
-        kind = next((k for k, rx in KINDS if rx.search(label)), "")
+        kind = kind_of(label)
         if kind not in AUTO_KINDS:  # 실적·특허 등은 담당자가 직접(11/05 사용자 결정)
             out.append((row, ItemScore(row.label, row.points or 0, kind, None, notes=["담당자가 직접 채점"])))
             continue
@@ -1181,7 +1198,7 @@ def fmt(v: float | None) -> str:
 def match(label: str, scores: list[ItemScore]) -> ItemScore | None:
     """서식(자기평가표) 줄 이름 → 본문 항목. 본문이 누계로 평가하는데 서식 줄이 '단일'이면 맞추지 않음."""
     label = _sq(label)  # '신 인 도'처럼 글자를 띄운 줄 이름
-    kind = next((k for k, rx in KINDS if rx.search(label)), None)
+    kind = kind_of(label, None)
     hits = [s for s in scores if s.kind == kind]
     if not hits:
         return None

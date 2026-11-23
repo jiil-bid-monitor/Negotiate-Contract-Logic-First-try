@@ -289,7 +289,7 @@ def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str],
         if apply_key(k, d) in states:
             lines.append(f"   {STATES[states[apply_key(k, d)]][1]}")
     lines += ["", "갱신했으면 → 아래 서류 버튼 → '갱신 완료' → 새 서류 PDF 보내기",
-              "   (PDF에서 유효기간을 읽어 확인받고 인증서갱신.xlsx도 고칩니다)",
+              "   (서류에 적힌 유효기간을 골라 저장하면 인증서갱신.xlsx도 고칩니다)",
               "아직이면 → 아래 버튼으로 상태 표시 (신청해야 함 · 신청 중)",
               "안 쓰는 서류면 → /remove 로 빼 주세요"]
     return "\n".join(lines), [key(k, d) for k, d in rows]

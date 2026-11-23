@@ -171,28 +171,26 @@ class TestBulk(unittest.TestCase):
                 r.json = lambda: {"ok": True, "result": {"message_id": len(sent)}}
                 return r
 
-        texts = iter(["유효기간 : 2025.11.30 ~ 2027.11.30", "스캔본"])
-        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder), "TELEGRAM_CHAT_ID": "-1"}),                 mock.patch.object(docupload, "pdf_text", lambda data: next(texts)),                 mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"):
+        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder), "TELEGRAM_CHAT_ID": "-1"}),                                  mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"):
             bot = tb.TelegramBot("T", {"-1"}, lambda: None, Session())
             bot.uploader.download = lambda file_id: b"%PDF-1.4"
             chat = {"chat": {"id": -1}}
             self.assertTrue(bot.handle_apply({"id": "1", "data": "e:all", "message": chat}))
             self.assertIn("1건 더", sent[-1]["text"])
             pdf = {"file_name": "a.pdf", "mime_type": "application/pdf", "file_id": "f"}
-            # 첫 서류: PDF 글자에서 날짜를 읽어 '맞음' 버튼
+            # 첫 서류: 날짜는 PDF에서 읽지 않고 버튼으로(11/23 사용자 결정) — 지금 만료일 2026-11-30에서 1년 뒤
             bot.uploader.handle_message({**chat, "document": pdf, "message_id": 50, "reply_to_message": {"message_id": len(sent)}})
-            self.assertIn("2027-11-30", sent[-1]["text"])
-            self.assertTrue(bot.uploader.handle_callback({"id": "2", "data": "x:ok", "message": {**chat, "message_id": len(sent)}}))
+            self.assertEqual(sent[-1]["reply_markup"]["inline_keyboard"][0][0]["text"], "1년 → 2027-11-30")
+            self.assertTrue(bot.uploader.handle_callback({"id": "2", "data": "x:y1", "message": {**chat, "message_id": len(sent)}}))
             self.assertIn("(그리다) 나", sent[-1]["text"], "다음 서류를 이어서 묻는다")
-            # 둘째 서류: 못 읽으면 답장으로 날짜
+            # 둘째 서류: 직접 입력 → 답장으로 날짜
             bot.uploader.handle_message({**chat, "document": pdf, "message_id": 51, "reply_to_message": {"message_id": len(sent)}})
-            self.assertIn("못 읽었습니다", sent[-1]["text"])
-            self.assertEqual(sent[-1]["reply_markup"]["inline_keyboard"][0][0]["text"], "1년 → 2027-12-01", "지금 만료일에서 1년 뒤")
-            self.assertTrue(bot.uploader.handle_callback({"id": "3", "data": "x:y1", "message": {**chat, "message_id": len(sent)}}))
+            self.assertEqual(sent[-1]["reply_markup"]["inline_keyboard"][0][0]["text"], "1년 → 2027-12-01")
+            self.assertTrue(bot.uploader.handle_callback({"id": "3", "data": "x:type", "message": {**chat, "message_id": len(sent)}}))
+            bot.uploader.handle_message({**chat, "text": "2027-12-01", "message_id": 52, "reply_to_message": {"message_id": len(sent)}})
         got = dict(D.read_cert(self.folder / D.CERT_FILE))
         self.assertEqual((got["(그리다) 가"], got["(그리다) 나"]), (date(2027, 11, 30), date(2027, 12, 1)))
         self.assertEqual(len(list((self.folder / "[최신 서류]").glob("*.pdf"))), 2)
-        self.assertEqual(docupload.found_expiry("유 효 기 간: 2026-04-01 ~ 2027-03-31"), date(2027, 3, 31))
 
     def test_web_alert(self):
         import os
@@ -215,10 +213,9 @@ class TestBulk(unittest.TestCase):
 
         pdf = base64.b64encode(b"%PDF-1.4 test").decode()
         with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.folder)}), \
-                mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"), \
-                mock.patch.object(docupload, "pdf_text", lambda data: "유효기간 : 2025.12.01 ~ 2027.12.01"):
+                mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json"):
             got = server.docs_upload({"action": "read", "kind": "(그리다) 나", "pdf": pdf})
-            self.assertEqual(got, {"found": "2027-12-01", "cands": ["2027-12-01", "2028-12-01"]})
+            self.assertEqual(got, {"cands": ["2027-12-01", "2028-12-01"]}, "날짜는 PDF에서 읽지 않고 1년·2년 뒤 후보만")
             saved = server.docs_upload({"action": "save", "kind": "(그리다) 나", "pdf": pdf, "end": "2027-12-01"})
             self.assertIn("2027-12-01로 고쳤습니다", saved["cert"])
             for bad in ({"kind": "../../x", "pdf": pdf}, {"kind": "(그리다) 나", "pdf": base64.b64encode(b"hello").decode()}):

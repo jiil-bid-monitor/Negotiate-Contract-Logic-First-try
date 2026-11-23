@@ -732,7 +732,6 @@ def docs_upload(data: dict[str, Any]) -> dict[str, Any]:
     if not (folder / "[최신 서류]").is_dir():
         raise RuntimeError("회사서류_최신/[최신 서류] 폴더를 찾지 못했습니다 — NAS 웹앱에서 올려 주세요")
     kind = _known_kind(folder, data, allow_new=bool(data.get("new")))
-    current = dict(docexpiry.read_docs(folder))
     try:
         pdf = base64.b64decode(str(data.get("pdf") or ""), validate=True)
     except ValueError as err:
@@ -740,11 +739,9 @@ def docs_upload(data: dict[str, Any]) -> dict[str, Any]:
     if not pdf.startswith(b"%PDF"):
         raise ValueError("PDF 파일만 올릴 수 있습니다")
     today = datetime.now().date()
-    if data.get("action") == "read":
-        base = current.get(kind)
-        found = docupload.found_expiry(docupload.pdf_text(pdf))
-        return {"found": found.isoformat() if found else None,
-                "cands": [docupload.plus_years(base, n).isoformat() for n in (1, 2)] if base else []}
+    if data.get("action") == "read":  # PDF인지만 보고 만료일 후보 — 날짜는 PDF에서 읽지 않고 사람이 고름(2026-11-23 사용자 결정)
+        base = docupload.date_base(folder, kind, today)
+        return {"cands": [docupload.plus_years(base, n).isoformat() for n in (1, 2)]}
     end = date.fromisoformat(str(data["end"])) if data.get("end") else None
     saved, cert, notes = docupload.save_doc(folder, kind, pdf, end, today)
     return {"saved": saved, "cert": cert, "notes": notes, "docs": docexpiry.web_alert(today)}

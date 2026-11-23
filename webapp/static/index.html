@@ -4722,7 +4722,7 @@ if (AWARD_TEST) {  // 시험 페이지: 탭 줄을 숨기고 낙찰 후 서류 �
 boot();
 
 // 회사 서류 갱신 알림 종 — 텔레그램 알림과 같은 서류(2026-11-23). 새 서류 PDF는 여기서 바로 올림(끌어다 놓기·고르기)
-// → PDF에서 유효기간을 읽어 확인받고 저장(텔레그램 /upload와 같은 저장, 서버 /api/docs-upload).
+// → 서류에 적힌 유효기간을 사람이 골라 저장(텔레그램 /upload와 같은 저장, 서버 /api/docs-upload).
 // '전체 서류 관리' 창(#docMgr)에서 새 서류 추가·유효기간 수정·빼기(/api/docs-all·/api/docs-manage) — 텔레그램 /upload·/remove와 같은 일
 let DOC_BELL = [], DOC_ALL = [], DOC_READY = false;
 const ddText = (d) => d.left == null ? "유효기간 없음" : d.left < 0 ? `만료 뒤 ${-d.left}일` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
@@ -4740,7 +4740,7 @@ function renderDocBell() {
   $("docBellPop").innerHTML = (DOC_BELL.length ? `<h3>회사 서류 갱신 알림 ${DOC_BELL.length}건</h3>` : "<h3>지금 갱신할 회사 서류가 없습니다</h3>") + "<ul>"
     + DOC_BELL.map((d) => docItem(d, `<span class="uphint">또는 PDF를 이 줄에 끌어다 놓기</span>`)).join("")
     + "</ul>" + (DOC_BELL.length ? "<p class=\"how\"><b>갱신했으면</b> 새로 받은 서류 PDF를 그 서류 줄에 올려 주세요.<br>"
-    + "PDF에서 유효기간을 읽어 확인한 뒤 저장하고, 인증서갱신.xlsx도 고칩니다.</p>" : "")
+    + "서류에 적힌 유효기간을 골라 저장하면 인증서갱신.xlsx도 고칩니다.</p>" : "")
     + `<p class="how"><button type="button" class="linkbtn" data-open-mgr>전체 서류 관리 (추가 · 수정 · 빼기) ›</button></p>`;
 }
 async function loadDocBell() {
@@ -4797,16 +4797,15 @@ async function docUpload(li, file) {
   const kind = isNew ? li.querySelector(".newname").value.trim() : li.dataset.kind;
   if (isNew && !kind) { box.innerHTML = `<p class="err">서류 이름을 먼저 적어 주세요.</p>`; return; }
   if (!file || !/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { box.innerHTML = `<p class="err">PDF 파일만 올릴 수 있습니다.</p>`; return; }
-  box.innerHTML = "<p>PDF를 읽는 중…</p>";
+  box.innerHTML = "<p>올리는 중…</p>";
   try {
     const pdf = await pdfBase64(file);
+    // 만료일은 PDF에서 읽지 않고 늘 고르게(2026-11-23 사용자 결정 — 잘못 읽으면 엑셀을 다시 고쳐야 해서)
     const r = await awardPost("/api/docs-upload", { action: "read", kind, pdf, new: isNew });
     const btn = (end, label) => `<button type="button" data-end="${end}">${esc(label)}</button>`;
-    box.innerHTML = (r.found
-      ? `<p>PDF에서 읽은 유효기간 끝나는 날: <b>${esc(r.found)}</b><br>서류와 같은지 확인해 주세요.</p><div class="choices">${btn(r.found, `맞음 — ${r.found}`)}</div>`
-      : `<p>PDF에서 유효기간을 못 읽었습니다(스캔본이면 글자가 없습니다).<br>서류에 적힌 유효기간 끝나는 날을 골라 주세요.</p>`
-        + (r.cands.length ? `<div class="choices">${r.cands.map((c, n) => btn(c, `${n + 1}년 → ${c}`)).join("")}</div>` : ""))
-      + `<div class="choices other">다른 날짜 <input type="date" value="${esc(r.found || r.cands[0] || "")}"> <button type="button" data-end="pick">저장</button>`
+    box.innerHTML = `<p><b>${esc(file.name)}</b><br>서류에 적힌 유효기간 끝나는 날을 골라 주세요.</p>`
+      + `<div class="choices">${r.cands.map((c, n) => btn(c, `${n + 1}년 → ${c}`)).join("")}</div>`
+      + `<div class="choices other">다른 날짜 <input type="date" value="${esc(r.cands[0] || "")}"> <button type="button" data-end="pick">저장</button>`
       + ` ${btn("", "유효기간 없는 서류")} <button type="button" data-cancel>취소</button></div>`;
     box.onclick = async (ev) => {
       const b = ev.target.closest("button");

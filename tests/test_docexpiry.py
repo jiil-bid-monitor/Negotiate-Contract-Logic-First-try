@@ -274,3 +274,38 @@ def mock_states():
     from unittest import mock
 
     return mock.patch.object(D, "APPLY_PATH", Path(tempfile.mkdtemp()) / "a.json")
+
+
+class TestNoDuplicate(TestDocManage):
+    """중복 막기·파일 바꾸기(2026-11-23 사용자 요청 — 잘못 올릴 수 있음)."""
+
+    def test_same_day_reupload_keeps_one(self):
+        from webapp import docupload as U
+
+        today = date(2026, 11, 23)
+        U.save_doc(self.f, "신용평가", b"%PDF wrong", date(2028, 6, 15), today)
+        U.save_doc(self.f, "신용평가", b"%PDF right", date(2028, 6, 15), today)
+        latest = list((self.f / "[최신 서류]").glob("신용평가*"))
+        self.assertEqual(len(latest), 1, "같은 날 두 번 올려도 [최신 서류]엔 하나(예전엔 발급일이 같아 둘 다 남았음)")
+        self.assertEqual(latest[0].read_bytes(), b"%PDF right")
+
+    def test_replace_keeps_dates(self):
+        from webapp import docupload as U
+
+        U.replace_doc(self.f, "신용평가", b"%PDF fixed", date(2026, 11, 23))
+        now = self.f / "[최신 서류]" / "신용평가등급확인서_2026-06-16_유효2027-06-15.pdf"
+        self.assertEqual(now.read_bytes(), b"%PDF fixed", "이름(발급일·유효기간) 그대로 내용만")
+        self.assertTrue((self.f / "[이전 서류]" / now.name).exists(), "앞 파일은 지우지 않고 [이전 서류]로")
+        with self.assertRaises(ValueError):
+            U.replace_doc(self.f, "없는서류", b"%PDF", date(2026, 11, 23))
+
+    def test_new_name_matching_existing_goes_to_it(self):
+        import os
+        from unittest import mock
+
+        from webapp import server
+
+        with mock.patch.dict(os.environ, {"COMPANY_DOCS_DIR": str(self.f)}):
+            self.assertEqual(server._known_kind(self.f, {"kind": "사업자 등록증"}, allow_new=True), "사업자등록증")
+            self.assertEqual(server._known_kind(self.f, {"kind": "사업자등록증명"}, allow_new=True), "사업자등록증명",
+                             "글자 포함만으로는 같은 서류로 안 봄")

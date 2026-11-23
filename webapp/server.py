@@ -722,8 +722,7 @@ def make_handler(app: App):
 
 def docs_upload(data: dict[str, Any]) -> dict[str, Any]:
     """웹앱 종 창에서 새 회사 서류 PDF 올리기(2026-11-23 사용자 요청 — 텔레그램 왔다 갔다 없이).
-    action 'read' = PDF에서 유효기간을 읽어 보여 주기만, 'save' = end(YYYY-MM-DD, 없으면 유효기간 없음)로 저장 — 텔레그램 /upload와 같은 저장."""
-    import base64
+    action 'read' = PDF인지 보고 만료일 후보만(날짜는 사람이 고름), 'save' = end(YYYY-MM-DD, 없으면 유효기간 없음)로 저장 — 텔레그램 /upload와 같은 저장."""
     from datetime import date
 
     from . import docupload
@@ -732,12 +731,7 @@ def docs_upload(data: dict[str, Any]) -> dict[str, Any]:
     if not (folder / "[최신 서류]").is_dir():
         raise RuntimeError("회사서류_최신/[최신 서류] 폴더를 찾지 못했습니다 — NAS 웹앱에서 올려 주세요")
     kind = _known_kind(folder, data, allow_new=bool(data.get("new")))
-    try:
-        pdf = base64.b64decode(str(data.get("pdf") or ""), validate=True)
-    except ValueError as err:
-        raise ValueError("PDF를 읽지 못했습니다") from err
-    if not pdf.startswith(b"%PDF"):
-        raise ValueError("PDF 파일만 올릴 수 있습니다")
+    pdf = _pdf_of(data)
     today = datetime.now().date()
     if data.get("action") == "read":  # PDF인지만 보고 만료일 후보 — 날짜는 PDF에서 읽지 않고 사람이 고름(2026-11-23 사용자 결정)
         base = docupload.date_base(folder, kind, today)
@@ -745,6 +739,18 @@ def docs_upload(data: dict[str, Any]) -> dict[str, Any]:
     end = date.fromisoformat(str(data["end"])) if data.get("end") else None
     saved, cert, notes = docupload.save_doc(folder, kind, pdf, end, today)
     return {"saved": saved, "cert": cert, "notes": notes, "docs": docexpiry.web_alert(today)}
+
+
+def _pdf_of(data: dict[str, Any]) -> bytes:
+    import base64
+
+    try:
+        pdf = base64.b64decode(str(data.get("pdf") or ""), validate=True)
+    except ValueError as err:
+        raise ValueError("PDF를 읽지 못했습니다") from err
+    if not pdf.startswith(b"%PDF"):
+        raise ValueError("PDF 파일만 올릴 수 있습니다")
+    return pdf
 
 
 def _known_kind(folder: Path, data: dict[str, Any], allow_new: bool = False) -> str:
@@ -755,7 +761,8 @@ def _known_kind(folder: Path, data: dict[str, Any], allow_new: bool = False) -> 
     if kind in dict(docexpiry.read_docs(folder)) or kind in docupload.kinds(folder):
         return kind
     if allow_new and (name := docupload.new_kind_name(kind)):
-        return name
+        # 띄어쓰기만 다른 같은 이름이면 그 서류로(새 줄을 만들지 않음 — 중복 막기, 2026-11-23)
+        return docupload.same_kind(folder, name) or name
     raise ValueError("서류 이름을 다시 적어 주세요 (40자 안, 파일 이름에 못 쓰는 기호 빼고)" if allow_new else "모르는 서류 종류입니다")
 
 
@@ -772,11 +779,13 @@ def docs_manage(data: dict[str, Any]) -> dict[str, Any]:
     if data.get("action") == "edit":
         end = date.fromisoformat(str(data["end"])) if data.get("end") else None
         message = docupload.edit_doc(folder, kind, end, today)
+    elif data.get("action") == "replace":  # 잘못 올린 파일 바꾸기 — 날짜는 그대로
+        message = docupload.replace_doc(folder, kind, _pdf_of(data), today)
     elif data.get("action") == "remove":
         moved, cert = docupload.remove_doc(folder, kind, today)
         message = f"파일 {moved}개를 [이전 서류]로 옮겼습니다." + (f"\n{cert}" if cert else "")
     else:
-        raise ValueError("action은 edit·remove")
+        raise ValueError("action은 edit·replace·remove")
     return {"message": message, "docs": docupload.all_docs(folder, today), "alert": docexpiry.web_alert(today)}
 
 

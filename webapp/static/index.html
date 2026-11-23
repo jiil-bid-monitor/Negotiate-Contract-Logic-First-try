@@ -392,6 +392,9 @@ body {
 .docbell-pop .linkbtn { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--brand); background: none; border: 0; padding: 0; cursor: pointer; }
 .docbell-pop .act { font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); border-radius: 4px; }
 .docbell-pop .choices button.danger { border-color: #d93025; background: #d93025; color: #fff; }
+.docbell-pop .choices button.go { border-color: var(--brand); background: var(--brand); color: #fff; }
+.docbell-pop .row2.file { font-size: 11.5px; word-break: break-all; }
+.docbell-pop label.act { display: inline-block; }
 .docbell-pop .err { color: #d93025; }
 .docmgr { padding: 0; border: 0; background: transparent; max-width: calc(100vw - 32px); }
 .docmgr::backdrop { background: rgba(0,0,0,.35); }
@@ -4731,6 +4734,7 @@ function docItem(d, extra = "") {
   return `<li data-kind="${esc(d.kind)}"><div class="row1"><span class="name">${esc(d.kind)}</span>`
     + `<span class="dd${d.left != null && d.left <= 7 ? " urgent" : ""}">${ddText(d)}</span></div>`
     + (d.end ? `<div class="row2">만료일 ${esc(d.end)}${d.state ? ` · ${esc(d.state)}` : ""}</div>` : "")
+    + (d.file ? `<div class="row2 file">지금 파일: ${esc(d.file)}</div>` : "")
     + `<div class="up">${UP}${extra}</div><div class="upbox"></div></li>`;
 }
 function renderDocBell() {
@@ -4751,7 +4755,8 @@ async function loadDocBell() {
 function renderDocMgr() {
   const q = ($("docMgrQ")?.value || "").replace(/\s+/g, "");
   const rows = DOC_ALL.filter((d) => !q || d.kind.replace(/\s+/g, "").includes(q));
-  $("docMgrList").innerHTML = rows.map((d) => docItem(d, `<button type="button" class="act" data-edit>날짜 수정</button>`
+  $("docMgrList").innerHTML = rows.map((d) => docItem(d, (d.file ? `<label class="act">파일 바꾸기<input type="file" data-replace accept="application/pdf,.pdf" hidden></label>` : "")
+    + `<button type="button" class="act" data-edit>날짜 수정</button>`
     + `<button type="button" class="act" data-remove>빼기</button>`)).join("") || "<li>찾는 서류가 없습니다.</li>";
 }
 async function openDocMgr() {
@@ -4848,10 +4853,29 @@ function docManage(li, action) {
     } catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
   };
 }
+async function docReplace(li, file) {  // 잘못 올린 파일 바꾸기 — 발급일·유효기간은 그대로, 앞 파일은 [이전 서류]로
+  const box = li.querySelector(".upbox"), kind = li.dataset.kind, d = DOC_ALL.find((x) => x.kind === kind) || {};
+  if (!file || !/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { box.innerHTML = `<p class="err">PDF 파일만 올릴 수 있습니다.</p>`; return; }
+  const pdf = await pdfBase64(file);
+  box.innerHTML = `<p>지금 파일 <b>${esc(d.file || "")}</b>을(를)<br><b>${esc(file.name)}</b>(으)로 바꿀까요?<br>`
+    + "발급일·유효기간은 그대로입니다 — 날짜가 틀렸으면 '날짜 수정'. 앞 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>"
+    + `<div class="choices"><button type="button" data-go="replace" class="go">바꾸기</button> <button type="button" data-cancel>취소</button></div>`;
+  box.onclick = async (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.hasAttribute("data-cancel")) { box.innerHTML = ""; return; }
+    box.innerHTML = "<p>바꾸는 중…</p>";
+    try {
+      const r = await awardPost("/api/docs-manage", { action: "replace", kind, pdf });
+      box.innerHTML = `<p class="ok">✓ ${esc(r.message).replace(/\n/g, "<br>")}</p>`;
+      setTimeout(() => { box.innerHTML = ""; afterSave(); }, 3000);
+    } catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+  };
+}
 function wireDocs(root) {  // 종 창·관리 창 같이 — 파일 고르기·끌어다 놓기·수정·빼기
   root.addEventListener("change", (ev) => {
     if (ev.target.type !== "file") return;
-    docUpload(ev.target.closest("li"), ev.target.files[0]);
+    (ev.target.hasAttribute("data-replace") ? docReplace : docUpload)(ev.target.closest("li"), ev.target.files[0]);
     ev.target.value = "";  // 같은 파일을 다시 골라도 다시 읽게
   });
   root.addEventListener("dragover", (ev) => {

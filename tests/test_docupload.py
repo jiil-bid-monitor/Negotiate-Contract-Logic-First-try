@@ -61,8 +61,9 @@ class UploadFlowTest(unittest.TestCase):
         cb = {"id": "c", "data": "k:0", "message": {"message_id": self.last_id(), "chat": {"id": int(CHAT)}}}
         self.assertTrue(self.up.handle_callback(cb))
         sent = self.calls[-1][1]
-        self.assertEqual((sent["reply_to_message_id"], sent["reply_markup"]["force_reply"]), (3, True),
-                         "날짜 질문은 PDF 보낸 메시지에 답장 + 답장 칸 자동")
+        buttons = [b["callback_data"] for row in sent["reply_markup"]["inline_keyboard"] for b in row]
+        self.assertEqual((sent["reply_to_message_id"], buttons), (3, ["x:y1", "x:y2", "x:type", "x:none"]),
+                         "PDF에서 날짜를 못 읽으면 1년·2년 뒤·직접 입력·없음 버튼(11/23 — 치지 않아도 되게), 답장으로 쳐도 받음")
         ask = self.last_id()
         self.assertTrue(self.up.handle_message(self.msg(4, "몰라", reply_to=ask)))
         self.assertIn("못 읽었습니다", self.calls[-1][1]["text"])

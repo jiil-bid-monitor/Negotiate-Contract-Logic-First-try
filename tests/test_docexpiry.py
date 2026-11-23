@@ -187,7 +187,8 @@ class TestBulk(unittest.TestCase):
             # 둘째 서류: 못 읽으면 답장으로 날짜
             bot.uploader.handle_message({**chat, "document": pdf, "message_id": 51, "reply_to_message": {"message_id": len(sent)}})
             self.assertIn("못 읽었습니다", sent[-1]["text"])
-            bot.uploader.handle_message({**chat, "text": "2027-12-01", "message_id": 52, "reply_to_message": {"message_id": len(sent)}})
+            self.assertEqual(sent[-1]["reply_markup"]["inline_keyboard"][0][0]["text"], "1년 → 2027-12-01", "지금 만료일에서 1년 뒤")
+            self.assertTrue(bot.uploader.handle_callback({"id": "3", "data": "x:y1", "message": {**chat, "message_id": len(sent)}}))
         got = dict(D.read_cert(self.folder / D.CERT_FILE))
         self.assertEqual((got["(그리다) 가"], got["(그리다) 나"]), (date(2027, 11, 30), date(2027, 12, 1)))
         self.assertEqual(len(list((self.folder / "[최신 서류]").glob("*.pdf"))), 2)

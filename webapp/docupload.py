@@ -12,7 +12,7 @@ from __future__ import annotations
 import html
 import json
 import re
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
@@ -48,6 +48,13 @@ def parse_expiry(text: str) -> date | None | str:
         return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
     except ValueError:
         return ""
+
+
+def plus_years(d: date, n: int) -> date:
+    try:
+        return d.replace(year=d.year + n)
+    except ValueError:  # 2월 29일
+        return d.replace(year=d.year + n, day=28)
 
 
 def found_expiry(text: str) -> date | None:
@@ -197,7 +204,11 @@ class Uploader:
         self.api("answerCallbackQuery", callback_query_id=cb["id"])
         if step == "expiry":  # PDF에서 읽은 날짜 '맞음'·'다른 날짜'·'유효기간 없음'
             if data == "x:other":
+                self._choose_date(chat, state)
+            elif data == "x:type":
                 self._ask_date(chat, state)
+            elif data in ("x:y1", "x:y2") and state.get("cands"):
+                self._save(chat, state, state["cands"][int(data[-1]) - 1], state.get("user_msg"))
             else:
                 self._save(chat, state, state.get("found") if data == "x:ok" else None, state.get("user_msg"))
             return True
@@ -238,7 +249,19 @@ class Uploader:
                                          [{"text": "다른 날짜", "callback_data": "x:other"},
                                           {"text": "유효기간 없는 서류", "callback_data": "x:none"}]]})
             return
-        self._ask_date(chat, state, f"{name} — PDF에서 유효기간을 못 읽었습니다(스캔본이면 글자가 없습니다).\n")
+        self._choose_date(chat, state, f"{name} — PDF에서 유효기간을 못 읽었습니다(스캔본이면 글자가 없습니다).\n")
+
+    def _choose_date(self, chat: str, state: dict, head: str = "") -> None:
+        """만료일 버튼(2026-11-23 사용자 요청 — 날짜를 치지 않게): 지금 만료일(없으면 오늘 하루 전)에서 1년·2년 뒤.
+        버튼에 날짜를 적어 서류와 맞춰 보고 누르게, 안 맞으면 '직접 입력'."""
+        old = dict(docexpiry.read_docs(self.folder())).get(state["kind"])
+        base = old or self.today() - timedelta(days=1)
+        state["cands"] = [plus_years(base, n) for n in (1, 2)]
+        state["ask"] = self._say(chat, head + f"<b>{html.escape(state['kind'])}</b> — 서류에 적힌 유효기간 끝나는 날과 같은 버튼을 눌러 주세요.",
+                                 state.get("user_msg"), {"inline_keyboard": [
+                                     [{"text": f"{n}년 → {d}", "callback_data": f"x:y{n}"} for n, d in zip((1, 2), state["cands"])],
+                                     [{"text": "다른 날짜 직접 입력", "callback_data": "x:type"},
+                                      {"text": "유효기간 없는 서류", "callback_data": "x:none"}]]})
 
     def _ask_date(self, chat: str, state: dict, head: str = "") -> None:
         # 텔레그램은 버튼과 답장 칸을 한 메시지에 같이 못 붙여서, 날짜를 칠 때는 답장 칸이 바로 열리는 질문으로

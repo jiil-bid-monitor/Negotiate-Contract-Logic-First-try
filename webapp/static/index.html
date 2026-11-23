@@ -2608,6 +2608,7 @@ function renderNotice(n) {
           ${n.reNotice ? reNoticeBadge() : ""}
           ${productOnly(n) ? productOnlyBadge(n) : ""}
           ${(n.licenseMatch || []).length ? licenseBadge(n) : ""}
+          ${n.localMatch ? localBadge(n) : ""}
           ${overseasBadges(n)}
         </div>
         <h3>${title}${n.detailUrl ? `<span class="ext" aria-hidden="true">↗</span>` : ""}${noticeNoTag(n.noticeNo)}</h3>
@@ -2631,6 +2632,12 @@ function licenseBadge(n) {
   return tipBadge("warn", "보유 면허로 수집", "보유 면허로 수집한 공고",
     `<p>제목에 관심 키워드가 없지만, 나라장터 면허제한을 지일 공사 면허 <b>${names}</b>로 모두 채워 수집한 공고입니다.</p>` +
       `<p>쓰는 면허: 실내건축공사업·정보통신공사업·금속구조물·창호·온실공사업·금속창호·지붕건축물조립공사업. 제목의 조건부 제외 키워드('정비' 등)는 이 경로에선 보지 않습니다.</p>`);
+}
+/** 제목 키워드 없이 정선 기관(수요·공고기관)의 입찰 공고라 수집한 공고 (2026-11-23 사용자 결정 — 사업 규모와 상관없이 일반 공고로) */
+function localBadge(n) {
+  return tipBadge("warn", "정선 사업으로 수집", "정선 사업으로 수집한 공고",
+    `<p>제목에 관심 키워드가 없지만, <b>${esc(n.localMatch)}</b>이(가) 낸 입찰 공고라 수집했습니다(지일 소재지).</p>` +
+      `<p>사업 규모와 상관없이 일반 공고로 봅니다. 제목의 조건부 제외 키워드('정비' 등)는 이 경로에선 보지 않고, 무조건 제외 키워드는 그대로 뺍니다.</p>`);
 }
 function productOnlyBadge(n) {
   const names = n.matchedBy.products.map((x) => `${esc(x.name)}(${esc(x.code)})`).join(", ");
@@ -3238,6 +3245,7 @@ function collectPaths(n) {
   if ((n.matchedBy?.keywords || []).length) out.push("관심 키워드");
   if (!n.outside && (n.matchedBy?.products || []).length) out.push("세부품명");
   if ((n.licenseMatch || []).length) out.push("보유 면허");
+  if (n.localMatch) out.push("정선 사업");
   return out;
 }
 

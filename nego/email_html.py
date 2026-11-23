@@ -203,20 +203,56 @@ def _section(title: str, rows: list[Candidate]) -> str:
     return head + body
 
 
-INTEREST, PRODUCT = "관심 공고", "세부품명 공고"
-_PRODUCT_TITLE = "세부품명 공고 (키워드 없이 보유 품목으로 수집)"
+INTEREST = "관심 공고"
+# (11/23 사용자 결정) 공고명에 이 낱말이 있으면 주간 메일 본문에서 뺌(첨부엔 남음) — 운영·관리 용역과 전산 사업은 지일 사업이 아님
+BODY_SKIP_WORDS = {"운영·관리 용역": ("유지관리", "유지보수", "청소", "환경미화", "시설관리", "모니터링", "경비", "파견", "업무지원", "운영관리", "행사기획"),
+                   "구매·계획 수립": ("구매", "기본구상", "계획수립"),
+                   "전산 사업": ("시스템", "플랫폼", "누리집", "홈페이지", "네트워크", "인프라", "데이터", "서버", "지하공간")}
+# (11/23) 키워드 없이 이 소프트웨어 세부품명으로만 들어온 공고는 본문에서 뺌 — 보유 등록이라 자격 판정엔 그대로 씀.
+# matched_product_codes엔 품목 이름이 들어온다(번호만 넣었다가 한 건도 안 걸렸음) — 이름·번호 둘 다
+SW_PRODUCTS = {"정보시스템개발서비스", "패키지소프트웨어개발및도입서비스", "소프트웨어유지및지원서비스",
+               "8111159801", "8111159901", "8111229901"}
+# (11/23 사용자 결정) 공고명에 이 낱말이 있으면 운영·관리 용역·설계만 용역이어도 본문에 둠 — 실감콘텐츠 유지관리·놀이터 설계는 지일 일
+BODY_KEEP_WORDS = ("실감", "놀이터", "놀이시설", "미디어아트", "체험콘텐츠")
+BODY_MIN_SYNC = 0.50  # (11/23 사용자 결정) 이번 주 290건으로 본문 약 30건이 되는 선
+
+
+def split_body(candidates: list[Candidate]) -> tuple[list[Candidate], dict[str, int]]:
+    """(11/23 사용자 결정 — 주간 메일 269건) 본문엔 들어온 길(키워드·세부품명·보유 면허)과 상관없이 싱크로율 50% 이상만.
+    관심 키워드가 '통신' 하나뿐인 공고, 공고명이 운영·관리 용역·전산 사업인 공고도 뺌. 뺀 공고는 첨부 리포트에만(지우지 않음).
+    싱크로율을 못 구한 공고는 본문에 둠(과거 실적 자료를 못 읽은 주에 본문이 비지 않게)."""
+    body: list[Candidate] = []
+    low = f"싱크로율 {round(BODY_MIN_SYNC * 100)}% 미만"
+    design = "설계 용역(제작·설치 없음)"
+    hidden = {"통신 키워드만": 0, **{k: 0 for k in BODY_SKIP_WORDS}, "소프트웨어 품목만": 0, design: 0, low: 0}
+    for c in candidates:
+        score = (getattr(c, "sync", None) or {}).get("score")
+        title = c.notice.title.replace(" ", "")
+        keep = any(w in title for w in BODY_KEEP_WORDS)
+        skip = None if keep else next((k for k, words in BODY_SKIP_WORDS.items() if any(w in title for w in words)), None)
+        if c.screen_result.matched_keywords == ["통신"]:
+            hidden["통신 키워드만"] += 1
+        elif skip:
+            hidden[skip] += 1
+        elif not c.screen_result.matched_keywords and set(c.screen_result.matched_product_codes or []) <= SW_PRODUCTS                 and c.screen_result.matched_product_codes:
+            hidden["소프트웨어 품목만"] += 1
+        elif not keep and "설계" in title and "용역" in title and "제작" not in title and "설치" not in title:
+            hidden[design] += 1  # 지일은 설계~제작·설치 통합 발주를 선호(대리님 9/9 인수인계)
+        elif score is not None and score < BODY_MIN_SYNC:
+            hidden[low] += 1
+        else:
+            body.append(c)
+    return body, hidden
 
 
 def split_parts(candidates: list[Candidate]) -> list[tuple[str, list[Candidate]]]:
-    """메일을 나눠 보낼 구역 — 관심 공고(늘), 세부품명 공고(있을 때만). 10/21 사용자 요청: 한 통이 길어 뒤가 잘려서."""
-    interest = [c for c in candidates if getattr(c.screen_result, "section", "관심") != "세부품명"]
-    product_only = [c for c in candidates if getattr(c.screen_result, "section", "관심") == "세부품명"]
-    return [(INTEREST, interest)] + ([(PRODUCT, product_only)] if product_only else [])
+    """메일 한 통 — 본문 공고만(11/23부터 세부품명 공고는 따로 안 보내고 첨부에만)."""
+    return [(INTEREST, split_body(candidates)[0])]
 
 
 def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime, part: str | None = None,
                       attached: bool = True) -> str:
-    """메일 본문. part가 INTEREST·PRODUCT면 그 구역만(메일 나눠 보내기), None이면 두 구역 다.
+    """메일 본문(본문 공고는 split_body). part는 제목 뒤에 붙일 구역 이름.
     attached=False면(첨부 없는 두 번째 통) '첨부 파일을 여세요' 안내를 뺀다."""
     period = ""
     if stats.period_begin and stats.period_end:
@@ -233,11 +269,12 @@ def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at
         header += f'<div style="{alert}">⚠ 조회 실패: {_esc(", ".join(stats.failed_operations))}</div>'
     if stats.license_error:
         header += f'<div style="{alert}">⚠ 면허제한정보 조회 실패 → 자격 게이트 미적용(fail-open)</div>'
+    body_rows, hidden = split_body(candidates)
+    if sum(hidden.values()):
+        why = " · ".join(f"{k} {v}" for k, v in hidden.items() if v)
+        header += (f'<div style="{meta}margin-top:6px;">본문 {len(body_rows)}건 · 첨부 리포트에만 {sum(hidden.values())}건 ({_esc(why)})</div>')
     header += "</div>"
-    content = header
-    for name, rows in split_parts(candidates):
-        if part in (None, name):
-            content += _section(_PRODUCT_TITLE if name == PRODUCT else name, rows)
+    content = header + _section(INTEREST, body_rows)
     # 바깥 표로 가운데 정렬 — div의 margin:auto를 무시하는 메일 프로그램도 표의 align은 지킨다
     return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
             f'style="width:100%;background:{PAGE_BG};border-collapse:collapse;">\n'

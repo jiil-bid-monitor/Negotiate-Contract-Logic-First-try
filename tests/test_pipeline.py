@@ -1132,6 +1132,33 @@ class TestLicenseRoute20261112(unittest.TestCase):
         self.assertEqual(got, [])  # 무조건 제외 키워드(보수공사)는 그대로
 
 
+
+class TestLocalRoute20261123(unittest.TestCase):
+    """2026-11-23 사용자 결정: 사업 규모와 상관없이 '입찰' 공고이면서 정선 기관(수요·공고기관)이 낸 공고는 키워드 없이도 일반 공고로 수집
+    (나중에 만들 1억 미만 간소화 규칙에서도 뺌). 무조건 제외 키워드는 그대로, 협상·수의계약은 해당 없음."""
+
+    def _run(self, title, award=fixtures.QUALIFY, inst="강원특별자치도 정선군", contract="제한경쟁", budget="30000000"):
+        config = load_config()
+        n = notice_from_raw(fixtures.notice("R26BK09990001", title=title, award=award, dminsttNm=inst,
+                                            cntrctCnclsMthdNm=contract, asignBdgtAmt=budget), "공사")
+        stats = RunStats()
+        return build_candidates([n], config, {}, {}, NOW, stats), stats
+
+    def test_jeongseon_bid_collected_without_keyword(self):
+        got, stats = self._run("○○면 마을안길 정비공사")  # 관심 키워드 없음 + 조건부 제외 키워드 '정비'
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0].category, "입찰")
+        self.assertEqual(got[0].screen_result.local_match, "강원특별자치도 정선군")
+        self.assertEqual(got[0].screen_result.section, "관심")
+        self.assertEqual(stats.local_route, 1)
+
+    def test_not_collected_outside_jeongseon_or_not_bid_or_hard_excluded(self):
+        self.assertEqual(self._run("○○면 마을안길 정비공사", inst="강원특별자치도 영월군")[0], [])
+        self.assertEqual(self._run("○○ 홍보물 제작", award=fixtures.NEGO)[0], [])  # 협상은 해당 없음
+        self.assertEqual(self._run("○○ 홍보물 제작", contract="수의계약")[0], [])  # 수의계약은 해당 없음
+        self.assertEqual(self._run("○○ 청사 보수공사")[0], [])  # 무조건 제외 키워드(보수공사)는 그대로
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

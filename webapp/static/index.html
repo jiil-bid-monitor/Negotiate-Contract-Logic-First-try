@@ -4925,17 +4925,27 @@ function renderJudgeBell() {
   const last = Object.values(participation).flatMap((p) => p.reports || []).map((r) => (r.date || "").slice(0, 10)).sort().at(-1);
   const md = (d) => d ? `${+d.slice(5, 7)}/${+d.slice(8, 10)}` : "";
   $("judgeBellPop").innerHTML = (todo.length ? `<h3>판단할 공고 ${todo.length}건</h3>` : "<h3>판단할 공고가 없습니다</h3>")
-    + `<p class="row2">텔레그램 보고에 나간 공고 중 아직 판단 안 한 것 · 마감 빠른 순${last ? ` · 마지막 보고 ${md(last)}` : ""}</p>`
-    + "<ul>" + todo.map((p) => {
+    + `<p class="row2">보고에 나간 공고 중 판단 안 한 것${last ? ` · 마지막 보고 ${md(last)}` : ""}</p>`
+    // 길게 늘어놓지 않게 마감이 가장 급한 3건만(11/23 사용자 — 나머지는 실제 공고 탭에서)
+    + "<ul>" + todo.slice(0, 3).map((p) => {
       const m = p.meta || {}, left = Math.ceil((deadlineAt(m.deadline) - Date.now()) / 86400000);
       const rep = (p.reports.at(-1)?.date || "").slice(0, 10);
       return `<li class="judge-item" data-goto-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span>`
         + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span></div>`
         + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
     }).join("") + "</ul>"
-    + (todo.length ? `<p class="how">공고를 누르면 실제 공고 탭의 그 카드로 갑니다 — 참가·보류·불참을 누르면 숫자가 줄어듭니다.</p>` : "");
+    + (todo.length > 3 ? `<p class="how"><button type="button" class="linkbtn" data-all-todo>그 밖의 ${todo.length - 3}건은 실제 공고 탭에서 판단 ›</button></p>` : "")
+    + (todo.length ? `<p class="how">공고를 누르면 그 공고로 갑니다 — 판단하면 숫자가 줄어듭니다.</p>` : "");
 }
 $("judgeBellPop").addEventListener("click", (ev) => {
+  if (ev.target.closest("[data-all-todo]")) {  // 실제 공고 탭 — 참가여부 '미지정'만, 마감 빠른 순 그대로
+    $("judgeBellPop").hidden = true;
+    showTab("live");
+    for (const k of Object.keys(filters)) filters[k] = "all";
+    filters.part = "미지정";
+    $("liveQ").value = "";
+    return void applyFilters();
+  }
   const li = ev.target.closest("[data-goto-no]");
   if (!li) return;
   $("judgeBellPop").hidden = true;

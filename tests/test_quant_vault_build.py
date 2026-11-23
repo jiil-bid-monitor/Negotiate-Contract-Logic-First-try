@@ -4887,3 +4887,19 @@ def test_joint_participant_rows_left_blank(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
     assert text.count("(주)가상") == 1 and text.count("강원 어딘가 1") == 1 and text.count("033-111-2222") == 1, text
     assert unfilled_slots(sec) == [], unfilled_slots(sec)
+
+
+def test_signer_and_bare_rep_line(tmp_path: Path):
+    """11/23 사용자: '서약자:   ○○○   대 표 :        (서명 또는 날인)' — '대 표 :'(자 없이)를 몰라 대표 자리가 비고 서약자 칸에 대표자 이름이 들어감.
+    띄어쓰기 무시하고 서명란에 '대표'가 있으면 대표자 성함, 같은 줄 서약자 자리는 회사명(표 칸·한 줄 문단 둘 다)."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, t: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                        f'<hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    tbl = "<hp:p><hp:run><hp:tbl><hp:tr>" + c(0, "서약자:") + c(1, "") + c(2, "대    표 :") + c(3, "(서명 또는 날인)") + "</hp:tr></hp:tbl></hp:run></hp:p>"
+    para = '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>서약자:                    대    표 :              (서명 또는 날인)</hp:t></hp:run></hp:p>'
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", tbl + para), tmp_path / "o.hwpx", v)
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "|서약자:|(주)가상|대    표 :|홍길동" in text and "(서명 또는 날인)" in text, text
+    assert re.search(r"서약자: \(주\)가상\s+대    표 : 홍길동\s+\(서명 또는 날인\)", text), text

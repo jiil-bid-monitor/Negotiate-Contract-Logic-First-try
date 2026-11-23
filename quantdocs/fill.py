@@ -186,7 +186,7 @@ _SENTENCE = re.compile(r"^(?:[※*＊]|주\))|(?:다|함|음|요|것|바람|기�
 _SKIP_LABEL = re.compile(r"주민|대리인|담당자|성명$|수신|발주|휴대")  # 휴대폰 = 대리인·담당자 개인 번호
 
 
-_SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|직인|날인)[)）]?$")
+_SEAL_ONLY = re.compile(r"^[(（]?(?:인|서명|서명또는인|인또는서명|직인|날인|서명또는날인|날인또는서명)[)）]?$")  # '(서명 또는 날인)'(11/23)
 _INLINE_LABELS = {"TEL": "전화번호", "Tel": "전화번호", "전화": "전화번호", "전화번호": "전화번호",
                   "FAX": "팩스번호", "Fax": "팩스번호", "팩스": "팩스번호", "팩스번호": "팩스번호", "FAX번호": "팩스번호", "Fax번호": "팩스번호", "E-mail": "이메일", "Email": "이메일", "이메일": "이메일",
                   "업태": "업태", "종목": "종목"}
@@ -791,6 +791,8 @@ def _other_party_cells(xml: str) -> list[tuple[int, int]]:
     return out
 
 
+_SIGN_REP = re.compile(r"대표[:：]")  # 서명 줄 '대 표 :'(자·이사 없이, 쌍점 있음 — 11/23)
+_SIGNER_LAB = re.compile(r"(?:서약자|서약인|확약자|각서인|신청인|신청자|제안자|입찰자|제출자)[:：]?")
 _SEAL_TAIL = r"(?:[(（](?:인|서명)[^()（）]{0,8}[)）]|[\u327f\U000F0000-\U000FFFFD])"  # '(인)'·'(인 또는 서명)'·도장 글자 ㉿(한글 기호 글꼴은 사용자 영역 문자, 11/06 청주 신청서)
 # 쌍점 없이 이름표만 있는 줄 — 이런 줄이 둘 이상 잇달아 있을 때만(서식 21 '주  소 / 상  호 / 대표자')
 _BARE_LABELS = {"주소": "주소", "소재지": "주소", "상호": "회사명", "업체명": "회사명", "회사명": "회사명",
@@ -1551,6 +1553,27 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         # 예전 규칙은 '○○○회사 대표 ○○○'처럼 자리표시가 앞인 한 줄만 알았음). 회사 줄은 서약자·신청인 등 이름표가 붙을 때만,
         # 대표 줄은 같은 줄이나 바로 앞 두 줄 안에서 회사 줄을 채웠을 때만(봉투 예시 '대표이사 ○○○ (인)'은 그대로 — 11/04 결정)
         signer = r"(?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)\s*[:：]?"
+        # '서약자:          대    표 :          (서명 또는 날인)'(11/23 사용자 — 띄어쓰기 무시하고 서명란에 '대표'가 있으면 대표자 성함):
+        # 서약자 뒤 = 회사명, '대 표 :' 뒤 = 대표자. 한 글 조각 안에 있을 때만(빈칸·탭)
+        seal2 = r"(?:" + _SEAL_TAIL + r"|[(（]\s*서\s*명\s*또\s*는\s*날\s*인\s*[)）])"
+        if re.fullmatch(rf"\s*{signer}\s+대\s*표\s*[:：]\s+{seal2}\s*", text) and _value("대표자", vault):
+            company, name = _value("회사명", vault), _value("대표자", vault)
+
+            def two(mm):
+                body = mm.group(2)
+                m2 = re.fullmatch(rf"(\s*{signer})([ \t]+)(대\s*표\s*[:：])([ \t]+)({seal2}.*)", body, re.S)
+                if not m2:
+                    return mm.group(0)
+                g1 = " " * max(2, len(m2.group(2)) - _span(company) - 1) if company else m2.group(2)
+                g2 = " " * max(2, len(m2.group(4)) - _span(name) - 1)
+                body = (m2.group(1) + (" " + _mark(company) if company else "") + g1 + m2.group(3) + " " + _mark(name) + g2 + m2.group(5))
+                return mm.group(1) + body + mm.group(3)
+            seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", two, xml[s:e], flags=re.S)
+            if seg != xml[s:e]:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 → {company} · 대표 {name}")
+                continue
         co_lab = r"(?:회\s*사\s*명|업\s*체\s*명|상\s*호|회\s*사)\s*[:：]?"
         rep_lab = r"대\s*표(?:\s*자|\s*이\s*사)?\s*[:：]?"
         co_ph = re.fullmatch(rf"\s*{signer}\s*{co_lab}\s*{_PH}\s*(?:{rep_lab}\s*{_PH}\s*(?:{_SEAL_TAIL})?\s*)?", text)
@@ -3320,6 +3343,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if sign_only and _row_group(cells, c) != "신청인":
                         continue
                     key = _label_key(c.text)
+                    # 한 줄 서명 표 '서약자: | __ | 대 표 : | (서명 또는 날인)'(11/23 사용자: 띄어쓰기 무시하고 서명란에 '대표'가 있으면 대표자 성함) —
+                    # '대 표 :' 칸 = 대표자, 같은 줄 서약자·신청인 등 칸 = 회사명(대표자 이름이 두 번 들어가지 않게)
+                    row_rep = any(o.row == c.row and _SIGN_REP.fullmatch(_sq(o.text)) for o in cells)
+                    if row_rep and _SIGN_REP.fullmatch(_sq(c.text)):
+                        key = "대표자"
+                    elif row_rep and key == "대표자" and _SIGNER_LAB.fullmatch(_sq(c.text)):
+                        key = "회사명"
                     # 왼쪽 세로 묶음 칸('대 표 자' | 성명 / 주소 / 연락처)의 사람 칸(11/06 제보: 청주 위임장 대표자 성명·연락처가 빔)
                     group = _row_group(cells, c)
                     if group == "대표자":

@@ -370,6 +370,9 @@ body {
 .docbell-pop ul { list-style: none; margin: 0; padding: 0; }
 .docbell-pop li { padding: 8px 0; border-top: 1px solid var(--line); word-break: keep-all; }
 .docbell-pop li:first-child { border-top: 0; }
+.docbell-pop li.judge-item { cursor: pointer; }
+.docbell-pop li.judge-item:hover .name { color: var(--brand); text-decoration: underline; }
+#judgeBellPop ul { max-height: 60vh; overflow: auto; }
 .docbell-pop .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .docbell-pop .name { font-weight: 600; color: var(--ink-strong); }
 .docbell-pop .dd { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -1475,6 +1478,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <p class="corpus-sum" id="corpusSum" hidden>과거 실적을 불러오는 중…</p>
     </div>
 
+    <div class="docbell" id="judgeBell" hidden>
+      <button type="button" id="judgeBellBtn" aria-haspopup="true" aria-expanded="false" title="판단할 공고 (텔레그램 보고에 나간 공고)">📋<span class="n" id="judgeBellN"></span></button>
+      <div class="docbell-pop" id="judgeBellPop" hidden></div>
+    </div>
     <div class="docbell" id="docBell" hidden>
       <button type="button" id="docBellBtn" aria-haspopup="true" aria-expanded="false" title="회사 서류 갱신 알림">🔔<span class="n" id="docBellN"></span></button>
       <div class="docbell-pop" id="docBellPop" hidden></div>
@@ -3197,6 +3204,7 @@ async function loadParticipation() {
     return;
   }
   refreshCards("part");
+  renderJudgeBell();
 }
 
 function myName() {
@@ -3378,6 +3386,7 @@ async function postParticipation(box, payload) {
     if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
     participation[box.dataset.part] = data.participation;
     refreshCards("part", true);
+    renderJudgeBell();  // 판단하면 📋 숫자가 바로 줄어듦
     return true;
   } catch (err) {
     alert(`저장 실패 — ${err.message}`);
@@ -3651,21 +3660,26 @@ $("logList").addEventListener("click", (ev) => {
   // 지금 공고 목록에 없는 공고(갈 카드가 없음)는 그 줄에서 참가·보류·불참을 펼친다
   const here = btn.closest(".log-row").querySelector(".log-judge");
   if (here) return void (here.hidden = !here.hidden);
+  gotoNotice(btn.dataset.goto);
+});
+/** 실제 공고 탭의 그 공고 카드로 — 판단 기록 '판단하기'·상단 📋 알림이 같이 씀. 카드가 없으면 false */
+function gotoNotice(no) {
   showTab("live");
   // 거르는 조건 때문에 카드가 숨어 있으면 조건을 풀고 다시 그린다
-  let box = document.querySelector(`.part[data-part="${CSS.escape(btn.dataset.goto)}"]`);
+  let box = document.querySelector(`.part[data-part="${CSS.escape(no)}"]`);
   if (!box) {
     for (const k of Object.keys(filters)) filters[k] = "all";
     $("liveQ").value = "";
     applyFilters();
-    box = document.querySelector(`.part[data-part="${CSS.escape(btn.dataset.goto)}"]`);
+    box = document.querySelector(`.part[data-part="${CSS.escape(no)}"]`);
   }
   const card = box?.closest(".notice");
-  if (!card) return;
+  if (!card) return false;
   card.scrollIntoView({ block: "center" });
   card.classList.add("just-promoted");
   setTimeout(() => card.classList.remove("just-promoted"), 2500);
-});
+  return true;
+}
 
 // ── 제외된 공고 · 공고 추적 ─────────────────────────────────────
 let exData = null;
@@ -4900,17 +4914,51 @@ function wireDocs(root) {  // 종 창·관리 창 같이 — 파일 고르기·�
   });
 }
 wireDocs($("docBellPop"));
-$("docBellBtn").onclick = (e) => {
-  e.stopPropagation();
-  const pop = $("docBellPop");
-  pop.hidden = !pop.hidden;
-  $("docBellBtn").setAttribute("aria-expanded", String(!pop.hidden));
-};
-document.addEventListener("click", (e) => {
-  // composedPath — 누른 버튼이 그 사이 다시 그려져 빠져도 창 안 클릭으로 봄
-  if (!e.composedPath().includes($("docBell"))) { $("docBellPop").hidden = true; $("docBellBtn").setAttribute("aria-expanded", "false"); }
+// 📋 판단할 공고 — 텔레그램 매일·주간 보고에 나간 공고 중 아직 판단 안 한 것(마감 전, 사전규격 빼고 — 판단 기록 '미판단'과 같은 규칙).
+// 텔레그램을 잘 안 봐서 웹앱에서 보이게(2026-11-23 사용자 결정 — 종과 아이콘 따로, 판단하면 숫자가 줄어듦, 팀 전체 기준)
+function renderJudgeBell() {
+  const todo = Object.values(participation).filter((p) => logStatusOf(p) === "미판단")
+    .sort((a, b) => deadlineAt(a.meta?.deadline) - deadlineAt(b.meta?.deadline));
+  $("judgeBell").hidden = !todo.length && !Object.values(participation).some((p) => p.reports?.length);
+  $("judgeBellN").textContent = todo.length;
+  $("judgeBellN").hidden = !todo.length;
+  const last = Object.values(participation).flatMap((p) => p.reports || []).map((r) => (r.date || "").slice(0, 10)).sort().at(-1);
+  const md = (d) => d ? `${+d.slice(5, 7)}/${+d.slice(8, 10)}` : "";
+  $("judgeBellPop").innerHTML = (todo.length ? `<h3>판단할 공고 ${todo.length}건</h3>` : "<h3>판단할 공고가 없습니다</h3>")
+    + `<p class="row2">텔레그램 보고에 나간 공고 중 아직 판단 안 한 것 · 마감 빠른 순${last ? ` · 마지막 보고 ${md(last)}` : ""}</p>`
+    + "<ul>" + todo.map((p) => {
+      const m = p.meta || {}, left = Math.ceil((deadlineAt(m.deadline) - Date.now()) / 86400000);
+      const rep = (p.reports.at(-1)?.date || "").slice(0, 10);
+      return `<li class="judge-item" data-goto-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span>`
+        + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span></div>`
+        + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
+    }).join("") + "</ul>"
+    + (todo.length ? `<p class="how">공고를 누르면 실제 공고 탭의 그 카드로 갑니다 — 참가·보류·불참을 누르면 숫자가 줄어듭니다.</p>` : "");
+}
+$("judgeBellPop").addEventListener("click", (ev) => {
+  const li = ev.target.closest("[data-goto-no]");
+  if (!li) return;
+  $("judgeBellPop").hidden = true;
+  if (!gotoNotice(li.dataset.gotoNo)) {  // 지금 목록(마지막 수집)에 없는 공고 — 공고번호로 찾기 칸에
+    $("liveQ").value = li.dataset.gotoNo;
+    applyFilters();
+  }
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("docBellPop").hidden = true; });
+for (const [bell, btn, pop] of [["docBell", "docBellBtn", "docBellPop"], ["judgeBell", "judgeBellBtn", "judgeBellPop"]]) {
+  $(btn).onclick = (e) => {
+    e.stopPropagation();
+    const open = $(pop).hidden;
+    for (const other of ["docBellPop", "judgeBellPop"]) $(other).hidden = true;  // 하나만 열림
+    $(pop).hidden = !open;
+    $(btn).setAttribute("aria-expanded", String(open));
+  };
+  document.addEventListener("click", (e) => {
+    // composedPath — 누른 버튼이 그 사이 다시 그려져 빠져도 창 안 클릭으로 봄
+    if (!e.composedPath().includes($(bell))) { $(pop).hidden = true; $(btn).setAttribute("aria-expanded", "false"); }
+  });
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("docBellPop").hidden = true; $("judgeBellPop").hidden = true; } });
+renderJudgeBell();
 loadDocBell();
 setInterval(loadDocBell, 10 * 60 * 1000);
 </script>

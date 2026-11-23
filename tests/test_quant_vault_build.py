@@ -4515,14 +4515,18 @@ def test_column_head_row_values_go_below(tmp_path: Path):
                                            f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
     rows = [[c(0, 0, "업체명"), c(1, 0, "", 3)],
             [c(0, 1, "대표자", 1, 2), c(1, 1, "성 명"), c(2, 1, "생년월일"), c(3, 1, "전화번호(회사) :")],
-            [c(1, 2, ""), c(2, 2, ""), c(3, 2, "")]]
+            [c(1, 2, ""), c(2, 2, ""), c(3, 2, "")],
+            [c(0, 3, "연락처", 1, 2), c(1, 3, "전화번호(휴대폰)"), c(2, 3, "전자메일"), c(3, 3, "")],
+            [c(1, 4, ""), c(2, 4, ""), c(3, 4, "")]]
     other = [[c(0, 0, "업체명"), c(1, 0, "대표자"), c(2, 0, "주 소")], [c(0, 1, ""), c(1, 1, ""), c(2, 1, "")]]
     tbl = lambda rs: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rs) + "</hp:tbl></hp:run></hp:p>"
     v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 어딘가 1", "전화번호": "033-111-2222",
-                              "대표자 주민등록번호": "650312-1******"})
+                              "이메일": "a@b.c", "대표자 주민등록번호": "650312-1******"})
     fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", tbl(rows) + tbl(other)), tmp_path / "o.hwpx", v)
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
     assert "|전화번호(회사) :|홍길동|1965. 03. 12.|033-111-2222|" in text, text
+    # 연락처 줄(11/23 사용자 결정): 휴대폰 = 회사 전화, 전자메일 = 회사 이메일
+    assert "|전화번호(휴대폰)|전자메일|033-111-2222|a@b.c|" in text, text
     assert "|업체명|대표자|주 소|" in text and text.count("홍길동") == 1 and "강원 어딘가 1" not in text, text
 
 

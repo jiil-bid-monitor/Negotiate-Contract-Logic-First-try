@@ -166,7 +166,7 @@ LABELS: list[tuple[tuple[str, ...], str]] = [
     (("전화", "TEL", "Tel"), "전화번호"),
     (("팩스", "FAX", "Fax", "fax"), "팩스번호"),
     (("홈페이지",), "홈페이지"),
-    (("E-mail", "E-Mail", "e-mail", "Email", "EMAIL", "E-MAIL", "이메일", "전자우편"), "이메일"),
+    (("E-mail", "E-Mail", "e-mail", "Email", "EMAIL", "E-MAIL", "이메일", "전자우편", "전자메일"), "이메일"),  # '전자메일'(11/23 서식 29 연락처 줄)
     (("회사설립", "설립년", "설립연", "설립일", "개업"), "설립일"),
     (("자본금",), "자본금"),
     (("총직원수", "총종업원수", "종업원수", "직원수", "상시근로자수"), "종업원 수"),  # '총직원수 | 명'(11/05 사용자 요청)
@@ -3149,6 +3149,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             and (group == "대표자" or _sq(c.text).startswith("대표자")
                                  or any(o.row == c.row and o is not c and re.fullmatch(r"대표자(?:명|성명)?|대표이사|대표", _sq(o.text)) for o in cells)):
                         key = "대표자 휴대폰"
+                    if key is None and c.start in col_heads and group != "대리인" and c.row not in agent_rows \
+                            and re.fullmatch(r"(?:전화번호|연락처)?\(?(?:휴대(?:폰|전화)(?:번호)?|핸드폰)\)?", _sq(c.text)):
+                        # 이름표 줄 '전화번호(휴대폰) | 전자메일 / __ | __'(11/23 사용자 결정: 서식 29 신청인 연락처) — 휴대폰 칸 = 회사 전화
+                        # (11/20 '대표님 개인 번호는 어느 서식에도 안 넣음 — 휴대폰 칸은 회사 전화'와 같음)
+                        key = "전화번호"
                     if key is None and _sq(c.text) == "사업명" and (sub_head is not None or any(re.match(r"서약자", _sq(x.text)) for x in cells)):
                         key = "_title"  # 보안특약 서약서 '사 업 명 | __'(11/13 사용자 요청) — 실적증명서의 '사업명'(실적 이름)과 달리 서약 표에서만 공고명
                     applicant = False

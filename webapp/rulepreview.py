@@ -43,6 +43,7 @@ class Change:
     remove_hard: list[str] = field(default_factory=list)
     keyword_work: list[str] = field(default_factory=list)  # "통신=공사" — 그 관심 키워드를 그 업무 공고에서만(11/23)
     license_work: list[str] = field(default_factory=list)  # "공사" — 보유 면허 경로를 그 업무 공고에서만(11/23)
+    license_keep: list[str] = field(default_factory=list)  # 위 한정의 예외 낱말(없으면 설정 licenseRouteKeepWords)
 
     def empty(self) -> bool:
         return not any(vars(self).values())
@@ -51,7 +52,8 @@ class Change:
         names = {"add_keyword": "관심 키워드 추가", "remove_keyword": "관심 키워드 삭제",
                  "add_exclude": "제외 키워드 추가", "remove_exclude": "제외 키워드 삭제",
                  "add_hard": "무조건 제외 추가", "remove_hard": "무조건 제외 삭제",
-                 "keyword_work": "관심 키워드 업무 한정", "license_work": "보유 면허 경로 업무 한정"}
+                 "keyword_work": "관심 키워드 업무 한정", "license_work": "보유 면허 경로 업무 한정",
+                 "license_keep": "보유 면허 경로 예외 낱말"}
         return " · ".join(f"{names[k]} {', '.join(v)}" for k, v in vars(self).items() if v)
 
 
@@ -77,12 +79,18 @@ def apply_change(config: S.ScreenConfig, change: Change) -> S.ScreenConfig:
                    exclude_keywords=_edit(config.exclude_keywords, change.add_exclude, change.remove_exclude),
                    hard_exclude_keywords=_edit(config.hard_exclude_keywords, change.add_hard, change.remove_hard),
                    keyword_work_types={**config.keyword_work_types, **_work_map(change.keyword_work)},
-                   license_work_types=list(change.license_work) or list(config.license_work_types))
+                   license_work_types=list(change.license_work) or list(config.license_work_types),
+                   license_keep_words=list(change.license_keep) or list(config.license_keep_words))
 
 
 def _license_kept(c: dict[str, Any], cfg: S.ScreenConfig) -> bool:
     """수집 때 보유 면허 경로로 남은 공고가 이 규칙에서도 그 경로로 남나 — 업무 한정(11/23)이 있으면 그 업무만."""
-    return bool(c.get("license_match")) and (not cfg.license_work_types or (c.get("work_type") or "") in cfg.license_work_types)
+    if not c.get("license_match"):
+        return False
+    if not cfg.license_work_types or (c.get("work_type") or "") in cfg.license_work_types:
+        return True
+    title = S._squash(c.get("title") or "")
+    return any(S._squash(w) and S._squash(w) in title for w in cfg.license_keep_words)
 
 
 def notice_of(c: dict[str, Any]) -> Notice:
@@ -180,12 +188,14 @@ def main(argv: list[str] | None = None) -> int:
                     help="그 관심 키워드를 그 업무 공고에서만 셈 (예: 통신=공사, 여러 업무는 쉼표)")
     ap.add_argument("--license-work", action="append", default=[], metavar="업무",
                     help="보유 면허 경로를 그 업무 공고에서만 (예: 공사)")
+    ap.add_argument("--license-keep", action="append", default=[], metavar="낱말",
+                    help="위 한정의 예외 — 공고명에 이 낱말이 있으면 다른 업무도 받음(없으면 설정 licenseRouteKeepWords)")
     ap.add_argument("--db", default=os.environ.get("WEBAPP_DB", "data/webapp.sqlite3"))
     ap.add_argument("--run", type=int, help="수집 결과 번호 (없으면 최신)")
     ap.add_argument("--out", default=os.environ.get("OUTPUT_DIR", "output"))
     a = ap.parse_args(argv)
     change = Change(a.add_keyword, a.remove_keyword, a.add_exclude, a.remove_exclude, a.add_hard, a.remove_hard,
-                    a.keyword_work, a.license_work)
+                    a.keyword_work, a.license_work, a.license_keep)
     if change.empty():
         ap.error("바꿀 조건을 하나 이상 주세요 (예: --add-exclude 영인)")
     db = Path(a.db)

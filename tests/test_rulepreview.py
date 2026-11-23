@@ -67,6 +67,12 @@ class RulePreviewTest(unittest.TestCase):
         self.assertNotIn("R8", got)  # 공사의 '통신'은 그대로
         self.assertNotIn("R9", got)  # 공사 공고는 보유 면허로 그대로
         self.assertNotIn("R2", got)
+        # 예외 낱말(전시·미디어 등)이 공고명에 있으면 용역도 보유 면허로 남음(11/23 — 미디어파사드·전시연출 용역)
+        pay["candidates"].append(_row("R10", "옛 전남도청 미디어파사드 제작 및 설치", True, license_match=["정보통신공사업(0036)"]))
+        rows = R.report(R.compare(pay, self.cfg, R.apply_change(self.cfg, R.Change(license_work=["공사"], license_keep=["미디어", "전시"]))), {})
+        got = {r[1] for r in rows}
+        self.assertIn("R4", got)
+        self.assertNotIn("R10", got)
 
     def test_cli_writes_csv(self):
         d = Path(tempfile.mkdtemp())

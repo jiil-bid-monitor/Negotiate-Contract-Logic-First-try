@@ -1141,7 +1141,8 @@ class TestWorkTypeRules20261123(unittest.TestCase):
         from dataclasses import replace as _replace
         config = load_config()
         if on:
-            config = _replace(config, screen=_replace(config.screen, keyword_work_types={"통신": ["공사"]}, license_work_types=["공사"]))
+            config = _replace(config, screen=_replace(config.screen, keyword_work_types={"통신": ["공사"]}, license_work_types=["공사"],
+                                                      license_keep_words=["전시", "연출", "미디어파사드"]))
         n = notice_from_raw(fixtures.notice("R26BK09990002", title=title, award=fixtures.QUALIFY, cntrctCnclsMthdNm="제한경쟁"), work)
         groups = {"R26BK09990002": [qualify.LicenseGroup("1", rows=rows)]} if rows else {}
         return build_candidates([n], config, groups, {}, NOW, RunStats())
@@ -1154,6 +1155,8 @@ class TestWorkTypeRules20261123(unittest.TestCase):
     def test_license_route_only_for_construction(self):
         rows = [["정보통신공사업/0036"]]
         self.assertEqual(self._run("2027년 경비함정 레이더 정밀점검 용역", "용역", rows), [])
+        # 예외 낱말 — 미디어파사드 제작·설치 용역은 보유 면허로 그대로(11/23 미리 보기에서 빠졌던 지일 일)
+        self.assertEqual(len(self._run("옛 전남도청 미디어파사드 제작 및 설치", "용역", rows)), 1)
         self.assertEqual(len(self._run("2027년 경비함정 레이더 정밀점검 용역", "용역", rows, on=False)), 1)
         got = self._run("지방도 낙석방지책 설치공사", "공사", [["금속창호·지붕건축물조립공사업/4991"]])
         self.assertEqual(len(got), 1)

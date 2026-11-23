@@ -117,5 +117,17 @@
   "_keywordWorkTypes_comment": "관심 키워드를 이 업무(공사·물품·용역) 공고에서만 셈 — 예 {\"통신\": [\"공사\"]}. 비면 모든 업무. 2026-11-23 판단 기록 26건 근거(통신 참가 3건 모두 공사) — 서버 PC 영향 미리 보기(`py -m webapp.rulepreview --keyword-work 통신=공사`)로 확인한 뒤 켬.",
   "keywordWorkTypes": {},
   "_licenseRouteWorkTypes_comment": "'보유 면허' 경로(키워드 없이 공사 면허로 수집)를 이 업무 공고에서만 — 예 [\"공사\"]. 비면 모든 업무(11/12 처음 규칙). 2026-11-23 근거: 보유 면허로 들어온 12건 모두 불참, 11건이 물품·용역 장비 납품·유지보수 — 미리 보기(`--license-work 공사`)로 확인한 뒤 켬.",
-  "licenseRouteWorkTypes": []
+  "licenseRouteWorkTypes": [],
+  "_licenseRouteKeepWords_comment": "licenseRouteWorkTypes 한정의 예외 — 공고명에 이 낱말이 있으면 물품·용역도 보유 면허 경로로 받음(2026-11-23 미리 보기: 옛 전남도청 미디어파사드 제작·설치, 예술의전당 전시연출 설계·제작·설치 용역이 빠졌음). licenseRouteWorkTypes가 비면 쓰이지 않음. '미디어'만 두면 '멀티미디어 강의실 빔프로젝터 구입'(불참)에도 걸려 미디어파사드·미디어아트로 좁힘.",
+  "licenseRouteKeepWords": [
+    "전시",
+    "연출",
+    "미디어파사드",
+    "미디어아트",
+    "실감",
+    "콘텐츠",
+    "체험",
+    "조형",
+    "놀이"
+  ]
 }

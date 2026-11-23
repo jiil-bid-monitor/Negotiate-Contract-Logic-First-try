@@ -64,6 +64,9 @@ class ScreenConfig:
     # '보유 면허' 경로(키워드 없이 공사 면허로 수집)를 이 업무 공고에서만 — ["공사"](2026-11-23: 보유 면허로 들어온 12건이 모두 불참,
     # 그중 11건이 정보통신공사업을 요구하는 물품·용역의 장비 납품·유지보수). 비면 모든 업무(11/12 처음 규칙)
     license_work_types: list[str] = field(default_factory=list)
+    # 위 업무 한정의 예외 — 공고명에 이 낱말이 있으면 그 밖 업무(물품·용역)도 보유 면허 경로로 받음(2026-11-23 미리 보기: 옛 전남도청 미디어파사드
+    # 제작·설치, 예술의전당 전시연출 설계·제작·설치 용역이 같이 빠졌음 — 지일 일)
+    license_keep_words: list[str] = field(default_factory=list)
     product_codes: list[dict[str, str]] = field(default_factory=list)
     industry_codes: list[dict[str, str]] = field(default_factory=list)
     # 제외 키워드와 관심 키워드가 공고명에 함께 있으면 빼지 않고 "검토 필요"로 남긴다(2026-09-30 사용자 결정 —
@@ -370,8 +373,9 @@ def license_route(notice: Notice, config: ScreenConfig, licenses: list[str], mis
     외주 추천 낙석방지책 '정비'공사가 그 낱말로 빠졌었음."""
     if not licenses or missed.excluded_by not in ("미매칭", "제외키워드"):
         return None
-    if config.license_work_types and notice.work_type not in config.license_work_types:
-        return None  # 이 업무(물품·용역 등) 공고는 면허만으로 안 받음(2026-11-23)
+    if config.license_work_types and notice.work_type not in config.license_work_types \
+            and not any(_squash(w) and _squash(w) in _squash(notice.title) for w in config.license_keep_words):
+        return None  # 이 업무(물품·용역 등) 공고는 면허만으로 안 받음 — 공고명에 전시·연출 등 예외 낱말이 있으면 받음(2026-11-23)
     if _match_exclude(notice, config.hard_exclude_keywords, config.exclude_exceptions):
         return None
     evidence = _overseas_exhibition_evidence(notice)

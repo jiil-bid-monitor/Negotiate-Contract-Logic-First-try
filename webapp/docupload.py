@@ -20,6 +20,7 @@ from . import docexpiry
 
 _DATE = re.compile(r"(\d{4})\D?(\d{1,2})\D?(\d{1,2})")
 FORCE = {"force_reply": True, "selective": True}
+REPLY = {"force_reply": True}  # 버튼에서 시작한 질문 — 누른 사람 메시지가 없어 selective를 못 씀
 
 
 def kinds(folder: Path) -> list[str]:
@@ -47,19 +48,6 @@ def parse_expiry(text: str) -> date | None | str:
         return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
     except ValueError:
         return ""
-
-
-def parse_dates(text: str, targets: list[tuple[str, date]]) -> tuple[list[tuple[str, date]], list[str]]:
-    """'번호 날짜' 줄들 → ([(종류, 새 만료일)], [못 읽은 줄]) — /expiry 한꺼번에 고치기(2026-11-23 사용자 요청)."""
-    pairs, bad = [], []
-    for line in filter(None, (t.strip() for t in (text or "").splitlines())):
-        m = re.match(r"^(\d{1,2})\s*[.)]?\s+(.+)$", line)
-        end = parse_expiry(m.group(2)) if m else ""
-        if not m or not isinstance(end, date) or not 1 <= int(m.group(1)) <= len(targets):
-            bad.append(line)
-            continue
-        pairs.append((targets[int(m.group(1)) - 1][0], end))
-    return pairs, bad
 
 
 def _norm(text: str) -> str:
@@ -142,19 +130,6 @@ class Uploader:
                 chat, "목록에서 뺄 서류를 고르세요. (파일은 지우지 않고 [이전 서류]로 옮깁니다)", msg.get("message_id"),
                 {"inline_keyboard": _grid(opts, "r") + [[{"text": "취소", "callback_data": "r:x"}]]})
             return True
-        if re.match(r"^/expiry(@\w+)?$", text):
-            today = self.today()
-            targets = [(k, d) for k, d in docexpiry.read_docs(self.folder()) if (d - today).days <= docexpiry.ALERT_MONTH]
-            if not targets:
-                self._say(chat, "30일 안에 끝나거나 이미 지난 서류가 없습니다.", msg.get("message_id"))
-                return True
-            self.pending[chat] = {"step": "dates", "ask": None, "asks": set(), "targets": targets}
-            self.pending[chat]["ask"] = self._say(
-                chat, "<b>유효기간 한꺼번에 고치기</b>\n"
-                + "\n".join(f"{i}. {html.escape(k)} — {d}" for i, (k, d) in enumerate(targets, 1))
-                + "\n\n<b>이 메시지에 답장</b>으로 바뀐 서류만 한 줄씩 '번호 새 만료일'을 보내 주세요.\n"
-                "예)\n1 2027-11-20\n2 2027-11-19\n(그만두려면 답장으로 '취소')", msg.get("message_id"), FORCE)
-            return True
         doc = msg.get("document") or {}
         if not state or replied not in state["asks"]:
             return False
@@ -185,25 +160,27 @@ class Uploader:
                 return True
             self._save(chat, state, end, msg.get("message_id"))
             return True
-        if state["step"] == "dates":
-            pairs, bad = parse_dates(text, state["targets"])
-            if not pairs:
-                state["ask"] = self._say(chat, "한 줄도 못 읽었습니다. 예) 1 2027-11-20", msg.get("message_id"), FORCE)
+        if state["step"] == "setdate":
+            end = parse_expiry(text)
+            if not isinstance(end, date):
+                state["ask"] = self._say(chat, "날짜를 못 읽었습니다. 예) 2027-11-20", msg.get("message_id"), REPLY)
                 return True
             self.pending.pop(chat, None)
-            lines = []
-            for kind, end in pairs:
-                try:
-                    ok = docexpiry.set_cert(self.folder() / docexpiry.CERT_FILE, kind, end)
-                except OSError:
-                    lines.append(f"⚠ {html.escape(kind)} — 인증서갱신.xlsx가 열려 있어 못 고침(엑셀을 닫고 다시)")
-                    continue
-                lines.append(f"✓ {html.escape(kind)} → {end}" if ok else
-                             f"⚠ {html.escape(kind)} — 인증서갱신.xlsx에 없는 서류라 /upload 로 새 PDF를 넣어 주세요")
-            lines += [f"⚠ 못 읽은 줄: {html.escape(b)}" for b in bad]
-            self._say(chat, "\n".join(lines) + "\n\n/docs 로 확인할 수 있습니다.", msg.get("message_id"))
+            cert = self._cert(state["kind"], end)
+            self._say(chat, f"<b>{html.escape(state['kind'])}</b>" + (cert or
+                      " — 인증서갱신.xlsx에 없는 서류라 날짜를 못 고쳤습니다. 새 PDF를 /upload 로 올려 주세요."),
+                      msg.get("message_id"))
             return True
         return False
+
+    def ask_date(self, chat: str, kind: str) -> bool:
+        """'갱신 완료 → 다른 날짜 직접 입력' 버튼 — 새 만료일을 답장으로 받는다(2026-11-23). 담당자 방이 아니면 False."""
+        if chat not in self.chats:
+            return False
+        self.pending[chat] = {"step": "setdate", "ask": None, "asks": set(), "kind": kind}
+        self.pending[chat]["ask"] = self._say(chat, f"<b>{html.escape(kind)}</b> — 새 유효기간 끝나는 날을 "
+                                                    "<b>이 메시지에 답장</b>으로 보내 주세요. 예) 2027-11-20", None, REPLY)
+        return True
 
     def handle_callback(self, cb: dict) -> bool:
         msg = cb.get("message") or {}

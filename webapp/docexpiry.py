@@ -185,9 +185,57 @@ def apply_buttons(docs: list[tuple[str, date]], today: date, states: dict[str, s
     rows = [[{"text": f"상태 표시: {k}" + (f" ({STATES[states[apply_key(k, d)]][0]})" if apply_key(k, d) in states else ""),
               "callback_data": "a:" + _apply_id(k, d)}] for k, d in hits]
     if len(hits) >= 2:
-        rows.append([{"text": f"모두 {label}", "callback_data": f"s:all:{key}"} for key, (label, _) in STATES.items()]
-                    + [{"text": "모두 지우기", "callback_data": "s:all:x"}])
+        rows.append([{"text": f"모두 {label}", "callback_data": f"s:all:{key}"} for key, (label, _) in STATES.items()])
+        rows.append([{"text": "모두 갱신 완료", "callback_data": "e:all"}, {"text": "모두 표시 지우기", "callback_data": "s:all:x"}])
     return {"inline_keyboard": rows} if rows else None
+
+
+def plus_years(d: date, n: int) -> date:
+    try:
+        return d.replace(year=d.year + n)
+    except ValueError:  # 2월 29일
+        return d.replace(year=d.year + n, day=28)
+
+
+def find_doc(docs: list[tuple[str, date]], code: str) -> tuple[str, date] | None:
+    return next((hit for hit in docs if _apply_id(*hit) == code), None)
+
+
+def renew_callback(docs: list[tuple[str, date]], data: str, folder: Path, today: date | None = None,
+                   states_path: Path | None = None) -> tuple[str, dict | None] | None:
+    """'갱신 완료' 버튼(2026-11-23 사용자 요청 — 명령어 없이 버튼만): 'e:지문' = 1년·2년 연장 버튼을 보인다,
+    'e:지문:1|2' = 인증서갱신.xlsx 만료일을 그만큼 늘린다. 지문 대신 'all' = 버튼이 달린 서류 전부(바뀔 날짜를 먼저 보여 줌).
+    직접 입력('…:d')은 답장을 받아야 해서 봇(docupload)이 맡는다. 서류가 목록에 없으면 None."""
+    parts = data.split(":")
+    code, years = parts[1], (parts[2] if len(parts) > 2 else "")
+    if code == "all":
+        hits = _button_docs(docs, today or date.today(), load_states(states_path or APPLY_PATH))
+    else:
+        hits = [hit] if (hit := find_doc(docs, code)) else []
+    if not hits:
+        return None
+    if years not in ("1", "2"):
+        if code == "all":
+            return ("<b>모두 갱신 완료</b> — 새 만료일 (1년 연장 기준)\n"
+                    + "\n".join(f"· {html.escape(k)}: {d} → {plus_years(d, 1)}" for k, d in hits)
+                    + "\n\n맞으면 아래에서 고르세요.", {"inline_keyboard": [
+                        [{"text": "모두 1년 연장", "callback_data": "e:all:1"}, {"text": "모두 2년 연장", "callback_data": "e:all:2"}]]})
+        k, d = hits[0]
+        return f"<b>{html.escape(k)}</b> — 새 유효기간 끝나는 날을 고르세요. (지금 {d})", {"inline_keyboard": [
+            [{"text": f"1년 연장 → {plus_years(d, 1)}", "callback_data": f"e:{code}:1"}],
+            [{"text": f"2년 연장 → {plus_years(d, 2)}", "callback_data": f"e:{code}:2"}],
+            [{"text": "다른 날짜 직접 입력", "callback_data": f"e:{code}:d"}]]}
+    lines = []
+    for k, d in hits:
+        new = plus_years(d, int(years))
+        try:
+            ok = set_cert(folder / CERT_FILE, k, new)
+        except OSError:
+            lines.append(f"⚠ {html.escape(k)} — 인증서갱신.xlsx가 엑셀에서 열려 있어 못 고쳤습니다. 엑셀을 닫고 다시 눌러 주세요.")
+            continue
+        lines.append(f"✓ {html.escape(k)} → {new}" if ok else
+                     f"⚠ {html.escape(k)} — 인증서갱신.xlsx에 없는 서류라 날짜를 못 고쳤습니다. 새 PDF를 /upload 로 올려 주세요.")
+    return "\n".join(lines), None
 
 
 def apply_callback(docs: list[tuple[str, date]], data: str, path: Path | None = None,
@@ -209,6 +257,7 @@ def apply_callback(docs: list[tuple[str, date]], data: str, path: Path | None = 
     if kind == "a":
         return f"{name} — 지금 어떤 상태인가요?", {"inline_keyboard": [
             [{"text": label, "callback_data": f"s:{code}:{key}"} for key, (label, _) in STATES.items()],
+            [{"text": "갱신 완료 (새 날짜 넣기)", "callback_data": f"e:{code}"}],
             [{"text": "표시 지우기", "callback_data": f"s:{code}:x"}]]}
     states = load_states(path)
     for hit in hits:
@@ -267,6 +316,7 @@ def due_alert(docs: list[tuple[str, date]], today: date, sent: set[str],
     lines += ["", "갱신했으면 → /upload 로 새 서류를 보내 주세요",
               "   (만료일을 물어보고 인증서갱신.xlsx도 고칩니다)",
               "아직이면 → 아래 버튼으로 상태 표시 (신청해야 함 · 신청 중)",
+              "새 날짜만 바꾸면 되면 → 아래 버튼 → '갱신 완료'",
               "안 쓰는 서류면 → /remove 로 빼 주세요"]
     return "\n".join(lines), [key(k, d) for k, d in rows]
 

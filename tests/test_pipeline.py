@@ -1134,15 +1134,23 @@ class TestLicenseRoute20261112(unittest.TestCase):
 
 
 class TestWorkTypeRules20261123(unittest.TestCase):
+    def test_config_turned_on(self):
+        """11/23 사용자 '병합하고 켜줘' — keywords.json에서 켬."""
+        sc = load_config().screen
+        self.assertEqual(sc.keyword_work_types.get("통신"), ["공사"])
+        self.assertEqual(sc.license_work_types, ["공사"])
+        self.assertIn("미디어파사드", sc.license_keep_words)
+
     """2026-11-23 판단 기록 26건(제안요청서·과업지시서로 확인): '통신' 참가 3건은 모두 공사, 보유 면허로 들어온 12건은 모두 불참(11건 물품·용역
     장비 납품·유지보수) → keywordWorkTypes {"통신": ["공사"]}, licenseRouteWorkTypes ["공사"]. 설정은 미리 보기 뒤 켬(기본은 꺼짐 = 예전 그대로)."""
 
     def _run(self, title, work, rows=None, on=True):
         from dataclasses import replace as _replace
         config = load_config()
-        if on:
-            config = _replace(config, screen=_replace(config.screen, keyword_work_types={"통신": ["공사"]}, license_work_types=["공사"],
-                                                      license_keep_words=["전시", "연출", "미디어파사드"]))
+        # 켬 = 11/23 설정, 끔 = 예전(업무 한정 없음) — keywords.json 값과 상관없이 시험
+        config = _replace(config, screen=_replace(config.screen, keyword_work_types={"통신": ["공사"]} if on else {},
+                                                  license_work_types=["공사"] if on else [],
+                                                  license_keep_words=["전시", "연출", "미디어파사드"] if on else []))
         n = notice_from_raw(fixtures.notice("R26BK09990002", title=title, award=fixtures.QUALIFY, cntrctCnclsMthdNm="제한경쟁"), work)
         groups = {"R26BK09990002": [qualify.LicenseGroup("1", rows=rows)]} if rows else {}
         return build_candidates([n], config, groups, {}, NOW, RunStats())

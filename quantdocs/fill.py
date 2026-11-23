@@ -2639,9 +2639,10 @@ def _history_grid(cells: list[Cell]) -> tuple[Cell, Cell, list[int]] | None:
 
 
 def _merge_blank_history_area(xml: str, chars: "_Chars") -> str:
-    """'주요연혁' 이름표 옆·아래가 선 없는 빈 여백(안쪽 칸 경계가 모두 '없음' — 편집 화면에만 빨간 점선)이면 그 칸들을 하나로 합침
-    (11/23 사용자: '별도 표 없이 빈 여백이면 기존 규칙대로 「연도.월  내용」으로 채우면 되잖아' — 숨은 칸을 표로 보고 연월·내용 칸에 나눠 넣었음).
-    합친 칸 = 이름표 바로 오른쪽 칸 자리, 이름표 줄부터 빈 줄 끝까지(바깥 테두리는 각 변의 원래 칸 것). 그 뒤 연혁은 예전 규칙(오른쪽 빈 칸에 한 줄씩)."""
+    """'주요연혁' 이름표 옆·아래가 선 없는 빈 여백(안쪽 칸 경계가 모두 '없음' — 편집 화면에만 빨간 점선)이면 그 줄들을 **한 줄**로 줄이고
+    이름표 오른쪽에 넓은 칸 하나만 둠(11/23 사용자: '별도 표 없이 빈 여백이면 기존 규칙대로 「연도.월  내용」' → 처음엔 여러 줄에 걸친 합친 칸(rowSpan)으로
+    했더니 표가 쪽에서 나뉠 때 한글에서 깨짐 — '표 안에 기입해야지. 깨졌잖아'). 한 줄이라 한글이 글 길이에 맞춰 줄 높이를 늘리고 쪽에서도 그 줄을 나눔.
+    바깥 테두리는 각 변의 원래 칸 것(`_Chars.merged_border`). 그 뒤 연혁은 예전 규칙(오른쪽 빈 칸에 한 줄씩)."""
     for ts, te in reversed(_all_tables(xml)):
         cells = _cells(xml, (ts, te))
         for lab in cells:
@@ -2658,7 +2659,7 @@ def _merge_blank_history_area(xml: str, chars: "_Chars") -> str:
                     break
                 rows.append(r)
                 r += 1
-            if len(rows) < 2:
+            if len(rows) < 2 or any(c.rowspan > 1 and c.row < lab.row < c.row + c.rowspan for c in cells):
                 continue
             bid = lambda c: (re.search(r'borderFillIDRef="(\d+)"', xml[c.start:c.end]) or [None, ""])[1]
             area = [c for c in cells if c.row in rows and c.col >= right[0].col]
@@ -2666,24 +2667,49 @@ def _merge_blank_history_area(xml: str, chars: "_Chars") -> str:
                     [c for c in area if c.col != right[0].col and chars.border_type(bid(c), "left") not in ("", "NONE")]
             if inner:
                 continue  # 칸 사이 선이 보이는 진짜 표 — 줄마다 나눠 넣는 쪽(`_history_grid`)
-            first = right[0]
-            last_row = [c for c in area if c.row == rows[-1]]
-            new_bid = chars.merged_border(bid(first), bid(right[-1]), bid(first),
-                                          bid(min(last_row, key=lambda c: c.col)) if last_row else bid(first))
-            if new_bid is None:
+            last = sorted((c for c in cells if c.row == rows[-1]), key=lambda c: c.col)
+            lab_bid = chars.merged_border(bid(lab), bid(lab), bid(lab), bid(last[0]))
+            area_bid = chars.merged_border(bid(right[0]), bid(right[-1]), bid(right[0]), bid(last[1]) if len(last) > 1 else bid(right[0]))
+            if lab_bid is None or area_bid is None:
                 continue
-            seg = xml[first.start:first.end]
-            width = sum(int(re.search(r'cellSz\b[^>]*\bwidth="(\d+)"', xml[c.start:c.end]).group(1)) for c in right)
-            height = sum(int(re.search(r'cellSz\b[^>]*\bheight="(\d+)"', xml[c.start:c.end]).group(1))
-                         for c in area if c.col == first.col)
-            seg = re.sub(r'borderFillIDRef="\d+"', f'borderFillIDRef="{new_bid}"', seg, count=1)
-            seg = re.sub(r'(cellSpan\b[^>]*\bcolSpan=")\d+("[^>]*\browSpan=")\d+(")',
-                         lambda m: f"{m.group(1)}{sum(c.colspan for c in right)}{m.group(2)}{len(rows)}{m.group(3)}", seg, count=1)
-            seg = re.sub(r'(cellSz\b[^>]*\bwidth=")\d+("[^>]*\bheight=")\d+(")', lambda m: f"{m.group(1)}{width}{m.group(2)}{height}{m.group(3)}", seg, count=1)
-            for c in sorted((c for c in area if c is not first), key=lambda c: -c.start):
-                xml = xml[:c.start] + xml[c.end:]
-            xml = xml[:first.start] + seg + xml[first.end:]
-            return _merge_blank_history_area(xml, chars)  # 칸 위치가 바뀌었으니 처음부터 다시(다른 표·다른 연혁 칸)
+            size = lambda c, k: int(re.search(rf'cellSz\b[^>]*\b{k}="(\d+)"', xml[c.start:c.end]).group(1))
+            height = sum(size(c, "height") for c in cells if c.row in rows and c.col == lab.col)
+
+            def reshape(c: Cell, b: str, colspan: int, width: int) -> str:
+                seg = re.sub(r'borderFillIDRef="\d+"', f'borderFillIDRef="{b}"', xml[c.start:c.end], count=1)
+                seg = re.sub(r'(cellSpan\b[^>]*\bcolSpan=")\d+("[^>]*\browSpan=")\d+(")', lambda m: f"{m.group(1)}{colspan}{m.group(2)}1{m.group(3)}", seg, count=1)
+                return re.sub(r'(cellSz\b[^>]*\bwidth=")\d+("[^>]*\bheight=")\d+(")', lambda m: f"{m.group(1)}{width}{m.group(2)}{height}{m.group(3)}", seg, count=1)
+            new_lab = reshape(lab, lab_bid, lab.colspan, size(lab, "width"))
+            new_area = reshape(right[0], area_bid, sum(c.colspan for c in right), sum(size(c, "width") for c in right))
+            trs = _spans(xml, "tr", ts + 1, te)
+            own = [(a, b) for a, b in trs if not any(x < a and b < y for x, y in trs if (x, y) != (a, b))]
+            row_of = lambda a, b: int(re.findall(r'rowAddr="(\d+)"', xml[a:b])[-1]) if re.search(r'rowAddr="\d+"', xml[a:b]) else -1
+            tr_lab = next(((a, b) for a, b in own if row_of(a, b) == lab.row), None)
+            gone = [(a, b) for a, b in own if row_of(a, b) in rows[1:]]
+            if tr_lab is None or len(gone) != len(rows) - 1:
+                continue
+            open_tr = re.match(r"<[^>]+>", xml[tr_lab[0]:tr_lab[1]]).group(0)
+            ns = re.match(r"<([\w.-]+:)?tr\b", open_tr).group(1) or ""
+            row_xml = f"{open_tr}{new_lab}{new_area}</{ns}tr>"
+            drop = len(rows) - 1
+            tbl = xml[ts:te]
+            parts, pos = [], ts
+            for a, b in sorted([tr_lab] + gone):
+                parts.append(xml[pos:a])
+                if (a, b) == tr_lab:
+                    parts.append(row_xml)
+                pos = b
+            parts.append(xml[pos:te])
+            body = "".join(parts)
+            # 뒤 줄 번호를 줄인 줄 수만큼 당김, 표 줄 수도
+            tail_at = body.find(row_xml) + len(row_xml)
+            head, tail = body[:tail_at], body[tail_at:]
+            tail = re.sub(r'rowAddr="(\d+)"', lambda m: f'rowAddr="{int(m.group(1)) - drop if int(m.group(1)) > rows[-1] else int(m.group(1))}"', tail)
+            body = head + tail
+            body = re.sub(r'(<(?:[\w.-]+:)?tbl\b[^>]*\browCnt=")(\d+)(")', lambda m: f"{m.group(1)}{int(m.group(2)) - drop}{m.group(3)}", body, count=1)
+            del tbl
+            xml = xml[:ts] + body + xml[te:]
+            return _merge_blank_history_area(xml, chars)  # 칸 위치가 바뀌었으니 처음부터 다시
     return xml
 
 

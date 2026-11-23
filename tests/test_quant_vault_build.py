@@ -4669,12 +4669,12 @@ def test_history_blank_area_merged_and_lines(tmp_path: Path):
     out = zipfile.ZipFile(tmp_path / "o.hwpx")
     sec, head = out.read("Contents/section0.xml").decode(), out.read("Contents/header.xml").decode()
     merged = re.search(r'<hp:tc borderFillIDRef="(\d+)">((?:(?!</hp:tc>).)*colAddr="2" rowAddr="0"(?:(?!</hp:tc>).)*)</hp:tc>', sec, re.S)
-    assert merged and 'colSpan="6" rowSpan="3"' in merged.group(2), sec
+    assert merged and 'colSpan="6" rowSpan="1"' in merged.group(2), sec  # 여러 줄에 걸친 칸(rowSpan)은 한글에서 쪽 나눔 때 깨져 한 줄로(11/23)
     lines = [re.sub(r"<[^>]+>", "", p) for p in re.findall(r"<hp:p\b.*?</hp:p>", merged.group(2), re.S)]
     assert lines[:2] == ["2009.09  법인 설립", "2012.08  사업자 등록"] and len(lines) == 4, lines
-    assert sec.count("<hp:tc ") == 4  # 합친 칸 1 + 이름표 열 3
+    assert sec.count("<hp:tc ") == 2 and sec.count("<hp:tr>") == 1 and 'rowCnt="1"' in sec  # 이름표 + 넓은 칸 하나, 줄 하나
     new = re.search(rf'<hh:borderFill id="{merged.group(1)}">.*?</hh:borderFill>', head, re.S).group(0)
-    assert 'rightBorder type="SOLID"' in new and 'topBorder type="SOLID"' in new and 'bottomBorder type="SOLID"' in new and 'borderFills itemCnt="6"' in head
+    assert 'rightBorder type="SOLID"' in new and 'topBorder type="SOLID"' in new and 'bottomBorder type="SOLID"' in new and 'borderFills itemCnt="7"' in head  # 이름표 칸·넓은 칸 테두리 2개 더함
 
 
 def test_column_head_row_values_go_below(tmp_path: Path):

@@ -4533,6 +4533,21 @@ def test_wrapped_value_prefix_two_spaces_per_hangul(tmp_path: Path):
     assert "\u3000" not in lines[i + 1]
     # 앞 빈칸 4 + 주(빈칸 2) + 빈칸 4 + 소(빈칸 2) + ' : '(빈칸 1 + 쌍점 어림 1 + 빈칸 1)
     assert pre == 4 + 2 + 4 + 2 + 3, (pre, lines[i + 1])
+def test_rep_group_with_paren_contact(tmp_path: Path):
+    """11/23 사용자 지적: 위임장 '대표자 (법인)' 세로 묶음 아래 '업체명 | (주)지일 | 연락처 | __' — 연락처가 빔
+    (묶음 칸 이름에 '(법인)'이 붙어 대표자 묶음으로 못 알아봄). 대표자 연락처 = 회사 전화, 대리인 묶음 연락처는 그대로 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+                                           f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "대표자 (법인)", 1, 2), c(1, 0, "성 명 (법인명)"), c(2, 0, ""), c(3, 0, "업체명"), c(4, 0, "")],
+            [c(1, 1, "업체명"), c(2, 1, ""), c(3, 1, "연락처"), c(4, 1, "")],
+            [c(0, 2, "대리인", 1, 1), c(1, 2, "업체명"), c(2, 2, ""), c(3, 2, "연락처"), c(4, 2, "")]]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "전화번호": "033-111-2222"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "|연락처|033-111-2222|" in text and text.count("033-111-2222") == 1, text
 
 
 def test_column_head_row_values_go_below(tmp_path: Path):

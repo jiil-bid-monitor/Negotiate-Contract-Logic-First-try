@@ -661,7 +661,8 @@ def _row_group(cells: list[Cell], c: Cell) -> str | None:
     for o in cells:
         if o is c or o.rowspan < 2 or o.col >= c.col or not (o.row <= c.row < o.row + o.rowspan):
             continue
-        t = _sq(o.text)
+        # 괄호 덧붙임은 떼고 봄 — '대표자 (법인)'(11/23 사용자 지적: 창원산업진흥원 위임장 대표자 연락처가 빔)
+        t = re.sub(r"[(（][^)）]*[)）]$", "", _sq(o.text)) or _sq(o.text)
         if re.fullmatch(r"(?:입찰|신청|제안|응모)?(?:대표자|대표이사)|위임자|위임인", t):  # '입찰 대표자'(11/10 경남교육청 위임장)
             return "대표자"
         if re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", t):

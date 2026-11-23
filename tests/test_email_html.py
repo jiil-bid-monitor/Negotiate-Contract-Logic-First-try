@@ -89,8 +89,8 @@ class TestEmailHtml(unittest.TestCase):
         for keep in ("○○ 해양생태놀이터 조성사업 기본·실시설계 용역", "○○박물관 실감콘텐츠 통합유지관리 용역"):
             c.notice = dataclasses.replace(c.notice, title=keep)
             self.assertEqual(split_body([c])[0], [c], f"11/23 사용자: 본문에 둠 — {keep}")
-        c.screen_result = dataclasses.replace(c.screen_result, matched_keywords=[], matched_product_codes=["8111159901"])
-        self.assertEqual(split_body([c])[1]["소프트웨어 품목만"], 1)
+        c.screen_result = dataclasses.replace(c.screen_result, matched_keywords=[], matched_product_codes=["정보시스템개발서비스"])
+        self.assertEqual(split_body([c])[1]["소프트웨어 품목만"], 1, "실제 자료엔 품목 이름이 들어옴")
 
     def test_card_size(self):
         per_card = len(render_email_html(self.cands[:1], self.stats, NOW).encode()) - len(

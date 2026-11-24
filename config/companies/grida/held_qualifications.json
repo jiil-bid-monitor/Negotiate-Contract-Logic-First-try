@@ -5,10 +5,6 @@
   "_companyRegion_comment": "본점 소재지(사업자등록증·건설업등록증: 경기도 파주시 조리읍). 지역 제한 판정에 씀.",
   "localRoutePlace": "",
   "_localRoutePlace_comment": "빈 글자 = 소재지 기관 입찰 공고를 키워드 없이 받는 경로 끔(지일 '정선 사업'). 2026-11-24 사용자: 그리다는 관심 키워드 예외 없이.",
-  "licenseRoute": false,
-  "_licenseRoute_comment": "false = 키워드 없이 보유 공사 면허로 받는 경로 끔(2026-11-24 사용자: 관심 키워드 예외 없이). 세부품명(등록 물품) 공고는 받음.",
-  "qualifiedOnly": true,
-  "_qualifiedOnly_comment": "true = 자격 미달(혼자 요구 자격을 다 못 채움) 공고는 제외 — 자격이 되는 공고만(2026-11-24 사용자). 판정 못 한(미확인) 공고는 남김.",
   "companyBizno": "1328802939",
   "_companyBizno_comment": "그리다 사업자등록번호(132-88-02939).",
   "heldProducts": [

@@ -73,9 +73,9 @@ def company_name(company: str | None) -> str:
 
 
 def company_tag(company: str | None = None) -> str:
-    """보고 제목 앞 '[그리다] ' — 지일은 빈 글자(예전 제목 그대로)."""
+    """보고 제목 앞 '[지일] '·'[그리다] '(2026-11-24 사용자 — 지일 보고에도 회사 이름)."""
     company = company if company is not None else report_company()
-    return f"[{company_name(company)}] " if company and company != DEFAULT_COMPANY else ""
+    return f"[{company_name(company or DEFAULT_COMPANY)}] "
 
 
 def load_config(config_dir: Path | None = None, company: str | None = None) -> AppConfig:
@@ -111,8 +111,6 @@ def load_config(config_dir: Path | None = None, company: str | None = None) -> A
                        for e in held.get("heldProducts", []) if str(e.get("code", "")).strip()],
         industry_codes=list(codes.get("industryCodes", [])),
         local_place=str(held.get("localRoutePlace", "정선") or ""),
-        license_route=bool(held.get("licenseRoute", True)),
-        qualified_only=bool(held.get("qualifiedOnly", False)),
     )
 
     # API_RETRY_DELAYS="10,10,30,70"이면 그 간격으로 그 횟수만큼 재시도(API_MAX_RETRIES보다 우선)

@@ -316,7 +316,7 @@ class Collector:
 
     def _run_nego(self, config: AppConfig, days: int | None, attachments: bool, cats, prespec: bool = True,
                   period: tuple[datetime, datetime] | None = None):
-        from nego.pipeline import drop_expired, drop_region_unmet, drop_unqualified, run
+        from nego.pipeline import drop_expired, drop_region_unmet, run
 
         if days:
             config.lookback_days = days
@@ -349,7 +349,6 @@ class Collector:
         # 지역 제한 미달은 제외(2026-10-14) — 첨부 공고문 판정이 API보다 우선이라 첨부를 읽은 뒤에
         candidates = drop_expired(candidates, datetime.now(), stats)
         candidates = drop_region_unmet(candidates, stats)
-        candidates = drop_unqualified(candidates, config, stats)  # 그리다: 자격 미달 뺌(2026-11-24)
         return candidates, stats
 
     def _work(self, job: Job, days: int | None, attachments: bool, ai: bool, cats, prespec: bool = True,

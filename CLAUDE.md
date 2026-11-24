@@ -24,13 +24,11 @@
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 **(11/18 사용자 요청) 오늘 한 일 정리·worklog·인수인계·다음 세션 시작 메시지엔 지금 세션에서 한 작업만** — 같은 날 다른 세션(팀원 등)이 한 PR·브랜치·기록은 언급하지 않음(커밋의 Claude-Session 줄로 가림).
 
-## 2026-11-24 — 그리다는 관심 키워드 예외 없이 · 자격이 되는 공고만 (같은 브랜치 `claude/grida-cert-folder`, 사용자 결정)
+## 2026-11-24 — 그리다 수집 = 지일과 같은 규칙, '정선 기관 입찰 공고(키워드 없이)'만 뺌 · 보고 제목 [지일]/[그리다] (같은 브랜치 `claude/grida-cert-folder`, 사용자 결정)
 
-- **(사용자) '관심 키워드 예외 없이 자격이 되는 공고만 수집'** — 그리다 보유 자격 파일 설정 셋(`load_config` → `ScreenConfig`):
-  `localRoutePlace: ""`(소재지 기관 입찰 공고 경로 끔 — 지일 '정선 사업'은 그대로, 잠깐 만든 '파주 사업'은 버림), `licenseRoute: false`(보유 공사 면허 경로 끔),
-  `qualifiedOnly: true` → `pipeline.drop_unqualified`(첨부 자격판정·지역 판정 뒤, CLI·웹앱): **자격 미달**(텔레그램 '자격 미달'과 같은 기준 — 요건 하나라도 미보유)은 제외 '자격미달'(화면 단계 '참가자격'), **판정 못 한 미확인은 남김**(사용자 결정).
-  **세부품명 공고(그리다 등록 물품 8종)·공고문 세부품명 확인은 남김**(사용자 결정 — 자격 자체가 맞는 공고라). 지일은 바뀐 것 없음(자격 미달도 공동수급 때문에 남김, 9/28).
-  시험 `TestLocalRoute20261123.test_grida_no_keyword_bypass`·`test_drop_unqualified_only_when_set`.
+- 그리다 보유 자격 파일 `localRoutePlace: ""` → `ScreenConfig.local_place` 빈 글자면 `screen.local_route` 끔(지일은 기본 '정선' 그대로). 보유 면허 경로·자격 미달 남기기는 지일과 같음
+  (중간에 만든 '파주 사업'·'보유 면허 경로 끔'·'자격 미달 제외'는 사용자 결정으로 버림 — 다시 넣지 말 것). 시험 `TestLocalRoute20261123.test_grida_no_local_route`.
+- **(사용자) 지일 보고 제목에도 '[지일] '**(`nego.config.company_tag` — 텔레그램·메일 제목·HTML 리포트 제목). Actions Run 이름·보고 기록 파일 이름은 그대로(백업 실행 skip 비교가 Run 이름이라).
 
 ## 2026-11-24 — 그리다도 정기 보고·판단 기록 미판단·피드백 시트·밤 22시 투찰 이력 (같은 브랜치 `claude/grida-cert-folder`, 사용자 결정)
 

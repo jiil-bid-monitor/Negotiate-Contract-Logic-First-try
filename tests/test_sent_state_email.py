@@ -47,7 +47,7 @@ class TestEmail(unittest.TestCase):
             self.assertEqual(email_report.load_recipients(path), ["a@x", "b@x"])
         self.assertTrue(all("@" in r for r in email_report.load_recipients()))
         subject = email_report.subject_for("2026-10-19", 7)
-        self.assertEqual(subject, "[나라장터 입찰 모니터링] 2026-10-19 주간 리포트 - 매칭 7건")
+        self.assertEqual(subject, "[지일] [나라장터 입찰 모니터링] 2026-10-19 주간 리포트 - 매칭 7건")
         msg = email_report.build_message(subject, "<p>본문</p>", "bot@x", ["a@x", "b@x"])
         self.assertEqual(msg["To"], "a@x, b@x")
         self.assertIn("<p>본문</p>", msg.get_body(("html",)).get_content())

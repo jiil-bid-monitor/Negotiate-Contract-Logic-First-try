@@ -27,7 +27,7 @@ class CompanyReportTest(unittest.TestCase):
             self.assertEqual(report_log.file_name(entry), "2026-11-24-daily-grida.json")
             self.assertEqual(report_log.parse(json.dumps(entry))["company"], "grida")
         with mock.patch.dict(os.environ, {"NEGO_COMPANY": ""}):
-            self.assertEqual(company_tag(), "")  # 지일은 예전 제목·파일 그대로
+            self.assertEqual(company_tag(), "[지일] ")  # 지일 보고 제목에도 회사 이름(11/24), 보고 기록 파일은 예전 그대로
             entry = report_log.build_entry("daily", [], datetime(2026, 11, 24, 1, tzinfo=timezone.utc), {})
             self.assertNotIn("company", entry)
             self.assertEqual(report_log.file_name(entry), "2026-11-24-daily.json")

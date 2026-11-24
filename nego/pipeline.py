@@ -306,8 +306,7 @@ def build_candidates(
         if not screen_result.matched:
             # 키워드로 안 걸렸어도 지일 공사 면허로 참가 조건을 다 채우면 '보유 면허' 공고로 남긴다(2026-11-12 사용자 결정)
             licenses = qualify.construction_license_match(license_groups.get(notice.notice_no, []), config.held_names, held_codes,
-                                                             qualify.construction_codes(config.held_raw)) \
-                if config.screen.license_route else None
+                                                             qualify.construction_codes(config.held_raw))
             routed = screen.license_route(notice, config.screen, licenses, screen_result) if licenses else None
             if routed is not None:
                 screen_result = routed
@@ -404,32 +403,6 @@ def drop_region_unmet(candidates: list[Candidate], stats: RunStats) -> list[Cand
         stats.screened_in -= 1
         c.is_candidate = False
         c.excluded_reason = f"{reason} ({required}만 참가 — 지일 {check.company}, 근거: {check.source})"
-        stats.rejected.append(c)
-    stats.candidates = len(kept)
-    return kept
-
-
-def is_unqualified(c: Candidate) -> bool:
-    """자격 미달 — 판정한 요건 중 하나라도 못 채움(텔레그램 '자격 미달'과 같은 기준). 판정 못 한(미확인) 공고는 False."""
-    q = c.qualification
-    return bool(q.checked) and (bool(getattr(q, "missing_count", 0)) or not q.passes)
-
-
-def drop_unqualified(candidates: list[Candidate], config: AppConfig, stats: RunStats) -> list[Candidate]:
-    """`qualified_only` 회사(그리다, 2026-11-24 사용자: 자격이 되는 공고만)면 자격 미달 후보를 제외 목록으로 옮긴다.
-    첨부 자격판정까지 끝난 뒤에 부른다(`drop_region_unmet` 다음). 지일은 그대로(공동수급으로 수주하는 경우가 있어 9/28부터 남김)."""
-    if not config.screen.qualified_only:
-        return candidates
-    kept = []
-    for c in candidates:
-        if not is_unqualified(c):
-            kept.append(c)
-            continue
-        reason = "자격미달"
-        stats.screened_out[reason] = stats.screened_out.get(reason, 0) + 1
-        stats.screened_in -= 1
-        c.is_candidate = False
-        c.excluded_reason = f"{reason} ({c.qualification.summary} — 혼자 참가 자격이 안 됨)"
         stats.rejected.append(c)
     stats.candidates = len(kept)
     return kept

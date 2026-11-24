@@ -69,8 +69,12 @@ class ScreenConfig:
     license_keep_words: list[str] = field(default_factory=list)
     product_codes: list[dict[str, str]] = field(default_factory=list)
     industry_codes: list[dict[str, str]] = field(default_factory=list)
-    # 키워드 없이 받는 그 회사 소재지 기관의 입찰 공고 — 지일 '정선'(기본), 그리다 '파주'(2026-11-24)
-    local_place: str = ""
+    # 키워드 없이 받는 그 회사 소재지 기관의 입찰 공고 — 지일 '정선'(기본). 빈 글자면 이 경로 끔(그리다, 2026-11-24)
+    local_place: str = "정선"
+    # 키워드 없이 보유 공사 면허로 받는 경로(2026-11-12) — 그리다는 끔(2026-11-24 사용자: 관심 키워드 예외 없이)
+    license_route: bool = True
+    # 자격 미달(혼자 자격을 다 못 채움) 공고는 후보에서 뺌 — 그리다(2026-11-24 사용자: 자격이 되는 공고만). 미확인은 남김
+    qualified_only: bool = False
     # 제외 키워드와 관심 키워드가 공고명에 함께 있으면 빼지 않고 "검토 필요"로 남긴다(2026-09-30 사용자 결정 —
     # 담당자 판단을 쌓아 제외 키워드를 고치려고). 웹앱만 켠다 — CLI·자동 발송은 예전처럼 제외.
     review_conflicts: bool = False
@@ -403,7 +407,9 @@ def local_route(notice: Notice, config: ScreenConfig, missed: ScreenResult, cate
     무조건 제외 키워드와 해외 개최는 그대로 뺌(보유 면허 경로와 같은 방식). 협상·수의계약·사전규격은 해당 없음."""
     if category != "입찰" or missed.excluded_by not in ("미매칭", "제외키워드"):
         return None
-    place = config.local_place or LOCAL_PLACE
+    place = config.local_place
+    if not place:
+        return None
     institution = next((x for x in (notice.demand_institution, notice.notice_institution) if x and place in _squash(x)), None)
     if institution is None:
         return None

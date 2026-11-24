@@ -110,7 +110,9 @@ def load_config(config_dir: Path | None = None, company: str | None = None) -> A
         product_codes=[{"code": str(e.get("code", "")).strip(), "name": e.get("name", "")}
                        for e in held.get("heldProducts", []) if str(e.get("code", "")).strip()],
         industry_codes=list(codes.get("industryCodes", [])),
-        local_place=str(held.get("localRoutePlace") or ""),
+        local_place=str(held.get("localRoutePlace", "정선") or ""),
+        license_route=bool(held.get("licenseRoute", True)),
+        qualified_only=bool(held.get("qualifiedOnly", False)),
     )
 
     # API_RETRY_DELAYS="10,10,30,70"이면 그 간격으로 그 횟수만큼 재시도(API_MAX_RETRIES보다 우선)

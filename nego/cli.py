@@ -405,11 +405,12 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     # 지역 제한 미달은 제외(2026-10-14) — 첨부 공고문 판정이 API보다 우선이라 첨부를 읽은 뒤에
-    from .pipeline import drop_expired, drop_region_unmet
+    from .pipeline import drop_expired, drop_region_unmet, drop_unqualified
 
     # 기준 마감이 지난 공고도 뺀다(2026-10-19 통합 결정 4번) — 첨부 제출기한으로 마감을 채운 뒤라 여기서
     candidates = drop_expired(candidates, now, stats)
     candidates = drop_region_unmet(candidates, stats)
+    candidates = drop_unqualified(candidates, config, stats)  # 그리다: 자격 미달 뺌(2026-11-24)
 
     # 싱크로율 — 과거 실적 자료(JIIL_REPO, Actions에선 암호화 묶음을 푼 data/jiil)가 있을 때만. 메일·HTML 리포트에 표시
     from .sync import PastIndex

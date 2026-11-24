@@ -555,11 +555,17 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     from .company import DEFAULT, current
     # 다른 회사(그리다 등)는 지일 .env 값을 쓰지 않음 — QUANT_GRIDA_FAX처럼 회사 이름을 넣은 이름만(11/24 회사 고르기)
     prefix = "QUANT_" if current() == DEFAULT else f"QUANT_{current().upper()}_"
+    # (11/24 사용자 요청) 그리다는 서식의 대표자 칸 전체(이름·생년월일·휴대폰·직위)를 .env 값으로 — 등기상 대표자가 아닌 분으로
+    # 적을 때(QUANT_GRIDA_REP 등). 자본금·직원 수도 .env로. 개인 정보라 값은 저장소에 적지 않음.
     for env_key, item in (("FAX", "팩스번호"), ("TEL", "전화번호"), ("EMAIL", "이메일"),
-                          ("HOMEPAGE", "홈페이지"), ("REP_MOBILE", "대표자 휴대폰")):
+                          ("HOMEPAGE", "홈페이지"), ("REP_MOBILE", "대표자 휴대폰"), ("REP", "대표자"),
+                          ("REP_TITLE", "대표자 직위"), ("CAPITAL", "자본금"), ("STAFF", "종업원 수")):
         v = read_env(prefix + env_key).strip()
         if v:
             vault.info[item] = v
+    rrn = re.match(r"\s*(\d{6})", read_env(prefix + "REP_RRN"))  # 앞 6자리만 — 뒷자리는 '*'(11/04 규칙)
+    if rrn:
+        vault.info["대표자 주민등록번호"] = f"{rrn.group(1)}-*******"
     if getattr(vault, "loose", None):
         notes.append("회사 자료 묶음 밖 PDF도 읽음(회사 서류 폴더): " + ", ".join(vault.loose[:5]))
     if getattr(vault, "patent_src", "") == "파일":

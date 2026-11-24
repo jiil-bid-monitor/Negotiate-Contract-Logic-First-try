@@ -84,3 +84,40 @@ def test_bizreg_company_name_with_space():
 
     assert read_bizreg("법 인 명 ( 단 체 명 ) : 주식회사 그리다\n대표자")["회사명"] == "주식회사 그리다"
     assert read_bizreg("법인명(단체명) : (주)지일   대표자(대표유형) : 홍")["회사명"] == "(주)지일"
+
+
+def test_grida_rep_from_env(monkeypatch, tmp_path):
+    """(11/24 사용자 요청) 그리다 대표자 칸 전체 = .env QUANT_GRIDA_REP·REP_RRN·REP_MOBILE·REP_TITLE, 자본금·직원 수도.
+    지일은 대표자 휴대폰 칸에 여전히 회사 전화(11/20 규칙)."""
+    from quantdocs import fill, importer
+
+    env = tmp_path / ".env"
+    env.write_text("QUANT_GRIDA_REP=홍길동\nQUANT_GRIDA_REP_RRN=670222 -1*\nQUANT_GRIDA_REP_MOBILE=010-0000-0000\n"
+                   "QUANT_GRIDA_REP_TITLE=이사\nQUANT_GRIDA_CAPITAL=200000000\nQUANT_GRIDA_STAFF=6\n"
+                   "QUANT_REP_MOBILE=010-9999-9999\n", encoding="utf-8")
+    monkeypatch.setattr(vault, "ENV_FILE", env)
+
+    class V:
+        info = {"대표자": "등기 대표", "전화번호": "031-000-0000"}
+        files: dict = {}
+        history: list = []
+
+    company.use("grida")
+    try:
+        v = V()
+        v.info = dict(V.info)
+        importer.enrich_vault(v)
+        assert v.info["대표자"] == "홍길동"
+        assert v.info["대표자 주민등록번호"] == "670222-*******"
+        assert v.info["대표자 직위"] == "이사"
+        assert fill._value("대표자 휴대폰", v) == "010-0000-0000"
+        assert fill._value("자본금", v) == "200,000,000원"
+        assert fill._value("종업원 수", v) == "6명"
+        assert fill._birth(v.info["대표자 주민등록번호"]) == "1967. 02. 22."
+    finally:
+        company.use("jiil")
+    v = V()
+    v.info = dict(V.info)
+    importer.enrich_vault(v)
+    assert v.info["대표자"] == "등기 대표"
+    assert fill._value("대표자 휴대폰", v) == "031-000-0000"

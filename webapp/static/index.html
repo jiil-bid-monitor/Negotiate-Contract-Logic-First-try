@@ -378,6 +378,8 @@ body {
 .calpop li.ev .what { flex: none; font-size: 12px; color: var(--muted); }
 .calpop li.ev .name { font-weight: 500; }
 .calpop li.ev:hover .name { color: var(--brand); text-decoration: underline; }
+.calpop li.ev.seen .name, .calpop li.ev.seen .what { color: var(--muted); font-weight: 400; }
+.calpop li.ev.seen i.k { opacity: .45; }
 .calpop li.ev .new { flex: none; font-size: 11px; font-weight: 700; color: #2563eb; }
 .docbell .n {
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
@@ -5101,7 +5103,7 @@ for (const [bell, btn, pop] of [["docBell", "docBellBtn", "docBellPop"], ["judge
     e.stopPropagation();
     const open = $(pop).hidden;
     for (const other of ["docBellPop", "judgeBellPop", "calBellPop"]) $(other).hidden = true;  // 하나만 열림
-    if (open && pop === "calBellPop") { CAL.day = ""; CAL.month = ""; renderCalendar(); markResultsSeen(); }  // 처음엔 이번 달 · 앞으로 2주
+    if (open && pop === "calBellPop") { CAL.day = ymd(new Date()); CAL.month = ""; renderCalendar(); markResultsSeen(); }  // 처음엔 오늘 일정(11/24 사용자 — 2주 목록은 다른 날 일정이 오늘처럼 보였음)
     $(pop).hidden = !open;
     if (open && pop === "judgeBellPop" && JUDGE_DONE.size) { JUDGE_DONE.clear(); renderJudgeBell(); }  // 지난번 불참 줄은 열 때 정리
     $(btn).setAttribute("aria-expanded", String(open));
@@ -5192,22 +5194,23 @@ function renderCalendar() {
     cells += `<button type="button" data-cday="${key}" class="${[d.getMonth() !== m - 1 ? "other" : "", key === today ? "today" : "", key === CAL.day ? "sel" : ""].join(" ")}">${d.getDate()}`
       + `<span class="dots">${kinds.map((k) => `<i class="k-${k}"></i>`).join("")}</span></button>`;
   }
-  // 아래 목록 — 고른 날, 안 골랐으면 오늘부터 2주(새 개찰 결과는 지난 날이어도 맨 위에)
-  const until = ymd(new Date(now.getTime() + 13 * 86400000));
-  const fresh = CAL.day ? [] : CAL.events.filter((e) => e.result && !calSeen.has(e.id) && e.d < today);
-  const list = [...fresh, ...CAL.events.filter((e) => CAL.day ? e.d === CAL.day : e.d >= today && e.d <= until)];
+  // 아래 목록 — 고른 날만(처음엔 오늘). 오늘이면 아직 안 본 개찰 결과도 지난 날 것까지 맨 위에
+  const fresh = CAL.day === today ? CAL.events.filter((e) => e.result && !calSeen.has(e.id) && e.d < today) : [];
+  const list = [...fresh, ...CAL.events.filter((e) => e.d === CAL.day)];
   const dayName = (key) => { const d = new Date(key + "T00:00"); return `${d.getMonth() + 1}/${d.getDate()} (${"일월화수목금토"[d.getDay()]})`; };
   let body = "", last = "";
   for (const e of list) {
     if (e.d !== last) { body += `${last ? "</ul>" : ""}<p class="day">${dayName(e.d)}${e.d === today ? " · 오늘" : ""}</p><ul>`; last = e.d; }
-    body += `<li class="ev" data-cev="${CAL.events.indexOf(e)}"><i class="k k-${e.kind}"></i><span class="what">${CAL_KIND[e.kind]}</span>`
+    // 확인한 결과·지난 일정은 회색(11/24 사용자 — 읽었다는 표시)
+    const grey = e.result ? calSeen.has(e.id) : e.d < today;
+    body += `<li class="ev${grey ? " seen" : ""}" data-cev="${CAL.events.indexOf(e)}"><i class="k k-${e.kind}"></i><span class="what">${CAL_KIND[e.kind]}</span>`
       + `<span class="name">${esc(e.title)}${e.result ? ` — ${esc(e.result)}` : ""}</span>${e.result && !calSeen.has(e.id) ? `<span class="new">새 결과</span>` : ""}</li>`;
   }
-  body = body ? body + "</ul>" : `<p class="row2" style="margin-top:10px">${CAL.day ? "이 날은 일정이 없습니다." : "앞으로 2주 안에 일정이 없습니다."}</p>`;
+  body = body ? body + "</ul>" : `<p class="row2" style="margin-top:10px">${!CAL.day ? "날짜를 누르면 그날 일정이 보입니다." : CAL.day === today ? "오늘은 일정이 없습니다 — 다른 날짜를 눌러 보세요." : "이 날은 일정이 없습니다."}</p>`;
   $("calBellPop").innerHTML = `<div class="calhead"><button type="button" data-cmon="-1" aria-label="지난달">‹</button><h3>${y}년 ${m}월</h3><button type="button" data-cmon="1" aria-label="다음 달">›</button></div>`
     + `<div class="grid">${cells}</div>`
     + `<div class="legend">${Object.entries(CAL_KIND).map(([k, l]) => `<span><i class="k-${k}"></i>${l}</span>`).join("")}</div>`
-    + (CAL.day ? "" : `<p class="day" style="color:var(--muted);font-weight:600">앞으로 2주</p>`) + body;
+    + body;
 }
 $("calBellPop").addEventListener("click", (ev) => {
   const t = ev.target;
@@ -5219,7 +5222,7 @@ $("calBellPop").addEventListener("click", (ev) => {
     return void renderCalendar();
   }
   const day = t.closest("[data-cday]");
-  if (day) { CAL.day = CAL.day === day.dataset.cday ? "" : day.dataset.cday; return void renderCalendar(); }
+  if (day) { CAL.day = day.dataset.cday; return void renderCalendar(); }
   const li = t.closest("[data-cev]");
   if (!li) return;
   const e = CAL.events[+li.dataset.cev];

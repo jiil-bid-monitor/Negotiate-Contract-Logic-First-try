@@ -1488,8 +1488,17 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .award-check { font: inherit; font-size: 14px; padding: 6px 12px; cursor: pointer; border: 1px solid var(--brand); background: var(--panel); color: var(--brand); border-radius: 6px; }
 .award-check:hover { background: var(--brand-tint); }
 /* 도움말(11/24 시험 — 낙찰 후 서류 탭에서만): 자주 묻는 것을 눌러서 보는 창, 외부 AI 안 씀 */
-.helpfab { position: fixed; right: 22px; bottom: 22px; z-index: 40; width: 52px; height: 52px; border-radius: 50%; border: 0; cursor: pointer;
-  background: var(--brand); color: #fff; font-size: 24px; font-weight: 700; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+/* 입체 '?'(11/24 사용자): 위 빛 + 아래 그림자 + 바닥 두께 */
+.helpfab { position: fixed; right: 22px; bottom: 22px; z-index: 40; width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer; padding: 0;
+  background: radial-gradient(circle at 32% 28%, #3fa37c 0%, var(--brand) 45%, #0f4a35 100%); color: #fff; font-size: 26px; font-weight: 800;
+  box-shadow: inset 0 3px 5px rgba(255,255,255,.35), inset 0 -5px 8px rgba(0,0,0,.28), 0 5px 0 #0b3a29, 0 9px 18px rgba(0,0,0,.28); }
+.helpfab span { display: block; text-shadow: 0 2px 2px rgba(0,0,0,.35); transform: translateY(-1px); }
+@keyframes help-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.helpfab.nudge { animation: help-bob 1.6s ease-in-out 3; }
+.helpnudge { position: fixed; right: 88px; bottom: 34px; z-index: 40; font: inherit; font-size: 13.5px; padding: 7px 12px; cursor: pointer;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 16px 16px 4px 16px; box-shadow: 0 3px 10px rgba(0,0,0,.12);
+  animation: help-in .4s ease-out .8s both; white-space: nowrap; }
+.helpnudge:hover { border-color: var(--brand); color: var(--brand); }
 .helpbox { position: fixed; right: 22px; bottom: 86px; z-index: 40; width: min(380px, calc(100vw - 32px)); height: min(580px, calc(100vh - 120px));
   display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.16); overflow: hidden; font-size: 15px; }
 .helpbox[hidden] { display: none; }
@@ -1503,7 +1512,27 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hmsg.first { margin-top: 14px; }
 .helpbox .hmsg:first-child { margin-top: 0; }
 .helpbox .hmsg.me { justify-content: flex-end; }
-.helpbox .hav { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.helpbox .hav { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--brand-dark); color: #fff; display: flex; align-items: center; justify-content: center; }
+.helpbox .hav svg { width: 22px; height: auto; }
+/* 움직임(11/24) — 창은 버튼 쪽에서 커지며 열림, 새 말은 아래에서 살짝 올라옴, 입력 중 점 3개. 움직임 줄이기 설정이면 끔 */
+@keyframes help-open { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes help-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes help-dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.helpbox:not([hidden]) { animation: help-open .22s ease-out; transform-origin: bottom right; }
+.helpbox .hmsg.new { animation: help-in .28s ease-out both; }
+.helpbox .hpicks button { transition: background .15s, transform .1s; }
+.helpbox .hpicks button:active, .helpfab:active { transform: scale(.97); }
+.helpfab { transition: transform .15s, box-shadow .15s; }
+.helpfab:hover { transform: translateY(-2px); }
+.helpfab:active { transform: translateY(4px); box-shadow: inset 0 3px 5px rgba(255,255,255,.3), inset 0 -3px 6px rgba(0,0,0,.28), 0 1px 0 #0b3a29, 0 3px 8px rgba(0,0,0,.25); }
+.helpbox .hpicks.cats { display: grid; grid-template-columns: 1fr 1fr; }
+.helpbox .hpicks.cats button { text-align: center; font-weight: 600; }
+.helpbox .hpicks .hother { border-style: dashed; color: var(--muted); border-color: var(--line); }
+.helpbox .htyping { display: flex; gap: 4px; padding: 13px 14px; }
+.helpbox .htyping i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: help-dot 1s infinite; }
+.helpbox .htyping i:nth-child(2) { animation-delay: .15s; }
+.helpbox .htyping i:nth-child(3) { animation-delay: .3s; }
+@media (prefers-reduced-motion: reduce) { .helpbox, .helpbox *, .helpfab, .helpnudge { animation: none !important; transition: none !important; } }
 .helpbox .hav.sp { background: none; }
 .helpbox .hcol { display: flex; flex-direction: column; min-width: 0; max-width: 82%; }
 .helpbox .hmsg.me .hcol { align-items: flex-end; }
@@ -1517,7 +1546,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hmsg.me .hb.tail { border-bottom-right-radius: 6px; }
 .helpbox .ht { flex: none; font-size: 11px; color: var(--muted); padding-bottom: 2px; }
 .helpbox .hpicks { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.helpbox .hpicks button { font: inherit; font-size: 14px; text-align: left; padding: 8px 12px; cursor: pointer; border: 1px solid var(--brand); background: #fff;
+.helpbox .hpicks button { font: inherit; font-size: 14px; text-align: center; padding: 8px 12px; cursor: pointer; border: 1px solid var(--brand); background: #fff;
   color: var(--brand); border-radius: 16px; word-break: keep-all; }
 .helpbox .hpicks button:hover { background: var(--brand-tint); }
 .helpbox .hform { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); background: var(--panel); }
@@ -1782,10 +1811,11 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   </section>
 
   <!-- 낙찰 후 서류(2026-11-10) — 투찰 기록·직접 넣은 공고의 낙찰자 확인(webapp/postaward.py), 공사 / 물품·용역 구분, 공고 폴더 만들기 -->
-  <button type="button" class="helpfab" id="helpFab" hidden aria-expanded="false" title="도움말 — 자주 묻는 것">?</button>
+  <button type="button" class="helpfab" id="helpFab" hidden aria-expanded="false" title="도움말, 자주 묻는 것"><span>?</span></button>
+  <button type="button" class="helpnudge" id="helpNudge" hidden>사용법이 궁금하면 눌러 보세요</button>
   <div class="helpbox" id="helpBox" hidden role="dialog" aria-label="도움말"></div>
   <section id="tab-award" hidden>
-    <p class="award-test-note" id="awardTestNote" hidden>시험 페이지예요 — 운영 목록·폴더와 따로 씁니다. 과거 수주 사업 <b>광양시 교통안전체험관(R25BK01125448)</b>은 '지금 낙찰자 확인'을 누를 때마다
+    <p class="award-test-note" id="awardTestNote" hidden>시험 페이지예요. 운영 목록·폴더와 따로 씁니다. 과거 수주 사업 <b>광양시 교통안전체험관(R25BK01125448)</b>은 '지금 낙찰자 확인'을 누를 때마다
       한 단계씩(① 개찰 결과 → ② 낙찰 확인 → ③ 계약 등록) 진행되고, 기다림·끝난 공고 예시는 운영 투찰 기록에서 복사해 넣었어요.
       만든 폴더는 <code>\\jiilserver\jiil-webapp\낙찰후서류_테스트</code>에 생깁니다. <button type="button" id="awardReset">처음으로 되돌리기</button></p>
     <!-- 공고번호 칸은 가끔만 써서 접어 둠(11/24 사용자 — 칸이 화면을 너무 차지함) -->
@@ -1793,11 +1823,11 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <p class="award-lead">투찰한 공고는 저절로 올라옵니다.</p>
       <details class="award-addbox"><summary>협상 등 공고번호로 넣기</summary>
         <div class="search">
-          <input id="awardNo" type="search" placeholder="공고번호 — 예: R26BK01800345-000" autocomplete="off" aria-label="공고번호">
+          <input id="awardNo" type="search" placeholder="공고번호, 예: R26BK01800345-000" autocomplete="off" aria-label="공고번호">
           <button type="button" id="awardAdd">목록에 넣기</button>
         </div>
       </details>
-      <button type="button" id="awardCheck" class="award-check" title="매일 밤 22시에 저절로 확인합니다 — 지금 바로 보고 싶을 때만">지금 낙찰자 확인</button>
+      <button type="button" id="awardCheck" class="award-check" title="매일 밤 22시에 저절로 확인합니다. 지금 바로 보고 싶을 때만">지금 낙찰자 확인</button>
     </div>
     <p class="sub" id="awardMsg"></p>
     <div id="awardList"></div>
@@ -4578,28 +4608,28 @@ function awardStage(v, kind) {
   const [ws, wd] = awardWords(v);
   const pg = v.progress || {}, mdd = (s) => String(s).slice(5, 10).split("-").map(Number).join("/");
   // 11/20 사용자: 착수·납품·청구는 서류 날짜로 단계 — 담당자가 서류의 제출일·청구일을 채워 저장하면 다음 단계로
-  if (v.status === "낙찰" && cdate && pg.claim) return ["청구 완료", 6, `청구서 ${mdd(pg.claim)} — 대금 지급을 기다림`];
-  if (v.status === "낙찰" && cdate && pg.done) return ["청구 서류", 5, `${wd}계 ${mdd(pg.done)} 제출 — 청구서의 청구일을 채우면 청구 완료`];
-  if (v.status === "낙찰" && cdate && pg.start) return [`${wd} 서류`, 4, `${ws}계 ${mdd(pg.start)} 제출${(v.contract || {}).due ? ` · ${wd} 기한 ${mdd(v.contract.due)}` : ""} — ${wd}계의 제출일을 채우면 다음 단계`];
-  if (v.status === "낙찰" && cdate) return [`${ws} 서류`, 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결 — ${v.folder && !v.qualOnly ? `서류 현황에서 ${ws} 서류를 확인하세요` : "'낙찰 서류 만들기'를 누르세요"}`];
+  if (v.status === "낙찰" && cdate && pg.claim) return ["청구 완료", 6, `청구서 ${mdd(pg.claim)} 제출. 대금 지급을 기다리는 중`];
+  if (v.status === "낙찰" && cdate && pg.done) return ["청구 서류", 5, `${wd}계 ${mdd(pg.done)} 제출. 청구서의 청구일을 채우면 청구 완료`];
+  if (v.status === "낙찰" && cdate && pg.start) return [`${wd} 서류`, 4, `${ws}계 ${mdd(pg.start)} 제출${(v.contract || {}).due ? ` · ${wd} 기한 ${mdd(v.contract.due)}` : ""}. ${wd}계의 제출일을 채우면 다음 단계`];
+  if (v.status === "낙찰" && cdate) return [`${ws} 서류`, 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결. ${v.folder && !v.qualOnly ? `서류 현황에서 ${ws} 서류를 확인하세요` : "'낙찰 서류 만들기'를 누르세요"}`];
   if (v.status === "낙찰") return v.folder && !v.qualOnly ? ["계약 서류", 2, `나라장터에 계약이 올라오면 ${ws} 단계로 넘어갑니다`]
-    : ["낙찰 — 계약 등록 기다림", 2, "나라장터에 계약이 올라오면 '낙찰 서류 만들기'가 켜집니다 — 계약서를 먼저 받았으면 '더 보기'에서 만드세요"];
+    : ["낙찰 (계약 등록 기다림)", 2, "나라장터에 계약이 올라오면 '낙찰 서류 만들기'가 켜집니다. 계약서를 먼저 받았으면 '더 보기'에서 만드세요"];
   if (v.folder) return ["적격심사 서류", 1, "심사 서류를 내고 낙찰을 기다립니다"];
-  if (kind === "todo") return ["적격심사 대상", 1, "개찰 1순위 — 심사 통보를 확인하세요"];
+  if (kind === "todo") return ["적격심사 대상", 1, "개찰 1순위입니다. 심사 통보를 확인하세요"];
   if (kind === "done") {
-    if (v.status === "다른 업체 낙찰") return ["끝남 — 다른 업체 낙찰", -1, "할 일 없음"];
-    if (o && rank == null) return ["끝남 — 하한선 미달", -1, "할 일 없음"];
-    if (o) return [`끝남 — 개찰 ${rank}등`, -1, d ? "지명경쟁은 1등이 아니면 낙찰 가능성이 없음" : "5등 밖이라 차례가 오지 않음"];
+    if (v.status === "다른 업체 낙찰") return ["끝남 (다른 업체 낙찰)", -1, "할 일 없음"];
+    if (o && rank == null) return ["끝남 (하한선 미달)", -1, "할 일 없음"];
+    if (o) return [`끝남 (개찰 ${rank}등)`, -1, d ? "지명경쟁은 1등이 아니면 낙찰 가능성이 없음" : "5등 밖이라 차례가 오지 않음"];
     return ["끝남", -1, ""];
   }
-  if (o && v.private && rank === 1) return ["개찰 1등 — 낙찰 확인 기다림", 0, "수의계약 — 적격심사 없이, 낙찰이 확인되면 '낙찰 서류 만들기'가 켜집니다"];
+  if (o && v.private && rank === 1) return ["개찰 1등 (낙찰 확인 기다림)", 0, "수의계약은 적격심사가 없습니다. 낙찰이 확인되면 '낙찰 서류 만들기'가 켜집니다"];
   // 11/20 사용자: 2등 차례는 나라장터로 알 수 없음 — 개찰 뒤 오래 낙찰자가 안 나오면 1순위 심사가 길어지는 것으로 보고 미리 표시
   const waited = o && o.at ? Math.floor((Date.now() - new Date(o.at + "T00:00:00")) / 86400000) : 0;
-  if (o && waited >= AWARD_LONG_WAIT) return [`개찰 ${rank}등 — 1순위 심사가 길어짐`, v.private ? 0 : 1,
-    `개찰 뒤 ${waited}일째 낙찰자가 안 나옴 — 1순위가 포기·탈락하면 차례가 옵니다. 발주처 연락을 받으면 '더 보기'에서 ${v.private ? "낙찰 서류" : "적격심사 서류"} 만들기`];
-  if (o) return [`개찰 ${rank}등 — 차례 기다림`, v.private ? 0 : 1, v.private ? "앞 순위가 계약을 못 하면 차례가 옵니다 — 낙찰이 확인되면 '낙찰 서류 만들기'"
-    : "앞 순위가 심사에서 떨어지면 차례가 옵니다 — 심사 통보를 받으면 '더 보기'에서 적격심사 서류 만들기"];
-  if (v.status === "대기") return ["개찰 결과 기다림", 0, v.private ? "수의계약 — 적격심사 없이 낙찰이 확인되면 계약" : "개찰 1순위면 적격심사 서류를 만들 수 있습니다"];
+  if (o && waited >= AWARD_LONG_WAIT) return [`개찰 ${rank}등 (1순위 심사가 길어짐)`, v.private ? 0 : 1,
+    `개찰 뒤 ${waited}일째 낙찰자가 안 나왔습니다. 1순위가 포기·탈락하면 차례가 옵니다. 발주처 연락을 받으면 '더 보기'에서 ${v.private ? "낙찰 서류" : "적격심사 서류"} 만들기`];
+  if (o) return [`개찰 ${rank}등 (차례 기다림)`, v.private ? 0 : 1, v.private ? "앞 순위가 계약을 못 하면 차례가 옵니다. 낙찰이 확인되면 '낙찰 서류 만들기'"
+    : "앞 순위가 심사에서 떨어지면 차례가 옵니다. 심사 통보를 받으면 '더 보기'에서 적격심사 서류 만들기"];
+  if (v.status === "대기") return ["개찰 결과 기다림", 0, v.private ? "수의계약은 적격심사 없이 낙찰이 확인되면 계약합니다" : "개찰 1순위면 적격심사 서류를 만들 수 있습니다"];
   return [v.status || "결과 기다림", 0, ""];
 }
 function renderAward(items) {
@@ -4614,7 +4644,7 @@ function renderAward(items) {
       : v.status === "대기" ? awardWaiting(o, awardLimit(v)) : `<span class="badge">${esc(v.status || "")}</span>`;
     // 단계 칸(모든 줄): 단계 이름 → 단계 줄(지나온 단계·지금 단계 칠함, 끝난 공고는 흐리게) → 설명 한 줄
     const [stageName, now, stageSub] = awardStage(v, kind);
-    const steps = `<div class="award-stage ${kind}">${esc(stageName)}</div><ol class="award-steps${kind === "done" ? " off" : ""}">${awardSteps(v).map((s, i) => `<li class="${now < 0 ? "" : i < now ? "done" : i === now ? "now" : ""}">${s}</li>`).join("")}</ol>${stageSub ? stageSub.split(" — ").map((s) => `<div class="sub">${esc(s)}</div>`).join("") : ""}`;
+    const steps = `<div class="award-stage ${kind}">${esc(stageName)}</div><ol class="award-steps${kind === "done" ? " off" : ""}">${awardSteps(v).map((s, i) => `<li class="${now < 0 ? "" : i < now ? "done" : i === now ? "now" : ""}">${s}</li>`).join("")}</ol>${stageSub ? stageSub.split(", ").map((s) => `<div class="sub">${esc(s)}</div>`).join("") : ""}`;
     const stage = v.qualOnly ? ` data-award-stage="qual"` : "";
     const canQual = kind === "todo" && !v.private && !v.folder && !isWon && rank === 1;
     const lateQual = kind === "wait" && !v.private && !v.folder && rank != null && rank > 1;  // 2~5등: 심사 통보받으면 '더 보기'에서
@@ -4628,17 +4658,17 @@ function renderAward(items) {
       ? (!o ? "① 개찰 결과 받기" : v.status === "대기" ? "② 낙찰 확인하기" : !(v.contract || {}).date ? "③ 계약 등록 확인하기" : "") : "";
     const simBtn = sim ? `<button type="button" class="award-sim" data-award-sim>다음 단계: ${sim}</button>` : "";
     const main = canAward ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" title="계약·착공(착수)·준공·청구 단계와 표준틀까지 만듦">낙찰 서류 만들기</button>`
-      : waitAward ? `<button type="button" class="award-main" disabled title="나라장터에 계약이 올라오면 켜집니다 — 계약서를 먼저 받았으면 '더 보기'에서">낙찰 서류 만들기</button>`
+      : waitAward ? `<button type="button" class="award-main" disabled title="나라장터에 계약이 올라오면 켜집니다. 계약서를 먼저 받았으면 '더 보기'에서">낙찰 서류 만들기</button>`
       : v.folder ? toggle(true)
       : canQual ? `<button type="button" class="award-main" data-award-folder="${esc(key)}" data-award-stage="qual">적격심사 서류 만들기</button>`
       // 기다림 줄: 다음에 쓸 버튼을 꺼 둔 채로 보임(11/20 사용자) — 수의계약은 적격심사가 없어 '낙찰 서류', 그 밖은 '적격심사 서류'
       : kind === "wait" ? (v.private
         ? `<button type="button" class="award-main" disabled title="지일이 낙찰자로 확인되면 켜집니다">낙찰 서류 만들기</button>`
-        : `<button type="button" class="award-main" disabled title="개찰 1등이면 켜집니다 — 2등부터는 심사 통보를 받으면 '더 보기'에서 만듭니다">적격심사 서류 만들기</button>`)
+        : `<button type="button" class="award-main" disabled title="개찰 1등이면 켜집니다. 2등부터는 심사 통보를 받으면 '더 보기'에서 만듭니다">적격심사 서류 만들기</button>`)
       : "";
     const more = [v.folder && needAward ? toggle(false) : "",
-      waitAward ? `<button type="button" data-award-folder="${esc(key)}" title="나라장터 계약정보보다 계약서를 먼저 받았을 때">계약서 받음 — 낙찰 서류 만들기</button>` : "",
-      lateQual ? `<button type="button" data-award-folder="${esc(key)}" data-award-stage="qual" title="앞 순위가 심사에서 떨어져 지일이 심사 통보를 받았을 때만">심사 통보받음 — 적격심사 서류 만들기</button>` : "",
+      waitAward ? `<button type="button" data-award-folder="${esc(key)}" title="나라장터 계약정보보다 계약서를 먼저 받았을 때">낙찰 서류 만들기 (계약서 받음)</button>` : "",
+      lateQual ? `<button type="button" data-award-folder="${esc(key)}" data-award-stage="qual" title="앞 순위가 심사에서 떨어져 지일이 심사 통보를 받았을 때만">적격심사 서류 만들기 (심사 통보받음)</button>` : "",
       v.folder ? `<button type="button" data-award-folder="${esc(key)}"${stage} title="나라장터에서 첨부를 다시 받고 서류_확인.txt를 새로 씀. 착공·착수서류에 넣은 계약 값을 준공·청구 서류의 파란 칸에 채움(담당자가 고친 칸은 안 덮어씀)">첨부 다시 받기</button>` : "",
       `<button type="button" data-award-del="${esc(key)}">목록에서 빼기</button>`].join("");
     const detail = AWARD_OPEN.has(key) ? `<tr class="award-detail"><td colspan="${kind === "done" ? 3 : 4}"><div id="awardDetail-${esc(key)}" class="award-panel">불러오는 중…</div></td></tr>` : "";
@@ -4646,8 +4676,8 @@ function renderAward(items) {
     // 계약 종류(일반·제한·지명경쟁, 수의계약 — 투찰 기록의 나라장터 계약방법, 11/20 사용자)
     const method = bid.method || (v.private ? "수의계약" : "");
     const meta = [v.institution, v.work, method, bid.at ? "투찰 " + bid.at.slice(5).replace("-", "/") : ""].filter(Boolean).map(esc).join(" · ");
-    return `<tr><td class="award-name"><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener" title="${esc(key)} — 나라장터에서 보기">${esc(v.title || key)}</a>${reissue}<div class="sub">${meta}</div></td>
-      <td class="award-money">${bid.amount ? `<b title="${Number(bid.amount).toLocaleString()}원">${won(Number(bid.amount))}</b>` : `<span class="sub">투찰 기록 없음</span><br>`}${result}${kind === "done" && v.status === "대기" && rank != null && rank > awardLimit(v) ? `<div class="sub">${awardDesignated(v) ? "지명경쟁은 1등만 가능성이 있음" : "5등 밖 — 차례가 오지 않음"}</div>` : ""}</td>
+    return `<tr><td class="award-name"><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener" title="${esc(key)}, 나라장터에서 보기">${esc(v.title || key)}</a>${reissue}<div class="sub">${meta}</div></td>
+      <td class="award-money">${bid.amount ? `<b title="${Number(bid.amount).toLocaleString()}원">${won(Number(bid.amount))}</b>` : `<span class="sub">투찰 기록 없음</span><br>`}${result}${kind === "done" && v.status === "대기" && rank != null && rank > awardLimit(v) ? `<div class="sub">${awardDesignated(v) ? "지명경쟁은 1등만 가능성이 있음" : "5등 밖, 차례가 오지 않음"}</div>` : ""}</td>
       ${kind === "done" ? "" : `<td>${steps}</td>`}
       <td class="award-act">${simBtn}${main}<details class="award-more"><summary>더 보기</summary>${more}</details></td></tr>${detail}`;
   };
@@ -4668,7 +4698,7 @@ async function loadAwardDetail(key) {
   catch (err) { box.textContent = err.message; }
 }
 function awardDetailHtml(key, s) {
-  if (!s.folder) return `<p class="sub">폴더가 없습니다 — '첨부 다시 받기'로 다시 만드세요.</p>`;
+  if (!s.folder) return `<p class="sub">폴더가 없습니다. '첨부 다시 받기'로 다시 만드세요.</p>`;
   const link = (rel, name) => `<a href="${AWARD_API}/file?key=${encodeURIComponent(key)}&path=${encodeURIComponent(rel)}">${esc(name)}</a>`;
   const local = !s.folder.startsWith("\\\\");
   const stages = s.stages.map((st) => {
@@ -4680,12 +4710,12 @@ function awardDetailHtml(key, s) {
   }).join("");
   // 서류가 있는 단계마다 한 상자(적격심사서류·착공/착수서류) — 채울 칸만 보이고, 자동으로 채운 칸은 접어 둠
   const todo = s.stages.filter((st) => st.doc || st.error).map((doc) => doc.doc ? `
-    <div class="award-box todo"><h4>${esc(doc.name)} — 담당자가 채울 칸 <span class="sub">${esc(doc.dir)}/${esc(doc.doc)}</span></h4>
+    <div class="award-box todo"><h4>${esc(doc.name)}: 담당자가 채울 칸 <span class="sub">${esc(doc.dir)}/${esc(doc.doc)}</span></h4>
       ${doc.todo.length ? `<ul class="award-chips">${doc.todo.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p>필수 칸을 모두 채웠습니다.</p>`}
-      ${doc.auto.length ? `<details class="award-autobox"><summary>자동으로 채운 칸 ${doc.auto.length}개 — 원문과 대조</summary><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl></details>` : ""}
+      ${doc.auto.length ? `<details class="award-autobox"><summary>자동으로 채운 칸 ${doc.auto.length}개, 원문과 대조</summary><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl></details>` : ""}
     </div>` : `<div class="award-box todo"><p>${esc(doc.error)}</p></div>`).join("");
   // 공고문이 요구한 '새로 발급할 서류'(11/19) — 맨 앞 붉은 상자
-  const reissue = (s.reissue || []).length ? `<div class="award-box reissue"><h4>⚠ 새로 발급할 서류 <span class="sub">공고문에 이름이 나옴 — 원문의 발급 기준 확인</span></h4><ul>${s.reissue.map((r) => `<li><b>${esc(r.kind)}</b> — 가진 것: ${esc(r.have)}</li>`).join("")}</ul></div>` : "";
+  const reissue = (s.reissue || []).length ? `<div class="award-box reissue"><h4>⚠ 새로 발급할 서류 <span class="sub">공고문에 이름이 나옵니다. 원문의 발급 기준을 확인하세요</span></h4><ul>${s.reissue.map((r) => `<li><b>${esc(r.kind)}</b>, 가진 것: ${esc(r.have)}</li>`).join("")}</ul></div>` : "";
   const notes = s.notes.length ? `<div class="award-box"><h4>확인할 것</h4><ul class="award-notes">${s.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>` : "";
   // 공고문 제출서류 — '[입찰참여 시] …' 앞말로 단계별 묶음, 줄마다 '표준틀에 있음 / 따로 준비' + 서류 이름, 어느 첨부에서 읽었는지는 묶음 아래 작게
   const groups = new Map();
@@ -4695,16 +4725,16 @@ function awardDetailHtml(key, s) {
     if (!groups.has(when)) groups.set(when, []);
     groups.get(when).push({ ...d, text: m ? d.text.slice(m[0].length) : d.text });
   }
-  const docs = `<div class="award-box award-wide"><h4>공고문 제출서류 <span class="sub">첨부를 끝까지 읽은 결과 — 원문과 대조하세요</span></h4>${s.docList.length
+  const docs = `<div class="award-box award-wide"><h4>공고문 제출서류 <span class="sub">첨부를 끝까지 읽은 결과입니다. 원문과 대조하세요</span></h4>${s.docList.length
     ? [...groups].map(([when, list]) => `<div class="award-docgroup"><h5>${esc(when)}</h5><ul class="award-docs">${list.map((d) =>
         `<li><span class="award-docstate ${d.covered ? "ok" : "no"}">${d.covered ? "표준틀에 있음" : "따로 준비"}</span><span class="award-doctext">${esc(d.text)}</span></li>`).join("")}</ul>
         <p class="sub">출처: ${esc([...new Set(list.map((d) => d.source).filter(Boolean))].join(" · ") || "첨부")}</p></div>`).join("")
-    : `<p class="sub">첨부에서 제출서류 목록을 찾지 못했습니다 — 공고문을 직접 확인하세요.</p>`}</div>`;
+    : `<p class="sub">첨부에서 제출서류 목록을 찾지 못했습니다. 공고문을 직접 확인하세요.</p>`}</div>`;
   const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="${AWARD_API}/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}">zip으로 받기</a></li>`),
     s.attach.length ? `<li><b>공고문서</b> ${s.attach.map((f) => link("공고문서/" + f, f)).join(" · ")}</li>` : ""].join("");
   return `<div class="award-path"><span>폴더</span><code>${esc(s.folder)}</code>
       <button type="button" data-award-copy="${esc(s.folder)}">경로 복사</button>
-      <span class="sub">${local ? "서버 PC 안 폴더라 다른 PC에서는 열리지 않습니다 — 아래 파일을 내려받으세요." : "탐색기 주소창에 붙여 넣으면 열립니다. 여기서 파일을 열어 채우고 저장하면 그대로 남습니다."}</span></div>
+      <span class="sub">${local ? "서버 PC 안 폴더라 다른 PC에서는 열리지 않습니다. 아래 파일을 내려받으세요." : "탐색기 주소창에 붙여 넣으면 열립니다. 여기서 파일을 열어 채우고 저장하면 그대로 남습니다."}</span></div>
     <ul class="award-stages">${stages}</ul>
     ${reissue}
     ${todo ? `<div class="award-grid">${todo}</div>` : ""}
@@ -4728,7 +4758,7 @@ async function awardAct(btn, path, body, done) {
   } catch (err) { $("awardMsg").textContent = err.message; }
   btn.disabled = false;
 }
-$("awardAdd").onclick = (e) => awardAct(e.target, AWARD_API, { no: $("awardNo").value }, () => { $("awardNo").value = ""; return "넣었습니다 — '지금 낙찰자 확인'을 누르면 바로 확인합니다."; });
+$("awardAdd").onclick = (e) => awardAct(e.target, AWARD_API, { no: $("awardNo").value }, () => { $("awardNo").value = ""; return "넣었습니다. '지금 낙찰자 확인'을 누르면 바로 확인합니다."; });
 $("awardCheck").onclick = (e) => awardAct(e.target, AWARD_API + "/check", {}, (d) => d.message || `낙찰 ${d.won} · 다른 업체 ${d.lost} · 아직 없음 ${d.waiting}`);
 $("awardList").onclick = (e) => {
   const open = e.target.closest("[data-award-open]");
@@ -4740,7 +4770,7 @@ $("awardList").onclick = (e) => {
   const copy = e.target.closest("[data-award-copy]");
   if (copy) {
     navigator.clipboard.writeText(copy.dataset.awardCopy).then(() => { copy.textContent = "복사됨"; },
-      () => { $("awardMsg").textContent = "복사하지 못했습니다 — 경로를 직접 선택해 복사하세요."; });
+      () => { $("awardMsg").textContent = "복사하지 못했습니다. 경로를 직접 선택해 복사하세요."; });
     return;
   }
   if (e.target.closest("[data-award-sim]")) return $("awardCheck").click();  // 시험 페이지 '다음 단계'
@@ -4752,8 +4782,8 @@ $("awardList").onclick = (e) => {
     // 시험 페이지는 시험 목록의 zip, 이미 있던 폴더면 이번에 더해진 파일만(since)
     a.href = `${AWARD_API}/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=${d.since ? "&since=" + d.since : ""}`;
     document.body.appendChild(a); a.click(); a.remove();
-    return d.since ? "같은 공고 폴더에 이번 서류를 더했습니다 — 더해진 파일만 '…_추가.zip'으로 받았습니다. 먼저 받은 zip과 같은 곳에 풀면 한 폴더로 합쳐집니다. 엑셀을 처음 열면 위의 '편집 사용'을 눌러야 서식 칸이 계산됩니다."
-      : "폴더를 만들고 첨부를 받았습니다 — 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 채울 칸은 '서류 현황'에서 볼 수 있습니다. 엑셀을 처음 열면 위의 '편집 사용'을 눌러야 서식 칸이 계산됩니다.";
+    return d.since ? "같은 공고 폴더에 이번 서류를 더했습니다. 더해진 파일만 '…_추가.zip'으로 받았습니다. 먼저 받은 zip과 같은 곳에 풀면 한 폴더로 합쳐집니다. 엑셀을 처음 열면 위의 '편집 사용'을 눌러야 서식 칸이 계산됩니다."
+      : "폴더를 만들고 첨부를 받았습니다. 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 채울 칸은 '서류 현황'에서 볼 수 있습니다. 엑셀을 처음 열면 위의 '편집 사용'을 눌러야 서식 칸이 계산됩니다.";
   });
   const del = e.target.closest("[data-award-del]");
   if (del && confirm("목록에서 뺄까요? (만든 폴더는 지우지 않습니다)")) awardAct(del, AWARD_API + "/delete", { key: del.dataset.awardDel });
@@ -4793,38 +4823,79 @@ document.addEventListener("toggle", (e) => {
   if (key) e.target.open ? SKIP_OPEN.add(key) : SKIP_OPEN.delete(key);
 }, true);
 // 낙찰 후 서류 도움말 — 자주 묻는 것(눌러서 보기 + 낱말 찾기). 회사 자료가 밖으로 나가지 않게 외부 AI는 안 씀(11/24 시험)
+const HELP_CATS = ["처음 오셨나요?", "목록·결과", "서류 만들기", "서류 채우기", "문제가 생겼을 때"];
 const AWARD_HELP = [
-  ["공고가 목록에 안 보여요", "투찰 계산기에서 투찰 기록을 남긴 공고는 저절로 올라옵니다. 투찰 기록이 없는 공고(협상 등)는 위의 '협상 등 공고번호로 넣기'를 눌러 공고번호를 넣으세요.", "목록 안 보 없 추가 넣 협상 공고번호"],
-  ["'낙찰 서류 만들기'가 안 눌려요", "나라장터에 계약이 올라와야 켜집니다(매일 밤 확인). 계약서를 먼저 받았다면 그 공고의 '더 보기' → '계약서 받음 — 낙찰 서류 만들기'를 누르세요.", "낙찰 서류 안 눌 흐 계약 버튼"],
-  ["적격심사 서류는 언제 만드나요?", "개찰 1등이면 바로 '적격심사 서류 만들기' 버튼이 나옵니다. 2~5등이면 '결과를 기다리는 공고'에 있다가, 심사 통보를 받으면 '더 보기' → '심사 통보받음 — 적격심사 서류 만들기'를 누르세요. 지명경쟁은 1등일 때만 만듭니다.", "적격 심사 등수 2등 통보 지명"],
-  ["만든 서류는 어디에 있나요?", "만들기를 누르면 묶음(zip)이 바로 내려받아지고, 같은 폴더가 회사 공유 폴더 '낙찰후서류'에도 생깁니다. 공유 폴더의 파일을 열어 고치고 저장하면 됩니다. 두 번째부터 받는 묶음(…_추가.zip)은 새로 더해진 파일만 들어 있습니다.", "어디 폴더 zip 파일 저장 위치 추가"],
-  ["파랑·초록·노랑 칸은 뭐예요?", "파랑 = 웹앱이 채운 칸, 초록 = 회사 정보, 노랑 = 직접 적을 칸입니다. 아직 비어 있는 칸은 '서류 현황'을 펼치면 '채울 칸'으로 보입니다.", "색 파랑 노랑 초록 칸 채울"],
-  ["착공·착수서류를 고치면 준공 서류에도 들어가나요?", "네. 고쳐서 저장한 뒤 그 공고의 '서류 현황'을 열면 준공·청구 서류의 파란 칸으로 저절로 옮겨 적습니다. 직접 고친 칸은 덮어쓰지 않습니다.", "착공 착수 준공 청구 반영 옮"],
-  ["'지금 낙찰자 확인'은 언제 누르나요?", "매일 밤 22시에 저절로 확인하니 평소엔 안 눌러도 됩니다. 결과를 바로 보고 싶을 때만 누르세요.", "낙찰자 확인 22시 언제"],
-  ["탈락한 공고는 어떻게 되나요?", "'끝난 공고' 칸에 접혀 있습니다. 따로 할 일은 없습니다.", "탈락 끝난 떨어"],
-  ["공고를 목록에서 빼고 싶어요", "그 공고의 '더 보기' → '목록에서 빼기'를 누르세요.", "빼 지우 삭제 제거"],
+  [0, "이 탭은 왜 만들었나요?", "투찰한 공고를 개찰 → 낙찰 → 계약 → 준공까지 따라가면서,\n그때그때 낼 서류를 미리 만들어 두려고 만들었습니다.\n\n예전엔 공고마다 폴더를 만들고 지난 서류를 복사해 고쳤는데,\n그 일을 웹앱이 대신합니다.", "왜 만들 목적 이유 처음 무엇 뭐"],
+  [0, "어떻게 동작하나요?", "① 투찰 계산기에 투찰 기록을 남기면 이 목록에 올라옵니다.\n② 매일 밤 22시에 나라장터에서 개찰·낙찰·계약을 확인합니다.\n③ 단계가 바뀌면 그 줄에 할 일 버튼이 켜집니다.\n④ 버튼을 누르면 표준틀에 공고 정보를 채운 폴더와 묶음(zip)이 생깁니다.\n⑤ 노란 칸만 직접 채우면 됩니다.", "동작 순서 흐름 어떻게 원리 사용법 쓰는"],
+  [0, "목록이 세 묶음으로 나뉜 건 뭔가요?", "• 지금 할 일: 개찰 1등·낙찰 등 서류를 만들어야 하는 공고\n• 결과를 기다리는 공고: 개찰 결과나 낙찰자 확정을 기다리는 중\n• 끝난 공고: 탈락·다른 업체 낙찰, 할 일 없음 (접혀 있음)", "묶음 세 칸 지금 할 일 기다리 끝난 구분"],
+  [0, "단계 줄(개찰·적격심사·계약…)은 뭔가요?", "공고가 지금 어디까지 왔는지 보여 줍니다.\n칠해진 칸이 지금 단계입니다.\n\n개찰 → 적격심사 → 계약 → 착공(착수) → 준공 → 청구 순서입니다.", "단계 줄 칸 색 칠 진행"],
+  [0, "낙찰 결과는 누가 입력하나요?", "사람이 입력하지 않습니다.\n매일 밤 22시에 나라장터 낙찰 정보를 웹앱이 직접 받아 옵니다.", "낙찰 결과 입력 누가 자동 나라장터"],
+  [0, "제가 직접 해야 하는 건 뭔가요?", "• 버튼 누르기 (적격심사 서류 · 낙찰 서류 만들기)\n• 만든 서류의 노란 칸 채우기\n\n공고 정보·금액·계약일처럼 나라장터에 있는 값은 웹앱이 채웁니다.", "직접 할 일 해야 담당자 제가"],
+
+  [1, "공고가 목록에 안 보여요", "투찰 계산기에서 투찰 기록을 남긴 공고만 저절로 올라옵니다.\n\n투찰 기록이 없는 공고(협상 등)는\n위쪽 '협상 등 공고번호로 넣기'를 눌러 공고번호를 넣으세요.", "목록 안 보 없 추가 넣 안나"],
+  [1, "협상 공고는 어떻게 넣나요?", "위쪽 '협상 등 공고번호로 넣기'를 누르고\n공고번호(예: R26BK01800345-000)를 넣은 뒤 '목록에 넣기'를 누르세요.", "협상 공고번호 넣기 추가 등록"],
+  [1, "'지금 낙찰자 확인'은 언제 누르나요?", "매일 밤 22시에 저절로 확인하니 평소엔 안 눌러도 됩니다.\n결과를 지금 바로 보고 싶을 때만 누르세요.", "낙찰자 확인 22시 언제 지금"],
+  [1, "개찰 2~5등이면 어떻게 되나요?", "'결과를 기다리는 공고'에 그대로 둡니다.\n\n앞 순위 업체가 심사에서 떨어져 지일이 심사 통보를 받으면\n그 공고의 '더 보기' → '적격심사 서류 만들기 (심사 통보받음)'를 누르세요.\n(나라장터 자료로는 차례가 넘어온 걸 알 수 없어 직접 눌러야 합니다.)", "2등 3등 4등 5등 차례 통보 순위"],
+  [1, "개찰 6등 밖이면요?", "차례가 오기 어려워 '끝난 공고'로 옮깁니다.\n따로 할 일은 없습니다.", "6등 밖 순위 낮"],
+  [1, "지명경쟁은 왜 1등만 서류를 만드나요?", "지명경쟁은 지명받은 업체끼리 겨루는 방식이라\n1등이 아니면 차례가 오는 일이 거의 없습니다.\n그래서 2등부터는 '끝난 공고'로 봅니다.", "지명 경쟁 1등"],
+  [1, "'하한선 미달'은 무슨 뜻인가요?", "투찰금액이 낙찰하한선보다 낮아 무효가 됐다는 뜻입니다.\n이 공고는 낙찰될 수 없어 '끝난 공고'로 갑니다.", "하한선 미달 무효 뜻"],
+  [1, "수의계약은 어떻게 되나요?", "수의계약은 적격심사가 없습니다.\n낙찰이 확인되고 계약이 올라오면 바로 '낙찰 서류 만들기'가 켜집니다.", "수의 계약 수의계약"],
+  [1, "탈락한 공고는 어떻게 되나요?", "'끝난 공고' 칸에 접혀 있습니다.\n따로 할 일은 없습니다.", "탈락 끝난 떨어 다른 업체"],
+  [1, "공고를 목록에서 빼고 싶어요", "그 공고의 '더 보기' → '목록에서 빼기'를 누르세요.\n만든 폴더·파일은 지우지 않습니다.", "빼 지우 삭제 제거"],
+
+  [2, "적격심사 서류는 언제 만드나요?", "개찰 1등이면 그 줄에 '적격심사 서류 만들기' 버튼이 바로 켜집니다.\n\n2~5등은 기다리다가,\n심사 통보를 받으면 '더 보기'에서 만드세요.", "적격 심사 언제 서류"],
+  [2, "'낙찰 서류 만들기'가 안 눌려요", "나라장터에 계약이 올라와야 켜집니다(매일 밤 확인).\n\n계약서를 먼저 받았다면\n그 공고의 '더 보기' → '낙찰 서류 만들기 (계약서 받음)'를 누르세요.", "낙찰 서류 안 눌 흐 계약 버튼 회색"],
+  [2, "낙찰 서류에는 뭐가 들어 있나요?", "착공(착수) · 준공 · 청구 단계별 폴더와 표준틀 엑셀입니다.\n공고 이름·발주기관·금액·계약일 같은 값은 미리 채워져 있습니다.\n\n적격심사 때 만든 공고 폴더 안에 함께 들어가므로,\n공고 하나의 서류를 한 폴더에서 다 볼 수 있습니다.", "낙찰 서류 내용 들어 폴더 구성"],
+  [2, "공사·물품·용역에 따라 서류가 다른가요?", "네, 업무에 맞춰 저절로 고릅니다.\n• 공사: 착공계 · 준공계\n• 물품: 착수서류 · 납품계\n• 용역: 착수서류 · 완료계\n청구서는 모두 같습니다.", "공사 물품 용역 다른 차이 착공 착수 납품 완료"],
+  [2, "계약서는 왜 안 만들어 주나요?", "계약서는 발주처마다 양식이 달라서 웹앱이 만들지 않습니다.\n발주처에서 받은 양식으로 작성해 주세요.", "계약서 계약 양식 안 만들"],
+  [2, "만든 서류는 어디에 있나요?", "공고 하나에 폴더가 하나 생깁니다.\n\n① 개찰 1등이면 '적격심사 서류 만들기'로 공고 폴더가 처음 생깁니다.\n② 계약이 나라장터에 등록되면 '낙찰 서류 만들기'가 켜집니다.\n③ 낙찰 서류는 새 폴더가 아니라 ①에서 만든 같은 폴더 안에 더해집니다.\n\n폴더는 회사 공유 폴더 '낙찰후서류'에 있고,\n만들 때마다 묶음(zip)도 바로 내려받아집니다.\n정확한 위치는 '서류 현황'의 '경로 복사'를 눌러 파일 탐색기 주소칸에 붙여 넣으세요.", "어디 폴더 zip 파일 저장 위치 경로"],
+  [2, "두 번째 받은 zip에 파일이 적어요", "정상입니다.\n\n처음 받은 zip에는 적격심사 서류가 들어 있고,\n낙찰 서류를 만들 때 받는 zip(…_추가.zip)에는 이번에 더해진 낙찰 서류만 들어 있습니다.\n\n두 zip을 같은 곳에 풀면 한 폴더로 합쳐집니다.\n공유 폴더에는 처음부터 전부 한 폴더에 있습니다.", "zip 추가 적 두 번째 일부 합치"],
+  [2, "'첨부 다시 받기'는 언제 누르나요?", "• 공고가 정정돼 첨부가 바뀌었을 때\n• '폴더가 없습니다'라고 나올 때\n누르면 나라장터 첨부를 다시 받고 '서류_확인.txt'를 새로 씁니다.", "첨부 다시 받기 정정 언제"],
+  [2, "'서류_확인.txt'는 뭔가요?", "공고문에 적힌 제출서류 중\n표준틀에 없어 따로 준비해야 하는 것을 적어 둔 파일입니다.\n공고 폴더의 '공고문서' 안에 있습니다.", "서류 확인 txt 제출서류 따로 준비"],
+
+  [3, "파랑·초록·노랑 칸은 뭐예요?", "• 파랑: 웹앱이 채운 칸\n• 초록: 회사 정보\n• 노랑: 직접 적을 칸", "색 파랑 노랑 초록 칸"],
+  [3, "꼭 채워야 할 칸은 어떻게 알아요?", "그 공고의 '서류 현황'을 펼치면\n아직 비어 있는 칸이 '채울 칸'으로 단계별로 보입니다.", "채울 칸 비어 필수 빠진 현황"],
+  [3, "착공·착수서류를 고치면 준공 서류에도 들어가나요?", "네. 고쳐서 저장한 뒤 '서류 현황'을 열면\n준공·청구 서류의 파란 칸으로 저절로 옮겨 적습니다.\n직접 고친 칸은 덮어쓰지 않습니다.", "착공 착수 준공 청구 반영 옮"],
+  [3, "날짜는 어떻게 적어요?", "엑셀 날짜 칸에는 2025-11-27 처럼 적어 주세요.\n2025.11.27 이나 11월 27일로 적으면 글자로 읽혀 계산이 안 됩니다.", "날짜 적 형식 입력"],
+  [3, "회사 서류(사업자등록증 등)는 어디서 바꾸나요?", "맨 위 '회사 서류'를 누르면 서류 목록과 만료일이 보입니다.\n새 PDF를 올리면 다음 서류부터 최신 것으로 들어갑니다.", "회사 서류 사업자 등록증 최신 바꾸 만료"],
+  [3, "한글(hwp) 파일로 내라고 해요", "표준틀은 엑셀로만 있습니다.\n한글 파일이 꼭 필요하면 개발 담당에게 말씀해 주세요.", "한글 hwp 한셀 파일 형식"],
+
+  [4, "버튼을 눌렀는데 아무 일도 없어요", "① 위쪽에 안내 글이 떴는지 보세요.\n② 키보드 F5로 새로 고친 뒤 다시 눌러 보세요.\n③ 그래도 안 되면 개발 담당에게 말씀해 주세요.", "안 됨 오류 반응 멈 에러 버튼"],
+  [4, "'폴더가 없습니다'라고 나와요", "그 공고의 '첨부 다시 받기'를 누르면 폴더를 다시 만듭니다.", "폴더 없 사라"],
+  [4, "계약일·금액이 실제와 달라요", "웹앱은 나라장터 계약정보 값을 씁니다.\n실제와 다르면 착공·착수서류에 바른 값을 고쳐 적으세요. 그 값이 먼저입니다.\n다른 값은 '서류_확인.txt'에 '확인:' 줄로도 남습니다.", "계약일 금액 다름 틀 실제 잘못"],
+  [4, "이 도우미는 외부 AI인가요?", "아닙니다.\n미리 정해 둔 질문과 답만 보여 주고,\n적은 질문은 회사 밖으로 나가지 않습니다.", "AI 외부 보안 챗봇 인공지능"],
+  [4, "원하는 답이 없어요", "아직 준비된 답이 없는 질문입니다.\n개발 담당에게 직접 물어봐 주세요.\n자주 나오는 질문은 여기에 답을 더해 두겠습니다.", "답 없 모르 다른 질문"],
 ];
 // 카카오톡 같은 대화창(11/24 사용자 — stellaize ChatPanel 모양 참고). 왼쪽 = 도우미, 오른쪽 = 나, 대화는 창을 연 동안만.
 // 직접 적은 질문은 낱말로 맞는 답을 찾고, 없으면 없다고 솔직하게 말한다(사용자: 있다고 지어내지 말 것).
 const HELP_LOG = [];
+const HELP_LOGO = `<span class="hav" aria-hidden="true"><svg viewBox="14 13 78 35" fill="currentColor"><path d="M23.8 14 L36.4 14 L36.4 25.5 C36.4 34 32.5 40.5 21.8 46.8 L17.4 33.2 L17.2 31.2 L22.4 26 L23.6 22.8 Z"/><rect x="40" y="14" width="12.5" height="33"/><rect x="57" y="14" width="13" height="33"/><path d="M74 14H86V33L89.4 37.6V47H74Z"/></svg></span>`;
+let HELP_SHOWN = 0;      // 이미 그린 말 수 — 새 말에만 올라오는 움직임
+let HELP_TYPING = false; // 도우미가 '입력 중…'
+function helpReply(fn) {  // 바로 답하지 않고 잠깐 '입력 중' 점을 보여 줌(11/24 사용자 — 딱딱하지 않게)
+  HELP_TYPING = true; renderHelp();
+  setTimeout(() => { HELP_TYPING = false; fn(); renderHelp(); }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 650);
+}
 const helpClock = () => new Date().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
 const helpSay = (who, text, picks = null) => HELP_LOG.push({ who, text, picks, at: helpClock() });
 function helpHello() {
   HELP_LOG.length = 0;
-  helpSay("bot", "안녕하세요, 지일 도우미입니다.\n낙찰 후 서류 탭에서 궁금한 것을 아래에서 골라 주세요. 직접 적어 물어보셔도 됩니다.", AWARD_HELP.map((_, i) => i));
+  helpSay("bot", "안녕하세요, 지일 도우미입니다.\n낙찰 후 서류 탭 사용법을 안내해 드려요.\n\n궁금한 주제를 고르거나, 아래 칸에 직접 적어 물어보세요.", "cats");
 }
 function helpMatch(q) {
   const t = q.replace(/\s+/g, "");
-  const scored = AWARD_HELP.map((h, i) => [i, h[2].split(" ").filter((w) => w && t.includes(w)).length + (h[0].replace(/\s+/g, "").includes(t) ? 2 : 0)]);
+  const scored = AWARD_HELP.map((h, i) => [i, h[3].split(" ").filter((w) => w && t.includes(w)).length + (h[1].replace(/\s+/g, "").includes(t) ? 2 : 0)]);
   const best = Math.max(...scored.map((x) => x[1]));
   return best > 0 ? scored.filter((x) => x[1] === best).map((x) => x[0]) : [];
 }
 function helpAsk(q) {
   helpSay("me", q);
   const hits = helpMatch(q);
-  if (hits.length === 1) helpSay("bot", AWARD_HELP[hits[0]][1], []);
-  else if (hits.length) helpSay("bot", "이 중에 찾으시는 게 있나요?", hits);
+  helpReply(() => {
+  if (hits.length === 1) helpSay("bot", AWARD_HELP[hits[0]][2], []);
+  else if (hits.length) helpSay("bot", "이 중에 찾으시는 게 있나요?", hits.slice(0, 6));
   else helpSay("bot", "죄송합니다. 이 질문은 제가 안내할 수 있는 정보가 없습니다.\n개발 담당에게 직접 물어봐 주세요.", []);
+  });
 }
 function renderHelp() {
   let html = "", prev = null;
@@ -4832,45 +4903,68 @@ function renderHelp() {
     const first = !prev || prev.who !== m.who;
     const lastOfGroup = !HELP_LOG[k + 1] || HELP_LOG[k + 1].who !== m.who;
     const live = k === HELP_LOG.length - 1;  // 고르기 버튼은 마지막 말 밑에만 — 지난 메뉴가 쌓이지 않게
-    const picks = live && m.picks && m.picks.length
-      ? `<div class="hpicks">${m.picks.map((i) => `<button type="button" data-hq="${i}">${esc(AWARD_HELP[i][0])}</button>`).join("")}</div>` : "";
-    const again = live && m.picks && !m.picks.length ? `<div class="hpicks"><button type="button" data-hmenu>다른 질문 보기</button></div>` : "";
-    html += `<li class="hmsg ${m.who}${first ? " first" : ""}">`
-      + (m.who === "bot" ? (first ? `<span class="hav" aria-hidden="true">지</span>` : `<span class="hav sp" aria-hidden="true"></span>`) : "")
+    const picks = !live || !m.picks ? ""
+      : m.picks === "cats" ? `<div class="hpicks cats">${HELP_CATS.map((c, i) => `<button type="button" data-hcat="${i}">${esc(c)}</button>`).join("")}</div>`
+      : m.picks.length ? `<div class="hpicks">${m.picks.map((i) => `<button type="button" data-hq="${i}">${esc(AWARD_HELP[i][1])}</button>`).join("")}`
+        + `<button type="button" class="hother" data-hmenu>다른 주제 보기</button></div>` : "";
+    const again = live && Array.isArray(m.picks) && !m.picks.length ? `<div class="hpicks"><button type="button" class="hother" data-hmenu>다른 질문 보기</button></div>` : "";
+    html += `<li class="hmsg ${m.who}${first ? " first" : ""}${k >= HELP_SHOWN ? " new" : ""}">`
+      + (m.who === "bot" ? (first ? HELP_LOGO : `<span class="hav sp" aria-hidden="true"></span>`) : "")
       + `<div class="hcol">${m.who === "bot" && first ? `<span class="hname">지일 도우미</span>` : ""}`
       + `<div class="hline"><p class="hb${lastOfGroup ? " tail" : ""}">${esc(m.text)}</p>${lastOfGroup ? `<span class="ht">${m.at}</span>` : ""}</div>${picks}${again}</div></li>`;
     prev = m;
   });
+  if (HELP_TYPING) html += `<li class="hmsg bot new${prev && prev.who === "bot" ? "" : " first"}">${prev && prev.who === "bot" ? `<span class="hav sp"></span>` : HELP_LOGO}`
+    + `<div class="hcol"><div class="hline"><p class="hb tail htyping" aria-label="입력 중"><i></i><i></i><i></i></p></div></div></li>`;
+  HELP_SHOWN = HELP_LOG.length;
   $("helpBox").innerHTML = `<div class="hhead"><b>지일 도우미</b><span>낙찰 후 서류</span><button type="button" data-hclose aria-label="닫기">✕</button></div>`
-    + `<p class="hsafe">🔒 외부 AI를 쓰지 않습니다 — 적은 질문은 회사 밖으로 나가지 않고, 정해 둔 답만 보여 줍니다.</p>`
+    + `<p class="hsafe">🔒 외부 AI를 쓰지 않습니다. 적은 질문은 회사 밖으로 나가지 않고, 정해 둔 답만 보여 줍니다.</p>`
     + `<ol class="hlog" role="log" aria-live="polite">${html}</ol>`
-    + `<form class="hform"><input id="helpQ" placeholder="직접 물어보기 — 예: 폴더가 어디예요?" autocomplete="off" aria-label="직접 물어보기"><button type="submit">보내기</button></form>`;
+    + `<form class="hform"><input id="helpQ" placeholder="직접 물어보기 (예: 폴더가 어디예요?)" autocomplete="off" aria-label="직접 물어보기"><button type="submit">보내기</button></form>`;
   const log = $("helpBox").querySelector(".hlog");
   log.scrollTop = log.scrollHeight;
 }
+function helpNudge() {
+  let seen = false;
+  try { seen = localStorage.getItem("help-seen") === "1"; } catch (e) {}
+  $("helpNudge").hidden = seen || $("helpFab").hidden || !$("helpBox").hidden;
+  $("helpFab").classList.toggle("nudge", !$("helpNudge").hidden);
+}
+$("helpNudge").onclick = () => helpOpen(true);
 function helpOpen(open) {
+  if (open) { try { localStorage.setItem("help-seen", "1"); } catch (e) {} }
   $("helpBox").hidden = !open;
+  helpNudge();
+  if (open) HELP_SHOWN = 0;  // 다시 열면 말들이 차례로 올라옴
   $("helpFab").setAttribute("aria-expanded", String(open));
   if (open) { if (!HELP_LOG.length) helpHello(); renderHelp(); $("helpQ").focus(); }
 }
 $("helpFab").onclick = () => helpOpen($("helpBox").hidden);
 $("helpBox").addEventListener("click", (e) => {
   const q = e.target.closest("[data-hq]");
-  if (q) { const h = AWARD_HELP[Number(q.dataset.hq)]; helpSay("me", h[0]); helpSay("bot", h[1], []); renderHelp(); return; }
-  if (e.target.closest("[data-hmenu]")) { helpSay("bot", "궁금한 것을 골라 주세요.", AWARD_HELP.map((_, i) => i)); renderHelp(); return; }
+  if (HELP_TYPING) return;
+  if (q) { const h = AWARD_HELP[Number(q.dataset.hq)]; helpSay("me", h[1]); helpReply(() => helpSay("bot", h[2], [])); return; }
+  const c = e.target.closest("[data-hcat]");
+  if (c) {
+    const n = Number(c.dataset.hcat);
+    helpSay("me", HELP_CATS[n]);
+    helpReply(() => helpSay("bot", "이런 걸 많이 물어보세요.", AWARD_HELP.map((h, i) => [h, i]).filter(([h]) => h[0] === n).map(([, i]) => i)));
+    return;
+  }
+  if (e.target.closest("[data-hmenu]")) { helpReply(() => helpSay("bot", "궁금한 주제를 골라 주세요.", "cats")); return; }
   if (e.target.closest("[data-hclose]")) helpOpen(false);
 });
 $("helpBox").addEventListener("submit", (e) => {
   e.preventDefault();
   const v = $("helpQ").value.trim();
-  if (!v) return;
+  if (!v || HELP_TYPING) return;
   helpAsk(v);
-  renderHelp();
   $("helpQ").focus();
 });
 function showTab(tab) {
   $("helpFab").hidden = tab !== "award";
   if (tab !== "award") $("helpBox").hidden = true;
+  helpNudge();
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   for (const name of ["live", "excluded", "corpus", "log", "calc", "quant", "award"]) $("tab-" + name).hidden = tab !== name;
   // 정량평가서도 고른 회사 자료로(2026-11-24) — iframe 주소에 ?co=를 붙이면 그 화면이 API에 붙여 보냄

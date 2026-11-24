@@ -1169,7 +1169,7 @@ class PostAward:
             try:
                 done, _ = fill_done(templates / name, folder / stage / doc, values, auto.get(rel, {}))
             except PermissionError:
-                head.append(f"[준공·청구] {rel}이 열려 있어 채우지 못함 — 엑셀에서 닫고 '첨부 다시 받기'")
+                head.append(f"[준공·청구] {rel}이 열려 있어 채우지 못함 — 엑셀에서 닫고 '서류 다시 만들기'")
                 continue
             auto[rel] = done
             kept = [DONE_NAMES[k] for k in values if values[k] not in (None, "") and k not in done
@@ -1253,7 +1253,7 @@ class PostAward:
             try:
                 self._fill_done(key, folder, nf, Path(v["templates"]), cv, [f"  {line}"], force=force)
             except Exception:  # noqa: BLE001 — 서류를 못 고쳐도 계약 값은 남김
-                line += " — 서류는 못 고침(파일이 열려 있으면 닫고 '첨부 다시 받기')"
+                line += " — 서류는 못 고침(파일이 열려 있으면 닫고 '서류 다시 만들기')"
             note = folder / "공고문서" / "서류_확인.txt"
             try:
                 with note.open("a", encoding="utf-8") as f:

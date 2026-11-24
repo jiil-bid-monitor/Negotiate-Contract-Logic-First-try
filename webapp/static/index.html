@@ -3240,7 +3240,7 @@ const partOf = (n) => {
 // ── 참가여부 · 담당자 · 대화 (같은 링크로 보는 사람 모두 공유) ────────────────
 let participation = {};
 let REPORT_LINK = false;
-let JUDGE_TODAY = false;  // 📋 입찰 칸 '오늘'만
+let JUDGE_TODAY = true;  // 📋 입찰 칸 '오늘'만 — 처음엔 오늘(11/24 사용자)
 const PART_STATUSES = ["참가", "보류", "불참"];  // 검토중 버튼은 2026-11-18 사용자 결정으로 뺌
 const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted", 미판단: "todo", 놓침: "missed", 참고: "muted" };
 
@@ -5038,7 +5038,7 @@ function renderJudgeBell() {
   const dailyIn = JUDGE_TODAY && rep ? daily.filter(isToday) : [...daily.filter(isToday), ...daily.filter((p) => !isToday(p))];
   // 주간 보고는 마감 D-2 안 공고만 펼쳐 보임(11/24 사용자 — 창이 길어 읽기 싫어짐), 나머지는 링크로
   const soon = (p) => Math.ceil((deadlineAt(p.meta?.deadline) - Date.now()) / 86400000) <= 2;  // 화면 D-N과 같은 셈
-  const toggle = rep ? `<span class="jtoggle" role="group" aria-label="보고 기간">${[[false, "7일"], [true, rep === todayText() ? "오늘" : mdOf(rep)]].map(([v, l]) => `<button type="button" data-jtoday="${v ? 1 : 0}" aria-pressed="${JUDGE_TODAY === v}" class="${JUDGE_TODAY === v ? "on" : ""}">${l}</button>`).join("")}</span>` : "";
+  const toggle = rep ? `<span class="jtoggle" role="group" aria-label="보고 기간">${[[true, rep === todayText() ? "오늘" : mdOf(rep)], [false, "7일"]].map(([v, l]) => `<button type="button" data-jtoday="${v ? 1 : 0}" aria-pressed="${JUDGE_TODAY === v}" class="${JUDGE_TODAY === v ? "on" : ""}">${l}</button>`).join("")}</span>` : "";
   const repLink = repN ? `<p class="how"><button type="button" class="linkbtn" data-report="daily:${rep}">${rep === todayText() ? "오늘" : mdOf(rep)} 보고 ${repN}건 모두 보기 ›</button></p>` : "";
   $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3><p class="row2">보고에 나간 공고 중 판단 안 한 것 · 7일 안</p>`
     + section("입찰 · 매일 보고", dailyIn, JUDGE_TODAY && rep ? "" : "입찰", repLink, toggle) + section("협상 · 규격가격 · 주간 보고", weekly, "협상", "", "", weekly.filter(soon).slice(0, 3))

@@ -3743,7 +3743,7 @@ function logAggHtml(all) {
       <tbody>${rows.map((r) => {
         const top = [...r.tags].sort((x, y) => y[1] - x[1])[0];
         const few = r.n < AGG_MIN_N;
-        const review = r.n >= AGG_REVIEW_N && pct(r.불참, r.n) >= AGG_REVIEW_OUT;
+        const review = !r.k.startsWith("(") && r.n >= AGG_REVIEW_N && pct(r.불참, r.n) >= AGG_REVIEW_OUT; // "(경로 기록 없음…)"은 여러 경로가 섞인 묶음이라 고칠 대상이 아님
         const note = review ? `<span class="badge warn">불참 ${pct(r.불참, r.n)}% — ${hint} 검토</span>` : few ? '<span class="faint-note">표본 적음</span>' : "";
         return `<tr><td>${esc(r.k)}</td><td class="num">${r.n}</td><td class="num">${r.참가}</td><td class="num">${r.보류}</td><td class="num">${r.불참}</td><td class="num">${few ? "–" : pct(r.참가, r.n) + "%"}</td><td>${top ? `${esc(top[0])} ${top[1]}` : ""}</td><td>${note}</td></tr>`;
       }).join("")}</tbody>

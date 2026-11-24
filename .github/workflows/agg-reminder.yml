@@ -1,0 +1,29 @@
+name: 판단 기록 집계 확인 알림
+# 매달 15일 10:00(KST) 개발자 방에 "판단 기록 집계를 볼 때"라고 알린다(2026-11-24 사용자 요청 — 첫 알림 12/15).
+# 집계는 웹앱 주소 끝 ?dev=1 → 판단 기록 탭 맨 아래. 규칙은 사람이 미리 보기로 확인한 뒤에만 바꾼다.
+# GitHub 예약 실행은 1~3시간 늦게 시작하곤 한다(daily.yml 참고) — 알림이라 그대로 둔다.
+on:
+  schedule:
+    - cron: "0 1 15 * *"   # 01:00 UTC = 10:00 KST
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: 개발자 방에 알림
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+        run: |
+          python -m nego.telegram dev-alert "$(printf '%s\n\n%s\n%s\n%s\n%s' \
+            '[개발자 알림] 판단 기록 집계를 볼 때입니다.' \
+            '· 웹앱 주소 끝에 ?dev=1 → 판단 기록 탭 맨 아래 「수집 경로별·관심 키워드별 집계」' \
+            '· 보유 면허 줄 불참이 11/23 뒤로 더 늘었으면 그 규칙(공사만)이 안 듣는 것' \
+            '· 「조정 검토」 표시가 붙은 줄은 캡처해서 Claude에게 — 규칙 미리 보기로 확인한 뒤 고침' \
+            '· 표시가 없으면 할 일 없음')"

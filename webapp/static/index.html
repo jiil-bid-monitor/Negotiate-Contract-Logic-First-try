@@ -897,6 +897,8 @@ ol.steps li.first { background: var(--urgent-tint); }
 .off-group > summary::before { content: "▸"; color: var(--muted); font-size: 13px; }
 .off-group[open] > summary::before { content: "▾"; }
 .off-group > summary h2 { color: var(--muted); }
+.skip-group { margin-top: 16px; }
+.skip-group > summary .skip-note { color: var(--muted); font-size: 13px; }
 .enrich-meta { margin: -6px 0 12px; color: var(--brand); font-size: 12.5px; }
 .enrich-meta:empty { display: none; } /* 비어 있으면 자리 안 차지(11/18 사용자: 빈 공간이 너무 큼) */
 
@@ -2125,6 +2127,9 @@ const dailyReportNos = (date) => reportNosOf(`daily:${date}`);
 let reportNos = new Set();
 /** 📋 창에서 방금 불참한 공고 — 공고번호 → { tag, open } */
 const JUDGE_DONE = new Map();  // 공고번호 → { tag, open }
+const REASON_OPEN = new Set();  // '사유 고치기'로 연 카드 — 칩을 눌러 다시 그려도 열린 채
+const TOUCHED = new Set();  // 이 화면에서 판단한 공고 — 사유를 고르는 동안 불참 칸으로 접혀 들어가지 않게
+const SKIP_OPEN = new Set();  // 펼친 불참 칸(본공고·사전규격)
 const JUDGE_ASK = new Set();  // '불참'을 눌러 사유를 고르는 중인 공고 — 사유를 골라야 저장(11/24 사용자: 기본 사유로 저장하면 사유 자료가 틀어짐)
 const inReport = (n) => reportNos.has(String(n.noticeNo || "").split("-")[0]);
 const mdOf = (d) => d ? `${+d.slice(5, 7)}/${+d.slice(8, 10)}` : "";
@@ -2531,13 +2536,25 @@ function applyFilters() {
       const list = shown.filter((n) => n.sourceType === key).sort(LIVE_SORTS[$("liveSort").value] || LIVE_SORTS.deadline);
       if (list.length === 0) return "";
       const strong = list.filter((n) => n.confidence === "강력추천").length;
+      // 불참으로 판단한 공고는 지우지 않고 칸 맨 아래 접힌 '불참' 칸으로 (11/24 사용자 요청 — 판단 기록에 남아 있음).
+      // 이 화면에서 방금 판단한 공고는 사유를 고르는 동안 제자리에 둔다. 참가여부 필터로 '불참'을 고르면 접지 않음.
+      const folds = filters.part !== "불참";
+      const skip = folds ? list.filter((n) => partOf(n) === "불참" && !TOUCHED.has(n.noticeNo)) : [];
+      const rest = skip.length ? list.filter((n) => !skip.includes(n)) : list;
+      const skipBox = skip.length
+        ? `<details class="off-group skip-group" data-skipkey="${esc(key)}"${SKIP_OPEN.has(key) ? " open" : ""}>
+            <summary><h2>불참 <span class="group-n">${skip.length}건</span></h2><span class="skip-note">판단 기록에도 있습니다</span></summary>
+            ${skip.map(renderNotice).join("")}
+          </details>`
+        : "";
       return `
         <div class="group" id="${key === "본공고" ? "grpMain" : "grpPre"}">
           <div class="group-head">
             <h2>${esc(key)} <span class="group-n">${list.length}건</span></h2>
             ${strong ? `<span class="group-strong">강력추천 ${strong}건</span>` : ""}
           </div>
-          ${list.map(renderNotice).join("")}
+          ${rest.map(renderNotice).join("")}
+          ${skipBox}
         </div>`;
     })
     .join("");
@@ -3358,14 +3375,18 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
       </div>`
     : "";
   const who = p.decidedBy ? `판단 <b>${esc(p.decidedBy)}</b>${p.decidedAt ? ` · ${esc(fmtDT(p.decidedAt))}` : ""}` : "";
+  // 사유(고른 칩·적은 글)가 있으면 칩 줄은 접고 '사유 고치기'로 연다 (11/24 사용자 요청)
+  const hasReason = !!(p.reason || tags.length);
+  const editOpen = REASON_OPEN.has(p.noticeNo);
   const form = `<form class="reason-form${chips ? " optional" : ""}"><input maxlength="500" placeholder="${chips ? "자세히 적기 (선택)" : esc(p.status) + " 사유"} — ${esc(REASON_HINT[p.status] || "")}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">${chips ? "자세히 저장" : "사유 저장"}</button></form>`;
+  const said = [tags.join(" · "), p.reason].filter(Boolean).map(esc).join(" — ");
   return `<div class="decision">
-    ${chips}
-    ${p.reason
-      ? `<span class="decision-reason"><b>${esc(p.status)} 사유</b> ${esc(p.reason)}</span><button type="button" class="linkish" data-preason>사유 고치기</button>`
+    ${hasReason ? "" : chips}
+    ${hasReason
+      ? `<span class="decision-reason"><b>${esc(p.status)} 사유</b> ${said}</span><button type="button" class="linkish" data-preason>사유 고치기</button>`
       : form}
     <span class="decision-who">${next ? nextStepButton(p) : ""}${who}${undo}</span>
-    ${p.reason ? `<div class="reason-edit" hidden>${form}</div>` : ""}
+    ${hasReason ? `<div class="reason-edit"${editOpen ? "" : " hidden"}>${chips}${form}</div>` : ""}
   </div>`;
 }
 
@@ -3491,6 +3512,7 @@ async function postParticipation(box, payload) {
     alert("위쪽 '내 이름' 칸에 이름을 먼저 입력해 주세요.");
     return false;
   }
+  TOUCHED.add(box.dataset.part);
   try {
     const res = await fetch("/api/participation", {
       method: "POST",
@@ -4601,6 +4623,10 @@ document.addEventListener("click", (e) => {
   showTab("live");
   window.scrollTo(0, 0);
 });
+document.addEventListener("toggle", (e) => {
+  const key = e.target.dataset?.skipkey;
+  if (key) e.target.open ? SKIP_OPEN.add(key) : SKIP_OPEN.delete(key);
+}, true);
 function showTab(tab) {
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   for (const name of ["live", "excluded", "corpus", "log", "calc", "quant", "award"]) $("tab-" + name).hidden = tab !== name;
@@ -4756,6 +4782,9 @@ document.addEventListener("click", (ev) => {
   if (reasonBtn) {
     const edit = reasonBtn.closest(".decision").querySelector(".reason-edit");
     edit.hidden = !edit.hidden;
+    const no = reasonBtn.closest("[data-part]")?.dataset.part;
+    const key = participation[no]?.noticeNo || no;
+    if (key) edit.hidden ? REASON_OPEN.delete(key) : REASON_OPEN.add(key);
     if (!edit.hidden) edit.querySelector("input").focus();
   }
 

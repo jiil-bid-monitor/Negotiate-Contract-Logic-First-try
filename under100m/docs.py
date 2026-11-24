@@ -94,6 +94,14 @@ def days_left_to_alert(record: dict, today: date) -> int | None:
     return (end - today).days
 
 
+def missing_expiry_note(kind: str) -> str:
+    """유효기간이 있어야 하는 서류인데 만료일을 모를 때 안내 — 서류목록 사유·웹앱 빨간 글씨가 같이 씀(2026-11-24 사용자).
+    직접생산확인증명서는 세부품명별 유효기간이 뒷장에 있음(그리다 2023-11 출력본은 뒷장이 없었음)."""
+    if "직접생산" in kind:
+        return "유효기간이 적힌 뒷장이 없어 만료일 모름 — 공공구매종합정보망에서 뒷장까지 다시 출력해 올리고 날짜를 넣으세요"
+    return ""
+
+
 def status_of(record: dict, today: date) -> tuple[str, str]:
     """서류목록 상태·사유."""
     if record.get("메모"):
@@ -101,6 +109,8 @@ def status_of(record: dict, today: date) -> tuple[str, str]:
     if record["종류"] in PER_NOTICE:
         return "공고 때 발급", "공고문이 요구하면 새로 발급"
     end = expiry_of(record)
+    if end is None and (note := missing_expiry_note(record["종류"])):
+        return "확인 필요", note
     if end is None:
         return "그대로 사용", "기간 없음 — 상호·대표자·주소·업종이 바뀌었으면 새로"
     if end < today:
@@ -156,7 +166,7 @@ def write_xlsx(path: Path, records: list[dict], today: date) -> None:
     if sheet.max_row:
         sheet.delete_rows(1, sheet.max_row)
     sheet.append(HEADERS)
-    order = {"재발급 필요": 0, "곧 만료": 1, "공고 때 발급": 2, "그대로 사용": 3}
+    order = {"재발급 필요": 0, "확인 필요": 1, "곧 만료": 2, "공고 때 발급": 3, "그대로 사용": 4}
     rows = []
     for record in records:
         status, reason = status_of(record, today)

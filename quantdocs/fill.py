@@ -277,9 +277,12 @@ def _fill_marks(seg: str, vault) -> tuple[str, list[str]]:
 
 
 def _masked(v: str) -> str:
-    """주민등록번호는 앞 6자리만 — 뒷자리는 늘 '*******'(11/04 사용자 요청)."""
-    m = re.search(r"(\d{6})\s*-?\s*[\d*Xx]{7}", v or "")
-    return f"{m.group(1)}-*******" if m else ""
+    """주민등록번호는 앞 6자리 + 뒷자리 첫 숫자만 — 나머지는 '*'(11/04 사용자 요청, 11/24 '뒷자리 첫 숫자도 나와야 함').
+    뒷자리 첫 글자를 모르면(원본부터 가려진 번호) '*' 일곱 개."""
+    m = re.search(r"(\d{6})\s*-?\s*([\d*Xx])[\d*Xx]{6}", v or "")
+    if not m:
+        return ""
+    return f"{m.group(1)}-{m.group(2) if m.group(2).isdigit() else '*'}******"
 
 
 def _birth(v: str) -> str:
@@ -427,6 +430,10 @@ def _value(key: str, vault) -> str:
     if key == "대표자 휴대폰":
         # (11/20 사용자 요청) 대표님 개인 번호는 어느 서식에도 넣지 않음 — 위임장 대표자 연락처·'(H.P)☎'·'휴대폰' 칸 모두 회사 전화
         # (11/16·11/18 'QUANT_REP_MOBILE = 대표자 휴대폰'을 대체, .env 값은 읽어도 안 씀)
+        # 예외(11/24 사용자 요청): 그리다 등 다른 회사는 .env QUANT_<ID>_REP_MOBILE을 적었으면 그 번호(대표자 칸 전체를 정해 둔 분 정보로)
+        from .company import DEFAULT, current
+        if current() != DEFAULT and vault.info.get("대표자 휴대폰"):
+            return str(vault.info["대표자 휴대폰"])
         return _value("전화번호", vault)
     if key == "_co_rep":
         co, rep = _value("회사명", vault), _value("대표자", vault)

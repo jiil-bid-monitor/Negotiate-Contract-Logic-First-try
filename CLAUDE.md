@@ -24,6 +24,14 @@
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 **(11/18 사용자 요청) 오늘 한 일 정리·worklog·인수인계·다음 세션 시작 메시지엔 지금 세션에서 한 작업만** — 같은 날 다른 세션(팀원 등)이 한 PR·브랜치·기록은 언급하지 않음(커밋의 Claude-Session 줄로 가림).
 
+## 2026-11-24 — 그리다 정량평가서 대표자 칸 = .env 값 (브랜치 `claude/grida-rep-env`, 사용자 결정)
+
+- **(사용자) 별도 요청이 없으면 그리다 서식의 대표자 칸 전체(이름·생년월일·휴대폰·서명란)는 등기상 대표가 아닌 지정한 분 정보로** —
+  서버 PC `.env` `QUANT_GRIDA_REP`(이름)·`QUANT_GRIDA_REP_RRN`(앞 6자리만 읽고 뒤는 '*')·`QUANT_GRIDA_REP_MOBILE`·`QUANT_GRIDA_REP_TITLE`(보안서약서 직위),
+  `QUANT_GRIDA_CAPITAL`·`QUANT_GRIDA_STAFF`·`QUANT_GRIDA_EMAIL`·`_TEL`·`_FAX`(`importer.enrich_vault` — 서류 PDF 값보다 먼저).
+  그리다는 대표자 휴대폰 칸에 그 번호(`fill._value`), **지일은 11/20 규칙 그대로 회사 전화**.
+- **(사용자) 주민등록번호는 뒷자리 첫 숫자까지**('670222-1******' — 지일·그리다 모두, `fill._masked`·`importer.masked_rrn`, 11/04 '앞 6자리만'을 대체). 원본부터 가려진 번호는 '-*******'. 개인 정보 값은 저장소·문서에 적지 않음. 시험 `test_grida_rep_from_env`.
+
 ## 2026-11-24 — 그리다 수집 = 지일과 같은 규칙, '정선 기관 입찰 공고(키워드 없이)'만 뺌 · 보고 제목 [지일]/[그리다] (같은 브랜치 `claude/grida-cert-folder`, 사용자 결정)
 
 - 그리다 보유 자격 파일 `localRoutePlace: ""` → `ScreenConfig.local_place` 빈 글자면 `screen.local_route` 끔(지일은 기본 '정선' 그대로). 보유 면허 경로·자격 미달 남기기는 지일과 같음

@@ -513,7 +513,7 @@ def masked_rrn(text: str) -> str:
     """대표자 주민등록번호 앞 6자리 + '-*******'. 법인등록번호(같은 6-7자리 모양)를 잡지 않게(11/04 제보: '110111-*******'):
     바로 앞 30자에 '법인'이 있으면(법인등록번호) 빼고, 이미 '*'로 가려진 번호(등록증)를 먼저, 그다음 '대표' 뒤 120자 안의 번호."""
     text = text or ""
-    best, score = "", 0
+    best, score, first = "", 0, "*"
     for m in _RRN.finditer(text):
         before = re.sub(r"\s+", "", text[max(0, m.start() - 30):m.start()])
         if "법인" in before or "사업자" in before:
@@ -521,8 +521,9 @@ def masked_rrn(text: str) -> str:
         near_ceo = "대표" in re.sub(r"\s+", "", text[max(0, m.start() - 120):m.start()])
         sc = (2 if "*" in m.group(2) else 0) + (1 if near_ceo else 0)
         if near_ceo and sc > score:
-            best, score = m.group(1), sc
-    return f"{best}-*******" if best else ""
+            best, score, first = m.group(1), sc, m.group(2)[0]
+    # 뒷자리 첫 숫자(성별)는 남김 — 11/24 사용자 요청. 나머지는 늘 '*'
+    return f"{best}-{first if first.isdigit() else '*'}******" if best else ""
 
 
 _TEXT_CACHE: dict[tuple[str, int, int], str] = {}
@@ -555,11 +556,18 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     from .company import DEFAULT, current
     # 다른 회사(그리다 등)는 지일 .env 값을 쓰지 않음 — QUANT_GRIDA_FAX처럼 회사 이름을 넣은 이름만(11/24 회사 고르기)
     prefix = "QUANT_" if current() == DEFAULT else f"QUANT_{current().upper()}_"
+    # (11/24 사용자 요청) 그리다는 서식의 대표자 칸 전체(이름·생년월일·휴대폰·직위)를 .env 값으로 — 등기상 대표자가 아닌 분으로
+    # 적을 때(QUANT_GRIDA_REP 등). 자본금·직원 수도 .env로. 개인 정보라 값은 저장소에 적지 않음.
     for env_key, item in (("FAX", "팩스번호"), ("TEL", "전화번호"), ("EMAIL", "이메일"),
-                          ("HOMEPAGE", "홈페이지"), ("REP_MOBILE", "대표자 휴대폰")):
+                          ("HOMEPAGE", "홈페이지"), ("REP_MOBILE", "대표자 휴대폰"), ("REP", "대표자"),
+                          ("REP_TITLE", "대표자 직위"), ("CAPITAL", "자본금"), ("STAFF", "종업원 수")):
         v = read_env(prefix + env_key).strip()
         if v:
             vault.info[item] = v
+    # 앞 6자리 + 뒷자리 첫 숫자만 — 나머지는 '*'(11/24 사용자 요청). '670222-1*'·'6702221'처럼 적어도 됨
+    rrn = re.match(r"\s*(\d{6})\s*-?\s*(\d?)", read_env(prefix + "REP_RRN"))
+    if rrn:
+        vault.info["대표자 주민등록번호"] = f"{rrn.group(1)}-{rrn.group(2) or '*'}******"
     if getattr(vault, "loose", None):
         notes.append("회사 자료 묶음 밖 PDF도 읽음(회사 서류 폴더): " + ", ".join(vault.loose[:5]))
     if getattr(vault, "patent_src", "") == "파일":

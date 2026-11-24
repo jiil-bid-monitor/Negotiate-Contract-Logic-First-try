@@ -636,7 +636,7 @@ def test_proxy_form_phone_fax_rrn_and_none_rule(tmp_path: Path):
         [_c(0, 4, "사무실"), _c(1, 4, ""), _c(2, 4, "FAX"), _c(3, 4, "")]])
     rep = fill_hwpx(_mini_hwpx(tmp_path / "p.hwpx", proxy), tmp_path / "po.hwpx", v)
     xml = zipfile.ZipFile(tmp_path / "po.hwpx").read("Contents/section0.xml").decode()
-    assert xml.count("800101-*******") == 1 and "1234567" not in xml  # 대표자 줄만, 뒷자리 없음
+    assert xml.count("800101-1******") == 1 and "1234567" not in xml  # 대표자 줄만, 뒷자리 없음
     assert xml.count("033-111-2222") == 2 and xml.count("033-111-3333") == 1  # 신청인 전화·사무실 / FAX, 휴대폰 칸은 비움
     assert any("주민등록번호" in f for f in rep.filled)
 
@@ -661,7 +661,7 @@ def test_enrich_ocr_scanned_and_masked_rrn(monkeypatch):
     monkeypatch.setattr(importer, "_ocr_pdf", lambda data: ocr[data])
     v = vault.Vault({"files/인감증명서.pdf": b"seal", "files/사업연혁.pdf": b"hist"})
     notes = importer.enrich_vault(v)
-    assert v.info["대표자 주민등록번호"] == "800101-*******"  # 뒷자리는 남기지 않음
+    assert v.info["대표자 주민등록번호"] == "800101-1******"  # 뒷자리는 남기지 않음
     assert [h["내용"] for h in v.history] == ["법인 설립", "산업디자인전문회사 신고"]
     assert any("OCR" in n for n in notes)
     monkeypatch.setattr(importer, "_ocr_pdf", lambda data: None)  # 도구 없음
@@ -682,7 +682,7 @@ def test_enrich_recognizes_registration_by_content(monkeypatch):
     v = vault.Vault({"files/나라장터 출력.pdf": b"reg", "files/견적.pdf": b"etc"})
     importer.enrich_vault(v)
     assert v.info["전화번호"] == "031-000-1111" and v.info["팩스번호"] == "02-000-2222"
-    assert v.info["대표자 주민등록번호"] == "800101-*******"
+    assert v.info["대표자 주민등록번호"] == "800101-1******"
 
 
 def test_inline_tel_fax_and_seal_placeholders(tmp_path: Path):
@@ -2895,7 +2895,7 @@ def test_rrn_corp_paren_bizno_label(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info=info))
     sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     assert "110111-1234567" in sec and "123-45-67890" in sec
-    assert "650312-*******" in sec
+    assert "650312-1******" in sec
 
 
 def test_none_rule_ignores_total_row(tmp_path: Path):

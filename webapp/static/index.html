@@ -703,6 +703,7 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 .log-reason { margin: 4px 0 2px; font-size: 13px; color: var(--ink); }
 .log-reason b { color: var(--muted); font-weight: 600; margin-right: 4px; }
 #logAgg td.num, #logAgg th.num { text-align: center; }
+.log-due .due-lab { font-size: 12px; color: var(--muted); font-weight: 400; }  /* 판단한 날로 읽지 않게(11/24) */
 .log-agg-title { font-family: var(--head); font-size: 15px; margin: 26px 0 8px; color: var(--ink-strong); }
 #logList { background: var(--panel); border: 1px solid var(--line); }
 #logList:empty { display: none; }
@@ -3673,7 +3674,7 @@ function renderLog() {
       <div class="log-main"><h3>${title}</h3><p class="log-meta">${sub}</p>${undecided ? "" : `<p class="log-why">${why || `<span class="faint-note">사유 없음</span>`}</p>`}
         ${inList || st !== "미판단" ? "" : `<span class="log-judge" hidden>${DECISIONS.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p.status === s ? "on" : ""}" data-pstatus="${s}">${s}</button>`).join("")}</span>`}
         ${!undecided && !p.reason && !(p.tags || []).length ? decisionRow(p, false) : ""}</div>
-      <div class="log-due${m.deadline && new Date(m.deadline) < new Date() ? " past" : ""}">${dueText(m.deadline)}</div>
+      <div class="log-due${m.deadline && new Date(m.deadline) < new Date() ? " past" : ""}">${m.deadline ? `<span class="due-lab">마감</span> ` : ""}${dueText(m.deadline)}</div>
       <div class="log-act">${act}${!undecided && p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단으로 되돌립니다">되돌리기</button>` : ""}</div>
     </div>`;
   };

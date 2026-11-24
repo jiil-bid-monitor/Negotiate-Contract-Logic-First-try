@@ -27,14 +27,16 @@ from datetime import datetime
 from urllib.parse import parse_qs, quote, urlparse
 
 from nego import bidcalc, bidrecommend, feedback_sheet, scope
-from nego.config import ConfigError, load_config, redact
+from nego.config import ConfigError, list_companies, load_config, redact
 from nego.http_client import ApiError
 
 from . import docexpiry, mview
 from .autorestart import RestartAfterCollect
 from .bidlog import BidLog
 from .postaward import PostAward
-from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector
+from .collect import MAX_CUSTOM_DAYS, PERIODS, RESULT_FORMAT, Collector, OtherCompanyBusy
+from .company import Company, link_collectors
+from .company import config_loader as company_config_loader
 from .docscan import DocScan
 from .mstore import TeamStore
 from .nasload import busy_reason
@@ -103,8 +105,10 @@ class App:
         # 폴더는 낙찰후서류_테스트), 과거 수주 사업 광양 교통안전체험관(물품 적격심사 → 낙찰)을 미리 넣어 둠
         self.award_test_dir = store.path.parent / "award_test"
         self.reset_award_test(clear=False)
-        self._run_cache: tuple[int | None, dict[str, Any] | None] = (None, None)
-        self._held_raw: dict[str, Any] | None = None
+        # 회사 고르기(2026-11-24) — 지일은 예전 store·판단 기록 그대로, 다른 회사는 add_company()로 data/<id>/에
+        jiil = next((r for r in list_companies() if r["id"] == "jiil"), {"name": "지일", "fullName": "(주)지일"})
+        self.companies: dict[str, Company] = {"jiil": Company("jiil", jiil.get("name") or "지일", jiil.get("fullName") or "",
+                                                              store, self.team, collector, self.docscan)}
         # 결과 보기 전용(NAS, WEBAPP_ROLE=viewer) — 수집 버튼을 숨기고 서버 PC가 보낸 결과를 받는다
         self.viewer = False
         self.imported = False
@@ -227,22 +231,31 @@ class App:
         run = self.store.latest_run() or {}
         return {c.get("notice_no"): c.get("title") or "" for c in (run.get("candidates") or []) + (run.get("rejected") or [])}
 
+    def add_company(self, cid: str, name: str, full_name: str, backup_dir: Path | None = None,
+                    collector: Collector | None = None) -> Company:
+        """지일 말고 다른 회사 — 수집 결과·판단 기록·공고문 세부품명 확인을 data/<id>/에 따로 둔다."""
+        folder = self.store.path.parent / cid
+        store = collector.store if collector is not None else Store(folder / "webapp.sqlite3")
+        docscan = getattr(collector, "docscan", None) or DocScan(folder / "doc_products.json")
+        collector = collector or Collector(store, self.past, docscan=docscan, config_loader=company_config_loader(cid))
+        holder: dict[str, Company] = {}
+        team = TeamStore(folder, titles=lambda: holder["co"].titles(),
+                         backup_dir=(backup_dir / cid) if backup_dir is not None else None)
+        co = holder["co"] = Company(cid, name, full_name, store, team, collector, docscan)
+        self.companies[cid] = co
+        link_collectors(self.companies)
+        return co
+
+    def company(self, q: dict[str, list[str]] | None) -> Company:
+        """요청의 ?co=<id> — 없거나 모르는 회사면 지일."""
+        cid = ((q or {}).get("co") or [""])[0]
+        return self.companies.get(cid) or self.companies["jiil"]
+
     def latest_run(self) -> dict[str, Any] | None:
-        """최신 결과(수 MB JSON)를 요청마다 다시 읽지 않게 결과 번호가 같으면 들고 있는 것을 쓴다."""
-        run_id = self.store.run_id_if_exists()
-        if run_id is None:
-            return None
-        if self._run_cache[0] != run_id:
-            self._run_cache = (run_id, self.store.run(run_id))
-        return self._run_cache[1]
+        return self.companies["jiil"].latest_run()
 
     def held_raw(self) -> dict[str, Any]:
-        if self._held_raw is None:
-            try:
-                self._held_raw = load_config().held_raw
-            except ConfigError:
-                self._held_raw = {}
-        return self._held_raw
+        return self.companies["jiil"].held_raw()
 
 
 def make_handler(app: App):
@@ -278,12 +291,13 @@ def make_handler(app: App):
             self.end_headers()
             self.wfile.write(body)
 
-        def _remote_participation(self, method: str, data: Any = None) -> None:
+        def _remote_participation(self, method: str, data: Any = None, co: Company | None = None) -> None:
             """판단 기록을 NAS에서 읽고 쓴다 — 서버 PC에 따로 쌓여 둘로 갈라지지 않게. NAS가 안 되면 오류(이 PC에 몰래 쓰지 않음)."""
             import requests
             base, token = app.team_remote
             try:
-                res = requests.request(method, base + "/api/participation", json=data, timeout=15,
+                res = requests.request(method, base + "/api/participation" + ("" if co is None or co.default else f"?co={co.id}"),
+                                       json=data, timeout=15,
                                        headers={"X-App-Token": token})
             except requests.RequestException:
                 return self._error(HTTPStatus.BAD_GATEWAY, "NAS에 연결하지 못해 판단 기록을 읽거나 저장하지 못했습니다 — 잠시 뒤 다시")
@@ -334,6 +348,7 @@ def make_handler(app: App):
             if url.path.startswith("/api/quant/"):
                 return self._quant("GET", url.path[len("/api/quant"):], None)
             q = parse_qs(url.query)
+            co = app.company(q)  # 회사 고르기(2026-11-24) — 화면이 ?co=<id>를 붙인다, 없으면 지일
             if url.path == "/api/meta":
                 years: dict[str, int] = {}
                 for p in app.past.projects:
@@ -347,6 +362,7 @@ def make_handler(app: App):
                     "has_service_key": bool(os.environ.get("NARA_SERVICE_KEY", "").strip()),
                     "has_ai_key": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
                     "can_collect": not app.viewer,
+                    "companies": [c.public() for c in app.companies.values()], "company": co.id,
                 })
             if url.path == "/api/docs-alert":
                 # 상단 바 종 아이콘 — 텔레그램 갱신 알림과 같은 서류(30일 안에 끝나거나 상태를 표시해 둔 지난 서류) (2026-11-23)
@@ -396,25 +412,25 @@ def make_handler(app: App):
                 # 제외 공고가 수천 건이면 본문이 수 MB라 매번 보내고 다시 그리면 화면이 느려진다(2026-10-01 제보)
                 have = q.get("have", [""])[0]
                 if have.isdigit():
-                    current = app.store.run_id_if_exists(int(wanted) if wanted.isdigit() else None)
+                    current = co.store.run_id_if_exists(int(wanted) if wanted.isdigit() else None)
                     if current is not None and current == int(have) and (not wanted.isdigit() or int(wanted) == current):
                         return self._json({
-                            "run": None, "same": True, "missing": False, "states": app.store.states(),
+                            "run": None, "same": True, "missing": False, "states": co.store.states(),
                             "static_version": app.static_version,
-                            "comment_counts": app.store.comment_counts(), "job": app.collector.job.snapshot(),
+                            "comment_counts": co.store.comment_counts(), "job": co.collector.job.snapshot(),
                         })
-                run = app.store.run(int(wanted)) if wanted.isdigit() else None
+                run = co.store.run(int(wanted)) if wanted.isdigit() else None
                 return self._json({
-                    "run": run or app.store.latest_run(), "missing": bool(wanted) and run is None,
+                    "run": run or co.store.latest_run(), "missing": bool(wanted) and run is None,
                     "static_version": app.static_version,
-                    "states": app.store.states(),
-                    "comment_counts": app.store.comment_counts(), "job": app.collector.job.snapshot(),
+                    "states": co.store.states(),
+                    "comment_counts": co.store.comment_counts(), "job": co.collector.job.snapshot(),
                 })
             if url.path == "/api/job":
-                return self._json(app.collector.job.snapshot())
+                return self._json(co.collector.job.snapshot())
             # ── 팀원 화면(ui.html)이 부르는 주소 — 2026-10-19 화면 이식 ──
             if url.path == "/api/notices":
-                job = app.collector.job.snapshot()
+                job = co.collector.job.snapshot()
                 if q.get("refresh", [""])[0] == "1":
                     if app.viewer:
                         return self._error(HTTPStatus.CONFLICT, VIEWER_MESSAGE)
@@ -422,33 +438,35 @@ def make_handler(app: App):
                     days = int(q.get("days", ["7"])[0]) if q.get("days", ["7"])[0].isdigit() else 7
                     begin, end = q.get("begin", [""])[0], q.get("end", [""])[0]  # 직접 지정 기간 (YYYY-MM-DD)
                     try:
-                        app.collector.start(days=days if days in PERIODS else 7, attachments=True, ai=False,
+                        co.collector.start(days=days if days in PERIODS else 7, attachments=True, ai=False,
                                             categories=None, prespec=True, begin=begin or None, end=end or None)
                     except ValueError as exc:
                         return self._json({"error": str(exc)})  # 날짜 형식·순서·92일 초과 — 화면이 그대로 보임
+                    except OtherCompanyBusy as exc:
+                        return self._json({"error": str(exc)})  # 다른 회사 화면에서 수집 중 — 끝난 뒤 다시
                     except RuntimeError:
                         pass  # 이미 누가 수집 중 — 그 진행을 같이 본다
-                    return self._json({"running": True, "job": app.collector.job.snapshot()})
-                data = mview.notices(app.latest_run(), app.team.promoted, app.held_raw(),
-                                     app.docscan.codes() if app.docscan else None)
+                    return self._json({"running": True, "job": co.collector.job.snapshot()})
+                data = mview.notices(co.latest_run(), co.team.promoted, co.held_raw(),
+                                     co.docscan.codes() if co.docscan else None)
                 return self._json({**data, "job": job, "static_version": app.static_version, "resultFormat": RESULT_FORMAT,
-                                   "canCollect": not app.viewer, "push": app.push.state if app.push else None,
-                                   "docScan": app.docscan.state if app.docscan else None})
+                                   "canCollect": not app.viewer, "push": co.push.state if co.push else None,
+                                   "docScan": co.docscan.state if co.docscan else None})
             if url.path == "/api/excluded":
-                return self._json(mview.excluded(app.latest_run(), app.team.promoted, app.held_raw()))
+                return self._json(mview.excluded(co.latest_run(), co.team.promoted, co.held_raw()))
             if url.path == "/api/docscan":
                 # '세부품명 미달' 용역 공고 공고문 확인 진행 — 화면이 찾은 건수가 늘면 세부품명 공고 탭을 다시 받는다
-                return self._json(app.docscan.state if app.docscan else {"running": False, "done": 0, "total": 0, "found": 0})
+                return self._json(co.docscan.state if co.docscan else {"running": False, "done": 0, "total": 0, "found": 0})
             if url.path == "/api/enrich":
                 # 첨부 읽기는 수집할 때 끝나 있다 — 화면이 기다릴 것이 없다
                 return self._json({"running": False, "done": 0, "total": 0, "byNo": {}, "keepQualifications": [],
-                                   "headquartersRegion": app.held_raw().get("companyRegion")})
+                                   "headquartersRegion": co.held_raw().get("companyRegion")})
             if url.path == "/api/participation":
                 if app.team_remote:
-                    return self._remote_participation("GET")
-                return self._json({"participation": app.team.participation, "statuses": STATUSES})
+                    return self._remote_participation("GET", co=co)
+                return self._json({"participation": co.team.participation, "statuses": STATUSES})
             if url.path == "/api/search":
-                return self._json(mview.search(q.get("q", [""])[0], app.latest_run(), app.past, app.held_raw()))
+                return self._json(mview.search(q.get("q", [""])[0], co.latest_run(), app.past, co.held_raw()))
             if url.path == "/api/corpus":
                 return self._json(mview.corpus(app.past))
             if url.path == "/api/past-live":  # 2026년~ 사업 폴더 목록(webapp/pastlive.py)
@@ -459,11 +477,11 @@ def make_handler(app: App):
                 return self._json({"excerpt": mview.project_excerpt(p) if p else None})
             if url.path == "/api/comments":
                 key = q.get("key", [""])[0]
-                return self._json({"comments": app.store.comments(key)})
+                return self._json({"comments": co.store.comments(key)})
             if url.path == "/api/past":
                 return self._json({"projects": app.past.public_list(), "error": app.past.error})
             if url.path == "/api/decisions":
-                return self._json({"decisions": app.store.decisions()})
+                return self._json({"decisions": co.store.decisions()})
             if url.path == "/api/bidlog":
                 return self._json({"entries": app.bidlog.entries()})
             if url.path == "/api/bidlog/seen":  # 아직 기록 파일이 없으면 null — 화면이 '처음'으로 보고 지금 결과를 본 것으로
@@ -500,7 +518,7 @@ def make_handler(app: App):
                 return self._send(200, app.bidlog.csv().encode("utf-8"), "text/csv; charset=utf-8")
             if url.path == "/api/decisions.csv":
                 # 판단 기록 내려받기(엑셀에서 바로 열리게 BOM 붙인 UTF-8) — 키워드 조정 검토 때 Claude에게 올려 주는 파일
-                return self._send(200, decisions_csv(app.store.decisions(latest_only=False)).encode("utf-8-sig"),
+                return self._send(200, decisions_csv(co.store.decisions(latest_only=False)).encode("utf-8-sig"),
                                   "text/csv; charset=utf-8")
             return self._error(HTTPStatus.NOT_FOUND, "없는 주소")
 
@@ -551,9 +569,10 @@ def make_handler(app: App):
             if test:  # 시험 페이지(/award-test) — 운영 목록·폴더와 따로
                 url, pa = url._replace(path=url.path.replace("/api/test/", "/api/", 1)), app.postaward_test
                 app.seed_award_test()
+            co = app.company(parse_qs(url.query))  # 회사 고르기(2026-11-24)
             try:
                 if url.path == "/api/import-run":
-                    return self._import_run()
+                    return self._import_run(co)
                 data = self._body()
                 if url.path.startswith("/api/quant/"):
                     return self._quant("POST", url.path[len("/api/quant"):], data)
@@ -570,7 +589,7 @@ def make_handler(app: App):
                         if (reason := busy_reason()):
                             raise RuntimeError(reason + " — 잠시 뒤 다시 눌러 주세요.")
                     cats = data.get("categories") or None
-                    job = app.collector.start(
+                    job = co.collector.start(
                         days=int(data["days"]) if data.get("days") else None,
                         begin=data.get("begin") or None,
                         end=data.get("end") or None,
@@ -585,7 +604,7 @@ def make_handler(app: App):
                     key = str(data.get("key") or "")
                     if not key:
                         raise ValueError("key가 필요합니다")
-                    state = app.store.set_state(
+                    state = co.store.set_state(
                         key, by=name,
                         status=data.get("status") or None,
                         assignee=(name if data.get("take") else None),
@@ -602,18 +621,18 @@ def make_handler(app: App):
                         raise ValueError("key가 필요합니다")
                     status = data.get("status") or None
                     snapshot = data.get("snapshot") if isinstance(data.get("snapshot"), dict) else {}
-                    app.store.add_decision(key, name, status, [str(r) for r in (data.get("reasons") or [])][:12],
+                    co.store.add_decision(key, name, status, [str(r) for r in (data.get("reasons") or [])][:12],
                                            str(data.get("memo") or ""), snapshot)
-                    state = app.store.set_state(key, by=name, status=status, clear_status=status is None)
-                    return self._json({"key": key, "state": state, "decisions": app.store.decisions()})
+                    state = co.store.set_state(key, by=name, status=status, clear_status=status is None)
+                    return self._json({"key": key, "state": state, "decisions": co.store.decisions()})
                 if url.path == "/api/comments":
                     name = self._name(data)
                     key = str(data.get("key") or "")
                     body = str(data.get("body") or "").strip()[:2000]
                     if not key or not body:
                         raise ValueError("key와 내용이 필요합니다")
-                    app.store.add_comment(key, name, body)
-                    return self._json({"comments": app.store.comments(key)})
+                    co.store.add_comment(key, name, body)
+                    return self._json({"comments": co.store.comments(key)})
                 if url.path == "/api/bidlog":
                     entry = app.bidlog.add(data)
                     return self._json({"ok": True, "entry": entry, "entries": app.bidlog.entries()})
@@ -696,10 +715,10 @@ def make_handler(app: App):
                     return self._json({"ok": True, "entries": app.bidlog.entries()})
                 if url.path == "/api/participation":
                     if app.team_remote:
-                        return self._remote_participation("POST", data)
-                    return self._json({"ok": True, "participation": app.team.update(data)})
+                        return self._remote_participation("POST", data, co=co)
+                    return self._json({"ok": True, "participation": co.team.update(data)})
                 if url.path == "/api/promote":
-                    return self._json({"ok": True, "promoted": app.team.promote(data)})
+                    return self._json({"ok": True, "promoted": co.team.promote(data)})
                 if url.path == "/api/match":
                     title = str(data.get("title") or "").strip()
                     text = str(data.get("text") or "")
@@ -712,7 +731,7 @@ def make_handler(app: App):
             except (ValueError, json.JSONDecodeError) as err:
                 return self._error(HTTPStatus.BAD_REQUEST, str(err))
 
-        def _import_run(self) -> None:
+        def _import_run(self, co: Company) -> None:
             """서버 PC가 보낸 수집 결과 저장(webapp/resultpush.py) — 본문을 다 받아 확인한 뒤에야 저장해, 끊기면 이전 결과가 그대로다."""
             if not app.viewer:
                 return self._error(HTTPStatus.FORBIDDEN, "이 서버는 결과를 받지 않습니다 (WEBAPP_ROLE=viewer일 때만)")
@@ -726,9 +745,9 @@ def make_handler(app: App):
                 raise ValueError("수집 결과 형식이 아닙니다")
             if int(payload.get("format") or 0) > RESULT_FORMAT:
                 raise RuntimeError(f"NAS 코드가 예전 버전입니다(결과 형식 {payload.get('format')}, NAS {RESULT_FORMAT}) — NAS 코드를 먼저 갱신하세요")
-            run_id = app.store.import_run(str(data["started_at"]), str(data["finished_at"]), data.get("params") or {}, payload)
+            run_id = co.store.import_run(str(data["started_at"]), str(data["finished_at"]), data.get("params") or {}, payload)
             if isinstance(data.get("doc_products"), dict):
-                app.docscan.merge(data["doc_products"])
+                co.docscan.merge(data["doc_products"])
             if run_id is not None:
                 app.imported = True  # 수집 뒤처럼 조용해지면 다시 켜 메모리를 비운다 (webapp/autorestart.py)
                 logging.getLogger(__name__).info("서버 PC 수집 결과 저장: %d번 — 후보 %d건", run_id, len(payload["candidates"]))
@@ -848,7 +867,8 @@ def decisions_csv(rows: list[dict[str, Any]]) -> str:
 def busy_now(app: App) -> bool:
     """수집·세부품명 확인·정량평가서 작업 중이면 True — 다시 켜면 끊기는 일들."""
     quant = sys.modules.get("quantdocs.web")  # 정량평가서 탭을 안 썼으면 불러오지 않는다
-    return bool(app.collector.job.running or app.docscan.state["running"] or (quant is not None and quant.busy()))
+    return bool(any(c.collector.job.running or (c.docscan is not None and c.docscan.state["running"])
+                    for c in (getattr(app, "companies", None) or {"": app}).values()) or (quant is not None and quant.busy()))
 
 
 def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, collector: Collector | None = None,
@@ -856,7 +876,12 @@ def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, c
     store = Store(db_path)
     past = past or PastIndex.load()
     docscan = DocScan(store.path.parent / "doc_products.json")
-    return App(store, past, collector or Collector(store, past, docscan=docscan), token, backup_dir=backup_dir, docscan=docscan)
+    app = App(store, past, collector or Collector(store, past, docscan=docscan), token, backup_dir=backup_dir, docscan=docscan)
+    # 다른 회사(config/companies.json — 2026-11-24 그리다) — 수집 결과·판단 기록은 data/<id>/에 따로
+    for row in list_companies():
+        if row["id"] != "jiil":
+            app.add_company(row["id"], row.get("name") or row["id"], row.get("fullName") or "", backup_dir=backup_dir)
+    return app
 
 
 def start_nightly(app: App) -> None:
@@ -900,9 +925,13 @@ def main(argv: list[str] | None = None) -> int:
     # 서버 PC — 수집이 끝나면 결과를 NAS로 보낸다(webapp/resultpush.py). 판단 기록은 NAS에만 쌓이므로 아래 시트 쓰기는 끈다
     push_url = os.environ.get("RESULT_PUSH_URL", "").strip()
     if push_url and not app.viewer:
-        app.push = ResultPush(push_url, os.environ.get("RESULT_PUSH_TOKEN", "").strip() or token, app.store, app.docscan,
-                              lambda: busy_now(app), Path(args.db).parent / "result_push.json")
-        app.push.start()
+        for co in app.companies.values():  # 회사마다 따로 보낸다 — NAS는 ?co=<id>로 그 회사 결과로 저장
+            co.push = ResultPush(push_url, os.environ.get("RESULT_PUSH_TOKEN", "").strip() or token, co.store, co.docscan,
+                                 lambda: busy_now(app),
+                                 Path(args.db).parent / ("result_push.json" if co.default else f"{co.id}/result_push.json"),
+                                 company=None if co.default else co.id)
+            co.push.start()
+        app.push = app.companies["jiil"].push
         app.team_remote = (push_url.rstrip("/"), os.environ.get("RESULT_PUSH_TOKEN", "").strip() or token or "")
     if backup_dir is not None:
         app.team.backup_now()
@@ -956,7 +985,8 @@ def main(argv: list[str] | None = None) -> int:
     # NAS에서만 — 수집이 끝나면 다시 켜 메모리를 비운다 (webapp/autorestart.py)
     restart_file = os.environ.get("WEBAPP_RESTART_FILE", "").strip()
     if restart_file:
-        RestartAfterCollect(Path(restart_file), lambda: app.collector.job.finished_at is not None or app.imported,
+        RestartAfterCollect(Path(restart_file), lambda: any(c.collector.job.finished_at is not None
+                                                            for c in app.companies.values()) or app.imported,
                             lambda: busy_now(app)).start()
     if app.past.error:
         logging.warning(app.past.error)

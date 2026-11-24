@@ -1,0 +1,7 @@
+{
+  "_comment": "웹앱 첫 화면의 회사 고르기(2026-11-24 사용자 요청). 회사마다 보유 자격 파일만 다르고 키워드·수집 규칙은 같다. 첫 줄이 기본 회사(지일) — 예전 데이터 폴더(data/)를 그대로 쓴다. 나머지 회사는 data/<id>/에 수집 결과·판단 기록을 따로 둔다.",
+  "companies": [
+    {"id": "jiil", "name": "지일", "fullName": "(주)지일", "held": "held_qualifications.json"},
+    {"id": "grida", "name": "그리다", "fullName": "(주)그리다", "held": "companies/grida/held_qualifications.json"}
+  ]
+}

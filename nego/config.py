@@ -39,12 +39,32 @@ class AppConfig:
     code_names: dict[str, str] | None = None
 
 
-def load_config(config_dir: Path | None = None) -> AppConfig:
+DEFAULT_COMPANY = "jiil"
+
+
+def list_companies(config_dir: Path | None = None) -> list[dict]:
+    """웹앱 회사 고르기 목록(config/companies.json, 2026-11-24) — 파일이 없으면 지일 하나."""
+    path = (config_dir or DEFAULT_CONFIG_DIR) / "companies.json"
+    rows = _read_json(path).get("companies", []) if path.exists() else []
+    rows = [r for r in rows if isinstance(r, dict) and str(r.get("id") or "").strip()]
+    return rows or [{"id": DEFAULT_COMPANY, "name": "지일", "fullName": "(주)지일", "held": "held_qualifications.json"}]
+
+
+def held_file(company: str | None, config_dir: Path | None = None) -> Path:
+    directory = config_dir or DEFAULT_CONFIG_DIR
+    for row in list_companies(directory):
+        if row["id"] == (company or DEFAULT_COMPANY):
+            return directory / str(row.get("held") or "held_qualifications.json")
+    raise ConfigError(f"모르는 회사: {company}")
+
+
+def load_config(config_dir: Path | None = None, company: str | None = None) -> AppConfig:
+    """`company`(companies.json의 id)를 주면 그 회사의 보유 자격 파일을 쓴다 — 키워드·수집 규칙은 같다."""
     directory = config_dir or DEFAULT_CONFIG_DIR
 
     keywords = _read_json(directory / "keywords.json")
     codes = _read_json(directory / "codes.json")
-    held = _read_json(directory / "held_qualifications.json")
+    held = _read_json(held_file(company, directory) if company else directory / "held_qualifications.json")
     # 선택 파일 — 없어도 동작한다.
     code_names_path = directory / "code_names.json"
     code_names_raw = _read_json(code_names_path) if code_names_path.exists() else {}

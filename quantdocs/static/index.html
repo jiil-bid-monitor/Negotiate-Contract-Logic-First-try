@@ -163,8 +163,11 @@ if (EMBED) {
   try { new MutationObserver(syncTheme).observe(parent.document.documentElement, {attributes: true, attributeFilter: ["data-theme"]}); } catch (e) {}
 }
 
+// 고른 회사(웹앱이 iframe 주소에 ?co=grida를 붙임, 2026-11-24) — 없으면 지일
+const CO = new URLSearchParams(location.search).get("co") || "";
 async function api(path, body) {
   path = path.replace(/^\/api/, BASE);
+  if (CO) path += (path.includes("?") ? "&" : "?") + "co=" + encodeURIComponent(CO);
   const r = await fetch(path, body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {});
   const j = await r.json().catch(() => ({error:"응답을 읽지 못함"}));
   if (!r.ok) throw new Error(j.error || r.status);

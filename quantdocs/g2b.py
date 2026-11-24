@@ -190,7 +190,9 @@ def _names() -> tuple[dict[str, str], dict[str, str]]:
         except (OSError, ValueError):
             return {}
 
-    held, codes = read("held_qualifications.json"), read("codes.json")
+    from .company import held_file
+
+    held, codes = read(held_file()), read("codes.json")  # 고른 회사의 보유 자격(11/24 회사 고르기)
     return (qualify.load_held_code_names(held),
             qualify.load_code_names({**codes, "productCodes": held.get("heldProducts", [])}, read("code_names.json")))
 

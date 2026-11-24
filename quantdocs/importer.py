@@ -196,7 +196,8 @@ def read_bizreg(text: str) -> dict[str, str]:
     info = {}
     pats = {
         "사업자등록번호": r"등록번호\s*:\s*(\d{3}-\d{2}-\d{5})",
-        "회사명": r"법\s*인\s*명\s*\(\s*단\s*체\s*명\s*\)\s*:\s*(\S+)",
+        # '주식회사 그리다'처럼 띄어 쓴 상호도 끝까지(11/24 그리다 사업자등록증 — '주식회사'만 읽혔음), 줄 끝까지
+        "회사명": r"법\s*인\s*명\s*\(\s*단\s*체\s*명\s*\)\s*:\s*([^\n]+?)(?=\s{2,}|\s+(?:대\s*표|개\s*업|법\s*인\s*등)|\n|$)",
         "법인등록번호": r"법\s*인\s*등\s*록\s*번\s*호\s*:\s*(\d{6}-\d{7})",
         "주소": r"본\s*점\s*소\s*재\s*지\s*:\s*([^\n]+)",
     }
@@ -551,13 +552,16 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     # 번호는 공개 저장소에 적지 않고 .env에만. 이메일·홈페이지도 같은 방식(11/11 사용자 — QUANT_EMAIL·QUANT_HOMEPAGE).
     from .vault import read_env
     # 대표자 휴대폰(QUANT_REP_MOBILE, 11/16 사용자 요청) — 대표자 줄의 휴대폰 칸에만 씀(대리인·담당자 휴대폰 칸은 그대로 비움)
-    for env_key, item in (("QUANT_FAX", "팩스번호"), ("QUANT_TEL", "전화번호"), ("QUANT_EMAIL", "이메일"),
-                          ("QUANT_HOMEPAGE", "홈페이지"), ("QUANT_REP_MOBILE", "대표자 휴대폰")):
-        v = read_env(env_key).strip()
+    from .company import DEFAULT, current
+    # 다른 회사(그리다 등)는 지일 .env 값을 쓰지 않음 — QUANT_GRIDA_FAX처럼 회사 이름을 넣은 이름만(11/24 회사 고르기)
+    prefix = "QUANT_" if current() == DEFAULT else f"QUANT_{current().upper()}_"
+    for env_key, item in (("FAX", "팩스번호"), ("TEL", "전화번호"), ("EMAIL", "이메일"),
+                          ("HOMEPAGE", "홈페이지"), ("REP_MOBILE", "대표자 휴대폰")):
+        v = read_env(prefix + env_key).strip()
         if v:
             vault.info[item] = v
     if getattr(vault, "loose", None):
-        notes.append("회사 자료 묶음 밖 PDF도 읽음(jiil-quant-docs 폴더): " + ", ".join(vault.loose[:5]))
+        notes.append("회사 자료 묶음 밖 PDF도 읽음(회사 서류 폴더): " + ", ".join(vault.loose[:5]))
     if getattr(vault, "patent_src", "") == "파일":
         notes.append(f"특허 건수는 특허증 파일 {len(vault.patents)}개로 셈(특허목록 시트가 비어 있음) — 파일 하나 = 1건")
     if getattr(vault, "tracks_src", ""):

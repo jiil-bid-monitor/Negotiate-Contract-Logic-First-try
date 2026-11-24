@@ -529,7 +529,8 @@ def make_handler(app: App):
             except ImportError as err:
                 return self._error(HTTPStatus.SERVICE_UNAVAILABLE,
                                    f"정량평가서 기능을 불러오지 못했습니다 — pip install -r requirements.txt ({err})")
-            code, ctype, data, extra = quant_api(method, sub, body, base="/api/quant")
+            co = self._quant_company()
+            code, ctype, data, extra = quant_api(method, sub, body, base="/api/quant", company=co)
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
@@ -539,6 +540,11 @@ def make_handler(app: App):
                 self.send_header(k, v)
             self.end_headers()
             self.wfile.write(data)
+
+        def _quant_company(self) -> str:
+            """정량평가서 화면(iframe /quant/?co=grida)이 붙여 보내는 회사 — 모르는 이름이면 지일."""
+            cid = (parse_qs(urlparse(self.path).query).get("co") or [""])[0]
+            return cid if cid in app.companies else "jiil"
 
         def _static(self, path: str) -> None:
             name = "index.html" if path in ("", "/") else path.lstrip("/")

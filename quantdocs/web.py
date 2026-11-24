@@ -97,7 +97,15 @@ def _git_pull() -> str:
         return f"git pull 실패 — 이전 묶음으로 진행: {err}"
 
 
-def _vault_info() -> dict:
+def _vault_info(company: str = "jiil") -> dict:
+    if company != "jiil":  # 그리다 등 — 묶음 없이 서류 폴더(11/24 회사 고르기)
+        from . import company as co_mod
+
+        co_mod.use(company)
+        folder = vault_mod.company_dir(company)
+        if not folder.is_dir():
+            return {"ok": False, "msg": f"{co_mod.name()} 자료 폴더가 없습니다 — 서버 PC {folder}"}
+        return {"ok": True, "msg": f"{co_mod.name()} 자료 폴더: {folder.name}"}
     p = vault_mod.sealed_path()
     if not p.exists():
         return {"ok": False, "msg": "회사 자료 묶음이 없습니다 — 옆 폴더 jiil-quant-docs(비공개 레포)를 받거나 .env에 QUANT_VAULT_PATH"}
@@ -146,12 +154,15 @@ def posted_date(text: str) -> date | None:
 
 
 def _run_analyze(job: dict) -> None:
+    from . import company as co_mod
+
+    co_mod.use(job.get("co"))  # 고른 회사 자료로(11/24 회사 고르기) — 이 작업 스레드 안에서만
     try:
         job["step"] = "회사 자료 묶음 확인"
         note = _git_pull()
         # 회사 자료가 없어도 서식·자격 목록은 보여 줌(11/03 사용자 요청) — 보유 여부·만들기만 막음
         try:
-            v, vault_err = vault_mod.load(), ""
+            v, vault_err = vault_mod.load_company(), ""
         except vault_mod.VaultError as err:
             v, vault_err = vault_mod.Vault({}), str(err)
         job["vault_ok"] = not vault_err
@@ -200,7 +211,7 @@ def _run_analyze(job: dict) -> None:
             s["notes"].append("⚠ 첨부 어디에서도 서식을 찾지 못함 — 서식이 PDF 그림(스캔)이거나 '[서식 N]' 같은 표시가 없을 수 있음, 공고번호를 알려 주면 확인")
         # '첨부 중 공고문·제안요청서·서식만 읽음 — 안 읽은 파일' 안내는 화면에서 뺌(11/06 사용자 요청 — 일상 안내)
         if vault_err:
-            s["notes"].insert(0, f"회사 자료 없음 — 지일 보유 여부·정량평가서 만들기는 안 됨 ({vault_err})")
+            s["notes"].insert(0, f"회사 자료 없음 — {co_mod.name()} 보유 여부·정량평가서 만들기는 안 됨 ({vault_err})")
         job["summary"] = s
         job["state"] = "ready"
     except vault_mod.VaultError as err:
@@ -222,10 +233,13 @@ def _g2b_no(n: dict, fallback: str) -> str:
 
 
 def _run_build(job: dict) -> None:
+    from . import company as co_mod
+
+    co_mod.use(job.get("co"))
     with _build_lock:
         try:
             job["step"] = "서식 채우고 회사 서류 고르는 중"
-            v = vault_mod.load()
+            v = vault_mod.load_company()
             out = JOBS / job["id"] / "out" / f"정량평가서_{job['no']}.zip"
             job["warnings"] = []
             n = job.get("notice", {})
@@ -251,13 +265,14 @@ def _j(obj, code: int = 200) -> tuple[int, str, bytes, dict]:
     return code, "application/json; charset=utf-8", json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8"), {}
 
 
-def api(method: str, sub: str, body: dict | None = None, base: str = "/api") -> tuple[int, str, bytes, dict]:
+def api(method: str, sub: str, body: dict | None = None, base: str = "/api",
+        company: str = "jiil") -> tuple[int, str, bytes, dict]:
     """API 한 번 — 이 웹앱(8766)과 프로젝트 1 웹앱(webapp/server.py의 /api/quant/…)이 같이 씀. 인증은 부르는 쪽이 함.
     sub: '/meta'·'/job/<id>'·'/download/<id>'·'/analyze'·'/build/<id>'. base: 내려받기 주소 앞부분. → (상태, 형식, 내용, 머리글)"""
     _cleanup()
     if method == "GET":
         if sub == "/meta":
-            return _j({"vault": _vault_info(), "hwp": bool(vault_mod.read_env("HWP2HWPX_CMD"))})
+            return _j({"vault": _vault_info(company), "hwp": bool(vault_mod.read_env("HWP2HWPX_CMD"))})
         if sub.startswith("/job/"):
             job = _jobs.get(sub.rsplit("/", 1)[-1])
             return _j(_public(job, base)) if job else _j({"error": "작업이 없습니다(시간이 지나 지워졌을 수 있음)"}, 404)
@@ -274,7 +289,7 @@ def api(method: str, sub: str, body: dict | None = None, base: str = "/api") -> 
         no = str(body.get("no") or "").strip().upper()
         if not no or not all(ch.isalnum() or ch == "-" for ch in no) or len(no) > 20:
             return _j({"error": "공고번호 형식이 아닙니다(예: R26BK01790000)"}, 400)
-        job = {"id": uuid.uuid4().hex[:12], "no": no, "date": None, "state": "running", "step": "시작"}
+        job = {"id": uuid.uuid4().hex[:12], "no": no, "date": None, "state": "running", "step": "시작", "co": company}
         with _lock:
             _jobs[job["id"]] = job
         threading.Thread(target=_run_analyze, args=(job,), daemon=True).start()

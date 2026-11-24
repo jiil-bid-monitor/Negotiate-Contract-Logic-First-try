@@ -63,7 +63,9 @@ def _code_names() -> dict[str, str]:
             continue
         try:
             out.update(json.loads((cfg / "code_names.json").read_text(encoding="utf-8")).get("names", {}))
-            held = json.loads((cfg / "held_qualifications.json").read_text(encoding="utf-8"))
+            from .company import held_file
+
+            held = json.loads((cfg / held_file()).read_text(encoding="utf-8"))
             for k in ("heldIndustries", "heldProducts"):
                 out.update({e["code"]: e["name"] for e in held.get(k, []) if e.get("code")})
         except (OSError, ValueError):

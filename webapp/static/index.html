@@ -1520,7 +1520,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="docbell-pop" id="judgeBellPop" hidden></div>
     </div>
     <div class="docbell" id="calBell">
-      <button type="button" id="calBellBtn" aria-haspopup="true" aria-expanded="false" title="일정 — 참가 공고 마감·개찰·서류 만료·계약·준공"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="lb">일정</span><span class="n" id="calBellN" hidden></span></button>
+      <button type="button" id="calBellBtn" aria-haspopup="true" aria-expanded="false" title="일정 — 숫자는 오늘 일정과 새 개찰 결과"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="lb">일정</span><span class="n" id="calBellN" hidden></span></button>
       <div class="docbell-pop calpop" id="calBellPop" hidden></div>
     </div>
     <div class="docbell" id="docBell" hidden>
@@ -5117,7 +5117,7 @@ loadDocBell();
 setInterval(loadDocBell, 10 * 60 * 1000);
 
 // ── 일정 달력 (11/24 사용자) — 참가 공고 마감 · 개찰(투찰 기록) · 회사 서류 만료 · 계약·준공예정(낙찰 후 서류) ──
-// 자료는 이미 있는 API를 모아 그리기만. 숫자 = 앞으로 7일 안 일정 + 아직 안 본 개찰 결과
+// 자료는 이미 있는 API를 모아 그리기만. 숫자 = 오늘 일정 + 아직 안 본 개찰 결과
 const CAL = { month: "", day: "", events: [], server: [] };
 CAL_READY = true;
 const CAL_KIND = { deadline: "마감", open: "개찰", doc: "서류 만료", award: "계약·준공" };
@@ -5170,8 +5170,9 @@ function calMerge() {
   if (!$("calBellPop").hidden) renderCalendar();
 }
 function renderCalBadge() {
-  const today = ymd(new Date()), week = ymd(new Date(Date.now() + 6 * 86400000));
-  const n = CAL.events.filter((e) => (e.d >= today && e.d <= week) || (e.result && !calSeen.has(e.id))).length;
+  // 숫자 = 오늘 일정 + 아직 안 본 개찰 결과(11/24 사용자 — 7일 안으로 세니 목록과 헷갈림)
+  const today = ymd(new Date());
+  const n = CAL.events.filter((e) => e.d === today || (e.result && !calSeen.has(e.id))).length;
   $("calBellN").textContent = n;
   $("calBellN").hidden = !n;
 }

@@ -128,7 +128,7 @@ class Row:
         if getattr(c, "region_suspect", None):
             notes.append("지역 제한 의심")
         if getattr(sr, "local_match", None):  # 키워드 없이 정선 기관 입찰 공고로 수집(2026-11-23)
-            notes.append("정선 사업")
+            notes.append(f"{getattr(sr, 'local_place', None) or '정선'} 사업")
         if getattr(sr, "license_match", None):  # 키워드 없이 지일 공사 면허로 수집(2026-11-12)
             notes.append("보유 면허(" + ", ".join(re.sub(r"\s*[/(]\s*\d{4,}\)?\s*$", "", n) for n in sr.license_match[:2]) + ")")
         return cls(c.notice.title or "", c.notice.detail_url, kind, c.notice.budget, c.days_left, qual,

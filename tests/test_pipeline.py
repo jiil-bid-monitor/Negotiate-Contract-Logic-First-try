@@ -1218,6 +1218,18 @@ class TestLocalRoute20261123(unittest.TestCase):
         self.assertEqual(self._run("○○ 홍보물 제작", contract="수의계약")[0], [])  # 수의계약은 해당 없음
         self.assertEqual(self._run("○○ 청사 보수공사")[0], [])  # 무조건 제외 키워드(보수공사)는 그대로
 
+    def test_grida_uses_paju(self):
+        """2026-11-24 사용자: 그리다는 정선 대신 파주(관내) 기관의 입찰 공고를 키워드 없이 수집."""
+        def run(inst):
+            config = load_config(company="grida")
+            n = notice_from_raw(fixtures.notice("R26BK09990002", title="○○동 마을안길 정비공사", award=fixtures.QUALIFY,
+                                                dminsttNm=inst, cntrctCnclsMthdNm="제한경쟁", asignBdgtAmt="30000000"), "공사")
+            return build_candidates([n], config, {}, {}, NOW, RunStats())
+        got = run("경기도 파주시")
+        self.assertEqual(got[0].screen_result.local_match, "경기도 파주시")
+        self.assertEqual(got[0].screen_result.local_place, "파주")
+        self.assertEqual(run("강원특별자치도 정선군"), [])  # 그리다엔 정선 경로 없음
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

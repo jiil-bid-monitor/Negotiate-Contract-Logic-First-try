@@ -132,6 +132,7 @@ def item(c: dict[str, Any], held_names: dict[str, str], promoted: dict[str, Any]
         "section": c.get("section") or "관심",
         "licenseMatch": c.get("license_match") or [],
         "localMatch": c.get("local_match") or "",
+        "localPlace": c.get("local_place") or "정선",
         "matchedBy": {"products": matched_products, "industries": [], "keywords": c.get("matched_keywords") or [],
                       "classes": []},
         "interestKeywords": c.get("interest_keywords") or [],

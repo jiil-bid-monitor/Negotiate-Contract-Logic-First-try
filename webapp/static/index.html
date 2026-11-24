@@ -372,6 +372,9 @@ body {
 .calpop .k-deadline { background: #1b6e43; } .calpop .k-open { background: #2563eb; } .calpop .k-doc { background: #d93025; } .calpop .k-award { background: #7c3aed; }
 .calpop .legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 2px; font-size: 11.5px; color: var(--muted); }
 .calpop .legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+.calpop .ranges { display: flex; gap: 6px; margin: 10px 0 0; }
+.calpop .ranges button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.calpop .ranges button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
 .calpop .day { margin: 10px 0 2px; font-size: 12px; font-weight: 700; color: var(--ink-strong); }
 .calpop li.ev { cursor: pointer; display: flex; gap: 8px; align-items: baseline; padding: 6px 0; }
 .calpop li.ev i.k { flex: none; display: inline-block; width: 7px; height: 7px; border-radius: 50%; position: relative; top: -1px; }
@@ -5147,7 +5150,7 @@ for (const [bell, btn, pop] of [["docBell", "docBellBtn", "docBellPop"], ["judge
     e.stopPropagation();
     const open = $(pop).hidden;
     for (const other of ["docBellPop", "judgeBellPop", "calBellPop"]) $(other).hidden = true;  // 하나만 열림
-    if (open && pop === "calBellPop") { CAL.day = ymd(new Date()); CAL.month = ""; renderCalendar(); markResultsSeen(); }  // 처음엔 오늘 일정(11/24 사용자 — 2주 목록은 다른 날 일정이 오늘처럼 보였음)
+    if (open && pop === "calBellPop") { CAL.day = ymd(new Date()); CAL.month = ""; CAL.range = ""; renderCalendar(); markResultsSeen(); }  // 처음엔 오늘 일정(11/24 사용자 — 2주 목록은 다른 날 일정이 오늘처럼 보였음)
     $(pop).hidden = !open;
     if (open && pop === "judgeBellPop" && JUDGE_DONE.size) { JUDGE_DONE.clear(); renderJudgeBell(); }  // 지난번 불참 줄은 열 때 정리
     $(btn).setAttribute("aria-expanded", String(open));
@@ -5164,7 +5167,7 @@ setInterval(loadDocBell, 10 * 60 * 1000);
 
 // ── 일정 달력 (11/24 사용자) — 참가 공고 마감 · 개찰(투찰 기록) · 회사 서류 만료 · 계약·준공예정(낙찰 후 서류) ──
 // 자료는 이미 있는 API를 모아 그리기만. 숫자 = 오늘 일정 + 아직 안 본 개찰 결과
-const CAL = { month: "", day: "", events: [], server: [] };
+const CAL = { month: "", day: "", range: "", events: [], server: [] };  // range: '' = 고른 날, 'week' = 오늘부터 7일, 'month' = 보는 달
 CAL_READY = true;
 const CAL_KIND = { deadline: "마감", open: "개찰", doc: "서류 만료", award: "계약·준공" };
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -5238,9 +5241,12 @@ function renderCalendar() {
     cells += `<button type="button" data-cday="${key}" class="${[d.getMonth() !== m - 1 ? "other" : "", key === today ? "today" : "", key === CAL.day ? "sel" : ""].join(" ")}">${d.getDate()}`
       + `<span class="dots">${kinds.map((k) => `<i class="k-${k}"></i>`).join("")}</span></button>`;
   }
-  // 아래 목록 — 고른 날만(처음엔 오늘). 오늘이면 아직 안 본 개찰 결과도 지난 날 것까지 맨 위에
-  const fresh = CAL.day === today ? CAL.events.filter((e) => e.result && !calSeen.has(e.id) && e.d < today) : [];
-  const list = [...fresh, ...CAL.events.filter((e) => e.d === CAL.day)];
+  // 아래 목록 — 고른 날(처음엔 오늘) 또는 '7일'·'이 달'(11/24 사용자 — 여러 날을 한꺼번에). 오늘·7일이면 아직 안 본 개찰 결과도 맨 위에
+  const weekEnd = ymd(new Date(now.getTime() + 6 * 86400000));
+  const inRange = CAL.range === "week" ? (e) => e.d >= today && e.d <= weekEnd
+    : CAL.range === "month" ? (e) => e.d.startsWith(month) : (e) => e.d === CAL.day;
+  const fresh = CAL.range === "week" || (!CAL.range && CAL.day === today) ? CAL.events.filter((e) => e.result && !calSeen.has(e.id) && e.d < today) : [];
+  const list = [...fresh, ...CAL.events.filter(inRange)];
   const dayName = (key) => { const d = new Date(key + "T00:00"); return `${d.getMonth() + 1}/${d.getDate()} (${"일월화수목금토"[d.getDay()]})`; };
   let body = "", last = "";
   for (const e of list) {
@@ -5250,10 +5256,14 @@ function renderCalendar() {
     body += `<li class="ev${grey ? " seen" : ""}" data-cev="${CAL.events.indexOf(e)}"><i class="k k-${e.kind}"></i><span class="what">${CAL_KIND[e.kind]}</span>`
       + `<span class="name">${esc(e.title)}${e.result ? ` — ${esc(e.result)}` : ""}</span>${e.result && !calSeen.has(e.id) ? `<span class="new">새 결과</span>` : ""}</li>`;
   }
-  body = body ? body + "</ul>" : `<p class="row2" style="margin-top:10px">${!CAL.day ? "날짜를 누르면 그날 일정이 보입니다." : CAL.day === today ? "오늘은 일정이 없습니다 — 다른 날짜를 눌러 보세요." : "이 날은 일정이 없습니다."}</p>`;
+  body = body ? body + "</ul>" : `<p class="row2" style="margin-top:10px">${CAL.range === "week" ? "앞으로 7일 안에 일정이 없습니다." : CAL.range === "month" ? "이 달에는 일정이 없습니다." : !CAL.day ? "날짜를 누르면 그날 일정이 보입니다." : CAL.day === today ? "오늘은 일정이 없습니다 — 다른 날짜를 눌러 보세요." : "이 날은 일정이 없습니다."}</p>`;
+  const cur = CAL.range || (CAL.day === today && month === today.slice(0, 7) ? "today" : "");
+  const ranges = [["today", "오늘"], ["week", "7일"], ["month", "이 달"]]
+    .map(([v, l]) => `<button type="button" data-crange="${v}" aria-pressed="${cur === v}" class="${cur === v ? "on" : ""}">${l}</button>`).join("");
   $("calBellPop").innerHTML = `<div class="calhead"><button type="button" data-cmon="-1" aria-label="지난달">‹</button><h3>${y}년 ${m}월</h3><button type="button" data-cmon="1" aria-label="다음 달">›</button></div>`
     + `<div class="grid">${cells}</div>`
     + `<div class="legend">${Object.entries(CAL_KIND).map(([k, l]) => `<span><i class="k-${k}"></i>${l}</span>`).join("")}</div>`
+    + `<div class="ranges" role="group" aria-label="볼 기간">${ranges}</div>`
     + body;
 }
 $("calBellPop").addEventListener("click", (ev) => {
@@ -5263,10 +5273,18 @@ $("calBellPop").addEventListener("click", (ev) => {
     const [y, m] = (CAL.month || ymd(new Date()).slice(0, 7)).split("-").map(Number);
     CAL.month = ymd(new Date(y, m - 1 + Number(mon.dataset.cmon), 1)).slice(0, 7);
     CAL.day = "";
+    if (CAL.range === "week") CAL.range = "month";  // 달을 넘기면 그 달 전체로
+    return void renderCalendar();
+  }
+  const rg = t.closest("[data-crange]");
+  if (rg) {
+    const v = rg.dataset.crange;
+    if (v === "today") { CAL.range = ""; CAL.day = ymd(new Date()); CAL.month = ""; }
+    else { CAL.range = v; if (v === "week") CAL.month = ""; }
     return void renderCalendar();
   }
   const day = t.closest("[data-cday]");
-  if (day) { CAL.day = day.dataset.cday; return void renderCalendar(); }
+  if (day) { CAL.range = ""; CAL.day = day.dataset.cday; return void renderCalendar(); }
   const li = t.closest("[data-cev]");
   if (!li) return;
   const e = CAL.events[+li.dataset.cev];

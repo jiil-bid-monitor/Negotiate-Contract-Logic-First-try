@@ -118,6 +118,8 @@ def item(c: dict[str, Any], held_names: dict[str, str], promoted: dict[str, Any]
         "budgetAmount": c.get("budget"),
         "budgetKind": c.get("budget_kind"),
         "postedAt": c.get("posted_at"),
+        "siteBriefingAt": c.get("site_briefing_at"),
+        "siteBriefingPlace": c.get("site_briefing_place"),
         "detailUrl": c.get("detail_url"),
         "productCode": prods[0] if prods else None,
         "productCodes": prods,

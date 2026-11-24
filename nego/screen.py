@@ -450,6 +450,8 @@ class Schedule:
     # 팝업에 같이 보여줄 일시(카드 마감 계산엔 안 씀) — 공고 게시·개찰, 첨부 공고문에서 찾은 참가등록·제출 마감 전부(2026-10-02 요청)
     posted_at: datetime | None = None
     opening_at: datetime | None = None
+    # 현장설명회 — 마감 계산엔 안 쓰고 팝업 일정·카드 칩에만(2026-11-24)
+    site_briefing_at: datetime | None = None
     attachment_deadlines: list = field(default_factory=list)
 
     @property
@@ -497,6 +499,7 @@ class Schedule:
             ("입찰 마감", self.bid_deadline),
             ("의견등록 마감", self.opinion_deadline),
             ("개찰", self.opening_at),
+            ("현장설명회", self.site_briefing_at),
         ]
         found = [(label, dt) for label, dt in items if dt is not None]
         extra = list(self.attachment_deadlines)
@@ -525,4 +528,5 @@ def build_schedule(notice: Notice) -> Schedule:
         opinion_deadline=parse_datetime(notice.opinion_deadline),
         posted_at=parse_datetime(getattr(notice, "posted_at", None)),
         opening_at=parse_datetime(getattr(notice, "opening_at", None)),
+        site_briefing_at=parse_datetime(getattr(notice, "site_briefing_at", None)),
     )

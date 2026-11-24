@@ -108,6 +108,10 @@ FIELD_CANDIDATES: dict[str, list[str]] = {
     "qualification_deadline": ["bidQlfctRgstDt"],
     "bid_deadline": ["bidClseDt", "bidClseDate"],
     "opening_at": ["opengDt"],
+    # 현장설명회(과업설명회) 일시·장소 — 나라장터 공고 상세 '현장설명일시'(2026-11-24 노원 하나금융공동 직장어린이집 R26BK01836585:
+    # 게시 11/19 10:25 → 설명회 11/20 14:00, 참석 업체만 투찰). 칸 이름은 실응답 미확인이라 'dcmtg…' 칸을 넓게 찾는다(`pick_briefing`).
+    "site_briefing_at": ["dcmtgOprtnDt", "dcmtgOprtnDate", "dcmtgDt"],
+    "site_briefing_place": ["dcmtgOprtnPlce", "dcmtgPlce"],
     # 예가방법(예정가격 결정방법). 실측(2026-09-17 `nego --verify`, Run #46):
     # 용역/물품/공사 세 오퍼레이션 모두에 있고 값도 실제로 채워져 있다
     # (예: 용역="비예가", 물품/공사="단일예가"). "복수예가"도 나올 수 있다.
@@ -176,6 +180,21 @@ _PRODUCT_ENTRY_RE = re.compile(r"\[\s*[^\]^]*\^\s*(\d{10})\s*\^\s*([^\]]*)\]")
 def parse_product_list(text: str | None) -> list[tuple[str, str]]:
     """"[1^5310270502^여자학생복(하)],[2^…^…]" → [(세부품명번호, 이름), …]."""
     return [(m.group(1), m.group(2).strip()) for m in _PRODUCT_ENTRY_RE.finditer(text or "")]
+
+
+def pick_briefing(raw: RawItem) -> tuple[str | None, str | None]:
+    """현장설명회 (일시, 장소). 정해 둔 칸이 없으면 이름이 'dcmtg'(설명회)로 시작하는 칸 중 일시·장소로 보이는 것."""
+    at, place = pick_field(raw, "site_briefing_at"), pick_field(raw, "site_briefing_place")
+    for key, value in raw.items():
+        text = str(value or "").strip()
+        if not text or not str(key).lower().startswith("dcmtg"):
+            continue
+        low = str(key).lower()
+        if at is None and ("dt" in low or "date" in low) and re.search(r"\d{4}-?\d{2}-?\d{2}", text):
+            at = text
+        elif place is None and "plce" in low:
+            place = text
+    return at, place
 
 
 def pick_field(raw: RawItem, key: str) -> str | None:

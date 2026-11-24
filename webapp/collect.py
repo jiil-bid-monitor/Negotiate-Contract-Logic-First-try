@@ -47,7 +47,7 @@ def custom_period(begin: str, end: str, now: datetime) -> tuple[datetime, dateti
 # 저장되는 수집 결과의 판정·표시 형식 버전. 자격 판정·팝업 자료가 바뀔 때 올린다 — 화면이 예전 버전으로
 # 수집된 결과를 보여주고 있으면 "다시 불러오기" 안내를 띄운다(화면은 서버가 알려 주는 이 값과 결과의 format을 비교 — 2026-09-30: 코드를 받고도 옛 결과를 보고
 # 중복·개수 오류가 그대로라고 여긴 일이 두 번 있었음).
-RESULT_FORMAT = 64
+RESULT_FORMAT = 65
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -145,6 +145,9 @@ def serialize(candidate, past: PastIndex, held: tuple[set[str], set[str]] = (set
         # 추정가격 / 배정예산 / None(금액 모름) — 2026-10-19 통합 결정 2번
         "budget_kind": n.budget_kind,
         "posted_at": n.posted_at,
+        # 현장설명회(나라장터 '현장설명일시') — 설명회 참석 업체만 투찰하는 공고가 많아 화면 맨 위에(2026-11-24 사용자 요청)
+        "site_briefing_at": _iso(candidate.schedule.site_briefing_at),
+        "site_briefing_place": getattr(n, "site_briefing_place", None),
         "deadline_label": earliest[0] if earliest else None,
         "deadline": _iso(earliest[1]) if earliest else None,
         "deadlines": [[label, _iso(dt)] for label, dt in candidate.schedule.all_deadlines],

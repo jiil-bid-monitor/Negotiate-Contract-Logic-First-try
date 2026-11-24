@@ -15,11 +15,11 @@
 <script>
   // 테마를 그리기 전에 적용한다. 본문이 뜬 뒤에 바꾸면 화면이 한 번 번쩍인다.
   // 기본은 라이트 — OS가 다크 모드여도 담당자가 고르기 전에는 밝은 화면으로 연다 (2026-10-02 요청).
-  // "시스템"을 고른 사람만 OS 설정을 따른다.
+  // '시스템'(OS 설정 따르기)은 11/24 사용자 요청으로 뺌 — 예전에 고른 사람도 라이트로.
   // 사생활 보호 모드·사이트 데이터 차단에서 localStorage 접근이 throw할 수 있어 감싼다.
   let savedTheme = null;
   try { savedTheme = localStorage.getItem("ui-theme"); } catch (e) { /* 저장소를 못 쓰면 기본(라이트) */ }
-  if (savedTheme !== "system") document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
 </script>
 
 <style>
@@ -1507,7 +1507,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <div class="theme" role="group" aria-label="화면 테마">
       <button type="button" data-theme-set="light" title="라이트 모드">라이트</button>
       <button type="button" data-theme-set="dark" title="다크 모드">다크</button>
-      <button type="button" data-theme-set="system" title="OS 설정을 따름">시스템</button>
     </div>
   </div>
 </div>
@@ -4172,12 +4171,9 @@ function renderDiagnosed(n, openSteps = false) {
 
 
 // ── 테마 ───────────────────────────────────────────────────
-// "시스템"은 data-theme 속성을 지워서 prefers-color-scheme에 맡기는 것이다.
 // 저장에 실패해도(사생활 보호 모드 등) 화면 전환 자체는 되어야 하므로 따로 감싼다.
 function applyTheme(mode) {
-  if (mode === "system") delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = mode;
-  // "시스템"도 저장한다 — 지우면 다음에 열 때 기본(라이트)으로 돌아간다
+  document.documentElement.dataset.theme = mode;
   try { localStorage.setItem("ui-theme", mode); } catch (e) { /* 저장 못 해도 이번 세션에는 적용된다 */ }
   markTheme(mode);
 }
@@ -4191,7 +4187,7 @@ function markTheme(mode) {
 (function initTheme() {
   let saved = null;
   try { saved = localStorage.getItem("ui-theme"); } catch (e) { /* 무시 */ }
-  markTheme(saved === "dark" || saved === "system" ? saved : "light");
+  markTheme(saved === "dark" ? "dark" : "light");
   document.querySelector(".theme").onclick = (ev) => {
     const btn = ev.target.closest("[data-theme-set]");
     if (btn) applyTheme(btn.dataset.themeSet);

@@ -186,3 +186,14 @@ class RunTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MissingExpiryTest(unittest.TestCase):
+    """11/24 사용자: 직접생산확인증명서인데 만료일을 모르면(뒷장 없음) 서류목록 사유·웹앱 빨간 글씨로 알림."""
+
+    def test_direct_production_without_expiry_needs_check(self):
+        from under100m.docs import status_of
+        st, why = status_of({"종류": "(그리다) 직접생산확인증명서(종합디자인 외)", "발급일": "2023-11-29", "유효기간": ""}, date(2026, 11, 24))
+        self.assertEqual(st, "확인 필요")
+        self.assertIn("뒷장", why)
+        self.assertEqual(status_of({"종류": "(그리다) 사업자등록증", "발급일": "2026-07-28", "유효기간": ""}, date(2026, 11, 24))[0], "그대로 사용")

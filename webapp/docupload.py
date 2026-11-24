@@ -439,7 +439,11 @@ def all_docs(folder: Path, today: date) -> list[dict]:
     names = [k for k, _ in dated]
     out += [{"kind": k, "end": None, "left": None, "state": ""} for k in kinds(folder)
             if k not in names and not any(docexpiry.same_doc(c, k) for c in names)]
+    from under100m import docs
+
     for d in out:
         paths = _latest(folder, file_kind(folder, d["kind"]))
         d["file"] = paths[-1].name if paths else ""
+        if paths and not d["end"] and (note := docs.missing_expiry_note(d["kind"])):
+            d["note"] = note  # 웹앱 서류 관리 창에 빨간 글씨
     return out

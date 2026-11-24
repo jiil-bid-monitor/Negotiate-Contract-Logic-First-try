@@ -4941,8 +4941,8 @@ function renderHelp() {
 function helpNudge() {
   let seen = false;
   try { seen = localStorage.getItem("help-seen") === "1"; } catch (e) {}
-  $("helpNudge").hidden = seen || $("helpFab").hidden || !$("helpBox").hidden;
-  $("helpFab").classList.toggle("nudge", !$("helpNudge").hidden);
+  $("helpNudge").hidden = $("helpFab").hidden || !$("helpBox").hidden;  // 문구는 늘 보임(11/24 사용자), 튀는 움직임은 처음만
+  $("helpFab").classList.toggle("nudge", !seen && !$("helpNudge").hidden);
 }
 $("helpNudge").onclick = () => helpOpen(true);
 function helpOpen(open) {

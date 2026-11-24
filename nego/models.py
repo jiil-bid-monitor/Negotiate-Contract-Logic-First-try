@@ -36,6 +36,9 @@ class Notice:
     qualification_deadline: str | None = None
     bid_deadline: str | None = None
     opening_at: str | None = None
+    # 현장설명회 일시·장소(나라장터 공고 상세 '현장설명일시') — 있으면 설명회 참석 업체만 투찰하는 공고가 많다(2026-11-24)
+    site_briefing_at: str | None = None
+    site_briefing_place: str | None = None
     estimate_price_method: str | None = None
 
     joint_method_name: str | None = None
@@ -155,6 +158,8 @@ def notice_from_raw(raw: dict[str, Any], work_type: str) -> Notice:
         qualification_deadline=F.pick_field(clean, "qualification_deadline"),
         bid_deadline=F.pick_field(clean, "bid_deadline"),
         opening_at=F.pick_field(clean, "opening_at"),
+        site_briefing_at=F.pick_briefing(clean)[0],
+        site_briefing_place=F.pick_briefing(clean)[1],
         estimate_price_method=F.pick_field(clean, "estimate_price_method"),
         joint_method_name=F.pick_field(clean, "joint_method_name"),
         joint_method_code=F.pick_field(clean, "joint_method_code"),

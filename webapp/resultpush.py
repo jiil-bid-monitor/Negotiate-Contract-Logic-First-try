@@ -27,8 +27,9 @@ RUN_META = ("id", "started_at", "finished_at", "params")
 
 class ResultPush:
     def __init__(self, url: str, token: str | None, store: Any, docscan: Any, busy: Callable[[], bool],
-                 state_path: Path, post: Callable[..., Any] = requests.post):
-        self.url = url.rstrip("/") + "/api/import-run"
+                 state_path: Path, post: Callable[..., Any] = requests.post, company: str | None = None):
+        # company: 지일 말고 다른 회사(2026-11-24 회사 고르기) — NAS가 그 회사 결과로 저장하게 ?co=<id>
+        self.url = url.rstrip("/") + "/api/import-run" + (f"?co={company}" if company else "")
         self.token = token
         self.store = store
         self.docscan = docscan

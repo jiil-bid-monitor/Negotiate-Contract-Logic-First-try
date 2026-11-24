@@ -118,6 +118,31 @@ body {
   letter-spacing: .02em; color: rgba(255,255,255,.88);
 }
 
+/* 회사 고르기 (2026-11-24) */
+.co-chip {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; cursor: pointer;
+  font-family: var(--head); font-size: 15px; font-weight: 700; color: #fff; background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.35); border-radius: 999px;
+}
+.co-chip span { font-size: 11px; opacity: .75; }
+.co-chip:hover { background: rgba(255,255,255,.2); }
+.co-pick { position: fixed; inset: 0; z-index: 1000; background: var(--bg, #f4f4f4); display: grid; place-items: center; padding: 16px; }
+.co-pick[hidden] { display: none; }
+body.picking { overflow: hidden; }
+.co-pick-box { width: min(560px, 100%); text-align: center; }
+.co-pick-box h2 { font-family: var(--head); font-size: 24px; margin: 0 0 8px; color: var(--ink-strong); }
+.co-pick-box p { margin: 0 0 24px; color: var(--muted); font-size: 14px; }
+.co-pick-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.co-pick-btns button {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 12px; cursor: pointer;
+  background: #fff; border: 2px solid var(--line); border-radius: 8px; color: var(--ink-strong);
+}
+.co-pick-btns button b { font-family: var(--head); font-size: 28px; }
+.co-pick-btns button span { font-size: 13px; color: var(--muted); }
+.co-pick-btns button:hover, .co-pick-btns button:focus-visible { border-color: var(--brand); outline: none; background: #f3faf6; }
+.co-pick-box .co-pick-note { margin: 20px 0 0; font-size: 12px; }
+@media (max-width: 480px) { .co-pick-btns { grid-template-columns: 1fr; } .co-pick-btns button { padding: 24px 12px; } }
+
 /* 테마 토글. 상단바는 두 모드에서 모두 어두우므로 여기 색은 흰 계열로 고정한다. */
 .theme { margin-left: auto; display: flex; border: 1px solid rgba(255,255,255,.22); }
 .theme button {
@@ -1579,11 +1604,25 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 </head>
 <body>
 
+<!-- 회사 고르기 (2026-11-24) — 웹앱을 처음 켜면(이 탭에서 아직 안 골랐으면) 먼저 보인다 -->
+<div class="co-pick" id="coPick" hidden role="dialog" aria-modal="true" aria-labelledby="coPickTitle">
+  <div class="co-pick-box">
+    <h2 id="coPickTitle">어느 회사 공고를 볼까요?</h2>
+    <p>회사마다 보유 자격이 달라 자격 판정·제외 공고·판단 기록이 따로입니다.</p>
+    <div class="co-pick-btns">
+      <button type="button" data-co="jiil"><b>지일</b><span>(주)지일</span></button>
+      <button type="button" data-co="grida"><b>그리다</b><span>(주)그리다</span></button>
+    </div>
+    <p class="co-pick-note">나중에 바꾸려면 맨 위 회사 이름을 누르세요.</p>
+  </div>
+</div>
+
 <div class="topbar">
   <div class="inner">
     <!-- JIIL 로고(사용자 제공 이미지를 SVG로, 10/15) — 다크 바 위에서 흰색으로 보이게 CSS가 반전시킨다 -->
     <a href="#live" class="logo-home" title="실제 공고로" data-home><svg class="logo" width="67" height="30" viewBox="14 13 78 35" role="img" aria-label="JIIL" fill="currentColor"><path d="M23.8 14 L36.4 14 L36.4 25.5 C36.4 34 32.5 40.5 21.8 46.8 L17.4 33.2 L17.2 31.2 L22.4 26 L23.6 22.8 Z"/><rect x="40" y="14" width="12.5" height="33"/><rect x="57" y="14" width="13" height="33"/><path d="M74 14H86V33L89.4 37.6V47H74Z"/></svg></a>
     <span class="slash">|</span>
+    <button type="button" class="co-chip" id="coChip" title="다른 회사 공고 보기">지일<span aria-hidden="true">▾</span></button>
     <div class="brand-text">
       <h1>나라장터 공고 수집</h1>
       <p class="corpus-sum" id="corpusSum" hidden>과거 실적을 불러오는 중…</p>
@@ -1901,6 +1940,40 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 "use strict";
 const $ = (id) => document.getElementById(id);
 
+/* ── 회사 고르기 (2026-11-24 사용자 요청: 지일·그리다) ───────────────────
+   같은 서버·같은 수집 규칙, 보유 자격만 다름. 고른 회사는 이 탭(sessionStorage)에 기억 — F5는 그대로, 새 창·새 탭은 다시 고름.
+   주소에 ?co=grida를 붙이면 고르기 없이 그 회사로. 서버로 가는 /api/ 요청엔 ?co=<id>를 붙인다(없으면 지일). */
+const COMPANY_NAMES = { jiil: "지일", grida: "그리다" };
+let CO_PICKED = "";
+try {
+  const fromUrl = new URLSearchParams(location.search).get("co");
+  if (fromUrl && COMPANY_NAMES[fromUrl]) sessionStorage.setItem("ui-company", fromUrl);
+  CO_PICKED = sessionStorage.getItem("ui-company") || "";
+} catch (e) { /* 저장 못 하면 늘 지일 */ }
+const CO = COMPANY_NAMES[CO_PICKED] ? CO_PICKED : "jiil";
+const CO_NAME = COMPANY_NAMES[CO];
+if (CO !== "jiil") {
+  const plainFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    if (typeof input === "string" && input.startsWith("/api/") && !input.startsWith("/api/quant/")) {
+      input += (input.includes("?") ? "&" : "?") + "co=" + encodeURIComponent(CO);
+    }
+    return plainFetch(input, init);
+  };
+}
+function pickCompany(id) {
+  try { sessionStorage.setItem("ui-company", id); } catch (e) { /* 무시 */ }
+  if (id === CO) { $("coPick").hidden = true; document.body.classList.remove("picking"); return; }
+  const url = new URL(location.href);
+  url.searchParams.delete("co");
+  location.replace(url.toString());  // 다른 회사 — 처음부터 그 회사 자료로 다시 그린다
+}
+function showCompanyPick() {
+  $("coPick").hidden = false;
+  document.body.classList.add("picking");
+  $("coPick").querySelector(`[data-co="${CO_PICKED || "jiil"}"]`)?.focus();
+}
+
 /**
  * JSON을 기대하는 요청의 공통 처리.
  *
@@ -2133,7 +2206,7 @@ async function loadNotices(refresh) {
     $("refresh").style.display = $("days").style.display = $("load").style.display = viewer ? "none" : "";
     $("customRange").hidden = viewer || $("days").value !== "custom";  // 판단은 10초마다 저절로 받음
     // 투찰 계산기·정량평가서는 서버 PC에서만 — 투찰 기록이 두 곳에 쌓이지 않게, 정량평가서는 NAS에 OCR이 없어서 (11/11 사용자 결정)
-    document.querySelectorAll('.tabs [data-tab="calc"], .tabs [data-tab="quant"]').forEach((b) => { b.hidden = viewer; });
+    document.querySelectorAll('.tabs [data-tab="calc"], .tabs [data-tab="quant"]').forEach((b) => { b.hidden = viewer || CO !== "jiil"; });
     if (data.empty) {
       $("loadState").textContent = "";
       $("liveMeta").innerHTML = viewer ? "아직 받은 수집 결과가 없습니다. 서버 PC 화면에서 수집하면 끝난 뒤 여기에 나타납니다."
@@ -5081,12 +5154,13 @@ function renderDocBell() {
 }
 async function loadDocBell() {
   if (document.querySelector("#docBellPop .upbox:not(:empty)")) return;  // 올리는 중엔 다시 그리지 않음
-  try { const r = await getJson("/api/docs-alert"); DOC_BELL = r.docs || []; DOC_READY = !!r.ready; } catch { return; }
+  try { const r = await getJson("/api/docs-alert"); DOC_BELL = coDocs(r.docs); DOC_READY = !!r.ready; } catch { return; }
   renderDocBell();
 }
 // 지일 / 그리다 서류 따로(11/24 사용자 — 쌓이면 보기 어려움). 그리다 서류는 이름이 '(그리다) …'
-let DOC_CO = "지일";
+let DOC_CO = CO_NAME;  // 관리 창은 고른 회사 쪽부터(2026-11-24 회사 고르기)
 const isGrida = (d) => /그리다/.test(d.kind);
+const coDocs = (docs) => (docs || []).filter((d) => isGrida(d) === (CO === "grida"));  // 종은 고른 회사 서류만
 function renderDocMgr() {
   const q = ($("docMgrQ")?.value || "").replace(/\s+/g, "");
   const hit = DOC_ALL.filter((d) => !q || d.kind.replace(/\s+/g, "").includes(q));
@@ -5126,7 +5200,7 @@ async function openDocMgr() {
 }
 function afterSave() {  // 저장·수정·빼기 뒤 종과 관리 창 목록을 새로
   (async () => {
-    try { DOC_BELL = (await getJson("/api/docs-alert")).docs || []; } catch {}
+    try { DOC_BELL = coDocs((await getJson("/api/docs-alert")).docs); } catch {}
     renderDocBell();
     if ($("docMgr")?.open) { try { DOC_ALL = (await getJson("/api/docs-all")).docs || []; } catch {} renderDocMgr(); }
   })();
@@ -5537,6 +5611,20 @@ $("calBellPop").addEventListener("click", (ev) => {
 });
 loadCalendar();
 setInterval(loadCalendar, 10 * 60 * 1000);
+
+// 회사 고르기 연결 (2026-11-24) — 이 탭에서 아직 안 골랐으면 첫 화면에 '지일 / 그리다'
+$("coChip").firstChild.textContent = CO_NAME;
+$("coChip").onclick = showCompanyPick;
+$("coPick").onclick = (ev) => { const b = ev.target.closest("[data-co]"); if (b) pickCompany(b.dataset.co); };
+document.title = CO === "jiil" ? document.title : `${CO_NAME} · ${document.title}`;
+document.querySelector("footer").firstChild.textContent = `\n    (주)${CO_NAME} · 로컬 전용 도구\n  `;
+if (CO !== "jiil") {
+  // 투찰 계산기·정량평가서·낙찰 후 서류·일정(투찰 기록)은 아직 지일 회사 자료·투찰 기록으로만 돈다 — 그리다 자료를 잇기 전엔 숨김
+  document.querySelectorAll('.tabs [data-tab="calc"], .tabs [data-tab="quant"], .tabs [data-tab="award"]').forEach((b) => { b.hidden = true; });
+  $("calBell").hidden = true;
+  if (["calc", "quant", "award"].includes(location.hash.slice(1).split("=")[0])) showTab("live");
+}
+if (!CO_PICKED) showCompanyPick();
 </script>
 <!-- 투찰 계산기 — 계산은 bidcalc.js(BidCalc), 화면은 bidcalc_ui.js (2026-10-15, 21라인 복수예가산출프로그램 모양) -->
 <script src="bidcalc.js"></script>

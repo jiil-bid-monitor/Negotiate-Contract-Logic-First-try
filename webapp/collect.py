@@ -266,6 +266,10 @@ class _JobLogHandler(logging.Handler):
             job.set_progress(LIST_END + 5 if msg.startswith("면허") else CHECK_END, "참가 자격·지역 확인 중")
 
 
+class OtherCompanyBusy(RuntimeError):
+    """다른 회사 화면에서 수집 중 — 같은 회사 수집 중(그 진행을 같이 봄)과 구분한다."""
+
+
 class Collector:
     """수집은 한 번에 하나만 돈다(나라장터 API 호출량 보호). 결과는 Store에 남겨 팀원이 같이 본다."""
 
@@ -281,6 +285,9 @@ class Collector:
         self._lock = threading.Lock()
         self._runner = runner or self._run_nego
         self._config_loader = config_loader
+        # 다른 회사 화면의 수집기(2026-11-24 회사 고르기) — 나라장터 호출량 보호로 회사를 통틀어 한 번에 하나만 돈다
+        self.peers: list["Collector"] = []
+        self.company_name = ""
 
     def start(self, days: int | None, attachments: bool, ai: bool, categories: list[str] | None,
               prespec: bool = True, begin: str | None = None, end: str | None = None) -> Job:
@@ -295,6 +302,9 @@ class Collector:
         with self._lock:
             if self.job.running:
                 raise RuntimeError("이미 수집 중입니다")
+            other = next((p for p in self.peers if p.job.running), None)
+            if other is not None:
+                raise OtherCompanyBusy(f"{other.company_name or '다른 회사'} 공고를 불러오는 중입니다 — 끝난 뒤 다시 눌러 주세요")
             self.job = Job(running=True, started_at=datetime.now().isoformat(timespec="seconds"),
                            params={"days": days, "begin": begin if period else None, "end": end if period else None,
                                    "attachments": attachments, "ai": ai, "prespec": prespec,

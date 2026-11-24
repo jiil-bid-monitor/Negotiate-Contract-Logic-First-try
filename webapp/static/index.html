@@ -3454,7 +3454,8 @@ function nQualBadges(n, noShare = false) {
   const denied = noShare || /불허/.test(jointLabel(n));
   return parts.map((p) => {
     const label = QUAL_LABEL[p.key]?.[p.status] || `${p.name} ${p.status}`;
-    const tone = p.status === "충족" ? "ok" : p.status === "미달" ? (denied ? "block" : "fix") : "faint";
+    // 미보유는 공동수급 가능 여부와 상관없이 늘 빨간 칩(2026-11-24 사용자 요청 — 공동수급은 옆 칩·팝업 문구로)
+    const tone = p.status === "충족" ? "ok" : p.status === "미달" ? "block" : "faint";
     const ico = p.status === "충족" ? "✓" : p.status === "미달" ? "!" : "";
     const ok = p.satisfied || [];
     const miss = p.missing || [];
@@ -4272,7 +4273,7 @@ function exStepBadges(n) {
       : /^충족/.test(q.detail)
         ? `<span class="badge qual ok" tabindex="0"><span class="ico" aria-hidden="true">✓</span>자격요건 충족${qtip("참가 자격", `<p>${esc(q.detail)}</p>`)}</span>`
         : /^자격 미보유/.test(q.detail)
-          ? tipBadge("fix", "자격 미보유 · 공동수급 확인", "참가 자격", `<p>${esc(q.detail)}</p>`)
+          ? tipBadge("block", "자격 미보유 · 공동수급 확인", "참가 자격", `<p>${esc(q.detail)}</p>`)
           : /업종제한 없음/.test(q.detail)
             ? tipBadge("faint", "자격요건 제한 없음", "참가 자격", `<p>나라장터 면허제한정보에 업종제한이 없습니다.</p>`)
             : tipBadge("faint", n.sourceType === "사전규격" ? "자격 판정 안 함" : "자격 확인 실패", "참가 자격", `<p>${esc(q.detail)}</p>`);

@@ -119,9 +119,9 @@ class TestBuildMessages(unittest.TestCase):
         text = "\n".join(T.build_messages(rows, "보고"))
         self.assertIn("후보 <b>3건</b> (관심 공고 2 · 세부품명 공고 1)", text)
         self.assertLess(text.index("■ 관심 공고 2건"), text.index("■ 세부품명 공고 (키워드 없이 보유 품목으로 수집) 1건"))
-        self.assertIn("1.2억(배정) · <b>🔴 D-8</b> · 자격 충족 — 품목: 안내판", text)
+        self.assertIn("1.2억(배정) · <b>🔴 D-8</b> · 자격 충족\n   품목: 안내판", text)   # 덧붙임은 셋째 줄(11/24)
         self.assertIn("[정정] <a", text)
-        self.assertIn("금액 모름 · D-12 · 자격 미확인 · 해외 의심", text)
+        self.assertIn("금액 모름 · D-12 · 자격 미확인\n   해외 의심", text)
         self.assertIn("자격 충족 · <code>R26BK01000001</code>", text)
 
     def test_one_missing_requirement_is_not_qualified(self):

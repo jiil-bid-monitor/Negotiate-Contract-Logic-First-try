@@ -182,14 +182,18 @@ def _line(index: int, row: Row, tagged: bool) -> str:
     else:
         days = f"D-{row.days_left}"
     line = f"{index}. {title}\n   {esc(_short_money(row.budget, row.budget_kind))} · {days} · {row.qualification}"
-    if row.linked:
-        line += f" · {esc(row.linked)}에서 확인"
-    for note in row.notes:
-        line += f" · {esc(note)}"
-    if row.notice_no:
-        line += f" · <code>{esc(row.notice_no)}</code>"
+    # 덧붙임(국방전자조달·보유 면허·지역 제한 의심·품목)은 셋째 줄로 — 한 줄에 다 붙이면 휴대폰에서 낱말 가운데서 꺾였음(11/24 사용자)
+    extra = ([f"{esc(row.linked)}에서 확인"] if row.linked else []) + [esc(n) for n in row.notes]
     if row.section == "세부품명" and row.products:
-        line += f" — 품목: {esc(', '.join(row.products))}"
+        extra.append(f"품목: {esc(', '.join(row.products))}")
+    if row.notice_no:
+        code = f"<code>{esc(row.notice_no)}</code>"
+        if extra:
+            extra.append(code)
+        else:
+            line += f" · {code}"
+    if extra:
+        line += "\n   " + " · ".join(extra)
     return line
 
 

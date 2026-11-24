@@ -29,7 +29,7 @@
 - **(사용자) 별도 요청이 없으면 그리다 서식의 대표자 칸 전체(이름·생년월일·휴대폰·서명란)는 등기상 대표가 아닌 지정한 분 정보로** —
   서버 PC `.env` `QUANT_GRIDA_REP`(이름)·`QUANT_GRIDA_REP_RRN`(앞 6자리만 읽고 뒤는 '*')·`QUANT_GRIDA_REP_MOBILE`·`QUANT_GRIDA_REP_TITLE`(보안서약서 직위),
   `QUANT_GRIDA_CAPITAL`·`QUANT_GRIDA_STAFF`·`QUANT_GRIDA_EMAIL`·`_TEL`·`_FAX`(`importer.enrich_vault` — 서류 PDF 값보다 먼저).
-  그리다는 대표자 휴대폰 칸에 그 번호(`fill._value`), **지일은 11/20 규칙 그대로 회사 전화**.
+  **(같은 날 사용자 결정) 기입 규칙은 지일과 완전히 같음** — 대표자 휴대폰 칸도 회사 전화(REP_MOBILE은 읽어도 안 씀), 회사별 예외 없음.
 - **(사용자) 주민등록번호는 뒷자리 첫 숫자까지**('670222-1******' — 지일·그리다 모두, `fill._masked`·`importer.masked_rrn`, 11/04 '앞 6자리만'을 대체). 원본부터 가려진 번호는 '-*******'. 개인 정보 값은 저장소·문서에 적지 않음. 시험 `test_grida_rep_from_env`.
 
 ## 2026-11-24 — 그리다 수집 = 지일과 같은 규칙, '정선 기관 입찰 공고(키워드 없이)'만 뺌 · 보고 제목 [지일]/[그리다] (같은 브랜치 `claude/grida-cert-folder`, 사용자 결정)

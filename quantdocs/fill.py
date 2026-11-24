@@ -430,10 +430,7 @@ def _value(key: str, vault) -> str:
     if key == "대표자 휴대폰":
         # (11/20 사용자 요청) 대표님 개인 번호는 어느 서식에도 넣지 않음 — 위임장 대표자 연락처·'(H.P)☎'·'휴대폰' 칸 모두 회사 전화
         # (11/16·11/18 'QUANT_REP_MOBILE = 대표자 휴대폰'을 대체, .env 값은 읽어도 안 씀)
-        # 예외(11/24 사용자 요청): 그리다 등 다른 회사는 .env QUANT_<ID>_REP_MOBILE을 적었으면 그 번호(대표자 칸 전체를 정해 둔 분 정보로)
-        from .company import DEFAULT, current
-        if current() != DEFAULT and vault.info.get("대표자 휴대폰"):
-            return str(vault.info["대표자 휴대폰"])
+        # (11/24 사용자 결정) 그리다도 지일과 완전히 같은 기입 규칙 — 회사별 예외 없음
         return _value("전화번호", vault)
     if key == "_co_rep":
         co, rep = _value("회사명", vault), _value("대표자", vault)
@@ -3489,6 +3486,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             if rrn and target is not None and target.blank:
                                 edits.append((target, [rrn], False))
                                 rep.filled.append(f"대표자 주민등록번호 → {rrn}")
+                        continue
+                    if not key and _sq(c.text) == "연락처" and (c.row in agent_rows or group == "대리인"):
+                        # (11/24 사용자 지적 — 해남 위임장) 대리인 줄 '연락처 | 사무실 / 휴대폰'은 비움 — 회사 대표 전화·대표자 휴대폰은
+                        # 대리인 연락처가 아님(11/16 '대리인 줄이어도 휴대폰 = 대표님 번호'를 대체)
                         continue
                     if not key and _sq(c.text) == "연락처" and _value("전화번호", vault):
                         # '연 락 처 | 회 사 / 휴대폰'(11/13 제천 서식 5 대표자 선임계) — '회 사' 줄 옆에 회사 전화, 휴대폰은 비움(개인 번호)

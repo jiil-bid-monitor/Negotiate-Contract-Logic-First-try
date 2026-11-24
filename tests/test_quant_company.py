@@ -110,7 +110,7 @@ def test_grida_rep_from_env(monkeypatch, tmp_path):
         assert v.info["대표자"] == "홍길동"
         assert v.info["대표자 주민등록번호"] == "670222-1******"
         assert v.info["대표자 직위"] == "이사"
-        assert fill._value("대표자 휴대폰", v) == "010-0000-0000"
+        assert fill._value("대표자 휴대폰", v) == "031-000-0000"  # 지일과 같은 규칙 — 개인 번호는 안 넣음
         assert fill._value("자본금", v) == "200,000,000원"
         assert fill._value("종업원 수", v) == "6명"
         assert fill._birth(v.info["대표자 주민등록번호"]) == "1967. 02. 22."

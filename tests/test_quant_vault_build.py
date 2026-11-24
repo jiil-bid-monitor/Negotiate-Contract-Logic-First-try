@@ -4028,7 +4028,8 @@ def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
     agent = tbl([[cell(0, 0, "대리인", rs=2), cell(1, 0, "성 명"), cell(2, 0, ""), cell(3, 0, "주민등록번호"), cell(4, 0, "")],
                  [cell(1, 1, "업체명"), cell(2, 1, ""), cell(3, 1, "연락처"), cell(4, 1, "회  사", "휴대폰")]])
     out = run("a", agent)
-    assert "010-" not in out and re.search(r"회  사  (?:<[^>]+>)*033-111-2222", out), out
+    # (11/24 사용자 지적 — 해남 위임장) 대리인 줄 연락처는 비움: 회사 대표 전화도 대표자 휴대폰도 안 넣음
+    assert "010-" not in out and "033-111-2222" not in out, out
     # 위임장 '응모 대표자 | 성 명 … / 업체명 | __ | 연 락 처 | __' — 대표자 묶음의 연락처도 회사 전화
     deleg = tbl([[cell(0, 0, "응모 대표자", rs=2), cell(1, 0, "성 명"), cell(2, 0, ""), cell(3, 0, "생년월일"), cell(4, 0, "")],
                  [cell(1, 1, "업체명"), cell(2, 1, ""), cell(3, 1, "연 락 처"), cell(4, 1, "")]])

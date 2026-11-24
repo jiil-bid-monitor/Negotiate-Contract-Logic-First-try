@@ -39,6 +39,10 @@ def test_companies_and_held_files():
     assert jiil.held_raw.get("heldIndustries"), "지일 보유 자격은 예전 파일 그대로"
     assert grida.screen.keywords == jiil.screen.keywords, "키워드는 같다(사용자 결정)"
     assert grida.held_raw is not jiil.held_raw and "heldIndustries" in grida.held_raw
+    from nego import qualify, region
+    held = qualify.load_held_codes(grida.held_raw)
+    assert {"0006", "4444", "3244", "6012100201"} <= held and "0036" not in held, "그리다 등록증 기준(11/24)"
+    assert region.company_sido(grida.held_raw) == "경기" and region.company_sido(jiil.held_raw) == "강원"
 
 
 def test_screen_has_picker():

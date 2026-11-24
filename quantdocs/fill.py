@@ -277,9 +277,12 @@ def _fill_marks(seg: str, vault) -> tuple[str, list[str]]:
 
 
 def _masked(v: str) -> str:
-    """주민등록번호는 앞 6자리만 — 뒷자리는 늘 '*******'(11/04 사용자 요청)."""
-    m = re.search(r"(\d{6})\s*-?\s*[\d*Xx]{7}", v or "")
-    return f"{m.group(1)}-*******" if m else ""
+    """주민등록번호는 앞 6자리 + 뒷자리 첫 숫자만 — 나머지는 '*'(11/04 사용자 요청, 11/24 '뒷자리 첫 숫자도 나와야 함').
+    뒷자리 첫 글자를 모르면(원본부터 가려진 번호) '*' 일곱 개."""
+    m = re.search(r"(\d{6})\s*-?\s*([\d*Xx])[\d*Xx]{6}", v or "")
+    if not m:
+        return ""
+    return f"{m.group(1)}-{m.group(2) if m.group(2).isdigit() else '*'}******"
 
 
 def _birth(v: str) -> str:

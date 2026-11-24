@@ -108,7 +108,7 @@ def test_grida_rep_from_env(monkeypatch, tmp_path):
         v.info = dict(V.info)
         importer.enrich_vault(v)
         assert v.info["대표자"] == "홍길동"
-        assert v.info["대표자 주민등록번호"] == "670222-*******"
+        assert v.info["대표자 주민등록번호"] == "670222-1******"
         assert v.info["대표자 직위"] == "이사"
         assert fill._value("대표자 휴대폰", v) == "010-0000-0000"
         assert fill._value("자본금", v) == "200,000,000원"

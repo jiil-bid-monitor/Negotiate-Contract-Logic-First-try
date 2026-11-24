@@ -359,6 +359,31 @@ body {
 }
 .docbell > button:hover, .docbell > button[aria-expanded="true"] { border-color: rgba(255,255,255,.7); }
 .docbell .lb { font-size: 13px; font-weight: 600; }
+.docbell .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; margin-right: 5px; }
+/* 일정 달력(11/24) — 작은 달력 + 날짜별 목록, 점 색 = 종류 */
+.calpop { width: 340px; }
+.calpop .calhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.calpop .calhead h3 { margin: 0; }
+.calpop .calhead button { font: inherit; font-size: 15px; width: 28px; height: 28px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; cursor: pointer; }
+.calpop .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.calpop .grid .wd { color: var(--muted); font-size: 11.5px; padding: 2px 0; }
+.calpop .grid button { font: inherit; border: 0; background: none; color: var(--ink); padding: 4px 0 3px; border-radius: 6px; cursor: pointer; min-height: 34px; }
+.calpop .grid button.other { color: var(--faint, #aaa); }
+.calpop .grid button.today { font-weight: 700; color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.calpop .grid button.sel { background: var(--brand); color: #fff; }
+.calpop .grid button:hover:not(.sel) { background: var(--line-soft, #f0f0f0); }
+.calpop .dots { display: flex; justify-content: center; gap: 2px; height: 5px; margin-top: 2px; }
+.calpop .dots i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; }
+.calpop .k-deadline { background: #1b6e43; } .calpop .k-open { background: #2563eb; } .calpop .k-doc { background: #d93025; } .calpop .k-award { background: #7c3aed; }
+.calpop .legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 2px; font-size: 11.5px; color: var(--muted); }
+.calpop .legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+.calpop .day { margin: 10px 0 2px; font-size: 12px; font-weight: 700; color: var(--ink-strong); }
+.calpop li.ev { cursor: pointer; display: flex; gap: 8px; align-items: baseline; padding: 6px 0; }
+.calpop li.ev i.k { flex: none; display: inline-block; width: 7px; height: 7px; border-radius: 50%; position: relative; top: -1px; }
+.calpop li.ev .what { flex: none; font-size: 12px; color: var(--muted); }
+.calpop li.ev .name { font-weight: 500; }
+.calpop li.ev:hover .name { color: var(--brand); text-decoration: underline; }
+.calpop li.ev .new { flex: none; font-size: 11px; font-weight: 700; color: #2563eb; }
 .docbell .n {
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
   background: #d93025; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
@@ -1496,11 +1521,15 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     </div>
 
     <div class="docbell" id="judgeBell" hidden>
-      <button type="button" id="judgeBellBtn" aria-haspopup="true" aria-expanded="false" title="판단할 공고 (텔레그램 보고에 나간 공고)">📋 <span class="lb">판단할 공고</span><span class="n" id="judgeBellN"></span></button>
+      <button type="button" id="judgeBellBtn" aria-haspopup="true" aria-expanded="false" title="판단할 공고 (텔레그램 보고에 나간 공고)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/></svg><span class="lb">판단할 공고</span><span class="n" id="judgeBellN"></span></button>
       <div class="docbell-pop" id="judgeBellPop" hidden></div>
     </div>
+    <div class="docbell" id="calBell">
+      <button type="button" id="calBellBtn" aria-haspopup="true" aria-expanded="false" title="일정 — 참가 공고 마감·개찰·서류 만료·계약·준공"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="lb">일정</span><span class="n" id="calBellN" hidden></span></button>
+      <div class="docbell-pop calpop" id="calBellPop" hidden></div>
+    </div>
     <div class="docbell" id="docBell" hidden>
-      <button type="button" id="docBellBtn" aria-haspopup="true" aria-expanded="false" title="회사 서류 갱신 알림">🔔 <span class="lb">회사 서류</span><span class="n" id="docBellN"></span></button>
+      <button type="button" id="docBellBtn" aria-haspopup="true" aria-expanded="false" title="회사 서류 갱신 알림"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="lb">회사 서류</span><span class="n" id="docBellN"></span></button>
       <div class="docbell-pop" id="docBellPop" hidden></div>
     </div>
     <label class="me-top">내 이름 <input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></label>
@@ -3240,6 +3269,7 @@ const partOf = (n) => {
 // ── 참가여부 · 담당자 · 대화 (같은 링크로 보는 사람 모두 공유) ────────────────
 let participation = {};
 let REPORT_LINK = false;
+let CAL_READY = false;  // 일정 달력 코드가 읽힌 뒤에만 다시 그림
 let JUDGE_TODAY = true;  // 📋 입찰 칸 '오늘'만 — 처음엔 오늘(11/24 사용자)
 const PART_STATUSES = ["참가", "보류", "불참"];  // 검토중 버튼은 2026-11-18 사용자 결정으로 뺌
 const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted", 미판단: "todo", 놓침: "missed", 참고: "muted" };
@@ -3252,6 +3282,7 @@ async function loadParticipation() {
   }
   refreshCards("part");
   renderJudgeBell();
+  if (typeof calMerge === "function" && CAL_READY) calMerge();
   if (REPORT_LINK) {  // 가장 최근 보고(매일·주간 중 늦은 날, 같은 날이면 둘 다)
     REPORT_LINK = false;
     const d = lastReport();
@@ -5101,11 +5132,12 @@ $("judgeBellPop").addEventListener("click", (ev) => {
     applyFilters();
   }
 });
-for (const [bell, btn, pop] of [["docBell", "docBellBtn", "docBellPop"], ["judgeBell", "judgeBellBtn", "judgeBellPop"]]) {
+for (const [bell, btn, pop] of [["docBell", "docBellBtn", "docBellPop"], ["judgeBell", "judgeBellBtn", "judgeBellPop"], ["calBell", "calBellBtn", "calBellPop"]]) {
   $(btn).onclick = (e) => {
     e.stopPropagation();
     const open = $(pop).hidden;
-    for (const other of ["docBellPop", "judgeBellPop"]) $(other).hidden = true;  // 하나만 열림
+    for (const other of ["docBellPop", "judgeBellPop", "calBellPop"]) $(other).hidden = true;  // 하나만 열림
+    if (open && pop === "calBellPop") { CAL.day = ""; CAL.month = ""; renderCalendar(); markResultsSeen(); }  // 처음엔 이번 달 · 앞으로 2주
     $(pop).hidden = !open;
     if (open && pop === "judgeBellPop" && JUDGE_DONE.size) { JUDGE_DONE.clear(); renderJudgeBell(); }  // 지난번 불참 줄은 열 때 정리
     $(btn).setAttribute("aria-expanded", String(open));
@@ -5115,10 +5147,120 @@ for (const [bell, btn, pop] of [["docBell", "docBellBtn", "docBellPop"], ["judge
     if (!e.composedPath().includes($(bell))) { $(pop).hidden = true; $(btn).setAttribute("aria-expanded", "false"); }
   });
 }
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("docBellPop").hidden = true; $("judgeBellPop").hidden = true; } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("docBellPop").hidden = true; $("judgeBellPop").hidden = true; $("calBellPop").hidden = true; } });
 renderJudgeBell();
 loadDocBell();
 setInterval(loadDocBell, 10 * 60 * 1000);
+
+// ── 일정 달력 (11/24 사용자) — 참가 공고 마감 · 개찰(투찰 기록) · 회사 서류 만료 · 계약·준공예정(낙찰 후 서류) ──
+// 자료는 이미 있는 API를 모아 그리기만. 숫자 = 앞으로 7일 안 일정 + 아직 안 본 개찰 결과
+const CAL = { month: "", day: "", events: [], server: [] };
+CAL_READY = true;
+const CAL_KIND = { deadline: "마감", open: "개찰", doc: "서류 만료", award: "계약·준공" };
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+let calSeen = new Set(), calFirst = true;  // 처음 쓰는 브라우저 — 이미 나온 결과는 '새 결과'로 안 셈
+try { const v = localStorage.getItem("cal-seen"); if (v) { calSeen = new Set(JSON.parse(v)); calFirst = false; } } catch (e) { /* 저장소 없음 */ }
+function markResultsSeen() {
+  for (const e of CAL.events) if (e.result) calSeen.add(e.id);
+  try { localStorage.setItem("cal-seen", JSON.stringify([...calSeen].slice(-300))); } catch (e) { /* 무시 */ }
+  renderCalBadge();
+}
+/** 개찰 결과 한 줄 — 비교 기록이면 웹앱 금액 기준(투찰내역과 같음) */
+function bidResultText(r) {
+  if (!r || r.status !== "완료") return "";
+  const rank = r.recorded ? r.recorded.rank : r.own ? (r.own.rank ?? r.own.underRank) : null;
+  return rank > 0 ? `${rank}등${rank === 1 ? "" : " (탈락)"}` : rank < 0 ? "하한선 미달" : "결과 나옴";
+}
+async function loadCalendar() {
+  const ev = [], add = (d, kind, title, go, extra = {}) => {
+    const day = String(d || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) ev.push({ d: day, kind, title: title || "", go, ...extra });
+  };
+  const get = async (url) => { try { return await getJson(url); } catch (e) { return {}; } };
+  const [docs, log, award] = await Promise.all([get("/api/docs-all"), get("/api/bidlog"), get("/api/postaward")]);
+  for (const d of docs.docs || []) add(d.end, "doc", d.kind, { doc: 1 });
+  const seenNo = new Set();
+  for (const e of (log.entries || []).slice().reverse()) {  // 같은 공고를 여러 번 기록했으면 하나만
+    if (seenNo.has(e.noticeNo)) continue;
+    seenNo.add(e.noticeNo);
+    add(e.openingAt, "open", e.title || e.noticeNo, { bidlog: 1 }, { id: e.noticeNo, result: bidResultText(e.result) });
+  }
+  for (const v of award.items || []) {
+    add(v.contract?.date, "award", `계약 · ${v.title || v.no || ""}`, { award: 1 });
+    add(v.contract?.due, "award", `준공예정 · ${v.title || v.no || ""}`, { award: 1 });
+  }
+  CAL.server = ev;
+  if (calFirst) { calFirst = false; CAL.events = ev; markResultsSeen(); }
+  calMerge();
+}
+/** 서버 일정 + 참가로 정한 공고 마감 — 판단이 바뀌면 바로 다시(loadParticipation이 부름) */
+function calMerge() {
+  const part = Object.values(participation).filter((p) => p.status === "참가" && /^\d{4}-\d{2}-\d{2}/.test(p.meta?.deadline || ""))
+    .map((p) => ({ d: p.meta.deadline.slice(0, 10), kind: "deadline", title: p.title || p.noticeNo, go: { notice: p.noticeNo } }));
+  CAL.events = [...(CAL.server || []), ...part].sort((a, b) => a.d.localeCompare(b.d));
+  renderCalBadge();
+  if (!$("calBellPop").hidden) renderCalendar();
+}
+function renderCalBadge() {
+  const today = ymd(new Date()), week = ymd(new Date(Date.now() + 6 * 86400000));
+  const n = CAL.events.filter((e) => (e.d >= today && e.d <= week) || (e.result && !calSeen.has(e.id))).length;
+  $("calBellN").textContent = n;
+  $("calBellN").hidden = !n;
+}
+function renderCalendar() {
+  const now = new Date(), today = ymd(now);
+  const month = CAL.month || today.slice(0, 7);
+  const [y, m] = month.split("-").map(Number);
+  const first = new Date(y, m - 1, 1), start = new Date(y, m - 1, 1 - ((first.getDay() + 6) % 7));  // 월요일부터
+  const byDay = new Map();
+  for (const e of CAL.events) { if (!byDay.has(e.d)) byDay.set(e.d, []); byDay.get(e.d).push(e); }
+  let cells = ["월", "화", "수", "목", "금", "토", "일"].map((w) => `<span class="wd">${w}</span>`).join("");
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), key = ymd(d);
+    if (i % 7 === 0 && i >= 28 && d.getMonth() !== m - 1) break;  // 다음 달로 넘어간 줄은 안 그림
+    const kinds = [...new Set((byDay.get(key) || []).map((e) => e.kind))].slice(0, 4);
+    cells += `<button type="button" data-cday="${key}" class="${[d.getMonth() !== m - 1 ? "other" : "", key === today ? "today" : "", key === CAL.day ? "sel" : ""].join(" ")}">${d.getDate()}`
+      + `<span class="dots">${kinds.map((k) => `<i class="k-${k}"></i>`).join("")}</span></button>`;
+  }
+  // 아래 목록 — 고른 날, 안 골랐으면 오늘부터 2주(새 개찰 결과는 지난 날이어도 맨 위에)
+  const until = ymd(new Date(now.getTime() + 13 * 86400000));
+  const fresh = CAL.day ? [] : CAL.events.filter((e) => e.result && !calSeen.has(e.id) && e.d < today);
+  const list = [...fresh, ...CAL.events.filter((e) => CAL.day ? e.d === CAL.day : e.d >= today && e.d <= until)];
+  const dayName = (key) => { const d = new Date(key + "T00:00"); return `${d.getMonth() + 1}/${d.getDate()} (${"일월화수목금토"[d.getDay()]})`; };
+  let body = "", last = "";
+  for (const e of list) {
+    if (e.d !== last) { body += `${last ? "</ul>" : ""}<p class="day">${dayName(e.d)}${e.d === today ? " · 오늘" : ""}</p><ul>`; last = e.d; }
+    body += `<li class="ev" data-cev="${CAL.events.indexOf(e)}"><i class="k k-${e.kind}"></i><span class="what">${CAL_KIND[e.kind]}</span>`
+      + `<span class="name">${esc(e.title)}${e.result ? ` — ${esc(e.result)}` : ""}</span>${e.result && !calSeen.has(e.id) ? `<span class="new">새 결과</span>` : ""}</li>`;
+  }
+  body = body ? body + "</ul>" : `<p class="row2" style="margin-top:10px">${CAL.day ? "이 날은 일정이 없습니다." : "앞으로 2주 안에 일정이 없습니다."}</p>`;
+  $("calBellPop").innerHTML = `<div class="calhead"><button type="button" data-cmon="-1" aria-label="지난달">‹</button><h3>${y}년 ${m}월</h3><button type="button" data-cmon="1" aria-label="다음 달">›</button></div>`
+    + `<div class="grid">${cells}</div>`
+    + `<div class="legend">${Object.entries(CAL_KIND).map(([k, l]) => `<span><i class="k-${k}"></i>${l}</span>`).join("")}</div>`
+    + (CAL.day ? "" : `<p class="day" style="color:var(--muted);font-weight:600">앞으로 2주</p>`) + body;
+}
+$("calBellPop").addEventListener("click", (ev) => {
+  const t = ev.target;
+  const mon = t.closest("[data-cmon]");
+  if (mon) {
+    const [y, m] = (CAL.month || ymd(new Date()).slice(0, 7)).split("-").map(Number);
+    CAL.month = ymd(new Date(y, m - 1 + Number(mon.dataset.cmon), 1)).slice(0, 7);
+    CAL.day = "";
+    return void renderCalendar();
+  }
+  const day = t.closest("[data-cday]");
+  if (day) { CAL.day = CAL.day === day.dataset.cday ? "" : day.dataset.cday; return void renderCalendar(); }
+  const li = t.closest("[data-cev]");
+  if (!li) return;
+  const e = CAL.events[+li.dataset.cev];
+  $("calBellPop").hidden = true;
+  if (e.go.notice) { if (!gotoNotice(e.go.notice)) { showTab("live"); $("liveQ").value = e.go.notice; applyFilters(); } }
+  else if (e.go.bidlog) { showTab("calc"); document.querySelector('[data-calcpage="log"]')?.click(); }
+  else if (e.go.award) showTab("award");
+  else if (e.go.doc) $("docBellBtn").click();
+});
+loadCalendar();
+setInterval(loadCalendar, 10 * 60 * 1000);
 </script>
 <!-- 투찰 계산기 — 계산은 bidcalc.js(BidCalc), 화면은 bidcalc_ui.js (2026-10-15, 21라인 복수예가산출프로그램 모양) -->
 <script src="bidcalc.js"></script>

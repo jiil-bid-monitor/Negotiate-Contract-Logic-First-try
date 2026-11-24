@@ -5172,7 +5172,8 @@ function calMerge() {
 function renderCalBadge() {
   // 숫자 = 오늘 일정 + 아직 안 본 개찰 결과(11/24 사용자 — 7일 안으로 세니 목록과 헷갈림)
   const today = ymd(new Date());
-  const n = CAL.events.filter((e) => e.d === today || (e.result && !calSeen.has(e.id))).length;
+  // 개찰 결과가 나와 확인한 개찰은 오늘이어도 안 셈(11/24 사용자) — 결과가 나오면 '새 결과'로 세다가, 창을 열어 보면 빠짐
+  const n = CAL.events.filter((e) => e.result ? !calSeen.has(e.id) : e.d === today).length;
   $("calBellN").textContent = n;
   $("calBellN").hidden = !n;
 }

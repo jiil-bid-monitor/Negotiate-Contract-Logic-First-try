@@ -1977,7 +1977,7 @@ function pickCompany(id) {
 function showCompanyPick() {
   $("coPick").hidden = false;
   document.body.classList.add("picking");
-  $("coPick").querySelector(`[data-co="${CO_PICKED || "jiil"}"]`)?.focus();
+  // 버튼에 미리 포커스를 주지 않음 — 고르기 전부터 지일이 초록으로 보였음(11/24 사용자 지적)
 }
 
 /**

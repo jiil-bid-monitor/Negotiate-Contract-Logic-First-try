@@ -1460,17 +1460,39 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 /* 도움말(11/24 시험 — 낙찰 후 서류 탭에서만): 자주 묻는 것을 눌러서 보는 창, 외부 AI 안 씀 */
 .helpfab { position: fixed; right: 22px; bottom: 22px; z-index: 40; width: 52px; height: 52px; border-radius: 50%; border: 0; cursor: pointer;
   background: var(--brand); color: #fff; font-size: 24px; font-weight: 700; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
-.helpbox { position: fixed; right: 22px; bottom: 86px; z-index: 40; width: min(380px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 120px));
-  overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.16); padding: 16px; font-size: 15px; }
-.helpbox h3 { margin: 0 0 4px; font-size: 16px; }
-.helpbox .hint { margin: 0 0 10px; color: var(--muted); font-size: 13.5px; }
-.helpbox input { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 10px; }
-.helpbox .qs button { display: block; width: 100%; text-align: left; font: inherit; padding: 9px 10px; margin: 0 0 6px; cursor: pointer;
-  border: 1px solid var(--line); background: var(--bg, #fafafa); color: var(--ink); border-radius: 6px; word-break: keep-all; }
-.helpbox .qs button:hover { border-color: var(--brand); }
-.helpbox .ans { background: var(--brand-tint); border-radius: 8px; padding: 12px; margin-bottom: 10px; line-height: 1.6; word-break: keep-all; }
-.helpbox .ans b { display: block; margin-bottom: 4px; }
-.helpbox .back { font: inherit; font-size: 14px; border: 0; background: none; color: var(--brand); cursor: pointer; padding: 0; }
+.helpbox { position: fixed; right: 22px; bottom: 86px; z-index: 40; width: min(380px, calc(100vw - 32px)); height: min(580px, calc(100vh - 120px));
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.16); overflow: hidden; font-size: 15px; }
+.helpbox[hidden] { display: none; }
+.helpbox .hhead { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.helpbox .hhead b { font-size: 16px; }
+.helpbox .hhead span { color: var(--muted); font-size: 13px; flex: 1; }
+.helpbox .hhead button { font: inherit; border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; }
+.helpbox .hlog { flex: 1; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 14px; list-style: none; background: #f7f8fa; }
+.helpbox .hmsg { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; }
+.helpbox .hmsg.first { margin-top: 14px; }
+.helpbox .hmsg:first-child { margin-top: 0; }
+.helpbox .hmsg.me { justify-content: flex-end; }
+.helpbox .hav { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.helpbox .hav.sp { background: none; }
+.helpbox .hcol { display: flex; flex-direction: column; min-width: 0; max-width: 82%; }
+.helpbox .hmsg.me .hcol { align-items: flex-end; }
+.helpbox .hname { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.helpbox .hline { display: flex; align-items: flex-end; gap: 6px; }
+.helpbox .hmsg.me .hline { flex-direction: row-reverse; }
+.helpbox .hb { margin: 0; padding: 9px 13px; border-radius: 18px; line-height: 1.6; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere;
+  background: #fff; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
+.helpbox .hmsg.bot .hb.tail { border-bottom-left-radius: 6px; }
+.helpbox .hmsg.me .hb { background: var(--brand); color: #fff; box-shadow: none; }
+.helpbox .hmsg.me .hb.tail { border-bottom-right-radius: 6px; }
+.helpbox .ht { flex: none; font-size: 11px; color: var(--muted); padding-bottom: 2px; }
+.helpbox .hpicks { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.helpbox .hpicks button { font: inherit; font-size: 14px; text-align: left; padding: 8px 12px; cursor: pointer; border: 1px solid var(--brand); background: #fff;
+  color: var(--brand); border-radius: 16px; word-break: keep-all; }
+.helpbox .hpicks button:hover { background: var(--brand-tint); }
+.helpbox .hform { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); background: var(--panel); }
+.helpbox .hform input { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 18px; }
+.helpbox .hform input:focus { outline: none; border-color: var(--brand); }
+.helpbox .hform button { font: inherit; font-size: 14px; font-weight: 600; padding: 0 14px; border: 0; border-radius: 18px; background: var(--brand); color: #fff; cursor: pointer; }
 .award-test-note { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; line-height: 1.7; }
 .award-test-note button { margin-left: 6px; }
 .award-act button.award-sim { display: block; border-style: dashed; margin-bottom: 6px; }
@@ -4678,32 +4700,68 @@ const AWARD_HELP = [
   ["탈락한 공고는 어떻게 되나요?", "'끝난 공고' 칸에 접혀 있습니다. 따로 할 일은 없습니다.", "탈락 끝난 떨어"],
   ["공고를 목록에서 빼고 싶어요", "그 공고의 '더 보기' → '목록에서 빼기'를 누르세요.", "빼 지우 삭제 제거"],
 ];
-let HELP_AT = -1;
-function renderHelp(q = "") {
-  const words = q.replace(/\s+/g, "");
-  const hit = (h) => !words || (h[0].replace(/\s+/g, "") + h[2]).includes(words) || h[2].split(" ").some((w) => words.includes(w));
-  const ans = HELP_AT >= 0 ? AWARD_HELP[HELP_AT] : null;
-  const list = AWARD_HELP.map((h, i) => [h, i]).filter(([h]) => hit(h));
-  $("helpBox").innerHTML = `<h3>무엇이 궁금하세요?</h3><p class="hint">질문을 누르거나 낱말을 적어 보세요.</p>`
-    + (ans ? `<div class="ans"><b>${esc(ans[0])}</b>${esc(ans[1])}</div><p><button type="button" class="back" data-hback>← 다른 질문 보기</button></p>` : "")
-    + (ans ? "" : `<input id="helpQ" placeholder="예: 폴더, 적격심사, 안 눌려요" value="${esc(q)}" autocomplete="off">`
-      + `<div class="qs">${list.map(([h, i]) => `<button type="button" data-hq="${i}">${esc(h[0])}</button>`).join("") || `<p class="hint">맞는 질문이 없습니다 — 다른 낱말로 찾아보거나 개발 담당에게 물어보세요.</p>`}</div>`);
+// 카카오톡 같은 대화창(11/24 사용자 — stellaize ChatPanel 모양 참고). 왼쪽 = 도우미, 오른쪽 = 나, 대화는 창을 연 동안만.
+// 직접 적은 질문은 낱말로 맞는 답을 찾고, 없으면 없다고 솔직하게 말한다(사용자: 있다고 지어내지 말 것).
+const HELP_LOG = [];
+const helpClock = () => new Date().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+const helpSay = (who, text, picks = null) => HELP_LOG.push({ who, text, picks, at: helpClock() });
+function helpHello() {
+  HELP_LOG.length = 0;
+  helpSay("bot", "안녕하세요, 지일 도우미입니다.\n낙찰 후 서류 탭에서 궁금한 것을 아래에서 골라 주세요. 직접 적어 물어보셔도 됩니다.", AWARD_HELP.map((_, i) => i));
 }
-$("helpFab").onclick = () => {
-  const open = $("helpBox").hidden;
+function helpMatch(q) {
+  const t = q.replace(/\s+/g, "");
+  const scored = AWARD_HELP.map((h, i) => [i, h[2].split(" ").filter((w) => w && t.includes(w)).length + (h[0].replace(/\s+/g, "").includes(t) ? 2 : 0)]);
+  const best = Math.max(...scored.map((x) => x[1]));
+  return best > 0 ? scored.filter((x) => x[1] === best).map((x) => x[0]) : [];
+}
+function helpAsk(q) {
+  helpSay("me", q);
+  const hits = helpMatch(q);
+  if (hits.length === 1) helpSay("bot", AWARD_HELP[hits[0]][1], []);
+  else if (hits.length) helpSay("bot", "이 중에 찾으시는 게 있나요?", hits);
+  else helpSay("bot", "죄송합니다. 이 질문은 제가 안내할 수 있는 정보가 없습니다.\n개발 담당에게 직접 물어봐 주세요.", []);
+}
+function renderHelp() {
+  let html = "", prev = null;
+  HELP_LOG.forEach((m, k) => {
+    const first = !prev || prev.who !== m.who;
+    const lastOfGroup = !HELP_LOG[k + 1] || HELP_LOG[k + 1].who !== m.who;
+    const live = k === HELP_LOG.length - 1;  // 고르기 버튼은 마지막 말 밑에만 — 지난 메뉴가 쌓이지 않게
+    const picks = live && m.picks && m.picks.length
+      ? `<div class="hpicks">${m.picks.map((i) => `<button type="button" data-hq="${i}">${esc(AWARD_HELP[i][0])}</button>`).join("")}</div>` : "";
+    const again = live && m.picks && !m.picks.length ? `<div class="hpicks"><button type="button" data-hmenu>다른 질문 보기</button></div>` : "";
+    html += `<li class="hmsg ${m.who}${first ? " first" : ""}">`
+      + (m.who === "bot" ? (first ? `<span class="hav" aria-hidden="true">지</span>` : `<span class="hav sp" aria-hidden="true"></span>`) : "")
+      + `<div class="hcol">${m.who === "bot" && first ? `<span class="hname">지일 도우미</span>` : ""}`
+      + `<div class="hline"><p class="hb${lastOfGroup ? " tail" : ""}">${esc(m.text)}</p>${lastOfGroup ? `<span class="ht">${m.at}</span>` : ""}</div>${picks}${again}</div></li>`;
+    prev = m;
+  });
+  $("helpBox").innerHTML = `<div class="hhead"><b>지일 도우미</b><span>낙찰 후 서류</span><button type="button" data-hclose aria-label="닫기">✕</button></div>`
+    + `<ol class="hlog" role="log" aria-live="polite">${html}</ol>`
+    + `<form class="hform"><input id="helpQ" placeholder="직접 물어보기 — 예: 폴더가 어디예요?" autocomplete="off" aria-label="직접 물어보기"><button type="submit">보내기</button></form>`;
+  const log = $("helpBox").querySelector(".hlog");
+  log.scrollTop = log.scrollHeight;
+}
+function helpOpen(open) {
   $("helpBox").hidden = !open;
   $("helpFab").setAttribute("aria-expanded", String(open));
-  if (open) { HELP_AT = -1; renderHelp(); $("helpQ")?.focus(); }
-};
+  if (open) { if (!HELP_LOG.length) helpHello(); renderHelp(); $("helpQ").focus(); }
+}
+$("helpFab").onclick = () => helpOpen($("helpBox").hidden);
 $("helpBox").addEventListener("click", (e) => {
   const q = e.target.closest("[data-hq]");
-  if (q) { HELP_AT = Number(q.dataset.hq); return renderHelp(); }
-  if (e.target.closest("[data-hback]")) { HELP_AT = -1; renderHelp(); $("helpQ")?.focus(); }
+  if (q) { const h = AWARD_HELP[Number(q.dataset.hq)]; helpSay("me", h[0]); helpSay("bot", h[1], []); renderHelp(); return; }
+  if (e.target.closest("[data-hmenu]")) { helpSay("bot", "궁금한 것을 골라 주세요.", AWARD_HELP.map((_, i) => i)); renderHelp(); return; }
+  if (e.target.closest("[data-hclose]")) helpOpen(false);
 });
-$("helpBox").addEventListener("input", (e) => {
-  if (e.target.id !== "helpQ") return;
-  const v = e.target.value; renderHelp(v);
-  const i = $("helpQ"); i.focus(); i.setSelectionRange(v.length, v.length);
+$("helpBox").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = $("helpQ").value.trim();
+  if (!v) return;
+  helpAsk(v);
+  renderHelp();
+  $("helpQ").focus();
 });
 function showTab(tab) {
   $("helpFab").hidden = tab !== "award";

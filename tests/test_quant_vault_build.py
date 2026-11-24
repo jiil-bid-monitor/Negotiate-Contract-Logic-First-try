@@ -4028,7 +4028,8 @@ def test_rep_mobile_only_in_representative_rows(tmp_path: Path):
     agent = tbl([[cell(0, 0, "대리인", rs=2), cell(1, 0, "성 명"), cell(2, 0, ""), cell(3, 0, "주민등록번호"), cell(4, 0, "")],
                  [cell(1, 1, "업체명"), cell(2, 1, ""), cell(3, 1, "연락처"), cell(4, 1, "회  사", "휴대폰")]])
     out = run("a", agent)
-    assert "010-" not in out and re.search(r"회  사  (?:<[^>]+>)*033-111-2222", out), out
+    # (11/24 사용자 지적 — 해남 위임장) 대리인 줄 연락처는 비움: 회사 대표 전화도 대표자 휴대폰도 안 넣음
+    assert "010-" not in out and "033-111-2222" not in out, out
     # 위임장 '응모 대표자 | 성 명 … / 업체명 | __ | 연 락 처 | __' — 대표자 묶음의 연락처도 회사 전화
     deleg = tbl([[cell(0, 0, "응모 대표자", rs=2), cell(1, 0, "성 명"), cell(2, 0, ""), cell(3, 0, "생년월일"), cell(4, 0, "")],
                  [cell(1, 1, "업체명"), cell(2, 1, ""), cell(3, 1, "연 락 처"), cell(4, 1, "")]])
@@ -4993,3 +4994,20 @@ def test_seal_cell_stays_one_line(tmp_path: Path):
     assert m, sec
     h = int(re.search(rf'<hh:charPr id="{m.group(1)}" height="(\d+)"', hdr).group(1))
     assert h < 1100, h  # 11pt면 칸(약 4.1cm)에 안 들어감 — 줄여서 한 줄
+
+
+def test_receipt_rep_before_submitter_label(tmp_path: Path):
+    """11/24 사용자 요청(해남 공룡박물관 접수증 '대 표 자 | (빈칸) 제출자 : / 접 수 자 | 해남군 공룡박물관 성 명 : (인)'):
+    대표자 이름은 칸 앞 빈칸 자리에, '제출자 :'는 서식 글 그대로 두고 비움, 접수자 줄은 공란."""
+    from quantdocs.fill import fill_hwpx
+
+    pad = " " * 26
+    body = _tbl([[_c(0, 0, "접수번호"), _c(1, 0, " 2026-2467")],
+                 [_c(0, 1, "회 사 명"), _c(1, 1, "")],
+                 [_c(0, 2, "대 표 자"), _c(1, 2, pad + "제출자 :")],
+                 [_c(0, 3, "접 수 자"), _c(1, 3, " 해남군 공룡박물관      성  명 :           (인)  ")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"홍길동 +제출자 :", text) and text.count("홍길동") == 1, text
+    assert "성  명 :           (인)" in text, text

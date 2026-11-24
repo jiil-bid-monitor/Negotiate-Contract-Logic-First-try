@@ -113,6 +113,19 @@ class App:
         # 서버 PC — 판단 기록은 NAS 한 곳에 저장(2026-11-09 사용자 결정). (NAS 주소, 토큰) — 있으면 /api/participation을 NAS로 넘긴다
         self.team_remote: tuple[str, str] | None = None
 
+    _seen_lock = threading.Lock()
+
+    def result_seen(self, add: list | None) -> list[str] | None:
+        """일정 창에서 본 개찰 결과(공고번호) — data/bid_result_seen.json. add가 None이면 읽기만(파일이 없으면 None = 처음)."""
+        path = self.store.path.parent / "bid_result_seen.json"
+        with self._seen_lock:
+            seen = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+            if add is None:
+                return seen
+            merged = sorted(set(seen or []) | {str(x) for x in add if x})[-1000:]
+            path.write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
+            return merged
+
     def award_root(self, test: bool = False) -> Path:
         """낙찰 후 서류 폴더를 만들 곳 — 공유 폴더 맨 위 '낙찰후서류'(POSTAWARD_DIR로 바꿈), 시험 페이지는 그 옆 '낙찰후서류_테스트'."""
         base = Path(os.environ.get("POSTAWARD_DIR", "").strip() or self.store.path.resolve().parents[2] / "낙찰후서류")
@@ -453,6 +466,8 @@ def make_handler(app: App):
                 return self._json({"decisions": app.store.decisions()})
             if url.path == "/api/bidlog":
                 return self._json({"entries": app.bidlog.entries()})
+            if url.path == "/api/bidlog/seen":  # 아직 기록 파일이 없으면 null — 화면이 '처음'으로 보고 지금 결과를 본 것으로
+                return self._json({"seen": app.result_seen(None)})
             if url.path == "/api/postaward":
                 return self._json({"items": pa.items()})
             if url.path == "/api/postaward/status":
@@ -661,7 +676,7 @@ def make_handler(app: App):
                     # 개찰 결과 받기(11/06) — 결과 없는 기록만, ids를 주면 그 기록만(force면 다시)
                     from nego import fields as F
                     from nego.bidrecommend import default_own_bizno
-                    from .bidresult import fill_results
+                    from .bidresult import fill_results, telegram_notify
                     try:
                         config = load_config()
                         if not config.api.service_key:
@@ -669,11 +684,13 @@ def make_handler(app: App):
                         base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
                         ids = [str(i) for i in data.get("ids") or []] or None
                         done = fill_results(app.bidlog, bidcalc.make_client(config.api), base, default_own_bizno(),
-                                            ids=ids, force=bool(data.get("force")))
+                                            ids=ids, force=bool(data.get("force")), notify=telegram_notify)
                     except (ConfigError, ApiError) as err:
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
                     return self._json({"ok": True, **done, "entries": app.bidlog.entries()})
+                if url.path == "/api/bidlog/seen":  # 일정 창에서 본 개찰 결과(공고번호) — PC가 달라도 같게(11/24)
+                    return self._json({"seen": app.result_seen(data.get("ids") or [])})
                 if url.path == "/api/bidlog/delete":
                     app.bidlog.delete(str(data.get("id") or ""))
                     return self._json({"ok": True, "entries": app.bidlog.entries()})

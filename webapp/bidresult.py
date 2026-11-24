@@ -208,9 +208,35 @@ def _needs_times(entry: dict[str, Any], status: str | None) -> bool:
     return (status == "개찰 전" and "closingAt" not in entry) or "contractMethod" not in entry
 
 
+def result_line(entry: dict[str, Any], res: dict[str, Any]) -> str:
+    """텔레그램 한 줄 — '공고명 — 2등 / 34곳 · 1위와 120,000원 차' (비교 기록이면 웹앱 금액 기준, 투찰내역과 같음)"""
+    own = effective_own(res) or {}
+    rank = own.get("rank")
+    total = res.get("bidderCount")
+    if rank:
+        what = f"{rank}등" + (f" / {total}곳" if total else "")
+    elif own.get("underRank") or own.get("remark"):
+        what = "하한선 미달" if (own.get("underRank") or 0) < 0 or "미달" in str(own.get("remark")) else str(own.get("remark"))
+    else:
+        what = "지일 순위 없음" if own else "지일 참가 없음"
+    gap = res.get("gapToWinner")
+    if rank and rank > 1 and gap is not None and not res.get("recorded"):
+        what += f" · 1위와 {abs(gap):,.0f}원 차"
+    return f"• {entry.get('title') or entry.get('noticeNo')} — {what}"
+
+
+def telegram_notify(lines: list[str]) -> None:
+    """새 개찰 결과를 담당자 방에 한 통(11/24 사용자 — 투찰 결과는 중요해서 따로). 텔레그램 설정이 없는 곳(서버 PC 등)이면 안 보냄."""
+    from nego.telegram import send_dev_alert
+
+    text = "\n".join([f"개찰 결과 {len(lines)}건", *lines, "", "웹앱 '일정' 또는 투찰 계산기 › 투찰내역에서 자세히"])
+    send_dev_alert(text, chat_env="TELEGRAM_CHAT_ID")
+
+
 def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str] | None = None, force: bool = False,
                  fetch: Callable[..., BidResult] | None = None,
-                 times: Callable[[Any, dict[str, Any]], dict[str, str]] | None = None) -> dict[str, Any]:
+                 times: Callable[[Any, dict[str, Any]], dict[str, str]] | None = None,
+                 notify: Callable[[list[str]], Any] | None = None) -> dict[str, Any]:
     """결과가 필요한 기록을 받아 `log`에 저장. ids를 주면 그 기록만(force면 '완료'도 다시).
 
     예전 기록(11/10 전)은 결과가 '개찰 전'이면 공고에서 개찰 일시·투찰 마감을 찾아 함께 저장 —
@@ -223,8 +249,11 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
         targets = [e for e in entries if needs_fetch(e, now)]
     done = targets[:MAX_PER_CALL]
     lookup = times or _lookup_times
+    fresh: list[str] = []  # 이번에 처음 '완료'가 된 결과 — notify로 한 번만(다시 받기는 이미 완료라 안 셈)
     for e in done:
         res = fetch_entry(client, base_url, e, own_bizno, fetch)
+        if res.get("status") == "완료" and (e.get("result") or {}).get("status") != "완료":
+            fresh.append(result_line(e, res))
         log.set_result(e["id"], res)
         if _needs_times(e, res.get("status")):
             log.set_times(e["id"], lookup(client, e))
@@ -274,4 +303,9 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
                and _needs_times(e, (e.get("result") or {}).get("status"))]
     for e in pending[:MAX_PER_CALL]:
         log.set_times(e["id"], lookup(client, e))
+    if fresh and notify:
+        try:
+            notify(fresh)
+        except Exception as err:  # 알림이 실패해도 결과 저장은 그대로
+            print(f"개찰 결과 알림 실패: {err}")
     return {"fetched": len(done), "left": max(0, len(targets) - len(done))}

@@ -41,7 +41,8 @@ def test_companies_and_held_files():
     assert grida.held_raw is not jiil.held_raw and "heldIndustries" in grida.held_raw
     from nego import qualify, region
     held = qualify.load_held_codes(grida.held_raw)
-    assert {"0006", "4444", "3244", "6012100201"} <= held and "0036" not in held, "그리다 등록증 기준(11/24)"
+    assert {"4990", "4442", "4444", "3244", "1469", "6012100201"} <= held, "그리다 경쟁입찰참가자격등록증 기준(11/24)"
+    assert not {"0036", "4440", "4443", "6014119501"} & held, "등록 안 된 업종·기간 지난 물품은 없음"
     assert region.company_sido(grida.held_raw) == "경기" and region.company_sido(jiil.held_raw) == "강원"
 
 

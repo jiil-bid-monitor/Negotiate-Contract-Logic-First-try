@@ -5024,19 +5024,24 @@ function renderJudgeBell() {
       + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
   };
   // 칸마다 마감이 가장 급한 3건만(11/23 사용자 — 길게 늘어놓지 않게), 나머지는 실제 공고 탭 그 대분류 탭에서
-  const section = (title, list, cat, extra = "", tail = "") => `<h4 class="judge-sec">${title} <span>${undecidedN(list)}건</span>${tail}</h4>`
-    + (list.length ? `<ul>${list.slice(0, 3).map(item).join("")}</ul>` : `<p class="row2">판단할 공고가 없습니다.</p>`)
-    + (list.length > 3 && cat ? `<p class="how"><button type="button" class="linkbtn" data-all-todo="${cat}">그 밖의 ${list.length - 3}건은 실제 공고 탭에서 판단 ›</button></p>` : "")
+  // preview — 창에 펼쳐 보일 공고(기본 앞 3건), 나머지는 링크로
+  const section = (title, list, cat, extra = "", tail = "", preview = list.slice(0, 3)) => `<h4 class="judge-sec">${title} <span>${undecidedN(list)}건</span>${tail}</h4>`
+    + (preview.length ? `<ul>${preview.map(item).join("")}</ul>` : list.length ? "" : `<p class="row2">판단할 공고가 없습니다.</p>`)
+    + (list.length > preview.length && cat ? `<p class="how"><button type="button" class="linkbtn" data-all-todo="${cat}">${preview.length ? "그 밖의 " : ""}${list.length - preview.length}건은 실제 공고 탭에서 판단 ›</button></p>` : "")
     + extra;
   // 가장 최근 매일 보고 공고 전부(판단한 것도) — 텔레그램 보고와 같은 목록을 실제 공고 탭에서(11/24 사용자)
   const rep = lastDailyReport();
   const repN = rep ? [...dailyReportNos(rep)].filter((no) => shown.has(no)).length : 0;
   // 입찰 칸 '7일 | 오늘' — 오늘(가장 최근) 매일 보고 공고만(11/24 사용자, 칸 머리 오른쪽에 작게)
-  const dailyIn = JUDGE_TODAY && rep ? daily.filter((p) => p.reports.some((r) => reportHit(r, rep, "daily"))) : daily;
+  const isToday = (p) => rep && p.reports.some((r) => reportHit(r, rep, "daily"));
+  // 오늘 보고 공고를 먼저(그 안에선 마감 순 그대로) — 11/24 사용자
+  const dailyIn = JUDGE_TODAY && rep ? daily.filter(isToday) : [...daily.filter(isToday), ...daily.filter((p) => !isToday(p))];
+  // 주간 보고는 마감 D-2 안 공고만 펼쳐 보임(11/24 사용자 — 창이 길어 읽기 싫어짐), 나머지는 링크로
+  const soon = (p) => Math.ceil((deadlineAt(p.meta?.deadline) - Date.now()) / 86400000) <= 2;  // 화면 D-N과 같은 셈
   const toggle = rep ? `<span class="jtoggle" role="group" aria-label="보고 기간">${[[false, "7일"], [true, rep === todayText() ? "오늘" : mdOf(rep)]].map(([v, l]) => `<button type="button" data-jtoday="${v ? 1 : 0}" aria-pressed="${JUDGE_TODAY === v}" class="${JUDGE_TODAY === v ? "on" : ""}">${l}</button>`).join("")}</span>` : "";
   const repLink = repN ? `<p class="how"><button type="button" class="linkbtn" data-report="daily:${rep}">${rep === todayText() ? "오늘" : mdOf(rep)} 보고 ${repN}건 모두 보기 ›</button></p>` : "";
   $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3><p class="row2">보고에 나간 공고 중 판단 안 한 것 · 7일 안</p>`
-    + section("입찰 · 매일 보고", dailyIn, JUDGE_TODAY && rep ? "" : "입찰", repLink, toggle) + section("협상 · 규격가격 · 주간 보고", weekly, "협상")
+    + section("입찰 · 매일 보고", dailyIn, JUDGE_TODAY && rep ? "" : "입찰", repLink, toggle) + section("협상 · 규격가격 · 주간 보고", weekly, "협상", "", "", weekly.filter(soon).slice(0, 3))
     + (todo.length ? `<p class="how">공고를 누르면 그 공고로 갑니다 — 판단하면 숫자가 줄어듭니다.</p>` : "");
 }
 // 📋 창에서 바로 불참 — 넘기던 공고를 몇 초에 정리(11/24 사용자, 놓침 94건 vs 판단 20건). 참가는 카드에서

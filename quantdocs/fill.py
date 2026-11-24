@@ -3594,6 +3594,20 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         edits.append((target, [line], False))
                         rep.filled.append(f"{_sq(c.text)} → {line}")
                         continue
+                    if key == "대표자" and not target.blank and re.fullmatch(r"[ \u3000]*제\s*출\s*(?:자|인)\s*[:：]\s*", target.text):
+                        # 접수증 '대 표 자 | (빈칸) 제출자 :'(11/24 해남 공룡박물관) — 대표자 이름은 칸 앞 빈칸 자리에, '제출자 :'는 그대로
+                        # (제출자·접수자는 사람이 적는 칸이라 비움)
+                        seg = xml[target.start:target.end]
+                        rep_name = value
+                        m = re.search(r"(<(?:[\w.-]+:)?t>)([ \u3000]*)(제)", seg)
+                        if m:
+                            pad = m.group(2)
+                            keep = max(4, len(pad) - _span(rep_name) - 2)
+                            seg = seg[:m.start(2)] + " " + _mark(rep_name) + " " * keep + seg[m.start(3):]
+                            seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                            edits.append((target, None, seg))
+                            rep.filled.append(f"{_sq(c.text)} → {rep_name}")
+                        continue
                     if key == "회사명" and not target.blank and _value("대표자", vault) and re.fullmatch(
                             rf"\s*대\s*표\s*(?:자|이\s*사)\s*[:：]\s*(?:{_SEAL_TAIL})?\s*", target.text):
                         # '회사명 | 대표자 :      (인)' — 값 칸에 대표자 서명 줄이 미리 적힌 칸(11/05 국민안전체험관 서식 1 질의서)

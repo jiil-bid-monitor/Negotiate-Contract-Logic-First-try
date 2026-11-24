@@ -405,6 +405,7 @@ body {
 .docbell-pop li.judge-item .row1 .dd { margin-left: auto; }
 .docbell-pop li.judge-item .jskip { margin-left: 8px; padding: 2px 10px; font-size: 12px; flex: none; }
 .docbell-pop li.judge-item.done { cursor: default; opacity: .75; }
+.docbell-pop li.judge-item.asking { cursor: default; }
 .docbell-pop li.judge-item.done:hover .name { color: inherit; text-decoration: none; }
 .docbell-pop .jtags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .docbell-pop .jtags .pbtn { padding: 2px 10px; font-size: 12px; }
@@ -2123,6 +2124,7 @@ const dailyReportNos = (date) => reportNosOf(`daily:${date}`);
 let reportNos = new Set();
 /** 📋 창에서 방금 불참한 공고 — 공고번호 → { tag, open } */
 const JUDGE_DONE = new Map();  // 공고번호 → { tag, open }
+const JUDGE_ASK = new Set();  // '불참'을 눌러 사유를 고르는 중인 공고 — 사유를 골라야 저장(11/24 사용자: 기본 사유로 저장하면 사유 자료가 틀어짐)
 const inReport = (n) => reportNos.has(String(n.noticeNo || "").split("-")[0]);
 const mdOf = (d) => d ? `${+d.slice(5, 7)}/${+d.slice(8, 10)}` : "";
 /**
@@ -5066,11 +5068,14 @@ function renderJudgeBell() {
     const m = p.meta || {}, left = Math.ceil((deadlineAt(m.deadline) - Date.now()) / 86400000);
     const rep = (p.reports.at(-1)?.date || "").slice(0, 10);
     const done = JUDGE_DONE.get(p.noticeNo);
+    if (JUDGE_ASK.has(p.noticeNo)) return `<li class="judge-item asking" data-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span></div>`
+      + `<div class="row2">불참 사유를 골라 주세요 — 고르면 저장됩니다 <button type="button" class="linkbtn" data-jask-cancel>취소</button></div>`
+      + `<div class="jtags">${BULK_TAGS.map((g) => `<button type="button" class="pbtn muted" data-jpick="${esc(g)}">${esc(g)}</button>`).join("")}</div></li>`;
     if (done) return `<li class="judge-item done" data-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span></div>`
       + `<div class="row2">불참 저장 · ${esc(done.tag)} <button type="button" class="linkbtn" data-jtags>사유 바꾸기</button> <button type="button" class="linkbtn" data-jundo>취소</button></div>`
       + (done.open ? `<div class="jtags">${BULK_TAGS.map((g) => `<button type="button" class="pbtn muted${g === done.tag ? " on" : ""}" data-jtag="${esc(g)}">${esc(g)}</button>`).join("")}</div>` : "") + `</li>`;
     return `<li class="judge-item" data-goto-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span>`
-      + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span><button type="button" class="pbtn muted jskip" data-jskip="${esc(p.noticeNo)}" title="불참 — 사유 '과업 성격 다름'으로 바로 저장">불참</button></div>`
+      + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span><button type="button" class="pbtn muted jskip" data-jskip="${esc(p.noticeNo)}" title="불참 — 사유를 고르면 저장">불참</button></div>`
       + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
   };
   // 칸마다 마감이 가장 급한 3건만(11/23 사용자 — 길게 늘어놓지 않게), 나머지는 실제 공고 탭 그 대분류 탭에서
@@ -5110,7 +5115,15 @@ $("judgeBellPop").addEventListener("click", (ev) => {
   const tg = t.closest("[data-jtoday]");
   if (tg) { ev.stopPropagation(); JUDGE_TODAY = tg.dataset.jtoday === "1"; return void renderJudgeBell(); }
   const skip = t.closest("[data-jskip]");
-  if (skip) { ev.stopPropagation(); return void judgeSkip(skip.dataset.jskip, BULK_TAGS[0]); }
+  if (skip) { ev.stopPropagation(); JUDGE_ASK.add(skip.dataset.jskip); return void renderJudgeBell(); }
+  const askLi = t.closest("li.asking");
+  if (askLi) {
+    ev.stopPropagation();
+    const no = askLi.dataset.no, pick = t.closest("[data-jpick]");
+    if (pick) { JUDGE_ASK.delete(no); return void judgeSkip(no, pick.dataset.jpick); }
+    if (t.closest("[data-jask-cancel]")) { JUDGE_ASK.delete(no); renderJudgeBell(); }
+    return;
+  }
   const doneLi = t.closest("li.done");
   if (doneLi) {
     ev.stopPropagation();
@@ -5158,7 +5171,7 @@ for (const [bell, btn, pop] of [["docBell", "docBellBtn", "docBellPop"], ["judge
     for (const other of ["docBellPop", "judgeBellPop", "calBellPop"]) $(other).hidden = true;  // 하나만 열림
     if (open && pop === "calBellPop") { CAL.day = ymd(new Date()); CAL.month = ""; CAL.range = ""; renderCalendar(); markResultsSeen(); }  // 처음엔 오늘 일정(11/24 사용자 — 2주 목록은 다른 날 일정이 오늘처럼 보였음)
     $(pop).hidden = !open;
-    if (open && pop === "judgeBellPop" && JUDGE_DONE.size) { JUDGE_DONE.clear(); renderJudgeBell(); }  // 지난번 불참 줄은 열 때 정리
+    if (open && pop === "judgeBellPop" && (JUDGE_DONE.size || JUDGE_ASK.size)) { JUDGE_DONE.clear(); JUDGE_ASK.clear(); renderJudgeBell(); }  // 지난번 불참 줄은 열 때 정리
     $(btn).setAttribute("aria-expanded", String(open));
   };
   document.addEventListener("click", (e) => {

@@ -305,7 +305,8 @@ def build_candidates(
 
         if not screen_result.matched:
             # 키워드로 안 걸렸어도 지일 공사 면허로 참가 조건을 다 채우면 '보유 면허' 공고로 남긴다(2026-11-12 사용자 결정)
-            licenses = qualify.construction_license_match(license_groups.get(notice.notice_no, []), config.held_names, held_codes)
+            licenses = qualify.construction_license_match(license_groups.get(notice.notice_no, []), config.held_names, held_codes,
+                                                             qualify.construction_codes(config.held_raw))
             routed = screen.license_route(notice, config.screen, licenses, screen_result) if licenses else None
             if routed is not None:
                 screen_result = routed

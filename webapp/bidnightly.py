@@ -137,8 +137,8 @@ def archived_numbers(history_dir: Path) -> set[str]:
     return done
 
 
-def read_live(history_dir: Path) -> list[dict[str, Any]]:
-    path = history_dir / LIVE_FILE
+def read_live(history_dir: Path, name: str = LIVE_FILE) -> list[dict[str, Any]]:
+    path = history_dir / name
     out = []
     if path.exists():
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -186,7 +186,7 @@ class Nightly:
                  history_dir: Path | None = None, archive_dir: Path | None = None,
                  fetch_one: Callable[..., dict] | None = None, fill_results: Callable[..., dict] | None = None, postaward=None,
                  before: Callable[[], Any] | None = None,
-                 now: Callable[[], datetime] = _now):
+                 now: Callable[[], datetime] = _now, company: str | None = None):
         h, a = default_dirs()
         self.state_path = Path(data_dir) / STATE_FILE
         self.bidlog = bidlog
@@ -200,6 +200,13 @@ class Nightly:
         self.before = before  # 밤 작업 직전에 부름 — 서버 PC 투찰 기록 받아 오기(webapp/bidlogpull.py)
         self.postaward = postaward  # 낙찰 후 서류 목록(webapp/postaward.py) — 투찰 기록을 올리고 낙찰자 확인
         self.now = now
+        # 그리다 등 다른 회사(2026-11-24): 개찰 결과는 같은 과거 개찰 폴더에 회사 이름 붙은 파일로(bid_results_live_grida.jsonl —
+        # 추천·경향이 bid_results*.jsonl을 다 읽으므로 같이 반영, 두 회사 밤 작업이 한 파일에 동시에 쓰지 않게), 엑셀·성적표는 archive/<회사>/
+        self.company = None if company in (None, "", "jiil") else company
+        self.live_file = f"bid_results_live_{self.company}.jsonl" if self.company else LIVE_FILE
+        from nego.config import company_name
+
+        self.own_label = company_name(self.company) if self.company else "지일"
         self._lock = threading.Lock()
 
     # 상태 파일
@@ -257,7 +264,7 @@ class Nightly:
         got = none = waiting = 0
         quota = False
         self.history_dir.mkdir(parents=True, exist_ok=True)
-        with (self.history_dir / LIVE_FILE).open("a", encoding="utf-8") as out:
+        with (self.history_dir / self.live_file).open("a", encoding="utf-8") as out:
             for v in ready:
                 if v["no"] in done:
                     v.update(status="완료", doneAt=now.isoformat(timespec="seconds"))
@@ -301,10 +308,11 @@ class Nightly:
         fill = self._fill_results
         if fill is None:
             from .bidresult import fill_results as fill
-        from .bidresult import telegram_notify
+        from .bidresult import telegram_notify_for
+        notify = telegram_notify_for(self.company)
         total = 0
         for _ in range(10):  # 한 번에 8건씩 — 남으면 이어서(최대 80건)
-            done = fill(self.bidlog, client, base_url, self.own_bizno, notify=telegram_notify)
+            done = fill(self.bidlog, client, base_url, self.own_bizno, notify=notify)
             total += done.get("fetched", 0)
             if not done.get("left") or not done.get("fetched"):
                 break
@@ -340,12 +348,12 @@ class Nightly:
         ws.title = "투찰내역"
         sheet(ws, head, rows, {1: 20, 4: 40, 5: 20})
 
-        live = [summarize_record(r, self.own_bizno) for r in read_live(self.history_dir)]
+        live = [summarize_record(r, self.own_bizno) for r in read_live(self.history_dir, self.live_file)]
         live.sort(key=lambda x: x["opened"], reverse=True)
         cols = [("opened", "개찰일시"), ("no", "공고번호"), ("title", "공고명"), ("institution", "발주처"), ("work", "업무"),
                 ("source", "출처(후보/투찰)"), ("bidders", "참가 업체 수"), ("basis", "기초금액"), ("planned", "예정가격"),
                 ("rate", "실제 사정률(%)"), ("lower", "하한율(%)"), ("winner", "1순위 업체"), ("winnerAmount", "1순위 투찰금액"),
-                ("winnerRate", "1순위 투찰률(%)"), ("winnerGap", "1순위 투찰률 − 하한율(%p)"), ("ownRank", "지일 순위"), ("fetched", "받은 날")]
+                ("winnerRate", "1순위 투찰률(%)"), ("winnerGap", "1순위 투찰률 − 하한율(%p)"), ("ownRank", f"{self.own_label} 순위"), ("fetched", "받은 날")]
         sheet(wb.create_sheet("개찰결과"), [c[1] for c in cols], [[x[k] for k, _ in cols] for x in live], {1: 17, 2: 18, 3: 40, 4: 20, 12: 20})
 
         wait = sorted((v for v in (state.get("watch") or {}).values() if v.get("status") != "완료"),
@@ -375,7 +383,7 @@ class Nightly:
         return now.weekday() == 0 or now.date() - date.fromisoformat(last) >= timedelta(days=7)
 
     def weekly_report(self, state: dict[str, Any], now: datetime) -> Path:
-        text = build_report(self.bidlog.entries(), read_live(self.history_dir), state, now, self.own_bizno)
+        text = build_report(self.bidlog.entries(), read_live(self.history_dir, self.live_file), state, now, self.own_bizno)
         folder = self.archive_dir / "성적표"
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / f"성적표_{now:%Y-%m-%d}.txt"

@@ -66,6 +66,11 @@ def _code_names() -> dict[str, str]:
             from .company import held_file
 
             held = json.loads((cfg / held_file()).read_text(encoding="utf-8"))
+            from nego.regcert import apply as _apply_cert
+
+            from .company import current
+
+            held = _apply_cert(held, current())
             for k in ("heldIndustries", "heldProducts"):
                 out.update({e["code"]: e["name"] for e in held.get(k, []) if e.get("code")})
         except (OSError, ValueError):

@@ -330,7 +330,9 @@ def write_csv(candidates: list[Candidate], path: Path) -> Path:
 def report_title(stats: RunStats) -> str:
     """리포트/발송 메시지 제목. 매일 실행(입찰)과 주간 실행(협상·규격가격)을 구분한다."""
     kinds = " · ".join(stats.categories) if stats.categories else "전체 유형"
-    return f"나라장터 입찰 모니터링 리포트 ({kinds})"
+    from .config import company_tag
+
+    return f"{company_tag()}나라장터 입찰 모니터링 리포트 ({kinds})"
 
 
 def render_console(candidates: list[Candidate], stats: RunStats) -> str:

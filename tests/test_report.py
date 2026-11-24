@@ -62,7 +62,7 @@ class TestRenderHtml(unittest.TestCase):
     def test_header_matches_existing_system_title_and_period(self):
         candidates, stats = self._candidates()
         out = render_html(candidates, stats, NOW)
-        self.assertIn("<h1>나라장터 입찰 모니터링 리포트 (전체 유형)</h1>", out)
+        self.assertIn("<h1>[지일] 나라장터 입찰 모니터링 리포트 (전체 유형)</h1>", out)
         self.assertIn("조회 기간: 2026. 8. 24. ~ 2026. 8. 31.", out)
         self.assertIn("생성 시각: 2026. 8. 31. AM 12:01:13", out)
 

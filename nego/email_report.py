@@ -25,7 +25,14 @@ log = logging.getLogger(__name__)
 RECIPIENTS_PATH = Path(__file__).resolve().parent.parent / "config" / "recipients.json"
 
 
-def load_recipients(path: Path = RECIPIENTS_PATH) -> list[str]:
+def load_recipients(path: Path | None = None) -> list[str]:
+    """받는 사람 — 그리다 등 다른 회사 보고는 config/companies/<id>/recipients.json이 있으면 그것, 없으면 지일과 같은 목록."""
+    if path is None:
+        from .config import report_company
+
+        company = report_company()
+        own = RECIPIENTS_PATH.parent / "companies" / company / "recipients.json" if company else None
+        path = own if own is not None and own.exists() else RECIPIENTS_PATH
     if not path.exists():
         return []
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -34,7 +41,9 @@ def load_recipients(path: Path = RECIPIENTS_PATH) -> list[str]:
 
 def subject_for(date_text: str, total: int, partial: bool = False, part: str | None = None) -> str:
     """part("관심 공고"·"세부품명 공고")가 있으면 나눠 보낸 메일 — 제목에 구역과 그 구역 건수."""
-    head = f"[나라장터 입찰 모니터링] {date_text} 주간 리포트"
+    from .config import company_tag
+
+    head = f"{company_tag()}[나라장터 입찰 모니터링] {date_text} 주간 리포트"
     body = f"{part} {total}건" if part else f"매칭 {total}건"
     return f"{head} - {body}" + (" (일부 조회 실패)" if partial else "")
 

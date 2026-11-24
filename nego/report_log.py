@@ -26,7 +26,8 @@ UNDECIDED = ("미판단", "놓침")
 METHOD = {"협상": "협상", "규격가격동시입찰": "규격가격동시", "입찰": "입찰", "수의계약": "수의"}
 
 
-def collect_paths(keywords: list[str], products: list[str], licenses: list[str], local: str | None = None) -> list[str]:
+def collect_paths(keywords: list[str], products: list[str], licenses: list[str], local: str | None = None,
+                  place: str | None = None) -> list[str]:
     """이 공고가 어떤 경로로 수집됐나 — 판단 기록으로 수집 조건을 조금씩 고칠 때 원인을 묶는 데 쓴다(11/16 사용자 요청).
     화면 쪽 같은 규칙은 index.html `collectPaths`."""
     out = []
@@ -37,7 +38,7 @@ def collect_paths(keywords: list[str], products: list[str], licenses: list[str],
     if licenses:
         out.append("보유 면허")
     if local:
-        out.append("정선 사업")
+        out.append(f"{place or '정선'} 사업")
     return out
 
 
@@ -70,7 +71,8 @@ def reported_notice(candidate: Any, held_names: dict[str, str]) -> dict[str, Any
             "keywords": list(sr.matched_keywords or []),
             "products": [held_names.get(p, p) for p in (sr.matched_product_codes or [])],
             "paths": collect_paths(list(sr.matched_keywords or []), list(sr.matched_product_codes or []),
-                                   list(getattr(sr, "license_match", None) or []), getattr(sr, "local_match", None)),
+                                   list(getattr(sr, "license_match", None) or []), getattr(sr, "local_match", None),
+                                   getattr(sr, "local_place", None)),
             "licenses": list(getattr(sr, "license_match", None) or []),
             "contractMethod": n.contract_method,
             "score": round(score * 100) if isinstance(score, (int, float)) else None,
@@ -84,13 +86,19 @@ def reported_notice(candidate: Any, held_names: dict[str, str]) -> dict[str, Any
 def build_entry(kind: str, candidates: list[Any], now: datetime, held_names: dict[str, str]) -> dict[str, Any]:
     if kind not in KINDS:
         raise ValueError(f"보고 종류는 daily 또는 weekly: {kind}")
-    return {"v": 1, "kind": kind, "date": kst_date(now), "reportedAt": now.astimezone(timezone.utc).isoformat(timespec="seconds"),
-            "notices": [reported_notice(c, held_names) for c in candidates]}
+    from .config import report_company
+
+    entry = {"v": 1, "kind": kind, "date": kst_date(now), "reportedAt": now.astimezone(timezone.utc).isoformat(timespec="seconds"),
+             "notices": [reported_notice(c, held_names) for c in candidates]}
+    if report_company():  # 그리다 등 — 웹앱이 그 회사 판단 기록에 합친다(없으면 지일)
+        entry["company"] = report_company()
+    return entry
 
 
 def file_name(entry: dict[str, Any]) -> str:
     """보고일-종류.json — 같은 날 같은 보고를 다시 보내면 같은 파일을 덮어쓴다."""
-    return f"{entry['date']}-{entry['kind']}.json"
+    tail = f"-{entry['company']}" if entry.get("company") else ""
+    return f"{entry['date']}-{entry['kind']}{tail}.json"
 
 
 def write(directory: Path, entry: dict[str, Any]) -> Path:
@@ -110,7 +118,10 @@ def parse(text: str) -> dict[str, Any] | None:
         return None
     notices = [n for n in e.get("notices") or [] if isinstance(n, dict) and str(n.get("noticeNo") or "").strip()
                and isinstance(n.get("title"), str)]
-    return {"v": 1, "kind": e["kind"], "date": e["date"], "reportedAt": str(e.get("reportedAt") or ""), "notices": notices}
+    out = {"v": 1, "kind": e["kind"], "date": e["date"], "reportedAt": str(e.get("reportedAt") or ""), "notices": notices}
+    if isinstance(e.get("company"), str) and re.fullmatch(r"[a-z0-9_-]{1,20}", e["company"]):
+        out["company"] = e["company"]
+    return out
 
 
 # 판단 없이 마감된 '놓침'은 마감 뒤 이만큼만 남긴다(2026-11-09 사용자 결정 — 근거(판단·사유) 있는 기록만 오래 둔다).
@@ -131,9 +142,9 @@ def _codes_of(names: list[str]) -> list[str]:
     global _NAME_TO_CODE
     if _NAME_TO_CODE is None:
         try:
-            from .config import load_config
+            from .config import load_config, report_company
 
-            held = (load_config().held_raw or {}).get("heldProducts", [])
+            held = (load_config(company=report_company()).held_raw or {}).get("heldProducts", [])
             _NAME_TO_CODE = {str(p.get("name") or ""): str(p.get("code") or "") for p in held}
         except Exception:  # noqa: BLE001 — 설정을 못 읽으면 이름 그대로(그 규칙만 안 걸림)
             _NAME_TO_CODE = {}

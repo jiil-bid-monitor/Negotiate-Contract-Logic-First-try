@@ -175,6 +175,18 @@ def _send_telegram(candidates, stats, html_path) -> bool:
     return sent > 0
 
 
+def _judge_url_for(company: str) -> None:
+    """보고 끝 '판단하러 가기' 주소(TELEGRAM_JUDGE_URL)에 ?co=<회사> — 누르면 그 회사 화면이 바로 열리게."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+    url = os.environ.get("TELEGRAM_JUDGE_URL", "").strip()
+    if not url or company == "jiil":
+        return
+    parts = urlsplit(url)
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "co"] + [("co", company)]
+    os.environ["TELEGRAM_JUDGE_URL"] = urlunsplit(parts._replace(query=urlencode(query)))
+
+
 def _save_report_log(kind: str, candidates, config, now) -> None:
     """보고에 나간 공고 목록 → output/report-log/{보고일}-{종류}.json (nego/report_log.py). 실패해도 보고는 이미 나갔으니
     종료코드는 그대로 — 사내 웹앱 판단 기록에 이번 보고가 안 쌓일 뿐이다."""
@@ -294,13 +306,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="HTML 리포트를 메일로 보낸다(주간 보고용, SMTP_* 환경변수·config/recipients.json — 통합 결정 15번)",
     )
+    parser.add_argument(
+        "--company",
+        help="보유 자격·보고를 이 회사(config/companies.json의 id, 예: grida)로 — 보고 제목 앞 [그리다], 보고 기록·피드백 시트 탭 따로"
+        " (2026-11-24). 없으면 지일",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
     _setup_logging(args.verbose)
 
+    if args.company:
+        os.environ["NEGO_COMPANY"] = args.company
+        _judge_url_for(args.company)
     try:
-        config = load_config()
+        config = load_config(company=args.company or None)
     except ConfigError as err:
         print(f"설정 오류: {err}", file=sys.stderr)
         return 1

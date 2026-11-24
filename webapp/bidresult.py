@@ -225,6 +225,21 @@ def result_line(entry: dict[str, Any], res: dict[str, Any]) -> str:
     return f"• {entry.get('title') or entry.get('noticeNo')} — {what}"
 
 
+def telegram_notify_for(company: str | None):
+    """회사별 개찰 결과 알림 — 지일은 담당자 방(TELEGRAM_CHAT_ID), 그리다 등은 TELEGRAM_<ID>_CHAT_ID(없으면 안 보냄)."""
+    if not company or company == "jiil":
+        return telegram_notify
+    from nego.config import company_name
+    from nego.telegram import send_dev_alert
+
+    def notify(lines: list[str]) -> None:
+        text = "\n".join([f"[{company_name(company)}] 개찰 결과 {len(lines)}건", *lines, "",
+                          "웹앱 투찰 계산기 › 투찰내역에서 자세히"])
+        send_dev_alert(text, chat_env=f"TELEGRAM_{company.upper()}_CHAT_ID")
+
+    return notify
+
+
 def telegram_notify(lines: list[str]) -> None:
     """새 개찰 결과를 담당자 방에 한 통(11/24 사용자 — 투찰 결과는 중요해서 따로). 텔레그램 설정이 없는 곳(서버 PC 등)이면 안 보냄."""
     from nego.telegram import send_dev_alert

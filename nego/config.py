@@ -65,6 +65,10 @@ def load_config(config_dir: Path | None = None, company: str | None = None) -> A
     keywords = _read_json(directory / "keywords.json")
     codes = _read_json(directory / "codes.json")
     held = _read_json(held_file(company, directory) if company else directory / "held_qualifications.json")
+    if config_dir is None:  # 그 회사 서류 폴더의 경쟁입찰참가자격등록증 PDF로 더함(지일 제외 — nego/regcert.py)
+        from .regcert import apply as _apply_cert
+
+        held = _apply_cert(held, company)
     # 선택 파일 — 없어도 동작한다.
     code_names_path = directory / "code_names.json"
     code_names_raw = _read_json(code_names_path) if code_names_path.exists() else {}

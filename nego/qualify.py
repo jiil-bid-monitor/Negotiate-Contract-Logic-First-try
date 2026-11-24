@@ -233,6 +233,14 @@ def no_held_license(
 CONSTRUCTION_LICENSE_CODES = frozenset({"0006", "4990", "0036", "1440", "4991"})
 
 
+def construction_codes(held_raw: dict | None) -> frozenset[str]:
+    """'보유 면허로 수집' 경로에 쓰는 그 회사 공사 면허 — 보유 업종 중 이름에 '공사업'이 든 나라장터 업종코드(4자리).
+    지일은 위 목록과 같고, 그리다는 실내건축(0006·4990) — 등록증으로 공사업이 더해지면 저절로 들어감(2026-11-24)."""
+    codes = frozenset(str(e.get("code") or "").strip() for e in (held_raw or {}).get("heldIndustries", [])
+                      if re.fullmatch(r"\d{4}", str(e.get("code") or "").strip()) and "공사업" in str(e.get("name") or ""))
+    return codes if held_raw is not None else CONSTRUCTION_LICENSE_CODES
+
+
 def construction_license_match(
     groups: list[LicenseGroup], held_names: list[str], held_codes: set[str] | frozenset[str] = frozenset(),
     codes: frozenset[str] = CONSTRUCTION_LICENSE_CODES,

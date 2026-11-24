@@ -193,6 +193,11 @@ def _names() -> tuple[dict[str, str], dict[str, str]]:
     from .company import held_file
 
     held, codes = read(held_file()), read("codes.json")  # 고른 회사의 보유 자격(11/24 회사 고르기)
+    from nego.regcert import apply as _apply_cert
+
+    from .company import current
+
+    held = _apply_cert(held, current())  # 서류 폴더의 등록증 PDF로 더한 것까지(지일 제외)
     return (qualify.load_held_code_names(held),
             qualify.load_code_names({**codes, "productCodes": held.get("heldProducts", [])}, read("code_names.json")))
 

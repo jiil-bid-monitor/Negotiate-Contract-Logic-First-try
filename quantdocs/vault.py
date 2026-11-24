@@ -223,8 +223,18 @@ def load(passphrase: str | None = None, path: Path | None = None) -> Vault:
                 files[m.name] = tar.extractfile(m).read()
     if INDEX not in files:
         raise VaultError(f"묶음 안에 {INDEX}가 없습니다")
-    wb = load_workbook(io.BytesIO(files[INDEX]), data_only=True)
     v = Vault(files)
+    _read_index(v, files[INDEX])
+    add_loose(v)
+    derive_patents(v)
+    return v
+
+
+def _read_index(v: "Vault", data: bytes) -> None:
+    """회사자료_양식.xlsx의 회사정보·연혁·서류상태·실적목록·인력목록·특허목록 시트."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(data), data_only=True)
     if "회사정보" in wb.sheetnames:
         v.info = {str(r.get("항목") or "").strip(): str(r.get("값")).strip()
                   for r in _rows(wb["회사정보"]) if r.get("항목") and r.get("값") not in (None, "")}
@@ -232,7 +242,36 @@ def load(passphrase: str | None = None, path: Path | None = None) -> Vault:
                         ("특허목록", "patents")):
         if sheet in wb.sheetnames:
             setattr(v, attr, _rows(wb[sheet]))
-    add_loose(v)
+
+
+def company_dir(company: str) -> Path:
+    """지일이 아닌 회사의 서류 폴더 — .env QUANT_<ID>_DIR(예: QUANT_GRIDA_DIR), 없으면 옆 폴더 <id>-quant-docs
+    (2026-11-24 사용자: C:\\Users\\HJE\\나라장터 수집\\grida-quant-docs\\그리다 자료 — 지일 jiil-quant-docs 바로 옆)."""
+    given = read_env(f"QUANT_{company.upper()}_DIR")
+    return Path(given) if given else ROOT.parent / f"{company}-quant-docs"
+
+
+def load_company(company: str | None = None) -> "Vault":
+    """그 회사 자료 — 지일은 잠금 묶음(load), 다른 회사는 폴더 안 서류를 그대로(묶음·비밀번호 없음).
+    폴더(하위 폴더까지)에 회사자료_양식.xlsx가 있으면 그 시트도 읽고, 없으면 등록증·사업자등록증 PDF에서 회사정보를 읽음(importer.enrich_vault)."""
+    from . import company as co_mod
+
+    company = company or co_mod.current()
+    if company == co_mod.DEFAULT:
+        return load()
+    folder = company_dir(company)
+    if not folder.is_dir():
+        raise VaultError(f"{co_mod.name()} 자료 폴더가 없습니다: {folder} — 서버 PC에 만들고 서류를 넣으세요")
+    v = Vault({})
+    index = [p for p in _loose_files(folder) if p.name == INDEX]
+    if index:
+        try:
+            _read_index(v, max(index, key=lambda x: x.stat().st_mtime).read_bytes())
+        except Exception as err:  # noqa: BLE001 — 열 수 없는 엑셀은 건너뛰고 서류만
+            raise VaultError(f"{co_mod.name()} {INDEX}를 열지 못했습니다: {err}") from err
+    add_loose(v, folder)
+    if not v.files and not v.info:
+        raise VaultError(f"{co_mod.name()} 자료 폴더가 비어 있습니다: {folder} — 등록증·사업자등록증 등 PDF를 넣으세요")
     derive_patents(v)
     return v
 

@@ -28,12 +28,20 @@ AWARDS = {("용역", "20260415"): [{"bidNtceNo": "20260415", "bidNtceOrd": "01",
                                   "sucsfbidAmt": "240000000", "sucsfbidRate": "90.15", "prtcptCnum": "7"}]}
 
 
+DAY_LIST = {(F.BID_NOTICE_OPERATIONS["용역"], "20260414"): [
+    {"bidNtceNo": "R26BK0000001", "bidNtceOrd": "000", "bidNtceNm": "다른 공고"},
+    {"bidNtceNo": "P2026207", "bidNtceOrd": "01", "bidNtceNm": "2026년 기업홍보영상 업그레이드 제작",
+     "presmptPrce": "17577000", "cntrctCnclsMthdNm": "수의계약"}]}
+
+
 class FakeClient:
     def __init__(self):
         self.calls = []
 
     def fetch_all_pages(self, base, op, params, label):
         self.calls.append(op)
+        if params.get("inqryDiv") == "1":  # 게시일 하루치 목록
+            return DAY_LIST.get((op, params["inqryBgnDt"][:8]), [])
         no = params["bidNtceNo"]
         for w, o in F.BID_NOTICE_OPERATIONS.items():
             if o == op:
@@ -70,3 +78,23 @@ def test_numbers_as_args(tmp_path):
 
 def test_targets_file_has_17():
     assert len(nl.read_targets([str(ROOT / "docs" / "kdn_targets_2026-05_11.csv")])) == 17
+
+
+def test_falls_back_to_posted_day_list(tmp_path, capsys):
+    import openpyxl
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.append(["구분", "공고번호", "공고명", "업무", "묶음", "게시(마감)"])
+    ws.append(["대상", "P2026207-01", "기업홍보영상", "용역", "영상·콘텐츠·홍보물", "2026/04/14 10:14(2026/04/14 15:00)"])
+    ws.append(["대상", "P2026999-01", "없는 공고", "공사", "홍보관·공간", "2026/04/14 11:00(2026/04/14 15:00)"])
+    src = tmp_path / "t.xlsx"; wb.save(src)
+    assert nl.main([str(src), "--no-award", "--out", str(tmp_path)], client=FakeClient()) == 0
+    assert "찾음 1건(게시일 목록에서 1)" in capsys.readouterr().out
+    with next(tmp_path.glob("공고조회_*.csv")).open(encoding="utf-8-sig") as f:
+        rows = {r["공고번호"]: r for r in csv.DictReader(f)}
+    assert rows["P2026207-01"]["찾은 방법"] == "게시일 목록" and rows["P2026207-01"]["사업금액(원)"] == "19334700"
+    assert "게시 목록에도 없음" in rows["P2026999-01"]["조회 오류"]
+
+
+def test_targets_file_2026_01_05_has_12_with_days():
+    t = nl.read_targets([str(ROOT / "docs" / "kdn_targets_2026-01_05.csv")])
+    assert len(t) == 12 and all(x["day"] for x in t)

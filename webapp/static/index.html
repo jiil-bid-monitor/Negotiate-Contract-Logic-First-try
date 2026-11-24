@@ -362,7 +362,17 @@ body {
 .calpop .calhead h3 { margin: 0; }
 .calpop .calmonth { position: relative; cursor: pointer; padding: 2px 8px; border-radius: 6px; }
 .calpop .calmonth:hover { background: var(--line-soft, #f0f0f0); }
-.calpop .calmonth input { position: absolute; inset: 0; opacity: 0; pointer-events: none; width: 100%; }
+.calpop .calhead .calmonth { font: inherit; width: auto; height: auto; border: 0; background: none; color: var(--ink); }
+.calpop .mpick { padding: 4px 2px 8px; }
+.calpop .mpick-y { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 10px; font-size: 16px; }
+.calpop .mpick button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; }
+.calpop .mpick-y button { width: 30px; height: 30px; font-size: 16px; }
+.calpop .mpick-m { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.calpop .mpick-m button { font-size: 15px; padding: 10px 0; }
+.calpop .mpick-m button:hover { border-color: var(--brand); }
+.calpop .mpick-m button.now { color: var(--brand); font-weight: 700; border-color: var(--brand); }
+.calpop .mpick-m button.sel { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 700; }
+.calpop .mpick-now { display: block; margin: 10px auto 0; padding: 6px 14px; font-size: 14px; }
 .calpop .calhead button { font: inherit; font-size: 15px; width: 28px; height: 28px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; cursor: pointer; }
 .calpop .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .calpop .grid .wd { color: var(--muted); font-size: 11.5px; padding: 2px 0; }
@@ -5222,7 +5232,7 @@ setInterval(loadDocBell, 10 * 60 * 1000);
 
 // ── 일정 달력 (11/24 사용자) — 참가 공고 마감 · 개찰(투찰 기록) · 회사 서류 만료 · 계약·준공예정(낙찰 후 서류) ──
 // 자료는 이미 있는 API를 모아 그리기만. 숫자 = 오늘 일정 + 아직 안 본 개찰 결과
-const CAL = { month: "", day: "", range: "", events: [], server: [] };  // range: '' = 고른 날, 'week' = 오늘부터 7일, 'month' = 보는 달
+const CAL = { pick: 0, month: "", day: "", range: "", events: [], server: [] };  // range: '' = 고른 날, 'week' = 오늘부터 7일, 'month' = 보는 달
 CAL_READY = true;
 const CAL_KIND = { deadline: "마감", open: "개찰", doc: "서류 만료", award: "계약·준공" };
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -5315,27 +5325,40 @@ function renderCalendar() {
   const cur = CAL.range || (CAL.day === today && month === today.slice(0, 7) ? "today" : "");
   const ranges = [["today", "오늘"], ["week", "7일"], ["month", "이 달"]]
     .map(([v, l]) => `<button type="button" data-crange="${v}" aria-pressed="${cur === v}" class="${cur === v ? "on" : ""}">${l}</button>`).join("");
-  $("calBellPop").innerHTML = `<div class="calhead"><button type="button" data-cmon="-1" aria-label="지난달">‹</button><label class="calmonth" title="눌러서 연·월 바로 고르기"><h3>${y}년 ${m}월 ▾</h3><input type="month" data-cpick value="${month}" aria-label="연·월 고르기"></label><button type="button" data-cmon="1" aria-label="다음 달">›</button></div>`
-    + `<div class="grid">${cells}</div>`
+  $("calBellPop").innerHTML = `<div class="calhead"><button type="button" data-cmon="-1" aria-label="지난달">‹</button><button type="button" class="calmonth" data-cpickopen aria-expanded="${!!CAL.pick}" title="눌러서 연·월 바로 고르기"><h3>${y}년 ${m}월 ▾</h3></button><button type="button" data-cmon="1" aria-label="다음 달">›</button></div>`
+    + (CAL.pick ? monthPicker(y, m) : `<div class="grid">${cells}</div>`)
     + `<div class="legend">${Object.entries(CAL_KIND).map(([k, l]) => `<span><i class="k-${k}"></i>${l}</span>`).join("")}</div>`
     + `<div class="ranges" role="group" aria-label="볼 기간">${ranges}</div>`
     + body;
 }
-// 연·월 바로 고르기(11/24 사용자 — 한 달씩 넘기면 1년 전으로 가기 번거로움)
-$("calBellPop").addEventListener("change", (ev) => {
-  if (!ev.target.matches("[data-cpick]") || !/^\d{4}-\d{2}$/.test(ev.target.value)) return;
-  CAL.month = ev.target.value;
-  CAL.day = "";
-  CAL.range = "month";  // 고른 달 일정 전체를 바로
-  renderCalendar();
-});
+// 연·월 바로 고르기(11/24 사용자 — 한 달씩 넘기면 1년 전으로 가기 번거로움, 브라우저 기본 고르기 창은 글씨가 작고 흐려서 직접 그림)
+function monthPicker(y, m) {
+  const py = CAL.pick;  // 고르는 중인 연도
+  const now = new Date(), ty = now.getFullYear(), tm = now.getMonth() + 1;
+  const months = Array.from({ length: 12 }, (_, k) => k + 1).map((k) =>
+    `<button type="button" data-cpickm="${k}" class="${py === y && k === m ? "sel" : ""}${py === ty && k === tm ? " now" : ""}">${k}월</button>`).join("");
+  return `<div class="mpick"><div class="mpick-y"><button type="button" data-cpicky="-1" aria-label="지난해">‹</button><b>${py}년</b><button type="button" data-cpicky="1" aria-label="다음 해">›</button></div>`
+    + `<div class="mpick-m">${months}</div><button type="button" class="mpick-now" data-cpickm="now">이번 달로</button></div>`;
+}
 $("calBellPop").addEventListener("click", (ev) => {
   const t = ev.target;
-  if (t.closest(".calmonth") && !t.matches("[data-cpick]")) { const i = t.closest(".calmonth").querySelector("input"); try { i.showPicker(); } catch (e) { i.focus(); } return; }
+  if (t.closest("[data-cpickopen]")) { CAL.pick = CAL.pick ? 0 : Number((CAL.month || ymd(new Date())).slice(0, 4)); return void renderCalendar(); }
+  const py = t.closest("[data-cpicky]");
+  if (py) { CAL.pick += Number(py.dataset.cpicky); return void renderCalendar(); }
+  const pm = t.closest("[data-cpickm]");
+  if (pm) {
+    const now = ymd(new Date()).slice(0, 7);
+    CAL.month = pm.dataset.cpickm === "now" ? now : `${CAL.pick}-${String(pm.dataset.cpickm).padStart(2, "0")}`;
+    CAL.pick = 0;
+    CAL.day = "";
+    CAL.range = "month";  // 고른 달 일정 전체를 바로
+    return void renderCalendar();
+  }
   const mon = t.closest("[data-cmon]");
   if (mon) {
     const [y, m] = (CAL.month || ymd(new Date()).slice(0, 7)).split("-").map(Number);
     CAL.month = ymd(new Date(y, m - 1 + Number(mon.dataset.cmon), 1)).slice(0, 7);
+    CAL.pick = 0;
     CAL.day = "";
     if (CAL.range === "week") CAL.range = "month";  // 달을 넘기면 그 달 전체로
     return void renderCalendar();

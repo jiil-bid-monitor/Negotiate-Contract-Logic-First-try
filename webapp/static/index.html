@@ -13,13 +13,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 
 <script>
-  // 테마를 그리기 전에 적용한다. 본문이 뜬 뒤에 바꾸면 화면이 한 번 번쩍인다.
-  // 기본은 라이트 — OS가 다크 모드여도 담당자가 고르기 전에는 밝은 화면으로 연다 (2026-10-02 요청).
-  // '시스템'(OS 설정 따르기)은 11/24 사용자 요청으로 뺌 — 예전에 고른 사람도 라이트로.
-  // 사생활 보호 모드·사이트 데이터 차단에서 localStorage 접근이 throw할 수 있어 감싼다.
-  let savedTheme = null;
-  try { savedTheme = localStorage.getItem("ui-theme"); } catch (e) { /* 저장소를 못 쓰면 기본(라이트) */ }
-  document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
+  // 화면은 라이트만(11/24 사용자 — 다크·시스템 버튼 뺌). 그리기 전에 정해 OS 다크 설정을 따라가지 않게
+  document.documentElement.dataset.theme = "light";
 </script>
 
 <style>
@@ -1525,7 +1520,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="docbell-pop" id="judgeBellPop" hidden></div>
     </div>
     <div class="docbell" id="calBell">
-      <button type="button" id="calBellBtn" aria-haspopup="true" aria-expanded="false" title="일정 — 참가 공고 마감·개찰·서류 만료·계약·준공"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="lb">일정</span><span class="n" id="calBellN" hidden></span></button>
+      <button type="button" id="calBellBtn" aria-haspopup="true" aria-expanded="false" title="일정 — 숫자는 오늘 일정과 새 개찰 결과"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="lb">일정</span><span class="n" id="calBellN" hidden></span></button>
       <div class="docbell-pop calpop" id="calBellPop" hidden></div>
     </div>
     <div class="docbell" id="docBell" hidden>
@@ -1533,10 +1528,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="docbell-pop" id="docBellPop" hidden></div>
     </div>
     <label class="me-top">내 이름 <input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></label>
-    <div class="theme" role="group" aria-label="화면 테마">
-      <button type="button" data-theme-set="light" title="라이트 모드">라이트</button>
-      <button type="button" data-theme-set="dark" title="다크 모드">다크</button>
-    </div>
   </div>
 </div>
 
@@ -4201,29 +4192,6 @@ function renderDiagnosed(n, openSteps = false) {
 }
 
 
-// ── 테마 ───────────────────────────────────────────────────
-// 저장에 실패해도(사생활 보호 모드 등) 화면 전환 자체는 되어야 하므로 따로 감싼다.
-function applyTheme(mode) {
-  document.documentElement.dataset.theme = mode;
-  try { localStorage.setItem("ui-theme", mode); } catch (e) { /* 저장 못 해도 이번 세션에는 적용된다 */ }
-  markTheme(mode);
-}
-
-function markTheme(mode) {
-  document.querySelectorAll("[data-theme-set]").forEach((b) => {
-    b.setAttribute("aria-pressed", String(b.dataset.themeSet === mode));
-  });
-}
-
-(function initTheme() {
-  let saved = null;
-  try { saved = localStorage.getItem("ui-theme"); } catch (e) { /* 무시 */ }
-  markTheme(saved === "dark" ? "dark" : "light");
-  document.querySelector(".theme").onclick = (ev) => {
-    const btn = ev.target.closest("[data-theme-set]");
-    if (btn) applyTheme(btn.dataset.themeSet);
-  };
-})();
 
 $("filters").onclick = (ev) => {
   const toggle = ev.target.closest(".dd-btn");
@@ -5149,17 +5117,19 @@ loadDocBell();
 setInterval(loadDocBell, 10 * 60 * 1000);
 
 // ── 일정 달력 (11/24 사용자) — 참가 공고 마감 · 개찰(투찰 기록) · 회사 서류 만료 · 계약·준공예정(낙찰 후 서류) ──
-// 자료는 이미 있는 API를 모아 그리기만. 숫자 = 앞으로 7일 안 일정 + 아직 안 본 개찰 결과
+// 자료는 이미 있는 API를 모아 그리기만. 숫자 = 오늘 일정 + 아직 안 본 개찰 결과
 const CAL = { month: "", day: "", events: [], server: [] };
 CAL_READY = true;
 const CAL_KIND = { deadline: "마감", open: "개찰", doc: "서류 만료", award: "계약·준공" };
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-let calSeen = new Set(), calFirst = true;  // 처음 쓰는 브라우저 — 이미 나온 결과는 '새 결과'로 안 셈
-try { const v = localStorage.getItem("cal-seen"); if (v) { calSeen = new Set(JSON.parse(v)); calFirst = false; } } catch (e) { /* 저장소 없음 */ }
+// 본 개찰 결과는 서버에 남김(data/bid_result_seen.json) — 다른 PC에서 열어도 같게(11/24 사용자)
+let calSeen = new Set(), calFirst = false;
 function markResultsSeen() {
-  for (const e of CAL.events) if (e.result) calSeen.add(e.id);
-  try { localStorage.setItem("cal-seen", JSON.stringify([...calSeen].slice(-300))); } catch (e) { /* 무시 */ }
+  const ids = CAL.events.filter((e) => e.result && !calSeen.has(e.id)).map((e) => e.id);
+  if (!ids.length) return;
+  ids.forEach((id) => calSeen.add(id));
   renderCalBadge();
+  fetch("/api/bidlog/seen", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ids }) }).catch(() => {});
 }
 /** 개찰 결과 한 줄 — 비교 기록이면 웹앱 금액 기준(투찰내역과 같음) */
 function bidResultText(r) {
@@ -5173,7 +5143,9 @@ async function loadCalendar() {
     if (/^\d{4}-\d{2}-\d{2}$/.test(day)) ev.push({ d: day, kind, title: title || "", go, ...extra });
   };
   const get = async (url) => { try { return await getJson(url); } catch (e) { return {}; } };
-  const [docs, log, award] = await Promise.all([get("/api/docs-all"), get("/api/bidlog"), get("/api/postaward")]);
+  const [docs, log, award, seen] = await Promise.all([get("/api/docs-all"), get("/api/bidlog"), get("/api/postaward"), get("/api/bidlog/seen")]);
+  // 서버 기록이 아직 없으면(처음) 지금 나와 있는 결과는 본 것으로 — 지난 결과가 한꺼번에 '새 결과'로 뜨지 않게
+  if (Array.isArray(seen.seen)) { calSeen = new Set(seen.seen); calFirst = false; } else calFirst = "seen" in seen;
   for (const d of docs.docs || []) add(d.end, "doc", d.kind, { doc: 1 });
   const seenNo = new Set();
   for (const e of (log.entries || []).slice().reverse()) {  // 같은 공고를 여러 번 기록했으면 하나만
@@ -5198,8 +5170,10 @@ function calMerge() {
   if (!$("calBellPop").hidden) renderCalendar();
 }
 function renderCalBadge() {
-  const today = ymd(new Date()), week = ymd(new Date(Date.now() + 6 * 86400000));
-  const n = CAL.events.filter((e) => (e.d >= today && e.d <= week) || (e.result && !calSeen.has(e.id))).length;
+  // 숫자 = 오늘 일정 + 아직 안 본 개찰 결과(11/24 사용자 — 7일 안으로 세니 목록과 헷갈림)
+  const today = ymd(new Date());
+  // 개찰 결과가 나와 확인한 개찰은 오늘이어도 안 셈(11/24 사용자) — 결과가 나오면 '새 결과'로 세다가, 창을 열어 보면 빠짐
+  const n = CAL.events.filter((e) => e.result ? !calSeen.has(e.id) : e.d === today).length;
   $("calBellN").textContent = n;
   $("calBellN").hidden = !n;
 }

@@ -158,6 +158,19 @@ class TestFill(unittest.TestCase):
         self.assertEqual(fill_results(log, None, "u", OWN, ids=[a["id"]], force=True, fetch=fake)["fetched"], 1)
         self.assertIn("1순위 업체", log.csv())
 
+    def test_new_result_notified_once(self):
+        """11/24 사용자: 개찰 결과가 처음 '완료'가 될 때만 한 통 — 개찰 전·다시 받기는 안 보냄."""
+        log = BidLog(Path(tempfile.mkdtemp()))
+        a = log.add({"noticeNo": "R26BK01810177", "title": "태백 통신공사", "bid": 173_500_000, "workType": "공사"})
+        sent, bidders = [], []
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(bidders), notify=sent.append)
+        self.assertEqual(sent, [])                                  # 개찰 전
+        bidders[:] = BIDDERS
+        fill_results(log, None, "u", OWN, ids=[a["id"]], force=True, fetch=lambda c, b, n: result(bidders), notify=sent.append)
+        self.assertEqual(sent, [["• 태백 통신공사 — 3등 / 4곳 · 1위와 300,000원 차"]])
+        fill_results(log, None, "u", OWN, ids=[a["id"]], force=True, fetch=lambda c, b, n: result(bidders), notify=sent.append)
+        self.assertEqual(len(sent), 1)                              # 이미 완료 — 다시 안 보냄
+
     def test_times_saved_and_filled(self):
         """투찰 마감·개찰 일시(11/10) — 기록할 때 저장, 예전 기록은 '개찰 전'이면 공고에서 찾아 채움."""
         log = BidLog(Path(tempfile.mkdtemp()))

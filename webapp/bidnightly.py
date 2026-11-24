@@ -301,9 +301,10 @@ class Nightly:
         fill = self._fill_results
         if fill is None:
             from .bidresult import fill_results as fill
+        from .bidresult import telegram_notify
         total = 0
         for _ in range(10):  # 한 번에 8건씩 — 남으면 이어서(최대 80건)
-            done = fill(self.bidlog, client, base_url, self.own_bizno)
+            done = fill(self.bidlog, client, base_url, self.own_bizno, notify=telegram_notify)
             total += done.get("fetched", 0)
             if not done.get("left") or not done.get("fetched"):
                 break

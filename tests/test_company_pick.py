@@ -121,3 +121,23 @@ class CompanyServerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CompanyBidLogTest(CompanyServerTest):
+    """투찰 계산기도 회사마다(2026-11-24) — 투찰 기록은 따로, '우리 회사'는 그 회사 사업자번호."""
+
+    def test_bidlog_per_company(self):
+        self.call("/api/bidlog?co=grida", {"noticeNo": "R26BK01800001", "title": "그리다 공고", "bid": 1000})
+        self.assertEqual([e["noticeNo"] for e in self.call("/api/bidlog?co=grida")[1]["entries"]], ["R26BK01800001"])
+        self.assertEqual(self.call("/api/bidlog")[1]["entries"], [], "지일 투찰내역엔 안 보임")
+        grida = self.app.companies["grida"]
+        self.assertEqual(grida.bidlog.path.parent.name, "grida")
+        self.assertEqual(grida.bizno(), "1328802939")
+        self.assertNotEqual(self.app.companies["jiil"].bizno(), grida.bizno())
+
+
+def test_screen_shows_calc_for_other_company():
+    html = (ROOT / "webapp" / "static" / "index.html").read_text(encoding="utf-8")
+    assert 'ownRankHead' in html and "CO_NAME} 등수" in html
+    ui = (ROOT / "webapp" / "static" / "bidcalc_ui.js").read_text(encoding="utf-8")
+    assert "const OWN = " in ui

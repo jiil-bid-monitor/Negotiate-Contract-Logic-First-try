@@ -242,6 +242,8 @@ class App:
         team = TeamStore(folder, titles=lambda: holder["co"].titles(),
                          backup_dir=(backup_dir / cid) if backup_dir is not None else None)
         co = holder["co"] = Company(cid, name, full_name, store, team, collector, docscan)
+        # 투찰 기록도 회사마다(2026-11-24 그리다 투찰 계산기) — data/<id>/bid_log.json, 백업은 BACKUP_DIR/<id>
+        co.bidlog = BidLog(folder, backup_dir=(backup_dir / cid) if backup_dir is not None else None)
         self.companies[cid] = co
         link_collectors(self.companies)
         return co
@@ -250,6 +252,10 @@ class App:
         """요청의 ?co=<id> — 없거나 모르는 회사면 지일."""
         cid = ((q or {}).get("co") or [""])[0]
         return self.companies.get(cid) or self.companies["jiil"]
+
+    def bidlog_of(self, co: Company):
+        """그 회사 투찰 기록 — 지일은 self.bidlog(NAS에선 main()이 서버 PC 사본과 합친 것으로 바꿈)."""
+        return self.bidlog if co.default else co.bidlog
 
     def latest_run(self) -> dict[str, Any] | None:
         return self.companies["jiil"].latest_run()
@@ -398,7 +404,7 @@ def make_handler(app: App):
                         return None
 
                 directory = Path(os.environ.get("BID_HISTORY_DIR") or os.environ.get("OUTPUT_DIR") or "output")
-                history = bidrecommend.history_from_dir(directory)
+                history = bidrecommend.history_from_dir(directory, co.bizno())
                 return self._json(bidrecommend.recommend(
                     history, work=q.get("work", [""])[0] or None, lo=num("lo"), hi=num("hi"),
                     scale=q.get("scale", ["auto"])[0], basis=num("basis"), lower_rate=num("lower"), a=num("a") or 0.0,
@@ -483,7 +489,7 @@ def make_handler(app: App):
             if url.path == "/api/decisions":
                 return self._json({"decisions": co.store.decisions()})
             if url.path == "/api/bidlog":
-                return self._json({"entries": app.bidlog.entries()})
+                return self._json({"entries": app.bidlog_of(co).entries()})
             if url.path == "/api/bidlog/seen":  # 아직 기록 파일이 없으면 null — 화면이 '처음'으로 보고 지금 결과를 본 것으로
                 return self._json({"seen": app.result_seen(None)})
             if url.path == "/api/postaward":
@@ -513,9 +519,9 @@ def make_handler(app: App):
                 return None
             if url.path == "/api/bidlog/bidders":
                 # 투찰 업체 전부(11/10) — 없으면 bidders=null(화면이 '결과 다시 받기' 뒤 다시 부름)
-                return self._json({"bidders": app.bidlog.bidders(q.get("id", [""])[0])})
+                return self._json({"bidders": app.bidlog_of(co).bidders(q.get("id", [""])[0])})
             if url.path == "/api/bidlog.csv":
-                return self._send(200, app.bidlog.csv().encode("utf-8"), "text/csv; charset=utf-8")
+                return self._send(200, app.bidlog_of(co).csv().encode("utf-8"), "text/csv; charset=utf-8")
             if url.path == "/api/decisions.csv":
                 # 판단 기록 내려받기(엑셀에서 바로 열리게 BOM 붙인 UTF-8) — 키워드 조정 검토 때 Claude에게 올려 주는 파일
                 return self._send(200, decisions_csv(co.store.decisions(latest_only=False)).encode("utf-8-sig"),
@@ -640,8 +646,8 @@ def make_handler(app: App):
                     co.store.add_comment(key, name, body)
                     return self._json({"comments": co.store.comments(key)})
                 if url.path == "/api/bidlog":
-                    entry = app.bidlog.add(data)
-                    return self._json({"ok": True, "entry": entry, "entries": app.bidlog.entries()})
+                    entry = app.bidlog_of(co).add(data)
+                    return self._json({"ok": True, "entry": entry, "entries": app.bidlog_of(co).entries()})
                 if url.path == "/api/past-live":  # 서버 PC가 사업 폴더로 만든 과거사업 목록을 보냄(webapp/pastlive.py)
                     from . import pastlive
                     return self._json({"ok": True, "rows": pastlive.receive(app, data.get("rows") or [])})
@@ -695,8 +701,8 @@ def make_handler(app: App):
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
                     return self._json({"ok": True, **done, "items": pa.items()})
                 if url.path == "/api/bidlog/update":
-                    app.bidlog.update(str(data.get("id") or ""), data)
-                    return self._json({"ok": True, "entries": app.bidlog.entries()})
+                    app.bidlog_of(co).update(str(data.get("id") or ""), data)
+                    return self._json({"ok": True, "entries": app.bidlog_of(co).entries()})
                 if url.path == "/api/bidlog/results":
                     # 개찰 결과 받기(11/06) — 결과 없는 기록만, ids를 주면 그 기록만(force면 다시)
                     from nego import fields as F
@@ -708,17 +714,18 @@ def make_handler(app: App):
                             return self._error(HTTPStatus.CONFLICT, "서버에 나라장터 인증키(NARA_SERVICE_KEY)가 없습니다")
                         base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
                         ids = [str(i) for i in data.get("ids") or []] or None
-                        done = fill_results(app.bidlog, bidcalc.make_client(config.api), base, default_own_bizno(),
-                                            ids=ids, force=bool(data.get("force")), notify=telegram_notify)
+                        # 개찰 알림(텔레그램)은 지일 방이라 지일 기록만 — 그리다는 화면에만(11/24)
+                        done = fill_results(app.bidlog_of(co), bidcalc.make_client(config.api), base, co.bizno(),
+                                            ids=ids, force=bool(data.get("force")), notify=telegram_notify if co.default else None)
                     except (ConfigError, ApiError) as err:
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
-                    return self._json({"ok": True, **done, "entries": app.bidlog.entries()})
+                    return self._json({"ok": True, **done, "entries": app.bidlog_of(co).entries()})
                 if url.path == "/api/bidlog/seen":  # 일정 창에서 본 개찰 결과(공고번호) — PC가 달라도 같게(11/24)
                     return self._json({"seen": app.result_seen(data.get("ids") or [])})
                 if url.path == "/api/bidlog/delete":
-                    app.bidlog.delete(str(data.get("id") or ""))
-                    return self._json({"ok": True, "entries": app.bidlog.entries()})
+                    app.bidlog_of(co).delete(str(data.get("id") or ""))
+                    return self._json({"ok": True, "entries": app.bidlog_of(co).entries()})
                 if url.path == "/api/participation":
                     if app.team_remote:
                         return self._remote_participation("POST", data, co=co)

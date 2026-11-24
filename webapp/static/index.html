@@ -1920,7 +1920,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         <span class="bidlog-actions"><span id="bidlogKind" class="kind-chips"></span><button type="button" id="bidlogReload">결과 새로 고침</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
       </div>
       <div class="bidlog-wrap"><table class="calc-form bidlog-table">
-        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>투찰금액</th><th>외주 금액</th><th>기준 사정률</th><th>개찰 결과</th><th>지일 등수</th><th></th></tr></thead>
+        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>투찰금액</th><th>외주 금액</th><th>기준 사정률</th><th>개찰 결과</th><th id="ownRankHead">지일 등수</th><th></th></tr></thead>
         <tbody id="bidlogRows"><tr><td colspan="8" class="why">불러오는 중…</td></tr></tbody>
       </table></div>
     </div>
@@ -2201,7 +2201,7 @@ async function loadNotices(refresh) {
     $("refresh").style.display = $("days").style.display = $("load").style.display = viewer ? "none" : "";
     $("customRange").hidden = viewer || $("days").value !== "custom";  // 판단은 10초마다 저절로 받음
     // 투찰 계산기·정량평가서는 서버 PC에서만 — 투찰 기록이 두 곳에 쌓이지 않게, 정량평가서는 NAS에 OCR이 없어서 (11/11 사용자 결정)
-    document.querySelectorAll('.tabs [data-tab="calc"], .tabs [data-tab="quant"]').forEach((b) => { b.hidden = viewer || (CO !== "jiil" && b.dataset.tab === "calc"); });
+    document.querySelectorAll('.tabs [data-tab="calc"], .tabs [data-tab="quant"]').forEach((b) => { b.hidden = viewer; });
     if (data.empty) {
       $("loadState").textContent = "";
       $("liveMeta").innerHTML = viewer ? "아직 받은 수집 결과가 없습니다. 서버 PC 화면에서 수집하면 끝난 뒤 여기에 나타납니다."
@@ -3495,7 +3495,6 @@ let IS_VIEWER = false;
 function nextStepButton(p) {
   if (IS_VIEWER || p?.status !== "참가" || p.meta?.sourceType === "사전규격") return "";
   const quant = ["협상", "규격가격동시"].includes(p.meta?.bidMethod);
-  if (!quant && CO !== "jiil") return "";  // 투찰 계산기는 아직 지일 화면에서만(그리다 화면엔 탭이 없음)
   return `<button type="button" class="pbtn next-step" data-next="${quant ? "quant" : "calc"}" data-next-no="${esc(p.noticeNo)}">${quant ? "정량평가서 만들기 ›" : "투찰 계산 ›"}</button>`;
 }
 document.addEventListener("click", (ev) => {
@@ -5616,10 +5615,11 @@ $("coPick").onclick = (ev) => { const b = ev.target.closest("[data-co]"); if (b)
 document.title = CO === "jiil" ? document.title : `${CO_NAME} · ${document.title}`;
 document.querySelector("footer").firstChild.textContent = `\n    (주)${CO_NAME} · 로컬 전용 도구\n  `;
 if (CO !== "jiil") {
-  // 투찰 계산기·낙찰 후 서류·일정(투찰 기록)은 아직 지일 투찰 기록으로만 돈다 — 숨김. 정량평가서는 그 회사 서류 폴더로(11/24)
-  document.querySelectorAll('.tabs [data-tab="calc"], .tabs [data-tab="award"]').forEach((b) => { b.hidden = true; });
+  // 낙찰 후 서류·일정은 아직 지일 자료로만 돈다 — 숨김. 정량평가서는 그 회사 서류 폴더로, 투찰 계산기는 그 회사 투찰 기록으로(11/24)
+  document.querySelectorAll('.tabs [data-tab="award"]').forEach((b) => { b.hidden = true; });
   $("calBell").hidden = true;
-  if (["calc", "award"].includes(location.hash.slice(1).split("=")[0])) showTab("live");
+  if (location.hash.slice(1).split("=")[0] === "award") showTab("live");
+  $("ownRankHead").textContent = `${CO_NAME} 등수`;
 }
 if (!CO_PICKED) showCompanyPick();
 </script>

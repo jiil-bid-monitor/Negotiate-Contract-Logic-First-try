@@ -22,6 +22,7 @@ class Company:
         self.collector = collector
         self.docscan = docscan
         self.push: Any = None  # 서버 PC → NAS 결과 보내기(webapp/resultpush.py) — main()이 켠다
+        self.bidlog: Any = None  # 투찰 기록(지일은 App.bidlog — NAS에선 서버 PC 사본과 합친 것으로 바뀌어 App이 들고 있음)
         self._run_cache: tuple[int | None, dict[str, Any] | None] = (None, None)
         self._held_raw: dict[str, Any] | None = None
         collector.company_name = name
@@ -49,6 +50,14 @@ class Company:
             except ConfigError:
                 self._held_raw = {}
         return self._held_raw
+
+    def bizno(self) -> str:
+        """개찰 결과에서 '우리 회사' 줄을 찾을 사업자번호 — 지일은 예전 그대로(JIIL_BIZNO·지일 파일), 다른 회사는 그 회사 보유 자격 파일."""
+        if self.default:
+            from nego.bidrecommend import default_own_bizno
+
+            return default_own_bizno()
+        return str(self.held_raw().get("companyBizno") or "")
 
     def titles(self) -> dict[str, str]:
         run = self.store.latest_run() or {}

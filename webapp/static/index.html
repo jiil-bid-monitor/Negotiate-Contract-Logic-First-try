@@ -111,6 +111,7 @@ body {
   /* 원본이 짙은 색이라 그대로 두면 다크 바에서 안 보인다. 완전한 흰색으로 반전. */
   filter: brightness(0) invert(1);
 }
+.topbar .logo-home { display: block; color: inherit; }
 .topbar .slash { color: rgba(255,255,255,.28); }
 .topbar h1 {
   font-family: var(--head); font-size: 15px; font-weight: 500; margin: 0;
@@ -1524,7 +1525,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 <div class="topbar">
   <div class="inner">
     <!-- JIIL 로고(사용자 제공 이미지를 SVG로, 10/15) — 다크 바 위에서 흰색으로 보이게 CSS가 반전시킨다 -->
-    <svg class="logo" width="67" height="30" viewBox="14 13 78 35" role="img" aria-label="JIIL" fill="currentColor"><path d="M23.8 14 L36.4 14 L36.4 25.5 C36.4 34 32.5 40.5 21.8 46.8 L17.4 33.2 L17.2 31.2 L22.4 26 L23.6 22.8 Z"/><rect x="40" y="14" width="12.5" height="33"/><rect x="57" y="14" width="13" height="33"/><path d="M74 14H86V33L89.4 37.6V47H74Z"/></svg>
+    <a href="#live" class="logo-home" title="실제 공고로" data-home><svg class="logo" width="67" height="30" viewBox="14 13 78 35" role="img" aria-label="JIIL" fill="currentColor"><path d="M23.8 14 L36.4 14 L36.4 25.5 C36.4 34 32.5 40.5 21.8 46.8 L17.4 33.2 L17.2 31.2 L22.4 26 L23.6 22.8 Z"/><rect x="40" y="14" width="12.5" height="33"/><rect x="57" y="14" width="13" height="33"/><path d="M74 14H86V33L89.4 37.6V47H74Z"/></svg></a>
     <span class="slash">|</span>
     <div class="brand-text">
       <h1>나라장터 공고 수집</h1>
@@ -4594,6 +4595,12 @@ function fitQuant(on) {
 $("quantFrame").addEventListener("load", () => { QUANT_RO && QUANT_RO.disconnect(); QUANT_RO = null; if (!$("tab-quant").hidden) fitQuant(true); });
 window.addEventListener("resize", () => { if (!$("tab-quant").hidden) fitQuant(true); });
 // 기간은 '나라장터에서 불러오기'를 누를 때 쓴다 (바꾸기만 해서는 다시 조회하지 않는다 — 수집이 몇 분 걸려서)
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("[data-home]")) return;
+  e.preventDefault();
+  showTab("live");
+  window.scrollTo(0, 0);
+});
 function showTab(tab) {
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   for (const name of ["live", "excluded", "corpus", "log", "calc", "quant", "award"]) $("tab-" + name).hidden = tab !== name;

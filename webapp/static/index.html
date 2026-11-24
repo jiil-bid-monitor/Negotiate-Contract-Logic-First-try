@@ -4851,6 +4851,7 @@ async function openDocMgr() {
   if (!$("docMgr")) {
     document.body.insertAdjacentHTML("beforeend", `<dialog id="docMgr" class="docmgr"><div class="docbell-pop">
       <div class="mgrhead"><h3>전체 회사 서류</h3><button type="button" class="act" data-close>닫기</button></div>
+      <p class="uphint" style="margin:-4px 0 10px">새 PDF를 바꿀 서류 줄 위에 끌어다 놓아도 됩니다.</p>
       <ul><li data-new="1"><div class="row1"><span class="name">새 서류 추가</span></div>
         <div class="up"><input class="newname" placeholder="서류 이름 (예: 조경식재공사업 등록증)" maxlength="40">${UP}</div>
         <div class="upbox"></div></li></ul>
@@ -4966,18 +4967,19 @@ function wireDocs(root) {  // 종 창·관리 창 같이 — 파일 고르기·�
     (ev.target.hasAttribute("data-replace") ? docReplace : docUpload)(ev.target.closest("li"), ev.target.files[0]);
     ev.target.value = "";  // 같은 파일을 다시 골라도 다시 읽게
   });
+  // 창 어디에 놓아도 브라우저가 PDF를 열지 않게 먼저 막고, 서류 줄 위일 때만 받음(11/24 사용자 — 관리 창에서 안 되는 것처럼 보였음)
   root.addEventListener("dragover", (ev) => {
+    ev.preventDefault();
     const li = ev.target.closest("li[data-kind], li[data-new]");
     if (!li) return;
-    ev.preventDefault();
     root.querySelectorAll("li.drop").forEach((x) => x !== li && x.classList.remove("drop"));
     li.classList.add("drop");
   });
   root.addEventListener("dragleave", (ev) => ev.target.closest?.("li")?.classList.remove("drop"));
   root.addEventListener("drop", (ev) => {
+    ev.preventDefault();
     const li = ev.target.closest("li[data-kind], li[data-new]");
     if (!li) return;
-    ev.preventDefault();
     li.classList.remove("drop");
     docUpload(li, ev.dataTransfer.files[0]);
   });

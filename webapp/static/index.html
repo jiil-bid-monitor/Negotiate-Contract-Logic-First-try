@@ -2058,7 +2058,22 @@ async function loadNotices(refresh) {
 }
 
 /** 현재 걸려 있는 필터 상태 */
-const filters = { cat: "all", work: "all", prod: "all", grade: "all", part: "all", check: "all", kind: "all" };
+const filters = { cat: "all", work: "all", prod: "all", grade: "all", part: "all", check: "all", kind: "all", report: "all" };
+/** 가장 최근 매일 보고(텔레그램 입찰 보고)의 날짜 — 📋 창 '모두 보기'로 그 보고 공고만 본다(11/24 사용자) */
+function lastDailyReport() {
+  let date = "";
+  for (const p of Object.values(participation)) for (const r of p.reports || []) {
+    const d = (r.date || "").slice(0, 10);
+    if (r.kind === "daily" && d > date) date = d;
+  }
+  return date;
+}
+/** 그 날 매일 보고에 나간 공고번호(차수 없이) */
+const dailyReportNos = (date) => new Set(Object.values(participation)
+  .filter((p) => p.reports?.some((r) => r.kind === "daily" && (r.date || "").slice(0, 10) === date)).map((p) => p.noticeNo));
+let reportNos = new Set();
+const inReport = (n) => reportNos.has(String(n.noticeNo || "").split("-")[0]);
+const mdOf = (d) => d ? `${+d.slice(5, 7)}/${+d.slice(8, 10)}` : "";
 /**
  * '따로 보기 · 세부품명으로만 걸린 공고' 켬/끔 — 대분류 탭(전체·협상·입찰·수의계약·사전규격)과 따로(2026-11-23 사용자 요청:
  * 세부품명 보기에서도 협상·수의계약 등 탭이 걸리게. 예전엔 이 칸이 탭 값 하나(cat=product)라 다른 탭을 누르면 빠져나왔음)
@@ -2361,6 +2376,7 @@ function listFilterPass(n) {
     (filters.prod === "all" || (n.productCodes || []).includes(filters.prod)) &&
     (filters.grade === "all" || n.confidence === filters.grade) &&
     (filters.part === "all" || partOf(n) === filters.part) &&
+    (filters.report === "all" || inReport(n)) &&
     checkPass(n, filters.check)
   );
 }
@@ -2375,7 +2391,9 @@ function applyFilters() {
   // 본공고·사전규격 목록에는 제목 키워드가 있는 공고만 둔다. 세부품명으로만 걸린 공고는 '세부품명 공고' 탭으로 (2026-10-16 요청).
   // 화면에서만 나눈다 — 텔레그램 보고에는 지금처럼 나간다
   const productIn = lastItems.filter((n) => productOnly(n) && (includePre() || n.sourceType !== "사전규격"));
-  const items = listed.filter((n) => !productOnly(n));
+  reportNos = filters.report === "all" ? new Set() : dailyReportNos(filters.report);
+  // 보고 공고만 볼 땐 세부품명으로만 걸린 공고도 같은 목록에 — 텔레그램 보고와 같은 건수가 보이게
+  const items = listed.filter((n) => !productOnly(n) || inReport(n));
   const shown = (prodView ? productIn : items).filter((n) => listFilterPass(n) && catPass(n));
 
   // 드롭다운 항목 옆 개수는 **전체 기준**으로 보여준다. 필터를 걸 때마다 숫자가 바뀌면
@@ -2556,12 +2574,13 @@ $("liveSort").onchange = () => {
  * opts: [값, 이름, 개수(null이면 숨김), 설명(선택), 비활성(선택)]
  */
 /** 고른 필터를 '적용 중' 칩(✕로 하나씩 지우기)과 지금 보는 건수로 — 탭 아래 줄(2026-11-18 사용자 요청) */
-const FILTER_NAMES = { work: "업무", prod: "세부품명", grade: "추천", part: "참가여부", check: "확인 필요", kind: "검토필요" };
+const FILTER_NAMES = { work: "업무", prod: "세부품명", grade: "추천", part: "참가여부", check: "확인 필요", kind: "검토필요", report: "보고" };
 function renderActiveFilters(shownN) {
   const label = (k, v) => {
     if (k === "prod") return heldProductList.find((h) => h.code === v)?.name || v;
     if (k === "check") return CHECK_OPTS.find(([c]) => c === v)?.[1] || v;
     if (k === "kind") return "검토필요만";
+    if (k === "report") return `${mdOf(v)} 매일 보고`;
     return v;
   };
   const on = Object.keys(FILTER_NAMES).filter((k) => filters[k] !== "all");
@@ -4973,11 +4992,16 @@ function renderJudgeBell() {
       + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
   };
   // 칸마다 마감이 가장 급한 3건만(11/23 사용자 — 길게 늘어놓지 않게), 나머지는 실제 공고 탭 그 대분류 탭에서
-  const section = (title, list, cat) => `<h4 class="judge-sec">${title} <span>${list.length}건</span></h4>`
+  const section = (title, list, cat, extra = "") => `<h4 class="judge-sec">${title} <span>${list.length}건</span></h4>`
     + (list.length ? `<ul>${list.slice(0, 3).map(item).join("")}</ul>` : `<p class="row2">판단할 공고가 없습니다.</p>`)
-    + (list.length > 3 ? `<p class="how"><button type="button" class="linkbtn" data-all-todo="${cat}">그 밖의 ${list.length - 3}건은 실제 공고 탭에서 판단 ›</button></p>` : "");
+    + (list.length > 3 ? `<p class="how"><button type="button" class="linkbtn" data-all-todo="${cat}">그 밖의 ${list.length - 3}건은 실제 공고 탭에서 판단 ›</button></p>` : "")
+    + extra;
+  // 가장 최근 매일 보고 공고 전부(판단한 것도) — 텔레그램 보고와 같은 목록을 실제 공고 탭에서(11/24 사용자)
+  const rep = lastDailyReport();
+  const repN = rep ? [...dailyReportNos(rep)].filter((no) => shown.has(no)).length : 0;
+  const repLink = repN ? `<p class="how"><button type="button" class="linkbtn" data-report="${rep}">${rep === todayText() ? "오늘" : mdOf(rep)} 보고 ${repN}건 모두 보기 ›</button></p>` : "";
   $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${todo.length}건</h3><p class="row2">보고에 나간 공고 중 판단 안 한 것 · 7일 안</p>`
-    + section("입찰 · 매일 보고", daily, "입찰") + section("협상 · 규격가격 · 주간 보고", weekly, "협상")
+    + section("입찰 · 매일 보고", daily, "입찰", repLink) + section("협상 · 규격가격 · 주간 보고", weekly, "협상")
     + (todo.length ? `<p class="how">공고를 누르면 그 공고로 갑니다 — 판단하면 숫자가 줄어듭니다.</p>` : "");
 }
 $("judgeBellPop").addEventListener("click", (ev) => {
@@ -4987,6 +5011,16 @@ $("judgeBellPop").addEventListener("click", (ev) => {
     for (const k of Object.keys(filters)) filters[k] = "all";
     filters.part = "미지정";
     filters.cat = ev.target.closest("[data-all-todo]").dataset.allTodo || "all";  // 입찰 · 협상 대분류 탭
+    $("liveQ").value = "";
+    return void applyFilters();
+  }
+  const repBtn = ev.target.closest("[data-report]");
+  if (repBtn) {  // 실제 공고 탭 — 그 날 매일 보고 공고만(판단한 것도), '적용 중' 칩 ✕로 풂
+    $("judgeBellPop").hidden = true;
+    showTab("live");
+    for (const k of Object.keys(filters)) filters[k] = "all";
+    prodView = false;
+    filters.report = repBtn.dataset.report;
     $("liveQ").value = "";
     return void applyFilters();
   }

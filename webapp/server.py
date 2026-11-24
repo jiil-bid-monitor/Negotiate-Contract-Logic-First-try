@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import hmac
 import json
@@ -707,16 +708,16 @@ def make_handler(app: App):
                     # 개찰 결과 받기(11/06) — 결과 없는 기록만, ids를 주면 그 기록만(force면 다시)
                     from nego import fields as F
                     from nego.bidrecommend import default_own_bizno
-                    from .bidresult import fill_results, telegram_notify
+                    from .bidresult import fill_results, telegram_notify_for
                     try:
                         config = load_config()
                         if not config.api.service_key:
                             return self._error(HTTPStatus.CONFLICT, "서버에 나라장터 인증키(NARA_SERVICE_KEY)가 없습니다")
                         base = os.environ.get("SCSBID_BASE_URL", "").strip() or F.SCSBID_BASE_URL
                         ids = [str(i) for i in data.get("ids") or []] or None
-                        # 개찰 알림(텔레그램)은 지일 방이라 지일 기록만 — 그리다는 화면에만(11/24)
+                        # 개찰 알림(텔레그램) — 지일은 지일 방, 그리다는 TELEGRAM_GRIDA_CHAT_ID가 있을 때 그리다 방(11/24)
                         done = fill_results(app.bidlog_of(co), bidcalc.make_client(config.api), base, co.bizno(),
-                                            ids=ids, force=bool(data.get("force")), notify=telegram_notify if co.default else None)
+                                            ids=ids, force=bool(data.get("force")), notify=telegram_notify_for(None if co.default else co.id))
                     except (ConfigError, ApiError) as err:
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
@@ -900,7 +901,7 @@ def build_app(db_path: Path, token: str | None, past: PastIndex | None = None, c
 def start_nightly(app: App) -> None:
     from nego import fields as F
     from nego.bidrecommend import default_own_bizno
-    from .bidnightly import Nightly
+    from .bidnightly import Nightly, default_dirs
 
     def make_client():
         try:
@@ -915,6 +916,14 @@ def start_nightly(app: App) -> None:
     pull = getattr(app, "bidlog_pull", None)
     Nightly(app.store.path.parent, app.bidlog, app.latest_run, make_client, default_own_bizno(), postaward=app.postaward,
             before=pull.pull if pull else None).start()
+    # 그리다 등 다른 회사도 같은 밤 작업(2026-11-24 사용자 결정) — 그 회사 투찰 기록·수집 결과·사업자번호로,
+    # 낙찰 후 서류는 지일만. 엑셀·성적표는 투찰 이력 폴더 안 <회사 이름>/ 폴더에
+    _, archive = default_dirs()
+    for co in app.companies.values():
+        if co.default:
+            continue
+        Nightly(co.store.path.parent, app.bidlog_of(co), co.latest_run, make_client, co.bizno(),
+                archive_dir=archive / co.name, company=co.id).start()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -955,9 +964,12 @@ def main(argv: list[str] | None = None) -> int:
     # 텔레그램 보고에 나간 공고 → 판단 기록 '미판단' (bot-state 브랜치의 보고 기록을 몇 분마다 받아 합친다)
     def on_report(entry: dict) -> int:
         kind = entry.get("kind") or ""
-        if (entry.get("date") or "") >= (app.reports.get(kind, {}).get("date") or ""):
-            app.reports[kind] = entry
-        return app.team.merge_report(entry)
+        co = app.companies.get(entry.get("company") or "jiil")  # 그리다 보고 → 그리다 판단 기록(2026-11-24)
+        if co is None:
+            return 0
+        if co.default and (entry.get("date") or "") >= (app.reports.get(kind, {}).get("date") or ""):
+            app.reports[kind] = entry  # 텔레그램 명령어(/notice 등)는 지일만
+        return co.team.merge_report(entry)
 
     ReportSync(on_report).start()
     # 매일 22시 투찰 이력 자동 수집 — 투찰내역 결과·입찰 공고 개찰 결과(추천 보정 자료)·투찰이력.xlsx·주간 성적표 (webapp/bidnightly.py)
@@ -994,7 +1006,10 @@ def main(argv: list[str] | None = None) -> int:
         sheet_cfg = None
         logging.warning("피드백 시트: %s", err)
     if sheet_cfg is not None and app.push is None:  # 서버 PC의 오래된 판단으로 시트를 덮어쓰지 않게
-        SheetSync(app.team.snapshot).start()
+        # 회사마다 — 지일은 '피드백' 탭, 그리다 등은 같은 시트의 '피드백_그리다' 탭(2026-11-24)
+        for co in app.companies.values():
+            cid = None if co.default else co.id
+            SheetSync(co.team.snapshot, write=functools.partial(feedback_sheet.write_verdicts, company=cid or "jiil")).start()
     # NAS에서만 — 수집이 끝나면 다시 켜 메모리를 비운다 (webapp/autorestart.py)
     restart_file = os.environ.get("WEBAPP_RESTART_FILE", "").strip()
     if restart_file:

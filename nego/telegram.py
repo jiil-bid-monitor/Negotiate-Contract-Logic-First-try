@@ -159,7 +159,9 @@ def report_title(categories: list[str] | None, prespec: bool, begin: datetime | 
     kinds = list(categories or ["전체 유형"])
     if prespec:
         kinds.append("사전규격")
-    title = f"{'·'.join(kinds)} 공고 보고"
+    from .config import company_tag
+
+    title = f"{company_tag()}{'·'.join(kinds)} 공고 보고"
     if begin and end:
         span = _md(begin) if begin.date() == end.date() else f"{_md(begin)}~{_md(end)}"
         title += f" ({span} 게시분)"

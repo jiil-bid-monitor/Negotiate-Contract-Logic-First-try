@@ -24,6 +24,16 @@
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 **(11/18 사용자 요청) 오늘 한 일 정리·worklog·인수인계·다음 세션 시작 메시지엔 지금 세션에서 한 작업만** — 같은 날 다른 세션(팀원 등)이 한 PR·브랜치·기록은 언급하지 않음(커밋의 Claude-Session 줄로 가림).
 
+## 2026-11-24 — 그리다도 정기 보고·판단 기록 미판단·피드백 시트·밤 22시 투찰 이력 (같은 브랜치 `claude/grida-cert-folder`, 사용자 결정)
+
+- **Actions(daily.yml) '그리다 수집 실행'**: 지일 수집이 성공한 실행마다 `python -m nego --company grida --output output/grida …`로 한 번 더(그리다 보유 자격·지역으로 거름, 수집 규칙·키워드는 같음).
+  매일 입찰 = 텔레그램 **그리다 방(Secret `TELEGRAM_GRIDA_CHAT_ID` — 없으면 그리다 단계 전체를 건너뜀)**, 주간 = 메일(`config/companies/grida/recipients.json`, 없으면 지일과 같은 받는 사람).
+  보고 제목 앞 '[그리다] '(`nego.config.company_tag` — `NEGO_COMPANY`), '판단하러 가기'에 `?co=grida`, 보낸 공고 기록 bot-state `sent_bids_grida.json`.
+- **보고 기록** `reports/{날짜}-{종류}-grida.json`(`company` 칸) → 웹앱 `on_report`가 그 회사 판단 기록에 '미판단'·'놓침', 📋도 그 회사 기준. 텔레그램 명령어용 `app.reports`는 지일만.
+- **피드백 시트** = 같은 시트의 **'피드백_그리다' 탭**(처음이면 만듦, `feedback_sheet.settings(company)`) — 보고 줄(A~R)·웹앱 판단(S~V, `SheetSync` 회사마다).
+- **밤 22시 작업**(`bidnightly.Nightly(company=)`): 그리다 투찰 기록·수집 결과·사업자번호로, 개찰 결과는 `bid_results_live_grida.jsonl`(추천이 같이 읽음), 엑셀·성적표는 투찰 이력 폴더 안 `그리다/`, 개찰 결과 알림은 서버 PC `.env` `TELEGRAM_GRIDA_CHAT_ID`가 있을 때 그리다 방. 낙찰 후 서류는 지일만.
+  시험 `tests/test_grida_reports.py`. 서버 코드 바뀜 — 웹앱 다시 켜기. **켜려면 GitHub Secret `TELEGRAM_GRIDA_CHAT_ID`(그리다 방에 봇 초대 뒤 방 ID)**.
+
 ## 2026-11-24 — 그리다 보유 자격: 서류 폴더의 등록증 PDF로 더함 · 싱크로율은 지일과 같게 (브랜치 `claude/grida-cert-folder`, 사용자 요청)
 
 - **(사용자) '싱크로율 동일하게 계산'** — 그리다도 지일 과거 사업과 비교하는 지금 계산 그대로(바꾼 것 없음).

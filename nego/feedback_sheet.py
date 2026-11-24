@@ -203,8 +203,12 @@ class _Sheets:
                   "POST", {"values": rows})
 
 
-def settings() -> tuple[str, str, str] | None:
-    """(서비스 계정 JSON, 시트 ID, 탭 이름). 키나 시트 ID가 없으면 None. 키 파일을 못 읽으면 SheetsError."""
+def settings(company: str | None = None) -> tuple[str, str, str] | None:
+    """(서비스 계정 JSON, 시트 ID, 탭 이름). 키나 시트 ID가 없으면 None. 키 파일을 못 읽으면 SheetsError.
+    지일이 아닌 회사(company, 없으면 CLI의 NEGO_COMPANY)는 같은 시트의 '<탭>_<회사 이름>' 탭(예: 피드백_그리다 — 처음이면 만듦)."""
+    from .config import DEFAULT_COMPANY, company_name, report_company
+
+    company = company if company is not None else report_company()
     sheet_id = os.environ.get("FEEDBACK_SHEET_ID", "").strip()
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
     path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip().strip("'\"")
@@ -215,7 +219,10 @@ def settings() -> tuple[str, str, str] | None:
             raise SheetsError(f"서비스 계정 키 파일을 읽을 수 없습니다 ({path}): {err}") from err
     if not sa_json or not sheet_id:
         return None
-    return sa_json, sheet_id, os.environ.get("FEEDBACK_SHEET_NAME", "").strip() or "피드백"
+    name = os.environ.get("FEEDBACK_SHEET_NAME", "").strip() or "피드백"
+    if company and company != DEFAULT_COMPANY:
+        name = f"{name}_{company_name(company)}"
+    return sa_json, sheet_id, name
 
 
 def _open(cfg: tuple[str, str, str], session: requests.Session) -> _Sheets:
@@ -281,10 +288,10 @@ def plan_verdicts(rows: list[list[Any]], wanted: dict[str, list[str]]) -> list[t
 
 
 def write_verdicts(records: dict[str, dict[str, Any]], now: datetime, session: requests.Session | None = None,
-                   prepare: bool = True) -> dict[str, int] | None:
+                   prepare: bool = True, company: str | None = None) -> dict[str, int] | None:
     """웹앱 판단 기록을 시트 S~V열에 옮겨 쓴다. 설정이 없으면 None. 실패하면 SheetsError.
     prepare=True면 S~V 머리글(예전 이름일 때만)·S열 드롭다운도 맞춘다 — 서버가 뜬 뒤 처음 한 번이면 된다."""
-    cfg = settings()
+    cfg = settings(company)
     if cfg is None:
         return None
     session = session or requests.Session()

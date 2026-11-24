@@ -58,6 +58,26 @@ def held_file(company: str | None, config_dir: Path | None = None) -> Path:
     raise ConfigError(f"모르는 회사: {company}")
 
 
+def report_company() -> str | None:
+    """정기 보고(CLI)를 어느 회사로 돌리는지 — `python -m nego --company grida`가 환경변수 NEGO_COMPANY에 둔다.
+    지일(기본)이면 None. 보고 제목·보고 기록 파일·피드백 시트 탭·메일 받는 사람이 이 값으로 갈린다(2026-11-24 그리다)."""
+    value = os.environ.get("NEGO_COMPANY", "").strip()
+    return value if value and value != DEFAULT_COMPANY else None
+
+
+def company_name(company: str | None) -> str:
+    for row in list_companies():
+        if row["id"] == (company or DEFAULT_COMPANY):
+            return str(row.get("name") or row["id"])
+    return str(company or "")
+
+
+def company_tag(company: str | None = None) -> str:
+    """보고 제목 앞 '[그리다] ' — 지일은 빈 글자(예전 제목 그대로)."""
+    company = company if company is not None else report_company()
+    return f"[{company_name(company)}] " if company and company != DEFAULT_COMPANY else ""
+
+
 def load_config(config_dir: Path | None = None, company: str | None = None) -> AppConfig:
     """`company`(companies.json의 id)를 주면 그 회사의 보유 자격 파일을 쓴다 — 키워드·수집 규칙은 같다."""
     directory = config_dir or DEFAULT_CONFIG_DIR

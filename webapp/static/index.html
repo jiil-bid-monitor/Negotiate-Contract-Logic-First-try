@@ -130,17 +130,14 @@ body {
 .co-pick[hidden] { display: none; }
 body.picking { overflow: hidden; }
 .co-pick-box { width: min(560px, 100%); text-align: center; }
-.co-pick-box h2 { font-family: var(--head); font-size: 24px; margin: 0 0 8px; color: var(--ink-strong); }
-.co-pick-box p { margin: 0 0 24px; color: var(--muted); font-size: 14px; }
+.co-pick-box h2 { font-family: var(--head); font-size: 24px; margin: 0 0 24px; color: var(--ink-strong); }
 .co-pick-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .co-pick-btns button {
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 12px; cursor: pointer;
   background: #fff; border: 2px solid var(--line); border-radius: 8px; color: var(--ink-strong);
 }
 .co-pick-btns button b { font-family: var(--head); font-size: 28px; }
-.co-pick-btns button span { font-size: 13px; color: var(--muted); }
 .co-pick-btns button:hover, .co-pick-btns button:focus-visible { border-color: var(--brand); outline: none; background: #f3faf6; }
-.co-pick-box .co-pick-note { margin: 20px 0 0; font-size: 12px; }
 @media (max-width: 480px) { .co-pick-btns { grid-template-columns: 1fr; } .co-pick-btns button { padding: 24px 12px; } }
 
 /* 테마 토글. 상단바는 두 모드에서 모두 어두우므로 여기 색은 흰 계열로 고정한다. */
@@ -1608,12 +1605,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 <div class="co-pick" id="coPick" hidden role="dialog" aria-modal="true" aria-labelledby="coPickTitle">
   <div class="co-pick-box">
     <h2 id="coPickTitle">어느 회사 공고를 볼까요?</h2>
-    <p>회사마다 보유 자격이 달라 자격 판정·제외 공고·판단 기록이 따로입니다.</p>
     <div class="co-pick-btns">
-      <button type="button" data-co="jiil"><b>지일</b><span>(주)지일</span></button>
-      <button type="button" data-co="grida"><b>그리다</b><span>(주)그리다</span></button>
+      <button type="button" data-co="jiil"><b>(주)지일</b></button>
+      <button type="button" data-co="grida"><b>(주)그리다</b></button>
     </div>
-    <p class="co-pick-note">나중에 바꾸려면 맨 위 회사 이름을 누르세요.</p>
   </div>
 </div>
 

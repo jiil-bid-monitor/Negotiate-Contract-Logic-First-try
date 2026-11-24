@@ -1,0 +1,155 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-24",
+ "reportedAt": "2026-11-23T23:58:56+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01850520",
+   "title": "빙해수조 모형시험용 모형선 제작",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "한국해양과학기술원 부설 선박해양플랜트연구소",
+    "budgetAmount": 51000000.0,
+    "confidence": "강력추천",
+    "bidMethod": "수의",
+    "keywords": [
+     "전시물"
+    ],
+    "products": [
+     "실물모형및전시물"
+    ],
+    "paths": [
+     "관심 키워드",
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 42,
+    "deadline": "2026-11-24T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01850520&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01831221",
+   "title": "김천 김밥거리조성 시설물 제작, 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "경상북도 김천시",
+    "budgetAmount": 379398182.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [
+     "조형물"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 57,
+    "deadline": "2026-11-24T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01831221&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01847452",
+   "title": "스마트 AI 마이닝 시험광산의 지하공간 및 암반구조물 정밀 안전진단",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "한국지질자원연구원",
+    "budgetAmount": 40909091.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 45,
+    "deadline": "2026-11-25T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01847452&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01848727",
+   "title": "세경대학교 실내 스크린 파크골프 아카데미 연습장조성",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "사회복지법인 심명규복지법인",
+    "budgetAmount": 131818182.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 52,
+    "deadline": "2026-11-30T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01848727&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01849219",
+   "title": "창녕군 청년 경영실습 임대농장 조성사업(건축, 토목공사) [입찰대행]",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "경상남도 창녕군",
+    "budgetAmount": 1123429091.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "금속창호ㆍ지붕건축물조립공사업/4991"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 66,
+    "deadline": "2026-12-02T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01849219&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01850273",
+   "title": "경북기계공업고등학교 환경개선공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "대구광역시교육청",
+    "budgetAmount": 1514087273.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "금속창호ㆍ지붕건축물조립공사업/4991"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 46,
+    "deadline": "2026-12-08T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01850273&bidPbancOrd=000"
+   }
+  }
+ ]
+}

@@ -211,6 +211,8 @@ class TestOverseas(unittest.TestCase):
         self.assertEqual(r.overseas_suspect, "제목에 해외 지명 '두바이'")
         r = screen.screen(_notice(title="보행자 인도 정비 전시관 안내"), _screen_config())
         self.assertIsNone(r.overseas_suspect, "'인도'는 표시에서 뺀다")
+        r = screen.screen(_notice(title="중앙선 영주~옹천 노후 연선전화기 개량공사 전시관"), _screen_config())
+        self.assertIsNone(r.overseas_suspect, "'연선전화기'의 '선전'은 중국 선전이 아님(11/24)")
 
 
 class TestSection(unittest.TestCase):

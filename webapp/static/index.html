@@ -359,6 +359,9 @@ body {
 .calpop { width: 340px; }
 .calpop .calhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .calpop .calhead h3 { margin: 0; }
+.calpop .calmonth { position: relative; cursor: pointer; padding: 2px 8px; border-radius: 6px; }
+.calpop .calmonth:hover { background: var(--line-soft, #f0f0f0); }
+.calpop .calmonth input { position: absolute; inset: 0; opacity: 0; pointer-events: none; width: 100%; }
 .calpop .calhead button { font: inherit; font-size: 15px; width: 28px; height: 28px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; cursor: pointer; }
 .calpop .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .calpop .grid .wd { color: var(--muted); font-size: 11.5px; padding: 2px 0; }
@@ -5260,14 +5263,23 @@ function renderCalendar() {
   const cur = CAL.range || (CAL.day === today && month === today.slice(0, 7) ? "today" : "");
   const ranges = [["today", "오늘"], ["week", "7일"], ["month", "이 달"]]
     .map(([v, l]) => `<button type="button" data-crange="${v}" aria-pressed="${cur === v}" class="${cur === v ? "on" : ""}">${l}</button>`).join("");
-  $("calBellPop").innerHTML = `<div class="calhead"><button type="button" data-cmon="-1" aria-label="지난달">‹</button><h3>${y}년 ${m}월</h3><button type="button" data-cmon="1" aria-label="다음 달">›</button></div>`
+  $("calBellPop").innerHTML = `<div class="calhead"><button type="button" data-cmon="-1" aria-label="지난달">‹</button><label class="calmonth" title="눌러서 연·월 바로 고르기"><h3>${y}년 ${m}월 ▾</h3><input type="month" data-cpick value="${month}" aria-label="연·월 고르기"></label><button type="button" data-cmon="1" aria-label="다음 달">›</button></div>`
     + `<div class="grid">${cells}</div>`
     + `<div class="legend">${Object.entries(CAL_KIND).map(([k, l]) => `<span><i class="k-${k}"></i>${l}</span>`).join("")}</div>`
     + `<div class="ranges" role="group" aria-label="볼 기간">${ranges}</div>`
     + body;
 }
+// 연·월 바로 고르기(11/24 사용자 — 한 달씩 넘기면 1년 전으로 가기 번거로움)
+$("calBellPop").addEventListener("change", (ev) => {
+  if (!ev.target.matches("[data-cpick]") || !/^\d{4}-\d{2}$/.test(ev.target.value)) return;
+  CAL.month = ev.target.value;
+  CAL.day = "";
+  CAL.range = "month";  // 고른 달 일정 전체를 바로
+  renderCalendar();
+});
 $("calBellPop").addEventListener("click", (ev) => {
   const t = ev.target;
+  if (t.closest(".calmonth") && !t.matches("[data-cpick]")) { const i = t.closest(".calmonth").querySelector("input"); try { i.showPicker(); } catch (e) { i.focus(); } return; }
   const mon = t.closest("[data-cmon]");
   if (mon) {
     const [y, m] = (CAL.month || ymd(new Date()).slice(0, 7)).split("-").map(Number);

@@ -126,6 +126,14 @@ body {
 }
 .co-chip span { font-size: 11px; opacity: .75; }
 .co-chip:hover { background: rgba(255,255,255,.2); }
+/* 회사 이름을 누르면 다른 회사로 바로(2026-11-24 사용자 요청) */
+.co-switch { position: relative; flex: none; }
+.co-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 50; min-width: 150px; padding: 4px;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+.co-menu[hidden] { display: none; }
+.co-menu button { display: block; width: 100%; text-align: left; padding: 8px 12px; border: 0; background: none; cursor: pointer;
+  font-family: var(--head); font-size: 14px; color: var(--ink-strong); border-radius: 6px; }
+.co-menu button:hover, .co-menu button:focus-visible { background: #f3faf6; outline: none; }
 .co-pick { position: fixed; inset: 0; z-index: 1000; background: var(--bg, #f4f4f4); display: grid; place-items: center; padding: 16px; }
 .co-pick[hidden] { display: none; }
 body.picking { overflow: hidden; }
@@ -1617,7 +1625,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <!-- JIIL 로고(사용자 제공 이미지를 SVG로, 10/15) — 다크 바 위에서 흰색으로 보이게 CSS가 반전시킨다 -->
     <a href="#live" class="logo-home" title="실제 공고로" data-home><svg class="logo" width="67" height="30" viewBox="14 13 78 35" role="img" aria-label="JIIL" fill="currentColor"><path d="M23.8 14 L36.4 14 L36.4 25.5 C36.4 34 32.5 40.5 21.8 46.8 L17.4 33.2 L17.2 31.2 L22.4 26 L23.6 22.8 Z"/><rect x="40" y="14" width="12.5" height="33"/><rect x="57" y="14" width="13" height="33"/><path d="M74 14H86V33L89.4 37.6V47H74Z"/></svg></a>
     <span class="slash">|</span>
-    <button type="button" class="co-chip" id="coChip" title="다른 회사 공고 보기">지일<span aria-hidden="true">▾</span></button>
+    <div class="co-switch">
+      <button type="button" class="co-chip" id="coChip" title="다른 회사 공고 보기" aria-haspopup="true" aria-expanded="false">지일<span aria-hidden="true">▾</span></button>
+      <div class="co-menu" id="coMenu" hidden role="menu"></div>
+    </div>
     <div class="brand-text">
       <h1>나라장터 공고 수집</h1>
       <p class="corpus-sum" id="corpusSum" hidden>과거 실적을 불러오는 중…</p>
@@ -5610,7 +5621,14 @@ setInterval(loadCalendar, 10 * 60 * 1000);
 
 // 회사 고르기 연결 (2026-11-24) — 이 탭에서 아직 안 골랐으면 첫 화면에 '지일 / 그리다'
 $("coChip").firstChild.textContent = CO_NAME;
-$("coChip").onclick = showCompanyPick;
+// 회사 이름을 누르면 다른 회사 목록 — 누르면 바로 그 회사로(2026-11-24 사용자 요청, 예전엔 고르기 화면을 다시 띄웠음)
+$("coMenu").innerHTML = Object.entries(COMPANY_NAMES).filter(([id]) => id !== CO)
+  .map(([id, name]) => `<button type="button" role="menuitem" data-co="${id}">${name}</button>`).join("");
+const setCoMenu = (open) => { $("coMenu").hidden = !open; $("coChip").setAttribute("aria-expanded", String(open)); };
+$("coChip").onclick = (ev) => { ev.stopPropagation(); setCoMenu($("coMenu").hidden); };
+$("coMenu").onclick = (ev) => { const b = ev.target.closest("[data-co]"); if (b) pickCompany(b.dataset.co); };
+document.addEventListener("click", (ev) => { if (!ev.target.closest(".co-switch")) setCoMenu(false); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setCoMenu(false); });
 $("coPick").onclick = (ev) => { const b = ev.target.closest("[data-co]"); if (b) pickCompany(b.dataset.co); };
 document.title = CO === "jiil" ? document.title : `${CO_NAME} · ${document.title}`;
 document.querySelector("footer").firstChild.textContent = `\n    (주)${CO_NAME} · 로컬 전용 도구\n  `;

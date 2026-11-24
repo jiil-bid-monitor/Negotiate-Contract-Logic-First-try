@@ -48,6 +48,7 @@ def test_companies_and_held_files():
 
 def test_screen_has_picker():
     html = (ROOT / "webapp" / "static" / "index.html").read_text(encoding="utf-8")
+    assert 'id="coMenu"' in html, "회사 이름 칩 → 다른 회사 바로 이동"
     assert 'id="coPick"' in html and 'data-co="jiil"' in html and 'data-co="grida"' in html
     assert "co=" in html and "sessionStorage" in html, "고른 회사를 요청마다 붙이고 이 탭에 기억"
 

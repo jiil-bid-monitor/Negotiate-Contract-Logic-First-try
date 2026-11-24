@@ -47,7 +47,7 @@
 ## 2026-11-24 — 웹앱 첫 화면 회사 고르기: 지일 · 그리다 (브랜치 `claude/company-picker`, 사용자 요청)
 
 - **(사용자) 자회사 (주)그리다 전용 웹앱도 — 법인서류·자격 보유 여부만 다르고 같은 서버·로직.** 웹앱을 열면 '지일 / 그리다' 두 버튼(`#coPick`),
-  고른 회사는 이 탭에 기억(sessionStorage — F5는 그대로, 새 창·새 탭은 다시 고름), 맨 위 회사 이름 칩(`#coChip`)을 누르면 다시 고름, 주소 `?co=grida`면 바로 그 회사.
+  고른 회사는 이 탭에 기억(sessionStorage — F5는 그대로, 새 창·새 탭은 다시 고름), 맨 위 회사 이름 칩(`#coChip`)을 누르면 다른 회사 이름이 아래로 나오고 누르면 바로 그 회사(`#coMenu`, 11/24 사용자 요청 — 예전엔 고르기 화면을 다시 띄움), 주소 `?co=grida`면 바로 그 회사.
   화면은 모든 `/api/` 요청에 `?co=<id>`를 붙이고(정량평가서 iframe 빼고), 서버는 `App.company(q)`로 회사 묶음(`webapp/company.py` `Company` — store·판단 기록·수집기·공고문 세부품명 확인)을 고름. 없으면 지일.
 - 회사 목록 `config/companies.json`, 보유 자격 = 회사마다 다른 파일(`load_config(company=)` — 지일은 예전 `held_qualifications.json`, 그리다는 `config/companies/grida/held_qualifications.json`).
   **키워드·수집 규칙은 같음**(사용자 결정). 데이터: 지일은 예전 `data/` 그대로, 그리다는 `data/grida/`(수집 결과 sqlite·participation.json·doc_products.json, 백업은 BACKUP_DIR/grida).

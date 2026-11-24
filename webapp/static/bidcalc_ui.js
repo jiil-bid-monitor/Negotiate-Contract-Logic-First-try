@@ -5,6 +5,8 @@
 
 (function () {
   const C = window.BidCalc;
+  // 고른 회사 이름(index.html 회사 고르기 — 2026-11-24 그리다도 투찰 계산기). 투찰 기록·개찰 결과의 '우리 회사' 표시
+  const OWN = (typeof CO_NAME === "string" && CO_NAME) || "지일";
   const $ = (sel) => document.querySelector(sel);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   // 접속 토큰은 쿠키로 간다(처음 ?t= 주소로 들어올 때 서버가 심음)
@@ -494,7 +496,7 @@
     "추첨 모형 추천(번호 선택 경향 → 모의 추첨)": ["추첨 모형 추천", "과거 공고에서 업체들이 어느 번호를 많이 골랐는지 배워, 예정가격이 정해지는 추첨(업체마다 번호 2개 → 많이 뽑힌 4개 평균)을 여러 번 흉내 내고, 1순위가 될 가능성이 가장 높은 금액을 골랐어요."],
     "가중 KNN 추천(닮은 공고에 무게)": ["닮은 공고 가중 추천", "과거 공고를 넣고 빼는 대신, 이 공고와 닮은 정도(분야·업무·변동폭·하한율·발주 방식·지역·금액 규모·최근일수록)만큼 무게를 주고 1순위가 될 가능성이 가장 높은 금액을 골랐어요."],
     "간격 예측 추천(1순위 간격 부스팅)": ["1순위 간격 예측 추천", "공고 특성으로 '1순위 업체가 하한선보다 얼마나 위에 쓸지'를 학습 모델로 예측하고, 하한선과 1순위 사이에 들 가능성이 가장 높은 금액을 골랐어요."],
-    "지일 실제 투찰(외주)": ["지일 실제 투찰(참고)", "비슷한 과거 공고에 지일이 실제로 낸 금액의 나라장터 결과예요(외주 추천값). 기준 사정률 칸은 그 공고들의 가운데 값이에요. 비교용 참고 줄이에요."],
+    "지일 실제 투찰(외주)": [`${OWN} 실제 투찰(참고)`, `비슷한 과거 공고에 ${OWN}이 실제로 낸 금액의 나라장터 결과예요${OWN === "지일" ? "(외주 추천값)" : ""}. 기준 사정률 칸은 그 공고들의 가운데 값이에요. 비교용 참고 줄이에요.`],
   };
   // 기준 사정률 — 이 금액을 정할 때 "예정가격 = 기초금액 × 이 값"으로 본 값(10/29: '가정 사정률'이 무슨 뜻인지 헷갈려 이름·설명을 바꿈)
   const RATE_HELP = "이 금액을 정할 때 '예정가격이 기초금액의 몇 %로 나올지'를 이 값으로 보고 계산했어요. 실제 사정률이 이 값보다 낮게 나오면 하한선을 넘고(통과), 높게 나오면 미달이에요. 높게 잡을수록 통과는 쉬워지지만 금액이 올라가 순위는 밀려요.";
@@ -608,7 +610,7 @@
     const sum = ranked.length ? `1~${ranked[ranked.length - 1].rank}위 업체는 실제 사정률보다 ${g(ranked[0].gap)} ~ ${g(ranked[ranked.length - 1].gap)} 위에 썼어요` : "";
     const rows = t.ranks.map((r) => `<tr><td>${r.rank}위 업체</td><td>${g(r.gap)}</td><td>${range(r.gap)}</td><td>${r.gap.n || 0}건</td></tr>`).join("");
     const o = t.own;
-    const ownRow = o ? `<tr class="own"><td>지일(참고)</td><td>${g(o.gap)}</td><td>${range(o.gap)}</td><td>${o.tried}건</td></tr>` : "";
+    const ownRow = o ? `<tr class="own"><td>${OWN}(참고)</td><td>${g(o.gap)}</td><td>${range(o.gap)}</td><td>${o.tried}건</td></tr>` : "";
     return `<details class="rec-more"><summary>투찰 경향 — ${esc(d.field || "비슷한 공고")} ${t.n}건${sum ? ` · ${sum}` : ""}
         ${tip(`<h4>투찰 경향 읽는 법</h4>각 순위 업체가 쓴 금액을 사정률로 바꿨을 때, 실제 사정률보다 얼마나 위였는지예요.
         <ul><li>0에 가까울수록 하한선에 바짝 붙은 금액</li><li>음수면 하한선 아래(탈락)</li></ul>
@@ -714,7 +716,7 @@
     if (a.kind === "web" || a.kind === "out" || a.kind === "other") return a.differs ? ` <span class="actual-warn" title="기록할 때 고른 금액과 나라장터 실제 투찰 금액이 다름">기록과 다름</span>` : "";
     const lab = a.plan ? { web: "투찰금액으로 투찰", out: "외주 금액으로 투찰" }[a.kind]
       : { web: "투찰금액으로 투찰", out: "외주 금액으로 투찰", none: "투찰 안 함", other: `다른 금액으로 투찰 (${won(a.amount || 0)}원)` }[a.kind];
-    const tip = a.plan ? "기록할 때 고른 금액 — 개찰 뒤 나라장터 실제 금액으로 확인" : "나라장터 개찰 결과의 지일 실제 금액으로 확인";
+    const tip = a.plan ? "기록할 때 고른 금액 — 개찰 뒤 나라장터 실제 금액으로 확인" : `나라장터 개찰 결과의 ${OWN} 실제 금액으로 확인`;
     return ` <span class="cm actual actual-${a.kind}${a.plan ? " plan" : ""}" title="${tip}">${esc(lab)}</span>${a.differs ? `<span class="actual-warn">기록과 다름</span>` : ""}`;
   }
   // 실제로 낸 쪽 금액은 그대로, 다른 쪽은 흐리게
@@ -798,7 +800,7 @@
         <div><span>웹앱 금액 투찰률</span><b>${s.bidRate != null ? pct3(s.bidRate) : "-"}</b></div>
       </div></div>`;
     const realPlace = real ? (real.rank != null ? `${real.rank}위 / ${res.bidderCount}곳` : real.underRank != null ? `하한선 미달 (${real.underRank}등)` : esc(real.remark || "순위 없음")) : "참가 안 함";
-    return `<div class="res-compare"><div class="res-compare-head">비교 기록 — 위 결과는 웹앱 기록 금액(${won(s.amount)}원) 기준, 아래는 실제 투찰${real ? "" : "(지일 참가 없음)"}</div>
+    return `<div class="res-compare"><div class="res-compare-head">비교 기록 — 위 결과는 웹앱 기록 금액(${won(s.amount)}원) 기준, 아래는 실제 투찰${real ? "" : "(${OWN} 참가 없음)"}</div>
       <div class="res-grid">
         <div><span>웹앱 금액 − 낙찰하한가</span><b>${s.gapToFloor != null ? `${s.gapToFloor >= 0 ? "+" : "−"}${won(Math.abs(s.gapToFloor))}원` : "-"}</b></div>
         ${gap(s.gapToWinner, "웹앱 금액 − 실제 1순위")}
@@ -817,10 +819,10 @@
     // 하한선 통과/미달은 옆 개찰 결과 칸(낙찰·탈락 아래)과 겹쳐 등수만(11/10) — 지일이 참가 안 한 공고만 기준 대비 통과/미달
     // 오른쪽 칸은 등수만(11/13 사용자 요청 — 참가 수는 개찰 결과 칸 '실제 투찰 N등 / M곳'에만)
     // 오른쪽 칸은 늘 등수만(11/20 사용자 요청 — '하한선 통과·미달' 글은 안 씀), 나라장터 결과에 지일 순위가 없으면 '순위 없음'(이유는 커서를 대면)
-    const main = place ? `<span class="rank-who">지일</span><span class="nowrap">${place}</span>` :  // 웹앱·지일은 등수 바로 위 작은 글씨(11/13 사용자 요청)
+    const main = place ? `<span class="rank-who">${OWN}</span><span class="nowrap">${place}</span>` :  // 웹앱·지일은 등수 바로 위 작은 글씨(11/13 사용자 요청)
       o ? (() => {  // 등수가 없으면 그 이유(나라장터 비고 — 오기입으로 '예가초과' 등, 11/20 사용자 확인)를 짧게, 비고도 없으면 '순위 없음'
         const why = (o.remark || "").replace("낙찰하한선미달", "하한선 미달").trim();
-        return `<span class="rank-who">지일</span><span class="nowrap res-none" title="${esc(why || "나라장터 결과에 순위 없음")}">${esc(why && why.length <= 10 ? why : "순위 없음")}</span>`;
+        return `<span class="rank-who">${OWN}</span><span class="nowrap res-none" title="${esc(why || "나라장터 결과에 순위 없음")}">${esc(why && why.length <= 10 ? why : "순위 없음")}</span>`;
       })() : "";
     // 아래 줄의 실제·웹앱 사정률·기준 차이는 뺌(11/13 사용자 요청 — 펼친 결과 칸에 있음, 표가 좌우로 넘침)
     // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색
@@ -832,7 +834,7 @@
     return C.bidAmount({ planned: res.plannedPrice, lowerRate: r.lowerRate, a: res.aValue ?? r.aValue ?? 0, how: "ceil", unit: 1 });
   }
   function detailRow(r) {
-    const res = r.result || {}, o = mine(res), w = res.winner, lab = o && o.recorded ? "웹앱" : "지일";
+    const res = r.result || {}, o = mine(res), w = res.winner, lab = o && o.recorded ? "웹앱" : OWN;
     const item = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
     return `<tr class="bidlog-detail" data-id="${esc(r.id)}"><td colspan="8"><div class="res-grid">
       ${item("1순위 업체", w ? esc(w.name) : "-")}

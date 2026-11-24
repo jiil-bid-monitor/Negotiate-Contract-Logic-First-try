@@ -481,13 +481,19 @@ def default_own_bizno() -> str:
         return ""
 
 
-def history_from_dir(directory: Path) -> History:
-    """폴더의 과거 개찰 파일 — 파일이 바뀌었을 때만 다시 읽는다(웹앱이 추천을 부를 때마다 수 MB를 읽지 않게)."""
+def history_from_dir(directory: Path, own_bizno: str | None = None) -> History:
+    """폴더의 과거 개찰 파일 — 파일이 바뀌었을 때만 다시 읽는다(웹앱이 추천을 부를 때마다 수 MB를 읽지 않게).
+    own_bizno: '우리 회사' 투찰 줄을 찾을 사업자번호(없으면 지일, 2026-11-24 그리다 화면) — 과거 개찰 자료는 같고 그 줄만 다름.
+    회사마다 따로 들고 있음(지일·그리다 두 벌까지)."""
     paths = history_paths(directory)
-    key = tuple((str(p), p.stat().st_mtime_ns) for p in paths)
-    if _CACHE.get("key") != key:
-        _CACHE.update(key=key, history=load_history(paths, default_own_bizno()))
-    return _CACHE["history"]
+    own = _clean_bizno(own_bizno or default_own_bizno())
+    key = (own, tuple((str(p), p.stat().st_mtime_ns) for p in paths))
+    held = _CACHE.setdefault("by_own", {})
+    if (held.get(own) or {}).get("key") != key:
+        if len(held) >= 2 and own not in held:
+            held.pop(next(iter(held)))
+        held[own] = {"key": key, "history": load_history(paths, own)}
+    return held[own]["history"]
 
 
 def _scale_ok(rec: PastBid, scale: str) -> bool:

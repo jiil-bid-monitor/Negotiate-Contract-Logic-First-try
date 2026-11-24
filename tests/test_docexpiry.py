@@ -266,6 +266,8 @@ class TestDocManage(unittest.TestCase):
         self.assertEqual(moved, 1)
         self.assertTrue((self.f / "[이전 서류]" / "사업자등록증_2026-01-05.pdf").exists())
         self.assertEqual(U.new_kind_name("  조경식재공사업  등록증 "), "조경식재공사업 등록증")
+        for raw in ("그리다 - 여성기업", "그리다-여성기업", "[그리다] 여성기업", "그리다_여성기업", "(그리다)여성기업", "그리다 여성기업"):
+            self.assertEqual(U.new_kind_name(raw), "(그리다) 여성기업", raw)
         for bad in ("", "../x", "a/b", "가" * 41):
             self.assertIsNone(U.new_kind_name(bad))
 

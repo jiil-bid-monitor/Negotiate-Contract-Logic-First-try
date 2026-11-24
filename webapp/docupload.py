@@ -309,6 +309,9 @@ OURS = -600
 def new_kind_name(text: str) -> str | None:
     """새 서류 종류 이름 — 파일 이름이 되므로 40자 안, 못 쓰는 기호 없이. 안 되면 None (텔레그램·웹앱 같이)."""
     name = re.sub(r"\s+", " ", text or "").strip()
+    # 그리다 서류는 앞머리를 '(그리다) '로 통일(11/24 사용자) — '그리다 - 여성기업'·'[그리다]여성기업'·'그리다_여성기업' 등
+    if m := re.match(r"^[(\[{（【]?\s*그리다\s*[)\]}）】]?\s*[-_:·.,]?\s*(.+)$", name):
+        name = f"(그리다) {m.group(1)}"
     return name if name and len(name) <= 40 and not re.search(r'[\\/:*?"<>|]', name) and name not in (".", "..") else None
 
 

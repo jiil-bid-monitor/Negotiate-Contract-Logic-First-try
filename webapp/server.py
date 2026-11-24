@@ -130,6 +130,20 @@ class App:
             path.write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
             return merged
 
+    def help_question(self, item: dict) -> None:
+        """도우미에 직접 적은 질문을 data/help_questions.json에 모음(11/24 사용자 — Typebot으로 옮길 때 자주 묻는 것부터 답을 늘리려고).
+        회사 밖으로 보내지 않음, 최근 2,000건만."""
+        q = str(item.get("q") or "").strip()[:300]
+        if not q:
+            return
+        path = self.store.path.parent / "help_questions.json"
+        row = {"q": q, "result": str(item.get("result") or "")[:20], "tab": str(item.get("tab") or "")[:20],
+               "at": datetime.now().isoformat(timespec="seconds")}
+        with self._seen_lock:
+            rows = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+            rows = (rows + [row])[-2000:]
+            path.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+
     def award_root(self, test: bool = False) -> Path:
         """낙찰 후 서류 폴더를 만들 곳 — 공유 폴더 맨 위 '낙찰후서류'(POSTAWARD_DIR로 바꿈), 시험 페이지는 그 옆 '낙찰후서류_테스트'."""
         base = Path(os.environ.get("POSTAWARD_DIR", "").strip() or self.store.path.resolve().parents[2] / "낙찰후서류")
@@ -721,6 +735,9 @@ def make_handler(app: App):
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
                     return self._json({"ok": True, **done, "entries": app.bidlog_of(co).entries()})
+                if url.path == "/api/help-question":  # 도우미에 직접 적은 질문 모으기(11/24)
+                    app.help_question(data)
+                    return self._json({"ok": True})
                 if url.path == "/api/bidlog/seen":  # 일정 창에서 본 개찰 결과(공고번호) — PC가 달라도 같게(11/24)
                     return self._json({"seen": app.result_seen(data.get("ids") or [])})
                 if url.path == "/api/bidlog/delete":

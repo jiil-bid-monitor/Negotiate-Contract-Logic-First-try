@@ -5104,3 +5104,24 @@ def test_bid_application_agent_name_and_group_name_label(tmp_path: Path):
         text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
         assert ("김대리" in text) == want, text
         assert re.search(r"단체\(또는 법인\) 명 : ?\(주\)가상", text), text
+
+
+def test_credit_grade_in_note_column(tmp_path: Path):
+    """11/25 사용자 요청: 경영상태 '… | 4.5점 | 4.5 | 비고' — 점수를 넣은 줄의 비고 칸에 해당 등급, 상한 줄 비고('최저점 3.5점')는 그대로."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore
+
+    c = lambda col, row, t, span=1, rs=1: (f'<hp:tc><hp:subList>' + "".join(f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{x}</hp:t></hp:run></hp:p>' for x in t.split("\n"))
+                                           + f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항 목"), c(1, 0, "세 부 항 목", 3), c(4, 0, "배 점"), c(5, 0, "평 점"), c(6, 0, "비 고")],
+            [c(0, 1, "경영상태", 1, 4), c(1, 1, "회사채"), c(2, 1, "기업어음"), c(3, 1, "기업신용"), c(4, 1, ""), c(5, 1, ""), c(6, 1, "")]]
+    for i, (a, b, p) in enumerate((("AAA, AA+, A0, BBB+, BBB0", "A1, A20, A30", "5.0점"), ("BBB-, BB+, BB0, BB-", "A3-, B+, B0", "4.5점"))):
+        rows.append([c(1, 2 + i, a), c(2, 2 + i, b), c(3, 2 + i, a), c(4, 2 + i, p), c(5, 2 + i, ""), c(6, 2 + i, "")])
+    rows.append([c(1, 4, "상 한 점 수", 3), c(4, 4, "5점"), c(5, 4, ""), c(6, 4, "최저점 3.5점")])
+    body = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 25)))
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
+    assert "4.5점|4.5|BB+|" in text, text
+    assert "최저점 3.5점" in text and text.count("BB+|") == 1, text

@@ -631,9 +631,9 @@ def share_path(path: Path | str) -> str:
 def project_path(v: dict, folder: Path) -> str:
     """계약까지 온 공고의 사업 폴더 주소(POSTAWARD_PROJECT_ROOT가 있을 때, 맞추는 일은 서버 PC awardsync). 없으면 ''."""
     root = os.environ.get("POSTAWARD_PROJECT_ROOT", "").strip().rstrip("\\/")
-    if not root or not v.get("bidYear"):
+    if not root or not (folder / "1_계약").is_dir():
         return ""
-    return "\\".join([root.replace("/", "\\"), f"{v['bidYear']} 프로젝트", "입찰", folder.name])
+    return "\\".join([root.replace("/", "\\"), "입찰", folder.name])
 
 
 # 착수서류 인력 줄 이름(표준틀 build_v5 SWITCH와 같게 — 11/19, 조직도 칸 이름)
@@ -687,27 +687,29 @@ def lookup(client: Any, base_url: str, no: str, ord_: str, work: str) -> tuple[s
 
 _LOCKED = "열려 있어 채우지 못함"
 LOST_DAYS = 30  # 탈락 폴더를 이만큼 두었다가 지움(11/25 사용자)
-FIRST_READ = "처음_읽어주세요.txt"
+FIRST_READ = "폴더_안내.txt"
 
 
 def first_read(work: str) -> str:
-    """낙찰돼 처음 생긴 폴더에 넣는 메모(11/25 사용자 — 짧고 쉽게)."""
+    """낙찰돼 처음 생긴 폴더에 넣는 안내(11/25 사용자 — 짧게, 회사 문서 말투)."""
     start = "2_착공" if work == "공사" else "2_착수"
     done = DONE_TEMPLATES[work][1] if work in DONE_TEMPLATES else "3_준공"
     return "\r\n".join([
-        "낙찰된 공고의 폴더입니다. 웹앱이 만들었습니다.", "",
-        "[지금 할 일]",
-        "1. 웹앱 '낙찰 후 서류'에서 '낙찰 서류 만들기' 누르기",
-        "2. 생긴 엑셀에서 노란 칸 채우기",
-        "3. 저장하기. 끝!", "",
-        "[폴더]",
-        "1_계약 : 계약서", f"{start} : {start[2:]} 서류", f"{done} : {done[2:]} 서류", "4_청구 : 청구서", "공고문서 : 공고문", "",
-        "[이것만 지켜 주세요]",
-        "폴더 이름은 바꾸지 마세요.", ""])
+        "[폴더 안내]", "", "낙찰된 공고의 서류를 보관하는 폴더입니다.", "",
+        "1. 진행 순서",
+        "  ① 웹앱 '낙찰 후 서류'에서 '낙찰 서류 만들기'를 눌러 주시기 바랍니다.",
+        "  ② 만들어진 엑셀의 노란 칸을 작성해 주시기 바랍니다.",
+        "  ③ 작성한 뒤 저장해 주시기 바랍니다.", "",
+        "2. 폴더 구성",
+        "  1_계약: 계약서", f"  {start}: {start[2:]} 서류", f"  {done}: {done[2:]} 서류", "  4_청구: 청구서", "  공고문서: 공고문", "",
+        "3. 유의 사항",
+        "  폴더 이름은 변경하지 않도록 주의해 주시기 바랍니다.",
+        "  사업이 끝나면 해당 연도 프로젝트의 '실행완료' 폴더로 옮겨 주시기 바랍니다.", ""])
 
 
-LOST_READ = "\r\n".join(["다른 업체가 낙찰된 공고의 폴더입니다.", f"여기로 옮기고 {LOST_DAYS}일 뒤에 저절로 지워집니다.", "",
-                         "남기고 싶으면 다른 곳에 복사해 두세요.", ""])
+LOST_READ = "\r\n".join(["[폴더 안내]", "", "다른 업체가 낙찰된 공고의 폴더를 보관하는 곳입니다.",
+                         f"옮겨진 날부터 {LOST_DAYS}일 뒤 자동으로 삭제됩니다.", "",
+                         "보관이 필요한 파일은 그 전에 다른 곳에 복사해 주시기 바랍니다.", ""])
 
 
 def _memo(path: Path, text: str) -> None:
@@ -862,8 +864,6 @@ class PostAward:
             for s in stages:
                 (folder / s).mkdir(parents=True, exist_ok=True)
             v["folder"] = str(folder)
-            if not qual_only:
-                v.setdefault("bidYear", self.now().year)  # 사업 폴더 'YYYY 프로젝트/입찰'의 해
             v.pop("wonOnly", None)
             v["qualOnly"] = qual_only  # 화면: 낙찰되면 '낙찰 서류 만들기'를 다시 보임
             self._write(items)
@@ -1379,7 +1379,7 @@ class PostAward:
         return out
 
     def open_won(self) -> int:
-        """낙찰된 공고의 폴더를 바로 만듦(11/25 사용자 '낙찰이 됐을 때 폴더가 생기도록') — 1_계약 + 처음_읽어주세요.txt. 사업 폴더로는
+        """낙찰된 공고의 폴더를 바로 만듦(11/25 사용자 '낙찰이 됐을 때 폴더가 생기도록') — 1_계약 + 폴더_안내.txt. 사업 폴더로는
         1_계약이 있는 폴더만 맞추므로(awardsync) 이때 사내 공유에도 생김. 서류는 '낙찰 서류 만들기' 때. 만든 수."""
         made = 0
         for key, v in self._read().items():
@@ -1404,7 +1404,6 @@ class PostAward:
                     x["qualOnly"] = True
                     x["wonOnly"] = True
                 x.update(folder=str(folder), wonAt=self.now().isoformat(timespec="seconds"))
-                x.setdefault("bidYear", self.now().year)
                 x.pop("lostFolder", None); x.pop("lostAt", None)
                 self._write(items)
             made += 1

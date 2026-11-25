@@ -59,10 +59,24 @@ def read_env(key: str) -> str:
     프로젝트 1 웹앱(webapp)은 .env를 읽지 않아도 이 함수로 같은 값을 씀."""
     env = ENV_FILE
     if env.exists():
-        for line in env.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        raw = env.read_bytes()
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:  # 메모장이 한글 인코딩(ANSI)으로 저장한 .env(11/25 — 대리인 이름이 안 읽힘)
+            text = raw.decode("cp949", errors="replace")
+        lines = text.splitlines()
+        for line in lines:  # 예전 그대로(비밀번호 등 글자 그대로) — 'KEY=값'
             if line.startswith(key + "="):
                 value = line[len(key) + 1:].strip("\r")
                 if len(value) >= 2 and value[0] == value[-1] == "'":
+                    value = value[1:-1]
+                if value:
+                    return value
+        for line in lines:  # 'export KEY=…'·'KEY = 값'처럼 앞말·빈칸이 붙은 줄도(11/25 — 대리인 이름이 안 읽힘)
+            m = re.match(rf"\s*(?:export\s+)?{re.escape(key)}\s*=\s*(.*?)\s*$", line)
+            if m and m.group(1):
+                value = m.group(1)
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
                     value = value[1:-1]
                 if value:
                     return value

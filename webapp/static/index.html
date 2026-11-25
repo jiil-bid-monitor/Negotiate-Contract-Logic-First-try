@@ -5157,10 +5157,20 @@ const HELP_SPOT = {
     "공고문에서 내라는 서류는 어디서 보나요?": "#awardList [data-award-open]", "아직 안 채운 칸은 어디서 보나요?": "#awardList [data-award-open]", "착공·준공·청구 중 어디까지 왔는지 보고 싶습니다": "#awardList .award-steps",
     "회사 서류를 새것으로 바꾸고 싶습니다": "#docBellBtn", "개찰 2~5등이면 무엇을 하나요?": "#awardList .award-more > summary", "개찰 6등부터는 어떻게 되나요?": "#awardList .award-group:last-of-type > summary",
     "어떤 순서로 하나요?": "#awardList .award-main" },
+  // 정량평가서 탭은 화면이 따로(iframe) 들어가 있어 그 안에서 찾음
+  quant: { "무엇부터 보면 되나요?": "#no", "어떤 순서로 하나요?": "#go", "받은 zip에는 무엇이 들어 있나요?": "#dlink", "기술인력은 왜 체크하나요?": "#staffBox > summary",
+    "실적 후보를 그대로 내도 되나요?": "#candBox > summary", "'한글 파일 필요'라고 나옵니다": "#hwpneed", "⚠ 표시가 나옵니다": "#notes", "만든 파일은 언제까지 받을 수 있나요?": "#dlink" },
 };
+const HELP_SPOT_CSS = `@keyframes help-spot { 0%, 100% { box-shadow: 0 0 0 3px #1b6e43, 0 0 0 9px rgba(27,110,67,.25); } 50% { box-shadow: 0 0 0 3px #1b6e43, 0 0 0 3px rgba(27,110,67,0); } }
+.help-spot { position: relative; z-index: 5; border-radius: 6px; box-shadow: 0 0 0 3px #1b6e43, 0 0 0 9px rgba(27,110,67,.25); animation: help-spot 1s ease-in-out 3; }`;
 const helpSpotOf = (h, tab = HELP_TAB) => (HELP_SPOT[tab] || {})[h[1]] || "";
 function helpSpot(sel) {
-  const el = [...document.querySelectorAll(sel)].find((x) => x.offsetParent !== null && !x.closest("#helpBox"));
+  let doc = document;
+  if (HELP_TAB === "quant") {  // 같은 서버의 화면이라 안쪽 문서를 읽을 수 있음. 표시 모양은 한 번 넣어 둠
+    try { doc = $("quantFrame").contentDocument || document; } catch (e) { doc = document; }
+    if (doc !== document && !doc.getElementById("helpSpotCss")) { const st = doc.createElement("style"); st.id = "helpSpotCss"; st.textContent = HELP_SPOT_CSS; doc.head.appendChild(st); }
+  }
+  const el = [...doc.querySelectorAll(sel)].find((x) => x.offsetParent !== null && !x.closest("#helpBox"));
   if (!el) { helpSay("bot", "지금 화면에는 그 자리가 보이지 않습니다.\n해당하는 공고나 기록이 생기면 나타납니다.", []); return renderHelp(); }
   $("helpBox").hidden = true;  // 가리지 않게 잠깐 접었다가 다시 엶
   el.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });

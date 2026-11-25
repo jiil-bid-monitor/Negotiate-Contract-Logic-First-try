@@ -4858,12 +4858,12 @@ const HELP_SETS = {
     [1, "'검토필요'는 뭔가요?", "공고명에 관심 키워드와 제외 키워드가\n같이 있는 공고입니다.\n다른 조건은 통과했으니\n직접 보고 판단해 주세요.", "검토필요 검토 필요"],
     [1, "'세부품명으로만 걸린 공고'는 뭔가요?", "공고명엔 관심 키워드가 없지만\n지일이 등록한 세부품명으로 걸린 공고입니다.\n오른쪽 '따로 보기'에서 모아 볼 수 있습니다.", "세부품명 품명 따로"],
 
-    [2, "참가·보류·불참은 어떻게 하나요?", "카드의 버튼을 누르고\n사유를 골라 주세요(메모도 됩니다).\nNAS와 서버 PC 웹앱에 같이 보입니다.", "참가 보류 불참 판단 사유"],
-    [2, "판단을 잘못 눌렀으면 어떻게 하나요?", "'되돌리기'를 누르면\n바로 전 판단으로 돌아갑니다.\n같은 버튼을 다시 누르면 판단이 지워집니다.", "잘못 취소 되돌리 바꾸 수정"],
+    [2, "참가·보류·불참은 어떻게 하나요?", "카드의 버튼을 누르고\n사유를 골라 주세요(메모도 됩니다).\nNAS와 서버 PC 웹앱에 같이 보입니다.", "참가 보류 불참 판단 사유 버튼"],
+    [2, "판단을 잘못 눌렀으면 어떻게 하나요?", "'되돌리기'를 누르면\n바로 전 판단으로 돌아갑니다.\n같은 버튼을 다시 누르면 판단이 지워집니다.", "잘못 취소 판단 되돌리 바꾸 수정"],
     [2, "사유는 어떻게 고치나요?", "카드의 '사유 고치기'를 눌러 주세요.", "사유 고치 수정 메모"],
     [2, "불참한 공고는 어디에 있나요?", "목록 아래 '불참' 묶음에 접혀 있습니다.\n판단 기록 탭에도 있습니다.", "불참 사라 어디 접혀"],
     [2, "'내가 맡기'는 뭔가요?", "그 공고의 담당을 나로 정합니다.\n맡은 뒤엔 '넘기기'로\n다른 팀원에게 넘길 수 있습니다.", "맡기 담당 넘기기"],
-    [2, "참가로 정한 뒤에는 무엇을 하나요?", "카드에 생기는 버튼을 눌러 주세요.\n• 협상·규격가격동시: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n사전규격에는 버튼이 없습니다.", "참가 다음 정량평가서 투찰 계산", "서버 PC 웹앱에서 같은 공고 카드의\n버튼을 눌러 주세요.\n• 협상·규격가격동시: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n사전규격에는 버튼이 없습니다."],
+    [2, "참가로 정한 뒤에는 무엇을 하나요?", "카드에 생기는 버튼을 눌러 주세요.\n• 협상·규격가격동시: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n사전규격에는 버튼이 없습니다.", "참가 참가한 다음 정량평가서 투찰 계산", "서버 PC 웹앱에서 같은 공고 카드의\n버튼을 눌러 주세요.\n• 협상·규격가격동시: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n사전규격에는 버튼이 없습니다."],
 
     [3, "자격 칩은 뭔가요?", "• 자격충족: 요구 면허를 모두 가짐\n• 자격 미보유: 빠진 면허가 있음\n칩에 커서를 대면\n빠진 면허와 공동수급 가능 여부가 보입니다.", "자격 충족 미보유 면허 칩"],
     [3, "싱크로율은 뭔가요?", "지일 과거 실적과\n과업이 얼마나 닮았는지입니다.\n참가 여부를 정하는 점수는 아닙니다.\n누르면 닮은 과거 사업이 보입니다.", "싱크로율 유사 닮은 퍼센트"],
@@ -5028,10 +5028,18 @@ function helpHello() {
   HELP_LOG.length = 0;
   helpSay("bot", "안녕하세요, 지일 도우미입니다.\n" + HS().name + " 탭은 이 순서로 보시면 됩니다.\n\n" + HS().qa[0][2] + "\n\n궁금하신 주제를 골라 주세요.", "cats");
 }
+// 여러 질문에 두루 있는 낱말(해야·어디·언제·목록 …)은 그것 하나만 겹쳐서는 비슷한 질문으로 보지 않음(11/25 사용자 — '입찰해야 할 공고'에 '제가 할 일')
+const HELP_GENERIC = (() => {
+  const df = new Map();
+  Object.values(HELP_SETS).forEach((x) => x.qa.forEach((h) => new Set(h[3].split(" ")).forEach((w) => df.set(w, (df.get(w) || 0) + 1))));
+  const list = new Set("해야 어디 언제 어떤 무엇 목록 확인 있는 없는 결과 공고 입찰 참가 사유 파일 회사 버튼 바꾸 서류 메뉴".split(" "));
+  df.forEach((n, w) => n >= 4 && list.add(w));
+  return list;
+})();
 function helpMatch(q, qa = HS().qa) {
   const t = q.replace(/[\s?？.!]+/g, "");
   const scored = qa.map((h, i) => [i, h[3].split(" ").filter((w) => w.length >= 2 && t.includes(w))  /* 한 글자 낱말은 아무 문장에나 걸려서 뺌 */.length])
-    .filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]);
+    .filter(([i, n]) => n >= 2 || (n === 1 && qa[i][3].split(" ").some((w) => w.length >= 2 && t.includes(w) && !HELP_GENERIC.has(w)))).sort((a, b) => b[1] - a[1]);
   const top = scored[0]?.[1] || 0, second = scored[1]?.[1] || 0;
   const sure = top >= 2 && (top - second >= 2 || second * 2 <= top);  // 한 답이 확실히 앞설 때만
   return { list: scored.map((x) => x[0]), sure };
@@ -5086,9 +5094,22 @@ function helpNotice(n) {
 const helpChance = (n) => "낙찰 가능성은 말씀드리기 어렵습니다.\n비교할 투찰 자료가 아직 충분하지 않고,\n" + (/협상|규격가격/.test(`${n?.bidMethodCategory || ""}${n?.bidMethod || ""}`)
   ? "제안서 평가 결과에 달려 있어\n장담할 수 없습니다."
   : "예정가격 추첨과 다른 업체의 금액에 달려 있어\n장담할 수 없습니다.\n\n금액을 정하실 때는 서버 PC 웹앱의\n'투찰 계산기'를 참고해 주세요.");
+// '우리가 입찰해야 할 공고는?' — 정해 주지는 않고, 지금 목록에서 아직 판단하지 않은 공고를 마감 순으로(11/25 사용자)
+const HELP_WHICH = /(입찰|투찰|참가|참여|지원|판단|검토)\s*(해야|할|하면|하기)[^?]*(공고|거|것|게)|(어떤|무슨|추천|할\s*만한|괜찮은|좋은)\s*(입찰\s*)?공고|공고.*(추천|골라)/;
+function helpWhich() {
+  const missing = (n) => (n.qual?.parts || []).some((x) => x.status === "미달");
+  const todo = lastItems.filter((n) => n.sourceType !== "사전규격" && !DECISIONS.includes(partOf(n)) && deadlineAt(n.deadline) > Date.now())
+    .sort((a, b) => deadlineAt(a.deadline) - deadlineAt(b.deadline));
+  if (!todo.length) return "지금 목록에는 판단하지 않은 본공고가\n없습니다.";
+  const fit = todo.filter((n) => !missing(n));
+  return `입찰할지는 담당자가 정해 주셔야 합니다.\n\n판단하지 않은 본공고가 ${todo.length}건 있고\n'자격 미보유' 표시가 없는 공고는 ${fit.length}건입니다.\n\n`
+    + (fit.length ? "그중 마감이 가까운 공고입니다.\n" : "마감이 가까운 공고입니다.\n")
+    + (fit.length ? fit : todo).slice(0, 3).map((n) => `• ${n.title}\n    ${fmtDT(n.deadline)} · ${n.noticeNo}`).join("\n") + "\n\n전체는 '실제 공고' 탭에서 봐 주세요.";
+}
 async function helpAnswer(q) {
   const exact = helpExact(q), hits = helpMatch(q), chance = HELP_CHANCE.test(q), no = HELP_NO.test(q);
   if (exact >= 0 && !no) { helpSay("bot", helpText(HS().qa[exact]), []); return "답함"; }
+  if (!no && !chance && HELP_WHICH.test(q)) { helpSay("bot", helpWhich(), []); return "판단할 공고"; }
   const found = await helpFind(q), one = found.list.length === 1 ? found.list[0] : null;
   if (one) helpSay("bot", helpNotice(one), chance ? null : []);
   else if (found.list.length && !chance) {
@@ -5108,6 +5129,10 @@ async function helpAnswer(q) {
 
 ${helpText(x.h)}`, []); return "답함"; }
   if (hits.list.length) { helpSay("bot", "비슷한 질문을 찾았습니다.\n궁금하신 것을 눌러 주세요.", hits.list.slice(0, 4)); return "고르기"; }
+  if (other.list.length) {
+    helpSay("bot", "이 탭에는 맞는 답이 없습니다.\n다른 탭에 비슷한 질문이 있습니다.\n\n" + other.list.slice(0, 3).map((i) => `• ${rest[i].tab} 탭: ${rest[i].h[1]}`).join("\n"), []);
+    return "다른 탭";
+  }
   helpSay("bot", "이 질문은 아직 준비된 답이 없습니다.\n\n공고번호나 공고명을 적으시면\n그 공고 정보를 알려 드립니다.\n사용법은 아래 주제에서 골라 주세요.", "cats");
   return "모름";
 }

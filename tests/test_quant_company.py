@@ -145,7 +145,7 @@ def test_grida_overview_and_history_from_env(monkeypatch, tmp_path):
         v = V()
         v.info = {"회사명": "주식회사 가상"}
         importer.enrich_vault(v)
-        assert v.info["회사명"] == "㈜가상" and v.info["주소"] == "가상시 길 1"
+        assert v.info["회사명"] == "(주)가상" and v.info["주소"] == "가상시 길 1"
         assert v.info["신용평가등급"] == "BB0" and v.info["신용평가 종류"] == "기업신용평가등급"
         assert fill._value("사업분야", v) == "제조,건설"
         assert fill._value("설립일", v)

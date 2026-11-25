@@ -5015,7 +5015,7 @@ const helpPrev = () => HELP_LOG.slice(0, -1).findLast((m) => Array.isArray(m.pic
 const helpSay = (who, text, picks = null) => HELP_LOG.push({ who, text, picks, at: helpClock() });
 function helpHello() {
   HELP_LOG.length = 0;
-  helpSay("bot", "안녕하세요, 지일 도우미입니다.\n" + HS().name + " 탭은 이 순서로 보시면 됩니다.\n\n" + HS().qa[0][2] + "\n\n더 궁금하신 것은 주제를 고르거나\n아래 칸에 적어 주세요.", "cats");
+  helpSay("bot", "안녕하세요, 지일 도우미입니다.\n" + HS().name + " 탭은 이 순서로 보시면 됩니다.\n\n" + HS().qa[0][2] + "\n\n궁금하신 주제를 골라 주세요.", "cats");
 }
 function helpMatch(q, qa = HS().qa) {
   const t = q.replace(/[\s?？.!]+/g, "");

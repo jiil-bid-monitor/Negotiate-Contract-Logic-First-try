@@ -1988,6 +1988,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <div class="toolbar ex-tools" id="exTools">
       <p class="sub ex-summary" id="exSummary" title="키워드·품목은 맞지만 다른 조건에 걸려 목록에서 빠진 공고와, 다른 조건은 모두 통과했는데 키워드·세부품명만 안 맞은 공고(세부품명 미달)입니다. 여러 조건에 걸리면 처음 걸린 조건에만 셉니다.">불러오는 중…</p>
     </div>
+    <div class="cat-tabs" id="exCatTabs" role="tablist" aria-label="공고 대분류"></div>
     <div class="filter-row">
       <div class="filters" id="exFilters"></div>
       <label class="sort-box">정렬
@@ -4393,7 +4394,7 @@ const num = (v) => v.toLocaleString("ko-KR");
  * 제외된 공고 — 사진 시안대로 위에 요약 한 줄, 드롭다운(제외 사유·제외 키워드·공고·낙찰방법·업무), 아래 카드.
  * 예전 '빠진 이유 | 건수 | 기준' 표는 '제외 사유' 드롭다운으로 옮겼다 (기준은 항목 아래 작은 글씨).
  */
-const exF = { stage: "active", kw: "all", kind: "all", method: "all", biz: "all" };
+const exF = { stage: "active", cat: "all", kw: "all", kind: "all", method: "all", biz: "all" };
 const EX_PAGE = 30;
 let exLimit = EX_PAGE;
 /**
@@ -4413,6 +4414,7 @@ function bidMethodOf(n) {
 /** 제외 키워드 단계 공고의 걸린 낱말 ("제목에 제외 키워드 '유지보수'") */
 const exKeyword = (n) => (n.excludedAt === "제외키워드" ? /'([^']+)'/.exec(n.excludedDetail || "")?.[1] || null : null);
 const EX_TESTS = {
+  cat: (n, v) => categoryOf(n) === v,  // 실제 공고 탭과 같은 밑줄 탭 (2026-11-25 사용자 — '공고'·'낙찰방법' 메뉴를 대체)
   kw: (n, v) => exKeyword(n) === v,
   kind: (n, v) => n.sourceType === v,
   method: (n, v) => (bidMethodOf(n) || "정보 없음") === v,
@@ -4457,14 +4459,16 @@ function renderExcluded() {
       ...menuStages.map(([s, c]) => [s, stageLabel(s), c, STAGE_RULE[s] || null, c === 0 && exF.stage !== s]),
     ]),
     exDd("kw", "제외 키워드", [["all", "전체", null], ...countBy(pool("kw"), exKeyword).map(([k, c]) => [k, k, c])]),
-    exDd("kind", "공고", [["all", "본공고+사전규격", null], ...countBy(pool("kind"), (n) => n.sourceType).map(([k, c]) => [k, k, c])]),
-    // 낙찰방법은 세 가지만 고르게 한다 (2026-10-15 요청 — 수의·설계공모·정보 없음까지 늘어놓으니 너무 많았다). 나머지는 '전체'에서 본다
-    exDd("method", "낙찰방법", [
-      ["all", "전체", pool("method").length],
-      ...[["입찰", "입찰"], ["협상", "협상"], ["규격가격동시", "규격가격동시입찰"]].map(([v, label]) => [v, label, pool("method").filter((n) => bidMethodOf(n) === v).length]),
-    ]),
     exDd("biz", "업무", [["all", "전체", null], ...countBy(pool("biz"), (n) => n.businessType).map(([k, c]) => [k, k, c])]),
   ].join("");
+
+  const catPool = pool("cat");
+  $("exCatTabs").innerHTML = `<div class="cat-main">${[["all", null, null], ...CATEGORIES].map(([v, note, sub]) => {
+    const n = v === "all" ? catPool.length : catPool.filter((x) => categoryOf(x) === v).length;
+    const tip = [sub, note].filter(Boolean).join(" · ");
+    return `<button type="button" role="tab" class="cat-tab ${exF.cat === v ? "on" : ""}" aria-selected="${exF.cat === v}" data-excat="${v}" ${tip ? `title="${esc(tip)}"` : ""}>` +
+      `<span class="cat-name">${esc(v === "all" ? "전체" : v)}<span class="n">${num(n)}</span></span></button>`;
+  }).join("")}</div>`;
 
   const list = d.items.filter((n) => exPass(n));
   const sort = $("exSort").value;
@@ -4732,6 +4736,13 @@ $("reviewCats").onclick = (ev) => {
   if (!btn || btn.disabled) return;
   reviewCat = btn.dataset.rcat;
   renderReview();
+};
+$("exCatTabs").onclick = (ev) => {
+  const btn = ev.target.closest("[data-excat]");
+  if (!btn) return;
+  exF.cat = btn.dataset.excat;
+  exLimit = EX_PAGE;
+  renderExcluded();
 };
 $("catTabs").onclick = (ev) => {
   const btn = ev.target.closest("[data-cat]");
@@ -5761,7 +5772,7 @@ $("tab-excluded").addEventListener("click", (ev) => {
     exLimit += EX_PAGE;
     renderExcluded();
   } else if (ev.target.id === "exReset") {
-    Object.assign(exF, { stage: "active", kw: "all", kind: "all", method: "all", biz: "all" });
+    Object.assign(exF, { stage: "active", cat: "all", kw: "all", kind: "all", method: "all", biz: "all" });
     $("liveQ").value = "";
     exLimit = EX_PAGE;
     renderExcluded();

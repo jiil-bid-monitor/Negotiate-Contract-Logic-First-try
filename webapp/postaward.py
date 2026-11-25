@@ -631,7 +631,7 @@ def share_path(path: Path | str) -> str:
 def project_path(v: dict, folder: Path) -> str:
     """계약까지 온 공고의 사업 폴더 주소(POSTAWARD_PROJECT_ROOT가 있을 때, 맞추는 일은 서버 PC awardsync). 없으면 ''."""
     root = os.environ.get("POSTAWARD_PROJECT_ROOT", "").strip().rstrip("\\/")
-    if not root or v.get("qualOnly") or not v.get("bidYear"):
+    if not root or not v.get("bidYear"):
         return ""
     return "\\".join([root.replace("/", "\\"), f"{v['bidYear']} 프로젝트", "입찰", folder.name])
 
@@ -686,6 +686,33 @@ def lookup(client: Any, base_url: str, no: str, ord_: str, work: str) -> tuple[s
 
 
 _LOCKED = "열려 있어 채우지 못함"
+LOST_DAYS = 30  # 탈락 폴더를 이만큼 두었다가 지움(11/25 사용자)
+FIRST_READ = "처음_읽어주세요.txt"
+
+
+def first_read(work: str) -> str:
+    """낙찰돼 처음 생긴 폴더에 넣는 메모(11/25 사용자 — 짧고 쉽게)."""
+    start = "2_착공" if work == "공사" else "2_착수"
+    done = DONE_TEMPLATES[work][1] if work in DONE_TEMPLATES else "3_준공"
+    return "\r\n".join([
+        "낙찰된 공고의 폴더입니다. 웹앱이 만들었습니다.", "",
+        "[지금 할 일]",
+        "1. 웹앱 '낙찰 후 서류'에서 '낙찰 서류 만들기' 누르기",
+        "2. 생긴 엑셀에서 노란 칸 채우기",
+        "3. 저장하기. 끝!", "",
+        "[폴더]",
+        "1_계약 : 계약서", f"{start} : {start[2:]} 서류", f"{done} : {done[2:]} 서류", "4_청구 : 청구서", "공고문서 : 공고문", "",
+        "[이것만 지켜 주세요]",
+        "폴더 이름은 바꾸지 마세요.", ""])
+
+
+LOST_READ = "\r\n".join(["다른 업체가 낙찰된 공고의 폴더입니다.", f"여기로 옮기고 {LOST_DAYS}일 뒤에 저절로 지워집니다.", "",
+                         "남기고 싶으면 다른 곳에 복사해 두세요.", ""])
+
+
+def _memo(path: Path, text: str) -> None:
+    if not path.exists():
+        path.write_bytes(text.encode("utf-8-sig"))  # 메모장에서 한글이 깨지지 않게
 
 
 class PostAward:
@@ -696,6 +723,7 @@ class PostAward:
         self.own = _digits(own_bizno)
         self.now = now
         self._lock = threading.Lock()
+        self.root: Path | None = None  # 공고 폴더를 만드는 곳 — 낙찰되면 바로 폴더를 만듦(서버가 정함, 없으면 안 만듦)
 
     def _read(self) -> dict[str, dict]:
         try:
@@ -809,6 +837,13 @@ class PostAward:
             self._write(items)
         return added
 
+    @staticmethod
+    def _folder_of(key: str, v: dict, root: Path) -> Path:
+        if v.get("folder") and Path(v["folder"]).is_dir():
+            return Path(v["folder"])  # 정정으로 공고명이 바뀌어도 쓰던 폴더 그대로
+        name = re.sub(r'[\\/:*?"<>|\s]+', " ", f"{key}_{v.get('title') or ''}").strip()[:90].rstrip(" ._")
+        return Path(root) / group_of(v.get("work", "")) / name
+
     def make_folder(self, key: str, root: Path, qual_only: bool = False) -> Path:
         """공고 폴더 — root/공사|물품·용역/번호-차수_공고명/ 아래 단계별 폴더. 이미 있으면 빈 폴더만 채우고 파일은 안 건드림.
         `qual_only`(낙찰 전 적격심사 단계)면 0_적격심사·공고문서만 — 나머지 단계는 낙찰 뒤에 더함."""
@@ -817,10 +852,7 @@ class PostAward:
             v = items.get(key)
             if v is None:
                 raise ValueError("목록에 없는 공고입니다")
-            name = re.sub(r'[\\/:*?"<>|\s]+', " ", f"{key}_{v.get('title') or ''}").strip()[:90].rstrip(" ._")
-            folder = Path(root) / group_of(v.get("work", "")) / name
-            if v.get("folder") and Path(v["folder"]).is_dir():
-                folder = Path(v["folder"])  # 정정으로 공고명이 바뀌어도 쓰던 폴더 그대로
+            folder = self._folder_of(key, v, root)
             stages = ["0_적격심사", "1_계약", "2_착공" if v.get("work") == "공사" else "2_착수",
                       done_dir(folder, v["work"]) if v.get("work") in DONE_TEMPLATES else "3_준공", "4_청구", "공고문서"]
             if qual_only:
@@ -832,6 +864,7 @@ class PostAward:
             v["folder"] = str(folder)
             if not qual_only:
                 v.setdefault("bidYear", self.now().year)  # 사업 폴더 'YYYY 프로젝트/입찰'의 해
+            v.pop("wonOnly", None)
             v["qualOnly"] = qual_only  # 화면: 낙찰되면 '낙찰 서류 만들기'를 다시 보임
             self._write(items)
         return folder
@@ -1341,21 +1374,83 @@ class PostAward:
                     out["waiting"] += 1
             self._write(items)
         self.archive_lost()
+        self.purge_lost()
+        self.open_won()
         return out
 
+    def open_won(self) -> int:
+        """낙찰된 공고의 폴더를 바로 만듦(11/25 사용자 '낙찰이 됐을 때 폴더가 생기도록') — 1_계약 + 처음_읽어주세요.txt. 사업 폴더로는
+        1_계약이 있는 폴더만 맞추므로(awardsync) 이때 사내 공유에도 생김. 서류는 '낙찰 서류 만들기' 때. 만든 수."""
+        made = 0
+        for key, v in self._read().items():
+            if self.root is None or v.get("status") != "낙찰" or v.get("hidden") or v.get("wonAt") or v.get("work") not in WORKS:
+                continue
+            folder = self._folder_of(key, v, self.root)
+            try:
+                back = Path(v["lostFolder"]) if v.get("lostFolder") else None
+                if back is not None and back.is_dir() and not folder.exists():  # 판정이 뒤집혀 낙찰됨 — 탈락에서 되살림
+                    folder.parent.mkdir(parents=True, exist_ok=True)
+                    back.rename(folder)
+                (folder / "1_계약").mkdir(parents=True, exist_ok=True)
+                _memo(folder / FIRST_READ, first_read(v["work"]))
+            except OSError:  # 공유 폴더가 안 보임 등 — 다음 확인 때
+                continue
+            with self._lock:
+                items = self._read()
+                if key not in items:
+                    continue
+                x = items[key]
+                if not x.get("folder"):  # 서류를 아직 안 만든 폴더 — '낙찰 서류 만들기'를 그대로 보임
+                    x["qualOnly"] = True
+                    x["wonOnly"] = True
+                x.update(folder=str(folder), wonAt=self.now().isoformat(timespec="seconds"))
+                x.setdefault("bidYear", self.now().year)
+                x.pop("lostFolder", None); x.pop("lostAt", None)
+                self._write(items)
+            made += 1
+        return made
+
+    def purge_lost(self) -> int:
+        """탈락 폴더로 옮긴 지 30일이 지난 것을 지움(11/25 사용자). 웹앱이 옮긴 것(lostAt)이고 '탈락' 폴더 바로 아래일 때만. 지운 수."""
+        import shutil
+
+        from .awardsync import LOST_DIR
+
+        gone = 0
+        for key, v in self._read().items():
+            folder = Path(v["lostFolder"]) if v.get("lostFolder") else None
+            if folder is None or not v.get("lostAt") or folder.parent.name != LOST_DIR:
+                continue
+            if self.now() - datetime.fromisoformat(v["lostAt"]) < timedelta(days=LOST_DAYS) or folder.is_symlink():
+                continue
+            try:
+                if folder.is_dir():
+                    shutil.rmtree(folder)
+            except OSError:  # 열려 있음 — 다음 확인 때 이어서
+                continue
+            with self._lock:
+                items = self._read()
+                if key in items:
+                    items[key]["lostFolder"] = ""
+                    items[key]["lostGone"] = self.now().isoformat(timespec="seconds")
+                    self._write(items)
+            gone += 1
+        return gone
+
     def archive_lost(self) -> int:
-        """적격심사 서류까지 만들었는데 다른 업체가 낙찰된 공고의 폴더를 _탈락으로 옮김(11/25 사용자 '탈락하면 폴더가 사라지게').
-        지우지 않음(판정이 뒤집히면 되살리게). 계약 서류까지 만든 폴더는 안 건드림. 옮긴 수."""
+        """적격심사 서류까지 만들었는데 다른 업체가 낙찰된 공고의 폴더를 탈락으로 옮김(11/25 사용자 '탈락하면 폴더가 사라지게').
+        30일 동안은 되살릴 수 있게 둠(purge_lost). 계약 서류까지 만든 폴더는 안 건드림. 옮긴 수."""
         from .awardsync import LOST_DIR, free_path
 
         moved = 0
         for key, v in self._read().items():
             folder = Path(v["folder"]) if v.get("folder") else None
-            if v.get("status") != "다른 업체 낙찰" or v.get("lostFolder") or not v.get("qualOnly") or folder is None or not folder.is_dir():
+            if v.get("status") != "다른 업체 낙찰" or "lostFolder" in v or not v.get("qualOnly") or folder is None or not folder.is_dir():
                 continue
             try:
                 lost = folder.parent.parent / LOST_DIR
                 lost.mkdir(exist_ok=True)
+                _memo(lost / FIRST_READ, LOST_READ)
                 to = free_path(lost / folder.name)
                 folder.rename(to)  # 같은 드라이브 — 열려 있으면 통째로 실패(반만 옮겨지지 않게 shutil.move 안 씀)
             except OSError:  # 엑셀에서 열려 있음 — 다음 확인 때
@@ -1364,7 +1459,7 @@ class PostAward:
                 items = self._read()
                 if key in items:
                     items[key].pop("folder", None)
-                    items[key]["lostFolder"] = str(to)
+                    items[key].update(lostFolder=str(to), lostAt=self.now().isoformat(timespec="seconds"))
                     self._write(items)
             moved += 1
         return moved
@@ -1661,7 +1756,7 @@ def selfcheck() -> None:
         assert by5["3_완료"]["doc"] == "완료계.xlsx" and by5["3_완료"]["todo"] == ["제출일"], by5["3_완료"]
         assert ["계약금액", "19,700,000"] in by5["3_완료"]["auto"] and "수신자" not in [a for a, _ in by5["3_완료"]["auto"]]
         assert by5["4_청구"]["doc"] == "청구서.xlsx" and by5["4_청구"]["todo"] == []
-        # 탈락: 적격심사만 만든 폴더는 _탈락으로(지우지 않음), 계약까지 만든 폴더는 그대로
+        # 탈락: 적격심사만 만든 폴더는 탈락으로, 계약까지 만든 폴더는 그대로
         lost = PostAward(Path(d) / "lost")
         qf, cf = Path(d) / "lroot" / "공사" / "R9_q", Path(d) / "lroot" / "공사" / "R8_c"
         qf.mkdir(parents=True); cf.mkdir(parents=True)
@@ -1670,8 +1765,25 @@ def selfcheck() -> None:
                      "R8": {"no": "R8", "status": "다른 업체 낙찰", "qualOnly": False, "folder": str(cf)},
                      "R7": {"no": "R7", "status": "대기", "qualOnly": True, "folder": str(cf)}})
         assert lost.archive_lost() == 1 and lost.archive_lost() == 0
-        assert not qf.exists() and (Path(d) / "lroot" / "_탈락" / "R9_q" / "a.txt").is_file() and cf.is_dir()
+        assert not qf.exists() and (Path(d) / "lroot" / "탈락" / "R9_q" / "a.txt").is_file() and cf.is_dir()
         assert "folder" not in lost._read()["R9"]
+        assert lost.purge_lost() == 0  # 30일 전엔 그대로
+        real_now, lost.now = lost.now, lambda: _now() + timedelta(days=LOST_DAYS + 1)
+        keep = Path(d) / "lroot" / "탈락" / "담당자가둔것"
+        keep.mkdir()
+        assert lost.purge_lost() == 1 and not (Path(d) / "lroot" / "탈락" / "R9_q").exists() and keep.is_dir()  # 웹앱이 옮긴 것만
+        assert lost.purge_lost() == 0 and lost.archive_lost() == 0
+        lost.now = real_now
+        # 낙찰: 폴더·메모가 바로 생기고 '낙찰 서류 만들기'는 그대로, 두 번 안 만듦
+        won = PostAward(Path(d) / "won"); won.root = Path(d) / "wroot"
+        won._write({"R5-000": {"no": "R5", "ord": "000", "status": "낙찰", "work": "공사", "title": "시험"},
+                    "R6-000": {"no": "R6", "ord": "000", "status": "대기", "work": "공사", "title": "대기"}})
+        assert won.open_won() == 1 and won.open_won() == 0
+        wf = won.root / "공사" / "R5-000_시험"
+        assert (wf / "1_계약").is_dir() and "노란 칸" in (wf / FIRST_READ).read_text(encoding="utf-8-sig") and not (won.root / "공사" / "R6-000_대기").exists()
+        assert won._read()["R5-000"]["qualOnly"] and won._read()["R5-000"]["wonOnly"]
+        won.make_folder("R5-000", won.root)
+        assert not won._read()["R5-000"]["qualOnly"] and "wonOnly" not in won._read()["R5-000"] and (wf / "4_청구").is_dir()
         assert share_path("/work/낙찰후서류/공사/A") == "\\\\jiilserver\\jiil-webapp\\낙찰후서류\\공사\\A"
 
 

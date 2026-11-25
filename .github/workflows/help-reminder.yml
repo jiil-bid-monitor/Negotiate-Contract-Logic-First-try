@@ -1,0 +1,26 @@
+name: 도우미 질문 확인 알림
+# 매달 1일·15일 10:00(KST) 개발자 방에 "도우미 질문을 볼 때"라고 알린다(2026-11-25 사용자 — 2주마다).
+# 질문은 NAS data/help_questions.json(회사 안에만). 표현을 보탠 뒤엔 node scripts/help_eval.js 로 엉뚱한 답이 없는지 확인.
+on:
+  schedule:
+    - cron: "0 1 1,15 * *"   # 01:00 UTC = 10:00 KST
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: 개발자 방에 알림
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+        run: |
+          python -m nego.telegram dev-alert "$(printf '%s\n\n%s\n%s' \
+            '[개발자 알림] 도우미 질문을 볼 때입니다.' \
+            '· NAS data/help_questions.json에서 「모름」·「고르기」 질문을 확인' \
+            '· Claude에게 "도우미 질문 보고 표현 보태줘"라고 요청')"

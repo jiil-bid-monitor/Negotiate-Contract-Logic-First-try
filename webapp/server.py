@@ -20,6 +20,7 @@ import os
 import secrets
 import sys
 import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -118,6 +119,7 @@ class App:
         self.push: ResultPush | None = None
         # 서버 PC — 판단 기록은 NAS 한 곳에 저장(2026-11-09 사용자 결정). (NAS 주소, 토큰) — 있으면 /api/participation을 NAS로 넘긴다
         self.team_remote: tuple[str, str] | None = None
+        self.promo_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
     _seen_lock = threading.Lock()
 
@@ -147,6 +149,33 @@ class App:
             rows = (rows + [row])[-2000:]
             path.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
 
+    def promoted(self, co: Company) -> dict[str, Any]:
+        """담당자가 '실제 공고로 올리기' 한 공고 — NAS 한 곳(11/25 사용자, 예전엔 누른 웹앱에만 남았음). 30초 동안은 받은 것을 쓰고,
+        NAS가 안 되면 지난번 것. 이 PC에 남아 있던 것은 처음 한 번 NAS로 옮김(파일은 promoted_옮기기전.json으로 남김)."""
+        if not self.team_remote:
+            return co.team.promoted
+        at, data = self.promo_cache.get(co.id, (0.0, None))
+        if data is not None and time.time() - at < 30:
+            return data
+        import requests
+        base, token = self.team_remote
+        url, head = base + "/api/promote" + ("" if co.default else f"?co={co.id}"), {"X-App-Token": token}
+        try:
+            res = requests.get(url, timeout=10, headers=head)
+            res.raise_for_status()
+            got = res.json()["promoted"]
+            if co.team.promoted:
+                for no, x in list(co.team.promoted.items()):
+                    if no not in got:
+                        r = requests.post(url, json={**x, "noticeNo": no, "on": True}, timeout=10, headers=head)
+                        r.raise_for_status()
+                        got = r.json()["promoted"]
+                co.team.forget_promoted()
+        except (requests.RequestException, ValueError, KeyError):
+            got = data if data is not None else co.team.promoted
+        self.promo_cache[co.id] = (time.time(), got)
+        return got
+
     def award_root(self, test: bool = False) -> Path:
         """낙찰 후 서류 폴더를 만들 곳 — 공유 폴더 맨 위 '낙찰후서류'(POSTAWARD_DIR로 바꿈), 시험 페이지는 그 옆 '낙찰후서류_테스트'."""
         base = Path(os.environ.get("POSTAWARD_DIR", "").strip() or self.store.path.resolve().parents[2] / "낙찰후서류")
@@ -172,6 +201,7 @@ class App:
                 shutil.rmtree(root, ignore_errors=True)
         self.bidlog_test = BidLog(d)
         self.postaward_test = PostAward(d, self.bidlog_test, default_own_bizno())
+        self.postaward_test.root = self.award_root(test=True)
 
     def seed_award_test(self) -> None:
         """시험 목록이 비었으면 공고를 넣음 — 광양(결과 없이, '지금 낙찰자 확인'으로 한 단계씩) + 운영 투찰 기록에서 경우마다 한 건씩
@@ -324,6 +354,18 @@ def make_handler(app: App):
                                        headers={"X-App-Token": token})
             except requests.RequestException:
                 return self._error(HTTPStatus.BAD_GATEWAY, "NAS에 연결하지 못해 판단 기록을 읽거나 저장하지 못했습니다 — 잠시 뒤 다시")
+            return self._send(res.status_code, res.content, "application/json; charset=utf-8")
+
+        def _remote_promote(self, data: Any, co: Company) -> None:
+            import requests
+            base, token = app.team_remote
+            try:
+                res = requests.post(base + "/api/promote" + ("" if co.default else f"?co={co.id}"), json=data, timeout=15,
+                                    headers={"X-App-Token": token})
+            except requests.RequestException:
+                return self._error(HTTPStatus.BAD_GATEWAY, "NAS에 연결하지 못해 저장하지 못했습니다 — 잠시 뒤 다시")
+            if res.ok:
+                app.promo_cache[co.id] = (time.time(), res.json().get("promoted") or {})
             return self._send(res.status_code, res.content, "application/json; charset=utf-8")
 
         def _remote_award(self, method: str, data: Any = None) -> None:
@@ -488,13 +530,13 @@ def make_handler(app: App):
                     except RuntimeError:
                         pass  # 이미 누가 수집 중 — 그 진행을 같이 본다
                     return self._json({"running": True, "job": co.collector.job.snapshot()})
-                data = mview.notices(co.latest_run(), co.team.promoted, co.held_raw(),
+                data = mview.notices(co.latest_run(), app.promoted(co), co.held_raw(),
                                      co.docscan.codes() if co.docscan else None)
                 return self._json({**data, "job": job, "static_version": app.static_version, "resultFormat": RESULT_FORMAT,
                                    "canCollect": not app.viewer, "push": co.push.state if co.push else None,
                                    "docScan": co.docscan.state if co.docscan else None})
             if url.path == "/api/excluded":
-                return self._json(mview.excluded(co.latest_run(), co.team.promoted, co.held_raw()))
+                return self._json(mview.excluded(co.latest_run(), app.promoted(co), co.held_raw()))
             if url.path == "/api/docscan":
                 # '세부품명 미달' 용역 공고 공고문 확인 진행 — 화면이 찾은 건수가 늘면 세부품명 공고 탭을 다시 받는다
                 return self._json(co.docscan.state if co.docscan else {"running": False, "done": 0, "total": 0, "found": 0})
@@ -506,6 +548,8 @@ def make_handler(app: App):
                 if app.team_remote:
                     return self._remote_participation("GET", co=co)
                 return self._json({"participation": co.team.participation, "statuses": STATUSES})
+            if url.path == "/api/promote":
+                return self._json({"promoted": app.promoted(co)})
             if url.path == "/api/search":
                 return self._json(mview.search(q.get("q", [""])[0], co.latest_run(), app.past, co.held_raw()))
             if url.path == "/api/corpus":
@@ -777,6 +821,8 @@ def make_handler(app: App):
                         return self._remote_participation("POST", data, co=co)
                     return self._json({"ok": True, "participation": co.team.update(data)})
                 if url.path == "/api/promote":
+                    if app.team_remote:  # 올리기도 판단처럼 NAS 한 곳에(11/25 사용자)
+                        return self._remote_promote(data, co)
                     return self._json({"ok": True, "promoted": co.team.promote(data)})
                 if url.path == "/api/match":
                     title = str(data.get("title") or "").strip()
@@ -989,6 +1035,7 @@ def main(argv: list[str] | None = None) -> int:
     # 판단 기록 백업 폴더 — 구글 드라이브 데스크톱이 동기화하는 폴더 (webapp/backup.py). 비어 있으면 백업하지 않는다
     backup_dir = Path(os.environ["BACKUP_DIR"].strip()) if os.environ.get("BACKUP_DIR", "").strip() else None
     app = build_app(Path(args.db), token, backup_dir=backup_dir)
+    app.postaward.root = app.award_root()  # 낙찰되면 여기에 공고 폴더를 만듦(open_won)
     app.viewer = os.environ.get("WEBAPP_ROLE", "").strip() == "viewer"
     # 서버 PC — 수집이 끝나면 결과를 NAS로 보낸다(webapp/resultpush.py). 판단 기록은 NAS에만 쌓이므로 아래 시트 쓰기는 끈다
     push_url = os.environ.get("RESULT_PUSH_URL", "").strip()

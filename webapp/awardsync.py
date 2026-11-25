@@ -4,8 +4,8 @@ NAS 웹앱 컨테이너는 jiil-webapp 공유 폴더만 볼 수 있어 사내 �
 1분마다 맞춘다. 담당자는 사내 공유 폴더 쪽 파일을 고치고(기준), 웹앱 '서류 현황'은 NAS 쪽을 읽으므로 고친 내용이 1분 안에 반영된다.
 규칙: 한쪽에만 있는 파일은 다른 쪽으로 복사, 둘 다 있으면 수정 시각이 늦은 쪽이 이김(copy2로 시각을 같이 옮겨 되풀이 안 함), 지우지 않음.
 사업 폴더(11/25 사용자): .env POSTAWARD_PROJECT_ROOT(사내 공유 '002 진행프로젝트')가 있으면 계약까지 온 공고(폴더에 1_계약이 있음)만
-'YYYY 프로젝트/입찰/번호_공고명'과 맞춤(적격심사 단계 폴더는 NAS에만). 탈락한 공고 폴더는 NAS 웹앱이 _탈락으로 옮기고(postaward.archive_lost)
-여기서 사내 공유 쪽 것도 _탈락으로 옮김(지우지 않음).
+'YYYY 프로젝트/입찰/번호_공고명'과 맞춤(적격심사 단계 폴더는 NAS에만). 탈락한 공고 폴더는 NAS 웹앱이 탈락으로 옮기고(postaward.archive_lost)
+여기서 사내 공유 쪽 것도 탈락으로 옮김. NAS의 탈락 폴더는 30일 뒤 지움(postaward.purge_lost, 11/25 사용자).
 켜기: 서버 PC .env의 POSTAWARD_SHARE_DIR(사내 공유 폴더 쪽 '낙찰후서류' 위치). NAS 쪽은 POSTAWARD_NAS_DIR(기본 \\\\jiilserver\\jiil-webapp\\낙찰후서류).
 shortcut: 1분마다 전체 비교 — 공고 폴더가 수백 개로 늘어 느려지면 바뀐 폴더만 보게 바꿀 것. 리빌드로 NAS가 사내 공유 폴더를 직접 보게 되면 이 동기화는 끔.
 """
@@ -21,7 +21,7 @@ from pathlib import Path
 
 NAS_DIR = Path(r"\\jiilserver\jiil-webapp\낙찰후서류")
 GROUPS = ("공사", "물품·용역")  # postaward.GROUPS의 폴더 이름(표준틀 폴더 _표준틀은 안 맞춤)
-LOST_DIR = "_탈락"
+LOST_DIR = "탈락"
 BID_DIR = "입찰"
 SLACK = 2.0  # 초 — 공유 폴더마다 시각 정밀도가 달라 이만큼은 같은 시각으로 봄
 
@@ -71,7 +71,7 @@ def free_path(p: Path) -> Path:
 
 
 def drop_lost(nas: Path, share: Path) -> None:
-    """NAS에서 _탈락으로 옮긴 공고 폴더가 사내 공유 쪽에 남아 있으면 거기서도 _탈락으로(안 옮기면 다음 맞춤 때 되살아남)."""
+    """NAS에서 탈락으로 옮긴 공고 폴더가 사내 공유 쪽에 남아 있으면 거기서도 탈락으로(안 옮기면 다음 맞춤 때 되살아남)."""
     lost = nas / LOST_DIR
     for f in lost.iterdir() if lost.is_dir() else ():
         for group in GROUPS:
@@ -158,7 +158,7 @@ def selfcheck() -> None:
         (nas / "공사" / "R1_A" / "2_착공").mkdir()
         (nas / "공사" / "R1_A" / "2_착공" / "착공서류.xlsx").write_text("new", encoding="utf-8")
         assert sync_once(nas, share)["to_share"] == 1  # 낙찰 뒤 웹앱이 더한 파일도 사내 공유로
-        # 탈락: NAS에서 _탈락으로 옮기면 사내 공유 쪽도 옮기고 되살리지 않음
+        # 탈락: NAS에서 탈락으로 옮기면 사내 공유 쪽도 옮기고 되살리지 않음
         (nas / LOST_DIR).mkdir()
         shutil.move(str(nas / "공사" / "R1_A"), str(nas / LOST_DIR / "R1_A"))
         assert sync_once(nas, share)["to_nas"] == 0

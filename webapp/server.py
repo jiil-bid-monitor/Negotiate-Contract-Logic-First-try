@@ -17,6 +17,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import secrets
 import sys
 import threading
@@ -346,6 +347,7 @@ def make_handler(app: App):
             self._send(status, json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
         def _error(self, status: int, message: str) -> None:
+            message = re.sub(r"\s+—\s+", ": ", re.sub(r"([다요])\s+—\s+", r"\1. ", message))  # 화면엔 긴 줄표를 안 씀(11/25 사용자)
             self._json({"error": message}, status)
 
         def _body(self) -> dict[str, Any]:
@@ -706,11 +708,15 @@ def make_handler(app: App):
                     since = time.time() - 5 if v0.get("folder") else None
                     before = {str(x) for x in Path(v0["folder"]).rglob("*.xlsx")} if v0.get("folder") and Path(v0["folder"]).is_dir() else set()
                     # 표준틀은 운영 폴더 것 — 시험 폴더(낙찰후서류_테스트)엔 _표준틀이 없음(NAS 컨테이너는 공유 폴더 주소로 틀을 못 찾아 root/_표준틀을 봄)
+                    docs0 = Path(v0["folder"]) / "공고문서" if v0.get("folder") else None
+                    had = {x.name for x in docs0.iterdir()} if docs0 and docs0.is_dir() else None
                     folder, _ = pa.prepare(key, app.award_root(test), qual_only=data.get("stage") == "qual",
-                                           templates=template_dir(app.award_root(False)), contract_lookup=contract_lookup())
+                                           templates=template_dir(app.award_root(False)), contract_lookup=contract_lookup(),
+                                           refetch=bool(data.get("refetch")))
                     if test:
                         app.fill_award_test_sample(key, folder, before)
-                    return self._json({"ok": True, "folder": str(folder), "since": since, "items": pa.items()})
+                    return self._json({"ok": True, "folder": str(folder), "since": since,
+                                       "newDocs": [] if had is None else sorted({x.name for x in (folder / "공고문서").iterdir()} - had), "items": pa.items()})
                 if url.path == "/api/postaward/delete":
                     pa.remove(str(data.get("key") or ""))
                     return self._json({"ok": True, "items": pa.items()})

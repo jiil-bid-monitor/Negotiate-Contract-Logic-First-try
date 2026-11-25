@@ -108,7 +108,7 @@ def _vault_info(company: str = "jiil") -> dict:
         return {"ok": True, "msg": f"{co_mod.name()} 자료 폴더: {folder.name}"}
     p = vault_mod.sealed_path()
     if not p.exists():
-        return {"ok": False, "msg": "회사 자료 묶음이 없습니다 — 옆 폴더 jiil-quant-docs(비공개 레포)를 받거나 .env에 QUANT_VAULT_PATH"}
+        return {"ok": False, "msg": "이 PC에는 회사 자료가 없어 서류를 만들 수 없습니다 — 서버 PC 웹앱에서 만들어 주세요"}
     if not vault_mod.read_passphrase():
         return {"ok": False, "msg": f"서버 PC에 {vault_mod.ENV}가 설정되지 않았습니다"}
     return {"ok": True, "msg": f"회사 자료 최근 갱신 {_sealed_date(p)}", "updated": _sealed_date(p)}

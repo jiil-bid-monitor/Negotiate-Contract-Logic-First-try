@@ -538,6 +538,19 @@ body.picking { overflow: hidden; }
 .tabs .tab-group { display: flex; flex-wrap: wrap; }
 /* 좁은 화면에서 오른쪽 묶음이 윗줄로 올라가면(.wrapped) 그 묶음 글자를 조금 작게 (11/20 사용자 요청) */
 .tabs.wrapped .tab-group + .tab-group button { font-size: 12.5px; padding: 8px 16px; }
+/* 좁은 화면: 상단 바·탭을 두 줄로 줄이고 도우미는 '?'만 (11/25 사용자 — 내용이 화면 아래에서 시작했음) */
+@media (max-width: 560px) {
+  .topbar .inner { padding: 10px 16px; gap: 8px; min-height: 0; }
+  .topbar .slash, .topbar .brand-text { display: none; }
+  .topbar .logo { height: 24px; }
+  .topbar .co-switch { margin-right: auto; }
+  .topbar .me-top { flex: 1 1 180px; }
+  .topbar .me-top input { flex: 1; width: auto; min-width: 0; padding: 4px 10px; }
+  .wrap { padding-top: 22px; padding-left: 16px; padding-right: 16px; }
+  .tabbar .tabs .tab-group { flex: 1 1 100%; flex-wrap: nowrap; }
+  .tabbar .tabs .tab-group button { flex: 1 1 auto; padding: 8px 2px; font-size: 13px; letter-spacing: 0; white-space: nowrap; }
+  .helpfab ~ .helpnudge, #helpNudge { display: none; }
+}
 .tab-search {
   flex: 0 1 340px; min-width: 0; height: 36px; padding: 4px 12px; margin: 4px 0;
   font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 4px;
@@ -1608,7 +1621,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .award-act { white-space: nowrap; }
 .award-act button { margin: 0 4px 4px 0; font-family: var(--head); font-size: 13px; font-weight: 500; padding: 6px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); cursor: pointer; }
 .award-act button.award-main { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
-.award-act button.award-main:hover { background: var(--brand-hover); border-color: var(--brand-hover); }
+.award-act button.award-main:disabled { background: none; color: var(--muted); border-color: var(--line); font-weight: 400; opacity: 1; }  /* 아직 못 누르는 버튼은 옅게(11/25) */
+.award-act button.award-main:not(:disabled):hover { background: var(--brand-hover); border-color: var(--brand-hover); }
 .award-act button:disabled { opacity: .45; cursor: not-allowed; }
 .award-act .qual button:disabled { pointer-events: none; } /* 꺼진 버튼 위에서도 설명 상자가 뜨게 */
 /* 표가 가로 스크롤 틀(.scroll) 안이라 설명 상자가 틀 밖으로 나가면 스크롤 막대가 생겼다 사라지며 화면이 흔들림 → 화면 기준(fixed)으로 띄움(placeAwardTip) */
@@ -1683,7 +1697,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="docbell-pop" id="judgeBellPop" hidden></div>
     </div>
     <div class="docbell" id="calBell">
-      <button type="button" id="calBellBtn" aria-haspopup="true" aria-expanded="false" title="일정 — 숫자는 오늘 일정과 새 개찰 결과"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="lb">일정</span><span class="n" id="calBellN" hidden></span></button>
+      <button type="button" id="calBellBtn" aria-haspopup="true" aria-expanded="false" title="일정: 숫자는 오늘 일정과 새 개찰 결과"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="lb">일정</span><span class="n" id="calBellN" hidden></span></button>
       <div class="docbell-pop calpop" id="calBellPop" hidden></div>
     </div>
     <div class="docbell" id="docBell" hidden>
@@ -1736,7 +1750,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         <span>~</span>
         <input type="date" id="toDate" aria-label="종료일" title="게시일 종료일 (이날 23:59까지, 오늘이면 지금까지)">
       </span>
-      <button type="button" id="refresh" title="고른 기간의 공고를 나라장터에서 새로 받고 첨부(공고문·과업지시서)까지 읽습니다 — 몇 분 걸립니다">나라장터에서 불러오기</button>
+      <button type="button" id="refresh" title="고른 기간의 공고를 나라장터에서 새로 받고 첨부(공고문·과업지시서)까지 읽습니다. 몇 분 걸립니다">나라장터에서 불러오기</button>
       <button type="button" id="load" class="ghost" title="서버에 저장된 마지막 수집 결과와 팀원의 참가여부·대화를 다시 받아옵니다 (나라장터에 다시 묻지 않습니다)">판단 갱신</button>
       <span class="load-state" id="loadState" role="status"></span>
       <!-- 찾기 칸 — 실제 공고 탭에선 수집 줄 오른쪽(2026-11-18), 제외된 공고 탭으로 가면 탭 줄 오른쪽으로 옮긴다(showTab) -->
@@ -1749,7 +1763,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <span class="af-sum" id="liveCount"></span>
       <label class="sort-box">정렬
         <select id="liveSort" aria-label="본공고·사전규격 정렬" title="본공고·사전규격 목록을 어떤 순서로 볼지">
-          <option value="deadline" title="자격등록 마감 기준 — 자격등록 마감이 없거나 이미 지났으면 투찰 마감으로">자격등록 마감 순</option>
+          <option value="deadline" title="자격등록 마감 기준: 자격등록 마감이 없거나 이미 지났으면 투찰 마감으로">자격등록 마감 순</option>
           <option value="bid" title="입찰서·제안서를 실제로 내는 마감 기준 (사전규격은 의견 마감)">투찰 마감 임박 순</option>
           <option value="score">싱크로율 높은 순</option>
           <option value="amount">금액 큰 순</option>
@@ -1765,7 +1779,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <div class="empty" id="kindEmpty" hidden></div>
     <details class="group off-group rescue-group" id="reviewGroup" hidden>
       <summary><h2>검토필요 <span class="group-n" id="reviewN"></span></h2></summary>
-      <p class="group-note">제목에 <b>관심 키워드</b>와 <b>제외 키워드</b>가 함께 있어 목록에서 뺀 공고입니다. 다른 조건(마감·금액·자격·지역 등)은 모두 통과했습니다. 우리 공고라고 판단되면 <b>목록에 올리기</b>를 누르세요 — 본공고·사전규격 목록에 들어가고 팀원 모두에게 보입니다.</p>
+      <p class="group-note">제목에 <b>관심 키워드</b>와 <b>제외 키워드</b>가 함께 있어 목록에서 뺀 공고입니다. 다른 조건(마감·금액·자격·지역 등)은 모두 통과했습니다. 우리 공고라고 판단되면 <b>목록에 올리기</b>를 누르세요. 본공고·사전규격 목록에 들어가고 팀원 모두에게 보입니다.</p>
       <div class="cat-tabs review-cats" id="reviewCats" role="tablist" aria-label="검토필요 낙찰방법"></div>
       <div id="reviewList"></div>
     </details>
@@ -1781,7 +1795,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="filters" id="exFilters"></div>
       <label class="sort-box">정렬
         <select id="exSort" aria-label="제외된 공고 정렬">
-          <option value="deadline" title="자격등록 마감 기준 — 자격등록 마감이 없거나 이미 지났으면 투찰 마감으로">자격등록 마감 순</option>
+          <option value="deadline" title="자격등록 마감 기준: 자격등록 마감이 없거나 이미 지났으면 투찰 마감으로">자격등록 마감 순</option>
           <option value="bid" title="입찰서·제안서를 실제로 내는 마감 기준 (사전규격은 의견 마감)">투찰 마감 임박 순</option>
           <option value="score">싱크로율 높은 순</option>
           <option value="amount">금액 큰 순</option>
@@ -1796,7 +1810,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   <section id="tab-corpus" hidden>
     <p class="search-intro">지일이 제안하거나 수행한 사업입니다. 사업명을 누르면 과업 내용이 펼쳐집니다.</p>
     <div class="search">
-      <input id="corpusQ" type="search" placeholder="사업명으로 찾기 — 예: 과학관, 놀이터, 조형물" autocomplete="off" aria-label="사업명으로 찾기">
+      <input id="corpusQ" type="search" placeholder="사업명으로 찾기: 예: 과학관, 놀이터, 조형물" autocomplete="off" aria-label="사업명으로 찾기">
       <select id="corpusYear" aria-label="연도"><option value="">전체 연도</option></select>
     </div>
     <div class="stats" id="stats"></div>
@@ -1896,9 +1910,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <!-- (11/06 사용자 요청) 추천 투찰금액을 난수표 위로 — 공고를 불러오면 바로 추천 금액이 보이게 -->
     <!-- 추천 사정률(2026-10-28 사용자 결정 — 과거 개찰 통계 기반). 서버 output/의 개찰 결과로 계산, 위 입력칸 값을 씀 -->
     <div class="calc-rec">
-      <h4 class="calc-h">추천 투찰금액 — 비슷한 과거 공고의 개찰 결과 기준</h4>
+      <h4 class="calc-h">추천 투찰금액: 비슷한 과거 공고의 개찰 결과 기준</h4>
       <div class="calc-rec-bar">
-        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="auto" selected>자동(닮은 공고로 가늠)</option><option value="all">전체(규모 구분 없이)</option><option value="small">소규모(100곳 미만)</option><option value="large">대규모(100곳 이상)</option></select></label> <span class="qual rec-i" tabindex="0" aria-label="설명"><span class="ico">?</span><span class="qtip"><b>자동</b> — 이번 공고와 닮은 과거 공고(분야·업무·금액·발주 방식·지역제한, 같은 발주기관은 더 크게 반영)의 참가 수로 이번 공고의 참가 수를 가늠합니다. 100곳 미만이면 소규모 공고끼리, 이상이면 대규모 공고끼리 비교합니다.<br>참가가 적을 공고(지역·업종 제한이 좁은 공고 등)라는 걸 알면 직접 <b>소규모</b>를 고르세요 — 자동 판정은 소규모를 대규모로 잡는 경우가 아직 있습니다.</span></span>
+        <label class="chk">경쟁 규모 <select id="cRecScale"><option value="auto" selected>자동(닮은 공고로 가늠)</option><option value="all">전체(규모 구분 없이)</option><option value="small">소규모(100곳 미만)</option><option value="large">대규모(100곳 이상)</option></select></label> <span class="qual rec-i" tabindex="0" aria-label="설명"><span class="ico">?</span><span class="qtip"><b>자동</b>: 이번 공고와 닮은 과거 공고(분야·업무·금액·발주 방식·지역제한, 같은 발주기관은 더 크게 반영)의 참가 수로 이번 공고의 참가 수를 가늠합니다. 100곳 미만이면 소규모 공고끼리, 이상이면 대규모 공고끼리 비교합니다.<br>참가가 적을 공고(지역·업종 제한이 좁은 공고 등)라는 걸 알면 직접 <b>소규모</b>를 고르세요. 자동 판정은 소규모를 대규모로 잡는 경우가 아직 있습니다.</span></span>
         <button type="button" id="cRecBtn">추천 보기</button>
         <span id="cRecMsg" class="job"></span>
       </div>
@@ -1963,7 +1977,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <tr><th>구 분</th><th>금 액</th><th>사정률 = (예정가격 / 기초금액) × 100</th></tr>
       <tbody id="cSummary"><tr><td colspan="3" class="why">예비가격을 만들고 번호를 고르면 나옵니다.</td></tr></tbody>
     </table>
-    <p class="why">예비가격·예정가격·하한선은 이 화면에서 <b>모의로 만든 값</b>입니다 — 실제 예비가격 15개는 나라장터가 무작위로 만들고, 예정가격은 개찰 때 업체들이 많이 고른 번호 4개의 평균으로 정해집니다. 투찰금액은 모의 값이 아니라 위 추천 칸(비슷한 과거 공고의 개찰 결과)으로 정합니다.</p>
+    <p class="why">예비가격·예정가격·하한선은 이 화면에서 <b>모의로 만든 값</b>입니다. 실제 예비가격 15개는 나라장터가 무작위로 만들고, 예정가격은 개찰 때 업체들이 많이 고른 번호 4개의 평균으로 정해집니다. 투찰금액은 모의 값이 아니라 위 추천 칸(비슷한 과거 공고의 개찰 결과)으로 정합니다.</p>
     </details>
 
     </div><!-- /calcPage -->
@@ -1983,7 +1997,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   </section>
 
   <footer>
-    (주)지일 · 로컬 전용 도구
+    (주)지일 · 사내 전용
   </footer>
 </div>
 
@@ -2050,8 +2064,11 @@ async function getJson(url) {
   if (data && data.unauthorized) throw new Error(data.error);
   return data;
 }
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const won = (n) => n == null ? "—" : (n / 100000000).toFixed(2) + "억";
+// 화면엔 긴 줄표를 안 씀(11/25 사용자, AI 티) — 서버가 준 글도 여기서 바꿈. 폴더 주소처럼 글자 그대로여야 하는 값은 escRaw
+const noDash = (t) => String(t).replace(/([다요])\s+—\s+/g, "$1. ").replace(/\s+—\s+/g, ": ");
+const esc = (s) => escRaw(noDash(s));
+const escRaw = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const won = (n) => n == null ? "-" : (n / 100000000).toFixed(2) + "억";
 /** 공고 사업금액 — 추정가격, 없으면 배정예산 그대로 "(배정)", 둘 다 없으면 "금액 모름" (통합 결정 2번) */
 const money = (n) => n.budgetAmount == null ? "금액 모름" : won(n.budgetAmount) + (n.budgetKind === "배정예산" ? " (배정)" : "");
 
@@ -2071,9 +2088,9 @@ async function boot() {
     data = await getJson("/api/corpus");
     if (data.error && !data.projects.length) throw new Error(data.error);
   } catch (err) {
-    $("corpusSum").textContent = "과거 실적 없음 — 싱크로율을 계산하지 못합니다";
+    $("corpusSum").textContent = "과거 실적 없음: 싱크로율을 계산하지 못합니다";
     // 여기서 던지면 화면이 "불러오는 중…"에 멈춘 채 콘솔에만 오류가 남는다.
-    $("stats").innerHTML = `<span style="color:var(--warn)">과거 사업 목록을 불러오지 못했습니다 — ${esc(err.message)}</span>`;
+    $("stats").innerHTML = `<span style="color:var(--warn)">과거 사업 목록을 불러오지 못했습니다. ${esc(err.message)}</span>`;
     return;
   }
   corpus = data.projects;
@@ -2146,7 +2163,7 @@ async function toggleProject(btn) {
     box.innerHTML = d.excerpt ? `<pre>${esc(d.excerpt)}</pre>` : `<p class="sub">과업 내용이 없습니다.</p>`;
     box.dataset.loaded = "1";
   } catch (err) {
-    box.innerHTML = `<p class="sub">불러오지 못했습니다 — ${esc(err.message)}</p>`;
+    box.innerHTML = `<p class="sub">불러오지 못했습니다. ${esc(err.message)}</p>`;
   }
 }
 
@@ -2168,7 +2185,7 @@ function checkPageVersion(v) {
   const bar = document.createElement("div");
   bar.id = "reloadBar";
   bar.className = "reload-bar";
-  bar.innerHTML = `화면이 업데이트됐습니다 — 새로고침하면 새 화면으로 보입니다 <button type="button">새로고침</button>`;
+  bar.innerHTML = `화면이 업데이트됐습니다. 새로고침하면 새 화면으로 보입니다 <button type="button">새로고침</button>`;
   bar.querySelector("button").onclick = () => location.reload();
   document.body.prepend(bar);
 }
@@ -2183,7 +2200,7 @@ function watchJob(job, mine) {
   const who = mine ? "" : " (다른 팀원이 시작한 수집)";
   const show = (j) => {
     $("loadState").classList.remove("err");
-    $("loadState").textContent = `수집 중${who} — ${jobProgress(j)}`;
+    $("loadState").textContent = `수집 중${who}: ${jobProgress(j)}`;
   };
   const tick = async () => {
     let j;
@@ -2194,7 +2211,7 @@ function watchJob(job, mine) {
     if (j.error) {
       $("loadState").classList.add("err");
       $("loadState").textContent = "수집 실패";
-      $("liveMeta").innerHTML = `<span style="color:var(--urgent)">수집 실패 — ${esc(j.error)}</span><br>지난 수집 결과를 그대로 보여 줍니다.`;
+      $("liveMeta").innerHTML = `<span style="color:var(--urgent)">수집 실패: ${esc(j.error)}</span><br>지난 수집 결과를 그대로 보여 줍니다.`;
       return;
     }
     loadNotices(false);
@@ -2224,7 +2241,7 @@ async function loadNotices(refresh) {
     $("loadState").textContent = "나라장터에서 받는 중…";
     const custom = $("days").value === "custom";
     const span = custom ? `${$("fromDate").value} ~ ${$("toDate").value}` : `최근 ${$("days").value}일`;
-    $("liveMeta").textContent = `${span} 게시 공고를 받고 첨부(공고문·과업지시서)까지 읽습니다 — 기간에 따라 몇 분 걸립니다. 그동안 지난 결과를 그대로 볼 수 있습니다.`;
+    $("liveMeta").textContent = `${span} 게시 공고를 받고 첨부(공고문·과업지시서)까지 읽습니다. 기간에 따라 몇 분 걸립니다. 그동안 지난 결과를 그대로 볼 수 있습니다.`;
     try {
       if (custom && (!$("fromDate").value || !$("toDate").value)) throw new Error("시작일·종료일을 고르세요");
       const query = custom
@@ -2236,7 +2253,7 @@ async function loadNotices(refresh) {
     } catch (err) {
       setBusy(false);
       $("loadState").textContent = "요청 실패";
-      $("liveMeta").innerHTML = `<span style="color:var(--urgent)">요청 실패 — ${esc(err.message)}</span>`;
+      $("liveMeta").innerHTML = `<span style="color:var(--urgent)">요청 실패: ${esc(err.message)}</span>`;
     }
     return;
   }
@@ -2247,7 +2264,7 @@ async function loadNotices(refresh) {
     if (data.error) {
       $("liveMeta").textContent = "";
       $("loadState").textContent = "조회 실패";
-      $("liveResults").innerHTML = `<div class="verdict edge">조회 실패 — ${esc(data.error)}</div>`;
+      $("liveResults").innerHTML = `<div class="verdict edge">조회 실패: ${esc(data.error)}</div>`;
       return;
     }
     if (data.thresholds) { HIGH = data.thresholds.high; LOW = data.thresholds.border; }
@@ -2274,9 +2291,9 @@ async function loadNotices(refresh) {
       `마지막 수집 ${esc(fmtShort(data.fetchedAt))} · ${esc(spanLabel(data))}` +
       (data.prespecError ? ` · <span style="color:var(--warn)">사전규격 조회 실패</span>` : "") +
       // 판정은 수집할 때 계산해 저장한다 — 서버 코드가 바뀐 뒤 예전 결과를 보고 있으면 다시 불러오라고 알린다
-      (data.format !== data.resultFormat ? `<br><span style="color:var(--warn)">이 결과는 이전 버전으로 수집됐습니다 — ${viewer ? "서버 PC에서 다시 수집하면" : "'나라장터에서 불러오기'를 다시 하면"} 새 판정으로 보입니다.</span>` : "") +
+      (data.format !== data.resultFormat ? `<br><span style="color:var(--warn)">이 결과는 이전 버전으로 수집됐습니다. ${viewer ? "서버 PC에서 다시 수집하면" : "'나라장터에서 불러오기'를 다시 하면"} 새 판정으로 보입니다.</span>` : "") +
       // 서버 PC 화면 — NAS로 보낸 결과 (실패하면 서버가 1분마다 다시 시도한다)
-      (data.push?.error ? `<br><span style="color:var(--urgent)">NAS로 보내지 못함 — ${esc(data.push.error)} (1분마다 다시 시도)</span>` : "");
+      (data.push?.error ? `<br><span style="color:var(--urgent)">NAS로 보내지 못함: ${esc(data.push.error)} (1분마다 다시 시도)</span>` : "");
     if (!jobTimer) $("loadState").textContent = `완료 ${fmtDT(new Date())}`;
     renderNotices(data.items, (data.titleExcludedItems || []).filter(stillOpen), (data.heldItems || []).filter(stillOpen), data.heldProducts || []);
     // 공고문 세부품명 확인이 뒤에서 돌고 있으면 진행을 보여 주고, 찾을 때마다 세부품명 공고 탭을 다시 받는다
@@ -2287,7 +2304,7 @@ async function loadNotices(refresh) {
     if (!$("tab-excluded").hidden) loadExcluded();
   } catch (err) {
     $("loadState").textContent = "요청 실패";
-    $("liveResults").innerHTML = `<div class="verdict edge">요청 실패 — ${esc(err.message)}</div>`;
+    $("liveResults").innerHTML = `<div class="verdict edge">요청 실패: ${esc(err.message)}</div>`;
   } finally {
     if (!jobTimer) setBusy(false);
   }
@@ -2335,8 +2352,8 @@ const catPass = (n) => filters.cat === "all" || categoryOf(n) === filters.cat;
 const CATEGORIES = [
   ["협상", "협상에 의한 계약·규격가격동시입찰 (용역·물품·공사)", "규격가격동시 포함"],
   ["입찰", "적격심사·최저가 등 일반 입찰 (용역·물품·공사)", "적격심사·최저가"],
-  ["수의계약", "수의계약 — 적격심사 없이 견적 등으로 바로 계약 (2026-11-12부터 수집)", null],
-  ["사전규격", "공고 전 단계 — 낙찰방법이 아직 정해지지 않음", "낙찰방법 정해지기 전"],
+  ["수의계약", "수의계약: 적격심사 없이 견적 등으로 바로 계약 (2026-11-12부터 수집)", null],
+  ["사전규격", "공고 전 단계: 낙찰방법이 아직 정해지지 않음", "낙찰방법 정해지기 전"],
 ];
 const WORK_TYPES = ["용역", "물품", "공사"];
 function categoryOf(n) {
@@ -2369,7 +2386,7 @@ const CHECK_OPTS = [
   ["qual", "자격·품명", "자격요건·세부품명번호 미보유, 이름만 적힌 업종 요건(확인 필요)"],
   ["perf", "실적·기술인력", "첨부 공고문의 실적제한·기술인력 요건"],
   ["scope", "확인할 것", "몽골 공고 유력·해외 개최 의심, 지역 제한 의심(첨부), 지역의무공동도급, 첨부 없음·국방전자조달"],
-  ["consortium", "컨소시엄 검토", "자격 미보유 — 보유 자격이 학술연구용역뿐"],
+  ["consortium", "컨소시엄 검토", "자격 미보유: 보유 자격이 학술연구용역뿐"],
 ];
 const checkPass = (n, v) => v === "all" || checkKinds(n).has(v);
 
@@ -2461,7 +2478,7 @@ async function setPromoted(btn, on) {
       }
     }
   } catch (err) {
-    alert(`저장하지 못했습니다 — ${err.message}`);
+    alert(`저장하지 못했습니다. ${err.message}`);
     btn.disabled = false;
     btn.textContent = on ? "목록에 올리기" : "목록에서 다시 빼기";
   }
@@ -2493,7 +2510,7 @@ function renderReview() {
   $("reviewN").textContent = all.length + "건";
   const tab = ([v, note, sub]) => {
     const n = v === "all" ? all.length : all.filter((x) => categoryOf(x) === v).length;
-    const tip = [sub, note].filter(Boolean).join(" — ");
+    const tip = [sub, note].filter(Boolean).join(" · ");
     return `<button type="button" role="tab" class="cat-tab ${reviewCat === v ? "on" : ""}" aria-selected="${reviewCat === v}" data-rcat="${v}" ${n === 0 && v !== "all" ? "disabled" : ""} ${tip ? `title="${esc(tip)}"` : ""}>` +
       `<span class="cat-name">${esc(v === "all" ? "전체" : v)}<span class="n">${num(n)}</span></span></button>`;
   };
@@ -2659,13 +2676,13 @@ function applyFilters() {
     const label = v === "all" ? "전체" : v;
     const off = v === "사전규격" && !includePre();
     // 작은 설명 글(sub)은 화면에서 빼고 커서를 대면 보이게 (2026-11-18 사용자 결정)
-    const tip = [sub, note].filter(Boolean).join(" — ");
+    const tip = [sub, note].filter(Boolean).join(" · ");
     return `<button type="button" role="tab" class="cat-tab ${filters.cat === v ? "on" : ""}" aria-selected="${filters.cat === v}" data-cat="${v}" ${off ? "disabled" : ""} ${tip ? `title="${esc(tip)}"` : ""}>` +
       `<span class="cat-name">${esc(label)}<span class="n">${num(n)}</span></span></button>`;
   };
   const prodN = productIn.length + outsideShown().length;
   $("catTabs").innerHTML = `<div class="cat-main">${[["all", null, null], ...CATEGORIES].map(catTab).join("")}</div>` +
-    `<button type="button" role="tab" class="cat-prod ${prodView ? "on" : ""}" aria-pressed="${prodView}" data-cat="product" title="${prodView ? "다시 누르면 전체 목록으로 돌아갑니다" : "제목 키워드 없이 세부품명으로 걸린 공고 — 목록 안·밖을 한 목록으로 봅니다. 왼쪽 탭(협상·입찰 등)도 함께 걸립니다"}">` +
+    `<button type="button" role="tab" class="cat-prod ${prodView ? "on" : ""}" aria-pressed="${prodView}" data-cat="product" title="${prodView ? "다시 누르면 전체 목록으로 돌아갑니다" : "제목 키워드 없이 세부품명으로 걸린 공고: 목록 안·밖을 한 목록으로 봅니다. 왼쪽 탭(협상·입찰 등)도 함께 걸립니다"}">` +
     `<span class="cat-prod-pre">따로 보기 ·</span> 세부품명으로만 걸린 공고<span class="n">${num(prodN)}</span> <span aria-hidden="true">${prodView ? "✕" : "→"}</span></button>`;
   $("filters").innerHTML = [
     dropdown("work", "업무", [
@@ -2716,8 +2733,8 @@ function applyFilters() {
   // 본공고와 사전규격은 담당자가 할 일이 다르다 — 본공고는 마감이 있는 실제 입찰이고,
   // 사전규격은 아직 공고 전이라 의견 제출·사전 준비 단계다. 섞어 놓으면 우선순위를 못 세운다.
   const groups = [
-    { key: "본공고", note: "마감이 있는 실제 입찰 — 참가 여부를 지금 판단해야 합니다" },
-    { key: "사전규격", note: "아직 공고 전 단계 — 의견 제출과 사전 준비 대상입니다" },
+    { key: "본공고", note: "마감이 있는 실제 입찰: 참가 여부를 지금 판단해야 합니다" },
+    { key: "사전규격", note: "아직 공고 전 단계: 의견 제출과 사전 준비 대상입니다" },
   ];
 
   $("liveResults").innerHTML = groups
@@ -2906,17 +2923,17 @@ function scoreWhyHtml(n) {
       ? "공고 제목 + 첨부 과업 문서(과업지시서·제안요청서·공내역서 등)"
       : s.basis === "공고명만"
         ? "공고 제목만 (첨부 과업 내용을 읽지 못했거나, 제외된 공고라 첨부를 읽지 않음)"
-        : s.basis || "—";
+        : s.basis || "-";
   // 근거 문서 — 연결 사전규격 첨부까지 과업 문서로 읽어서, 공고 첨부에 없는 글로 점수가 나올 수 있다(2026-10-19 사용자 요청)
   const docNames = (s.docs || []).map(esc).join(", ");
   const docs =
     s.docs_from === "과업 문서"
       ? `근거 문서: ${docNames || "과업 문서"}${(s.docs || []).some((d) => d.startsWith("연결 사전규격")) ? " <small>(연결 사전규격 첨부 = 본공고 전에 올린 사전규격의 규격서·제안요청서)</small>" : ""}<br>`
       : s.docs_from === "첨부 전체"
-        ? `근거 문서: 공고문만 — 과업 문서(과업지시서·제안요청서) 없음${docNames ? ` <small>(${docNames})</small>` : ""}<br>`
+        ? `근거 문서: 공고문만: 과업 문서(과업지시서·제안요청서) 없음${docNames ? ` <small>(${docNames})</small>` : ""}<br>`
         : "";
   const head = `<h4>싱크로율 근거</h4>
-    <p class="meta">비교한 것: ${esc(s.docs_from === "첨부 전체" ? "공고 제목 + 첨부 공고문" : basis)}<br>${docs}${s.score == null ? "판정 불가 — 비교할 과업 항목이 없습니다" : `가장 비슷한 과거 실적과의 유사도 ${Math.round(s.score * 100)}% · ${esc(s.level || "")}`}</p>`;
+    <p class="meta">비교한 것: ${esc(s.docs_from === "첨부 전체" ? "공고 제목 + 첨부 공고문" : basis)}<br>${docs}${s.score == null ? "판정 불가: 비교할 과업 항목이 없습니다" : `가장 비슷한 과거 실적과의 유사도 ${Math.round(s.score * 100)}% · ${esc(s.level || "")}`}</p>`;
   const facets = Object.entries(s.tags || {}).filter(([, t]) => (t || []).length);
   const profileHtml =
     `<h5>이 공고의 과업 프로필</h5>` +
@@ -2934,7 +2951,7 @@ function scoreWhyHtml(n) {
       const ex = (t.excerpts || []).length
         ? `<span class="nums">공고 원문에서 겹친 과업</span>${t.excerpts.map((e) => `<blockquote class="quote">${esc(e.text)} <small>(${esc(e.tag)})</small></blockquote>`).join("")}`
         : "";
-      return `<li><b>${i + 1}. ${esc(t.title)}</b> (${esc(t.year)}) — ${Math.round((t.score || 0) * 100)}%${tags}${ex}</li>`;
+      return `<li><b>${i + 1}. ${esc(t.title)}</b> (${esc(t.year)}): ${Math.round((t.score || 0) * 100)}%${tags}${ex}</li>`;
     })
     .join("");
   return head + profileHtml + `<h5>비슷한 과거 사업</h5><p class="meta">꼬리표는 이 공고와 겹치는 과업 항목입니다.</p><ol>${rows}</ol>
@@ -3074,7 +3091,7 @@ function deadlineTip(n) {
       return `<li><span>${esc(label)}${star ? " ★" : ""}</span><b>${esc(dtText(iso))}${dd}</b></li>`;
     })
     .join("");
-  const notes = ["★ = 기준 마감 — 자격등록·입찰·의견등록 마감 중 가장 이른 것 (셋 다 없으면 첨부 공고문 마감)."];
+  const notes = ["★ = 기준 마감: 자격등록·입찰·의견등록 마감 중 가장 이른 것 (셋 다 없으면 첨부 공고문 마감)."];
   if (list.some(([label]) => label === "공동수급협정 마감")) notes.push("공동수급협정 마감은 공동수급으로 참가할 때만 해당해 기준에서 뺍니다.");
   return { title: "입찰 일정", body: `<ul class="due-list">${rows}</ul><p>${notes.map(esc).join("<br>")}</p>` };
 }
@@ -3137,7 +3154,7 @@ function briefingBadge(n) {
   const body = `<p>현장설명회: <b>${esc(when)}</b>${n.siteBriefingPlace ? ` · ${esc(n.siteBriefingPlace)}` : ""}</p>` +
     `<p>설명회에 참석해 등록한 업체만 투찰할 수 있는 공고가 많습니다. 참석 의무인지는 공고문에서 확인하세요.</p>`;
   return briefingAhead(n)
-    ? `<span class="due-tag today qual" tabindex="0">현장설명 ${esc(when)}${qtip("현장설명회 — 참가 자격 확인", body)}</span>`
+    ? `<span class="due-tag today qual" tabindex="0">현장설명 ${esc(when)}${qtip("현장설명회: 참가 자격 확인", body)}</span>`
     : tipBadge("", `현장설명 지남 (${t.getMonth() + 1}/${t.getDate()})`, "현장설명회가 이미 열림",
         body + `<p>설명회에 참석하지 않았다면 참가할 수 없을 수 있습니다.</p>`);
 }
@@ -3160,7 +3177,7 @@ function renderEnrichMeta() {
   }
   const parts = [];
   if (e.total) parts.push(`첨부 공고문·과업지시서 확인 ${e.done}/${e.total}`);
-  $("enrichMeta").textContent = parts.join(" · ") + " — 끝나는 대로 카드에 채워집니다";
+  $("enrichMeta").textContent = parts.join(" · ") + ": 끝나는 대로 카드에 채워집니다";
 }
 
 // ── 부가 정보: 자격 · 지역 · 공동수급 · 확인 필요 ──────────────
@@ -3184,7 +3201,7 @@ async function pollDocScan() {
   }
   if (s) {
     $("enrichMeta").textContent = s.running
-      ? `용역 공고문 세부품명 확인 ${s.done}/${s.total} (찾음 ${s.found}건) — 찾는 대로 '세부품명 공고' 탭에 붙습니다`
+      ? `용역 공고문 세부품명 확인 ${s.done}/${s.total} (찾음 ${s.found}건): 찾는 대로 '세부품명 공고' 탭에 붙습니다`
       : "";
     if (s.found !== lastDocFound) {
       lastDocFound = s.found;
@@ -3228,7 +3245,7 @@ function regionBadge(n) {
   const hq = r.company ? `<p>${CO_NAME} 본점 소재지: <b>${esc(r.company)}</b></p>` : "";
   const src = `<p class="src">출처: ${esc(r.source || "나라장터 참가가능지역 정보")}</p>`;
   if (r.status === "충족")
-    return tipBadge("okb", "✓ 지역제한 충족", "지역제한", `<p>본점 소재지가 <b>${esc(req)}</b>인 업체만 참가할 수 있습니다 — 조건을 충족합니다.</p>${hq}${src}`);
+    return tipBadge("okb", "✓ 지역제한 충족", "지역제한", `<p>본점 소재지가 <b>${esc(req)}</b>인 업체만 참가할 수 있습니다. 조건을 충족합니다.</p>${hq}${src}`);
   if (r.status === "미달")
     return tipBadge("block", "지역제한 · 참가 불가", "지역제한", `<p>본점 소재지가 <b>${esc(req)}</b>인 업체만 참가할 수 있습니다.</p>${hq}${src}`);
   if ((n.regions || []).length)
@@ -3259,7 +3276,7 @@ function regionSuspectBadge(n) {
   const rows = [["요건", sum.basis], ["기간", sum.period], ["개인사업자", sum.individual ? "공고문에 언급 있음" : null]].filter(([, v]) => v);
   return tipBadge("warn", `⚠ 지역 제한 의심 ${esc(req)}`, "지역 제한 의심 (첨부 공고문)",
     `<p class="lead">첨부 공고문에 <b>${esc(req)}</b> 소재 업체만 참가할 수 있다는 문구가 있습니다.</p>` +
-      `<p>나라장터 참가가능지역에는 제한이 없어 목록에서 빼지 않았습니다 — 공고문 판정은 표시만 합니다.</p>` +
+      `<p>나라장터 참가가능지역에는 제한이 없어 목록에서 빼지 않았습니다. 공고문 판정은 표시만 합니다.</p>` +
       (rows.length ? `<ul class="due-list">${rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join("")}</ul>` : "") +
       (t.evidence ? `<p class="q-label">공고문 원문</p><blockquote class="quote">${esc(t.evidence)}</blockquote>` : "") +
       `<p>원문에서 참가할 수 있는지 확인하세요.</p>`);
@@ -3270,7 +3287,7 @@ function attachBadge(n) {
   const ls = n.linkedSystem;
   if (ls)
     return tipBadge("warn", `${esc(ls.name)}에서 확인`, `${esc(ls.name)} 공고`,
-      `<p>나라장터엔 첨부가 없고 규격서·상세는 ${esc(ls.name)}에 있습니다 — 자격·과업은 거기서 확인하세요.</p><p><a href="${esc(ls.url)}" target="_blank" rel="noopener">${esc(ls.url)}</a></p>`);
+      `<p>나라장터엔 첨부가 없고 규격서·상세는 ${esc(ls.name)}에 있습니다. 자격·과업은 거기서 확인하세요.</p><p><a href="${esc(ls.url)}" target="_blank" rel="noopener">${esc(ls.url)}</a></p>`);
   if (n.attachmentCount === 0)
     return tipBadge("faint", "첨부 없음", "나라장터 첨부 없음", `<p>나라장터에 올라온 첨부파일이 없어 자격·확인 필요 요건을 읽지 못했습니다.<br>공고 상세에서 직접 확인하세요.</p>`);
   return "";
@@ -3282,7 +3299,7 @@ const FLAG_LABEL = { 실적: "실적 요건", 현장설명회: "현장설명회 
 // 이름 사전에 없는 업종(코드 없이 이름만 적힘) — 지일 보유 여부를 판정하지 못한다 (2026-10-19 요청)
 // 지역의무공동도급은 설명 문구 없음 — 요약·원문만(2026-11-25 사용자 요청)
 const FLAG_NOTE = { 지역공동도급: "",
-  업종: CO_NAME + " 보유 업종 목록·코드 사전에 없는 이름이라 자동 판정하지 않았습니다 — 보유 여부를 공고문과 등록 현황에서 확인하세요." };
+  업종: CO_NAME + " 보유 업종 목록·코드 사전에 없는 이름이라 자동 판정하지 않았습니다. 보유 여부를 공고문과 등록 현황에서 확인하세요." };
 const flagChipText = (f) => FLAG_LABEL[f.kind] || f.kind;
 function flagBadges(n) {
   return (n.textFlags || []).map((f) => {
@@ -3290,9 +3307,9 @@ function flagBadges(n) {
     const body =
       (rows.length ? `<ul class="due-list">${rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join("")}</ul>` : "") +
       `<p class="q-label">공고문 원문</p><blockquote class="quote">${esc(f.text)}</blockquote>` +
-      (FLAG_NOTE[f.kind] === "" ? "" : `<p>${esc(FLAG_NOTE[f.kind] || "자동 판정하지 않습니다 — " + CO_NAME + " 실적·인력이 조건에 맞는지 공고문에서 확인하세요.")}</p>`) +
+      (FLAG_NOTE[f.kind] === "" ? "" : `<p>${esc(FLAG_NOTE[f.kind] || "자동 판정하지 않습니다. " + CO_NAME + " 실적·인력이 조건에 맞는지 공고문에서 확인하세요.")}</p>`) +
       (f.source ? `<p class="src">출처: ${esc(f.source)}</p>` : "");
-    return tipBadge("warn", `⚠ ${esc(flagChipText(f))}`, `${esc(FLAG_LABEL[f.kind] || f.kind)} — 확인 필요`, body);
+    return tipBadge("warn", `⚠ ${esc(flagChipText(f))}`, `${esc(FLAG_LABEL[f.kind] || f.kind)}: 확인 필요`, body);
   });
 }
 
@@ -3376,7 +3393,7 @@ function overseasBadges(n) {
   if (n.overseasSuspect) out.push(tipBadge("warn", "해외 개최 의심", "해외 개최 의심",
     `<p class="lead">${esc(n.overseasSuspect)}</p><p>해외 개최 제외 규칙에는 걸리지 않아 목록에 남겼습니다.<br>개최지가 해외인지 공고 원문에서 확인하세요.</p>`));
   if (n.overseasAttachment) out.push(tipBadge("warn", "해외 개최 (첨부)", "첨부의 개최·사업 장소",
-    `<p>첨부 공고문·과업지시서의 장소: <b>${esc(n.overseasAttachment)}</b></p><p>첨부 판정은 표시만 합니다 — 원문에서 확인하세요.</p>`));
+    `<p>첨부 공고문·과업지시서의 장소: <b>${esc(n.overseasAttachment)}</b></p><p>첨부 판정은 표시만 합니다. 원문에서 확인하세요.</p>`));
   return out.join("");
 }
 
@@ -3435,7 +3452,7 @@ function reqBlocksHtml(all, mixed) {
   // 필수 보유(하나뿐인 요건)는 한 칸에 — 미보유 먼저
   const must = uniqBy(all.filter(isMustReq).map((r) => r.items[0]), (i) => i.label).sort((a, b) => Number(a.held) - Number(b.held));
   if (must.length) {
-    const h = must.length === 1 ? "필수 보유" : `필수 보유 — ${must.length}개 모두 필요`;
+    const h = must.length === 1 ? "필수 보유" : `필수 보유: ${must.length}개 모두 필요`;
     blocks.push(`<div class="lay-blk"><p class="lay-h">${h}</p><ul>${must.map((i) => {
       const [cls, sym] = mark(i.held, false);
       return `<li class="${cls}">${sym} ${optHtml(i, mixed)}</li>`;
@@ -3450,11 +3467,11 @@ function reqBlocksHtml(all, mixed) {
         const text = c.rows.map((x) => `<span class="${x.held ? "" : "combo-miss"}">${esc(x.label)}</span>${x.via ? ` <span class="grp">← ${esc(x.via)}</span>` : ""}`).join(" + ");
         return `<li class="${cls}">${sym} ${text}</li>`;
       };
-      blocks.push(`<div class="lay-blk"><p class="lay-h">아래 방법 중 하나를 갖추면 충족 — ${done ? "보유로 충족" : "미보유"}</p><ul>${combos.map(line).join(LAY_OR)}</ul></div>`);
+      blocks.push(`<div class="lay-blk"><p class="lay-h">아래 방법 중 하나를 갖추면 충족: ${done ? "보유로 충족" : "미보유"}</p><ul>${combos.map(line).join(LAY_OR)}</ul></div>`);
     } else if (r.any_of) {
       const items = uniqBy(r.items, (i) => i.label);
       const done = items.some((i) => i.held);
-      blocks.push(`<div class="lay-blk"><p class="lay-h">아래 ${items.length}개 중 1개 이상 보유하면 충족 — ${done ? "보유로 충족" : "미보유"}</p><ul>${items.map((i) => {
+      blocks.push(`<div class="lay-blk"><p class="lay-h">아래 ${items.length}개 중 1개 이상 보유하면 충족: ${done ? "보유로 충족" : "미보유"}</p><ul>${items.map((i) => {
         const [cls, sym] = mark(i.held, done);
         return `<li class="${cls}">${sym} ${optHtml(i, mixed)}</li>`;
       }).join(LAY_OR)}</ul></div>`);
@@ -3484,7 +3501,7 @@ function nQualBadges(n, noShare = false) {
     let body;
     if (all.length) {
       const mixed = all.some((r) => new Set((r.items || []).map((i) => i.kind)).size > 1);
-      title = `${esc(p.name)} ${all.length}건 — 충족 ${ok.length} · 미달 ${miss.length}`;
+      title = `${esc(p.name)} ${all.length}건: 충족 ${ok.length} · 미달 ${miss.length}`;
       body = reqBlocksHtml(all, mixed) + `<p class="lay-legend">✓ 보유 · ✗ 미보유 · – 이미 충족했거나 공동수급으로 채울 수 있어 없어도 됨<br>${esc(QUAL_NOTES[p.key])}</p>`;
     } else if ((p.held || []).length) {
       title = "보유로 충족한 자격";
@@ -3497,8 +3514,8 @@ function nQualBadges(n, noShare = false) {
       body += noShare
         ? `<p class="warnline">${CO_SUBJ} 보유한 요구 면허가 하나도 없어 공동수급으로도 맡을 부분이 없습니다.</p>`
         : denied
-        ? `<p class="warnline">공동수급 불허 — 부족한 자격을 함께 채울 업체를 구할 수 없습니다.</p>`
-        : `<p>공동수급이 허용되면 이 자격을 가진 업체와 함께 참가할 수 있습니다 — 옆 공동수급 배지를 보세요.</p>`;
+        ? `<p class="warnline">공동수급 불허: 부족한 자격을 함께 채울 업체를 구할 수 없습니다.</p>`
+        : `<p>공동수급이 허용되면 이 자격을 가진 업체와 함께 참가할 수 있습니다. 옆 공동수급 배지를 보세요.</p>`;
     return `<span class="badge qual ${tone}" tabindex="0">${ico ? `<span class="ico" aria-hidden="true">${ico}</span>` : ""}${esc(label)}${qtip(title, body)}</span>`;
   });
 }
@@ -3596,8 +3613,8 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
   // 사유(고른 칩·적은 글)가 있으면 칩 줄은 접고 '사유 고치기'로 연다 (11/24 사용자 요청)
   const hasReason = !!(p.reason || tags.length);
   const editOpen = REASON_OPEN.has(p.noticeNo);
-  const form = `<form class="reason-form${chips ? " optional" : ""}"><input maxlength="500" placeholder="${chips ? "자세히 적기 (선택)" : esc(p.status) + " 사유"} — ${esc(REASON_HINT[p.status] || "")}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">${chips ? "자세히 저장" : "사유 저장"}</button></form>`;
-  const said = [tags.join(" · "), p.reason].filter(Boolean).map(esc).join(" — ");
+  const form = `<form class="reason-form${chips ? " optional" : ""}"><input maxlength="500" placeholder="${chips ? "자세히 적기 (선택)" : esc(p.status) + " 사유"}: ${esc(REASON_HINT[p.status] || "")}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">${chips ? "자세히 저장" : "사유 저장"}</button></form>`;
+  const said = [tags.join(" · "), p.reason].filter(Boolean).map(esc).join(" · ");
   return `<div class="decision">
     ${hasReason ? "" : chips}
     ${hasReason
@@ -3646,7 +3663,7 @@ function pastHint(n) {
   return `<div class="past-hint"><span class="past-hint-h">비슷한 공고 지난 판단</span>${list
     .map((p) => {
       const why = [...(p.tags || []), p.reason].filter(Boolean).join(" · ");
-      return `<span class="past-item"><span class="badge pstat ${PART_TONE[p.status]}">${esc(p.status)}</span> ${why ? `<b>${esc(why)}</b> — ` : ""}${esc(p.title)} <span class="past-who">(${esc(p.decidedBy || p.owner || "—")}${p.decidedAt ? `, ${esc(fmtDT(p.decidedAt).slice(5, 10))}` : ""})</span></span>`;
+      return `<span class="past-item"><span class="badge pstat ${PART_TONE[p.status]}">${esc(p.status)}</span> ${why ? `<b>${esc(why)}</b> · ` : ""}${esc(p.title)} <span class="past-who">(${esc(p.decidedBy || p.owner || "-")}${p.decidedAt ? `, ${esc(fmtDT(p.decidedAt).slice(5, 10))}` : ""})</span></span>`;
     })
     .join("")}</div>`;
 }
@@ -3718,7 +3735,7 @@ function partBlock(n) {
           return `<li><b>${esc(c.by)}</b> ${esc(c.text)} <time>${esc(when(c.at))}${c.editedAt ? " · 수정됨" : ""}</time>${mine}</li>`;
         })
         .join("") || '<li class="sys">아직 대화가 없습니다.</li>'}</ul>
-      <form class="talk-form"><input maxlength="1000" placeholder="예: 공동수급 불허라 단독 수행 어려워 보류 — 규모 확인 중" autocomplete="off"><button type="submit">남기기</button></form>
+      <form class="talk-form"><input maxlength="1000" placeholder="예: 공동수급 불허라 단독 수행 어려워 보류: 규모 확인 중" autocomplete="off"><button type="submit">남기기</button></form>
     </details>
   </div>`;
 }
@@ -3744,7 +3761,7 @@ async function postParticipation(box, payload) {
     renderJudgeBell();  // 판단하면 📋 숫자가 바로 줄어듦
     return true;
   } catch (err) {
-    alert(`저장 실패 — ${err.message}`);
+    alert(`저장 실패: ${err.message}`);
     return false;
   }
 }
@@ -3884,10 +3901,10 @@ function renderLog() {
   const all = entries.filter((e) => !UNDECIDED.includes(e.st)).map((e) => e.p);
   const count = (s) => entries.filter((e) => e.st === s).length;
   $("logMeta").innerHTML =
-    `판단 기록 <b>${num(entries.length)}</b>건 — ${DECISIONS.map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
+    `판단 기록 <b>${num(entries.length)}</b>건: ${DECISIONS.map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
     `<button type="button" class="linkish" id="logCsv">${logFilterOn() ? `CSV 내려받기 (고른 ${num(logFiltered(entries).length)}건)` : "CSV 내려받기"}</button>` +
     "";
-  $("logAggNote").textContent = DEV_VIEW ? `개발자 화면 — 아래 집계는 판단할 때의 관심 키워드·수집 경로 기준${all.length < LOG_AGG_MIN ? ` (판단 ${all.length}건 — ${LOG_AGG_MIN}건쯤부터 비율이 믿을 만함)` : ""}. 끄려면 주소 끝에 ?dev=0` : "";
+  $("logAggNote").textContent = DEV_VIEW ? `개발자 화면: 아래 집계는 판단할 때의 관심 키워드·수집 경로 기준${all.length < LOG_AGG_MIN ? ` (판단 ${all.length}건: ${LOG_AGG_MIN}건쯤부터 비율이 믿을 만함)` : ""}. 끄려면 주소 끝에 ?dev=0` : "";
   $("logSearch").hidden = entries.length === 0;
   $("logEmpty").hidden = entries.length > 0;
 
@@ -3908,7 +3925,7 @@ function renderLog() {
     const why = [...(p.tags || []), p.reason].filter(Boolean).map(esc).join(" · ");
     const sub = [m.institution, m.budgetAmount ? won(m.budgetAmount) : null].filter(Boolean).map(esc)
       .concat(undecided ? [p.owner ? `담당 ${esc(p.owner)}` : "", reported ? esc(reported) : ""]
-        : [`${esc(p.decidedBy || p.owner || "—")}${p.decidedAt ? ` ${esc(fmtDT(p.decidedAt).slice(5, 10).replace("-", "/"))}` : ""}`])
+        : [`${esc(p.decidedBy || p.owner || "-")}${p.decidedAt ? ` ${esc(fmtDT(p.decidedAt).slice(5, 10).replace("-", "/"))}` : ""}`])
       .filter(Boolean).join(" · ");
     const act = st === "미판단" ? `<button type="button" class="log-go" data-goto="${esc(p.noticeNo)}">판단하기</button>`
       : nextStepButton(p) + (inList ? `<button type="button" class="linkish" data-goto="${esc(p.noticeNo)}">목록에서 보기</button>` : "");
@@ -3952,7 +3969,7 @@ function renderLog() {
     const fold = (items, label, show) => !items.length ? "" : show || q ? items.map(row).join("")
       : `<details class="log-missed"><summary>${label} ${items.length}건</summary>${items.map(row).join("")}</details>`;
     return `<details class="log-week" data-week="${esc(w.key)}"${open ? " open" : ""}><summary><b>${esc(w.label)}</b> · ${w.items.length}건 <span class="faint-note">${esc(cnt)}</span></summary>${rest.map(row).join("")}`
-      + `${fold(missed, "판단 없이 마감된 공고(놓침)", stf === "놓침")}${fold(ref, "사전규격 — 참고(본공고가 나오면 판단)", stf === "참고")}</details>`;
+      + `${fold(missed, "판단 없이 마감된 공고(놓침)", stf === "놓침")}${fold(ref, "사전규격: 참고(본공고가 나오면 판단)", stf === "참고")}</details>`;
   };
   $("logList").innerHTML = entries.length
     ? list.length ? top + (top && weeks.length ? '<h3 class="log-sec-title log-sec-past">지난 기록 <span class="faint-note">판단한 공고</span></h3>' : "") + weeks.map(weekHtml).join("")
@@ -3992,7 +4009,7 @@ function logAggHtml(all) {
         const top = [...r.tags].sort((x, y) => y[1] - x[1])[0];
         const few = r.n < AGG_MIN_N;
         const review = !r.k.startsWith("(") && r.n >= AGG_REVIEW_N && pct(r.불참, r.n) >= AGG_REVIEW_OUT; // "(경로 기록 없음…)"은 여러 경로가 섞인 묶음이라 고칠 대상이 아님
-        const note = review ? `<span class="badge warn">불참 ${pct(r.불참, r.n)}% — ${hint} 검토</span>` : few ? '<span class="faint-note">표본 적음</span>' : "";
+        const note = review ? `<span class="badge warn">불참 ${pct(r.불참, r.n)}%: ${hint} 검토</span>` : few ? '<span class="faint-note">표본 적음</span>' : "";
         return `<tr><td>${esc(r.k)}</td><td class="num">${r.n}</td><td class="num">${r.참가}</td><td class="num">${r.보류}</td><td class="num">${r.불참}</td><td class="num">${few ? "–" : pct(r.참가, r.n) + "%"}</td><td>${top ? `${esc(top[0])} ${top[1]}` : ""}</td><td>${note}</td></tr>`;
       }).join("")}</tbody>
     </table></div>`;
@@ -4004,7 +4021,7 @@ function logAggHtml(all) {
     : "";
   const skipNote = skipped.length ? `<p class="sub log-agg-note">필터와 무관한 사유(${NON_FILTER_TAGS.join("·")})만 고른 판단 ${skipped.length}건은 아래 두 표에서 뺌.</p>` : "";
   return tagTable + skipNote
-    + table("수집 경로별 집계", "수집 경로", (p) => (p.meta?.paths?.length ? p.meta.paths : ["(경로 기록 없음 — 11/16 전 판단)"]), "경로 조건")
+    + table("수집 경로별 집계", "수집 경로", (p) => (p.meta?.paths?.length ? p.meta.paths : ["(경로 기록 없음: 11/16 전 판단)"]), "경로 조건")
     + table("관심 키워드별 집계", "관심 키워드", (p) => p.meta?.keywords || [], "키워드");
 }
 
@@ -4031,7 +4048,7 @@ function downloadLogCsv() {
 $("logMeta").addEventListener("click", (ev) => {
   if (ev.target.id !== "logCsv") return;
   if (!logEntriesOf().length) return void alert("아직 판단 기록이 없습니다. 실제 공고 카드에서 참가·보류·불참을 고르면 내려받을 수 있습니다.");
-  if (!logFiltered(logEntriesOf()).length) return void alert("고른 조건에 맞는 판단 기록이 없습니다 — 찾기 칸·판단·보고 고르기를 바꿔 보세요.");
+  if (!logFiltered(logEntriesOf()).length) return void alert("고른 조건에 맞는 판단 기록이 없습니다. 찾기 칸·판단·보고 고르기를 바꿔 보세요.");
   downloadLogCsv();
 });
 $("logQ").oninput = () => renderLog();
@@ -4094,7 +4111,7 @@ const STAGE_NOTE = {
   해외개최: "몽골이 아닌 해외 개최 공고입니다. 제목에 한국관이 있거나, 전시회·해외 지명과 단체관이 함께 있거나, USA·UAE 같은 영문 국가 약자가 있으면 해외 개최로 봅니다.",
   "키워드·품목": "공고명·품명에 등록 키워드가 없고, 공고의 세부품명(용역은 용역분류)도 " + CO_NAME + " 등록 품목이 아닙니다.<br>다른 조건(금액·자격·지역·마감)은 모두 통과한 공고만 싣습니다.",
   참가자격: "나라장터 업종제한의 요구 면허를 " + CO_SUBJ + " 하나도 보유하지 않았습니다.<br>공동수급으로도 " + CO_SUBJ + " 맡을 몫이 없습니다.",
-  참가지역: "다른 지역(시·도, 시·군 단위)에 본사가 있는 업체만 참가할 수 있는 공고입니다.<br>나라장터 참가가능지역 정보로만 판단합니다 — 첨부 문서의 지역 문구는 '지역 제한 의심' 표시만 합니다.",
+  참가지역: "다른 지역(시·도, 시·군 단위)에 본사가 있는 업체만 참가할 수 있는 공고입니다.<br>나라장터 참가가능지역 정보로만 판단합니다. 첨부 문서의 지역 문구는 '지역 제한 의심' 표시만 합니다.",
   "과업 내용": "첨부 과업지시서를 읽어 보니 전시·제작 사업이 아닙니다.<br>제목에 키워드가 없고 과업에도 전시·제작 내용이 없거나, 사업 목적이 휴게·독서 공간 조성입니다.",
 };
 function excludedBadge(n) {
@@ -4142,7 +4159,7 @@ async function loadExcluded() {
     exData = data;
     renderExcluded();
   } catch (err) {
-    $("exResults").innerHTML = `<div class="verdict edge">요청 실패 — ${esc(err.message)}</div>`;
+    $("exResults").innerHTML = `<div class="verdict edge">요청 실패: ${esc(err.message)}</div>`;
   }
 }
 
@@ -4213,7 +4230,7 @@ function renderExcluded() {
   // 많이 빠진 이유부터
   const stages = Object.entries(d.byStage).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
   $("exSummary").innerHTML =
-    `${esc(d.periodLabel || "")} 수집 <b>${num(d.total)}</b>건 중 우리 분야 후보였다가 빠진 마감 전 공고 <b>${num(d.items.length)}</b>건 — ` +
+    `${esc(d.periodLabel || "")} 수집 <b>${num(d.total)}</b>건 중 우리 분야 후보였다가 빠진 마감 전 공고 <b>${num(d.items.length)}</b>건: ` +
     stages.map(([s, c]) => `${esc(stageLabel(s))} ${num(c)}`).join(" · ");
 
   const pool = (g) => d.items.filter((n) => exPass(n, g));
@@ -4327,13 +4344,13 @@ function productMissBadge(n, k) {
     `<div class="lay-blk"><p class="lay-h">${h}</p><ul><li class="${cls}">${sym} ${text}${note ? `<span class="lay-note">${note}</span>` : ""}</li></ul></div>`;
   const kw = blk("관심 키워드", "miss", "✗", k.name ? "공고명·품명에 없음" : "공고명에 없음");
   if (pre && !k.name)
-    return tipBadge("faint", "사전규격 · 품목 정보 없음", "세부품명 — 사전규격 (판정 못 함)",
+    return tipBadge("faint", "사전규격 · 품목 정보 없음", "세부품명: 사전규격 (판정 못 함)",
       kw + blk("세부품명번호", "lay-spare", "–", "정보 없음", "사전규격 응답에는 번호가 없습니다") +
       `<p class="lay-legend">본공고가 나오면 다시 판정합니다.</p>`);
   const prod = k.name
     ? blk(`${esc(k.what || "세부품명")} (나라장터)`, "miss", "✗", esc(k.name), CO_NAME + " 등록 품목이 아님")
     : blk("세부품명번호", "miss", "✗", "공고에 번호가 없음");
-  return tipBadge("block", "세부품명번호 미달", pre ? "세부품명 — 미달 (사전규격)" : "세부품명 — 미달",
+  return tipBadge("block", "세부품명번호 미달", pre ? "세부품명: 미달 (사전규격)" : "세부품명: 미달",
     kw + prod + `<p class="lay-legend">관심 키워드나 ${CO_NAME} 등록 품목 중 하나라도 맞으면 수집합니다.</p>`);
 }
 
@@ -4343,8 +4360,8 @@ function productMissBadge(n, k) {
  */
 function exReasonBlock(n, kw) {
   const main = kw
-    ? `<b>제외 키워드</b> — 공고명에 <mark class="kw">${esc(kw)}</mark>이(가) 있어 제외`
-    : `<b>${esc(stageLabel(n.excludedAt))}</b>${n.excludedDetail ? ` — ${esc(n.excludedDetail)}` : ""}`;
+    ? `<b>제외 키워드</b>: 공고명에 <mark class="kw">${esc(kw)}</mark>이(가) 있어 제외`
+    : `<b>${esc(stageLabel(n.excludedAt))}</b>${n.excludedDetail ? `: ${esc(n.excludedDetail)}` : ""}`;
   const step = (n.steps || []).find((s) => s.step === "키워드·품목");
   const parts = step?.ok ? step.detail.split(" · ") : [];
   const pick = (tag) => parts.filter((p) => p.startsWith(tag)).map((p) => p.slice(tag.length).replace(/\s*—.*$/, "").trim());
@@ -4399,7 +4416,7 @@ function promoteAsk(n, kw) {
   const body =
     `<p class="lead"><b>${LEAD[n.excludedAt] || `${esc(stageLabel(n.excludedAt))} 때문에 빠진 공고입니다.`}</b></p>` +
     (n.excludedDetail ? `<p>${esc(n.excludedDetail)}</p>` : "") +
-    (others.length ? `<p class="q-label">이 밖에도 걸린 조건</p><ul>${others.map((s) => `<li class="miss">✗ ${esc(STEP_NAME[s.step] || s.step)} — ${esc(s.detail)}</li>`).join("")}</ul>` : "") +
+    (others.length ? `<p class="q-label">이 밖에도 걸린 조건</p><ul>${others.map((s) => `<li class="miss">✗ ${esc(STEP_NAME[s.step] || s.step)}: ${esc(s.detail)}</li>`).join("")}</ul>` : "") +
     `<p>올리면 실제 공고 목록에 들어가고 팀원 모두에게 보입니다.<br>목록에서 '다시 빼기'로 되돌릴 수 있습니다.</p>`;
   return `<span class="promote-ask">참가할 만한 공고라면
     <span class="qual promote-tip" tabindex="0"><button type="button" class="rs-promote" data-promote="${esc(n.noticeNo)}" data-title="${esc(n.title)}" data-keyword="${esc(kw || "")}" data-reason="${esc(reason)}">실제 공고로 올리기</button>${qtip("올리기 전에 확인하세요", body).replace('class="qtip"', 'class="qtip right"')}</span>
@@ -4602,8 +4619,8 @@ function awardWaiting(o, lim = 5) {
   if (!o) return `<span class="badge warn">대기</span><div class="sub">낙찰자 확정 전</div>`;
   const n = o.bidders != null ? ` / ${o.bidders}곳` : "";
   if (o.rank == null) return `<span class="badge">탈락</span><div class="sub">개찰 ${esc((o.remark || "순위 없음").replace("낙찰하한선", "하한선"))}${o.underRank != null ? ` (${o.underRank}등)` : ""}</div>`;
-  // 5등 밖은 차례가 올 일이 사실상 없어 '탈락'(11/12 사용자 결정 — 투찰내역 '5위 안'과 같은 기준)
-  if (o.rank > lim) return `<span class="badge">탈락</span><div class="sub">개찰 ${o.rank}등${n}</div>`;
+  // 5등 밖은 차례가 올 가능성이 낮아 끝난 공고로 — 탈락 확정은 아니라 'N등 밖'(11/25 사용자, 예전 '탈락' 11/12 — 투찰내역 '5위 안'과 같은 기준)
+  if (o.rank > lim) return `<span class="badge">${lim}등 밖</span><div class="sub">개찰 ${o.rank}등${n}</div>`;
   return `<span class="badge warn">대기</span><div class="sub">개찰 ${o.rank}등${n}</div>`;  // 차례·확정 설명은 단계 칸에
 }
 // 11/19 화면 정리(사용자 승인 — 개선안 ①): 할 일 → 기다림 → 끝남 세 묶음, 한 줄에 버튼은 다음 할 일 하나, 나머지는 '더 보기'.
@@ -4642,7 +4659,7 @@ function awardStage(v, kind) {
   if (kind === "done") {
     if (v.status === "다른 업체 낙찰") return ["끝남 (다른 업체 낙찰)", -1, "할 일 없음"];
     if (o && rank == null) return ["끝남 (하한선 미달)", -1, "할 일 없음"];
-    if (o) return [`끝남 (개찰 ${rank}등)`, -1, d ? "지명경쟁은 1등이 아니면 낙찰 가능성이 없음" : "5등 밖이라 차례가 오지 않음"];
+    if (o) return [`끝남 (개찰 ${rank}등)`, -1, d ? "지명경쟁은 2등부터 차례가 오는 일이 거의 없음" : "차례가 올 가능성이 낮음 (웹앱 기준 5등 밖)"];
     return ["끝남", -1, ""];
   }
   if (o && v.private && rank === 1) return ["개찰 1등 (낙찰 확인 기다림)", 0, "수의계약은 적격심사가 없습니다. 낙찰이 확인되면 '낙찰 서류 만들기'가 켜집니다"];
@@ -4670,7 +4687,7 @@ function renderAward(items) {
     const steps = `<div class="award-stage ${kind}">${esc(stageName)}</div><ol class="award-steps${kind === "done" ? " off" : ""}">${awardSteps(v).map((s, i) => `<li class="${now < 0 ? "" : i < now ? "done" : i === now ? "now" : ""}">${s}</li>`).join("")}</ol>${stageSub ? stageSub.split(", ").map((s) => `<div class="sub">${esc(s)}</div>`).join("") : ""}`;
     const stage = v.qualOnly ? ` data-award-stage="qual"` : "";
     const canQual = kind === "todo" && !v.private && !v.folder && !isWon && rank === 1;
-    const lateQual = kind === "wait" && !v.private && !v.folder && rank != null && rank > 1;  // 2~5등: 심사 통보받으면 '더 보기'에서
+    const lateQual = kind !== "todo" && v.status === "대기" && !v.private && !v.folder && rank != null && rank > 1;  // 2~5등: 심사 통보받으면 '더 보기'에서
     // 낙찰 서류는 계약 등록이 확인된 뒤(11/20 사용자) — 나라장터에 계약이 안 올라오는 공고는 계약서를 받으면 '더 보기'에서
     const needAward = isWon && !(v.folder && !v.qualOnly);
     const canAward = needAward && Boolean((v.contract || {}).date);
@@ -4692,7 +4709,7 @@ function renderAward(items) {
     const more = [v.folder && needAward ? toggle(false) : "",
       waitAward ? `<button type="button" data-award-folder="${esc(key)}" title="나라장터 계약정보보다 계약서를 먼저 받았을 때">낙찰 서류 만들기 (계약서 받음)</button>` : "",
       lateQual ? `<button type="button" data-award-folder="${esc(key)}" data-award-stage="qual" title="앞 순위가 심사에서 떨어져 지일이 심사 통보를 받았을 때만">적격심사 서류 만들기 (심사 통보받음)</button>` : "",
-      v.folder ? `<button type="button" data-award-folder="${esc(key)}"${stage} title="평소엔 누르지 않아도 됩니다. 공고 폴더를 지웠거나, 만들 때 엑셀이 열려 있어 못 채웠을 때만 누르세요. 직접 고친 칸은 덮어쓰지 않습니다">서류 다시 만들기 (폴더 지움)</button>` : "",
+      v.folder ? `<button type="button" data-award-folder="${esc(key)}"${stage} data-award-refetch title="평소엔 누르지 않아도 됩니다. 공고가 정정됐거나, 공고 폴더를 지웠거나, 만들 때 엑셀이 열려 있어 못 채웠을 때만 누르세요. 직접 고친 칸은 덮어쓰지 않습니다">서류 다시 만들기 (공고 정정·폴더 지움)</button>` : "",
       `<button type="button" data-award-del="${esc(key)}">목록에서 빼기</button>`].join("");
     const detail = AWARD_OPEN.has(key) ? `<tr class="award-detail"><td colspan="${kind === "done" ? 3 : 4}"><div id="awardDetail-${esc(key)}" class="award-panel">불러오는 중…</div></td></tr>` : "";
     const reissue = (v.reissue || []).length ? ` <span class="badge urgentb" title="${esc(v.reissue.map((r) => r.kind + ' (가진 것 ' + r.have + ')').join(', '))}">⚠ 새로 발급 ${v.reissue.length}</span>` : "";
@@ -4700,7 +4717,7 @@ function renderAward(items) {
     const method = bid.method || (v.private ? "수의계약" : "");
     const meta = [v.institution, v.work, method, bid.at ? "투찰 " + bid.at.slice(5).replace("-", "/") : ""].filter(Boolean).map(esc).join(" · ");
     return `<tr><td class="award-name"><a href="https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${esc(v.no)}&bidPbancOrd=${esc(v.ord || "000")}" target="_blank" rel="noopener" title="${esc(key)}, 나라장터에서 보기">${esc(v.title || key)}</a>${reissue}<div class="sub">${meta}</div></td>
-      <td class="award-money">${bid.amount ? `<b title="${Number(bid.amount).toLocaleString()}원">${won(Number(bid.amount))}</b>` : `<span class="sub">투찰 기록 없음</span><br>`}${result}${kind === "done" && v.status === "대기" && rank != null && rank > awardLimit(v) ? `<div class="sub">${awardDesignated(v) ? "지명경쟁은 1등만 가능성이 있음" : "5등 밖, 차례가 오지 않음"}</div>` : ""}</td>
+      <td class="award-money">${bid.amount ? `<b title="${Number(bid.amount).toLocaleString()}원">${won(Number(bid.amount))}</b>` : `<span class="sub">투찰 기록 없음</span><br>`}${result}${kind === "done" && v.status === "대기" && rank != null && rank > awardLimit(v) ? `<div class="sub">${awardDesignated(v) ? "지명경쟁은 2등부터 차례가 거의 없음" : "차례가 올 가능성이 낮음"}</div>` : ""}</td>
       ${kind === "done" ? "" : `<td>${steps}</td>`}
       <td class="award-act">${simBtn}${main}<details class="award-more"><summary>더 보기</summary>${more}</details></td></tr>${detail}`;
   };
@@ -4711,7 +4728,7 @@ function renderAward(items) {
   $("awardList").innerHTML = `<h3>지금 할 일 ${todo.length}건</h3>` + (todo.length ? table(todo)
     : `<p class="sub">지일이 개찰 1등이거나 낙찰된 공고가 생기면 여기에 올라와, 적격심사·계약 서류를 만들 수 있습니다.</p>`)
     + (wait.length ? `<details class="award-group" open><summary>결과를 기다리는 공고 ${wait.length}건</summary>${table(wait)}</details>` : "")
-    + (done.length ? `<details class="award-group"><summary>끝난 공고 ${done.length}건 <span class="sub">탈락·다른 업체 낙찰</span></summary>${table(done, true)}</details>` : "");
+    + (done.length ? `<details class="award-group"><summary>끝난 공고 ${done.length}건 <span class="sub">하한선 미달·등수 밖·다른 업체 낙찰</span></summary>${table(done, true)}</details>` : "");
   AWARD_OPEN.forEach(loadAwardDetail);
 }
 async function loadAwardDetail(key) {
@@ -4755,8 +4772,8 @@ function awardDetailHtml(key, s) {
     : `<p class="sub">첨부에서 제출서류 목록을 찾지 못했습니다. 공고문을 직접 확인하세요.</p>`}</div>`;
   const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="${AWARD_API}/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}">zip으로 받기</a></li>`),
     s.attach.length ? `<li><b>공고문서</b> ${s.attach.map((f) => link("공고문서/" + f, f)).join(" · ")}</li>` : ""].join("");
-  return `<div class="award-path"><span>폴더</span><code>${esc(s.folder)}</code>
-      <button type="button" data-award-copy="${esc(s.folder)}">경로 복사</button>
+  return `<div class="award-path"><span>폴더</span><code>${escRaw(s.folder)}</code>
+      <button type="button" data-award-copy="${escRaw(s.folder)}">경로 복사</button>
       <span class="sub">${local ? "서버 PC 안 폴더라 다른 PC에서는 열리지 않습니다. 아래 파일을 내려받으세요." : "탐색기 주소창에 붙여 넣으면 열립니다. 여기서 파일을 열어 채우고 저장하면 그대로 남습니다."}</span></div>
     <ul class="award-stages">${stages}</ul>
     ${reissue}
@@ -4798,13 +4815,15 @@ $("awardList").onclick = (e) => {
   }
   if (e.target.closest("[data-award-sim]")) return $("awardCheck").click();  // 시험 페이지 '다음 단계'
   const f = e.target.closest("[data-award-folder]");
-  if (f) return awardAct(f, AWARD_API + "/folder", { key: f.dataset.awardFolder, stage: f.dataset.awardStage || "" }, (d) => {
+  if (f) return awardAct(f, AWARD_API + "/folder", { key: f.dataset.awardFolder, stage: f.dataset.awardStage || "", refetch: "awardRefetch" in f.dataset }, (d) => {
     loadAward();
     // 묶음 zip 바로 내려받기(11/17 사용자) — 같은 폴더가 NAS와 사내 공유 폴더(서버 PC가 1분마다 복사)에도 있음
     const a = document.createElement("a");
     // 시험 페이지는 시험 목록의 zip, 이미 있던 폴더면 이번에 더해진 파일만(since)
     a.href = `${AWARD_API}/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=${d.since ? "&since=" + d.since : ""}`;
     document.body.appendChild(a); a.click(); a.remove();
+    if ("awardRefetch" in f.dataset && d.since) return (d.newDocs || []).length ? `새로 받은 첨부 ${d.newDocs.length}개: ${d.newDocs.join(", ")}. 이미 만든 서류는 그대로 두었으니 바뀐 내용을 확인해 주세요.`
+      : "첨부를 다시 확인했습니다. 새로 받은 첨부가 없고, 이미 만든 서류는 그대로입니다.";
     return d.since ? "같은 공고 폴더에 이번 서류를 더했습니다. 더해진 파일만 '…_추가.zip'으로 받았습니다. 먼저 받은 zip과 같은 곳에 풀면 한 폴더로 합쳐집니다. 엑셀을 처음 열면 위의 '편집 사용'을 눌러야 서식 칸이 계산됩니다."
       : "폴더를 만들고 첨부를 받았습니다. 묶음 zip을 내려받았고, 사내 공유 폴더에도 1분 안에 생깁니다. 채울 칸은 '서류 현황'에서 볼 수 있습니다. 엑셀을 처음 열면 위의 '편집 사용'을 눌러야 서식 칸이 계산됩니다.";
   });
@@ -4951,16 +4970,17 @@ const HELP_SETS = {
     [0, "이 탭은 뭔가요?", "입찰에서 낙찰되면 낼 서류를\n웹앱이 미리 만들어 드립니다.\n공고명·금액은 채워져 있고\n계약일은 나라장터에 계약이 올라와 있으면\n채워집니다.\n노란 칸을 적고 파란 칸을 확인해 주세요.", "이 탭 뭐 무엇 목적"],
     [0, "어떻게 쓰나요?", "① 투찰 계산기에서 투찰을 기록하면\n    이 목록에 공고가 올라옵니다.\n② 개찰·낙찰·계약은\n    1시간마다 저절로 확인합니다.\n③ 서류를 만들 때가 되면\n    그 공고 줄에 버튼이 켜집니다.", "사용법 순서 쓰는"],
     [0, "제가 할 일은 뭔가요?", "① 공고 줄에 켜진 버튼을 누릅니다.\n② '서류 현황 ▾' → '경로 복사'로\n    폴더를 엽니다.\n③ 엑셀의 노란 칸을 채우고 저장합니다.", "제가 할 일 해야"],
-    [0, "목록이 세 묶음으로 나뉜 건 뭔가요?", "• 지금 할 일: 개찰 1등·낙찰·\n    서류를 만든 공고\n• 결과를 기다리는 공고: 개찰·낙찰 결과 대기\n• 끝난 공고: 탈락·다른 업체 낙찰", "묶음 세 칸 지금 할 일 기다리 끝난 구분"],
+    [0, "목록이 세 묶음으로 나뉜 건 뭔가요?", "• 지금 할 일: 개찰 1등·낙찰·\n    서류를 만든 공고\n• 결과를 기다리는 공고: 개찰·낙찰 결과 대기\n• 끝난 공고: 하한선 미달·6등부터·다른 업체 낙찰", "묶음 세 칸 지금 할 일 기다리 끝난 구분"],
     [0, "단계 줄은 뭔가요?", "그 공고가 어디까지 왔는지 보여 줍니다.\n진하게 칠해진 칸이 지금 단계입니다.\n\n착수(착공)부터는 서류의 제출일·청구일을\n채워 저장하면 다음 단계로 넘어갑니다.", "단계 줄 칸 색 칠 진행"],
     [0, "먼저 연습해 볼 수 있나요?", "네. 연습용 화면이 따로 있습니다.\n[[연습 화면 열기|/award-test]]\n여기서 누른 것은\n실제 공고·폴더에 영향이 없습니다.", "연습 시험 테스트 award-test 해보 해 보"],
 
     [1, "개찰 결과는 언제 보이나요?", "웹앱이 켜져 있으면\n1시간마다 저절로 확인합니다.\n지금 바로 보시려면\n위쪽 '지금 낙찰자 확인'을 눌러 주세요.", "개찰 결과 언제 낙찰 22시 확인 입력 누가"],
     [1, "공고가 목록에 안 보이면 어떻게 하나요?", "투찰 계산기에서 투찰을 기록한\n공고만 올라옵니다.\n평일 낮에 1시간마다 가져오니\n바로 보시려면 '지금 낙찰자 확인'을\n눌러 주세요.\n\n투찰 기록이 없는 공고는\n위쪽 '공고번호로 직접 넣기'를 눌러\n공고번호를 넣어 주세요.", "목록 안 보 없 추가 넣 안나 공고번호"],
+    [1, "개찰 등수는 무슨 뜻인가요?", "개찰 때 나온 지일의 순위입니다.\n낙찰이 확정된 순위는 아닙니다.\n\n적격심사는 1순위부터 차례로 하고\n앞 순위가 떨어지면 다음 순위로 넘어갑니다.\n\n웹앱은 이렇게 나누어 보여 드립니다.\n• 1등: 지금 할 일\n• 2~5등: 결과를 기다리는 공고\n• 6등부터: 끝난 공고\n\n5등은 나라장터 규정이 아니라\n웹앱에서 정한 기준입니다.", "등수 순위 5등 기준 6등"],
     [1, "개찰 1등이면 어떻게 되나요?", "'지금 할 일'에 올라오고\n'적격심사 서류 만들기' 버튼이 켜집니다.\n\n수의계약은 적격심사가 없어\n낙찰이 확인될 때까지 기다립니다.", "1등 1순위 개찰"],
-    [1, "개찰 2~5등이면 어떻게 되나요?", "'결과를 기다리는 공고'에 있습니다.\n앞 순위가 포기하거나 심사에서 떨어지면\n차례가 옵니다.\n\n발주처 연락을 받으면 그 공고의\n'더 보기' → '적격심사 서류 만들기\n(심사 통보받음)'을 눌러 주세요.\n\n수의계약은 적격심사가 없어\n낙찰이 확인될 때까지 기다립니다.\n지명경쟁은 2등부터 끝난 공고로 갑니다.", "2등 3등 4등 5등 차례 통보 순위 포기"],
-    [1, "개찰 6등 밖이면 어떻게 되나요?", "차례가 오기 어려워 '끝난 공고'로 갑니다.\n따로 하실 일은 없습니다.", "6등 밖 순위 낮"],
-    [1, "지명경쟁은 왜 1등만인가요?", "지명경쟁은 1등이 아니면\n차례가 오는 일이 거의 없기 때문입니다.", "지명 경쟁 1등"],
+    [1, "개찰 2~5등이면 어떻게 되나요?", "'결과를 기다리는 공고'에 있습니다.\n앞 순위가 포기하거나 심사에서 떨어지면\n다음 순위로 차례가 옵니다.\n\n발주처 연락을 받으면 그 공고의\n'더 보기' → '적격심사 서류 만들기\n(심사 통보받음)'을 눌러 주세요.\n\n수의계약은 적격심사가 없어\n낙찰이 확인될 때까지 기다립니다.", "2등 3등 4등 5등 차례 통보 순위 포기"],
+    [1, "개찰 6등부터는 어떻게 되나요?", "'끝난 공고'로 옮겨 보여 드립니다.\n차례가 올 가능성이 낮아 나눈 것이고\n탈락이 확정됐다는 뜻은 아닙니다.\n\n발주처 연락을 받으면\n'더 보기' → '적격심사 서류 만들기\n(심사 통보받음)'을 눌러 주세요.", "6등 밖 순위 낮"],
+    [1, "지명경쟁은 왜 1등만 보나요?", "2등부터 차례가 오는 일이 거의 없어\n1등만 기다리는 것으로 정했습니다.\n나라장터 규정은 아니고\n웹앱에서 정한 기준입니다.", "지명 경쟁 1등"],
     [1, "'하한선 미달'은 무슨 뜻인가요?", "투찰금액이 낙찰하한선보다 낮아\n그 투찰이 무효가 됐다는 뜻입니다.\n따로 하실 일은 없습니다.", "하한선 미달 무효 뜻"],
     [1, "공고는 목록에서 어떻게 빼나요?", "그 공고의 '더 보기' → '목록에서 빼기'를\n눌러 주세요.\n만든 폴더·파일은 그대로 남습니다.\n\n다시 보시려면 '공고번호로 직접 넣기'로\n같은 번호를 넣어 주세요.", "빼 지우 삭제 제거"],
     [1, "계약 단계로 언제 바뀌나요?", "발주처가 나라장터에 계약을 올린 뒤\n1시간마다 확인할 때 바뀝니다.\n바로 보시려면 '지금 낙찰자 확인'을\n눌러 주세요.", "계약 단계 바뀌 착수 착공 언제 안 바뀌"],
@@ -4971,7 +4991,7 @@ const HELP_SETS = {
     [2, "공사·물품·용역 서류가 다른가요?", "네, 공고에 맞는 서류로\n저절로 만들어집니다.\n• 공사: 착공서류 · 준공계\n• 물품: 착수서류 · 납품계\n• 용역: 착수서류 · 완료계\n청구서는 모두 같습니다.", "공사 물품 용역 다른 차이 착공 착수 납품 완료 준공"],
     [2, "계약서는 왜 안 만들어 주나요?", "발주처마다 양식이 다르기 때문입니다.\n발주처에서 받은 양식으로 작성해 주세요.", "계약서 계약 양식 안 만들"],
     [2, "'서류_확인.txt'는 뭔가요?", "공고문에서 읽은 제출서류 목록입니다.\n표준틀에 있는 것과\n따로 준비할 것이 나뉘어 있고\n웹앱이 채운 칸도 적혀 있습니다.\n공고 폴더 안 '공고문서' 폴더에 있습니다.", "서류 확인 txt 제출서류 따로 준비"],
-    [2, "'서류 다시 만들기'는 언제 누르나요?", "평소엔 누르지 않으셔도 됩니다.\n아래 경우에만 '더 보기'에서 눌러 주세요.\n• 공고 폴더를 지웠거나 옮겼을 때\n• 만들 때 엑셀이 열려 있어 못 채웠다고 나올 때\n\n이미 있는 서류와 받아 둔 첨부는\n그대로 둡니다.\n정정된 공고의 첨부는\n나라장터에서 직접 받아 주세요.", "다시 만들기 첨부 다시 받기 정정 언제"],
+    [2, "'서류 다시 만들기'는 언제 누르나요?", "평소엔 누르지 않으셔도 됩니다.\n아래 경우에만 '더 보기'에서 눌러 주세요.\n• 공고가 정정됐을 때\n• 공고 폴더를 지웠거나 옮겼을 때\n• 만들 때 엑셀이 열려 있어 못 채웠다고 나올 때\n\n바뀐 첨부는 '공고문서' 폴더에\n'_정정날짜' 이름으로 새로 들어갑니다.\n이미 만든 서류는 그대로 두니\n바뀐 내용을 확인해 주세요.", "다시 만들기 첨부 다시 받기 정정 언제"],
     [2, "적격심사 틀은 어떻게 고르나요?", "고르실 필요 없습니다.\n공고의 업무·금액·지역에 맞는\n틀로 저절로 만들어집니다.\n맞는 틀이 없으면 만들지 않고\n'서류_확인.txt'에 이유를 적습니다.", "적격심사 틀 고르 표준틀 어떤 지역 금액"],
     [2, "공고문 제출서류는 어디서 보나요?", "'서류 현황 ▾'을 열면 아래쪽에\n공고문에 적힌 때별로 나눠 보입니다.\n'따로 준비'라고 된 서류는\n직접 챙겨 주세요.", "공고문 제출서류 제출 서류 목록 어디"],
 
@@ -5347,7 +5367,7 @@ document.addEventListener("click", (ev) => {
         if (await postParticipation(box, { status: "불참", tags: [tag], ...(decisionMeta(no) ? { meta: decisionMeta(no) } : {}) })) { ok += 1; LOG_PICK.delete(no); }
       }
       renderLog();
-      if (ok < nos.length) alert(`${nos.length}건 중 ${ok}건만 저장했습니다 — 나머지는 다시 눌러 주세요.`);
+      if (ok < nos.length) alert(`${nos.length}건 중 ${ok}건만 저장했습니다. 나머지는 다시 눌러 주세요.`);
     })();
     return;
   }
@@ -5466,7 +5486,7 @@ if (AWARD_TEST) {  // 시험 페이지: 탭 줄을 숨기고 낙찰 후 서류 �
   document.title = "낙찰 후 서류 시험";
   document.querySelector(".tabs").style.display = "none";  // .tabs 의 display:flex 가 hidden 을 덮어서
   $("awardTestNote").hidden = false;
-  $("awardReset").onclick = (e) => awardAct(e.target, AWARD_API + "/reset", {}, () => "처음 상태로 되돌렸습니다 — 광양 공고만 남고 시험 폴더는 지웠습니다.");
+  $("awardReset").onclick = (e) => awardAct(e.target, AWARD_API + "/reset", {}, () => "처음 상태로 되돌렸습니다. 광양 공고만 남고 시험 폴더는 지웠습니다.");
   showTab("award");
 }
 (function openHashTab() {
@@ -5533,7 +5553,7 @@ async function openDocMgr() {
       <p class="uphint" style="margin:-4px 0 10px">새 PDF를 바꿀 서류 줄 위에 끌어다 놓아도 됩니다.</p>
       <ul><li data-new="1"><div class="row1"><span class="name">새 서류 추가</span></div>
         <div class="up"><input class="newname" placeholder="서류 이름 (예: 조경식재공사업 등록증)" maxlength="40">${UP}</div>
-        <p class="uphint" style="margin:6px 0 0">그리다 서류는 이름 앞에 <b>(그리다)</b>를 붙여 주세요 — 예: (그리다) 여성기업. 그래야 그리다 쪽에 따로 보입니다.</p>
+        <p class="uphint" style="margin:6px 0 0">그리다 서류는 이름 앞에 <b>(그리다)</b>를 붙여 주세요. 예: (그리다) 여성기업. 그래야 그리다 쪽에 따로 보입니다.</p>
         <div class="upbox"></div></li></ul>
       <input id="docMgrQ" class="mgrq" placeholder="서류 찾기"><div class="mgrtabs" id="docMgrTabs" role="group" aria-label="회사"></div><ul id="docMgrList"></ul>
       <p class="how">빼기는 목록과 알림에서만 빼고, 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p></div></dialog>`);
@@ -5607,7 +5627,7 @@ function docManage(li, action) {
   box.innerHTML = action === "edit"
     ? `<p>새 파일 없이 유효기간만 고칩니다(잘못 적었을 때).</p><div class="choices other">유효기간 끝 <input type="date" value="${esc(d.end || "")}">`
       + ` <button type="button" data-go="date">저장</button> <button type="button" data-go="none">유효기간 없는 서류</button> <button type="button" data-cancel>취소</button></div>`
-    : `<p><b>${esc(kind)}</b> — 목록과 알림에서 뺄까요?<br>파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>`
+    : `<p><b>${esc(kind)}</b>: 목록과 알림에서 뺄까요?<br>파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>`
       + `<div class="choices"><button type="button" data-go="remove" class="danger">빼기</button> <button type="button" data-cancel>취소</button></div>`;
   box.onclick = async (ev) => {
     const b = ev.target.closest("button");
@@ -5628,7 +5648,7 @@ async function docReplace(li, file) {  // 잘못 올린 파일 바꾸기 — 발
   if (!file || !/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { box.innerHTML = `<p class="err">PDF 파일만 올릴 수 있습니다.</p>`; return; }
   const pdf = await pdfBase64(file);
   box.innerHTML = `<p>지금 파일 <b>${esc(d.file || "")}</b>을(를)<br><b>${esc(file.name)}</b>(으)로 바꿀까요?<br>`
-    + "발급일·유효기간은 그대로입니다 — 날짜가 틀렸으면 '날짜 수정'. 앞 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>"
+    + "발급일·유효기간은 그대로입니다. 날짜가 틀렸으면 '날짜 수정'. 앞 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>"
     + `<div class="choices"><button type="button" data-go="replace" class="go">바꾸기</button> <button type="button" data-cancel>취소</button></div>`;
   box.onclick = async (ev) => {
     const b = ev.target.closest("button");
@@ -5697,13 +5717,13 @@ function renderJudgeBell() {
     const rep = (p.reports.at(-1)?.date || "").slice(0, 10);
     const done = JUDGE_DONE.get(p.noticeNo);
     if (JUDGE_ASK.has(p.noticeNo)) return `<li class="judge-item asking" data-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span></div>`
-      + `<div class="row2">불참 사유를 골라 주세요 — 고르면 저장됩니다 <button type="button" class="linkbtn" data-jask-cancel>취소</button></div>`
+      + `<div class="row2">불참 사유를 골라 주세요. 고르면 저장됩니다 <button type="button" class="linkbtn" data-jask-cancel>취소</button></div>`
       + `<div class="jtags">${BULK_TAGS.map((g) => `<button type="button" class="pbtn muted" data-jpick="${esc(g)}">${esc(g)}</button>`).join("")}</div></li>`;
     if (done) return `<li class="judge-item done" data-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span></div>`
       + `<div class="row2">불참 저장 · ${esc(done.tag)} <button type="button" class="linkbtn" data-jtags>사유 바꾸기</button> <button type="button" class="linkbtn" data-jundo>취소</button></div>`
       + (done.open ? `<div class="jtags">${BULK_TAGS.map((g) => `<button type="button" class="pbtn muted${g === done.tag ? " on" : ""}" data-jtag="${esc(g)}">${esc(g)}</button>`).join("")}</div>` : "") + `</li>`;
     return `<li class="judge-item" data-goto-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span>`
-      + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span><button type="button" class="pbtn muted jskip" data-jskip="${esc(p.noticeNo)}" title="불참 — 사유를 고르면 저장">불참</button></div>`
+      + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span><button type="button" class="pbtn muted jskip" data-jskip="${esc(p.noticeNo)}" title="불참: 사유를 고르면 저장">불참</button></div>`
       + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
   };
   // 칸마다 마감이 가장 급한 3건만(11/23 사용자 — 길게 늘어놓지 않게), 나머지는 실제 공고 탭 그 대분류 탭에서
@@ -5725,7 +5745,7 @@ function renderJudgeBell() {
   const repLink = repN ? `<p class="how"><button type="button" class="linkbtn" data-report="daily:${rep}">${rep === todayText() ? "오늘" : mdOf(rep)} 보고 ${repN}건 모두 보기 ›</button></p>` : "";
   $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3><p class="row2">보고에 나간 공고 중 판단 안 한 것 · 7일 안</p>`
     + section("입찰 · 매일 보고", dailyIn, JUDGE_TODAY && rep ? "" : "입찰", repLink, toggle) + section("협상 · 규격가격 · 주간 보고", weekly, "협상", "", "", weekly.filter(soon).slice(0, 3))
-    + (todo.length ? `<p class="how">공고를 누르면 그 공고로 갑니다 — 판단하면 숫자가 줄어듭니다.</p>` : "");
+    + (todo.length ? `<p class="how">공고를 누르면 그 공고로 갑니다. 판단하면 숫자가 줄어듭니다.</p>` : "");
 }
 // 📋 창에서 바로 불참 — 넘기던 공고를 몇 초에 정리(11/24 사용자, 놓침 94건 vs 판단 20건). 참가는 카드에서
 async function judgeSkip(no, tag) {
@@ -5901,9 +5921,9 @@ function renderCalendar() {
     // 확인한 결과·지난 일정은 회색(11/24 사용자 — 읽었다는 표시)
     const grey = e.result ? calSeen.has(e.id) : e.d < today;
     body += `<li class="ev${grey ? " seen" : ""}" data-cev="${CAL.events.indexOf(e)}"><i class="k k-${e.kind}"></i><span class="what">${CAL_KIND[e.kind]}</span>`
-      + `<span class="name">${esc(e.title)}${e.result ? ` — ${esc(e.result)}` : ""}</span>${e.result && !calSeen.has(e.id) ? `<span class="new">새 결과</span>` : ""}</li>`;
+      + `<span class="name">${esc(e.title)}${e.result ? `: ${esc(e.result)}` : ""}</span>${e.result && !calSeen.has(e.id) ? `<span class="new">새 결과</span>` : ""}</li>`;
   }
-  body = body ? body + "</ul>" : `<p class="row2" style="margin-top:10px">${CAL.range === "week" ? "앞으로 7일 안에 일정이 없습니다." : CAL.range === "month" ? "이 달에는 일정이 없습니다." : !CAL.day ? "날짜를 누르면 그날 일정이 보입니다." : CAL.day === today ? "오늘은 일정이 없습니다 — 다른 날짜를 눌러 보세요." : "이 날은 일정이 없습니다."}</p>`;
+  body = body ? body + "</ul>" : `<p class="row2" style="margin-top:10px">${CAL.range === "week" ? "앞으로 7일 안에 일정이 없습니다." : CAL.range === "month" ? "이 달에는 일정이 없습니다." : !CAL.day ? "날짜를 누르면 그날 일정이 보입니다." : CAL.day === today ? "오늘은 일정이 없습니다. 다른 날짜를 눌러 보세요." : "이 날은 일정이 없습니다."}</p>`;
   const cur = CAL.range || (CAL.day === today && month === today.slice(0, 7) ? "today" : "");
   const ranges = [["today", "오늘"], ["week", "7일"], ["month", "이 달"]]
     .map(([v, l]) => `<button type="button" data-crange="${v}" aria-pressed="${cur === v}" class="${cur === v ? "on" : ""}">${l}</button>`).join("");
@@ -5978,7 +5998,7 @@ document.addEventListener("click", (ev) => { if (!ev.target.closest(".co-switch"
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setCoMenu(false); });
 $("coPick").onclick = (ev) => { const b = ev.target.closest("[data-co]"); if (b) pickCompany(b.dataset.co); };
 document.title = CO === "jiil" ? document.title : `${CO_NAME} · ${document.title}`;
-document.querySelector("footer").firstChild.textContent = `\n    (주)${CO_NAME} · 로컬 전용 도구\n  `;
+document.querySelector("footer").firstChild.textContent = `\n    (주)${CO_NAME} · 사내 전용\n  `;
 if (CO !== "jiil") {
   // 낙찰 후 서류·일정은 아직 지일 자료로만 돈다 — 숨김. 정량평가서는 그 회사 서류 폴더로, 투찰 계산기는 그 회사 투찰 기록으로(11/24)
   document.querySelectorAll('.tabs [data-tab="award"]').forEach((b) => { b.hidden = true; });

@@ -628,6 +628,14 @@ def share_path(path: Path | str) -> str:
     return "\\\\jiilserver\\jiil-webapp\\" + s[len("/work/"):].replace("/", "\\") if s.startswith("/work/") else s
 
 
+def project_path(v: dict, folder: Path) -> str:
+    """계약까지 온 공고의 사업 폴더 주소(POSTAWARD_PROJECT_ROOT가 있을 때, 맞추는 일은 서버 PC awardsync). 없으면 ''."""
+    root = os.environ.get("POSTAWARD_PROJECT_ROOT", "").strip().rstrip("\\/")
+    if not root or v.get("qualOnly") or not v.get("bidYear"):
+        return ""
+    return "\\".join([root.replace("/", "\\"), f"{v['bidYear']} 프로젝트", "입찰", folder.name])
+
+
 # 착수서류 인력 줄 이름(표준틀 build_v5 SWITCH와 같게 — 11/19, 조직도 칸 이름)
 START_ROLES = {"물품": {1: "현장대리인", 3: "디자인·설계", 4: "제작·설치", 5: "공무·관리지원"},
                "용역": {1: "용역 책임자", 3: "기획", 4: "디자인", 5: "설계"}}
@@ -819,6 +827,8 @@ class PostAward:
             for s in stages:
                 (folder / s).mkdir(parents=True, exist_ok=True)
             v["folder"] = str(folder)
+            if not qual_only:
+                v.setdefault("bidYear", self.now().year)  # 사업 폴더 'YYYY 프로젝트/입찰'의 해
             v["qualOnly"] = qual_only  # 화면: 낙찰되면 '낙찰 서류 만들기'를 다시 보임
             self._write(items)
         return folder
@@ -984,7 +994,7 @@ class PostAward:
             stages.append(stage)
         notice = folder / "공고문서"
         attach = sorted(f.name for f in notice.iterdir() if f.is_file()) if notice.is_dir() else []
-        return {"folder": share_path(folder), "stages": stages, "attach": attach,
+        return {"folder": project_path(v, folder) or share_path(folder), "stages": stages, "attach": attach,
                 "docList": v.get("docList") or [], "notes": v.get("notes") or [], "reissue": v.get("reissue") or []}
 
     def file(self, key: str, rel: str) -> Path:
@@ -1312,7 +1322,34 @@ class PostAward:
                 else:
                     out["waiting"] += 1
             self._write(items)
+        self.archive_lost()
         return out
+
+    def archive_lost(self) -> int:
+        """적격심사 서류까지 만들었는데 다른 업체가 낙찰된 공고의 폴더를 _탈락으로 옮김(11/25 사용자 '탈락하면 폴더가 사라지게').
+        지우지 않음(판정이 뒤집히면 되살리게). 계약 서류까지 만든 폴더는 안 건드림. 옮긴 수."""
+        from .awardsync import LOST_DIR, free_path
+
+        moved = 0
+        for key, v in self._read().items():
+            folder = Path(v["folder"]) if v.get("folder") else None
+            if v.get("status") != "다른 업체 낙찰" or v.get("lostFolder") or not v.get("qualOnly") or folder is None or not folder.is_dir():
+                continue
+            try:
+                lost = folder.parent.parent / LOST_DIR
+                lost.mkdir(exist_ok=True)
+                to = free_path(lost / folder.name)
+                folder.rename(to)  # 같은 드라이브 — 열려 있으면 통째로 실패(반만 옮겨지지 않게 shutil.move 안 씀)
+            except OSError:  # 엑셀에서 열려 있음 — 다음 확인 때
+                continue
+            with self._lock:
+                items = self._read()
+                if key in items:
+                    items[key].pop("folder", None)
+                    items[key]["lostFolder"] = str(to)
+                    self._write(items)
+            moved += 1
+        return moved
 
 
 def selfcheck() -> None:
@@ -1606,6 +1643,17 @@ def selfcheck() -> None:
         assert by5["3_완료"]["doc"] == "완료계.xlsx" and by5["3_완료"]["todo"] == ["제출일"], by5["3_완료"]
         assert ["계약금액", "19,700,000"] in by5["3_완료"]["auto"] and "수신자" not in [a for a, _ in by5["3_완료"]["auto"]]
         assert by5["4_청구"]["doc"] == "청구서.xlsx" and by5["4_청구"]["todo"] == []
+        # 탈락: 적격심사만 만든 폴더는 _탈락으로(지우지 않음), 계약까지 만든 폴더는 그대로
+        lost = PostAward(Path(d) / "lost")
+        qf, cf = Path(d) / "lroot" / "공사" / "R9_q", Path(d) / "lroot" / "공사" / "R8_c"
+        qf.mkdir(parents=True); cf.mkdir(parents=True)
+        (qf / "a.txt").write_text("담당자", encoding="utf-8")
+        lost._write({"R9": {"no": "R9", "status": "다른 업체 낙찰", "qualOnly": True, "folder": str(qf)},
+                     "R8": {"no": "R8", "status": "다른 업체 낙찰", "qualOnly": False, "folder": str(cf)},
+                     "R7": {"no": "R7", "status": "대기", "qualOnly": True, "folder": str(cf)}})
+        assert lost.archive_lost() == 1 and lost.archive_lost() == 0
+        assert not qf.exists() and (Path(d) / "lroot" / "_탈락" / "R9_q" / "a.txt").is_file() and cf.is_dir()
+        assert "folder" not in lost._read()["R9"]
         assert share_path("/work/낙찰후서류/공사/A") == "\\\\jiilserver\\jiil-webapp\\낙찰후서류\\공사\\A"
 
 

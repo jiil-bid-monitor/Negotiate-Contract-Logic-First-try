@@ -11,6 +11,10 @@
 <!-- ji1.co.kr과 같은 폰트. 네트워크가 막혀도 아래 폴백 스택으로 읽힌다. -->
 <link rel="stylesheet" href="https://webfontworld.github.io/gmarket/GmarketSans.css" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" media="print" onload="this.media='all'">
+<script>
+  // 화면 밝기: 고른 적이 있으면 그것(라이트·다크), 없으면 PC·휴대폰 설정을 따름 — 그리기 전에 정해 깜빡이지 않게 (2026-11-25 사용자)
+  try { const t = localStorage.getItem("ui-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 
 
 <style>
@@ -125,11 +129,11 @@ body {
 /* 회사 이름을 누르면 다른 회사로 바로(2026-11-24 사용자 요청) */
 .co-switch { position: relative; flex: none; }
 .co-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 50; min-width: 150px; padding: 4px;
-  background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
 .co-menu[hidden] { display: none; }
 .co-menu button { display: block; width: 100%; text-align: left; padding: 8px 12px; border: 0; background: none; cursor: pointer;
   font-family: var(--head); font-size: 14px; color: var(--ink-strong); border-radius: 6px; }
-.co-menu button:hover, .co-menu button:focus-visible { background: #f3faf6; outline: none; }
+.co-menu button:hover, .co-menu button:focus-visible { background: var(--brand-tint); outline: none; }
 .co-pick { position: fixed; inset: 0; z-index: 1000; background: var(--bg, #f4f4f4); display: grid; place-items: center; padding: 16px; }
 .co-pick[hidden] { display: none; }
 body.picking { overflow: hidden; }
@@ -157,8 +161,9 @@ body.picking { overflow: hidden; }
 .theme button[aria-pressed="true"] { background: rgba(255,255,255,.92); color: var(--brand-dark); font-weight: 600; }
 @media (max-width: 560px) {
   .topbar .inner { height: auto; padding-block: 14px; }
-  .theme { margin-left: 0; width: 100%; }
-  .theme button { flex: 1; }
+  .theme { margin-left: 0; flex: none; }
+  .theme button { padding: 6px 10px; }
+  .topbar .me-top { flex: 1 1 0; min-width: 0; }  /* 휴대폰: 이름 칸 옆에 라이트·다크 */
 }
 
 .wrap { max-width: 1180px; margin: 0 auto; padding-block: 26px 40px; padding-left: 24px; padding-right: 24px; }
@@ -1518,7 +1523,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hhead span { color: var(--muted); font-size: 13px; flex: 1; }
 .helpbox .hhead button { font: inherit; border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; }
 .helpbox .hsafe { margin: 0; padding: 7px 14px; font-size: 12.5px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--line); word-break: keep-all; }
-.helpbox .hlog { flex: 1; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 14px; list-style: none; background: #f7f8fa; }
+.helpbox .hlog { flex: 1; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 14px; list-style: none; background: var(--bg); }
 .helpbox .hmsg { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; }
 .helpbox .hmsg.first { margin-top: 14px; }
 .helpbox .hmsg:first-child { margin-top: 0; }
@@ -1560,7 +1565,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .fback:hover { color: var(--brand); }
 .helpbox .ftitle { margin: 4px 0 10px; font-size: 17px; line-height: 1.4; word-break: keep-all; }
 .helpbox .fans { white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; font-size: 15px; line-height: 1.75; }
-.helpbox .fgo { font: inherit; font-size: 14px; margin-top: 16px; padding: 9px 16px; border: 1px solid var(--brand); border-radius: 18px; background: #fff; color: var(--brand); cursor: pointer; }
+.helpbox .fgo { font: inherit; font-size: 14px; margin-top: 16px; padding: 9px 16px; border: 1px solid var(--brand); border-radius: 18px; background: var(--panel); color: var(--brand); cursor: pointer; }
 .helpbox .hq { display: block; margin-bottom: 4px; }
 .helpbox .hmore summary { cursor: pointer; color: var(--brand); font-size: 14px; margin-top: 6px; list-style: none; }
 .helpbox .hmore summary::-webkit-details-marker { display: none; }
@@ -1586,19 +1591,19 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hline { display: flex; align-items: flex-end; gap: 6px; }
 .helpbox .hmsg.me .hline { flex-direction: row-reverse; }
 .helpbox .hb { margin: 0; padding: 9px 13px; border-radius: 18px; line-height: 1.6; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere;
-  background: #fff; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
+  background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
 .helpbox .hmsg.bot .hb.tail { border-bottom-left-radius: 6px; }
-.helpbox .hmsg.me .hb { background: var(--brand); color: #fff; box-shadow: none; }
+.helpbox .hmsg.me .hb { background: var(--brand); color: var(--on-brand); box-shadow: none; }
 .helpbox .hmsg.me .hb.tail { border-bottom-right-radius: 6px; }
 .helpbox .ht { flex: none; font-size: 11px; color: var(--muted); padding-bottom: 2px; }
 .helpbox .hpicks { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.helpbox .hpicks button { font: inherit; font-size: 14px; text-align: center; padding: 8px 12px; cursor: pointer; border: 1px solid var(--brand); background: #fff;
+.helpbox .hpicks button { font: inherit; font-size: 14px; text-align: center; padding: 8px 12px; cursor: pointer; border: 1px solid var(--brand); background: var(--panel);
   color: var(--brand); border-radius: 16px; word-break: keep-all; }
 .helpbox .hpicks button:hover { background: var(--brand-tint); }
 .helpbox .hform { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); background: var(--panel); }
-.helpbox .hform input { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 18px; }
+.helpbox .hform input { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); color: var(--ink); }
 .helpbox .hform input:focus { outline: none; border-color: var(--brand); }
-.helpbox .hform button { font: inherit; font-size: 14px; font-weight: 600; padding: 0 14px; border: 0; border-radius: 18px; background: var(--brand); color: #fff; cursor: pointer; }
+.helpbox .hform button { font: inherit; font-size: 14px; font-weight: 600; padding: 0 14px; border: 0; border-radius: 18px; background: var(--brand); color: var(--on-brand); cursor: pointer; }
 .award-test-note { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; line-height: 1.7; }
 .award-test-note button { margin-left: 6px; }
 .award-act button.award-sim { display: block; border-style: dashed; margin-bottom: 6px; }
@@ -1903,6 +1908,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="docbell-pop" id="docBellPop" hidden></div>
     </div>
     <label class="me-top">내 이름 <input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></label>
+    <div class="theme" role="group" aria-label="화면 밝기">
+      <button type="button" data-theme-set="light" aria-pressed="false">라이트</button>
+      <button type="button" data-theme-set="dark" aria-pressed="false">다크</button>
+    </div>
   </div>
 </div>
 
@@ -5692,6 +5701,18 @@ function helpOpen(open) {
   if (open) { if (!HELP_LOG.length) helpHello(); renderHelp(); $("helpQ")?.focus(); }
 }
 $("helpFab").onclick = () => helpOpen($("helpBox").hidden);
+// 화면 밝기 버튼 — 고르지 않았으면 지금 보이는 밝기(PC·휴대폰 설정)를 눌린 것으로
+function themeMark() {
+  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.querySelectorAll("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === cur)));
+}
+document.querySelectorAll("[data-theme-set]").forEach((b) => (b.onclick = () => {
+  document.documentElement.dataset.theme = b.dataset.themeSet;
+  try { localStorage.setItem("ui-theme", b.dataset.themeSet); } catch (e) {}
+  themeMark();
+}));
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", themeMark);
+themeMark();
 // 휴대폰: 필터·정렬은 버튼 하나 → 아래에서 올라오는 창 (2026-11-25 사용자 결정)
 function filterSheet(open) {
   document.body.classList.toggle("filter-sheet", open);

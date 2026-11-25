@@ -5186,3 +5186,19 @@ def test_grida_delegation_filled_even_as_manual_form(tmp_path: Path):
             assert g2[(0, 1)] == "김대리" and g2[(1, 1)] == "2023.07.01.~", g2
         else:
             assert g1[(0, 2)] == "" and g1[(2, 2)] == "", g1
+
+
+def test_seal_never_pushed_to_next_line(tmp_path: Path):
+    """(11/25 사용자 고정 규칙 — 지일·그리다 모두) 서명 줄 '신청인          (인)'에 대표자 이름을 넣어도 '(인)'이 다음 줄로 넘어가지 않게
+    줄 너비(한글 2칸)를 늘리지 않음 — 빈칸이 모자라면 (인) 뒤·줄 앞 빈칸을 줄임. 예전엔 글자 수로만 빼 한글 이름만큼 줄이 길어졌음."""
+    from quantdocs.fill import fill_hwpx
+
+    def width(t):
+        return sum(2 if "가" <= ch <= "힣" else 1 for ch in t)
+
+    for line in ("                                   신청인          (인)", "신청인      (인)          "):
+        src = _mini_hwpx(tmp_path / "s.hwpx", f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{line}</hp:t></hp:run></hp:p>')
+        fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "이가은"}), title="가상 공고")
+        text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+        assert re.search(r"신청인 +이가은 +\(인\)", text), text
+        assert width(text) <= width(line), (width(text), width(line), text)

@@ -1468,6 +1468,12 @@ def _fill_employment(xml: str, vault, rep: FillReport) -> str:
     return xml
 
 
+def _seal_need(value: str) -> int:
+    """서명 줄에 값을 넣을 때 빼야 할 빈칸 수 — 한글 2칸 + 11pt 여유(11/25 사용자 고정 규칙: '(인)'은 절대 다음 줄로 넘기지 않음)."""
+    w = _span(value)
+    return w + -(-w // 10)
+
+
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None, sign_only: bool = False) -> str:
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
@@ -1571,11 +1577,11 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 body = mm.group(2)
                 if not state["c"]:
                     body, k = re.subn(r"((?:업\s*체\s*명|상\s*호|회\s*사\s*명|제\s*안\s*업\s*체)\s*[:：]?)( {2,})(?=\S)",
-                                      lambda m2: f"{m2.group(1)} {_mark(company)}" + " " * max(2, len(m2.group(2)) - len(company) - 1), body, count=1)
+                                      lambda m2: f"{m2.group(1)} {_mark(company)}" + " " * max(2, len(m2.group(2)) - _seal_need(company) - 1), body, count=1)
                     state["c"] = bool(k)
                 if not state["n"]:
                     body, k = re.subn(r"(대\s*표\s*(?:자|이\s*사)\s*[:：])( *)",
-                                      lambda m2: f"{m2.group(1)} {_mark(name)}" + " " * max(2, len(m2.group(2)) - len(name) - 1), body, count=1)
+                                      lambda m2: f"{m2.group(1)} {_mark(name)}" + " " * max(1, len(m2.group(2)) - _seal_need(name) - 1), body, count=1)
                     state["n"] = bool(k)
                 return mm.group(1) + body + mm.group(3)
             seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", lambda mm, st={"c": False, "n": False}: put_two(mm, st),
@@ -1607,12 +1613,25 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 body = mm.group(2)
                 if done:
                     return mm.group(0)
-                m2 = re.search(r"((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)(?:\s*성\s*명)?|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\([^()]{1,10}\))?))( {3,})", body)
+                m2 = re.search(r"((?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|대\s*표\s*(?:자|이\s*사)(?:\s*성\s*명)?|(?:신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)(?:\s*\((?!\s*(?:인|서명|날인|직인|서명\s*또는\s*(?:날)?인)\s*\))[^()]{1,10}\))?))( {3,})", body)  # '(인)'은 덧붙임 괄호 아님
                 if not m2:
                     return mm.group(0)
                 done.append(1)
-                pad = " " * max(3, len(m2.group(2)) - len(name) - 2)
-                body = body[:m2.end(1)] + "  " + _mark(name) + pad + body[m2.end():]
+                # '(인)'은 절대 다음 줄로 넘기지 않음(11/25 사용자 고정 규칙 — '신청인   이가은' / '(인)'으로 나뉨):
+                # 넣는 너비는 글자 수가 아니라 한글 2칸 + 11pt 여유로 셈, 빈칸이 모자라면 (인) 뒤 → 줄 앞 빈칸 순으로 줄임
+                room = len(m2.group(2))
+                need = 2 + _span(name) + -(-_span(name) // 10)
+                cut = max(0, need + 1 - room)
+                tail = body[m2.end():]
+                if cut:
+                    t = len(tail) - len(tail.rstrip(" "))
+                    tail = tail[:len(tail) - min(t, cut)] if t else tail
+                    cut -= min(t, cut)
+                head = body[:m2.end(1)]
+                if cut:
+                    lead = len(head) - len(head.lstrip(" "))
+                    head = head[min(lead, cut):]
+                body = head + "  " + _mark(name) + " " * max(1, room - need) + tail
                 return mm.group(1) + body + mm.group(3)
             seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", put_name, xml[s:e], flags=re.S)
             if seg != xml[s:e]:
@@ -1657,8 +1676,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
 
                 def fill_t(mm):
                     body = mm.group(2)
-                    body = re.sub(r"\(주\)( {3,})", lambda m2: _mark(corp) + " " * max(3, len(m2.group(1)) - len(corp) + 3), body, count=1)
-                    body = re.sub(r"(성\s*명\s*[:：])( {3,})", lambda m2: f"{m2.group(1)} {_mark(name)}" + " " * max(3, len(m2.group(2)) - len(name) - 1), body, count=1)
+                    body = re.sub(r"\(주\)( {3,})", lambda m2: _mark(corp) + " " * max(3, len(m2.group(1)) - _seal_need(corp) + 3), body, count=1)
+                    body = re.sub(r"(성\s*명\s*[:：])( {3,})", lambda m2: f"{m2.group(1)} {_mark(name)}" + " " * max(1, len(m2.group(2)) - _seal_need(name) - 1), body, count=1)
                     return mm.group(1) + body + mm.group(3)
                 seg = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, xml[s:e], flags=re.S)
                 seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)

@@ -238,3 +238,16 @@ def test_company_name_short_form(monkeypatch, tmp_path):
         v.info = {"회사명": raw}
         importer.enrich_vault(v)
         assert v.info["회사명"] == "(주)가상", raw
+
+
+def test_grida_licenses_from_held_file():
+    """(11/25 사용자) 서류상태 시트가 없는 그리다도 '면허/허가/등록증 보유현황' = 보유 자격 파일의 등록 업종."""
+    from quantdocs import fill
+
+    company.use("grida")
+    try:
+        text = fill._value("_licenses", vault.Vault({}))
+    finally:
+        company.use("jiil")
+    assert "실내건축공사업" in text and "비디오물제작업" in text
+    assert text.count("실내건축공사업") == 1

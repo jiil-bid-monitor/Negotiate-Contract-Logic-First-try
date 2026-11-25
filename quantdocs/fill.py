@@ -452,6 +452,25 @@ def _drop_click_here(xml: str, title: str = "") -> tuple[str, int]:
             return xml, count
 
 
+def _held_licenses() -> list[str]:
+    """고른 회사 보유 자격 파일(+ 서류 폴더 등록증 PDF로 더한 것)의 등록 업종 이름 — 같은 이름은 한 번."""
+    try:
+        import json
+
+        from nego.regcert import apply as apply_cert
+
+        from .company import current, held_file
+        from .g2b import _nego_config
+
+        cfg = _nego_config()
+        if not cfg:
+            return []
+        held = apply_cert(json.loads((cfg / held_file()).read_text(encoding="utf-8")), current())
+    except Exception:  # noqa: BLE001 — 못 읽으면 비움
+        return []
+    return [str(e.get("name") or "").strip() for e in held.get("heldIndustries", []) if str(e.get("name") or "").strip()]
+
+
 def _value(key: str, vault) -> str:
     if key == "대표자 휴대폰":
         # (11/20 사용자 요청) 대표님 개인 번호는 어느 서식에도 넣지 않음 — 위임장 대표자 연락처·'(H.P)☎'·'휴대폰' 칸 모두 회사 전화
@@ -468,7 +487,8 @@ def _value(key: str, vault) -> str:
         names = [str(d.get("서류 이름") or "") for d in vault.docs
                  if d.get("서류 이름") and str(d.get("상태") or "") != "재발급"
                  and re.search(r"자격|직접생산|면허|등록|신고", str(d.get("서류 종류") or "") + str(d.get("서류 이름") or ""))]
-        return ", ".join(dict.fromkeys(names))
+        # 서류상태 시트가 없는 회사(그리다 — 폴더 서류만)는 보유 자격 파일의 등록 업종으로(11/25 사용자 — '면허/허가/등록증 보유현황'이 빔)
+        return ", ".join(dict.fromkeys(names or _held_licenses()))
     if key == "_tel_mail":  # '031-000-0000 (mail@…)', 이메일이 없으면 전화만
         tel, mail = _value("전화번호", vault), _value("이메일", vault)
         return f"{tel} ({mail})" if tel and mail else tel or mail

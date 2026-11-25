@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
+from openpyxl.styles.numbers import BUILTIN_FORMATS
+
 BLANK = Path(__file__).resolve().parent.parent / "quantdocs" / "assets" / "blank.hwpx"
 PAGE_W, PAGE_H = 59528, 84188  # A4, HWPUNIT(1/7200인치)
 PX = 75                        # 96dpi 1픽셀
@@ -27,8 +29,9 @@ SIDE = {"thin": ("SOLID", "0.25 mm"), "hair": ("SOLID", "0.12 mm"), "medium": ("
         "dashDot": ("DASH_DOT", "0.12 mm"), "dashDotDot": ("DASH_DOT_DOT", "0.12 mm")}
 ALIGN = {"center": "CENTER", "centerContinuous": "CENTER", "right": "RIGHT", "distributed": "DISTRIBUTE", "justify": "JUSTIFY"}
 NONE = ("NONE", "0.1 mm")
+BUILTIN_MONEY = {BUILTIN_FORMATS[i] for i in (5, 6, 7, 8, 42, 44)}
 THEME = ["FFFFFF", "000000", "E7E6E6", "44546A", "4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47"]
-NOT_SAVED = "엑셀에서 열어 저장한 뒤 다시 눌러 주세요. 저장하지 않은 파일은 계산된 칸이 비어 있습니다."
+NOT_SAVED = "서류를 채우고 저장한 뒤 다시 눌러 주세요. 저장하지 않은 파일은 계산된 칸이 비어 있습니다."
 
 
 class NotSaved(ValueError):
@@ -88,6 +91,8 @@ def _show_date(v, fmt: str) -> str:
 
 
 def _show_number(v, fmt: str) -> str:
+    if fmt in BUILTIN_MONEY:  # 엑셀 기본 통화 서식 — 한국 설정에선 ₩
+        fmt = fmt.replace('"$"', '"₩"')
     if fmt in ("General", "@", ""):
         return str(int(v)) if float(v).is_integer() else f"{v:.10g}"
     parts = fmt.split(";")
@@ -178,7 +183,8 @@ def digit_px(wb) -> int:
     """엑셀 열 너비 단위(기본 글꼴 숫자 폭 px). 엑셀이 저장한 너비는 픽셀 ÷ 이 값이라 거꾸로 찾음."""
     ws = {d.width for s in wb.worksheets for d in s.column_dimensions.values() if d.width and d.width < 255}
     off = lambda n: sum(abs(x * n - round(x * n)) for x in ws)  # noqa: E731
-    return min((8, 6, 7, 9, 10), key=lambda n: round(off(n) / max(1, len(ws)), 3))
+    base = round((wb._fonts[0].sz or 11) * 96 / 72 * 0.53)  # 글꼴에 따라 한 칸 넓음(돋움 11 = 9) — 한셀이 저장한 너비는 조금 어긋나 후보를 둘로만
+    return min((base, base + 1), key=off)
 
 
 def rgb(c, default=None) -> str | None:
@@ -278,6 +284,8 @@ class Sheet:
             if alone and h > self.h * 0.45 and w > self.w * 0.4:
                 full.append((im, f.row))
                 continue
+            if abs(w / self.k - 7200) < 600 and abs(h / self.k - 7200) < 600 and im.width > im.height * 1.5:
+                h = int(w * im.height / im.width)  # 한셀이 크기를 잃고 1인치 네모로 저장한 로고
             x = sum(self.cw.get(c, 0) for c in range(self.c1, f.col + 1)) + int(f.colOff / EMU_PX * PX * self.k)
             marks.setdefault(f.row + 1, []).append((im, x, int(f.rowOff / EMU_PX * PX * self.k), w, h))
         return marks, [im for im, _ in sorted(full, key=lambda x: x[1])]
@@ -552,7 +560,7 @@ def _size(data: bytes) -> tuple[int, int] | None:
 
 def convert(xlsx: Path | str) -> bytes:
     """엑셀 파일 → hwpx 내용. 엑셀에서 저장하지 않아 수식 값이 없으면 NotSaved."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     wb = load_workbook(xlsx, data_only=True)
     sheets = [ws for ws in wb.worksheets if ws.sheet_state == "visible" and ws.print_area and not SKIP.match(ws.title)]
@@ -583,7 +591,7 @@ def convert(xlsx: Path | str) -> bytes:
 
 def _check_saved(xlsx: Path, values) -> None:
     """웹앱이 만든 파일(openpyxl)은 수식 값이 하나도 없음 — 엑셀이 저장하면 값이 남음."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     formulas = [(ws.title, c.coordinate) for ws in load_workbook(xlsx).worksheets for row in ws.iter_rows() for c in row
                 if isinstance(c.value, str) and c.value.startswith("=")]

@@ -178,7 +178,7 @@ def _has_sheet(xlsx: Path, name: str) -> bool:
 
 def add_reissue_sheet(xlsx: Path, rows: list[tuple[str, str]]) -> None:
     """기본사항 바로 뒤에 '⚠새로발급' 탭 — 공고문이 요구한 새로 발급할 서류와 보유본 날짜(인쇄 안 함)."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
     from openpyxl.styles import Font, PatternFill
 
     wb = load_workbook(xlsx)
@@ -269,7 +269,7 @@ def _contract_info(row: dict) -> dict[str, str]:
 def read_progress(xlsx: Path, label: str) -> str:
     """서류 기본사항에서 그 이름 칸(제출일·청구일)이 채워졌으면 'YYYY-MM-DD' — 담당자가 서류를 다 써서 낸 것으로 봄(11/20 사용자
     '착공·준공·청구는 사람이 확인하기 전엔 모름' → 서류 날짜로 단계). 수식·빈칸이면 ''."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     try:
         wb = load_workbook(xlsx, read_only=True)
@@ -363,7 +363,7 @@ DONE_NAMES = {"to": "수신자", "title": "건명", "amount": "계약금액", "t
 
 def _labels(xlsx: Path) -> set[str]:
     """기본사항 A열 이름들."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     ws = load_workbook(xlsx)["기본사항"]
     return {str(ws.cell(r, 1).value or "").strip() for r in range(1, ws.max_row + 1)}
@@ -371,7 +371,7 @@ def _labels(xlsx: Path) -> set[str]:
 
 def done_todo(xlsx: Path, auto: dict[str, str]) -> tuple[list[str], list[list[str]]]:
     """준공·청구 서류 기본사항에서 (빈 노랑·파랑 칸 이름 — 안내에 '비우면'·'때만'이 있는 칸은 뺌, [자동으로 채운 칸 이름, 값])."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     ws = load_workbook(xlsx)["기본사항"]
     names = {label: key for key, labels in DONE_LABELS.items() for label in labels}
@@ -392,7 +392,7 @@ def done_todo(xlsx: Path, auto: dict[str, str]) -> tuple[list[str], list[list[st
 def start_values(xlsx: Path, auto: dict[str, str] | None = None) -> dict[str, Any]:
     """착공·착수서류 기본사항에서 담당자가 넣은 계약 값(빈 칸·수식, 웹앱이 넣은 값 그대로인 칸은 뺌 — auto = {행: 넣은 값})."""
     auto = auto or {}
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     ws = load_workbook(xlsx)["기본사항"]
     out: dict[str, Any] = {}
@@ -417,7 +417,7 @@ def fill_done(source: Path, target: Path, values: dict[str, Any], prev: dict[str
     """준공·청구 틀(source)을 target에 복사해 기본사항의 이름이 맞는 칸(B열)에 값. target이 이미 있으면 그 파일에서
     빈 칸·틀 기본 수식·지난번 자동 값 그대로인 칸만 씀 —
     담당자가 고친 칸은 안 건드림. (이번에 자동으로 둔 값 {값 이름: 글}, 파일을 바꿨는지)."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     from openpyxl.styles import PatternFill
 
@@ -508,7 +508,7 @@ def basic_values(v: dict, title: str, institution: str, contract_method: str, te
 
 def fill_basic(template: Path, target: Path, values: dict) -> None:
     """표준틀을 복사해 기본사항 B열에 값, C열에 '[자동] 출처'. 채운 칸은 하늘색(사람이 넣는 노란 칸과 구분)."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
     from openpyxl.styles import PatternFill
 
     wb = load_workbook(template)
@@ -575,7 +575,7 @@ def service_template(templates: Path, sido: str | None, estimate: float | None, 
 
 def fill_qual(template: Path, target: Path, values: dict[str, Any]) -> list[str]:
     """표준틀을 복사해 기본사항의 이름이 맞는 칸(B열)에 값. 채운 칸 이름을 돌려줌."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     wb = load_workbook(template)
     ws = wb["기본사항"]
@@ -597,7 +597,7 @@ def fill_qual(template: Path, target: Path, values: dict[str, Any]) -> list[str]
 
 def qual_todo(xlsx: Path) -> tuple[list[str], list[list[str]]]:
     """적격심사서류 기본사항에서 (빈 노란 칸 이름 — 안내에 '비우면'·'때만'이 있는 선택 칸은 뺌, [파란 칸 이름, 값])."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     ws = load_workbook(xlsx)["기본사항"]
     labels = {label for group in QUAL_LABELS.values() for label in group}
@@ -643,7 +643,7 @@ START_ROLES = {"물품": {1: "현장대리인", 3: "디자인·설계", 4: "제�
 
 def sheet_todo(xlsx: Path, gong: bool) -> tuple[list[str], list[list[str]]]:
     """착공·착수서류 기본사항에서 (아직 빈 필수 칸 이름, [자동으로 채운 칸 이름, 값]). 숨긴 줄은 안 봄."""
-    from openpyxl import load_workbook
+    from .xlsxread import load_workbook
 
     ws = load_workbook(xlsx)["기본사항"]
     todo, auto = [], []

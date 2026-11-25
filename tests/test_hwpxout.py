@@ -1,5 +1,6 @@
 """낙찰 서류 엑셀 → 한글(hwpx). 한글이 못 여는 모양(빈 줄·빈 격자)이 안 생기는지."""
 import io
+import re
 import zipfile
 from datetime import datetime
 from xml.etree import ElementTree as ET
@@ -106,3 +107,46 @@ def test_postaward_hwpx_stays_in_folder(tmp_path, monkeypatch):
     (tmp_path / "밖.xlsx").write_bytes(b"x")
     with pytest.raises(ValueError):
         pa.hwpx("k", "../밖.xlsx")
+
+
+def _hcell(path):
+    """한셀이 저장한 모양으로 — 글꼴·칸 모양이 AlternateContent(한셀용 + 엑셀용) 안, 색은 소문자."""
+    with zipfile.ZipFile(path) as z:
+        items = {n: z.read(n) for n in z.namelist()}
+    x = items["xl/styles.xml"].decode().replace("FFFF00", "ffff00")
+    head = x[:x.index("<cellXfs")]
+    body = x[len(head):]
+    body = re.sub(r"(<xf [^>]*?/>|<xf [^>]*>.*?</xf>)", lambda m: '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">'
+                  f'<mc:Choice xmlns:hs="h" Requires="hs">{m[0]}</mc:Choice><mc:Fallback>{m[0]}</mc:Fallback></mc:AlternateContent>', body, flags=re.S)
+    items["xl/styles.xml"] = (head + body).encode()
+    with zipfile.ZipFile(path, "w") as w:
+        for n, d in items.items():
+            w.writestr(n, d)
+
+
+def test_hcell_saved_workbook(tmp_path):
+    from webapp.xlsxread import load_workbook
+
+    f = tmp_path / "a.xlsx"
+    _book(f)
+    _hcell(f)
+    ws = load_workbook(f)["착공계"]
+    assert ws["D2"].fill.fgColor.rgb == "00FFFF00" and ws["B3"].number_format == 'yyyy"년" m"월" d"일"'
+    assert hwpxout.convert(f)[:2] == b"PK"
+    assert hwpxout.show(5, r'_("$"* #,##0_);_("$"* \(#,##0\);_("$"* "-"_);_(@_)') == "₩ 5"
+
+
+def test_saved_pictures_keep_size_for_hcell(tmp_path):
+    from openpyxl.drawing.image import Image as XlImage
+    from PIL import Image
+
+    from webapp import xlsxfit
+
+    Image.new("RGB", (60, 20)).save(tmp_path / "logo.png")
+    wb = Workbook()
+    wb.active.add_image(XlImage(str(tmp_path / "logo.png")), "A1")
+    f = tmp_path / "a.xlsx"
+    wb.save(f)
+    xlsxfit.keep_pic_size(f)
+    with zipfile.ZipFile(f) as z:
+        assert '<a:ext cx="571500" cy="190500"/></a:xfrm>' in z.read("xl/drawings/drawing1.xml").decode()

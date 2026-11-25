@@ -31,6 +31,12 @@
 - **(사용자) 업체명·회사명은 '주식회사 그리다' 대신 '(주)그리다'** — `importer.enrich_vault` 끝에서 '주식회사 X'·'X 주식회사'·'㈜X' → '(주)X'(모든 회사).
 - 입찰참가신청서 '대리인(사용인감) | 본 입찰에 관한 일체의 권한을 다음의 자에게 위임합니다. / - 성 명 :' = 지정 임원(`vault.agent`, 위임 문장이 든 같은 칸의 성명·생년월일·주소 줄만 — `_fill_label_paragraphs`). 지일은 그대로 비움.
 - 서약서 '단체(또는 법인) 명 :' = 회사명(`_label_key`). 시험 `test_bid_application_agent_name_and_group_name_label`·`test_company_name_short_form`. 서버 코드 바뀜 — 웹앱 다시 켜기.
+## 2026-11-25 — 접수증 제출자 = 대표자 · 그리다 회사명·주소 .env (브랜치 `claude/receipt-submitter`, 사용자 요청 — 해남 접수증 vs 정선 제출본)
+
+- **(사용자) 접수증은 접수번호·접수일자·접수자 빼고 제출본과 같게** — '제 출 자 | 소속: 직위: 성명 : (인)' = 회사명·대표이사·대표자(`_fill_pledge_signer`가 '제출자' 이름표 + 옆 칸만),
+  '대 표 자 | 이름 제출자 :' 한 칸은 '제출자 :' 뒤에도 대표자 이름. 11/18·11/24 '제출자는 비움'을 대체. 접수자 줄은 그대로 공란.
+- 회사명·주소 `.env` `QUANT_GRIDA_NAME`·`QUANT_GRIDA_ADDR`(지일은 `QUANT_NAME`·`QUANT_ADDR`) — 서류의 '주식회사 그리다'·'…75, 1층' 대신 제출본 표기.
+  시험 `test_receipt_submitter_row_filled`·`test_receipt_rep_before_submitter_label`(바꿈). 서버 코드 바뀜 — 웹앱 다시 켜기.
 
 ## 2026-11-25 — 그리다 사용인감계 = 지일 회사 정보 · 위임장 대리인 연락처 (브랜치 `claude/grida-seal-agent`, 사용자 결정)
 

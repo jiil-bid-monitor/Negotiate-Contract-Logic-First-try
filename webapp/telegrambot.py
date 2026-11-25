@@ -25,6 +25,7 @@ from typing import Any, Callable
 import requests
 
 from nego.telegram import API_BASE, _short_money
+from nego.nodash import no_dash
 
 from . import docexpiry
 from .docupload import Uploader
@@ -242,6 +243,8 @@ class TelegramBot:
         return cls(token, chats, latest_run, reports=reports)
 
     def _api(self, method: str, http_timeout: float = 30, **body: Any) -> Any:
+        if isinstance(body.get("text"), str):
+            body["text"] = no_dash(body["text"])
         res = self.session.post(f"{API_BASE}/bot{self.token}/{method}", json=body, timeout=http_timeout)
         data = res.json()
         if not data.get("ok"):

@@ -545,6 +545,12 @@ def _cached_text(path: str, data: bytes) -> str:
     return _TEXT_CACHE[key]
 
 
+def _env_rrn(raw: str) -> str:
+    """.env 주민번호 → 앞 6자리 + 뒷자리 첫 숫자만, 나머지 '*'(11/24 사용자 요청). '670222-1*'·'6702221'처럼 적어도 됨."""
+    m = re.match(r"\s*(\d{6})\s*-?\s*(\d?)", raw or "")
+    return f"{m.group(1)}-{m.group(2) or '*'}******" if m else ""
+
+
 def enrich_vault(vault, report: list | None = None) -> list[str]:
     """묶음 안 연혁·경쟁입찰참가자격등록증·사업자등록증 PDF를 읽어 회사정보의 빈 칸과 연혁을 채움(메모리에서만, 11/04 사용자 요청:
     '연혁 pdf·입찰참가등록증 pdf 확인해서 기입 가능한 건 바로 작성'). 회사정보 시트에 적힌 값이 늘 먼저. 돌려줌: 알림 줄."""
@@ -556,18 +562,31 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     from .company import DEFAULT, current
     # 다른 회사(그리다 등)는 지일 .env 값을 쓰지 않음 — QUANT_GRIDA_FAX처럼 회사 이름을 넣은 이름만(11/24 회사 고르기)
     prefix = "QUANT_" if current() == DEFAULT else f"QUANT_{current().upper()}_"
-    # (11/24 사용자 요청) 그리다는 서식의 대표자 칸 전체(이름·생년월일·휴대폰·직위)를 .env 값으로 — 등기상 대표자가 아닌 분으로
-    # 적을 때(QUANT_GRIDA_REP 등). 자본금·직원 수도 .env로. 개인 정보라 값은 저장소에 적지 않음.
-    for env_key, item in (("FAX", "팩스번호"), ("TEL", "전화번호"), ("EMAIL", "이메일"),
-                          ("HOMEPAGE", "홈페이지"), ("REP_MOBILE", "대표자 휴대폰"), ("REP", "대표자"),
-                          ("REP_TITLE", "대표자 직위"), ("CAPITAL", "자본금"), ("STAFF", "종업원 수")):
+    # 자본금·직원 수도 .env로. 개인 정보라 값은 저장소에 적지 않음.
+    items = [("FAX", "팩스번호"), ("TEL", "전화번호"), ("EMAIL", "이메일"), ("HOMEPAGE", "홈페이지"),
+             ("CAPITAL", "자본금"), ("STAFF", "종업원 수")]
+    if current() == DEFAULT:
+        items += [("REP_MOBILE", "대표자 휴대폰"), ("REP", "대표자"), ("REP_TITLE", "대표자 직위")]
+    for env_key, item in items:
         v = read_env(prefix + env_key).strip()
         if v:
             vault.info[item] = v
-    # 앞 6자리 + 뒷자리 첫 숫자만 — 나머지는 '*'(11/24 사용자 요청). '670222-1*'·'6702221'처럼 적어도 됨
-    rrn = re.match(r"\s*(\d{6})\s*-?\s*(\d?)", read_env(prefix + "REP_RRN"))
-    if rrn:
-        vault.info["대표자 주민등록번호"] = f"{rrn.group(1)}-{rrn.group(2) or '*'}******"
+    if current() == DEFAULT:
+        rrn = _env_rrn(read_env(prefix + "REP_RRN"))
+        if rrn:
+            vault.info["대표자 주민등록번호"] = rrn
+    else:
+        # (11/25 사용자 결정 — 그리다 위임장 샘플) 대표자 칸은 늘 등기상 대표(서류에서 읽은 값). .env의 지정 임원은 위임장 '대리인' 칸에만
+        # (11/24 'QUANT_GRIDA_REP = 대표자 칸 전체'를 대체). 이름은 QUANT_GRIDA_AGENT…가 먼저, 없으면 11/24에 넣은 QUANT_GRIDA_REP…를 그대로 읽음.
+        # info가 아니라 vault.agent에 — info에 '대리인 주민등록번호'를 두면 대표자 주민번호 찾기('주민'이 든 첫 항목)가 잘못 집음
+        def env2(name):
+            return (read_env(f"{prefix}AGENT_{name}" if name else f"{prefix}AGENT") or read_env(f"{prefix}REP_{name}" if name else f"{prefix}REP")).strip()
+        agent = {"성명": env2(""), "주민등록번호": _env_rrn(env2("RRN")), "직위": env2("TITLE"),
+                 "휴대폰": env2("MOBILE"), "주소": env2("ADDR")}
+        vault.agent = {k: v for k, v in agent.items() if v} if agent["성명"] else {}
+        rrn = _env_rrn(read_env(prefix + "CEO_RRN"))  # 등기상 대표 주민번호 — 서류에서 못 읽을 때(앞 6자리 + 뒷자리 첫 숫자)
+        if rrn:
+            vault.info["대표자 주민등록번호"] = rrn
     if getattr(vault, "loose", None):
         notes.append("회사 자료 묶음 밖 PDF도 읽음(회사 서류 폴더): " + ", ".join(vault.loose[:5]))
     if getattr(vault, "patent_src", "") == "파일":

@@ -5011,3 +5011,42 @@ def test_receipt_rep_before_submitter_label(tmp_path: Path):
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert re.search(r"홍길동 +제출자 :", text) and text.count("홍길동") == 1, text
     assert "성  명 :           (인)" in text, text
+
+
+def test_grida_delegation_agent_rows_from_env(tmp_path: Path):
+    """(11/25 사용자 결정 — 그리다 위임장 샘플) 대표자 칸 = 등기상 대표, 대리인 칸 = .env 지정 임원(성명·주민번호·주소·'회사명 / 직위'·
+    '☎ 회사 전화 / H.P: 휴대폰'), 끝 '○ 대 리 인 : (인)'도 지정 임원. vault.agent가 없는 지일은 대리인 줄 업체명만(예전 그대로)."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    def head(col, row, text, rows):
+        return _c(col, row, text).replace('rowSpan="1"', f'rowSpan="{rows}"')
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    rows = []
+    for top, who in ((0, "대 표 자"), (3, "대 리 인")):
+        rows += [[head(0, top, who, 3), _c(1, top, "성 명"), _c(2, top, ""), _c(3, top, "주민등록번호"), _c(4, top, "")],
+                 [_c(1, top + 1, "주 소"), _c(2, top + 1, "", 3)],
+                 [_c(1, top + 2, "업체명(직 위)" if top else "업체명"), _c(2, top + 2, ""), _c(3, top + 2, "연 락 처"), _c(4, top + 2, "")]]
+    body = para("위 임 장") + _tbl(rows) + para("○ 대 표 자 :          (인)") + para("○ 대 리 인 :          (인)")
+    src = _mini_hwpx(tmp_path / "w.hwpx", body)
+    info = {"회사명": "(주)가상", "대표자": "등기대표", "주소": "가상시 가상로 1", "전화번호": "000-000-0000",
+            "대표자 주민등록번호": "900101-2******"}
+
+    v = vault.Vault({}, info=dict(info))
+    v.agent = {"성명": "지정임원", "주민등록번호": "700101-2******", "직위": "이사", "휴대폰": "010-0000-0000", "주소": "가상시 집로 2"}
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
+    assert got[(0, 2)] == "등기대표" and got[(0, 4)] == "900101-2******" and got[(1, 2)] == "가상시 가상로 1"
+    assert got[(3, 2)] == "지정임원" and got[(3, 4)] == "700101-2******" and got[(4, 2)] == "가상시 집로 2"
+    assert got[(5, 2)] == "(주)가상이사" and "☎ 000-000-0000" in got[(5, 4)] and "H.P: 010-0000-0000" in got[(5, 4)]
+    flat = re.sub(r"<[^>]+>", "", xml)
+    assert "대 표 자 : 등기대표" in flat and "대 리 인 : 지정임원" in flat
+
+    v2 = vault.Vault({}, info=dict(info))  # 지일 — 지정 임원 없음
+    fill_hwpx(src, tmp_path / "o2.hwpx", v2)
+    xml2 = zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode()
+    got2 = {(c.row, c.col): c.text for c in _cells(xml2, _spans(xml2, "tbl")[0])}
+    assert got2[(3, 2)] == "" and got2[(3, 4)] == "" and got2[(4, 2)] == "" and got2[(5, 4)] == ""
+    assert "지정임원" not in xml2

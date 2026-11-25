@@ -1692,6 +1692,9 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         if not key and memo_signer(label, seal) and not any(cs <= s and e <= ce for cs, ce in single):
             key = "대표자"
         value = _value(key, vault) if key else ""
+        agent = getattr(vault, "agent", None) or {}
+        if not key and seal and agent.get("성명") and re.sub(r"[^가-힣]", "", label) in ("대리인", "수임인"):
+            value = agent["성명"]  # 위임장 끝 '○ 대 리 인 :      (인)'(11/25 그리다 샘플) — 지정 임원, 지일은 vault.agent가 없어 그대로 비움
         if not key and _sq(label) == "생년월일" and any(
                 n - 3 <= n2 < n and (_label_key(l2) == "대표자" or _BARE_LABELS.get(l2) == "대표자") or abs(n2 - n) <= 4 and memo_signer(l2, sl2)
                 for _s2, _e2, l2, sl2, _b2, n2 in cands):
@@ -3432,6 +3435,32 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if key is None and re.fullmatch(r"기관명|대표", _sq(c.text)) and _sign_table(cells, by_pos):
                         # 각서·신청서 끝 서명 표 '제 출 일 | 2026년 월 일 / 기 관 명 | __ / 대    표 | (인)'(11/18 봉평) — 기관명 = 지일(입찰자), 대표 = 대표자
                         key = "회사명" if _sq(c.text) == "기관명" else "대표자"
+                    agent = getattr(vault, "agent", None) or {}
+                    if agent and (group == "대리인" or c.row in agent_rows):
+                        # (11/25 사용자 결정 — 그리다 위임장 샘플) 대리인 칸 = .env 지정 임원(그리다만 — 지일은 vault.agent가 없어 예전대로 업체명만):
+                        # 성 명 · 주민등록번호(앞 6자리 + 첫 숫자) · 주 소 · 업체명(직 위) = '회사명 / 직위' · 연 락 처 = '☎ 회사 전화 / H.P: 휴대폰'
+                        lab = _sq(c.text)
+                        target = by_pos.get((c.row, c.col + c.colspan))
+                        val = None
+                        if re.fullmatch(r"(?:대리인)?(?:성명|이름|성함)", lab):
+                            val = [agent.get("성명", "")]
+                        elif "주민등록번호" in lab or lab == "생년월일":
+                            val = [agent.get("주민등록번호", "") if "주민" in lab else _birth(agent.get("주민등록번호", ""))]
+                        elif re.fullmatch(r"주소|자택주소|현주소", lab):
+                            val = [agent.get("주소", "")]
+                        elif key == "회사명" or re.match(r"(?:업체명|소속|회사명)", lab):
+                            val = [_value("회사명", vault)] + ([agent["직위"]] if "직위" in lab and agent.get("직위") else [])
+                        elif re.fullmatch(r"직위|직급|직책", lab):
+                            val = [agent.get("직위", "")]
+                        elif re.fullmatch(r"연락처|전화|전화번호|휴대(?:폰|전화)(?:번호)?", lab):
+                            tel, mob = _value("전화번호", vault), agent.get("휴대폰", "")
+                            val = ([f"☎ {tel}"] if tel and "휴대" not in lab else []) + ([f"H.P: {mob}"] if mob else [])
+                        val = [x for x in (val or []) if x]
+                        if val and target is not None and target.blank:
+                            edits.append((target, val, False))
+                            rep.filled.append(f"대리인 {lab} → 지정 임원")
+                        if val is not None or key not in ("회사명", None):
+                            continue
                     if group == "대리인" and key not in ("회사명", None):
                         continue  # 대리인 줄은 업체명만(성명·주민번호·주소·연락처는 개인 정보라 비움 — 10/28·11/05 결정)
                     core = re.sub(r"\(.*?\)|[^\w]", "", c.text)  # '〈 주요연혁(요약) 〉' → '주요연혁'

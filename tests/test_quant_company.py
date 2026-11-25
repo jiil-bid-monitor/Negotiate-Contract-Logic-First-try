@@ -87,14 +87,14 @@ def test_bizreg_company_name_with_space():
 
 
 def test_grida_rep_from_env(monkeypatch, tmp_path):
-    """(11/24 사용자 요청) 그리다 대표자 칸 전체 = .env QUANT_GRIDA_REP·REP_RRN·REP_MOBILE·REP_TITLE, 자본금·직원 수도.
-    지일은 대표자 휴대폰 칸에 여전히 회사 전화(11/20 규칙)."""
+    """(11/25 사용자 결정) 그리다 대표자 칸 = 등기상 대표(서류 값 그대로), .env 지정 임원(QUANT_GRIDA_REP… / AGENT…)은 vault.agent —
+    위임장 대리인 칸에만. 등기 대표 주민번호는 QUANT_GRIDA_CEO_RRN. 자본금·직원 수는 그대로 .env. 지일은 예전대로."""
     from quantdocs import fill, importer
 
     env = tmp_path / ".env"
     env.write_text("QUANT_GRIDA_REP=홍길동\nQUANT_GRIDA_REP_RRN=670222 -1*\nQUANT_GRIDA_REP_MOBILE=010-0000-0000\n"
-                   "QUANT_GRIDA_REP_TITLE=이사\nQUANT_GRIDA_CAPITAL=200000000\nQUANT_GRIDA_STAFF=6\n"
-                   "QUANT_REP_MOBILE=010-9999-9999\n", encoding="utf-8")
+                   "QUANT_GRIDA_REP_TITLE=이사\nQUANT_GRIDA_AGENT_ADDR=가상시 집로 2\nQUANT_GRIDA_CEO_RRN=900101-2\n"
+                   "QUANT_GRIDA_CAPITAL=200000000\nQUANT_GRIDA_STAFF=6\nQUANT_REP_MOBILE=010-9999-9999\n", encoding="utf-8")
     monkeypatch.setattr(vault, "ENV_FILE", env)
 
     class V:
@@ -107,17 +107,19 @@ def test_grida_rep_from_env(monkeypatch, tmp_path):
         v = V()
         v.info = dict(V.info)
         importer.enrich_vault(v)
-        assert v.info["대표자"] == "홍길동"
-        assert v.info["대표자 주민등록번호"] == "670222-1******"
-        assert v.info["대표자 직위"] == "이사"
-        assert fill._value("대표자 휴대폰", v) == "031-000-0000"  # 지일과 같은 규칙 — 개인 번호는 안 넣음
+        assert v.info["대표자"] == "등기 대표"
+        assert v.info["대표자 주민등록번호"] == "900101-2******"
+        assert "대표자 직위" not in v.info
+        assert v.agent == {"성명": "홍길동", "주민등록번호": "670222-1******", "직위": "이사",
+                           "휴대폰": "010-0000-0000", "주소": "가상시 집로 2"}
+        assert fill._value("대표자 휴대폰", v) == "031-000-0000"  # 지일과 같은 규칙 — 대표자 칸에 개인 번호는 안 넣음
         assert fill._value("자본금", v) == "200,000,000원"
         assert fill._value("종업원 수", v) == "6명"
-        assert fill._birth(v.info["대표자 주민등록번호"]) == "1967. 02. 22."
     finally:
         company.use("jiil")
     v = V()
     v.info = dict(V.info)
     importer.enrich_vault(v)
     assert v.info["대표자"] == "등기 대표"
+    assert not getattr(v, "agent", None)
     assert fill._value("대표자 휴대폰", v) == "031-000-0000"

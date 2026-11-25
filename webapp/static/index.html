@@ -1570,6 +1570,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .fq p { margin: 2px 0 8px; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.6; font-size: 14px; }
 .helpbox .fq .flink { font: inherit; font-size: 13px; padding: 0 0 8px; border: 0; background: none; color: var(--brand); text-decoration: underline; cursor: pointer; }
 .helpbox .fnone { color: var(--muted); font-size: 14px; }
+/* '어디인지 보기'로 가리킨 자리 — 테두리가 세 번 깜빡임(움직임 줄이기 설정이면 테두리만) */
+@keyframes help-spot { 0%, 100% { box-shadow: 0 0 0 3px var(--brand), 0 0 0 9px rgba(27,110,67,.25); } 50% { box-shadow: 0 0 0 3px var(--brand), 0 0 0 3px rgba(27,110,67,0); } }
+.help-spot { position: relative; z-index: 5; border-radius: 6px; box-shadow: 0 0 0 3px var(--brand), 0 0 0 9px rgba(27,110,67,.25); animation: help-spot 1s ease-in-out 3; }
+@media (prefers-reduced-motion: reduce) { .help-spot { animation: none; } }
 .helpbox .hpicks button small { color: var(--muted); font-size: 12px; margin-left: 4px; }
 .helpbox .htyping { display: flex; gap: 4px; padding: 13px 14px; }
 .helpbox .htyping i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: help-dot 1s infinite; }

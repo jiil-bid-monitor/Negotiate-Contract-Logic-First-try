@@ -807,6 +807,8 @@ class PostAward:
                 raise ValueError("목록에 없는 공고입니다")
             name = re.sub(r'[\\/:*?"<>|\s]+', " ", f"{key}_{v.get('title') or ''}").strip()[:90].rstrip(" ._")
             folder = Path(root) / group_of(v.get("work", "")) / name
+            if v.get("folder") and Path(v["folder"]).is_dir():
+                folder = Path(v["folder"])  # 정정으로 공고명이 바뀌어도 쓰던 폴더 그대로
             stages = ["0_적격심사", "1_계약", "2_착공" if v.get("work") == "공사" else "2_착수",
                       done_dir(folder, v["work"]) if v.get("work") in DONE_TEMPLATES else "3_준공", "4_청구", "공고문서"]
             if qual_only:
@@ -821,16 +823,19 @@ class PostAward:
         return folder
 
     def prepare(self, key: str, root: Path, fetch=None, templates: Path | None = None, qual_only: bool = False,
-                contract_lookup=None) -> tuple[Path, list[dict]]:
+                contract_lookup=None, refetch: bool = False) -> tuple[Path, list[dict]]:
         """공고 폴더 만들기 — 나라장터에서 공고 정보·첨부를 받아(정량평가서와 같은 quantdocs.g2b.fetch_notice) 업무를 정하고,
         첨부는 공고문서/에 두고, 첨부가 요구하는 제출서류를 읽어 표준틀에 없는 것을 '서류_확인.txt'에 적는다.
-        표준틀(templates, 기본 root/_표준틀)이 있으면 착공·착수서류를 복사해 기본사항을 채운다(시험판 11/11)."""
+        표준틀(templates, 기본 root/_표준틀)이 있으면 착공·착수서류를 복사해 기본사항을 채운다(시험판 11/11).
+        refetch('서류 다시 만들기', 11/25)면 정정된 공고를 위해 첨부를 나라장터에서 다시 받음 — 내용이 바뀐 첨부는 예전 것 옆에 '_정정날짜'로."""
+        import glob
         import shutil
         import tempfile
         import time
 
         started = time.time() - 120  # NAS 시계가 조금 달라도 이번에 만든 파일로 봄
         reissue: list[tuple[str, str]] = []
+        new_docs: list[str] = []
         if fetch is None:
             from quantdocs.g2b import fetch_notice as fetch
         v = {**(self._read().get(key) or {})}
@@ -841,7 +846,7 @@ class PostAward:
         reuse = [f for f in sorted(old_docs.iterdir()) if f.is_file() and f.name not in (SUMMARY, "서류_확인.txt") and not f.name.startswith("~$")]             if old_docs and old_docs.is_dir() else []
         with tempfile.TemporaryDirectory(prefix="postaward_") as tmp:
             nf = None
-            if reuse:
+            if reuse and not refetch:
                 try:
                     nf = fetch(key, Path(tmp), skip_files=True, work=v.get("work", ""), licenses=False)
                     nf.files = reuse
@@ -852,6 +857,8 @@ class PostAward:
                     nf = fetch(key, Path(tmp), work=v.get("work", ""))
                 except TypeError:
                     nf = fetch(key, Path(tmp))
+            if refetch and reuse and (getattr(nf, "skipped", None) or not nf.files):
+                nf.files = [*nf.files, *(f for f in reuse if f.name not in {x.name for x in nf.files})]  # 못 받은 첨부는 있던 것으로
             private = "수의" in (getattr(nf, "contract_method", "") or "")
             with self._lock:
                 items = self._read()
@@ -869,8 +876,15 @@ class PostAward:
             docs = required_docs(nf.files)
             for f in nf.files:
                 target = folder / "공고문서" / f.name
+                if refetch and target != f and target.exists():
+                    body = f.read_bytes()
+                    if any(x.read_bytes() == body for x in (target, *target.parent.glob(f"{glob.escape(target.stem)}_정정*{target.suffix}"))):
+                        continue
+                    target = target.with_name(f"{target.stem}_정정{self.now():%Y%m%d_%H%M}{target.suffix}")
                 if not target.exists():  # 담당자가 고쳤을 수 있어 덮어쓰지 않음
                     shutil.copyfile(f, target)
+                    if refetch and reuse:
+                        new_docs.append(target.name)
             tdir = Path(templates) if templates else template_dir(root)
             with self._lock:  # 서류 현황에서 착공·착수 값을 준공·청구로 옮길 때 같은 표준틀을 씀(시험 폴더엔 _표준틀이 없음)
                 items = self._read(); items[key]["templates"] = str(tdir); self._write(items)
@@ -888,7 +902,9 @@ class PostAward:
                         basic.append(f"[새로 발급] {x.name}에 탭을 넣지 못함({err.__class__.__name__})")
                 basic.append("[새로 발급] 공고문이 요구: " + ", ".join(f"{k}({h})" for k, h in reissue) + " — 엑셀 '⚠새로발급' 탭")
             summary = folder / "공고문서" / SUMMARY
-            if nf.title and not summary.exists():
+            if new_docs:
+                basic.append(f"  정정된 첨부를 새로 받음: {', '.join(new_docs)} — 이미 만든 서류는 그대로이니 바뀐 내용을 확인하세요")
+            if nf.title and (new_docs or not summary.exists()):
                 try:
                     write_summary(summary, key, v, nf)
                 except Exception as err:  # noqa: BLE001 — 요약을 못 만들어도 폴더·서류는 그대로
@@ -1419,6 +1435,26 @@ def selfcheck() -> None:
         assert (q / "2_착수").is_dir() and pa._read()["R26BK00000002-000"]["qualOnly"] is False
         # 착수 틀은 물품·용역 하나(11/18)
         assert load_workbook(q / "2_착수" / "착수서류.xlsx")["기본사항"]["H1"].value == "표준틀_착수서류(물품·용역).xlsx"
+        # 서류 다시 만들기(refetch): 정정된 첨부는 예전 것 옆에 새 이름으로, 같은 내용이면 안 늘림
+        (Path(d) / "dl").mkdir()
+        att = Path(d) / "dl" / "공고문.txt"
+
+        def refetch_run(text, skipped=False):
+            att.write_text(text, encoding="utf-8")
+            nf9 = _NF2()
+            nf9.title, nf9.files = "B 물품(정정)", [] if skipped else [att]
+            return pa.prepare("R26BK00000002-000", Path(d) / "out", fetch=lambda k, t: nf9, templates=tpl, refetch=True)[0]
+
+        assert refetch_run("원본") == q and (q / "공고문서" / "공고문.txt").read_text(encoding="utf-8") == "원본"
+        assert "정정된 첨부" not in (q / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
+        refetch_run("정정본")
+        fixed = list((q / "공고문서").glob("공고문_정정*.txt"))
+        assert len(fixed) == 1 and fixed[0].read_text(encoding="utf-8") == "정정본"
+        assert (q / "공고문서" / "공고문.txt").read_text(encoding="utf-8") == "원본"
+        assert "정정된 첨부를 새로 받음" in (q / "공고문서" / "서류_확인.txt").read_text(encoding="utf-8")
+        refetch_run("정정본")
+        refetch_run("", skipped=True)  # 나라장터에서 못 받으면 있던 첨부 그대로
+        assert len(list((q / "공고문서").glob("공고문*.txt"))) == 2
         # 수의계약: 적격심사 폴더는 막고, 낙찰 서류엔 0_적격심사 단계가 없음
         class _NF3(_NF):
             title, contract_method = "C 공사", "수의계약"

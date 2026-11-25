@@ -578,13 +578,15 @@ def make_handler(app: App):
             if url.path == "/api/postaward/status":
                 # 서류 현황(11/11) — 단계별 파일·담당자가 채울 칸·첨부 제출서류
                 return self._json(pa.status(q.get("key", [""])[0]))
-            if url.path in ("/api/postaward/file", "/api/postaward/zip"):
+            if url.path in ("/api/postaward/file", "/api/postaward/zip", "/api/postaward/hwpx"):
                 # 공고 폴더 안 파일 내려받기 — 브라우저는 윈도우 폴더를 열 수 없고 다른 PC는 서버 PC 디스크에 못 들어가서.
                 # zip = 단계 폴더 하나를 묶어서(제출용, 11/16)
                 try:
                     if url.path.endswith("/zip"):
                         since = q.get("since", [""])[0]
                         name, body = pa.zip(q.get("key", [""])[0], q.get("path", [""])[0], float(since) if since else None)
+                    elif url.path.endswith("/hwpx"):
+                        name, body = pa.hwpx(q.get("key", [""])[0], q.get("path", [""])[0])
                     else:
                         target = pa.file(q.get("key", [""])[0], q.get("path", [""])[0])
                         name, body = target.name, target.read_bytes()

@@ -1515,10 +1515,14 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 16px 16px 4px 16px; box-shadow: 0 3px 10px rgba(0,0,0,.12);
   animation: help-in .4s ease-out .8s both; white-space: nowrap; }
 .helpnudge:hover { border-color: var(--brand); color: var(--brand); }
-.helpbox { position: fixed; right: 22px; bottom: 86px; z-index: 40; width: min(540px, calc(100vw - 32px)); height: min(680px, calc(100vh - 110px));
+.helpbox { position: fixed; right: 22px; bottom: 86px; z-index: 40; width: min(var(--hw, 380px), calc(100vw - 32px)); height: min(var(--hh, 580px), calc(100vh - 110px));
   display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.16); overflow: hidden; font-size: 15px; }
 .helpbox[hidden] { display: none; }
-.helpbox .hhead { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.helpbox .hgrip { position: absolute; left: 0; top: 0; width: 24px; height: 24px; padding: 0; border: 0; background: none; cursor: nwse-resize; touch-action: none; color: var(--muted); }
+.helpbox .hgrip svg { position: absolute; left: 4px; top: 4px; width: 11px; height: 11px; }
+.helpbox .hgrip:hover, .helpbox .hgrip:focus-visible { color: var(--brand); }
+@media (max-width: 480px) { .helpbox .hgrip { display: none; } }
+.helpbox .hhead { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px 12px 24px; border-bottom: 1px solid var(--line); }
 .helpbox .hhead b { font-size: 16px; }
 .helpbox .hhead span { color: var(--muted); font-size: 13px; flex: 1; }
 .helpbox .hhead button { font: inherit; border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; }
@@ -5025,6 +5029,7 @@ function awardDetailHtml(key, s) {
   // 서류가 있는 단계마다 한 상자(적격심사서류·착공/착수서류) — 채울 칸만 보이고, 자동으로 채운 칸은 접어 둠
   const todo = s.stages.filter((st) => st.doc || st.error).map((doc) => doc.doc ? `
     <div class="award-box todo"><h4>${esc(doc.name)}: 담당자가 채울 칸 <span class="sub">${esc(doc.dir)}/${esc(doc.doc)}</span></h4>
+      <p class="award-hwpx"><button type="button" data-award-hwpx="${escRaw(key)}" data-path="${escRaw(doc.dir + "/" + doc.doc)}">한글로 받기</button> <span class="sub" role="status"></span></p>
       ${doc.todo.length ? `<ul class="award-chips">${doc.todo.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p>필수 칸을 모두 채웠습니다.</p>`}
       ${doc.auto.length ? `<details class="award-autobox"><summary>자동으로 채운 칸 ${doc.auto.length}개, 원문과 대조</summary><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl></details>` : ""}
     </div>` : `<div class="award-box todo"><p>${esc(doc.error)}</p></div>`).join("");
@@ -5072,6 +5077,24 @@ async function awardAct(btn, path, body, done) {
   } catch (err) { $("awardMsg").textContent = err.message; }
   btn.disabled = false;
 }
+// 저장한 엑셀을 한글(hwpx)로(11/25 사용자) — 저장 전이면 이유가 버튼 옆에
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-award-hwpx]");
+  if (!b) return;
+  const say = b.nextElementSibling;
+  b.disabled = true; say.textContent = "만드는 중…";
+  try {
+    const res = await fetch(`${AWARD_API}/hwpx?key=${encodeURIComponent(b.dataset.awardHwpx)}&path=${encodeURIComponent(b.dataset.path)}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "만들지 못했습니다.");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await res.blob());
+    a.download = b.dataset.path.split("/").pop().replace(/\.xlsx$/i, ".hwpx");
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    say.textContent = "";
+  } catch (err) { say.textContent = err.message; }
+  b.disabled = false;
+});
 $("awardAdd").onclick = (e) => awardAct(e.target, AWARD_API, { no: $("awardNo").value }, () => { $("awardNo").value = ""; return "넣었습니다. '지금 낙찰자 확인'을 누르면 바로 확인합니다."; });
 $("awardCheck").onclick = (e) => awardAct(e.target, AWARD_API + "/check", {}, (d) => d.message || `낙찰 ${d.won} · 다른 업체 ${d.lost} · 아직 없음 ${d.waiting}`);
 $("awardList").onclick = (e) => {
@@ -5324,7 +5347,7 @@ const HELP_SETS = {
 
     [6, "'폴더가 없습니다'라고 나옵니다", "그 공고의 '더 보기' →\n'서류 다시 만들기'를 눌러 주세요.\n폴더와 서류를 다시 만듭니다.\n지운 폴더에서 직접 적은 내용은\n되살아나지 않습니다.", "폴더 없 사라"],
     [6, "계약일·금액이 계약서와 다릅니다", "착공·착수서류 기본사항에\n바른 값을 적고 저장해 주세요.\n'서류 현황 ▾'을 열면\n준공·청구 서류에도 들어갑니다.\n준공·청구에서 직접 고친 칸은\n바뀌지 않습니다.\n\n나라장터에 변경계약이 올라오면\n금액·준공예정일은\n준공·청구 서류에 저절로 들어갑니다.", "계약일 금액 다름 틀 실제 잘못"],
-    [6, "한글(hwp) 파일로 내라고 합니다", "엑셀이나 PDF로 내도 되는지\n발주처에 먼저 확인해 주세요.\n\n한글로만 받는 곳이면\n① 발주처 한글 서식을 엽니다.\n② 완성한 엑셀을 보며 값을 옮겨 적습니다.\n③ 예정공정표와 사진은 엑셀에서 선택해\n    '홈' → '복사' 옆 화살표 →\n    '그림으로 복사'를 누르고\n    한글에 붙여 넣습니다.\n\n그림은 한글에서 고칠 수 없으니\n엑셀에서 고친 뒤 다시 붙여 주세요.", "한글 hwp 한셀 파일 형식"],
+    [6, "한글(hwp) 파일로 내라고 합니다", "엑셀이나 PDF로 내도 되는지\n발주처에 먼저 확인해 주세요.\n\n한글로만 받는 곳이면\n① 엑셀 서류를 다 채우고 저장합니다.\n② 목록에서 '서류 현황'을 엽니다.\n③ 서류 이름 아래 '한글로 받기'를 누릅니다.\n\n우리 서식이 한글 파일로 내려옵니다.\n받은 뒤 쪽 모양을 한 번 확인해 주세요.\n고칠 때는 엑셀에서 고치고 다시 받습니다.\n\n발주처가 준 한글 서식이 따로 있으면\n그 서식에 직접 적어야 합니다.", "한글 hwp 한셀 파일 형식"],
   ] },
 };
 // 모든 탭에 같이 나오는 질문(주제 -1 = 맨 끝 '문제가 생겼을 때')
@@ -5703,7 +5726,7 @@ function helpFaqList() {
   return part("처음 볼 때", true) + part("쓰다가 궁금할 때", false);
 }
 function renderHelp() {
-  const head = `<div class="hhead"><b>${CO_NAME} 도우미</b><span>${esc(HS().name)} · ${IS_VIEWER ? "NAS 웹앱" : "서버 PC 웹앱"}</span><button type="button" data-hclose aria-label="닫기">✕</button></div>`
+  const head = `<button type="button" class="hgrip" aria-label="창 크기 조절(화살표 키, 두 번 누르면 처음 크기)" title="끌어서 크기 조절 · 두 번 누르면 처음 크기"><svg viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1 10V1h9M4.5 10V4.5H10"/></svg></button><div class="hhead"><b>${CO_NAME} 도우미</b><span>${esc(HS().name)} · ${IS_VIEWER ? "NAS 웹앱" : "서버 PC 웹앱"}</span><button type="button" data-hclose aria-label="닫기">✕</button></div>`
     + `<div class="hviews" role="tablist">${[["chat", "대화"], ["faq", "자주 묻는 질문"]].map(([v, t]) => `<button type="button" role="tab" data-hview="${v}" aria-selected="${HELP_VIEW === v}">${t}</button>`).join("")}</div>`;
   if (HELP_VIEW === "faq") {
     $("helpBox").innerHTML = head + `<div class="hform fform"><input id="helpFind" type="search" value="${esc(HELP_FAQ.find)}" placeholder="질문에서 찾기" autocomplete="off" aria-label="자주 묻는 질문에서 찾기"></div><div class="flist" id="helpFaq">${helpFaqList()}</div>`;
@@ -5737,6 +5760,34 @@ function renderHelp() {
   const log = $("helpBox").querySelector(".hlog");
   log.scrollTop = log.scrollHeight;
 }
+// 창 크기 조절 — 오른쪽 아래에 붙은 창이라 왼쪽 위 손잡이로. 이 브라우저에 기억(11/25 사용자, 기본은 처음 크기 380×580)
+function helpSize(w, h, save) {
+  const st = $("helpBox").style;
+  if (w == null) { st.removeProperty("--hw"); st.removeProperty("--hh"); }
+  else { st.setProperty("--hw", Math.max(300, Math.min(w, innerWidth - 32)) + "px"); st.setProperty("--hh", Math.max(320, Math.min(h, innerHeight - 110)) + "px"); }
+  if (save) try { w == null ? localStorage.removeItem("help-size") : localStorage.setItem("help-size", JSON.stringify([w, h].map(Math.round))); } catch (e) {}
+}
+try { const z = JSON.parse(localStorage.getItem("help-size") || "null"); if (z && z.every(Number.isFinite)) helpSize(z[0], z[1]); } catch (e) {}
+$("helpBox").addEventListener("pointerdown", (e) => {
+  const grip = e.target.closest(".hgrip");
+  if (!grip) return;
+  e.preventDefault(); grip.focus(); grip.setPointerCapture(e.pointerId);
+  const r = $("helpBox").getBoundingClientRect();
+  let w = r.width, h = r.height, moved = false;
+  grip.onpointermove = (m) => { moved = true; w = r.width + e.clientX - m.clientX; h = r.height + e.clientY - m.clientY; helpSize(w, h); };
+  grip.onpointerup = grip.onpointercancel = () => {
+    grip.onpointermove = grip.onpointerup = grip.onpointercancel = null;
+    if (moved) { const b = $("helpBox").getBoundingClientRect(); helpSize(b.width, b.height, true); }
+  };
+});
+$("helpBox").addEventListener("dblclick", (e) => { if (e.target.closest(".hgrip")) helpSize(null, null, true); });
+$("helpBox").addEventListener("keydown", (e) => {
+  const d = { ArrowLeft: [20, 0], ArrowRight: [-20, 0], ArrowUp: [0, 20], ArrowDown: [0, -20] }[e.key];
+  if (!d || !e.target.closest(".hgrip")) return;
+  e.preventDefault();
+  const r = $("helpBox").getBoundingClientRect();
+  helpSize(r.width + d[0], r.height + d[1], true);
+});
 function helpNudge() {
   let seen = false;
   try { seen = localStorage.getItem("help-seen") === "1"; } catch (e) {}

@@ -207,8 +207,37 @@ def _apply(path: Path, fixes: dict[str, dict]) -> None:
             os.remove(tmp)
 
 
+def keep_pic_size(path: Path) -> None:
+    """openpyxl이 저장한 그림엔 크기(xfrm)가 없어 한셀에서 로고·증빙이 1인치 네모로 보임 → 칸 자리에 적힌 크기를 그림에도(11/25)."""
+    with zipfile.ZipFile(path) as z:
+        items = [(i, z.read(i.filename)) for i in z.infolist()]
+    changed = False
+
+    def one(m):
+        x, size = m.group(0), re.search(r'<ext cx="(\d+)" cy="(\d+)"', m.group(0))
+        if not size or "<a:xfrm" in x:
+            return x
+        return re.sub(r"<spPr>", '<spPr><a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:off x="0" y="0"/>'
+                      f'<a:ext cx="{size[1]}" cy="{size[2]}"/></a:xfrm>', x, count=1)
+    for k, (info, data) in enumerate(items):
+        if info.filename.startswith("xl/drawings/drawing"):
+            new = re.sub(r"<oneCellAnchor>.*?</oneCellAnchor>", one, data.decode("utf-8"), flags=re.S).encode("utf-8")
+            changed |= new != data
+            items[k] = (info, new)
+    if changed:
+        tmp = path.with_suffix(".tmp")
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as w:
+            for info, data in items:
+                w.writestr(info.filename, data)
+        tmp.replace(path)
+
+
 def fit(path: Path) -> list[str]:
     """잘리는 칸을 맞추고 고친 곳을 '시트 칸' 줄로 돌려줌. 실패해도 파일은 그대로(빈 목록)."""
+    try:
+        keep_pic_size(Path(path))
+    except Exception:  # noqa: BLE001 — 못 고쳐도 서류는 그대로 씀
+        pass
     try:
         fixes = plan(Path(path))
         if fixes:

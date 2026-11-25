@@ -1876,6 +1876,21 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 @media (min-width: 641px) { #liveTools .tab-search { min-width: 240px; } }
 .topbar .brand-text h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }  /* 실제 글꼴이 넓어도 위 띠는 한 줄 */
 .meta-old { color: var(--warn); font-weight: 600; cursor: help; }
+
+/* ── 2026-11-25 사용자: 바로가기 아이콘은 위 띠 맨 오른쪽, 참가·보류 버튼 작게, 싱크로율은 막대와 함께 ── */
+.topbar .top-links { margin-left: 0; order: 99; }
+.topbar .brand-text { margin-right: auto; }
+@media (max-width: 760px) { .topbar .top-links { order: 0; margin-left: auto; } .topbar .docbell, .topbar .me-top, .topbar .theme { order: 1; } }  /* 휴대폰은 따로 한 줄을 쓰지 않게 첫 줄 오른쪽 */
+@media (min-width: 641px) {
+  .pbtn { font-size: 12.5px; padding: 4px 10px; min-height: 28px; }
+}
+@media (max-width: 640px) {
+  .pbtn { font-size: 13.5px; padding: 6px 14px; min-height: 36px; }
+}
+.notice.live.compact .card-score { flex-direction: row; align-items: center; gap: 8px; }
+.notice.live.compact .card-score small { order: 1; }
+.notice.live.compact .card-score .score-bar { display: block; order: 2; width: 72px; height: 6px; margin: 0; }
+.notice.live.compact .card-score b { order: 3; min-width: 3.2em; text-align: right; }
 </style>
 </head>
 <body>
@@ -1906,10 +1921,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <p class="corpus-sum" id="corpusSum" hidden>과거 실적을 불러오는 중…</p>
     </div>
 
-    <nav class="side-links top-links" aria-label="바로가기">
-      <a href="https://www.g2b.go.kr/" target="_blank" rel="noopener" title="나라장터 새 창으로 열기"><img src="icons/g2b.ico" alt=""><b>나라장터</b><small>g2b.go.kr</small><span class="go">↗</span></a>
-      <a href="https://www.21line.co.kr/conty/?cd=first" target="_blank" rel="noopener" title="21라인 새 창으로 열기"><img src="icons/21line.ico" alt=""><b>21라인</b><small>21line.co.kr</small><span class="go">↗</span></a>
-    </nav>
     <div class="docbell" id="judgeBell" hidden>
       <button type="button" id="judgeBellBtn" aria-haspopup="true" aria-expanded="false" title="판단할 공고 (텔레그램 보고에 나간 공고)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/></svg><span class="lb">판단할 공고</span><span class="n" id="judgeBellN"></span></button>
       <div class="docbell-pop" id="judgeBellPop" hidden></div>
@@ -1927,6 +1938,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <button type="button" data-theme-set="light" aria-pressed="false">라이트</button>
       <button type="button" data-theme-set="dark" aria-pressed="false">다크</button>
     </div>
+    <nav class="side-links top-links" aria-label="바로가기">
+      <a href="https://www.g2b.go.kr/" target="_blank" rel="noopener" title="나라장터 새 창으로 열기"><img src="icons/g2b.ico" alt=""><b>나라장터</b><small>g2b.go.kr</small><span class="go">↗</span></a>
+      <a href="https://www.21line.co.kr/conty/?cd=first" target="_blank" rel="noopener" title="21라인 새 창으로 열기"><img src="icons/21line.ico" alt=""><b>21라인</b><small>21line.co.kr</small><span class="go">↗</span></a>
+    </nav>
   </div>
 </div>
 
@@ -4687,7 +4702,7 @@ function renderExcludedCard(n) {
     <div class="card-head2">
       <div class="badges">${exDueBadge(n)}${bidMethodOf(n) ? bidMethodBadge({ ...n, bidMethodCategory: bidMethodOf(n) }) : ""}${businessTypeBadge(n)}${n.sourceType === "사전규격" ? sourceTypeBadge(n) : ""}${n.reNotice ? reNoticeBadge() : ""}</div>
       <h3>${title}</h3>
-      <div class="card-score static ${tone}"><b>${score}<i>%</i></b><small>싱크로율</small></div>
+      <div class="card-score static ${tone}"><b>${score}<i>%</i></b><span class="score-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, score))}%"></span></span><small>싱크로율</small></div>
     </div>
     <div class="facts-line"><dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>${noticeNoTag(n.noticeNo)}</div>
     ${exReasonBlock(n, kw)}

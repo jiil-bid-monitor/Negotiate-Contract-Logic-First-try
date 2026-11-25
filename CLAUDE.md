@@ -31,6 +31,8 @@
 - `.claude/skills/emil-design-eng/`(emilkowalski/skills `64eb3de`, MIT — UI 다듬기·컴포넌트·움직임 원칙)·`.claude/skills/impeccable/`(pbakaus/impeccable `plugin/skills/impeccable` `9e460a8`, Apache 2.0 —
   화면 계획·점검·다듬기, `/impeccable audit|critique|polish …`). 원본 그대로 + LICENSE(·NOTICE). impeccable의 `scripts/impeccable`은 첫 실행 때 GitHub 릴리스에서 엔진을 받음(체크섬 확인) — 못 받으면 지침만 읽고 진행.
   새 세션부터 스킬 목록에 나옴. 웹앱 화면을 고칠 때도 CLAUDE.md 규칙(설명 문구 새로 안 넣기 등)이 먼저.
+- (이어서 사용자 요청) `.claude/skills/taste-skill/`(Leonxlnx/taste-skill `d1a2bb4`, MIT, 스킬 이름 `design-taste-frontend`) — **지침·도구만**(SKILL.md·references·library·scripts, 약 2MB, 사용자 결정):
+  사진·아이콘·예제 화면 `assets/`(38MB, 홍보용 웹사이트 소재)는 뺌 — SKILL.md가 assets를 가리키는 부분은 없으니 건너뛸 것. 원래 홍보 사이트용 지침이라 업무 화면엔 references 쪽만 참고.
 
 ## 2026-11-25 — 정량평가서 화면 고정 설명글 삭제 (브랜치 `claude/quant-drop-notes`, 사용자 요청)
 

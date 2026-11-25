@@ -282,12 +282,12 @@ body.picking { overflow: hidden; }
   flex: 0 0 auto; text-align: right; line-height: 1.1; padding-left: 12px;
   border-left: 1px solid var(--line-soft); font-variant-numeric: tabular-nums;
 }
-.card-score b { display: block; font-family: var(--head); font-size: 24px; font-weight: 700; color: var(--muted); letter-spacing: -.01em; }
-.card-score b i { font-style: normal; font-size: 13px; font-weight: 600; margin-left: 1px; }
+.card-score > b { display: block; font-family: var(--head); font-size: 24px; font-weight: 700; color: var(--muted); letter-spacing: -.01em; }
+.card-score > b i { font-style: normal; font-size: 13px; font-weight: 600; margin-left: 1px; }
 .card-score small { display: block; font-size: 11px; color: var(--faint); margin-top: 2px; }
 
-.card-score.hi b { color: var(--brand); }
-.card-score.edge b, .card-score.edge small { color: var(--warn); }
+.card-score.hi > b { color: var(--brand); }
+.card-score.edge > b, .card-score.edge > small { color: var(--warn); }
 
 /* 실제 공고 카드 — 왼쪽 본문, 오른쪽 싱크로율 칸, 아래 참가여부 줄 */
 .notice.live { padding: 16px 20px 12px; border-radius: 4px; margin-bottom: 12px; }
@@ -300,8 +300,8 @@ body.picking { overflow: hidden; }
   flex: 0 0 150px; display: flex; flex-direction: column; justify-content: center; align-items: stretch;
   padding: 0 0 0 20px; border-left: 1px solid var(--line-soft); text-align: right;
 }
-.notice.live .card-score b { font-size: 30px; }
-.notice.live .card-score b i { font-size: 18px; }
+.notice.live .card-score > b { font-size: 30px; }
+.notice.live .card-score > b i { font-size: 18px; }
 .score-bar { display: block; height: 6px; margin: 8px 0 6px; background: var(--line-soft); border-radius: 3px; overflow: hidden; }
 .score-bar span { display: block; height: 100%; background: var(--muted); border-radius: 3px; }
 .card-score.hi .score-bar span { background: var(--brand); }
@@ -349,10 +349,7 @@ body.picking { overflow: hidden; }
 .score-why .meta { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
 .score-why ol { margin: 0; padding: 0; list-style: none; }
 .score-why li { padding: 8px 0; border-top: 1px solid var(--line-soft); }
-/* 바깥 % 숫자(.card-score b — 24px 제목 글꼴)를 물려받지 않게 되돌린다 */
-.card-score .score-why b,
-.card-score.hi .score-why b,
-.card-score.edge .score-why b { display: inline; font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0; color: var(--ink-strong); }
+.score-why b { font-size: 13px; font-weight: 700; color: var(--ink-strong); }
 .score-why .nums { display: block; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .score-why .terms { display: block; font-size: 12px; margin-top: 2px; }
 /* 과업 프로필·과거 사업 꼬리표. 공고와 겹치는 꼬리표는 진하게, 이 사업에만 있는 꼬리표는 흐리게 */

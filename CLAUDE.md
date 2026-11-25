@@ -26,6 +26,11 @@
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 **(11/18 사용자 요청) 오늘 한 일 정리·worklog·인수인계·다음 세션 시작 메시지엔 지금 세션에서 한 작업만** — 같은 날 다른 세션(팀원 등)이 한 PR·브랜치·기록은 언급하지 않음(커밋의 Claude-Session 줄로 가림).
 
+## 2026-11-25: 싱크로율 팝업 사업명 글자 크기 통일 (브랜치 `claude/sync-popup-font`, 사용자 지적)
+
+- 싱크로율이 낮은(회색) 카드만 팝업 안 사업명이 30px: 카드 % 숫자 크기(`.notice.live .card-score b`)가 팝업 안 굵은 글까지 걸렸고, 되돌리는 규칙은 높음·경계선에서만 이겼음 →
+  % 숫자 규칙은 바로 아래 글자에만(`.card-score > b`), 되돌리는 규칙은 뺌. 세 등급 모두 13px. 화면만, F5.
+
 ## 2026-11-25 — 디자인 지침(스킬) 두 개를 저장소에 넣음 (브랜치 `claude/design-skills`, 사용자 요청 — 웹앱 UI/UX 손보기 전)
 
 - `.claude/skills/emil-design-eng/`(emilkowalski/skills `64eb3de`, MIT — UI 다듬기·컴포넌트·움직임 원칙)·`.claude/skills/impeccable/`(pbakaus/impeccable `plugin/skills/impeccable` `9e460a8`, Apache 2.0 —

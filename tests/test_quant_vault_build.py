@@ -5238,3 +5238,16 @@ def test_grida_track_table_leaves_orderer_blank():
             company.use("jiil")
         assert vals[1] == ["가상 놀이터"] and vals[6] == ["단독"], vals
         assert (4 in vals) is has_org, vals
+
+
+def test_guide_text_in_value_cell_replaced(tmp_path: Path):
+    """(11/25 사용자) 값 칸에 미리 적힌 작성 안내('뒷자리 첫째자리까지 기재')는 예시 — 지우고 회사 정보."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    rows = [[_c(0, 0, "대표자"), _c(1, 0, ""), _c(2, 0, "주민등록번호"), _c(3, 0, "뒷자리 첫째자리까지 기재")]]
+    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl(rows))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍대표", "대표자 주민등록번호": "000101-3******"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v, title="가상 공고")
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    g = {(c.row, c.col): c.text.strip() for c in _cells(xml, _spans(xml, "tbl")[0])}
+    assert g[(0, 3)] == "000101-3******" and "첫째자리" not in xml, g

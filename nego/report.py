@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .pipeline import Candidate, RunStats
+from .nodash import no_dash
 from .screen import parse_datetime
 
 CSV_COLUMNS = [
@@ -754,6 +755,6 @@ def save_reports(
     prefix = "_".join(stats.categories) if stats.categories else "전체"
     csv_path = write_csv(candidates, output_dir / f"공고_{prefix}_{stamp}.csv")
     html_path = output_dir / f"공고_{prefix}_{stamp}.html"
-    html_path.write_text(render_html(candidates, stats, generated_at), encoding="utf-8")
+    html_path.write_text(no_dash(render_html(candidates, stats, generated_at)), encoding="utf-8")
 
     return {"csv": csv_path, "html": html_path}

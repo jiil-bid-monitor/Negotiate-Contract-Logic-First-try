@@ -20,6 +20,8 @@ import ssl
 from email.message import EmailMessage
 from pathlib import Path
 
+from .nodash import no_dash
+
 log = logging.getLogger(__name__)
 
 RECIPIENTS_PATH = Path(__file__).resolve().parent.parent / "config" / "recipients.json"
@@ -50,11 +52,11 @@ def subject_for(date_text: str, total: int, partial: bool = False, part: str | N
 
 def build_message(subject: str, html_body: str, sender: str, recipients: list[str], attachment: Path | None = None) -> EmailMessage:
     msg = EmailMessage()
-    msg["Subject"] = subject
+    msg["Subject"] = no_dash(subject)
     msg["From"] = sender
     msg["To"] = ", ".join(recipients)
     msg.set_content("HTML 메일을 볼 수 없는 환경입니다. 첨부한 리포트 파일을 열어 주세요.")
-    msg.add_alternative(html_body, subtype="html")
+    msg.add_alternative(no_dash(html_body), subtype="html")
     if attachment is not None and attachment.exists():
         msg.add_attachment(attachment.read_bytes(), maintype="text", subtype="html", filename=attachment.name)
     return msg

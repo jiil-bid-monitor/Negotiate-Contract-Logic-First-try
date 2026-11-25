@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from nego import fields as F
+from nego.nodash import no_dash
 from nego.region import sido_of
 
 from . import xlsxfit
@@ -185,14 +186,14 @@ def add_reissue_sheet(xlsx: Path, rows: list[tuple[str, str]]) -> None:
         del wb[REISSUE_SHEET]
     ws = wb.create_sheet(REISSUE_SHEET, 1 if "기본사항" in wb.sheetnames else 0)
     ws.sheet_properties.tabColor = "FFC00000"
-    ws["A1"] = "⚠ 공고문이 요구한 '새로 발급할 서류' — 제출 전에 새로 발급받으세요 (이 탭은 제출 안 함)"
+    ws["A1"] = "⚠ 공고문이 요구한 '새로 발급할 서류'. 제출 전에 새로 발급받으세요 (이 탭은 제출 안 함)"
     ws["A1"].font = Font(b=True, sz=12, color="FFC00000")
     ws["A3"], ws["B3"], ws["C3"] = "서류", "가지고 있는 것(발급일)", "할 일"
     for c in ("A3", "B3", "C3"):
         ws[c].font, ws[c].fill = Font(b=True), PatternFill("solid", fgColor="FFFCE4D6")
     for i, (kind, have) in enumerate(rows, 4):
         ws.cell(i, 1, kind), ws.cell(i, 2, have), ws.cell(i, 3, "공고문의 발급 기준(예: 공고일 이후 발급)을 확인해 새로 발급")
-    ws.cell(len(rows) + 5, 1, "공고문에 서류 이름이 나와서 표시함(자동) — 제출 요구인지는 공고문 원문과 대조")
+    ws.cell(len(rows) + 5, 1, "공고문에 서류 이름이 나와서 표시함(자동). 제출 요구인지는 공고문 원문과 대조")
     ws.column_dimensions["A"].width, ws.column_dimensions["B"].width, ws.column_dimensions["C"].width = 26, 24, 60
     wb.save(xlsx)
     xlsxfit.fit(xlsx)  # 넣은 값이 칸보다 길면 줄 높이·줄바꿈 맞춤(11/20 사용자 '글씨 잘림 없게')
@@ -516,7 +517,7 @@ def fill_basic(template: Path, target: Path, values: dict) -> None:
     for row, (value, source) in values.items():
         ws.cell(row, 2).value = value
         ws.cell(row, 2).fill = blue
-        ws.cell(row, 3).value = f"[자동] {source}"
+        ws.cell(row, 3).value = no_dash(f"[자동] {source}")
     target.parent.mkdir(parents=True, exist_ok=True)
     wb.save(target)
     xlsxfit.fit(target)  # 넣은 값이 칸보다 길면 줄 높이·줄바꿈 맞춤(11/20 사용자 '글씨 잘림 없게')
@@ -587,7 +588,7 @@ def fill_qual(template: Path, target: Path, values: dict[str, Any]) -> list[str]
             done.append(str(ws.cell(r, 1).value).strip())
         note = QUAL_NOTES.get(str(ws.cell(r, 1).value or "").strip())
         if note and not ws.cell(r, 3).value:
-            ws.cell(r, 3).value = note
+            ws.cell(r, 3).value = no_dash(note)
     target.parent.mkdir(parents=True, exist_ok=True)
     wb.save(target)
     xlsxfit.fit(target)  # 넣은 값이 칸보다 길면 줄 높이·줄바꿈 맞춤(11/20 사용자 '글씨 잘림 없게')
@@ -921,7 +922,7 @@ class PostAward:
         for d in docs:
             lines.append(f"[{'틀에 있음' if d['covered'] else '틀에 없음 — 따로 준비'}] {d['text']}  ({d['source']})")
         lines += [""] + [f"첨부를 받지 못함: {s}" for s in nf.skipped]
-        (folder / "공고문서" / "서류_확인.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (folder / "공고문서" / "서류_확인.txt").write_text(no_dash("\n".join(lines)) + "\n", encoding="utf-8")
         with self._lock:
             items = self._read()
             items[key]["docs"] = {"found": len(docs), "missing": sum(not d["covered"] for d in docs), "files": len(nf.files)}
@@ -1279,7 +1280,7 @@ class PostAward:
             note = folder / "공고문서" / "서류_확인.txt"
             try:
                 with note.open("a", encoding="utf-8") as f:
-                    f.write("\n" + line + " — 준공·청구 서류 파란 칸을 새 값으로(직접 고친 칸은 그대로). 착수서류는 원계약 그대로.\n")
+                    f.write("\n" + no_dash(line) + ". 준공·청구 서류 파란 칸을 새 값으로(직접 고친 칸은 그대로). 착수서류는 원계약 그대로.\n")
             except OSError:
                 pass
         return True

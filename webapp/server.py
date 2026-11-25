@@ -17,7 +17,6 @@ import json
 import logging
 import mimetypes
 import os
-import re
 import secrets
 import sys
 import threading
@@ -31,6 +30,7 @@ from urllib.parse import parse_qs, quote, urlparse
 from nego import bidcalc, bidrecommend, feedback_sheet, scope
 from nego.config import ConfigError, list_companies, load_config, redact
 from nego.http_client import ApiError
+from nego.nodash import no_dash
 
 from . import docexpiry, mview
 from .autorestart import RestartAfterCollect
@@ -347,8 +347,7 @@ def make_handler(app: App):
             self._send(status, json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
         def _error(self, status: int, message: str) -> None:
-            message = re.sub(r"\s+—\s+", ": ", re.sub(r"([다요])\s+—\s+", r"\1. ", message))  # 화면엔 긴 줄표를 안 씀(11/25 사용자)
-            self._json({"error": message}, status)
+            self._json({"error": no_dash(message)}, status)
 
         def _body(self) -> dict[str, Any]:
             length = int(self.headers.get("Content-Length") or 0)

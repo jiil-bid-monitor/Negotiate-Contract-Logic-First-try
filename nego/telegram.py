@@ -56,6 +56,8 @@ from typing import Any
 
 import requests
 
+from .nodash import no_dash
+
 log = logging.getLogger(__name__)
 
 API_BASE = "https://api.telegram.org"
@@ -342,7 +344,7 @@ def send_messages(
                 "sendMessage",
                 data={
                     "chat_id": chat_id,
-                    "text": text,
+                    "text": no_dash(text),
                     "parse_mode": "HTML",
                     "disable_web_page_preview": "true",
                 },

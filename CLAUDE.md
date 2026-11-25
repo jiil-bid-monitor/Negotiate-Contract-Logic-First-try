@@ -33,6 +33,13 @@
   대리인 성명·생년월일·주소는 서버 PC `.env` `QUANT_GRIDA_AGENT…`(또는 `QUANT_GRIDA_REP…`)가 있어야 들어감 — 해남 결과에서 비었던 건 그 값이 없거나 #675 반영 전으로 봄.
   시험 `test_grida_seal_form_uses_jiil_vault`·`test_grida_agent_contact_prefilled_labels`. 서버 코드 바뀜 — 웹앱 다시 켜기.
 
+## 2026-11-25 — 그리다 설립일·사업분야·신용평가등급·연혁도 .env로 (브랜치 `claude/grida-env-info`, 사용자 요청)
+
+- 서버 PC `.env` `QUANT_GRIDA_FOUNDED`(설립일)·`_FIELD`(사업분야)·`_CREDIT`(신용평가등급)·`_CREDIT_KIND`·`_CREDIT_DATE`·`_CREDIT_END`,
+  `_HISTORY`(연혁 — '2022.10.04 법인설립|2023.09.11 …'처럼 '|'로 나눔, 서류에서 읽은 연혁보다 먼저) — `importer.enrich_vault`(지일도 `QUANT_…` 같은 이름).
+  신용평가 확인서 PDF가 있으면 그 값이 먼저. 값은 사용자가 준 그리다 제안서(정선 복합문화센터)에서 뽑아 파일로만 전달(저장소에 안 적음).
+  시험 `test_grida_overview_and_history_from_env`. 서버 코드 바뀜 — 웹앱 다시 켜기.
+
 ## 2026-11-25 — 그리다 정량평가서 기술인력 = 지일 인력 (브랜치 `claude/grida-jiil-staff`, 사용자 결정)
 
 - **(사용자) 그리다 인력 자료 자체가 지일과 동일 취급** — 그리다 정량평가서 기술인력은 늘 지일 인력(`vault.jiil_staff` — jiil-quant-docs 폴더의 기술인력 엑셀 먼저,

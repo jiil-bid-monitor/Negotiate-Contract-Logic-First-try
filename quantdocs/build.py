@@ -423,11 +423,28 @@ _SEAL_FORM = re.compile(r"사\s*용\s*인\s*감")
 _JIIL_VAULT: list = []  # 그리다 사용인감계에 쓸 지일 자료(작업마다 한 번 읽음)
 
 
-def _seal_vault(title: str, vault):
+# 서식 이름에 '사용인감'이 없어도 본문이 사용인감계 모양이면(11/25 해남 — '사 용 인 감 | 인 적 사 항' 표). '(사용인감)' 서명 줄만 있는 서약서는 아님
+_SEAL_BODY = re.compile(r"사용인감(?:계|신고)|사용인감.{0,6}인적사항")
+
+
+def _seal_body(path: Path | None) -> bool:
+    from .fill import _text
+
+    if path is None:
+        return False
+    try:
+        with zipfile.ZipFile(path) as z:
+            text = "".join(_text(z.read(n).decode("utf-8")) for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n))
+    except (OSError, zipfile.BadZipFile, KeyError):
+        return False
+    return bool(_SEAL_BODY.search(re.sub(r"\s+", "", text)))
+
+
+def _seal_vault(title: str, vault, path: Path | None = None):
     """(11/25 사용자 결정) 지일이 아닌 회사(그리다)도 사용인감계는 지일 회사 정보(업체명·주소·대표자·전화)로 채움 — 다른 서식은 그 회사 것."""
     from . import company as co_mod
 
-    if co_mod.current() == co_mod.DEFAULT or not _SEAL_FORM.search(title or ""):
+    if co_mod.current() == co_mod.DEFAULT or not (_SEAL_FORM.search(title or "") or _seal_body(path)):
         return vault
     if not _JIIL_VAULT:
         from .importer import enrich_vault
@@ -513,7 +530,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 a.notes.append(f"{f.name}: 한글(HWPX) 파일이 아니라 서식을 자르지 못함 — 원본을 한글에서 HWPX로 저장해 확인")
                 continue
             for c in sorted(cut(src, forms_dir, cut_names), key=lambda c: [int(n) for n in re.findall(r"\d+", c.no)]):
-                vault = _seal_vault(c.title, base_vault)
+                vault = _seal_vault(c.title, base_vault, forms_dir / c.file)
                 joint = not _BLANK_FORM.search(c.title) and _joint_body(forms_dir / c.file)
                 if is_manual(c.title) or joint:  # 양식 그대로 — 내려받은 뒤 직접 기입
                     manual_dir.mkdir(parents=True, exist_ok=True)

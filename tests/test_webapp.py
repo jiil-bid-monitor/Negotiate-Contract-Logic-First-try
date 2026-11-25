@@ -597,6 +597,34 @@ class TestServer(unittest.TestCase):
         local.team_remote = ("http://127.0.0.1:9", "x")  # NAS 꺼짐
         self.assertEqual(self.call("/api/participation")[0], 502)
 
+    def test_postaward_goes_to_nas(self):
+        """서버 PC의 낙찰 후 서류 목록·파일도 NAS 한 곳으로(2026-11-25) — 이 PC엔 안 쌓이고, 파일은 받은 그대로."""
+        nas_store = Store(Path(tempfile.mkdtemp()) / "n.sqlite3")
+        nas = App(nas_store, FakePast(), Collector(nas_store, FakePast(), runner=fixture_run, config_loader=config_with_key),
+                  token="nas-token")
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(nas))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        local = App(Store(Path(tempfile.mkdtemp()) / "l.sqlite3"), FakePast(), self.collector, token="secret-token")
+        local.team_remote = (f"http://127.0.0.1:{httpd.server_address[1]}", "nas-token")
+        self.httpd.RequestHandlerClass = make_handler(local)
+        status, data = self.call("/api/postaward", {"no": "R26BK00000009-000", "title": "전시관", "work": "물품"})
+        self.assertEqual(status, 200, data)
+        self.assertEqual([v["no"] for v in nas.postaward.items()], ["R26BK00000009"])
+        self.assertEqual(local.postaward.items(), [])
+        self.assertEqual(len(self.call("/api/postaward")[1]["items"]), 1)
+        folder = nas.postaward.make_folder("R26BK00000009-000", Path(tempfile.mkdtemp()))
+        (folder / "공고문서" / "공고문.hwp").write_bytes(b"HWP")
+        req = urllib.request.Request(self.base + "/api/postaward/file?key=R26BK00000009-000&path="
+                                     + urllib.parse.quote("공고문서/공고문.hwp"), headers={"X-App-Token": "secret-token"})
+        with urllib.request.urlopen(req) as res:
+            self.assertEqual(res.read(), b"HWP")
+            self.assertIn("attachment", res.headers["Content-Disposition"])
+        self.assertEqual(self.call("/api/postaward", token="wrong")[0], 401)
+        local.team_remote = ("http://127.0.0.1:9", "x")  # NAS 꺼짐
+        self.assertEqual(self.call("/api/postaward")[0], 502)
+
     def test_token_required_for_api_not_for_page(self):
         self.assertEqual(self.call("/api/meta", token="wrong")[0], 401)
         with urllib.request.urlopen(self.base + "/") as res:

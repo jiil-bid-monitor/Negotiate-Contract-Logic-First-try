@@ -324,6 +324,24 @@ def make_handler(app: App):
                 return self._error(HTTPStatus.BAD_GATEWAY, "NAS에 연결하지 못해 판단 기록을 읽거나 저장하지 못했습니다 — 잠시 뒤 다시")
             return self._send(res.status_code, res.content, "application/json; charset=utf-8")
 
+        def _remote_award(self, method: str, data: Any = None) -> None:
+            """낙찰 후 서류도 NAS 한 곳에서(11/25 사용자 — 서버 PC에서도 같은 목록·폴더를 쓰게). 파일·zip은 받은 그대로 넘긴다."""
+            import requests
+            base, token = app.team_remote
+            try:
+                res = requests.request(method, base + self.path, json=data, timeout=600, headers={"X-App-Token": token})
+            except requests.RequestException:
+                return self._error(HTTPStatus.BAD_GATEWAY, "NAS에 연결하지 못했습니다 — 잠시 뒤 다시")
+            self.send_response(res.status_code)
+            for name in ("Content-Type", "Content-Disposition"):
+                if res.headers.get(name):
+                    self.send_header(name, res.headers[name])
+            self.send_header("Content-Length", str(len(res.content)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(res.content)
+
         def _json(self, data: Any, status: int = 200) -> None:
             self._send(status, json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
@@ -507,6 +525,8 @@ def make_handler(app: App):
                 return self._json({"entries": app.bidlog_of(co).entries()})
             if url.path == "/api/bidlog/seen":  # 아직 기록 파일이 없으면 null — 화면이 '처음'으로 보고 지금 결과를 본 것으로
                 return self._json({"seen": app.result_seen(None)})
+            if app.team_remote and pa is app.postaward and url.path.startswith("/api/postaward"):
+                return self._remote_award("GET")
             if url.path == "/api/postaward":
                 return self._json({"items": pa.items()})
             if url.path == "/api/postaward/status":
@@ -666,6 +686,8 @@ def make_handler(app: App):
                 if url.path == "/api/past-live":  # 서버 PC가 사업 폴더로 만든 과거사업 목록을 보냄(webapp/pastlive.py)
                     from . import pastlive
                     return self._json({"ok": True, "rows": pastlive.receive(app, data.get("rows") or [])})
+                if app.team_remote and not test and url.path.startswith("/api/postaward"):
+                    return self._remote_award("POST", data)
                 if url.path == "/api/postaward":
                     pa.add(str(data.get("no") or ""), str(data.get("title") or ""), str(data.get("work") or ""))
                     return self._json({"ok": True, "items": pa.items()})
@@ -931,7 +953,8 @@ def start_nightly(app: App) -> None:
         return bidcalc.make_client(config.api), base
 
     pull = getattr(app, "bidlog_pull", None)
-    Nightly(app.store.path.parent, app.bidlog, app.latest_run, make_client, default_own_bizno(), postaward=app.postaward,
+    Nightly(app.store.path.parent, app.bidlog, app.latest_run, make_client, default_own_bizno(),
+            postaward=None if app.team_remote else app.postaward,  # 서버 PC는 NAS 목록을 씀 — 낙찰 확인도 NAS가
             before=pull.pull if pull else None).start()
     # 그리다 등 다른 회사도 같은 밤 작업(2026-11-24 사용자 결정) — 그 회사 투찰 기록·수집 결과·사업자번호로,
     # 낙찰 후 서류는 지일만. 엑셀·성적표는 투찰 이력 폴더 안 <회사 이름>/ 폴더에

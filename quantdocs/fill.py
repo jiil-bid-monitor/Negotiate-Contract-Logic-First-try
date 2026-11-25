@@ -795,10 +795,18 @@ def _column_heads(cells: list[Cell], by_pos: dict) -> dict[int, Cell]:
 def _agent_rows(xml: str, cells: list[Cell]) -> set[int]:
     """'대리인'·'수임인' 칸이 세로로 묶은 줄 번호(위임장 — 대리인 주소는 개인 주소라 비움)."""
     out: set[int] = set()
+    by_pos = {(c.row, c.col): c for c in cells}
     for c in cells:
         if re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", _sq(c.text)):
             rs = re.findall(r'rowSpan="(\d+)"', xml[c.start:c.end])
-            out.update(range(c.row, c.row + (int(rs[-1]) if rs else 1)))
+            span = int(rs[-1]) if rs else 1
+            out.update(range(c.row, c.row + span))
+            if span == 1:  # 칸을 합치지 않고 테두리만 숨긴 '대리인' 머리(11/25 해남 — 가운데 줄에만 글) — 위·아래 빈 머리 칸 줄도
+                for step in (-1, 1):
+                    r = c.row + step
+                    while (n := by_pos.get((r, c.col))) is not None and n.blank and abs(r - c.row) <= 3:
+                        out.add(r)
+                        r += step
     return out
 
 
@@ -1410,6 +1418,47 @@ def _block_colons(xml: str, cands: list, chars: "_Chars | None", cells: list[tup
         for r in g:
             out[r[2]] = mid - r[1]  # 그 줄 왼쪽 여백 기준으로 되돌림
     return out
+
+
+_EMP_LABELS = [  # 재직증명서 칸 이름표 → 지정 임원 값(11/25 사용자 — 그리다 정선 제출본 [서식 10])
+    (r"성명|이름|성함", lambda a, v: a.get("성명", "")),
+    (r"주민등록번호", lambda a, v: a.get("주민등록번호", "")),
+    (r"생년월일", lambda a, v: _birth(a.get("주민등록번호", ""))),
+    (r"부서/?직위|부서·직위|소속/?직위", lambda a, v: "/".join(x for x in (a.get("부서", ""), a.get("직위", "")) if x)),
+    (r"직위|직책|직급", lambda a, v: a.get("직위", "")),
+    (r"부서", lambda a, v: a.get("부서", "")),
+    (r"소속|회사명|업체명", lambda a, v: _value("회사명", v)),
+    (r"주소|현주소|자택주소", lambda a, v: a.get("주소", "")),
+    (r"재직기간|근무기간|입사일", lambda a, v: f"{a['입사일']}~" if a.get("입사일") else ""),
+]
+
+
+def _fill_employment(xml: str, vault, rep: FillReport) -> str:
+    """재직증명서 표('성 명 | __ | 생년월일 | __ / 소 속 / 직 위 / 주 소 / 재직기간')를 위임장 대리인(지정 임원 — vault.agent)으로.
+    지일은 vault.agent가 없어 그대로(11/05 직접 기입 서식)."""
+    agent = getattr(vault, "agent", None) or {}
+    if not agent.get("성명"):
+        return xml
+    edits = []
+    for tbl in _all_tables(xml):
+        cells = _cells(xml, tbl)
+        labels = {_sq(c.text) for c in cells}
+        if not any(re.fullmatch(r"재직기간|근무기간", t) for t in labels):
+            continue
+        by_pos = {(c.row, c.col): c for c in cells}
+        for c in cells:
+            lab = re.sub(r"[()（）]", "", _sq(c.text))
+            fn = next((f for rx, f in _EMP_LABELS if re.fullmatch(rx, lab)), None)
+            target = by_pos.get((c.row, c.col + c.colspan))
+            if fn is None or target is None or not target.blank:
+                continue
+            val = fn(agent, vault)
+            if val:
+                edits.append((target, val))
+                rep.filled.append(f"재직증명서 {lab} → 지정 임원")
+    for c, val in sorted(edits, key=lambda e: e[0].start, reverse=True):
+        xml = xml[:c.start] + _set_cell(xml[c.start:c.end], [_mark(val)]) + xml[c.end:]
+    return xml
 
 
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None, sign_only: bool = False) -> str:
@@ -3325,6 +3374,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
         if re.fullmatch(r"Contents/section\d+\.xml", name):
             xml = data.decode("utf-8")
             xml, n_click = _drop_click_here(xml, title)
+            xml = _fill_employment(xml, vault, rep)  # 재직증명서 = 지정 임원(그리다, 11/25) — 다른 칸 규칙보다 먼저
             if n_click:
                 rep.filled.append(f"누름틀 안내 글(붉은 글씨) {n_click}곳을 지움 — 공고명 자리는 공고명, 나머지는 칸 규칙대로 채움")
             edits: list[tuple[Cell, list[str], bool]] = []

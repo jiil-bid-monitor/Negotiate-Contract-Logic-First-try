@@ -5125,3 +5125,33 @@ def test_credit_grade_in_note_column(tmp_path: Path):
     text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()))
     assert "4.5점|4.5|BB+|" in text, text
     assert "최저점 3.5점" in text and text.count("BB+|") == 1, text
+
+
+def test_grida_employment_cert_and_split_agent_head(tmp_path: Path):
+    """(11/25 사용자 — 해남 그리다 위임장·재직증명서) ① '대리인' 머리가 합친 칸이 아니라 가운데 줄에만 글(위·아래 빈 칸)이어도 대리인 줄
+    ② 재직증명서 표 = 지정 임원(성명·생년월일·소속·직위·주소·재직기간). vault.agent가 없으면(지일) 재직증명서는 그대로."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    rows = [[_c(0, 0, ""), _c(1, 0, "성 명"), _c(2, 0, ""), _c(3, 0, "생년월일"), _c(4, 0, "")],
+            [_c(0, 1, "대리인"), _c(1, 1, "주 소"), _c(2, 1, "", 3)],
+            [_c(0, 2, ""), _c(1, 2, "업체명"), _c(2, 2, ""), _c(3, 2, "연락처"), _c(4, 2, "")]]
+    emp = [[_c(0, 0, "성 명"), _c(1, 0, ""), _c(2, 0, "생년월일"), _c(3, 0, "")],
+           [_c(0, 1, "소 속"), _c(1, 1, ""), _c(2, 1, "직 위"), _c(3, 1, "")],
+           [_c(0, 2, "주 소"), _c(1, 2, "", 3)],
+           [_c(0, 3, "재직기간"), _c(1, 3, "", 3)]]
+    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl(rows) + _tbl(emp))
+    for agent in ({"성명": "김대리", "주민등록번호": "700101-2******", "직위": "이사", "주소": "가상시 집로 2", "입사일": "2023.07.01."}, {}):
+        v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍대표", "주소": "회사시 본점로 1", "전화번호": "000-000-0000"})
+        v.agent = agent
+        fill_hwpx(src, tmp_path / "o.hwpx", v)
+        xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+        t1, t2 = (_cells(xml, t) for t in _spans(xml, "tbl"))
+        g1 = {(c.row, c.col): c.text.strip() for c in t1}
+        g2 = {(c.row, c.col): c.text.strip() for c in t2}
+        if agent:
+            assert g1[(0, 2)] == "김대리" and g1[(1, 2)] == "가상시 집로 2", g1
+            assert g2[(0, 1)] == "김대리" and g2[(0, 3)] == "1970. 01. 01." and g2[(1, 1)] == "(주)가상" and g2[(1, 3)] == "이사", g2
+            assert g2[(2, 1)] == "가상시 집로 2" and g2[(3, 1)] == "2023.07.01.~", g2
+        else:
+            assert g1[(0, 2)] == "" and g1[(1, 2)] == "", g1  # 지일 — 대리인 줄은 업체명만
+            assert g2[(0, 1)] == "" and g2[(3, 1)] == "", g2

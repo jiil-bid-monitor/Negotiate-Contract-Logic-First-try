@@ -5009,12 +5009,12 @@ def test_receipt_rep_before_submitter_label(tmp_path: Path):
     src = _mini_hwpx(tmp_path / "s.hwpx", body)
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
-    assert re.search(r"홍길동 +제출자 : 홍길동", text) and text.count("홍길동") == 2, text  # (11/25) 제출자도 대표자
+    assert re.search(r"홍길동 +제출자 :접", text) and text.count("홍길동") == 1, text  # 제출자는 비움(11/25)
     assert "성  명 :           (인)" in text, text  # 접수자 줄은 공란
 
 
 def test_receipt_submitter_row_filled(tmp_path: Path):
-    """(11/25 사용자 요청 — 그리다 정선 접수증 제출본) '제 출 자 | 소속: 직위: 성명 : (인)' = 회사명·대표이사·대표자, 접수자 줄은 공란."""
+    """(11/25 사용자 — 누가 제출하는지 모름) '제 출 자 | 소속: 직위: 성명 : (인)'·접수자 줄 모두 공란, 회사명은 채움."""
     from quantdocs.fill import fill_hwpx
 
     body = _tbl([[_c(0, 0, "접수번호"), _c(1, 0, " - ")],
@@ -5024,7 +5024,7 @@ def test_receipt_submitter_row_filled(tmp_path: Path):
     src = _mini_hwpx(tmp_path / "s.hwpx", body)
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
-    assert re.search(r"소속: \(주\)가상 +직위: 대표이사 +성명 : 홍길동 +\(인\)", text), text
+    assert "소속:          직위:          성명 :            (인)" in text and "홍길동" not in text, text
     assert "소속: 가족행복과  직위:     성명 :          (인)" in text, text
 
 

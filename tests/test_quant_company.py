@@ -132,7 +132,8 @@ def test_grida_overview_and_history_from_env(monkeypatch, tmp_path):
     env = tmp_path / ".env"
     env.write_text("QUANT_GRIDA_NAME=㈜가상\nQUANT_GRIDA_ADDR=가상시 길 1\nQUANT_GRIDA_FOUNDED=2000-01-02\nQUANT_GRIDA_FIELD=제조,건설\nQUANT_GRIDA_CREDIT=BB0\n"
                    "QUANT_GRIDA_CREDIT_KIND=기업신용평가등급\n"
-                   "QUANT_GRIDA_HISTORY=2000.01.02 법인설립|2001.03.04 공장등록\n", encoding="utf-8")
+                   "QUANT_GRIDA_HISTORY=2000.01.02 법인설립|2001.03.04 공장등록\n"
+                   "QUANT_GRIDA_CEO=가대표\nQUANT_GRIDA_CEO_TITLE=대표이사\nQUANT_GRIDA_REP=대리인\n", encoding="utf-8")
     monkeypatch.setattr(vault, "ENV_FILE", env)
 
     class V:
@@ -150,6 +151,7 @@ def test_grida_overview_and_history_from_env(monkeypatch, tmp_path):
         assert fill._value("사업분야", v) == "제조,건설"
         assert fill._value("설립일", v)
         assert [h["내용"] for h in v.history] == ["법인설립", "공장등록"]
+        assert v.info["대표자"] == "가대표" and v.info["대표자 직위"] == "대표이사" and v.agent["성명"] == "대리인"
     finally:
         company.use("jiil")
 

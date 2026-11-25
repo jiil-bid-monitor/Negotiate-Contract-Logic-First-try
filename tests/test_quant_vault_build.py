@@ -5155,3 +5155,34 @@ def test_grida_employment_cert_and_split_agent_head(tmp_path: Path):
         else:
             assert g1[(0, 2)] == "" and g1[(1, 2)] == "", g1  # 지일 — 대리인 줄은 업체명만
             assert g2[(0, 1)] == "" and g2[(3, 1)] == "", g2
+
+
+def test_grida_delegation_filled_even_as_manual_form(tmp_path: Path):
+    """(11/25 사용자 — 해남 '위임장 및 재직증명서' 한 서식) 제목의 '재직' 때문에 직접 기입 서식(sign_only)이 되어 대리인·대표자 칸이 모두 비었음
+    → 그리다(vault.agent)면 대리인 표는 채움. 재직기간 칸에 날짜 자리표시('  .  .  ~ 현재')가 있어도 채움. 지일은 예전대로 비움."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    def _rs(col, row, text):  # 두 줄을 세로로 합친 머리 칸
+        return _c(col, row, text).replace('rowSpan="1"', 'rowSpan="2"')
+
+    rows = [[_rs(0, 0, "대표자"), _c(1, 0, "성 명"), _c(2, 0, "")],
+            [_c(1, 1, "업체명"), _c(2, 1, "")],
+            [_rs(0, 2, "대리인"), _c(1, 2, "성 명"), _c(2, 2, "")],
+            [_c(1, 3, "주 소"), _c(2, 3, "")]]
+    emp = [[_c(0, 0, "성 명"), _c(1, 0, "")],
+           [_c(0, 1, "재 직 기 간"), _c(1, 1, "    .   .   ~ 현재")]]
+    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl(rows) + _tbl(emp))
+    for agent in ({"성명": "김대리", "주소": "가상시 집로 2", "입사일": "2023.07.01."}, {}):
+        v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍대표", "주소": "회사시 본점로 1", "전화번호": "000-000-0000"})
+        v.agent = agent
+        fill_hwpx(src, tmp_path / "o.hwpx", v, sign_only=True)
+        xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+        t1, t2 = (_cells(xml, t) for t in _spans(xml, "tbl"))
+        g1 = {(c.row, c.col): c.text.strip() for c in t1}
+        g2 = {(c.row, c.col): c.text.strip() for c in t2}
+        if agent:
+            assert g1[(0, 2)] == "홍대표" and g1[(1, 2)] == "(주)가상", g1
+            assert g1[(2, 2)] == "김대리" and g1[(3, 2)] == "가상시 집로 2", g1
+            assert g2[(0, 1)] == "김대리" and g2[(1, 1)] == "2023.07.01.~", g2
+        else:
+            assert g1[(0, 2)] == "" and g1[(2, 2)] == "", g1

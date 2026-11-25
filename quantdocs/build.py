@@ -619,8 +619,9 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 z.writestr(f"{folder}/{name}", data)
             for f in files:
                 z.write(f, f"공고문/{f.name}")
-            z.writestr("읽어보기.txt", _readme(f"{notice_title} [{guide(a.kind)['name']}]", reports, attach, missing, a.notes, manual,
-                                              per_form, bool(merged_forms)))
+            from nego.nodash import no_dash
+            z.writestr("읽어보기.txt", no_dash(_readme(f"{notice_title} [{guide(a.kind)['name']}]", reports, attach, missing, a.notes, manual,
+                                              per_form, bool(merged_forms))))
         return out_zip
     finally:
         shutil.rmtree(work, ignore_errors=True)

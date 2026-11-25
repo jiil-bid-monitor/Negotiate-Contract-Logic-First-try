@@ -125,6 +125,34 @@ def test_grida_rep_from_env(monkeypatch, tmp_path):
     assert fill._value("대표자 휴대폰", v) == "031-000-0000"
 
 
+def test_grida_overview_and_history_from_env(monkeypatch, tmp_path):
+    """(11/25 사용자 요청) 그리다 설립일·사업분야·신용평가등급·연혁도 .env로 — 연혁은 '|'로 나눈 줄."""
+    from quantdocs import fill, importer
+
+    env = tmp_path / ".env"
+    env.write_text("QUANT_GRIDA_FOUNDED=2000-01-02\nQUANT_GRIDA_FIELD=제조,건설\nQUANT_GRIDA_CREDIT=BB0\n"
+                   "QUANT_GRIDA_CREDIT_KIND=기업신용평가등급\n"
+                   "QUANT_GRIDA_HISTORY=2000.01.02 법인설립|2001.03.04 공장등록\n", encoding="utf-8")
+    monkeypatch.setattr(vault, "ENV_FILE", env)
+
+    class V:
+        info: dict = {}
+        files: dict = {}
+        history = [{"연월일": "1999.01", "내용": "예전 줄"}]
+
+    company.use("grida")
+    try:
+        v = V()
+        v.info = {}
+        importer.enrich_vault(v)
+        assert v.info["신용평가등급"] == "BB0" and v.info["신용평가 종류"] == "기업신용평가등급"
+        assert fill._value("사업분야", v) == "제조,건설"
+        assert fill._value("설립일", v)
+        assert [h["내용"] for h in v.history] == ["법인설립", "공장등록"]
+    finally:
+        company.use("jiil")
+
+
 def _staff_xlsx(name: str) -> bytes:
     wb = Workbook()
     ws = wb.active

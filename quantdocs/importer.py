@@ -564,13 +564,18 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     prefix = "QUANT_" if current() == DEFAULT else f"QUANT_{current().upper()}_"
     # 자본금·직원 수도 .env로. 개인 정보라 값은 저장소에 적지 않음.
     items = [("FAX", "팩스번호"), ("TEL", "전화번호"), ("EMAIL", "이메일"), ("HOMEPAGE", "홈페이지"),
-             ("CAPITAL", "자본금"), ("STAFF", "종업원 수")]
+             ("CAPITAL", "자본금"), ("STAFF", "종업원 수"),
+             # (11/25 사용자 요청 — 그리다 일반현황 서식 값) 설립일·사업분야·신용평가등급도 .env로
+             ("FOUNDED", "설립일"), ("FIELD", "사업분야"), ("CREDIT", "신용평가등급"), ("CREDIT_KIND", "신용평가 종류"),
+             ("CREDIT_DATE", "신용평가 평가일"), ("CREDIT_END", "신용평가 유효기간")]
     if current() == DEFAULT:
         items += [("REP_MOBILE", "대표자 휴대폰"), ("REP", "대표자"), ("REP_TITLE", "대표자 직위")]
     for env_key, item in items:
         v = read_env(prefix + env_key).strip()
         if v:
             vault.info[item] = v
+    # 연혁도 .env로(11/25 사용자 요청) — '2022.10.04 법인설립|2023.09.11 소프트웨어 사업자등록'처럼 '|'로 나눔, 서류에서 읽은 연혁보다 먼저
+    env_hist = read_history(read_env(prefix + "HISTORY").replace("|", "\n"))
     if current() == DEFAULT:
         rrn = _env_rrn(read_env(prefix + "REP_RRN"))
         if rrn:
@@ -681,7 +686,9 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
         end = credit.get("신용평가 유효기간")
         if end and end < f"{date.today():%Y-%m-%d}":
             notes.append(f"⚠ 신용평가등급 확인서 유효기간({end})이 지났음 — 새 확인서로 바꾸세요")
-    if hist and len(hist) > len(vault.history):  # 시트 연혁(보통 법인 설립 한 줄)보다 많으면 PDF 연혁을 씀
+    if env_hist:
+        vault.history = env_hist
+    elif hist and len(hist) > len(vault.history):  # 시트 연혁(보통 법인 설립 한 줄)보다 많으면 PDF 연혁을 씀
         vault.history = hist
         notes.append(f"연혁 {len(hist)}줄을 '{hist_src}'에서 읽어 넣음 — 줄 확인")
     if ocr:

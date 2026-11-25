@@ -705,7 +705,7 @@ class PostAward:
         rows = [{**v, "group": group_of(v.get("work", "")), **({"progress": self._progress(v)} if v.get("folder") and not v.get("qualOnly") else {}),
                  **({"opening": opened[k]} if k in opened else {}),
                  **({"bid": bids.get(k) or bids.get(v.get("no", ""))} if bids.get(k) or bids.get(v.get("no", "")) else {})}
-                for k, v in self._read().items()]
+                for k, v in self._read().items() if not v.get("hidden")]
         return sorted(rows, key=lambda v: (order.get(v["group"], 2), v.get("added", "")), reverse=False)
 
     def _progress(self, v: dict) -> dict[str, str]:
@@ -761,6 +761,9 @@ class PostAward:
     def _add(self, items: dict, no: str, ord_: str, **info) -> bool:
         key = f"{no}-{ord_}" if ord_ else no
         if key in items or (not ord_ and any(k.startswith(no + "-") for k in items)):
+            for k, v in items.items():  # 목록에서 뺀 공고 — 번호를 직접 넣을 때만 되살림(투찰 기록으로는 안 올라옴)
+                if info.get("source") == "직접 입력" and (k == key or (not ord_ and k.startswith(no + "-"))):
+                    v.pop("hidden", None)
             return False
         items[key] = {"no": no, "ord": ord_, "status": "대기", "added": self.now().isoformat(timespec="seconds"), **info}
         return True
@@ -777,7 +780,8 @@ class PostAward:
     def remove(self, key: str) -> None:
         with self._lock:
             items = self._read()
-            items.pop(key, None)
+            if key in items:  # 지우면 투찰 기록에서 다시 올라와 숨김 표시만 남김(11/25 사용자)
+                items[key]["hidden"] = True
             self._write(items)
 
     def sync_bidlog(self) -> int:
@@ -1193,6 +1197,8 @@ class PostAward:
             return 0
         found = 0
         for key, v in self._read().items():
+            if v.get("hidden"):
+                continue
             if v.get("status") != "낙찰":
                 continue
             if (v.get("contract") or {}).get("date"):
@@ -1271,7 +1277,7 @@ class PostAward:
             for key, v in items.items():
                 if keys is not None and key not in keys:
                     continue
-                if keys is None and v.get("status") != "대기":
+                if keys is None and (v.get("status") != "대기" or v.get("hidden")):
                     continue
                 work, row = lookup(client, base_url, v["no"], v.get("ord", ""), v.get("work", ""))
                 v["checkedAt"] = now.isoformat(timespec="seconds")

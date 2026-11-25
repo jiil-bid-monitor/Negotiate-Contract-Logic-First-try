@@ -685,6 +685,9 @@ def lookup(client: Any, base_url: str, no: str, ord_: str, work: str) -> tuple[s
     return work, None
 
 
+_LOCKED = "열려 있어 채우지 못함"
+
+
 class PostAward:
     def __init__(self, data_dir: Path, bidlog=None, own_bizno: str = "", now=_now):
         self._prog_cache: dict[str, tuple[float, str]] = {}
@@ -961,7 +964,9 @@ class PostAward:
         if v.get("startMtime") == mtime:
             return False
         nf = SimpleNamespace(title=v.get("title", ""), institution=v.get("institution", ""), raw={})
-        self._fill_done(key, folder, nf, Path(v["templates"]))
+        lines = self._fill_done(key, folder, nf, Path(v["templates"]), carry=True)
+        if any(_LOCKED in x for x in lines):  # 준공·청구 엑셀이 열려 있음 — 다음에 현황을 열 때 다시
+            return False
         with self._lock:
             items = self._read(); items[key]["startMtime"] = mtime; self._write(items)
         return True
@@ -1158,10 +1163,11 @@ class PostAward:
         return contract_values(row, v.get("institution", "")), [f"  나라장터 계약정보 찾음(통합계약번호 {row.get('untyCntrctNo')}) — 계약일·착수일·준공예정일 등을 채움(파란 칸)"]
 
     def _fill_done(self, key: str, folder: Path, nf, templates: Path, cv: dict | None = None, contract_notes=None,
-                   force: set[str] | frozenset = frozenset()) -> list[str]:
+                   force: set[str] | frozenset = frozenset(), carry: bool = False) -> list[str]:
         """3_준공(준공계·납품계·완료계)·4_청구(청구서) 기본사항 파란 칸 — 공고·낙찰 값(수요기관·공고명·낙찰금액) <
         나라장터 계약정보(contract_lookup(공고) → 계약정보 한 줄: 계약일·착수일·준공예정일·금액·담당부서, 계약 뒤에 생김) <
-        담당자가 착공·착수서류에 적은 값 순으로(11/18). 담당자가 고친 칸은 안 건드림. 안내 줄을 돌려줌."""
+        담당자가 착공·착수서류에 적은 값 순으로(11/18). 담당자가 고친 칸은 안 건드림. 안내 줄을 돌려줌.
+        carry(서류 현황을 열 때)면 착공·착수서류에서 바뀐 값만 옮김 — 공고·낙찰 값으로 계약 값을 되돌리지 않게(11/25)."""
         v = self._read().get(key) or {}
         work = v.get("work", "")
         if work not in DONE_TEMPLATES:
@@ -1175,6 +1181,9 @@ class PostAward:
             values["nap"] = "예" if "설계" in title else "아니오"
         lines = list(contract_notes or [])
         cv = cv or {}
+        known = v.get("contract") or {}  # 지난번에 찾은 계약 — 이번에 나라장터를 못 봐도 낙찰금액으로 되돌아가지 않게
+        values.update({k: x for k, x in (("amount", int(known["amount"]) if known.get("amount") else None),
+                                         ("contract", _date(known.get("date"))), ("due", _date(known.get("due")))) if x})
         values.update(cv)
         _, stage0, doc0 = TEMPLATES.get(work, TEMPLATES["용역"])
         start = folder / stage0 / doc0
@@ -1188,6 +1197,13 @@ class PostAward:
         for k, val in got.items():
             if k in cv and k != "gwiha" and _key(cv[k]) != _key(val):
                 lines.append(f"  확인: {DONE_NAMES[k]} — {stage0}/{doc0} '{_key(val)}', 나라장터 계약정보 '{_key(cv[k])}' (계약서로 확인)")
+        # 변경계약이 들어온 뒤엔 착공·착수서류(원계약)에서 새로 고친 값만 — 안 고친 옛 금액이 새 계약 금액을 되돌리지 않게
+        last = v.get("startGot") or {}
+        if carry or v.get("changes"):
+            got = {k: x for k, x in got.items() if _key(x) != last.get(k)}
+        seen = {**last, **{k: _key(x) for k, x in got.items()}}
+        if carry:
+            values = {}
         values.update(got)
         values.update({k: cv[k] for k in force if cv.get(k) not in (None, "")})  # 변경계약 — 착수서류(원계약) 값보다 새 계약 값
         auto, head = dict(v.get("autoFill") or {}), []
@@ -1200,9 +1216,9 @@ class PostAward:
             try:
                 done, _ = fill_done(templates / name, folder / stage / doc, values, auto.get(rel, {}))
             except PermissionError:
-                head.append(f"[준공·청구] {rel}이 열려 있어 채우지 못함 — 엑셀에서 닫고 '서류 다시 만들기'")
+                head.append(f"[준공·청구] {rel}이 {_LOCKED} — 엑셀에서 닫고 '서류 다시 만들기'")
                 continue
-            auto[rel] = done
+            auto[rel] = {**auto.get(rel, {}), **done}  # 이번에 안 넣은 칸의 자동 기록은 남김(지우면 '담당자가 고친 칸'으로 잘못 봄)
             kept = [DONE_NAMES[k] for k in values if values[k] not in (None, "") and k not in done
                     and any(lab in DONE_LABELS[k] for lab in _labels(folder / stage / doc))]
             head.append(f"[준공·청구] {rel} — 자동으로 채운 파란 칸: " + ", ".join(DONE_NAMES[k] for k in done)
@@ -1214,6 +1230,8 @@ class PostAward:
         with self._lock:
             items = self._read()
             items[key]["autoFill"] = auto
+            if not any(_LOCKED in x for x in head):
+                items[key]["startGot"] = seen
             self._write(items)
         return head + lines
 

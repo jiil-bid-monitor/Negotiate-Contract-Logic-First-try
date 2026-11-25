@@ -305,6 +305,7 @@
       LAST_NOTICE = { noticeNo: d.notice_no || no.replace(/-\d+$/, ""), noticeOrd: d.notice_ord || "", title: d.title || "",
         institution: d.institution || "", workType: d.work_type || "", contractMethod: d.contract_method || "", openingAt: d.opening_at || "", closingAt: d.closing_at || "" };
       REC_BID_EDITED = false; recordMsg("");
+      REC_PICK = null; REC_OPTIONS = [];  // 앞 공고의 추천 사정률이 하한율 없는 공고 금액에 남지 않게(11/25)
       text("#cTitle", d.title);
       text("#cInst", d.institution);
       text("#cNoShow", d.notice_no ? `${d.notice_no}${d.notice_ord ? "-" + d.notice_ord : ""}` : "");

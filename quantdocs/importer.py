@@ -593,7 +593,7 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
         def env2(name):
             return (read_env(f"{prefix}AGENT_{name}" if name else f"{prefix}AGENT") or read_env(f"{prefix}REP_{name}" if name else f"{prefix}REP")).strip()
         agent = {"성명": env2(""), "주민등록번호": _env_rrn(env2("RRN")), "직위": env2("TITLE"),
-                 "휴대폰": env2("MOBILE"), "주소": env2("ADDR")}
+                 "휴대폰": env2("MOBILE"), "주소": env2("ADDR"), "부서": env2("DEPT"), "입사일": env2("JOINED")}
         vault.agent = {k: v for k, v in agent.items() if v} if agent["성명"] else {}
         rrn = _env_rrn(read_env(prefix + "CEO_RRN"))  # 등기상 대표 주민번호 — 서류에서 못 읽을 때(앞 6자리 + 뒷자리 첫 숫자)
         if rrn:

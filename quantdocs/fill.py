@@ -361,6 +361,8 @@ def _label_key(text: str) -> str | None:
         return "_co_rep"  # '회사명 / 대표자 :      (인)' = '(주)지일 / 이운봉'(11/13 사용자 지적 — 회사명만 들어갔음)
     if not t or _SKIP_LABEL.search(t) or _SENTENCE.search(t):
         return None
+    if re.fullmatch(r"단체\(또는법인\)명|법인\(또는단체\)명|단체\(법인\)명|법인\(단체\)명|(?:단체|법인)명", t):
+        return "회사명"  # 서약서 '단체(또는 법인) 명 :'(11/25 사용자 — 해남 그리다 서약서)
     if re.fullmatch(r"기관\((?:회사|업체)\)명|(?:회사|업체)\(기관\)명|기관명\((?:회사|업체)명\)", t):
         return "회사명"  # '기관(회사)명 :'(11/13 위탁·수탁 서명란) — 기관 아닌 회사 쪽은 지일
     if re.fullmatch(r"(?:입찰)?(?:\(제안\)|제안)?공고(?:\(지명\))?번호|입찰공고(?:\(지명\))?|입찰\((?:지명|제안)\)공고(?:번호)?|입찰공고\((?:지명|제안)\)", t):  # '입찰공고 | 제2026- 호'(11/13 제천)  # '입찰공고(지명)번호'·'입찰공고번호'(서식 2·6)·'입찰(제안)공고번호'(11/10 경남교육청)
@@ -1719,6 +1721,17 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         agent = getattr(vault, "agent", None) or {}
         if not key and seal and agent.get("성명") and re.sub(r"[^가-힣]", "", label) in ("대리인", "수임인"):
             value = agent["성명"]  # 위임장 끝 '○ 대 리 인 :      (인)'(11/25 그리다 샘플) — 지정 임원, 지일은 vault.agent가 없어 그대로 비움
+        # ('- 성       명 :'은 머리 떼기(_party_head)가 '성'을 머리로 보고 '명'만 남겨 원래 줄 글로 봄)
+        raw_lab = re.fullmatch(r"\s*[-·○◦]?\s*((?:성|생년월일|주소|주민등록번호)[\s가-힣]{0,12}?)\s*[:：]\s*", _text(xml[s:e]))
+        raw_lab = re.sub(r"[^가-힣]", "", raw_lab.group(1)) if raw_lab else ""
+        if not key and agent.get("성명") and raw_lab in ("성명", "생년월일", "주소", "주민등록번호"):
+            # 입찰참가신청서 '대리인(사용인감) | 본 입찰에 관한 일체의 권한을 다음의 자에게 위임합니다. / - 성 명 :'(11/25 사용자 — 해남 그리다)
+            # — 위임 문장이 든 같은 칸 안의 줄만 지정 임원 값(그 밖의 '성명' 줄은 개인 칸이라 그대로 비움)
+            box = min(((cs, ce) for cs, ce in cells if cs <= s and e <= ce), key=lambda x: x[1] - x[0], default=None)
+            if box and re.search(r"위\s*임\s*(?:합\s*니\s*다|함)", _text(xml[box[0]:box[1]])):
+                lab = raw_lab
+                value = {"성명": agent["성명"], "주소": agent.get("주소", ""), "주민등록번호": agent.get("주민등록번호", ""),
+                         "생년월일": _birth(agent.get("주민등록번호", ""))}[lab]
         if not key and _sq(label) == "생년월일" and any(
                 n - 3 <= n2 < n and (_label_key(l2) == "대표자" or _BARE_LABELS.get(l2) == "대표자") or abs(n2 - n) <= 4 and memo_signer(l2, sl2)
                 for _s2, _e2, l2, sl2, _b2, n2 in cands):

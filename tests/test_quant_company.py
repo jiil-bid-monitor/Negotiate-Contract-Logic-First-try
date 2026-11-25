@@ -212,3 +212,21 @@ def test_grida_seal_form_uses_jiil_vault(monkeypatch):
         company.use("jiil")
     assert build._seal_vault("사용인감계", grida) is grida, "지일 화면은 그대로"
     build._JIIL_VAULT.clear()
+
+
+def test_company_name_short_form(monkeypatch, tmp_path):
+    """(11/25 사용자 요청) 업체명·회사명은 '주식회사 그리다' 대신 '(주)그리다'."""
+    from quantdocs import importer
+
+    env = tmp_path / ".env"
+    env.write_text("", encoding="utf-8")
+    monkeypatch.setattr(vault, "ENV_FILE", env)
+
+    class V:
+        files: dict = {}
+        history: list = []
+    for raw in ("주식회사 가상", "가상 주식회사", "(주)가상", "㈜가상"):
+        v = V()
+        v.info = {"회사명": raw}
+        importer.enrich_vault(v)
+        assert v.info["회사명"] == "(주)가상", raw

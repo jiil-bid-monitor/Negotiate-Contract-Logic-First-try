@@ -23,6 +23,7 @@ LIVE_FILE = "past_live.json"
 PROJECT_DIR = Path(r"\\jiilserver\002 진행프로젝트")
 FIRST_YEAR = 2026
 DONE_DIR = "실행완료"
+BID_DIR = "입찰"  # 웹앱이 낙찰 공고 폴더를 두는 곳(awardsync) — 이 안의 폴더 하나하나가 사업
 DOC_SUFFIXES = (".hwp", ".hwpx", ".pdf", ".docx")
 DOC_WORDS = ("제안요청", "과업지시", "과업내용", "공고서", "입찰공고", "공고문", "규격서", "시방서")
 DONE_WORDS = ("준공계", "준공서류", "납품계", "완료계", "완수계", "준공검사원", "납품검사원", "완료검사원")
@@ -40,7 +41,8 @@ def project_dir() -> Path:
 
 def clean_title(name: str) -> str:
     """'260514_동해전천스테이션'·'2026_횡성목재문화체험장'·'06_몽골_칸부미디어' → 사업 이름."""
-    s = re.sub(r"^(?:\d{4,6}|\d{2})[_\s-]+", "", name)
+    s = re.sub(r"^R\d{2}[A-Z]{2}\d{8}(?:-\d{2,3})?_", "", name)  # 웹앱이 만든 폴더 'R26BK…-000_공고명'
+    s = re.sub(r"^(?:\d{4,6}|\d{2})[_\s-]+", "", s)
     return re.sub(r"\s+", " ", s.replace("_", " ")).strip() or name
 
 
@@ -63,7 +65,9 @@ def project_folders(root: Path | None = None) -> list[tuple[int, Path, bool]]:
         for p in sorted(y.iterdir()):
             if not p.is_dir() or p.name.startswith((".", "~")):
                 continue
-            if p.name == DONE_DIR:
+            if p.name == BID_DIR:
+                out += [(year, q, False) for q in sorted(p.iterdir()) if q.is_dir() and not q.name.startswith((".", "~", "_"))]
+            elif p.name == DONE_DIR:
                 out += [(year, q, True) for q in sorted(p.iterdir()) if q.is_dir() and not q.name.startswith((".", "~"))]
             else:
                 out.append((year, p, False))
@@ -137,6 +141,20 @@ def scan(folder: Path, title: str, year: int) -> tuple[list[Path], Any, Any]:
     return out, max(dones) if dones else None, max(claims) if claims else None
 
 
+def _submitted(folder: Path):
+    """웹앱이 만든 폴더 — 준공계·납품계·완료계의 제출일을 적어 저장했으면 그날(빈 틀은 처음부터 있어 파일만으로는 준공으로 안 봄)."""
+    from datetime import date
+
+    from .postaward import DONE_DIRS, DONE_TEMPLATES, read_progress
+
+    names = {t[2] for t in DONE_TEMPLATES.values()}
+    for d in DONE_DIRS:
+        for f in (folder / d).glob("*.xlsx") if (folder / d).is_dir() else ():
+            if f.name in names and (s := read_progress(f, "제출일")):
+                return date.fromisoformat(s)
+    return None
+
+
 def base_folders(base: list[dict]) -> set[str]:
     """기존 155건이 온 폴더 이름(['2026/2026_이청준문학관'] → '2026_이청준문학관')."""
     out = set()
@@ -167,6 +185,7 @@ def build(data_dir: Path, tp, base: list[dict], root: Path | None = None) -> lis
         if not docs or sig_docs & seen_docs:  # 문서가 하나라도 같으면 같은 사업(공항사거리조형물 ↔ 260824_청주공항사거리…)
             continue  # 사업 폴더가 아님(서식·장비·자료 모음 등) 또는 같은 문서를 쓰는 폴더가 이미 있음
         seen.add(n); seen_docs |= sig_docs
+        done_at = done_at or _submitted(folder)
         done = bool(done_at) or moved
         note = (("준공 " + done_at.isoformat()) if done_at else "준공계 파일 없음") + " · " + (("청구 " + claim_at.isoformat()) if claim_at else "청구 남음") \
             if done else "준공 전"

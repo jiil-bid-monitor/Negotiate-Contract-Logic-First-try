@@ -1517,7 +1517,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 16px 16px 4px 16px; box-shadow: 0 3px 10px rgba(0,0,0,.12);
   animation: help-in .4s ease-out .8s both; white-space: nowrap; }
 .helpnudge:hover { border-color: var(--brand); color: var(--brand); }
-.helpbox { position: fixed; right: 22px; bottom: 86px; z-index: 40; width: min(460px, calc(100vw - 32px)); height: min(580px, calc(100vh - 120px));
+.helpbox { position: fixed; right: 22px; bottom: 86px; z-index: 40; width: min(540px, calc(100vw - 32px)); height: min(680px, calc(100vh - 110px));
   display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.16); overflow: hidden; font-size: 15px; }
 .helpbox[hidden] { display: none; }
 .helpbox .hhead { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
@@ -1557,19 +1557,23 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hviews button[aria-selected="true"] { color: var(--brand); font-weight: 600; border-bottom-color: var(--brand); }
 .helpbox .fform { border-top: 0; border-bottom: 1px solid var(--line); }
 .helpbox .flist { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 14px; }
-.helpbox .flist summary { cursor: pointer; word-break: keep-all; list-style: none; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
-.helpbox .flist summary::-webkit-details-marker { display: none; }
-.helpbox .flist summary::after { content: "▾"; color: var(--muted); font-size: 12px; transition: transform .15s; }
-.helpbox .flist details[open] > summary::after { transform: rotate(180deg); }
-.helpbox .fcat { border-bottom: 1px solid var(--line); }
-.helpbox .fcat > summary { padding: 13px 0; font-size: 15px; font-weight: 600; }
-.helpbox .fcat > summary span { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 400; }
-.helpbox .fq { padding-left: 12px; border-left: 2px solid transparent; }
-.helpbox .fq[open] { border-left-color: var(--brand); margin-bottom: 8px; }
-.helpbox .fq > summary { padding: 8px 0; font-size: 14px; }
-.helpbox .fq[open] > summary { color: var(--brand); font-weight: 600; }
-.helpbox .fq p { margin: 2px 0 8px; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.6; font-size: 14px; }
-.helpbox .fq .flink { font: inherit; font-size: 13px; padding: 0 0 8px; border: 0; background: none; color: var(--brand); text-decoration: underline; cursor: pointer; }
+.helpbox .frow { display: flex; justify-content: space-between; gap: 12px; align-items: center; width: 100%; font: inherit; font-size: 15px; text-align: left; line-height: 1.45; padding: 14px 4px; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--ink); cursor: pointer; word-break: keep-all; }
+.helpbox .frow::after { content: "›"; color: var(--muted); font-size: 17px; }
+.helpbox .frow:hover { color: var(--brand); }
+.helpbox .fcat { font-weight: 600; padding: 17px 4px; }
+.helpbox .fcat span { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 400; }
+.helpbox .fback { font: inherit; font-size: 14px; padding: 12px 0 4px; border: 0; background: none; color: var(--muted); cursor: pointer; }
+.helpbox .fback:hover { color: var(--brand); }
+.helpbox .ftitle { margin: 4px 0 10px; font-size: 17px; line-height: 1.4; word-break: keep-all; }
+.helpbox .fans { white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; font-size: 15px; line-height: 1.75; }
+.helpbox .fgo { font: inherit; font-size: 14px; margin-top: 16px; padding: 9px 16px; border: 1px solid var(--brand); border-radius: 18px; background: #fff; color: var(--brand); cursor: pointer; }
+.helpbox .hq { display: block; margin-bottom: 4px; }
+.helpbox .hmore summary { cursor: pointer; color: var(--brand); font-size: 14px; margin-top: 6px; list-style: none; }
+.helpbox .hmore summary::-webkit-details-marker { display: none; }
+.helpbox .hmore summary::after { content: " ▾"; font-size: 12px; }
+.helpbox .hmore[open] summary { display: none; }
+.helpbox .hpicks.nav { flex-direction: row; flex-wrap: wrap; }
+.helpbox .hpicks .hsub { color: var(--muted); border-color: var(--line); }
 .helpbox .fnone { color: var(--muted); font-size: 14px; }
 /* '어디인지 보기'로 가리킨 자리 — 테두리가 세 번 깜빡임(움직임 줄이기 설정이면 테두리만) */
 @keyframes help-spot { 0%, 100% { box-shadow: 0 0 0 3px var(--brand), 0 0 0 9px rgba(27,110,67,.25); } 50% { box-shadow: 0 0 0 3px var(--brand), 0 0 0 3px rgba(27,110,67,0); } }
@@ -4920,7 +4924,7 @@ const HELP_SETS = {
     [2, "사업금액은 어떤 금액인가요?", "나라장터의 추정가격입니다.\n추정가격이 없으면 배정예산을 쓰고\n금액 옆에 '(배정)'이라고 적습니다.\n둘 다 없으면 '금액 모름'으로 나옵니다.\n\n추정가격은 부가세를 뺀 금액이고\n배정예산은 부가세가 든 금액입니다.", "사업금액 추정가격 배정예산 배정 금액모름 부가세"],
 
     [3, "참가·보류·불참은 어디서 정하나요?", "카드의 버튼을 누르고\n사유를 골라 주세요(메모도 됩니다).\nNAS와 서버 PC 웹앱에 같이 보입니다.", "참가 보류 불참 판단 사유 버튼"],
-    [3, "잘못 눌렀는데 취소할 수 있나요?", "'되돌리기'를 누르면\n바로 전 판단으로 돌아갑니다.\n같은 버튼을 다시 누르면\n판단이 지워집니다.", "잘못 취소 판단 되돌리 바꾸 수정 눌러버 잘못눌"],
+    [3, "잘못 눌렀는데 취소할 수 있나요?", "'되돌리기'를 누르면\n바로 전 판단으로 돌아갑니다.\n같은 버튼을 다시 누르면\n판단이 지워집니다.", "잘못 취소 되돌리 바꾸 수정 눌러버 잘못눌"],
     [3, "적은 사유를 고치고 싶습니다", "카드의 '사유 고치기'를 눌러 주세요.", "사유 고치 수정 메모 오타 사유수정"],
     [3, "불참한 공고를 다시 보고 싶습니다", "본공고·사전규격 칸마다 맨 아래\n'불참' 묶음에 접혀 있습니다.\n판단 기록 탭에도 있습니다.", "불참 사라 어디 접혀"],
     [3, "비슷한 공고는 지난번에 어떻게 판단했나요?", "공고명이 비슷한 공고를\n판단한 적이 있으면\n카드에 '비슷한 공고 지난 판단'으로\n2건까지 보입니다.\n그때의 판단과 사유가 같이 나옵니다.", "비슷한 지난번 지난판단 예전에 전에는"],
@@ -4960,7 +4964,7 @@ const HELP_SETS = {
     [0, "무엇부터 보면 되나요?", "① 참가로 정한 공고의 마감\n② 보류한 공고의 마감과 사유", "처음 열면 먼저 보면 뭐부터 오늘"],
     [0, "이 탭에서는 무엇을 하나요?", "참가·보류·불참으로 판단한 공고 목록입니다.\n누가·언제·왜 판단했는지 남습니다.", "이 탭 뭐 무엇 목적 누가 판단자 이탭에서는"],
     [0, "어떤 순서로 하나요?", "① 위쪽에서 참가·보류·불참을 고릅니다.\n② 엑셀이 필요하면 'CSV 내려받기'를\n    누릅니다.\n\n기록은 실제 공고 탭에서 판단하면\n저절로 쌓입니다.", "사용법 순서 쓰는 할 일"],
-    [0, "아직 판단하지 않은 공고는 어디에 있나요?", "여기엔 없습니다.\n실제 공고 탭에서 판단해 주세요.", "판단 안 미판단 없 안정한 정하지"],
+    [0, "아직 판단하지 않은 공고는 어디에 있나요?", "여기엔 없습니다.\n실제 공고 탭에서 판단해 주세요.", "미판단 판단안 안정한 정하지 내리지"],
 
     [1, "참가한 공고만 보고 싶습니다", "위쪽에서 전체·참가·보류·불참을\n골라 주세요.", "참가 보류 불참 고르 거르 참가만 불참만 보류만"],
     [1, "엑셀로 받고 싶습니다", "'CSV 내려받기'를 누르면\n지금 고른 기록만 엑셀로 받습니다.", "엑셀 CSV 내려 받기 다운"],
@@ -5190,7 +5194,7 @@ function helpRank(q0, pool) {
     const rare = kept.filter((k) => !HELP_GENERIC.has(k) && HELP_GENERIC.df.get(k) <= 2 && raw0.includes(k.toLowerCase())).length;
     const said = kept.filter((k) => !HELP_GENERIC.has(k) && raw0.includes(k.toLowerCase())).length;
     const hit = Q.filter((g) => x.doc.has(g)).reduce((n, g) => n + HELP_IDF(g), 0), cover = total ? hit / total : 0;
-    return { x, spec, gen, rare, said, hit, cover, score: spec + gen * 0.2 + hit / 8 };
+    return { x, kept, spec, gen, rare, said, hit, cover, score: spec + gen * 0.2 + hit / 8 };
   }).filter((r) => r.spec || (r.gen && r.hit >= HELP_P.genMin) || (r.cover >= HELP_P.show && r.hit >= HELP_P.min)).sort((a, b) => b.score - a.score);
 }
 /** 직접 적은 질문을 어떻게 답할지 — {kind: answer·othertab·choices·none·special, list: [{tab, i, h}], why}. ctx = {prevTitle: 앞에 답한 질문 제목} */
@@ -5230,9 +5234,11 @@ function helpDecide(q, tab = HELP_TAB, ctx = null) {
   // ③ 나머지는 고르기로만(바로 답하지 않음) — 이 탭 후보 먼저, 다른 탭 후보는 이 탭 1등만큼은 닮았을 때
   // 후보 거르기(11/25 사용자 '후보 버튼도 질문과 맞게'): 두 검토자가 후보 510개를 채점하니 절반만 맞았고, 틀린 것은 낱말 하나만 겹친 다른 탭 질문과 2등 이하 후보였음
   const both = HELP_BOTH.test(q);  // 두 가지를 한 번에 물으면 둘째 후보도 남김
-  const near = mine.filter((r, k) => !k || ((r.spec >= 2 || r.cover >= 0.35) && r.score >= mine[0].score * 0.5) || (both && r.spec && r.score >= mine[0].score * 0.35));
+  // 첫 후보가 이미 설명한 낱말만 겹치는 후보는 새로 알려 주는 것이 없음('판단 어디서 해' → '잘못 눌렀는데 취소', 11/25 사용자). 거의 비기면 남김
+  const adds = (r, t) => !t || r.score >= t.score * 0.9 || r.kept.some((w) => !t.kept.includes(w));
+  const near = mine.filter((r, k) => !k || adds(r, mine[0])).filter((r, k) => !k || ((r.spec >= 2 || r.cover >= 0.35) && r.score >= mine[0].score * 0.5) || (both && r.spec && r.score >= mine[0].score * 0.35));
   const far = others.filter((r) => named || r.said >= 2 || (r.spec && r.cover >= (r.gen ? 0.5 : 0.65)))
-    .filter((r) => !mine.length || r.score >= mine[0].score).slice(0, mine.length ? 2 : 3);
+    .filter((r) => !mine.length || (r.score >= mine[0].score && adds(r, mine[0]))).slice(0, mine.length ? 2 : 3);
   const cand = named ? [...far, ...near.slice(0, 2)] : [...near.slice(0, 4 - Math.min(far.length, 2)), ...far];
   const one = cand.filter((r, k) => !cand.some((o, j) => o.x.h[1] === r.x.h[1] && (o.x.tab === key ? r.x.tab !== key : j < k && r.x.tab !== key)));
   if (one.length) return res("choices", one.slice(0, 4), mine.length ? "choices" : "other-choices");
@@ -5300,9 +5306,20 @@ function helpReply(fn) {  // 바로 답하지 않고 잠깐 '입력 중' 점을 
 }
 const helpClock = () => new Date().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
 const helpSay = (who, text, picks = null, spot = "") => HELP_LOG.push({ who, text, picks, spot, at: helpClock() });
+// 처음 열었을 때 보이는 질문 셋(11/25 사용자 '최소한 필요한 버튼') — 나머지는 '전체 질문'에서
+const HELP_TOP = {
+  live: ["무엇부터 보면 되나요?", "참가할 수 있는 공고인지 어떻게 확인하나요?", "참가로 정한 다음에는 무엇을 하나요?"],
+  excluded: ["왜 빠졌는지 어디서 보나요?", "잘못 빠진 공고를 되살리고 싶습니다", "특정 공고를 찾고 싶습니다"],
+  log: ["참가한 공고만 보고 싶습니다", "지난번에 왜 불참했는지 보고 싶습니다", "엑셀로 받고 싶습니다"],
+  corpus: ["특정 사업을 찾고 싶습니다", "진행 중인 사업은 어떻게 정해지나요?", "새 사업이 보이지 않습니다"],
+  calc: ["추천 투찰금액은 어떻게 정해지나요?", "기초금액·하한율이 '-'로 나옵니다", "'낙찰'·'탈락'과 등수는 어떻게 읽나요?"],
+  quant: ["어떤 순서로 하나요?", "직접 채워야 하는 칸은 어디인가요?", "'한글 파일 필요'라고 나옵니다"],
+  award: ["무엇부터 보면 되나요?", "개찰 1등이면 무엇을 하나요?", "만든 서류는 어디에 있나요?"],
+};
 function helpHello() {
   HELP_LOG.length = 0; HELP_CTX = {};
-  helpSay("bot", "안녕하세요, " + CO_NAME + " 도우미입니다.\n" + HS().name + " 탭에서는 이 순서로 확인해 주세요.\n\n" + HS().qa[0][2] + "\n\n궁금한 것을 아래에 적어 주세요.", "faq");
+  const top = (HELP_TOP[HELP_TAB] || []).map((t) => HS().qa.findIndex((h) => h[1] === t)).filter((i) => i >= 0);
+  helpSay("bot", "안녕하세요. " + HS().name + " 탭을 도와드립니다.", top);
 }
 // 공고번호·공고명을 물으면 웹앱이 가진 그 공고 정보만(11/25 사용자) — 지금 목록 → 낙찰 후 서류 → 판단 기록 → 제외된 공고 순서
 const helpNorm = (t) => String(t || "").replace(/[\s?？.!,·'"()[\]「」<>~-]+/g, "").toLowerCase();
@@ -5407,25 +5424,40 @@ function helpAsk(q) {
 }
 let HELP_VIEW = "chat";  // 대화 / 자주 묻는 질문(11/25 사용자 — FAQ를 대화와 나눔)
 const helpHtml = (text) => esc(text).replace(/\[\[([^|\]]+)\|(\/[\w-]*)\]\]/g, '<a href="$2" target="_blank">$1 ›</a>');
-/** 자주 묻는 질문 — 주제를 접어 두고 누르면 펼침. 찾는 중이면 맞는 질문만 주제 없이 */
-function helpFaqList(filter) {
-  const key = helpSquash(filter), qa = HS().qa.map((h, i) => ({ h, i }));
-  const row = ({ h, i }) => `<details class="fq"><summary>${esc(h[1])}</summary><p>${helpHtml(helpText(h))}</p>`
-    + `${helpSpotOf(h) ? `<button type="button" class="flink" data-hspot="${esc(helpSpotOf(h))}">어디인지 보기</button>` : ""}</details>`;
+/** 답 모양: '[질문]'은 제목으로, 여덟 줄이 넘으면 첫 문단만 보이고 나머지는 '자세히'(좁은 창에 글이 가득 차지 않게) */
+function helpBody(text) {
+  const m = /^\[(?!\[)([^\]]+)\]\n\n([\s\S]*)$/.exec(text), head = m ? `<b class="hq">${esc(m[1])}</b>` : "", body = m ? m[2] : text;
+  const parts = body.split("\n\n");
+  let n = 1;
+  while (n < parts.length && parts.slice(0, n).join("\n").split("\n").length < 3) n++;  // 첫 문단이 너무 짧으면 다음 것까지
+  if (body.split("\n").length <= 8 || n >= parts.length) return head + helpHtml(body);
+  return head + helpHtml(parts.slice(0, n).join("\n\n")) + `<details class="hmore"><summary>자세히</summary>${helpHtml(parts.slice(n).join("\n\n"))}</details>`;
+}
+/** 자주 묻는 질문 — 한 화면에 한 가지만: 주제 → 질문 → 답. 찾는 중이면 맞는 질문만 */
+let HELP_FAQ = { cat: -1, q: -1, find: "" };
+function helpFaqList() {
+  const qa = HS().qa.map((h, i) => ({ h, i })), key = helpSquash(HELP_FAQ.find);
+  const row = ({ h, i }) => `<button type="button" class="frow" data-fq="${i}">${esc(h[1])}</button>`;
+  if (HELP_FAQ.q >= 0) {
+    const h = HS().qa[HELP_FAQ.q], spot = helpSpotOf(h);
+    return `<button type="button" class="fback" data-fback="q">‹ ${esc(key ? "찾은 질문" : HS().cats[h[0]])}</button><h3 class="ftitle">${esc(h[1])}</h3><div class="fans">${helpHtml(helpText(h))}</div>`
+      + (spot ? `<button type="button" class="fgo" data-hspot="${esc(spot)}">어디인지 보기</button>` : "");
+  }
   if (key) {
     const hit = qa.filter(({ h }) => helpSquash(h[1] + helpText(h) + h[3]).includes(key));
     return hit.length ? hit.map(row).join("") : `<p class="fnone">맞는 질문이 없습니다.</p>`;
   }
+  if (HELP_FAQ.cat >= 0) return `<button type="button" class="fback" data-fback="cat">‹ 주제</button><h3 class="ftitle">${esc(HS().cats[HELP_FAQ.cat])}</h3>` + qa.filter(({ h }) => h[0] === HELP_FAQ.cat).map(row).join("");
   return HS().cats.map((c, n) => {
-    const rows = qa.filter(({ h }) => h[0] === n);
-    return rows.length ? `<details class="fcat" name="help-cat"${n ? "" : " open"}><summary>${esc(c)}<span>${rows.length}</span></summary>${rows.map(row).join("")}</details>` : "";
+    const num = qa.filter(({ h }) => h[0] === n).length;
+    return num ? `<button type="button" class="frow fcat" data-fcat="${n}">${esc(c)}<span>${num}</span></button>` : "";
   }).join("");
 }
 function renderHelp() {
   const head = `<div class="hhead"><b>${CO_NAME} 도우미</b><span>${esc(HS().name)} · ${IS_VIEWER ? "NAS 웹앱" : "서버 PC 웹앱"}</span><button type="button" data-hclose aria-label="닫기">✕</button></div>`
     + `<div class="hviews" role="tablist">${[["chat", "대화"], ["faq", "자주 묻는 질문"]].map(([v, t]) => `<button type="button" role="tab" data-hview="${v}" aria-selected="${HELP_VIEW === v}">${t}</button>`).join("")}</div>`;
   if (HELP_VIEW === "faq") {
-    $("helpBox").innerHTML = head + `<div class="hform fform"><input id="helpFind" type="search" placeholder="질문에서 찾기" autocomplete="off" aria-label="자주 묻는 질문에서 찾기"></div><div class="flist" id="helpFaq">${helpFaqList("")}</div>`;
+    $("helpBox").innerHTML = head + `<div class="hform fform"><input id="helpFind" type="search" value="${esc(HELP_FAQ.find)}" placeholder="질문에서 찾기" autocomplete="off" aria-label="자주 묻는 질문에서 찾기"></div><div class="flist" id="helpFaq">${helpFaqList()}</div>`;
     return;
   }
   let html = "", prev = null;
@@ -5433,23 +5465,23 @@ function renderHelp() {
     const first = !prev || prev.who !== m.who;
     const lastOfGroup = !HELP_LOG[k + 1] || HELP_LOG[k + 1].who !== m.who;
     const live = k === HELP_LOG.length - 1;  // 고르기 버튼은 마지막 말 밑에만 — 지난 메뉴가 쌓이지 않게
-    // 버튼은 다음에 할 일만(11/25 사용자 '버튼이 너무 많으면 피로'): 후보 · 어디인지 보기 · 자주 묻는 질문 보기. 주제 고르기는 '자주 묻는 질문'으로 옮김
-    const picks = !live || !m.picks ? ""
-      : m.picks === "faq" ? `<div class="hpicks"><button type="button" data-hview="faq">자주 묻는 질문 보기</button></div>`
-      : m.picks.length ? `<div class="hpicks">${m.picks.map((c) => (typeof c === "number" ? `<button type="button" data-hq="${c}">${esc(HS().qa[c][1])}</button>`
-          : `<button type="button" data-hq="${c.i}" data-htab="${c.tab}">${esc(HS(c.tab).qa[c.i][1])} <small>${esc(HELP_SETS[c.tab].name)} 탭</small></button>`)).join("")}</div>` : "";
-    const again = live && m.spot ? `<div class="hpicks"><button type="button" data-hspot="${esc(m.spot)}">어디인지 보기</button></div>` : "";
+    // 버튼은 다음에 할 일만: 후보(최대 4) · 어디인지 보기 · 다른 질문
+    const faqBtn = `<button type="button" class="hsub" data-hview="faq">${k ? "다른 질문" : "전체 질문"}</button>`;
+    const list = !live || !Array.isArray(m.picks) ? [] : m.picks;
+    const picks = !live || !m.picks ? "" : list.length ? `<div class="hpicks">${list.map((c) => (typeof c === "number" ? `<button type="button" data-hq="${c}">${esc(HS().qa[c][1])}</button>`
+          : `<button type="button" data-hq="${c.i}" data-htab="${c.tab}">${esc(HS(c.tab).qa[c.i][1])} <small>${esc(HELP_SETS[c.tab].name)} 탭</small></button>`)).join("")}${faqBtn}</div>`
+      : `<div class="hpicks nav">${m.spot ? `<button type="button" data-hspot="${esc(m.spot)}">어디인지 보기</button>` : ""}${faqBtn}</div>`;
     html += `<li class="hmsg ${m.who}${first ? " first" : ""}${k >= HELP_SHOWN ? " new" : ""}">`
       + (m.who === "bot" ? (first ? HELP_LOGO : `<span class="hav sp" aria-hidden="true"></span>`) : "")
       + `<div class="hcol">${m.who === "bot" && first ? `<span class="hname">${CO_NAME} 도우미</span>` : ""}`
-      + `<div class="hline"><p class="hb${lastOfGroup ? " tail" : ""}">${helpHtml(m.text)}</p>${lastOfGroup ? `<span class="ht">${m.at}</span>` : ""}</div>${picks}${again}</div></li>`;
+      + `<div class="hline"><div class="hb${lastOfGroup ? " tail" : ""}">${m.who === "bot" ? helpBody(m.text) : helpHtml(m.text)}</div>${lastOfGroup ? `<span class="ht">${m.at}</span>` : ""}</div>${picks}</div></li>`;
     prev = m;
   });
   if (HELP_TYPING) html += `<li class="hmsg bot new${prev && prev.who === "bot" ? "" : " first"}">${prev && prev.who === "bot" ? `<span class="hav sp"></span>` : HELP_LOGO}`
     + `<div class="hcol"><div class="hline"><p class="hb tail htyping" aria-label="입력 중"><i></i><i></i><i></i></p></div></div></li>`;
   HELP_SHOWN = HELP_LOG.length;
   $("helpBox").innerHTML = head
-    + `<p class="hsafe">🔒 외부 AI를 쓰지 않습니다. 정해 둔 답만 보여 드리고, 적은 질문은 회사 서버에만 남습니다.</p>`
+    + `<p class="hsafe">🔒 외부 AI를 쓰지 않습니다</p>`
     + `<ol class="hlog" role="log" aria-live="polite">${html}</ol>`
     + `<form class="hform"><input id="helpQ" placeholder="궁금한 것이나 공고번호를 적어 주세요" autocomplete="off" aria-label="직접 물어보기"><button type="submit">보내기</button></form>`;
   const log = $("helpBox").querySelector(".hlog");
@@ -5482,13 +5514,22 @@ $("helpBox").addEventListener("click", (e) => {
     return;
   }
   const view = e.target.closest("[data-hview]");
-  if (view) { HELP_VIEW = view.dataset.hview; renderHelp(); $(HELP_VIEW === "faq" ? "helpFind" : "helpQ").focus(); return; }
+  if (view) { HELP_VIEW = view.dataset.hview; HELP_FAQ = { cat: -1, q: -1, find: "" }; renderHelp(); if (HELP_VIEW === "chat") $("helpQ").focus(); return; }
+  const f = e.target.closest("[data-fcat], [data-fq], [data-fback]");
+  if (f) {
+    const d = f.dataset;
+    if (d.fcat) HELP_FAQ.cat = Number(d.fcat);
+    else if (d.fq) HELP_FAQ.q = Number(d.fq);
+    else if (d.fback === "q") HELP_FAQ.q = -1;
+    else HELP_FAQ.cat = -1;
+    $("helpFaq").innerHTML = helpFaqList(); $("helpFaq").scrollTop = 0;
+    return;
+  }
   const spot = e.target.closest("[data-hspot]");
   if (spot) return helpSpot(spot.dataset.hspot);
   if (e.target.closest("[data-hclose]")) helpOpen(false);
 });
-$("helpBox").addEventListener("toggle", (e) => { if (e.target.open && e.target.matches(".fq")) e.target.scrollIntoView({ block: "nearest" }); }, true);  // 아래쪽 질문을 펼치면 답이 보이게
-$("helpBox").addEventListener("input", (e) => { if (e.target.id === "helpFind") $("helpFaq").innerHTML = helpFaqList(e.target.value); });
+$("helpBox").addEventListener("input", (e) => { if (e.target.id === "helpFind") { HELP_FAQ = { cat: -1, q: -1, find: e.target.value }; $("helpFaq").innerHTML = helpFaqList(); } });
 $("helpBox").addEventListener("submit", (e) => {
   e.preventDefault();
   const v = $("helpQ").value.trim();
@@ -5498,7 +5539,7 @@ $("helpBox").addEventListener("submit", (e) => {
 });
 function showTab(tab) {
   $("helpFab").hidden = !HELP_SETS[tab];
-  if (HELP_TAB !== tab) { HELP_TAB = tab; HELP_LOG.length = 0; HELP_VIEW = "chat"; $("helpBox").hidden = true; }  // 탭이 바뀌면 그 탭 안내로 새로
+  if (HELP_TAB !== tab) { HELP_TAB = tab; HELP_LOG.length = 0; HELP_VIEW = "chat"; HELP_FAQ = { cat: -1, q: -1, find: "" }; $("helpBox").hidden = true; }  // 탭이 바뀌면 그 탭 안내로 새로
   helpNudge();
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   for (const name of ["live", "excluded", "corpus", "log", "calc", "quant", "award"]) $("tab-" + name).hidden = tab !== name;

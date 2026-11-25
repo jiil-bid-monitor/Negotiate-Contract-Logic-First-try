@@ -1875,22 +1875,44 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 #liveTools > select, #liveTools > button, #liveTools .load-state { flex: none; white-space: nowrap; }
 @media (min-width: 641px) { #liveTools .tab-search { min-width: 240px; } }
 .topbar .brand-text h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }  /* 실제 글꼴이 넓어도 위 띠는 한 줄 */
-.meta-old { color: var(--warn); font-weight: 600; cursor: help; }
+.meta-old { color: var(--warn); font-weight: 600; }
 
 /* ── 2026-11-25 사용자: 바로가기 아이콘은 위 띠 맨 오른쪽, 참가·보류 버튼 작게, 싱크로율은 막대와 함께 ── */
 .topbar .top-links { margin-left: 0; order: 99; }
 .topbar .brand-text { margin-right: auto; }
 @media (max-width: 760px) { .topbar .top-links { order: 0; margin-left: auto; } .topbar .docbell, .topbar .me-top, .topbar .theme { order: 1; } }  /* 휴대폰은 따로 한 줄을 쓰지 않게 첫 줄 오른쪽 */
 @media (min-width: 641px) {
-  .pbtn { font-size: 12.5px; padding: 4px 10px; min-height: 28px; }
+  .pbtn { font-size: 12px; line-height: 1.4; padding: 2px 9px; min-height: 24px; }
 }
 @media (max-width: 640px) {
-  .pbtn { font-size: 13.5px; padding: 6px 14px; min-height: 36px; }
+  .pbtn { font-size: 13px; line-height: 1.4; padding: 4px 12px; min-height: 32px; }
 }
 .notice.live.compact .card-score { flex-direction: row; align-items: center; gap: 8px; }
 .notice.live.compact .card-score small { order: 1; }
 .notice.live.compact .card-score .score-bar { display: block; order: 2; width: 72px; height: 6px; margin: 0; }
 .notice.live.compact .card-score b { order: 3; min-width: 3.2em; text-align: right; }
+
+/* ── 카드 칩 작게 (2026-11-25 사용자: 칩이 커서 공고 정보가 한눈에 안 들어옴) — 글자 위주, 칩은 낮고 얇게 ── */
+.notice.live.compact .badge, .notice.live.compact .due-tag, .notice.live.compact .grade {
+  font-size: 11px; line-height: 1.35; padding: 1px 6px; border-radius: 3px; letter-spacing: 0;
+}
+.notice.live.compact .badge .ico { width: 12px; height: 12px; font-size: 9px; }
+.notice.live.compact .badges, .notice.live.compact .tag-group { gap: 4px; }
+.notice.live.compact .card-foot { margin-top: 12px; padding-top: 10px; }  /* 둘째 줄과 칩 줄 사이 여유(11/25 사용자) */
+.notice.live.compact .facts-line { margin-top: 4px; }
+.notice.live.compact .no-copy { font-size: 11px; line-height: 16px; padding: 0 6px; min-height: 0; }
+.notice.live.compact .past-hint { margin-top: 6px; padding: 4px 10px; font-size: 12px; }
+.notice.live.compact .past-hint .badge { font-size: 11px; }
+.notice.live.compact .grade { font-family: var(--body); font-weight: 600; }
+/* 참가 사유 칩·입력칸도 낮게 */
+.notice.live.compact .rchip { font-size: 12px; padding: 2px 10px; }
+.notice.live.compact .reason-chips { gap: 4px; }
+.notice.live.compact .reason-tags-h { margin: 0 0 5px; font-size: 12.5px; }
+.notice.live.compact .reason-form input, .notice.live.compact .reason-form button { padding-top: 3px; padding-bottom: 3px; }
+@media (max-width: 640px) {
+  .notice.live.compact .badge, .notice.live.compact .due-tag, .notice.live.compact .grade { font-size: 12px; padding: 2px 7px; }
+  .notice.live.compact .no-copy { min-height: 26px; font-size: 12px; padding: 2px 9px; }
+}
 </style>
 </head>
 <body>
@@ -2524,10 +2546,8 @@ async function loadNotices(refresh) {
     // 마감 지난 공고는 보이지 않는다. 서버가 이미 빼지만, 받아 둔 목록을 다음 날 다시 열면 그 사이 마감된 공고가 남는다
     data.items = data.items.filter(stillOpen);
     // 한 줄만 — 마지막 수집 시각과 조회 기간 (2026-11-18 사용자 결정, 받은 공고 수·싱크로율 건수는 뺌)
-    // 화면엔 짧게만 — '최근 갱신'·'이전 공고'(2026-11-25 사용자: 정확한 시간은 필요 없음), 자세한 시각·설명은 커서를 대면
+    // 화면엔 짧게만 — '최근 갱신'·'이전 공고'(2026-11-25 사용자: 정확한 시간은 필요 없음, 커서를 대도 설명 상자 없음)
     const stale = data.format !== data.resultFormat;
-    const staleWhy = `이 결과는 이전 버전으로 수집됐습니다. ${viewer ? "서버 PC에서 다시 수집하면" : "'나라장터에서 불러오기'를 다시 하면"} 새 판정으로 보입니다.`;
-    $("liveMeta").title = $("loadState").title = `마지막 수집 ${fmtShort(data.fetchedAt)} · ${spanLabel(data)}` + (stale ? `\n${staleWhy}` : "");
     $("liveMeta").innerHTML =
       (stale ? `<span class="meta-old">이전 공고</span>` : "") +
       (data.prespecError ? `${stale ? " · " : ""}<span style="color:var(--warn)">사전규격 조회 실패</span>` : "") +
@@ -3851,7 +3871,7 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
   const options = tagsFor(p.status);
   const chips = options
     ? `<div class="reason-tags">
-        <p class="reason-tags-h"><b>${p.status === "참가" ? "참가 이유를" : "사유를"} 골라 주세요</b> <span>(여러 개 가능 · 누르면 바로 저장 · 다음 수집 때 비슷한 공고에 이 판단이 함께 보입니다)</span>${tags.length ? `<span class="reason-saved">✓ 저장됨</span>` : ""}</p>
+        <p class="reason-tags-h"><b>${p.status === "참가" ? "참가 이유를" : "사유를"} 골라 주세요</b>${tags.length ? `<span class="reason-saved">✓ 저장됨</span>` : ""}</p>
         <div class="reason-chips">${options.map((t) => `<button type="button" class="rchip ${tags.includes(t) ? "on" : ""}" data-rtag="${esc(t)}" aria-pressed="${tags.includes(t)}">${esc(t)}</button>`).join("")}</div>
       </div>`
     : "";
@@ -5126,7 +5146,7 @@ const HELP_SETS = {
     [0, "무엇부터 보면 되나요?", "① 맨 위 '판단할 공고'\n② 목록 맨 위: 현장설명회가 남은 공고\n③ 카드의 마감 · 사업금액 · 자격 칩", "처음 열면 먼저 보면 뭐부터 오늘"],
     [0, "이 탭에서는 무엇을 하나요?", "나라장터 공고 중\n지일이 검토할 만한 공고를 모아 보여 드립니다.\n관심 키워드·세부품명·보유 면허로 모으고,\n정선 기관의 입찰 공고는 키워드 없이도 모읍니다.\n\n아래 공고는 빠집니다.\n• 마감이 지난 공고\n• 다른 지역 업체만 참가할 수 있는 공고\n• 요구 면허를 지일이 하나도 갖지 않은 공고\n• 제외 키워드·해외 개최 공고\n빠진 공고는 '제외된 공고' 탭에 있습니다\n(마감이 지난 공고는 빼고).\n\n면허가 일부만 없는 공고는\n'자격 미보유' 칩을 달고 남아 있습니다.", "이 탭 뭐 무엇 목적 이탭에서는"],
     [0, "어떤 순서로 하나요?", "① 카드에서 마감·사업금액·자격을 봅니다.\n② 공고명을 눌러 공고문을 확인합니다.\n③ 참가·보류·불참을 누르고 사유를 고릅니다.\n④ 참가로 정하면 사유 줄 오른쪽에\n    버튼이 생깁니다. 눌러 주세요.\n    • 입찰·수의계약: 투찰 계산 ›\n    • 협상: 정량평가서 만들기 ›\n    • 규격가격동시: 두 버튼 모두\n\n사전규격에는 버튼이 없습니다.", "사용법 순서 쓰는 할 일", "① 카드에서 마감·사업금액·자격을 봅니다.\n② 공고명을 눌러 공고문을 확인합니다.\n③ 참가·보류·불참을 누르고 사유를 고릅니다.\n\n참가로 정한 다음에는 서버 PC 웹앱에서\n같은 공고 카드의 버튼을 눌러 주세요.\n• 입찰·수의계약: 투찰 계산 ›\n• 협상: 정량평가서 만들기 ›\n• 규격가격동시: 두 버튼 모두\n사전규격에는 버튼이 없습니다."],
-    [0, "새 공고는 언제 들어오나요?", "이 서버 PC 웹앱에서 수집할 때 들어옵니다.\n기간을 고르고\n'나라장터에서 불러오기'를 눌러 주세요.\n끝나면 NAS 웹앱에도 저절로 보내집니다.\n지일과 그리다는 화면마다 따로 불러오고\n한쪽이 불러오는 중이면 기다려야 합니다.", "언제 새로 수집 업데이트 갱신 올라온 반영", "서버 PC 웹앱에서 수집해야 들어옵니다.\n수집이 끝나면 이곳으로 저절로 옵니다.\n열어 둔 화면이면 F5를 눌러 주세요.\n목록 위 '최근 갱신'에 커서를 대면\n마지막 수집 시각이 보입니다."],
+    [0, "새 공고는 언제 들어오나요?", "이 서버 PC 웹앱에서 수집할 때 들어옵니다.\n기간을 고르고\n'나라장터에서 불러오기'를 눌러 주세요.\n끝나면 NAS 웹앱에도 저절로 보내집니다.\n지일과 그리다는 화면마다 따로 불러오고\n한쪽이 불러오는 중이면 기다려야 합니다.", "언제 새로 수집 업데이트 갱신 올라온 반영", "서버 PC 웹앱에서 수집해야 들어옵니다.\n수집이 끝나면 이곳으로 저절로 옵니다.\n열어 둔 화면이면 F5를 눌러 주세요."],
 
     [1, "협상·입찰·수의계약은 어떻게 다른가요?", "목록 위 탭으로 나뉩니다.\n• 협상: 제안서를 평가해 정함\n    (규격가격동시 포함)\n• 입찰: 적격심사·최저가\n• 수의계약: 적격심사 없이 견적 등으로 계약\n• 사전규격: 본공고 전 단계, 낙찰방법 미정", "협상 입찰 수의 사전규격 차이 탭"],
     [1, "'판단할 공고' 숫자는 무슨 뜻인가요?", "최근 7일 보고에 나간 공고 중\n지금 목록에 있고\n아직 판단하지 않은 공고 수입니다.\n사전규격은 세지 않습니다.", "📋 숫자 판단할 텔레그램 빨간 판단할공고"],

@@ -2904,7 +2904,7 @@ function applyFilters() {
   const prodN = productIn.length + outsideShown().length;
   $("catTabs").innerHTML = `<div class="cat-main">${[["all", null, null], ...CATEGORIES].map(catTab).join("")}</div>` +
     `<button type="button" role="tab" class="cat-prod ${prodView ? "on" : ""}" aria-pressed="${prodView}" data-cat="product" title="${prodView ? "다시 누르면 전체 목록으로 돌아갑니다" : "제목 키워드 없이 세부품명으로 걸린 공고: 목록 안·밖을 한 목록으로 봅니다. 왼쪽 탭(협상·입찰 등)도 함께 걸립니다"}">` +
-    `<span class="cat-prod-pre">따로 보기 ·</span> 세부품명으로만 걸린 공고<span class="n">${num(prodN)}</span> <span aria-hidden="true">${prodView ? "✕" : "→"}</span></button>`;
+    `세부품명 공고<span class="n">${num(prodN)}</span> <span aria-hidden="true">${prodView ? "✕" : "→"}</span></button>`;
   $("filters").innerHTML = [
     dropdown("work", "업무", [
       ["all", "전체", items.length],
@@ -3091,7 +3091,7 @@ function renderActiveFilters(shownN) {
     return v;
   };
   const on = Object.keys(FILTER_NAMES).filter((k) => filters[k] !== "all");
-  const tab = (prodView ? "세부품명으로만 걸린 공고 · " : "") + (filters.cat === "all" ? "전체" : filters.cat);
+  const tab = (prodView ? "세부품명 공고 · " : "") + (filters.cat === "all" ? "전체" : filters.cat);
   const what = [tab, ...on.map((k) => label(k, filters[k]))].join(" · ");
   $("activeFilters").innerHTML = (on.length
     ? `<span class="af-lab">적용 중</span>${on.map((k) => `<button type="button" class="af-chip" data-clear="${k}" title="이 조건 지우기">${esc(FILTER_NAMES[k])}: ${esc(label(k, filters[k]))} <span aria-hidden="true">✕</span></button>`).join("")}<button type="button" class="af-reset" data-clear="*">모두 지우기</button>`
@@ -5115,7 +5115,7 @@ const HELP_SETS = {
     [1, "싱크로율은 무슨 뜻인가요?", "지일 과거 실적과\n과업이 얼마나 닮았는지입니다.\n참가 여부를 정하는 점수는 아닙니다.\n누르면 닮은 과거 사업이 보입니다.", "싱크로율 유사 닮은 퍼센트 비슷한정도 예전사업과 오른쪽"],
     [1, "'강력추천'·'참고용'은 무슨 뜻인가요?", "• 강력추천: 등록 품목이나 업종이 맞고\n    공고명 키워드도 맞음\n• 참고용: 그 밖의 공고\n칩에 커서를 대면 맞은 항목이 보입니다.", "강력추천 참고용 등급"],
     [1, "'검토필요'는 어떤 공고인가요?", "공고명에 관심 키워드와 제외 키워드가\n같이 있는 공고입니다.\n지일이 할 만한 공고면\n'목록에 올리기'를 누른 뒤 판단해 주세요.", "검토필요 검토 필요 제외낱말 관심낱말 함께"],
-    [1, "'세부품명으로만 걸린 공고'는 어떤 공고인가요?", "공고명엔 관심 키워드가 없지만\n지일이 등록한 세부품명으로 걸린 공고입니다.\n오른쪽 '따로 보기'에서 모아 볼 수 있습니다.", "세부품명 품명 따로"],
+    [1, "'세부품명 공고'는 어떤 공고인가요?", "공고명엔 관심 키워드가 없지만\n지일이 등록한 세부품명으로 걸린 공고입니다.\n오른쪽 '세부품명 공고'에서 모아 볼 수 있습니다.", "세부품명 품명 따로"],
     [1, "'보유 면허로 수집'·'정선 사업으로 수집'은 무슨 뜻인가요?", "• 보유 면허로 수집:\n    키워드는 없지만 보유 공사 면허로\n    나라장터 면허 조건을 채우는 공사\n    (물품·용역은 공고명에 전시·연출 등이\n    있을 때만)\n• 정선 사업으로 수집:\n    이름에 '정선'이 든 기관의 입찰 공고", "보유 면허 정선 수집 배지"],
     [1, "'회사 서류' 숫자는 무슨 뜻인가요?", "30일 안에 만료되는 회사 서류 수입니다.\n이미 지난 서류는 '신청해야 함'이나\n'신청 중'으로 표시한 것만 셉니다.\n눌러서 새 서류를 올릴 수 있습니다.", "🔔 종 회사 서류 만료"],
 
@@ -5144,7 +5144,7 @@ const HELP_SETS = {
     [4, "참가로 정한 공고의 마감을 한눈에 보고 싶습니다", "맨 위 '일정'을 눌러 주세요.\n참가로 정한 공고의 마감이\n날짜별로 보입니다.\n개찰일·계약일·준공예정일과\n회사 서류 만료일도 같이 나옵니다.\n\n마감은 판단할 때의 날짜입니다.\n정정공고로 바뀌었는지는\n공고문에서 확인해 주세요.", "달력 일정 캘린더 개찰일 스케줄"],
 
     [5, "이름을 적으라고 나옵니다", "맨 위 '내 이름' 칸에 이름을 적어 주세요.\n판단 기록에 그 이름으로 남습니다.", "이름 적으라 입력 저장 안"],
-    [5, "찾는 공고가 보이지 않습니다", "① 찾기 글자와 '적용 중' 필터를 지웁니다.\n② 탭을 '전체'로 바꿉니다.\n③ 칸 아래 '불참' 묶음과 '검토필요' 칸,\n    '세부품명으로만 걸린 공고'를 봅니다.\n④ '제외된 공고' 탭에서 찾습니다.\n\n거기에도 없으면 수집한 기간 밖이거나\n마감이 지났거나 수집 조건에\n걸리지 않은 공고일 수 있습니다.", "안 보 없 빠진 사라 어제 안보여"],
+    [5, "찾는 공고가 보이지 않습니다", "① 찾기 글자와 '적용 중' 필터를 지웁니다.\n② 탭을 '전체'로 바꿉니다.\n③ 칸 아래 '불참' 묶음과 '검토필요' 칸,\n    '세부품명 공고'를 봅니다.\n④ '제외된 공고' 탭에서 찾습니다.\n\n거기에도 없으면 수집한 기간 밖이거나\n마감이 지났거나 수집 조건에\n걸리지 않은 공고일 수 있습니다.", "안 보 없 빠진 사라 어제 안보여"],
   ] },
   excluded: { name: "제외된 공고", cats: ["처음 사용하기", "화면 표시 뜻", "빠진 이유 보기", "공고 되살리기", "문제가 생겼을 때"], qa: [
     [0, "무엇부터 보면 되나요?", "① 제외 사유: 이유별로 모아 보기\n② 공고명: 지일이 할 만한 공고가 있는지", "처음 열면 먼저 보면 뭐부터 오늘"],
@@ -5455,7 +5455,7 @@ const helpText = (h) => ((IS_VIEWER && h[4]) || h[2]).replace("{여기}", IS_VIE
 // {탭: {질문 제목: CSS 선택자}} — 맞는 요소 중 화면에 보이는 첫 번째. 요소 이름을 바꾸면 여기도 같이(없으면 '지금 화면에는 없습니다'라고 말함)
 const HELP_SPOT = {
   live: { "무엇부터 보면 되나요?": "#judgeBellBtn", "새 공고는 언제 들어오나요?": "#load, #liveMeta", "협상·입찰·수의계약은 어떻게 다른가요?": "#catTabs", "특정 공고를 찾고 싶습니다": "#liveQ",
-    "마감이 급한 공고부터 보고 싶습니다": "#liveSort", "아직 판단하지 않은 공고만 보고 싶습니다": '#filters [data-dd="part"]', "용역·물품·공사 중 하나만 보고 싶습니다": '#filters [data-dd="work"]', "공고 원문은 어디서 보나요?": "#liveResults .notice h3 a", "'검토필요'는 어떤 공고인가요?": "#reviewGroup > summary", "'세부품명으로만 걸린 공고'는 어떤 공고인가요?": ".cat-prod",
+    "마감이 급한 공고부터 보고 싶습니다": "#liveSort", "아직 판단하지 않은 공고만 보고 싶습니다": '#filters [data-dd="part"]', "용역·물품·공사 중 하나만 보고 싶습니다": '#filters [data-dd="work"]', "공고 원문은 어디서 보나요?": "#liveResults .notice h3 a", "'검토필요'는 어떤 공고인가요?": "#reviewGroup > summary", "'세부품명 공고'는 어떤 공고인가요?": ".cat-prod",
     "참가·보류·불참은 어디서 정하나요?": "#liveResults [data-pstatus]", "잘못 눌렀는데 취소할 수 있나요?": "#liveResults [data-pundo]", "적은 사유를 고치고 싶습니다": "#liveResults [data-preason]",
     "불참한 공고를 다시 보고 싶습니다": "#liveResults .skip-group > summary", "'내가 맡기'는 언제 누르나요?": "#liveResults [data-powner]", "참가로 정한 다음에는 무엇을 하나요?": "#liveResults .next-step",
     "싱크로율은 무슨 뜻인가요?": "#liveResults .card-score", "'강력추천'·'참고용'은 무슨 뜻인가요?": "#liveResults .grade", "참가할 수 있는 공고인지 어떻게 확인하나요?": "#liveResults .tag-group",

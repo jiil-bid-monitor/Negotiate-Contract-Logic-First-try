@@ -614,6 +614,13 @@ _TRACK_COLS = [  # 실적집계표 머리글 낱말 → 값(t, 머리글)
 ]
 
 
+def _co_other() -> bool:
+    """지일이 아닌 회사(그리다 등) 서식을 채우는 중인지."""
+    from . import company as co_mod
+
+    return co_mod.current() != co_mod.DEFAULT
+
+
 def _note_only(text: str) -> bool:
     """'※ 간략하게 기재'처럼 작성 안내만 적힌 칸(11/18 봉평 서식 16 — 실적 표 아래 큰 빈 줄의 사업개요 칸)."""
     t = _sq(text)
@@ -638,7 +645,9 @@ def _fill_tracks(xml: str, cells: list[Cell], tracks: list[dict], rep: FillRepor
                 if any(w in h for w in words):
                     if fn is None:
                         no_col = c.col
-                    elif fn not in colmap.values():
+                    elif fn not in colmap.values() and not (words[0] == "발주기관" and _co_other()):
+                        # 그리다 등 다른 회사는 발주처 칸을 비움(11/25 사용자 — 실적은 사업명·사업기간·계약금액·업무수행내용·공동수행 여부만;
+                        # 사업 폴더 문서에서 읽은 발주기관이 문장 조각으로 들어갔음). 지일은 예전대로 발주기관
                         colmap[c.col] = fn
                     break
         amount_head = next((headtext[k] for k, fn in colmap.items() if fn is _amount), "")

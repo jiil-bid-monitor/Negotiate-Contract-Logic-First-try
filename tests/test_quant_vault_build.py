@@ -5218,3 +5218,23 @@ def test_applicant_rep_group_rrn(tmp_path: Path):
     xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     g = {(c.row, c.col): c.text.strip() for c in _cells(xml, _spans(xml, "tbl")[0])}
     assert g[(0, 4)] == "000101-3******", g
+
+
+def test_grida_track_table_leaves_orderer_blank():
+    """(11/25 사용자) 그리다 실적 표는 사업명·사업기간·계약금액·업무수행내용·공동수행 여부만 — 발주처 칸은 비움(지일은 예전대로)."""
+    from quantdocs import company
+    from quantdocs.fill import FillReport, _cells, _fill_tracks, _spans
+
+    heads = ["연번", "사업명", "사업 기간", "계약금액(단위:백만원)", "발주처", "구체적 업무수행 내용", "타사와 공동프로젝트 수행여부", "비고"]
+    rows = [[_sz_cell(i, 0, h, 2000, 1500) for i, h in enumerate(heads)],
+            [_sz_cell(i, 1, "", 2000, 1500) for i in range(len(heads))]]
+    xml = '<hp:tbl rowCnt="2" colCnt="8">' + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    tracks = [{"사업명": "가상 놀이터", "계약금액(원)": 48_200_000, "발주기관": "의 사정에 따라", "분야": "기타"}]
+    for co, has_org in (("grida", False), ("jiil", True)):
+        company.use(co)
+        try:
+            vals = {c.col: l for c, l, _ in _fill_tracks(xml, _cells(xml, _spans(xml, "tbl")[0]), tracks, FillReport("x"))}
+        finally:
+            company.use("jiil")
+        assert vals[1] == ["가상 놀이터"] and vals[6] == ["단독"], vals
+        assert (4 in vals) is has_org, vals

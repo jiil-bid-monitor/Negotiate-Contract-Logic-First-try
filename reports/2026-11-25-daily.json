@@ -1,0 +1,343 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-25",
+ "reportedAt": "2026-11-25T12:14:52+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01853392",
+   "title": "덕소초 복합문화센터 건립 설계용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "경기도 남양주시",
+    "budgetAmount": 587600000.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "복합문화센터"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 75,
+    "deadline": "2026-11-26T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01853392&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01853584",
+   "title": "2026년 벼 자동화 육묘장 조성사업",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "경남 합천동부농업협동조합",
+    "budgetAmount": 1290681819.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "금속창호ㆍ지붕건축물조립공사업/4991"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 55,
+    "deadline": "2026-11-29T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01853584&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01851766",
+   "title": "고등학교 학점 이수 지원을 위한 나이스 기능개선",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "한국교육학술정보원",
+    "budgetAmount": 470000000.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [
+     "정보시스템개발서비스"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 50,
+    "deadline": "2026-11-29T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01851766&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01850647",
+   "title": "2027년 국립과천과학관 재산종합보험",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "과학기술정보통신부 국립과천과학관",
+    "budgetAmount": 623000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "과학관"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 57,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01850647&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01853771",
+   "title": "경북선 흥덕4 건널목 등 28개소 지능형 CCTV 개량공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사",
+    "budgetAmount": 3092338182.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 52,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01853771&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01839978",
+   "title": "해운대 주차장 주차시스템 설치 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "코레일네트웍스주식회사",
+    "budgetAmount": 71363636.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 53,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01839978&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01853425",
+   "title": "횡성문화원 발표회장 리모델링 사업(건축)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도 횡성군",
+    "budgetAmount": 393057000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 28,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01853425&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01851018",
+   "title": "[국가물산업클러스터 실증화시설 디지털 고도화 시스템구축]중앙제어실 감시제어설비 개선(구매)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "한국환경공단 국가물산업클러스터사업단",
+    "budgetAmount": 600000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 46,
+    "deadline": "2026-12-02T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01851018&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01848429",
+   "title": "(가칭)주암초중통합학교 신축 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "경기도교육청 경기도안양과천교육지원청",
+    "budgetAmount": 1116710000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 39,
+    "deadline": "2026-12-07T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01848429&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01846730",
+   "title": "서울대학교 지능형 캠퍼스를 위한 차세대 네트워크 구축사업 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "서울대학교 정보화본부",
+    "budgetAmount": 5053100000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 39,
+    "deadline": "2026-12-07T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01846730&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01853412",
+   "title": "경부선 서창~조치원 간 신안 등 11건널목 지능형 CCTV 구축공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사 회계통합센터",
+    "budgetAmount": 1438360000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 50,
+    "deadline": "2026-12-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01853412&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01852131",
+   "title": "국제캠퍼스 자유관A 강의실 도장 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "연세대학교",
+    "budgetAmount": 231909091.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 48,
+    "deadline": "2026-12-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01852131&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01852369",
+   "title": "신평초등학교 공간재구조화 교사개축 정보통신공사(계속비)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "부산광역시교육청 부산광역시서부교육지원청",
+    "budgetAmount": 1075770909.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간",
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 44,
+    "deadline": "2026-12-09T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01852369&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01852940",
+   "title": "정선의료재단 [의료소모품] 3M 종이반창고 Micropore #1530-0 (24ea) 살색 외 395건(긴급)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "(재)정선의료재단",
+    "budgetAmount": null,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "정선 사업"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 26,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01852940&bidPbancOrd=000"
+   }
+  }
+ ]
+}

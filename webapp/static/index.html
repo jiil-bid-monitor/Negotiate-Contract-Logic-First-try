@@ -1861,6 +1861,20 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   #tab-corpus .search { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
   #tab-corpus .search select { width: auto; }
 }
+
+/* ── 위 띠 한 줄 (2026-11-25 — 지일은 '판단할 공고' 버튼이 더 있어 두 줄로 넘어가 그리다와 모양이 달랐음) ── */
+.topbar .inner { gap: 12px; }
+.topbar .top-links { gap: 2px; }
+.topbar .top-links a { padding: 6px; }
+.topbar .top-links img { width: 20px; height: 20px; }
+.topbar .top-links b, .topbar .top-links .go { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.topbar .brand-text { flex: 1 1 auto; }
+.me-top input { width: 140px; }
+.theme button { padding: 6px 10px; }
+/* 불러오기 줄: 버튼은 찌그러지지 않고, 긴 안내 글만 줄어듦 */
+#liveTools > select, #liveTools > button, #liveTools .load-state { flex: none; white-space: nowrap; }
+@media (min-width: 641px) { #liveTools .tab-search { min-width: 240px; } }
+.topbar .brand-text h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }  /* 실제 글꼴이 넓어도 위 띠는 한 줄 */
 </style>
 </head>
 <body>

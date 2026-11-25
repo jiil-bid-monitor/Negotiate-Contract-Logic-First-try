@@ -5251,3 +5251,16 @@ def test_guide_text_in_value_cell_replaced(tmp_path: Path):
     xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     g = {(c.row, c.col): c.text.strip() for c in _cells(xml, _spans(xml, "tbl")[0])}
     assert g[(0, 3)] == "000101-3******" and "첫째자리" not in xml, g
+
+
+def test_bond_il_geum_won_jeong_and_spaced_budget(tmp_path: Path):
+    """(11/25 사용자 제보 — 무안 입찰보증금 지급각서) '○ 입찰 보증금 : 일금          원정(입찰금액의 5%)'이 빔 — '일금' 모양을 몰랐음.
+    사업예산은 제안요청서 '사업예산 / 금 60,000,000원'에서 읽음."""
+    from quantdocs.fill import basis_amount, fill_hwpx
+
+    assert basis_amount({"제안요청서.hwp": " 사 업 예 산\n금 60,000,000원(금육천만원, 부가가치세 포함)"})[0] == 60_000_000
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    src = _mini_hwpx(tmp_path / "s.hwpx", p("입찰보증금 지급각서") + p("○ 입찰 보증금 : 일금          원정(입찰금액의 5%)"))
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={}), basis=60_000_000)
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert "보증금 : 일금 삼백만 원정 (￦ 3,000,000 )(입찰금액의 5%)" in text, text

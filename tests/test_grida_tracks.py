@@ -32,3 +32,21 @@ def test_scan_project_folder_to_orders(tmp_path, monkeypatch):
     assert orders[0]["준공일"] == date(2025, 5, 26)
     merged = vault.merge_tracks([], orders)
     assert merged[0]["발주기관"] == "가상시 체험관"
+
+
+def test_org_and_amount_guards(tmp_path, monkeypatch):
+    """(11/25 사용자 시험 결과) 발주기관에 '의 사정에 따라 변경될 수 있음' 같은 문장 조각이 잡히고, 작은 금액(1,216,368원)을 계약금액으로 읽었음."""
+    assert gt._org("의 사정에 따라 변경될 수 있음") == ""
+    assert gt._org("납품기한") == "" and gt._org("에게 의무제출)") == ""
+    assert gt._org("경기도교육청 경기도파주교육지원청 대표계약자 주식회사 가상") == "경기도교육청 경기도파주교육지원청"
+    assert gt._org("제7군단") == "제7군단"
+    p = tmp_path / "2025_가상 놀이터"
+    p.mkdir()
+    (p / "계약서.pdf").write_bytes(b"x")
+    (p / "준공계.pdf").write_bytes(b"x")
+    texts = {"계약서.pdf": "발주자의 사정에 따라 변경될 수 있음\n지체상금 계약금액 1,216,368원\n계약금액 : 금 48,200,000원\n발주처 : 가상군\n",
+             "준공계.pdf": "준공계 가상 놀이터 설치 사업 준공 신고서\n착수일 : 2025. 5. 7.\n준공기한 : 2025. 9. 3.\n"}
+    monkeypatch.setattr(gt, "_text", lambda f: texts.get(f.name, ""))
+    row = gt.read_project(p)
+    assert row["금액"] == 48200000 and row["발주기관"] == "가상군", row
+    assert row["시작"] == date(2025, 5, 7) and row["끝"] == date(2025, 9, 3), row

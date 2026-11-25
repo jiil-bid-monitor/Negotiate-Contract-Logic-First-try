@@ -27,19 +27,31 @@ SUFFIXES = (".pdf", ".hwp", ".hwpx", ".docx")
 PRIORITY = ("실적증명", "계약서", "준공", "완료", "납품", "착수", "착공", "공고", "제안요청", "과업지시")
 MAX_FILES = 400
 MAX_READ = 12
+MIN_AMOUNT = 5_000_000
 
 
 def _sp(word: str) -> str:
     return r"\s*".join(map(re.escape, word))
 
 
-_AMOUNT = re.compile(rf"(?:총\s*)?(?:{_sp('계약금액')}|{_sp('계약금')}|{_sp('도급금액')}|{_sp('납품금액')}|{_sp('공사금액')})"
+_AMOUNT = re.compile(rf"(?:총\s*)?(?:{_sp('계약금액')}|{_sp('계약금')}|{_sp('도급금액')}|{_sp('납품금액')}|{_sp('공사금액')}|{_sp('낙찰금액')}|{_sp('사업금액')})"
                      r"[^\d\n]{0,40}?([\d]{1,3}(?:,\d{3}){2,})\s*원?")
 _DATE = r"(20\d{2})\s*[.\-년/]\s*(\d{1,2})\s*[.\-월/]\s*(\d{1,2})"
-_PERIOD = re.compile(rf"(?:계약|사업|용역|공사|납품|수행|과업)\s*기\s*간[^\d\n]{{0,15}}{_DATE}[^\d\n]{{0,15}}?~\s*{_DATE}")
+_PERIOD = re.compile(rf"(?:(?:계약|사업|용역|공사|납품|수행|과업|착수|제작|설치)\s*)?기\s*간\s*[:：)]?[^\d\n]{{0,15}}{_DATE}[^\d\n]{{0,15}}?[~～-]\s*{_DATE}")
 _START = re.compile(rf"(?:착\s*수|착\s*공|계\s*약)\s*(?:일|년\s*월\s*일)[^\d\n]{{0,10}}{_DATE}")
-_END = re.compile(rf"(?:준\s*공|완\s*료|납\s*품)\s*(?:일|년\s*월\s*일|예정일)[^\d\n]{{0,10}}{_DATE}")
-_ORG = re.compile(r"(?:발\s*주\s*기\s*관|수\s*요\s*기\s*관|발\s*주\s*처|발\s*주\s*자)\s*(?:명)?\s*[:：]?\s*([가-힣A-Za-z0-9()·\s]{2,40}?)(?:\s{2,}|\n|$|[|])")
+_END = re.compile(rf"(?:준\s*공|완\s*료|납\s*품)\s*(?:일\s*자|일|년\s*월\s*일|예\s*정\s*일(?:\s*자)?|기\s*한|기\s*일)[^\d\n]{{0,10}}{_DATE}")
+_ORG = re.compile(r"(?:발\s*주\s*기\s*관|수\s*요\s*기\s*관|발\s*주\s*처|발\s*주\s*청|발\s*주\s*자)\s*(?:명)?\s*[)）]?\s*[:：]?\s*([^\n|]{2,60})")
+# 발주기관 값은 기관 이름처럼 끝나는 것만(11/25 사용자 시험 — '의 사정에 따라 변경될 수 있음' 같은 문장 조각을 잡았음)
+_ORG_END = re.compile(r"(?:청|시|군|구|도|공사|공단|재단|진흥원|교육원|연구원|원|센터|학교|부대|군단|사단|여단|연대|본부|도서관|관|소|협회|조합|위원회|단|처|부|아파트|주식회사)$")
+_ORG_CUT = re.compile(r"\s*(?:대표\s*계약자|계약\s*상대자|계약자|수급인|주\s*소|전\s*화|담\s*당|연락처|\(인\)|[,;]).*$")
+_ORG_BAD = re.compile(r"사정|따라|변경|의견|협의|요구|자격|승인|하도급|제출|충족|에게|하는|하여|있음|없음|경우|기한|작업|취지")
+
+
+def _org(raw: str) -> str:
+    v = _ORG_CUT.sub("", re.sub(r"\s+", " ", raw)).strip(" :：·-")
+    if not v or len(v) > 40 or _ORG_BAD.search(v) or re.match(r"(?:의|이|가|에게|와|과|에서|은|는|을|를)\s", v):
+        return ""
+    return v if _ORG_END.search(v) else ""
 
 
 def _d(y, m, d) -> date | None:
@@ -101,22 +113,22 @@ def read_project(folder: Path) -> dict:
         if len(re.sub(r"\s", "", t)) < 30:
             continue
         got = False
-        if row["금액"] is None and (m := _AMOUNT.search(t)):
-            row["금액"], got = int(m.group(1).replace(",", "")), True
+        amounts = [int(m.group(1).replace(",", "")) for m in _AMOUNT.finditer(t)]
+        amounts = [a for a in amounts if a >= MIN_AMOUNT]  # 지체상금·보증금 같은 작은 금액은 계약금액이 아님(11/25 — 365세이프타운 1,216,368원)
+        if amounts and max(amounts) > (row["금액"] or 0):
+            row["금액"], got = max(amounts), True
         if row["시작"] is None and (m := _PERIOD.search(t)):
             row["시작"], row["끝"], got = _d(*m.group(1, 2, 3)), _d(*m.group(4, 5, 6)), True
         if row["시작"] is None and (m := _START.search(t)):
             row["시작"], got = _d(*m.group(1, 2, 3)), True
         if row["끝"] is None and (m := _END.search(t)):
             row["끝"], got = _d(*m.group(1, 2, 3)), True
-        if not row["발주기관"] and (m := _ORG.search(t)):
-            org = re.sub(r"\s+", " ", m.group(1)).strip(" :")
-            if len(org) >= 2:
+        if not row["발주기관"]:
+            org = next((o for m in _ORG.finditer(t) if (o := _org(m.group(1)))), "")
+            if org:
                 row["발주기관"], got = org, True
         if got:
             row["근거"].append(p.relative_to(folder).as_posix())
-        if row["금액"] and row["시작"] and row["끝"] and row["발주기관"]:
-            break
     need = [k for k, label in (("금액", "계약금액"), ("시작", "착수일"), ("끝", "준공일"), ("발주기관", "발주기관")) if not row[k]]
     row["확인"] = ", ".join({"금액": "계약금액", "시작": "착수일", "끝": "준공일", "발주기관": "발주기관"}[k] for k in need)
     return row

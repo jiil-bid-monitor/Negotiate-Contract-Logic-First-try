@@ -4222,7 +4222,7 @@ def test_self_eval_group_head_score_column_and_total(tmp_path: Path):
         col, row = re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', tc).groups()
         got[(int(row), int(col))] = re.sub(r"<[^>]+>", "", tc).strip()
     assert got[(2, 4)] == "4" and got[(3, 4)] == "3" and got[(4, 4)] == "7", got  # 경영상태 BB+ → 4, 신인도 만점 3, 합계 7
-    assert "BB+" not in got[(2, 4)] + got[(2, 5)]
+    assert "BB+" not in got[(2, 4)] and got[(2, 5)] == "BB+"  # 점수 칸엔 등급 글자 없음, 비고 칸 = 해당 등급(11/25 사용자 요청)
 
 
 def test_merge_sec_pr_paragraph_drops_stale_lineseg(tmp_path: Path):

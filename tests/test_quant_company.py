@@ -196,7 +196,7 @@ def test_grida_jiil_staff_no_note():
     assert not any("기술인력" in n for n in notes)
 
 
-def test_grida_seal_form_uses_jiil_vault(monkeypatch):
+def test_grida_seal_form_uses_jiil_vault(monkeypatch, tmp_path):
     """(11/25 사용자 결정) 그리다 화면에서 만들어도 사용인감계만 지일 회사 정보 — 다른 서식은 그리다 것."""
     from quantdocs import build, importer
 
@@ -209,6 +209,13 @@ def test_grida_seal_form_uses_jiil_vault(monkeypatch):
     try:
         assert build._seal_vault("사 용 인 감 계", grida) is jiil
         assert build._seal_vault("위임장", grida) is grida
+        # 서식 이름에 '사용인감'이 없어도 본문이 '사 용 인 감 | 인 적 사 항' 표면 사용인감계(11/25 해남)
+        import zipfile
+        for name, body in (("seal.hwpx", "사 용 인 감</hp:t><hp:t>인 적 사 항"), ("pledge.hwpx", "서 약 자 인(사용인감)")):
+            path = tmp_path / name
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("Contents/section0.xml", f"<hp:p><hp:run><hp:t>{body}</hp:t></hp:run></hp:p>")
+            assert (build._seal_vault("서식 7", grida, path) is jiil) == (name == "seal.hwpx")
     finally:
         company.use("jiil")
     assert build._seal_vault("사용인감계", grida) is grida, "지일 화면은 그대로"

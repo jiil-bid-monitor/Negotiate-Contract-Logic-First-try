@@ -5050,3 +5050,22 @@ def test_grida_delegation_agent_rows_from_env(tmp_path: Path):
     got2 = {(c.row, c.col): c.text for c in _cells(xml2, _spans(xml2, "tbl")[0])}
     assert got2[(3, 2)] == "" and got2[(3, 4)] == "" and got2[(4, 2)] == "" and got2[(5, 4)] == ""
     assert "지정임원" not in xml2
+
+
+def test_grida_agent_contact_prefilled_labels(tmp_path: Path):
+    """(11/25 해남 그리다 위임장) '대리인 | 성 명 | __ | 생년월일 | __ / 주 소 / 업체명 | __ | 연락처 | 사무실 : / 휴대폰 :' —
+    연락처 칸에 이름표가 미리 적혀 있어도 사무실 = 회사 전화, 휴대폰 = 지정 임원."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    head = _c(0, 0, "대리인").replace('rowSpan="1"', 'rowSpan="3"')
+    rows = [[head, _c(1, 0, "성 명"), _c(2, 0, ""), _c(3, 0, "생년월일"), _c(4, 0, "")],
+            [_c(1, 1, "주 소"), _c(2, 1, "", 3)],
+            [_c(1, 2, "업체명"), _c(2, 2, ""), _c(3, 2, "연락처"), _c(4, 2, "사무실 :<hp:lineBreak/>휴대폰 :")]]
+    src = _mini_hwpx(tmp_path / "w.hwpx", _tbl(rows))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "등기대표", "주소": "가상시", "전화번호": "000-000-0000"})
+    v.agent = {"성명": "지정임원", "주민등록번호": "700101-2******", "휴대폰": "010-0000-0000", "주소": "가상시 집로 2"}
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
+    assert got[(0, 2)] == "지정임원" and got[(1, 2)] == "가상시 집로 2"
+    assert "사무실 : 000-000-0000" in got[(2, 4)] and "휴대폰 : 010-0000-0000" in got[(2, 4)]

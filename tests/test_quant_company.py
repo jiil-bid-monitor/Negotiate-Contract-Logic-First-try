@@ -135,8 +135,8 @@ def _staff_xlsx(name: str) -> bytes:
     return buf.getvalue()
 
 
-def test_grida_uses_jiil_staff_when_own_missing(monkeypatch):
-    """(11/25 사용자 결정) 그리다 폴더에 인력 자료가 없으면 지일 인력을 그대로 — 그리다 인력 엑셀이 있으면 그것이 먼저."""
+def test_grida_staff_is_jiil_staff(monkeypatch):
+    """(11/25 사용자 결정) 그리다 인력 자료 = 지일 인력 — 그리다 폴더에 인력 엑셀이 있어도 지일 것."""
     root = Path(tempfile.mkdtemp())
     jiil = root / "jiil-quant-docs" / "기술인력"
     jiil.mkdir(parents=True)
@@ -153,6 +153,6 @@ def test_grida_uses_jiil_staff_when_own_missing(monkeypatch):
         assert v.staff_src.startswith("지일 인력")
         (grida / "그리다인력.xlsx").write_bytes(_staff_xlsx("나그리"))
         v = vault.load_company()
-        assert [s["이름"] for s in v.staff] == ["나그리"], "그리다 자기 인력 엑셀이 먼저"
+        assert [s["이름"] for s in v.staff] == ["가지일"], "그리다 폴더 인력 엑셀이 있어도 지일 인력"
     finally:
         company.use("jiil")

@@ -272,10 +272,10 @@ def load_company(company: str | None = None) -> "Vault":
     add_loose(v, folder)
     if not v.files and not v.info:
         raise VaultError(f"{co_mod.name()} 자료 폴더가 비어 있습니다: {folder} — 등록증·사업자등록증 등 PDF를 넣으세요")
-    if not v.staff:  # (11/25 사용자 결정) 그리다 인력 자료가 없으면 지일 인력을 그대로 — 그 회사 폴더에 인력 엑셀·시트를 두면 그것이 먼저
-        v.staff, src = jiil_staff()
-        if v.staff:
-            v.staff_src = f"지일 인력({src})"
+    # (11/25 사용자 결정) 그리다 인력 자료 = 지일 인력 — 그 회사 폴더의 인력 엑셀·시트보다 늘 먼저(지일 인력을 못 읽을 때만 폴더 것)
+    staff, src = jiil_staff()
+    if staff:
+        v.staff, v.staff_src = staff, f"지일 인력({src})"
     derive_patents(v)
     return v
 

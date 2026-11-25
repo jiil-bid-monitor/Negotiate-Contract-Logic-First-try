@@ -595,7 +595,7 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
         notes.append(f"실적목록은 jiil-quant-docs 폴더의 '{vault.tracks_src}'에서 읽음({len(vault.tracks)}건) — 묶음 실적의 발주기관·지분율 등은 사업명으로 살림")
     if getattr(vault, "staff_src", ""):
         if vault.staff_src.startswith("지일 인력"):
-            notes.append(f"기술인력은 {vault.staff_src}을 그대로 씀({len(vault.staff)}명) — 이 회사 폴더에 인력 엑셀이 없음")
+            notes.append(f"기술인력은 {vault.staff_src}을 그대로 씀({len(vault.staff)}명) — 이 회사 인력은 지일과 같게")
         else:
             notes.append(f"기술인력은 jiil-quant-docs 폴더의 '{vault.staff_src}'에서 읽음({len(vault.staff)}명) — 회사 자료 묶음의 인력목록보다 먼저")
     found_info: dict[str, tuple[str, str]] = {}  # 항목 → (값, 파일)

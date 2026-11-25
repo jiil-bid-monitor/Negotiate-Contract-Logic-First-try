@@ -165,7 +165,8 @@ class TestLinkedSystem(unittest.TestCase):
         self.assertIn("국방전자조달 공고", report.render_console(cands, stats))
         self.assertIn("국방전자조달에서 확인", report.render_html(cands, stats, datetime(2026, 9, 12, 9)))
         row = telegram.Row.from_candidate(cands[0])
-        self.assertIn("· 국방전자조달에서 확인", telegram._line(1, row, False))
+        # 덧붙임은 셋째 줄 맨 앞(11/24 줄바꿈 정리 — 둘째 줄 끝 '· …'에서 옮김)
+        self.assertIn("\n   국방전자조달에서 확인", telegram._line(1, row, False))
 
 
 class TestCollect(unittest.TestCase):

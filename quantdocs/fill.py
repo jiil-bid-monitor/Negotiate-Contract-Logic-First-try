@@ -1336,9 +1336,12 @@ def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
         if sq.startswith("확인자") or sq == "접수자":  # 접수증 '접 수 자' 줄은 발주기관이 적음
             left = 0
             continue
-        # 접수증 '제 출 자 | 소속: 직위: 성명 : (인)'(11/25 사용자 요청 — 그리다 정선 제출본처럼 소속·직위·성명)
-        if sq.startswith("서약자") or sq == "제출자":
-            left, done = (2 if sq == "제출자" else 5), set()  # 제출자는 이름표 + 바로 옆 칸만(아래 다른 '성 명' 칸은 안 건드림)
+        # 접수증 '제 출 자' 줄은 비움(11/25 사용자: 누가 제출하는지 모름 — 같은 날 '제출자 = 대표자'를 되돌림)
+        if sq == "제출자":
+            left = 0
+            continue
+        if sq.startswith("서약자"):
+            left, done = 5, set()
         if left <= 0:
             continue
         left -= 1
@@ -3365,11 +3368,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
     # 나라장터 번호를 모를 때만 공고문의 기관 공고번호('제2026-1129호')
     no_text = g2b_no or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")
     if title or no_text or ref_no:
-        vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text,
-                                      # 기관공고번호 칸 = 나라장터 참조번호 그대로('전시사업부-1363' — 11/23 사용자, '제Y-N호' 모양이 아니어도),
-                                      # 없으면 공고문의 기관 공고번호
-                                      "_agency_no": ref_no.strip() or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")},
-                                docs=vault.docs, history=vault.history)
+        extra = {"_title": title, "_notice_no": no_text,
+                 # 기관공고번호 칸 = 나라장터 참조번호 그대로('전시사업부-1363' — 11/23 사용자, '제Y-N호' 모양이 아니어도),
+                 # 없으면 공고문의 기관 공고번호
+                 "_agency_no": ref_no.strip() or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")}
+        # 묶음의 다른 값(지정 임원 agent·인력 staff 등)도 그대로 — 예전엔 info·docs·history만 옮겨, 공고 이름을 넘기는 실제 만들기에선
+        # 위임장 대리인·재직증명서(11/25 해남)·기술자 보유현황 '계' 열(staff)이 늘 비었음(시험은 공고 이름 없이 불러 통과했음)
+        vault = SimpleNamespace(**{**vars(vault), "info": {**vault.info, **extra}})
     zin = zipfile.ZipFile(src)
     out_entries = {}
     chars = _Chars(zin.read("Contents/header.xml").decode("utf-8"), face) if "Contents/header.xml" in zin.namelist() else None
@@ -3763,9 +3768,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             pad = m.group(2)
                             keep = max(4, len(pad) - _span(rep_name) - 2)
                             seg = seg[:m.start(2)] + " " + _mark(rep_name) + " " * keep + seg[m.start(3):]
-                            # '제출자 :' 뒤에도 대표자 이름(11/25 사용자 요청 — 그리다 정선 접수증 제출본과 같게)
-                            seg = re.sub(r"(제\s*출\s*(?:자|인)\s*[:：])([ \u3000]*)(</(?:[\w.-]+:)?t>)",
-                                         lambda x: x.group(1) + " " + _mark(rep_name) + x.group(3), seg, count=1)
+                            # '제출자 :'는 비움(11/25 사용자: 누가 제출하는지 모름)
                             seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                             edits.append((target, None, seg))
                             rep.filled.append(f"{_sq(c.text)} → {rep_name}")

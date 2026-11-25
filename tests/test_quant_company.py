@@ -123,3 +123,36 @@ def test_grida_rep_from_env(monkeypatch, tmp_path):
     assert v.info["대표자"] == "등기 대표"
     assert not getattr(v, "agent", None)
     assert fill._value("대표자 휴대폰", v) == "031-000-0000"
+
+
+def _staff_xlsx(name: str) -> bytes:
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["이름", "입사일", "등급"])
+    ws.append([name, "2015.01.01", "특급"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_grida_uses_jiil_staff_when_own_missing(monkeypatch):
+    """(11/25 사용자 결정) 그리다 폴더에 인력 자료가 없으면 지일 인력을 그대로 — 그리다 인력 엑셀이 있으면 그것이 먼저."""
+    root = Path(tempfile.mkdtemp())
+    jiil = root / "jiil-quant-docs" / "기술인력"
+    jiil.mkdir(parents=True)
+    (jiil / "인력목록.xlsx").write_bytes(_staff_xlsx("가지일"))
+    grida = root / "grida-quant-docs"
+    grida.mkdir()
+    (grida / vault.INDEX).write_bytes(_index())
+    monkeypatch.setenv("QUANT_LOOSE_DIR", str(root / "jiil-quant-docs"))
+    monkeypatch.setenv("QUANT_GRIDA_DIR", str(grida))
+    company.use("grida")
+    try:
+        v = vault.load_company()
+        assert [s["이름"] for s in v.staff] == ["가지일"]
+        assert v.staff_src.startswith("지일 인력")
+        (grida / "그리다인력.xlsx").write_bytes(_staff_xlsx("나그리"))
+        v = vault.load_company()
+        assert [s["이름"] for s in v.staff] == ["나그리"], "그리다 자기 인력 엑셀이 먼저"
+    finally:
+        company.use("jiil")

@@ -272,8 +272,32 @@ def load_company(company: str | None = None) -> "Vault":
     add_loose(v, folder)
     if not v.files and not v.info:
         raise VaultError(f"{co_mod.name()} 자료 폴더가 비어 있습니다: {folder} — 등록증·사업자등록증 등 PDF를 넣으세요")
+    if not v.staff:  # (11/25 사용자 결정) 그리다 인력 자료가 없으면 지일 인력을 그대로 — 그 회사 폴더에 인력 엑셀·시트를 두면 그것이 먼저
+        v.staff, src = jiil_staff()
+        if v.staff:
+            v.staff_src = f"지일 인력({src})"
     derive_patents(v)
     return v
+
+
+def jiil_staff() -> tuple[list[dict], str]:
+    """지일 인력목록 — jiil-quant-docs 폴더의 기술인력 엑셀이 먼저(add_loose와 같은 규칙), 없으면 잠금 묶음의 인력목록 시트.
+    못 읽으면 빈 목록(그리다 서식은 인력 없이 그대로 만듦)."""
+    folder = loose_dir()
+    if folder is not None:
+        xlsx = [p for p in _loose_files(folder) if p.suffix.lower() == ".xlsx"]
+        for p in sorted(xlsx, key=lambda x: x.stat().st_mtime, reverse=True):
+            try:
+                staff = read_staff_xlsx(p.read_bytes())
+            except OSError:
+                continue
+            if staff:
+                return staff, p.relative_to(folder).as_posix()
+    try:
+        v = load()
+    except Exception:  # noqa: BLE001 — 묶음·비밀번호가 없으면 인력 없이
+        return [], ""
+    return list(v.staff), v.staff_src or "회사 자료 묶음"
 
 
 def loose_dir() -> Path | None:

@@ -597,6 +597,23 @@ class TestServer(unittest.TestCase):
         local.team_remote = ("http://127.0.0.1:9", "x")  # NAS 꺼짐
         self.assertEqual(self.call("/api/participation")[0], 502)
 
+    def test_postaward_remove_stays_removed(self):
+        """목록에서 뺀 공고는 투찰 기록이 있어도 다시 올라오지 않고(2026-11-25), 번호를 직접 넣으면 폴더 기록 그대로 되살아난다."""
+        from webapp.postaward import PostAward
+
+        class Log:
+            def entries(self):
+                return [{"noticeNo": "R26BK00000009", "noticeOrd": "000", "title": "전시관", "workType": "물품"}]
+        pa = PostAward(Path(tempfile.mkdtemp()), Log(), "2068636338")
+        self.assertEqual(pa.sync_bidlog(), 1)
+        pa.make_folder("R26BK00000009-000", Path(tempfile.mkdtemp()))
+        pa.remove("R26BK00000009-000")
+        self.assertEqual((pa.sync_bidlog(), pa._read()["R26BK00000009-000"]["hidden"]), (0, True))
+        pa._opened = pa._bids = lambda: {}
+        self.assertEqual(pa.items(), [])
+        pa.add("R26BK00000009-000")
+        self.assertTrue(pa.items()[0]["folder"])
+
     def test_postaward_goes_to_nas(self):
         """서버 PC의 낙찰 후 서류 목록·파일도 NAS 한 곳으로(2026-11-25) — 이 PC엔 안 쌓이고, 파일은 받은 그대로."""
         nas_store = Store(Path(tempfile.mkdtemp()) / "n.sqlite3")

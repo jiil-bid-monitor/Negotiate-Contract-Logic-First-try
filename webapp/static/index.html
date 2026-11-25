@@ -5351,7 +5351,7 @@ if (AWARD_TEST) {  // 시험 페이지: 탭 줄을 숨기고 낙찰 후 서류 �
 (function openHashTab() {
   if (AWARD_TEST) return;
   const [tab, arg] = decodeURIComponent(location.hash.slice(1)).split("=");
-  if (!["live", "excluded", "corpus", "log", "calc", "quant", "award"].includes(tab)) return;
+  if (!["live", "excluded", "corpus", "log", "calc", "quant", "award"].includes(tab)) return showTab("live");  // 탭 없는 주소로 열 때도 첫 화면 도우미(?)가 보이게
   showTab(tab);
   if (tab === "live" && arg === "report") REPORT_LINK = true;  // 텔레그램 '판단하러 가기' — 판단 기록을 받은 뒤 그 보고 공고만
   if (tab === "calc" && arg) {

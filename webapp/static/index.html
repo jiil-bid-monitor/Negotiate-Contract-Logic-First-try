@@ -1490,7 +1490,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   .calc-lookup input { width: 100%; }
 }
 @media print {
-  .topbar, .tabbar, .me-note, footer, #jumpNav, .side-links, .calc-lookup, .calc-btns { display: none !important; }
+  .topbar, .tabbar, .me-note, footer, #jumpNav, #exJumpNav, .side-links, .calc-lookup, .calc-btns { display: none !important; }
 }
 /* 낙찰 후 서류 — 서류 현황 펼침(11/11) */
 /* 결과 글이 버튼 옆에 생겼다 사라지면 입력 칸·버튼이 좌우로 밀림 → 아래 줄에 자리 고정(11/12) */
@@ -1826,6 +1826,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     </div>
     <p class="sub" id="exMeta" style="margin:0 0 14px"></p>
     <div id="exResults"></div>
+    <!-- 제외된 공고 탭에도 '맨 위로'(11/25 사용자 요청) — 실제 공고 탭 바로가기와 같은 모양, 칸 이동 없이 하나 -->
+    <nav class="jump solo" id="exJumpNav" aria-label="맨 위로"><a href="#" data-jump="top"><span>↑ 맨 위로</span></a></nav>
   </section>
 
   <section id="tab-corpus" hidden>
@@ -2822,6 +2824,7 @@ function renderJumpNav() {
 }
 /** 첫 화면보다 아래로 내려갔을 때만 보이고, 지금 보고 있는 칸을 진하게 */
 function markJump() {
+  $("exJumpNav").classList.toggle("shown", window.scrollY > window.innerHeight * 0.6);
   const nav = $("jumpNav");
   if (nav.hidden) return;
   nav.classList.toggle("shown", window.scrollY > window.innerHeight * 0.6);
@@ -2833,6 +2836,9 @@ function markJump() {
   nav.querySelectorAll("a").forEach((a) => a.classList.toggle("on", a.dataset.jump === cur));
 }
 window.addEventListener("scroll", markJump, { passive: true });
+$("exJumpNav").addEventListener("click", (ev) => {
+  if (ev.target.closest("a[data-jump]")) { ev.preventDefault(); window.scrollTo({ top: 0 }); }
+});
 $("jumpNav").addEventListener("click", (ev) => {
   const a = ev.target.closest("a[data-jump]");
   if (!a) return;

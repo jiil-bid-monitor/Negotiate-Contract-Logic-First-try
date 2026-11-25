@@ -5009,8 +5009,23 @@ def test_receipt_rep_before_submitter_label(tmp_path: Path):
     src = _mini_hwpx(tmp_path / "s.hwpx", body)
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
-    assert re.search(r"홍길동 +제출자 :", text) and text.count("홍길동") == 1, text
-    assert "성  명 :           (인)" in text, text
+    assert re.search(r"홍길동 +제출자 : 홍길동", text) and text.count("홍길동") == 2, text  # (11/25) 제출자도 대표자
+    assert "성  명 :           (인)" in text, text  # 접수자 줄은 공란
+
+
+def test_receipt_submitter_row_filled(tmp_path: Path):
+    """(11/25 사용자 요청 — 그리다 정선 접수증 제출본) '제 출 자 | 소속: 직위: 성명 : (인)' = 회사명·대표이사·대표자, 접수자 줄은 공란."""
+    from quantdocs.fill import fill_hwpx
+
+    body = _tbl([[_c(0, 0, "접수번호"), _c(1, 0, " - ")],
+                 [_c(0, 1, "회 사 명"), _c(1, 1, "")],
+                 [_c(0, 2, "제 출 자"), _c(1, 2, "소속:          직위:          성명 :            (인)")],
+                 [_c(0, 3, "접 수 자"), _c(1, 3, "소속: 가족행복과  직위:     성명 :          (인)")]])
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"소속: \(주\)가상 +직위: 대표이사 +성명 : 홍길동 +\(인\)", text), text
+    assert "소속: 가족행복과  직위:     성명 :          (인)" in text, text
 
 
 def test_grida_delegation_agent_rows_from_env(tmp_path: Path):
@@ -5069,3 +5084,23 @@ def test_grida_agent_contact_prefilled_labels(tmp_path: Path):
     got = {(c.row, c.col): c.text for c in _cells(xml, _spans(xml, "tbl")[0])}
     assert got[(0, 2)] == "지정임원" and got[(1, 2)] == "가상시 집로 2"
     assert "사무실 : 000-000-0000" in got[(2, 4)] and "휴대폰 : 010-0000-0000" in got[(2, 4)]
+
+
+def test_bid_application_agent_name_and_group_name_label(tmp_path: Path):
+    """(11/25 사용자 — 해남 그리다) 입찰참가신청서 '대리인 | 본 입찰에 관한 일체의 권한을 다음의 자에게 위임합니다. / - 성 명 :' = 지정 임원,
+    서약서 '단체(또는 법인) 명 :' = 회사명. vault.agent가 없으면(지일) 대리인 성명은 그대로 비움."""
+    from quantdocs.fill import fill_hwpx
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    cell = (f'<hp:tc><hp:subList>{para("본 입찰에 관한 일체의 권한을 다음의 자에게 위임합니다.")}{para("- 성       명 : ")}</hp:subList>'
+            '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    body = _tbl([[_c(0, 0, "대리인 사용인감"), cell]]) + para("단체(또는 법인) 명 : ") + para("대 표 자 :           (인)")
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    for agent, want in (({"성명": "김대리"}, True), ({}, False)):
+        v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+        v.agent = agent
+        fill_hwpx(src, tmp_path / "o.hwpx", v)
+        text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+        assert ("김대리" in text) == want, text
+        assert re.search(r"단체\(또는 법인\) 명 : ?\(주\)가상", text), text

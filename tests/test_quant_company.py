@@ -130,7 +130,7 @@ def test_grida_overview_and_history_from_env(monkeypatch, tmp_path):
     from quantdocs import fill, importer
 
     env = tmp_path / ".env"
-    env.write_text("QUANT_GRIDA_FOUNDED=2000-01-02\nQUANT_GRIDA_FIELD=제조,건설\nQUANT_GRIDA_CREDIT=BB0\n"
+    env.write_text("QUANT_GRIDA_NAME=㈜가상\nQUANT_GRIDA_ADDR=가상시 길 1\nQUANT_GRIDA_FOUNDED=2000-01-02\nQUANT_GRIDA_FIELD=제조,건설\nQUANT_GRIDA_CREDIT=BB0\n"
                    "QUANT_GRIDA_CREDIT_KIND=기업신용평가등급\n"
                    "QUANT_GRIDA_HISTORY=2000.01.02 법인설립|2001.03.04 공장등록\n", encoding="utf-8")
     monkeypatch.setattr(vault, "ENV_FILE", env)
@@ -143,8 +143,9 @@ def test_grida_overview_and_history_from_env(monkeypatch, tmp_path):
     company.use("grida")
     try:
         v = V()
-        v.info = {}
+        v.info = {"회사명": "주식회사 가상"}
         importer.enrich_vault(v)
+        assert v.info["회사명"] == "(주)가상" and v.info["주소"] == "가상시 길 1"
         assert v.info["신용평가등급"] == "BB0" and v.info["신용평가 종류"] == "기업신용평가등급"
         assert fill._value("사업분야", v) == "제조,건설"
         assert fill._value("설립일", v)
@@ -195,7 +196,7 @@ def test_grida_jiil_staff_no_note():
     assert not any("기술인력" in n for n in notes)
 
 
-def test_grida_seal_form_uses_jiil_vault(monkeypatch):
+def test_grida_seal_form_uses_jiil_vault(monkeypatch, tmp_path):
     """(11/25 사용자 결정) 그리다 화면에서 만들어도 사용인감계만 지일 회사 정보 — 다른 서식은 그리다 것."""
     from quantdocs import build, importer
 
@@ -208,7 +209,32 @@ def test_grida_seal_form_uses_jiil_vault(monkeypatch):
     try:
         assert build._seal_vault("사 용 인 감 계", grida) is jiil
         assert build._seal_vault("위임장", grida) is grida
+        # 서식 이름에 '사용인감'이 없어도 본문이 '사 용 인 감 | 인 적 사 항' 표면 사용인감계(11/25 해남)
+        import zipfile
+        for name, body in (("seal.hwpx", "사 용 인 감</hp:t><hp:t>인 적 사 항"), ("pledge.hwpx", "서 약 자 인(사용인감)")):
+            path = tmp_path / name
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("Contents/section0.xml", f"<hp:p><hp:run><hp:t>{body}</hp:t></hp:run></hp:p>")
+            assert (build._seal_vault("서식 7", grida, path) is jiil) == (name == "seal.hwpx")
     finally:
         company.use("jiil")
     assert build._seal_vault("사용인감계", grida) is grida, "지일 화면은 그대로"
     build._JIIL_VAULT.clear()
+
+
+def test_company_name_short_form(monkeypatch, tmp_path):
+    """(11/25 사용자 요청) 업체명·회사명은 '주식회사 그리다' 대신 '(주)그리다'."""
+    from quantdocs import importer
+
+    env = tmp_path / ".env"
+    env.write_text("", encoding="utf-8")
+    monkeypatch.setattr(vault, "ENV_FILE", env)
+
+    class V:
+        files: dict = {}
+        history: list = []
+    for raw in ("주식회사 가상", "가상 주식회사", "(주)가상", "㈜가상"):
+        v = V()
+        v.info = {"회사명": raw}
+        importer.enrich_vault(v)
+        assert v.info["회사명"] == "(주)가상", raw

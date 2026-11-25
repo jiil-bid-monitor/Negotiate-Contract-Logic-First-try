@@ -1046,6 +1046,15 @@ class PostAward:
             raise ValueError("파일을 찾지 못했습니다")
         return target
 
+    def hwpx(self, key: str, rel: str) -> tuple[str, bytes]:
+        """담당자가 저장한 엑셀 서류를 한글로(11/25 사용자) — (파일 이름, 내용)."""
+        from webapp import hwpxout
+
+        xlsx = self.file(key, rel)
+        if xlsx.suffix.lower() != ".xlsx":
+            raise ValueError("엑셀 서류만 한글로 바꿉니다")
+        return xlsx.stem + ".hwpx", hwpxout.convert(xlsx)
+
     def zip(self, key: str, rel: str, since: float | None = None) -> tuple[str, bytes]:
         """단계 폴더 하나(rel이 비면 공고 폴더 전체 — 폴더 만들기 때 묶음, 11/17)를 zip으로 — (파일 이름, 내용). 폴더 밖·빈 폴더면 오류.
         since(초)를 주면 그 뒤에 바뀐 파일만 — 적격심사 서류를 받은 공고에서 낙찰 서류를 만들 때 더해진 것만(11/20 사용자 'zip 두 번 받지 않게')."""

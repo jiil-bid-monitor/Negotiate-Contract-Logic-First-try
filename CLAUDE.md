@@ -26,6 +26,13 @@
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 **(11/18 사용자 요청) 오늘 한 일 정리·worklog·인수인계·다음 세션 시작 메시지엔 지금 세션에서 한 작업만** — 같은 날 다른 세션(팀원 등)이 한 PR·브랜치·기록은 언급하지 않음(커밋의 Claude-Session 줄로 가림).
 
+## 2026-11-25 — 그리다 사용인감계 = 지일 회사 정보 · 위임장 대리인 연락처 (브랜치 `claude/grida-seal-agent`, 사용자 결정)
+
+- **(사용자) 그리다 화면에서 만들어도 사용인감계만 전부 지일**(업체명·주소·대표자·전화 — 지일 잠금 묶음 + 지일 .env, `build._seal_vault`, 제목에 '사용인감'), 다른 서식은 그리다 것.
+- 위임장 대리인 연락처 칸에 '사무실 : / 휴대폰 :'이 미리 적힌 모양(해남 공룡과학체험관) — 사무실 = 회사 전화, 휴대폰 = 지정 임원(`fill._agent_contact`).
+  대리인 성명·생년월일·주소는 서버 PC `.env` `QUANT_GRIDA_AGENT…`(또는 `QUANT_GRIDA_REP…`)가 있어야 들어감 — 해남 결과에서 비었던 건 그 값이 없거나 #675 반영 전으로 봄.
+  시험 `test_grida_seal_form_uses_jiil_vault`·`test_grida_agent_contact_prefilled_labels`. 서버 코드 바뀜 — 웹앱 다시 켜기.
+
 ## 2026-11-25 — 그리다 설립일·사업분야·신용평가등급·연혁도 .env로 (브랜치 `claude/grida-env-info`, 사용자 요청)
 
 - 서버 PC `.env` `QUANT_GRIDA_FOUNDED`(설립일)·`_FIELD`(사업분야)·`_CREDIT`(신용평가등급)·`_CREDIT_KIND`·`_CREDIT_DATE`·`_CREDIT_END`,

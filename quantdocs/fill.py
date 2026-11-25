@@ -243,6 +243,30 @@ def _fill_inline(seg: str, vault, loose: bool = False) -> tuple[str, list[str]]:
     return new, done
 
 
+_AGENT_TEL = re.compile(r"(?P<lab>사[  　]*무[  　]*실|회[  　]*사|휴[  　]*대[  　]*(?:폰|전[  　]*화)|핸[  　]*드[  　]*폰|H[  　]*\.?[  　]*P[  　]*\.?)"
+                        r"(?P<colon>[  　]*[:：])[  　]*$")
+
+
+def _agent_contact(seg: str, tel: str, mob: str) -> str:
+    """대리인 연락처 칸의 '사무실 :'·'휴대폰 :' 빈자리 — 사무실·회사 = 회사 전화, 휴대폰·H.P = 지정 임원 휴대폰(빈자리일 때만)."""
+    def fill_t(m):
+        body = re.split(r"(<[^>]*>)", m.group(2))
+        for i, x in enumerate(body):
+            if x.startswith("<"):
+                continue
+            mm = _AGENT_TEL.search(x)
+            if not mm:
+                continue
+            value = mob if re.search(r"휴|핸|H", mm.group("lab")) else tel
+            if value:
+                body[i] = x[:mm.start()] + f"{mm.group('lab')}{mm.group('colon')} {_mark(value)}"
+        return m.group(1) + "".join(body) + m.group(3)
+    new = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", fill_t, seg, flags=re.S)
+    if new != seg:
+        new = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", new, flags=re.S)
+    return new
+
+
 _GAP = r"(?:[  　]|<(?:[\w.-]+:)?fwSpace/>|<(?:[\w.-]+:)?nbSpace/>)*"
 # 연락처 칸 '(회사)☎ / (H. P)☎'(11/18 봉평 서식 8 대표자 선임계) — 회사 = 회사 전화, H.P = 대표자 휴대폰(11/16 '휴대폰' 칸 규칙과 같음)
 _MARKS = [(re.compile(rf"(\({_GAP}회{_GAP}사{_GAP}\){_GAP}(?:☎|☏|TEL|Tel|전화)?)(?:[  　]*)(?=</(?:[\w.-]+:)?t>)"), "전화번호"),
@@ -3459,6 +3483,12 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if val and target is not None and target.blank:
                             edits.append((target, val, False))
                             rep.filled.append(f"대리인 {lab} → 지정 임원")
+                        elif target is not None and not target.blank and re.fullmatch(r"연락처|전화|전화번호", lab):
+                            # 연락처 칸에 '사무실 : / 휴대폰 :'이 미리 적힌 모양(11/25 해남 그리다 위임장) — 사무실 = 회사 전화, 휴대폰 = 지정 임원
+                            new_seg = _agent_contact(xml[target.start:target.end], _value("전화번호", vault), agent.get("휴대폰", ""))
+                            if new_seg != xml[target.start:target.end]:
+                                edits.append((target, None, new_seg))
+                                rep.filled.append("대리인 연락처 → 지정 임원")
                         if val is not None or key not in ("회사명", None):
                             continue
                     if group == "대리인" and key not in ("회사명", None):

@@ -419,6 +419,33 @@ def _safe(name: str) -> str:
     return re.sub(r'[\\/:*?"<>|]+', "_", str(name)).strip() or "파일"
 
 
+_SEAL_FORM = re.compile(r"사\s*용\s*인\s*감")
+_JIIL_VAULT: list = []  # 그리다 사용인감계에 쓸 지일 자료(작업마다 한 번 읽음)
+
+
+def _seal_vault(title: str, vault):
+    """(11/25 사용자 결정) 지일이 아닌 회사(그리다)도 사용인감계는 지일 회사 정보(업체명·주소·대표자·전화)로 채움 — 다른 서식은 그 회사 것."""
+    from . import company as co_mod
+
+    if co_mod.current() == co_mod.DEFAULT or not _SEAL_FORM.search(title or ""):
+        return vault
+    if not _JIIL_VAULT:
+        from .importer import enrich_vault
+        from .vault import load
+
+        mine = co_mod.current()
+        co_mod.use(co_mod.DEFAULT)
+        try:
+            jv = load()
+            enrich_vault(jv)
+            _JIIL_VAULT.append(jv)
+        except Exception:  # noqa: BLE001 — 지일 자료를 못 읽으면 그 회사 것 그대로
+            _JIIL_VAULT.append(None)
+        finally:
+            co_mod.use(mine)
+    return _JIIL_VAULT[0] or vault
+
+
 def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notice_date: date | None = None,
           award_method: str = "", contract_method: str = "", licenses: list[str] | None = None,
           notice_no: str = "", staff_pick: list[str] | None = None, license_groups: list | None = None,
@@ -437,6 +464,8 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
     if patent_pick is not None:
         vault.patent_pick = set(patent_pick)
         vault.patent_pick_from_screen = True
+    base_vault = vault
+    _JIIL_VAULT.clear()
     work = Path(tempfile.mkdtemp(prefix="quantdocs_build_"))
     try:
         a = analyze(files, vault, notice_date, work, award_method, contract_method, licenses, license_groups)
@@ -484,6 +513,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 a.notes.append(f"{f.name}: 한글(HWPX) 파일이 아니라 서식을 자르지 못함 — 원본을 한글에서 HWPX로 저장해 확인")
                 continue
             for c in sorted(cut(src, forms_dir, cut_names), key=lambda c: [int(n) for n in re.findall(r"\d+", c.no)]):
+                vault = _seal_vault(c.title, base_vault)
                 joint = not _BLANK_FORM.search(c.title) and _joint_body(forms_dir / c.file)
                 if is_manual(c.title) or joint:  # 양식 그대로 — 내려받은 뒤 직접 기입
                     manual_dir.mkdir(parents=True, exist_ok=True)
@@ -520,6 +550,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 except (ValueError, zipfile.BadZipFile, KeyError) as err:
                     merge_failed = True
                     a.notes.append(f"{f.name}: 서식을 한 파일로 잇지 못함({err}) — 서식별 파일을 쓰세요")
+        vault = base_vault  # 사용인감계에 쓴 지일 자료는 서식 채우기에만
         per_form = merge_failed or not merged_forms
         # 서식을 하나도 못 만들었으면 이유를 늘 알림(11/13 사용자 요청 — 옛길박물관: 통합서식이 경고 없이 빠졌음)
         if not reports and not manual and not merged_forms:

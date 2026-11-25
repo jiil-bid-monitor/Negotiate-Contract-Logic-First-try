@@ -193,3 +193,22 @@ def test_grida_jiil_staff_no_note():
     v = vault.Vault({}, staff=[{"이름": "가", "입사일": None, "재직": "재직", "등급": "특급"}], staff_src="지일 인력(x.xlsx)")
     notes = importer.enrich_vault(v) or []
     assert not any("기술인력" in n for n in notes)
+
+
+def test_grida_seal_form_uses_jiil_vault(monkeypatch):
+    """(11/25 사용자 결정) 그리다 화면에서 만들어도 사용인감계만 지일 회사 정보 — 다른 서식은 그리다 것."""
+    from quantdocs import build, importer
+
+    jiil = vault.Vault({}, info={"회사명": "(주)지일", "대표자": "지일대표"})
+    monkeypatch.setattr(vault, "load", lambda *a, **k: jiil)
+    monkeypatch.setattr(importer, "enrich_vault", lambda v, report=None: [])
+    grida = vault.Vault({}, info={"회사명": "주식회사 그리다"})
+    build._JIIL_VAULT.clear()
+    company.use("grida")
+    try:
+        assert build._seal_vault("사 용 인 감 계", grida) is jiil
+        assert build._seal_vault("위임장", grida) is grida
+    finally:
+        company.use("jiil")
+    assert build._seal_vault("사용인감계", grida) is grida, "지일 화면은 그대로"
+    build._JIIL_VAULT.clear()

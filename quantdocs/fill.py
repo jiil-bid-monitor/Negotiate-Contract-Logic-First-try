@@ -477,7 +477,7 @@ def _value(key: str, vault) -> str:
         m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", d)
         return f"{m.group(1)}. {m.group(2)}. {m.group(3)}." if m else d
     v = vault.info.get(key, "")
-    if not v and key in ("전화번호", "팩스번호"):  # 회사정보 시트 항목 이름이 '대표전화'·'TEL'·'FAX' 등이어도
+    if not v and key in ("전화번호", "팩스번호") and key not in getattr(vault, "blank_info", ()):  # 회사정보 시트 항목 이름이 '대표전화'·'TEL'·'FAX' 등이어도
         words = ("전화", "TEL", "연락처") if key == "전화번호" else ("팩스", "FAX")
         v = next((str(x) for k, x in vault.info.items() if x and any(w in k.upper() for w in words)
                   and not re.search(r"휴대|담당|팩스|FAX" if key == "전화번호" else r"휴대|담당", k.upper())), "")

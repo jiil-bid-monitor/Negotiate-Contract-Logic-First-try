@@ -153,6 +153,31 @@ def test_grida_overview_and_history_from_env(monkeypatch, tmp_path):
         company.use("jiil")
 
 
+def test_grida_env_dash_blanks_document_value(monkeypatch, tmp_path):
+    """(11/25 사용자) .env 'QUANT_GRIDA_FAX=-' = 등록증 PDF 등 서류에 팩스가 있어도 비움."""
+    from quantdocs import fill, importer
+
+    env = tmp_path / ".env"
+    env.write_text("QUANT_GRIDA_FAX=-\n", encoding="utf-8")
+    monkeypatch.setattr(vault, "ENV_FILE", env)
+    monkeypatch.setattr(importer, "_cached_text", lambda path, data: "경쟁입찰참가자격등록증\n전화번호 031-000-0000\n팩스번호 031-000-0001\n")
+
+    class V:
+        info: dict = {}
+        files = {"files/등록증.pdf": b"x"}
+        history: list = []
+
+    company.use("grida")
+    try:
+        v = V()
+        v.info = {"FAX": "031-000-0002"}
+        importer.enrich_vault(v)
+        assert v.info["전화번호"] == "031-000-0000"
+        assert fill._value("팩스번호", v) == ""
+    finally:
+        company.use("jiil")
+
+
 def _staff_xlsx(name: str) -> bytes:
     wb = Workbook()
     ws = wb.active

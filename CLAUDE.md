@@ -26,6 +26,12 @@
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 **(11/18 사용자 요청) 오늘 한 일 정리·worklog·인수인계·다음 세션 시작 메시지엔 지금 세션에서 한 작업만** — 같은 날 다른 세션(팀원 등)이 한 PR·브랜치·기록은 언급하지 않음(커밋의 Claude-Session 줄로 가림).
 
+## 2026-11-25 — .env 값 '-'·'없음' = 서류에 있어도 비움 (브랜치 `claude/grida-fax-blank`, 사용자 제보)
+
+- 그리다 FAX를 .env에서 지웠는데도 들어감 — 그리다 폴더의 경쟁입찰참가자격등록증 PDF에서 팩스번호를 읽었음(11/24부터).
+  `QUANT_GRIDA_FAX=-`(또는 '없음')면 서류·시트 값도 안 쓰고 비움(`importer.enrich_vault` `vault.blank_info`, `fill._value` 대체 이름 찾기도 건너뜀).
+  같은 방식으로 TEL·EMAIL·HOMEPAGE·CAPITAL 등 모든 `QUANT_GRIDA_…`·`QUANT_…` 항목. 시험 `test_grida_env_dash_blanks_document_value`. 서버 코드 바뀜 — 웹앱 다시 켜기.
+
 ## 2026-11-25 — 그리다 사용인감계 = 지일 회사 정보 · 위임장 대리인 연락처 (브랜치 `claude/grida-seal-agent`, 사용자 결정)
 
 - **(사용자) 그리다 화면에서 만들어도 사용인감계만 전부 지일**(업체명·주소·대표자·전화 — 지일 잠금 묶음 + 지일 .env, `build._seal_vault`, 제목에 '사용인감'), 다른 서식은 그리다 것.

@@ -570,10 +570,15 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
              ("CREDIT_DATE", "신용평가 평가일"), ("CREDIT_END", "신용평가 유효기간")]
     if current() == DEFAULT:
         items += [("REP_MOBILE", "대표자 휴대폰"), ("REP", "대표자"), ("REP_TITLE", "대표자 직위")]
+    blank: set[str] = set()  # .env에 '-'·'없음' = 서류(등록증 등)에 값이 있어도 비움(11/25 사용자 — 그리다 FAX)
     for env_key, item in items:
         v = read_env(prefix + env_key).strip()
-        if v:
+        if v in ("-", "없음"):
+            vault.info[item] = ""
+            blank.add(item)
+        elif v:
             vault.info[item] = v
+    vault.blank_info = blank
     # 연혁도 .env로(11/25 사용자 요청) — '2022.10.04 법인설립|2023.09.11 소프트웨어 사업자등록'처럼 '|'로 나눔, 서류에서 읽은 연혁보다 먼저
     env_hist = read_history(read_env(prefix + "HISTORY").replace("|", "\n"))
     if current() == DEFAULT:
@@ -673,7 +678,7 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
                 found_info.setdefault(k, (v, name))
     filled = []
     for k, (v, src) in found_info.items():
-        if not vault.info.get(k):
+        if not vault.info.get(k) and k not in blank:
             vault.info[k] = v
             filled.append(f"{k}({src})")
     if filled:

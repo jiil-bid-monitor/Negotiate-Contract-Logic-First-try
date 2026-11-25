@@ -1,0 +1,915 @@
+[
+ {
+  "id": "h-001",
+  "tab": "award",
+  "q": "그럼 7등은요?",
+  "expect": "개찰 6등부터는 어떻게 되나요?",
+  "prev": "개찰 2등이면 뭐 해요?",
+  "prevTitle": "개찰 2~5등이면 무엇을 하나요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-002",
+  "tab": "award",
+  "q": "3등이면요?",
+  "expect": "개찰 2~5등이면 무엇을 하나요?",
+  "prev": "개찰 1등 나왔는데 뭐 해야 돼요",
+  "prevTitle": "개찰 1등이면 무엇을 하나요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-003",
+  "tab": "award",
+  "q": "그럼 1순위로 나오면요?",
+  "expect": "개찰 1등이면 무엇을 하나요?",
+  "prev": "6등 밖이면 어떻게 됩니까",
+  "prevTitle": "개찰 6등부터는 어떻게 되나요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-004",
+  "tab": "award",
+  "q": "지명경쟁이어도 똑같아요?",
+  "expect": "지명경쟁은 왜 1등만 보나요?",
+  "prev": "개찰 3등이면 뭘 하죠",
+  "prevTitle": "개찰 2~5등이면 무엇을 하나요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-005",
+  "tab": "award",
+  "q": "거기서 고치면 바로 반영돼요?",
+  "expect": "공유 폴더에서 고치면 언제 반영되나요?",
+  "prev": "만들어진 서류는 어디 있어요",
+  "prevTitle": "만든 서류는 어디에 있나요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-006",
+  "tab": "award",
+  "q": "그거 제가 바꿔 적어도 됩니까?",
+  "expect": "'○○ 귀하'는 고쳐도 되나요?",
+  "altExpect": [
+   "착수계 수신은 누구로 적나요?"
+  ],
+  "prev": "착수계 수신은 누구로 씁니까",
+  "prevTitle": "착수계 수신은 누구로 적나요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-007",
+  "tab": "live",
+  "q": "잘못 누르면요?",
+  "expect": "잘못 눌렀는데 취소할 수 있나요?",
+  "prev": "참가 불참 버튼은 어디서 눌러요",
+  "prevTitle": "참가·보류·불참은 어디서 정하나요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-008",
+  "tab": "live",
+  "q": "그 다음엔요?",
+  "expect": "참가로 정한 다음에는 무엇을 하나요?",
+  "prev": "참가로 정하려면 어디를 눌러요",
+  "prevTitle": "참가·보류·불참은 어디서 정하나요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-009",
+  "tab": "live",
+  "q": "그때 고른 사유는 바꿀 수 있어요?",
+  "expect": "적은 사유를 고치고 싶습니다",
+  "prev": "불참 누른 공고가 어디 갔죠",
+  "prevTitle": "불참한 공고를 다시 보고 싶습니다",
+  "type": "followup"
+ },
+ {
+  "id": "h-010",
+  "tab": "live",
+  "q": "그럼 실적 요건이라고 붙은 건요?",
+  "expect": "'실적 요건'·'기술인력 요건'은 무슨 뜻인가요?",
+  "prev": "자격 미보유라고 써진 게 뭐예요",
+  "prevTitle": "'자격충족'·'자격 미보유'는 무슨 뜻인가요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-011",
+  "tab": "live",
+  "q": "그 옆 클립보드 그림 숫자는요?",
+  "expect": "📋 숫자는 무슨 뜻인가요?",
+  "prev": "종 모양 옆 숫자는 뭐예요",
+  "prevTitle": "🔔 숫자는 무슨 뜻인가요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-012",
+  "tab": "calc",
+  "q": "그 금액으로 실제 냈으면요?",
+  "expect": "외주 금액으로 투찰했습니다",
+  "prev": "외주 추천 금액은 왜 적어요",
+  "prevTitle": "외주 추천 금액은 왜 적나요?",
+  "type": "followup"
+ },
+ {
+  "id": "h-013",
+  "tab": "calc",
+  "q": "결과는 언제 떠요?",
+  "expect": "개찰 결과는 언제 나오나요?",
+  "prev": "투찰한 금액 남겨 두려면요",
+  "prevTitle": "투찰한 금액을 기록하고 싶습니다",
+  "type": "followup"
+ },
+ {
+  "id": "h-015",
+  "tab": "log",
+  "q": "그걸 파일로 뽑을 수도 있어요?",
+  "expect": "엑셀로 받고 싶습니다",
+  "prev": "참가로 한 것만 보려면요",
+  "prevTitle": "참가한 공고만 보고 싶습니다",
+  "type": "followup",
+  "altExpect": [
+   "어떤 순서로 하나요?"
+  ]
+ },
+ {
+  "id": "h-016",
+  "tab": "excluded",
+  "q": "잘못 빠진 거면 어떻게 해요?",
+  "expect": "잘못 빠진 공고를 되살리고 싶습니다",
+  "prev": "이 공고 왜 빠졌는지 어디 나와요",
+  "prevTitle": "왜 빠졌는지 어디서 보나요?",
+  "type": "followup",
+  "altExpect": [
+   "어떤 순서로 하나요?"
+  ]
+ },
+ {
+  "id": "h-017",
+  "tab": "log",
+  "q": "판단한 내역을 파일로 저장해서 팀장님께 보내고 싶어요",
+  "expect": "엑셀로 받고 싶습니다",
+  "type": "synonym",
+  "altExpect": [
+   "어떤 순서로 하나요?"
+  ]
+ },
+ {
+  "id": "h-018",
+  "tab": "award",
+  "q": "개찰에서 4위 했는데 가망 없습니까",
+  "expect": "개찰 2~5등이면 무엇을 하나요?",
+  "type": "synonym",
+  "altExpect": [
+   "개찰 등수는 무슨 뜻인가요?"
+  ]
+ },
+ {
+  "id": "h-019",
+  "tab": "award",
+  "q": "리스트에서 이 건 없애려면?",
+  "expect": "공고를 목록에서 빼고 싶습니다",
+  "type": "synonym"
+ },
+ {
+  "id": "h-020",
+  "tab": "award",
+  "q": "직인은 출력해서 누르면 됩니까",
+  "expect": "도장은 어떻게 찍나요?",
+  "type": "synonym"
+ },
+ {
+  "id": "h-021",
+  "tab": "award",
+  "q": "작성된 문서가 보관된 곳이 어딘가요",
+  "expect": "만든 서류는 어디에 있나요?",
+  "type": "synonym"
+ },
+ {
+  "id": "h-022",
+  "tab": "award",
+  "q": "대금 받을 때 구비서류가 뭐죠",
+  "expect": "청구할 때 무엇을 내나요?",
+  "type": "synonym"
+ },
+ {
+  "id": "h-023",
+  "tab": "live",
+  "q": "실수로 클릭했는데 원상복구 되나요",
+  "expect": "잘못 눌렀는데 취소할 수 있나요?",
+  "type": "synonym"
+ },
+ {
+  "id": "h-024",
+  "tab": "live",
+  "q": "공고 상세 페이지 열어보려면 어떻게 하죠",
+  "expect": "공고 원문은 어디서 보나요?",
+  "type": "synonym"
+ },
+ {
+  "id": "h-025",
+  "tab": "live",
+  "q": "예산 큰 것부터 나열하고 싶습니다",
+  "expect": "보이는 순서를 바꾸고 싶습니다",
+  "type": "synonym"
+ },
+ {
+  "id": "h-026",
+  "tab": "live",
+  "q": "카드 오른쪽에 73% 라고 적힌 건 뭔가요",
+  "expect": "싱크로율은 무슨 뜻인가요?",
+  "type": "synonym"
+ },
+ {
+  "id": "h-027",
+  "tab": "calc",
+  "q": "웹앱이 권하는 입찰가는 무슨 근거로 산출됩니까",
+  "expect": "추천 투찰금액은 어떻게 정해지나요?",
+  "type": "synonym"
+ },
+ {
+  "id": "h-028",
+  "tab": "quant",
+  "q": "결과물은 얼마 뒤에 소멸됩니까",
+  "expect": "만든 파일은 언제까지 받을 수 있나요?",
+  "type": "synonym"
+ },
+ {
+  "id": "h-029",
+  "tab": "excluded",
+  "q": "걸러진 건을 원복시키려면",
+  "expect": "잘못 빠진 공고를 되살리고 싶습니다",
+  "type": "synonym",
+  "altExpect": [
+   "어떤 순서로 하나요?"
+  ]
+ },
+ {
+  "id": "h-030",
+  "tab": "corpus",
+  "q": "현재 수행 중인 프로젝트는 무슨 기준으로 뜹니까",
+  "expect": "진행 중인 사업은 어떻게 정해지나요?",
+  "type": "synonym"
+ },
+ {
+  "id": "h-031",
+  "tab": "live",
+  "q": "새 공고 언제 올라와요?",
+  "expect": "새 공고는 언제 들어오나요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-032",
+  "tab": "live",
+  "q": "검토필요 이건 뭐지?",
+  "expect": "'검토필요'는 어떤 공고인가요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-033",
+  "tab": "live",
+  "q": "내가 맡기 눌러도 돼?",
+  "expect": "'내가 맡기'는 언제 누르나요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-034",
+  "tab": "live",
+  "q": "이름 쓰라는데요",
+  "expect": "이름을 적으라고 나옵니다",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-035",
+  "tab": "award",
+  "q": "하한 미달 떴는데 뭐 해야 됨?",
+  "expect": "'하한선 미달'은 무슨 뜻인가요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-037",
+  "tab": "award",
+  "q": "날짜 어떻게 써요",
+  "expect": "날짜는 어떻게 적나요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-038",
+  "tab": "award",
+  "q": "연습해봐도 되죠?",
+  "expect": "먼저 연습해 볼 수 있나요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-040",
+  "tab": "calc",
+  "q": "사정률 기준이 뭐예요",
+  "expect": "'기준 사정률'은 무슨 뜻인가요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-041",
+  "tab": "quant",
+  "q": "실적 후보 그냥 내면 되나",
+  "expect": "실적 후보를 그대로 내도 되나요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-042",
+  "tab": "log",
+  "q": "지난주꺼 어딨어요",
+  "expect": "지난주 기록은 어디에 있나요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-043",
+  "tab": "excluded",
+  "q": "마감 지난 것도 떠요?",
+  "expect": "마감이 지난 공고도 나오나요?",
+  "type": "colloquial"
+ },
+ {
+  "id": "h-044",
+  "tab": "live",
+  "q": "공고원문어디서봐요",
+  "expect": "공고 원문은 어디서 보나요?",
+  "type": "typo-spacing"
+ },
+ {
+  "id": "h-045",
+  "tab": "live",
+  "q": "자격미보유 칩 무슨뜻",
+  "expect": "'자격충족'·'자격 미보유'는 무슨 뜻인가요?",
+  "type": "typo-spacing"
+ },
+ {
+  "id": "h-046",
+  "tab": "award",
+  "q": "예정공정표어떻게만들어요",
+  "expect": "예정공정표는 어떻게 만드나요?",
+  "type": "typo-spacing"
+ },
+ {
+  "id": "h-047",
+  "tab": "award",
+  "q": "서류다시만들기 언제눌러요",
+  "expect": "'서류 다시 만들기'는 언제 누르나요?",
+  "type": "typo-spacing"
+ },
+ {
+  "id": "h-049",
+  "tab": "calc",
+  "q": "개찰결과언제나와요",
+  "expect": "개찰 결과는 언제 나오나요?",
+  "type": "typo-spacing"
+ },
+ {
+  "id": "h-050",
+  "tab": "quant",
+  "q": "한글파일필요 라고뜹니다",
+  "expect": "'한글 파일 필요'라고 나옵니다",
+  "type": "typo-spacing"
+ },
+ {
+  "id": "h-051",
+  "tab": "log",
+  "q": "판단 최소하고싶어요",
+  "expect": "판단을 취소하고 싶습니다",
+  "type": "typo-spacing"
+ },
+ {
+  "id": "h-052",
+  "tab": "live",
+  "q": "투찰한 금액 기록은 어디서 해요",
+  "expect": "투찰한 금액을 기록하고 싶습니다",
+  "expectTab": "calc",
+  "type": "other-tab",
+  "altExpect": [
+   "calc::어떤 순서로 하나요?"
+  ]
+ },
+ {
+  "id": "h-053",
+  "tab": "live",
+  "q": "제외된 공고를 사유별로 모아 보려면",
+  "expect": "빠진 이유별로 모아 보고 싶습니다",
+  "expectTab": "excluded",
+  "type": "other-tab"
+ },
+ {
+  "id": "h-054",
+  "tab": "calc",
+  "q": "개찰 1등 했는데 적격 서류는 어디서 만듭니까",
+  "expect": "개찰 1등이면 무엇을 하나요?",
+  "expectTab": "award",
+  "type": "other-tab"
+ },
+ {
+  "id": "h-055",
+  "tab": "award",
+  "q": "추천 투찰금액은 어떻게 계산됩니까",
+  "expect": "추천 투찰금액은 어떻게 정해지나요?",
+  "expectTab": "calc",
+  "type": "other-tab"
+ },
+ {
+  "id": "h-056",
+  "tab": "log",
+  "q": "기술인력 체크는 왜 하는 거예요",
+  "expect": "기술인력은 왜 체크하나요?",
+  "expectTab": "quant",
+  "type": "other-tab"
+ },
+ {
+  "id": "h-057",
+  "tab": "quant",
+  "q": "착수계 수신은 누구로 써요",
+  "expect": "착수계 수신은 누구로 적나요?",
+  "expectTab": "award",
+  "type": "other-tab"
+ },
+ {
+  "id": "h-058",
+  "tab": "corpus",
+  "q": "판단 기록을 엑셀로 받으려면",
+  "expect": "엑셀로 받고 싶습니다",
+  "expectTab": "log",
+  "type": "other-tab",
+  "altExpect": [
+   "log::어떤 순서로 하나요?"
+  ]
+ },
+ {
+  "id": "h-059",
+  "tab": "excluded",
+  "q": "싱크로율이 뭐예요",
+  "expect": "싱크로율은 무슨 뜻인가요?",
+  "expectTab": "live",
+  "type": "other-tab"
+ },
+ {
+  "id": "h-060",
+  "tab": "award",
+  "q": "참가 불참은 어디서 눌러요",
+  "expect": "참가·보류·불참은 어디서 정하나요?",
+  "expectTab": "live",
+  "type": "other-tab"
+ },
+ {
+  "id": "h-061",
+  "tab": "award",
+  "q": "도장은 어떻게 찍고 날짜는 어떤 형식으로 써요?",
+  "expect": "도장은 어떻게 찍나요?",
+  "altExpect": [
+   "날짜는 어떻게 적나요?"
+  ],
+  "type": "multi-intent"
+ },
+ {
+  "id": "h-062",
+  "tab": "award",
+  "q": "만든 서류는 어디 있고 안 채운 칸은 어디서 봐요",
+  "expect": "만든 서류는 어디에 있나요?",
+  "altExpect": [
+   "아직 안 채운 칸은 어디서 보나요?"
+  ],
+  "type": "multi-intent"
+ },
+ {
+  "id": "h-063",
+  "tab": "award",
+  "q": "용역이면 현장대리인입니까 책임자입니까, 그리고 착수계 수신은 누구로 씁니까",
+  "expect": "현장대리인과 용역 책임자 중 어느 쪽인가요?",
+  "altExpect": [
+   "착수계 수신은 누구로 적나요?"
+  ],
+  "type": "multi-intent"
+ },
+ {
+  "id": "h-064",
+  "tab": "live",
+  "q": "자격 미보유가 뭐고 싱크로율은 또 뭐예요",
+  "expect": "'자격충족'·'자격 미보유'는 무슨 뜻인가요?",
+  "altExpect": [
+   "싱크로율은 무슨 뜻인가요?"
+  ],
+  "type": "multi-intent"
+ },
+ {
+  "id": "h-065",
+  "tab": "live",
+  "q": "공고 찾는 방법이랑 정렬 바꾸는 법 알려주세요",
+  "expect": "특정 공고를 찾고 싶습니다",
+  "altExpect": [
+   "보이는 순서를 바꾸고 싶습니다"
+  ],
+  "type": "multi-intent"
+ },
+ {
+  "id": "h-066",
+  "tab": "calc",
+  "q": "외주 금액은 왜 적고 개찰 결과는 언제 나와요",
+  "expect": "외주 추천 금액은 왜 적나요?",
+  "altExpect": [
+   "개찰 결과는 언제 나오나요?"
+  ],
+  "type": "multi-intent"
+ },
+ {
+  "id": "h-067",
+  "tab": "quant",
+  "q": "압축파일에 뭐가 들어 있고 언제까지 받을 수 있어요",
+  "expect": "받은 zip에는 무엇이 들어 있나요?",
+  "altExpect": [
+   "만든 파일은 언제까지 받을 수 있나요?"
+  ],
+  "type": "multi-intent"
+ },
+ {
+  "id": "h-068",
+  "tab": "live",
+  "q": "카드에 초록색으로 자격충족이라고 붙어 있는 건 뭔가요",
+  "expect": "'자격충족'·'자격 미보유'는 무슨 뜻인가요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-069",
+  "tab": "live",
+  "q": "정선 사업으로 수집이라고 달린 공고는 왜 들어온 거죠",
+  "expect": "'보유 면허로 수집'·'정선 사업으로 수집'은 무슨 뜻인가요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-070",
+  "tab": "live",
+  "q": "분명히 어제 본 공고인데 목록에서 안 보여요",
+  "expect": "찾는 공고가 보이지 않습니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-071",
+  "tab": "live",
+  "q": "수의랑 협상 탭은 뭐가 다른 겁니까",
+  "expect": "협상·입찰·수의계약은 어떻게 다른가요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-072",
+  "tab": "live",
+  "q": "세부품명으로만 걸렸다는 공고는 왜 따로 있나요",
+  "expect": "'세부품명으로만 걸린 공고'는 어떤 공고인가요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-073",
+  "tab": "live",
+  "q": "불참 처리한 건은 다시 확인하려면 어디로 가야 하나요",
+  "expect": "불참한 공고를 다시 보고 싶습니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-074",
+  "tab": "live",
+  "q": "서버 컴퓨터가 꺼지면 아무것도 못 씁니까",
+  "expect": "서버 PC가 꺼져 있으면 무엇을 쓸 수 있나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-075",
+  "tab": "award",
+  "q": "적격 서류 틀은 제가 금액대별로 골라야 합니까",
+  "expect": "적격심사 서식을 직접 골라야 하나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-076",
+  "tab": "award",
+  "q": "착공계 고쳐 저장하면 준공계에도 따라 들어갑니까",
+  "expect": "착공·착수서류를 고치면 준공 서류도 바뀌나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-077",
+  "tab": "award",
+  "q": "계약 올라왔다는데 단계가 아직 그대로네요",
+  "expect": "계약 단계로는 언제 넘어가나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-078",
+  "tab": "award",
+  "q": "낙찰 서류 만들기 버튼이 흐려서 안 눌려요",
+  "expect": "'낙찰 서류 만들기'가 눌리지 않습니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-079",
+  "tab": "award",
+  "q": "엑셀 칸이 파란색 노란색으로 칠해져 있는데 무슨 차이예요",
+  "expect": "파랑·초록·노랑 칸은 무슨 뜻인가요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-080",
+  "tab": "award",
+  "q": "지명은 왜 1순위만 기다립니까",
+  "expect": "지명경쟁은 왜 1등만 보나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-081",
+  "tab": "award",
+  "q": "수의 건은 적격 없이 바로 낙찰 서류입니까",
+  "expect": "수의계약도 적격심사가 있나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-082",
+  "tab": "award",
+  "q": "투찰한 건이 여기 목록에 안 올라와 있습니다",
+  "expect": "공고가 목록에 보이지 않습니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-083",
+  "tab": "award",
+  "q": "폴더가 없다는 메시지가 떠요",
+  "expect": "'폴더가 없습니다'라고 나옵니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-084",
+  "tab": "award",
+  "q": "발주처에서 hwp로 달라는데 엑셀밖에 없네요",
+  "expect": "한글(hwp) 파일로 내라고 합니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-085",
+  "tab": "award",
+  "q": "두 번째로 받은 압축파일에 파일이 몇 개밖에 없어요",
+  "expect": "두 번째 zip에 파일이 적게 들어 있습니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-086",
+  "tab": "award",
+  "q": "실적증명은 웹앱에서 뽑아 줍니까",
+  "expect": "실적증명서는 어디서 받나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-087",
+  "tab": "award",
+  "q": "계약 금액이 실제 계약서랑 안 맞게 들어가 있습니다",
+  "expect": "계약일·금액이 계약서와 다릅니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-088",
+  "tab": "award",
+  "q": "용역 건도 적격 받는 경우가 있습니까",
+  "expect": "용역도 적격심사를 받나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-089",
+  "tab": "award",
+  "q": "사업자등록증 새로 발급받았는데 교체하려면",
+  "expect": "회사 서류를 새것으로 바꾸고 싶습니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-090",
+  "tab": "award",
+  "q": "준공 끝난 건은 실적 목록으로 넘어갑니까",
+  "expect": "끝난 사업은 과거사업 목록에 들어가나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-091",
+  "tab": "award",
+  "q": "물품이랑 공사는 내는 서류가 다릅니까",
+  "expect": "공사·물품·용역은 서류가 다른가요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-092",
+  "tab": "award",
+  "q": "연락책임자 란에는 누구 이름을 넣어요",
+  "expect": "연락책임자는 누구로 적나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-093",
+  "tab": "award",
+  "q": "공고에서 요구하는 제출서류 목록을 보려면",
+  "expect": "공고문에서 내라는 서류는 어디서 보나요?",
+  "altExpect": [
+   "'서류_확인.txt'에는 무엇이 적혀 있나요?"
+  ],
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-094",
+  "tab": "calc",
+  "q": "경쟁 규모는 뭘로 두면 됩니까",
+  "expect": "'경쟁 규모'는 무엇으로 고르나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-095",
+  "tab": "calc",
+  "q": "공고번호 넣었더니 못 찾는다고 합니다",
+  "expect": "공고번호를 찾지 못한다고 나옵니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-096",
+  "tab": "calc",
+  "q": "여기 적는 질문이 회사 밖으로 나가지는 않죠",
+  "expect": "이 도우미는 외부 AI인가요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-097",
+  "tab": "quant",
+  "q": "빨간 세모 느낌표 경고가 떠 있어요",
+  "expect": "⚠ 표시가 나옵니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-098",
+  "tab": "quant",
+  "q": "제가 손으로 써야 하는 데가 어디예요",
+  "expect": "직접 채워야 하는 칸은 어디인가요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-099",
+  "tab": "quant",
+  "q": "이 화면은 뭐 하는 데예요",
+  "expect": "이 탭에서는 무엇을 하나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-100",
+  "tab": "corpus",
+  "q": "새로 딴 사업이 목록에 안 떠요",
+  "expect": "새 사업이 보이지 않습니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-101",
+  "tab": "corpus",
+  "q": "과학관 했던 사업을 찾아보려면",
+  "expect": "특정 사업을 찾고 싶습니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-102",
+  "tab": "log",
+  "q": "아직 안 정한 공고는 여기 없나요",
+  "expect": "아직 판단하지 않은 공고는 어디에 있나요?",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-103",
+  "tab": "log",
+  "q": "눌러도 아무 일도 안 일어나요",
+  "expect": "버튼을 눌러도 반응이 없습니다",
+  "type": "paraphrase"
+ },
+ {
+  "id": "h-106",
+  "tab": "live",
+  "q": "나라장터 인증서 갱신 어떻게 해요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-107",
+  "tab": "live",
+  "q": "관심 키워드에 도서관을 추가해 주세요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-108",
+  "tab": "live",
+  "q": "텔레그램 방에 초대해 주세요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-109",
+  "tab": "live",
+  "q": "공동수급 협정서 양식 주세요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-110",
+  "tab": "award",
+  "q": "하자보수 보증서는 어디서 끊어요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-111",
+  "tab": "award",
+  "q": "선금 신청은 어떻게 합니까",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-112",
+  "tab": "award",
+  "q": "지체상금 계산해 주세요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-113",
+  "tab": "award",
+  "q": "인지세는 얼마 붙어요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-114",
+  "tab": "calc",
+  "q": "A값이 뭔지 설명해 주세요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-115",
+  "tab": "calc",
+  "q": "낙찰하한율은 법으로 정해져 있습니까",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-116",
+  "tab": "quant",
+  "q": "제안서 발표는 누가 하나요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-117",
+  "tab": "quant",
+  "q": "정성평가 점수는 어떻게 받나요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-118",
+  "tab": "log",
+  "q": "연차 신청은 어디서 해요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-119",
+  "tab": "corpus",
+  "q": "작년 매출이 얼마였죠",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-120",
+  "tab": "excluded",
+  "q": "제외 키워드 목록은 제가 고칠 수 있나요",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "h-121",
+  "tab": "live",
+  "q": "이번 주에 어떤 공고에 들어가는 게 좋을까요",
+  "expect": null,
+  "type": "special"
+ },
+ {
+  "id": "h-123",
+  "tab": "live",
+  "q": "R26BK01800345 공고 마감이 언제예요",
+  "expect": null,
+  "type": "special"
+ },
+ {
+  "id": "h-124",
+  "tab": "award",
+  "q": "R26BK01815406 이건 왜 탈락입니까",
+  "expect": null,
+  "type": "special"
+ },
+ {
+  "id": "h-125",
+  "tab": "live",
+  "q": "지금 목록 중에 낙찰 가능성 제일 높은 거 골라줘요",
+  "expect": null,
+  "type": "special"
+ }
+]

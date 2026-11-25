@@ -1554,6 +1554,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hpicks.cats [data-hcat]:nth-child(odd):is(:last-child, :has(+ .hother)) { grid-column: 1 / -1; }
 .helpbox .hpicks.cats .hother { grid-column: 1 / -1; font-weight: 400; }
 .helpbox .hpicks .hother { color: var(--muted); border-color: var(--line); }
+.helpbox .hpicks button small { color: var(--muted); font-size: 12px; margin-left: 4px; }
 .helpbox .hpicks.nav { flex-direction: row; }
 .helpbox .hpicks.nav button { flex: 1; }
 .helpbox .htyping { display: flex; gap: 4px; padding: 13px 14px; }
@@ -4866,6 +4867,7 @@ document.addEventListener("toggle", (e) => {
 }, true);
 // 낙찰 후 서류 도움말 — 자주 묻는 것(눌러서 보기 + 낱말 찾기). 회사 자료가 밖으로 나가지 않게 외부 AI는 안 씀(11/24 시험)
 // 탭마다 도우미 질문·답(11/24 사용자 — 담당자 눈높이, 우리 기능 안에서만 답함). [주제 번호, 질문, 답, 찾을 낱말]
+// HELP-PURE-BEGIN (여기부터 HELP-PURE-END까지는 화면 없이도 도는 코드: scripts/help_eval.js가 그대로 읽어 시험함)
 const HELP_SETS = {
   live: { name: "실제 공고", cats: ["처음 사용하기", "공고 보기", "참가 판단", "화면 표시 뜻", "문제가 생겼을 때"], qa: [
     [0, "무엇부터 보면 되나요?", "① 맨 위 📋: 판단할 공고\n② 목록 맨 위: 현장설명회가 남은 공고\n③ 카드의 마감 · 사업금액 · 자격 칩", "처음 열면 먼저 보면"],
@@ -4988,7 +4990,7 @@ const HELP_SETS = {
     [2, "적격심사 서식을 직접 골라야 하나요?", "고르실 필요 없습니다.\n공고의 업무·금액·지역에 맞는\n틀로 저절로 만들어집니다.\n맞는 틀이 없으면 만들지 않고\n'서류_확인.txt'에 이유를 적습니다.", "적격심사 틀 고르 표준틀 어떤 지역 금액"],
     [2, "공고문에서 내라는 서류는 어디서 보나요?", "'서류 현황 ▾'을 열면 아래쪽에\n공고문에 적힌 때별로 나눠 보입니다.\n'따로 준비'라고 된 서류는\n직접 챙겨 주세요.", "공고문 제출서류 제출 서류 목록 어디"],
 
-    [3, "파랑·초록·노랑 칸은 무슨 뜻인가요?", "• 파랑: 웹앱이 채운 칸\n    계약서와 맞는지 봐 주세요.\n• 초록: 회사 정보\n• 노랑: 직접 적으실 칸", "색 파랑 노랑 초록 칸"],
+    [3, "파랑·초록·노랑 칸은 무슨 뜻인가요?", "• 파랑: 웹앱이 채운 칸\n    계약서와 맞는지 봐 주세요.\n• 초록: 회사 정보\n• 노랑: 직접 적으실 칸", "색 색깔 색상 파랑 파란 노랑 노란 초록 칸"],
     [3, "아직 안 채운 칸은 어디서 보나요?", "공고 줄의 '서류 현황 ▾'을 열면\n아직 비어 있는 칸이 '채울 칸'으로 나옵니다.", "채울 칸 비어 필수 빠진 현황"],
     [3, "착공·착수서류를 고치면 준공 서류도 바뀌나요?", "네. 착공·착수서류를 고쳐 저장한 뒤\n'서류 현황 ▾'을 열면 준공·청구 서류에도\n같은 값이 들어갑니다.", "착공 착수 준공 청구 반영 옮"],
     [3, "날짜는 어떻게 적나요?", "2025-11-27 처럼\n'-'로 이어 적어 주세요.\n2025.11.27 로 적으면\n적을 수 없다는 안내가 나옵니다.", "날짜 적 형식 입력"],
@@ -5022,10 +5024,115 @@ const HELP_COMMON = [
   [-1, "이 도우미는 외부 AI인가요?", "아닙니다.\n미리 정해 둔 답만 보여 드립니다.\n적은 질문은 회사 안에만 남고\n밖으로 나가지 않습니다.", "AI 외부 보안 챗봇 인공지능"],
 ];
 let HELP_TAB = "award";
-const HS = () => {
-  const set = HELP_SETS[HELP_TAB] || HELP_SETS.live;
+const HS = (tab = HELP_TAB) => {
+  const set = HELP_SETS[tab] || HELP_SETS.live;
   return { ...set, qa: [...set.qa, ...HELP_COMMON.map(([c, ...r]) => [c < 0 ? set.cats.length - 1 : c, ...r])] };
 };
+// 여러 질문에 두루 있는 낱말(해야·어디·언제·목록 …)은 그것 하나만 겹쳐서는 비슷한 질문으로 보지 않음(11/25 사용자 — '입찰해야 할 공고'에 '제가 할 일')
+const HELP_GENERIC = (() => {
+  const df = new Map();
+  Object.values(HELP_SETS).forEach((x) => x.qa.forEach((h) => new Set(h[3].split(" ")).forEach((w) => df.set(w, (df.get(w) || 0) + 1))));
+  const list = new Set("해야 어디 언제 어떤 무엇 목록 확인 있는 없는 결과 공고 입찰 참가 사유 파일 회사 버튼 바꾸 서류 메뉴".split(" "));
+  df.forEach((n, w) => n >= 4 && list.add(w));
+  list.df = df;
+  return list;
+})();
+// 직접 적은 질문: 질문 버튼 글과 거의 같을 때만 바로 답하고, 낱말만 겹치면 비슷한 질문을 보여 줌(11/24 사용자 — 엉뚱한 답 금지, 모르면 모른다고)
+function helpExact(q, qa = HS().qa) {
+  const t = q.replace(/[\s?？.!'·]+/g, "");
+  if (t.length < 4) return -1;
+  return qa.findIndex((h) => { const k = h[1].replace(/[\s?？.!'·]+/g, ""); return k === t || k.includes(t) || t.includes(k); });
+}
+const HELP_NO = /(?<![A-Z0-9])(?:R\d{2}[A-Z]{2}\d{8}|\d{11})(?![0-9])/i;
+const HELP_CHANCE = /(낙찰|수주|당첨|이길|1등|1순위).{0,8}(가능|확률|될까|되나|돼\?|할까|있을까|받을|높)|(가능성|확률).{0,6}(있|높|얼마|어때|몇)|^이길/;
+const HELP_WHICH = /(입찰|투찰|참가|참여|지원|판단|검토)\s*(해야|할|하면|하기)[^?]*(공고|거|것|게)|(어떤|무슨|추천|할\s*만한|괜찮은|좋은)\s*(입찰\s*)?공고|공고.*(추천|골라)/;
+// ── 직접 적은 질문의 문맥(11/25 사용자 '채팅으로 물으면 문맥을 못 잡는다') — 외부 AI 없이 규칙으로:
+// ① 앞에 답한 질문과 같은 주제 안에서 짧은 후속 질문을 먼저 찾음 ② 탭 이름이 든 질문은 그 탭부터
+// ③ 찾을 낱말에 없는 표현은 글자 두 개씩 겹치는 정도로 후보를 찾아 '혹시 이 질문인가요?'로만 보임(바로 답하지 않음).
+// 고친 뒤엔 node scripts/help_eval.js 로 재 볼 것(엉뚱한 답 0건 유지).
+const helpSquash = (s) => String(s || "").toLowerCase().replace(/[^0-9a-z가-힣]+/g, "");
+const helpGrams = (s) => { const t = helpSquash(s), out = new Set(); for (let i = 0; i < t.length - 1; i++) out.add(t.slice(i, i + 2)); return out; };
+const HELP_DOCS = Object.keys(HELP_SETS).flatMap((tab) => HS(tab).qa.map((h, i) => {
+  const doc = helpGrams(h[1]);
+  h[3].split(" ").forEach((w) => helpGrams(w).forEach((g) => doc.add(g)));
+  return { tab, i, h, doc, common: i >= HELP_SETS[tab].qa.length };
+}));
+const HELP_IDF = (() => {  // 여러 질문에 두루 나오는 글자쌍(나요·어떻·공고 …)은 무게 0
+  const uniq = [...new Map(HELP_DOCS.map((x) => [x.h[1], x])).values()], df = new Map();
+  uniq.forEach((x) => x.doc.forEach((g) => df.set(g, (df.get(g) || 0) + 1)));
+  return (g) => { const n = df.get(g) || 0; return !n || n > uniq.length * 0.07 ? 0 : Math.log(uniq.length / n); };
+})();
+function helpGramRank(q, pool) {
+  const Q = [...helpGrams(q)].filter((g) => HELP_IDF(g) > 0), total = Q.reduce((s, g) => s + HELP_IDF(g), 0);
+  if (!total) return [];
+  return pool.map((x) => { const hit = Q.filter((g) => x.doc.has(g)).reduce((s, g) => s + HELP_IDF(g), 0); return { x, hit, cover: hit / total }; })
+    .filter((r) => r.hit > 0).sort((a, b) => b.hit - a.hit);
+}
+const HELP_P = { gap: 1, show: 0.45, min: 6, genMin: 4, followMin: 3, followGap: 0.8, followLen: 12 };  // 문턱값 — scripts/help_eval.js 로 재서 정함
+const HELP_TAB_WORDS = { calc: ["투찰계산기", "계산기", "투찰내역", "난수표"], quant: ["정량평가서", "정량평가", "통합서식", "통합본"],
+  award: ["낙찰후서류", "낙찰후", "적격심사", "착수계", "착공계", "준공계", "납품계", "완료계", "청구서"],
+  log: ["판단기록"], excluded: ["제외된공고", "제외공고"], corpus: ["과거사업", "과거실적"], live: ["실제공고"] };
+const HELP_FOLLOW = /^(그럼|그러면|그런데|근데|그건|그거|그게|그걸|그때|거기|이건|이거|또|그리고|그\s*다음|다음엔|다음은|아니면|반대로)/;
+// 같은 뜻 다른 말(사람이 한 줄씩 늘리는 표) — 질문에 왼쪽 말이 있으면 오른쪽 말을 덧붙여 찾음. 화면 용어일 뿐 회사 자료가 아님
+const HELP_ALIAS = [[/스프레드시트|xlsx|엑셀/i, "엑셀 CSV"], [/리스트/, "목록"], [/없애|지우|삭제|제거/, "빼 지우"], [/직인|인감|날인/, "도장"], [/한컴|한글\s*파일|hwpx/i, "한글 hwp"],
+  [/벨|종\s*모양|종\s*아이콘/, "🔔"], [/랭킹|순위|석차/, "등수"], [/원상\s*복구|원래대로|무르|되돌/, "취소 되돌리"], [/먹통|안\s*눌|작동|멈췄|멈춤/, "반응 버튼"], [/셀/, "칸"],
+  [/가격|값/, "금액"], [/프로젝트|과제/, "사업"], [/살리|복구|복원|돌려놓/, "되살"], [/걸러|누락/, "빠진 제외"], [/묶어|종류별|유형별/, "이유별 모아"], [/다운로드|다운|저장/, "내려 받"],
+  [/조회|검색/, "찾기 찾"], [/변경|수정/, "바꾸 고치"], [/느낌표|경고|세모/, "⚠ 경고"], [/압축/, "zip 묶음"], [/업체\s*수|참여\s*업체|경쟁\s*업체/, "경쟁 규모"], [/남아|보존|유지/, "보관"]];
+// 등수 숫자는 도우미 질문이 나눈 대로(1등 / 2~5등 / 6등부터) 바꿔 찾음: '그럼 7등은요?', '4위 했는데'
+const helpRanks = (q) => q.replace(/(\d+)\s*(등|위|순위)(?![가-힣]*급)/g, (m, n) => m + (n === "1" ? " 1등 1순위" : n >= 2 && n <= 5 ? " 2등 5등 차례" : n >= 6 ? " 6등 밖" : ""));
+const helpWiden = (q) => helpRanks(q) + HELP_ALIAS.filter(([re]) => re.test(q)).map(([, add]) => " " + add).join("");
+/** 질문과 닮은 순서 — 찾을 낱말이 통째로 든 수(spec: 그 질문에만 있는 낱말, gen: 두루 있는 낱말)와 글자쌍 겹침(hit·cover)을 한 점수로.
+ *  두루 있는 낱말(어떤·금액·서류 …)만 겹친 질문은 후보에서 뺌 — 예전엔 그런 낱말 둘이면 바로 답해 엉뚱한 답이 나왔음(11/25 시험 세트). */
+function helpRank(q0, pool) {
+  const q = helpWiden(q0), raw0 = helpRanks(q0).replace(/[\s?？.!]+/g, "").toLowerCase(), raw = q.replace(/[\s?？.!]+/g, "").toLowerCase();
+  const Q = [...helpGrams(q)].filter((g) => HELP_IDF(g) > 0), total = Q.reduce((n, g) => n + HELP_IDF(g), 0);
+  return pool.map((x) => {
+    const ks = x.h[3].split(" ").filter((k) => k.length >= 2 && raw.includes(k.toLowerCase()));
+    const kept = ks.filter((k) => !ks.some((o) => o !== k && o.includes(k)));  // '청구'·'청구서'처럼 겹친 낱말은 긴 것 하나만
+    const spec = kept.filter((k) => !HELP_GENERIC.has(k)).length, gen = kept.length - spec;
+    // rare = 사용자가 실제로 적은 글에 든, 질문 두 개 이하에만 있는 낱말 수(같은 뜻 표로 덧붙인 말은 안 셈) — 바로 답할지의 기준
+    const rare = kept.filter((k) => !HELP_GENERIC.has(k) && HELP_GENERIC.df.get(k) <= 2 && raw0.includes(k.toLowerCase())).length;
+    const hit = Q.filter((g) => x.doc.has(g)).reduce((n, g) => n + HELP_IDF(g), 0), cover = total ? hit / total : 0;
+    return { x, spec, gen, rare, hit, cover, score: spec + gen * 0.2 + hit / 8 };
+  }).filter((r) => r.spec || (r.gen && r.hit >= HELP_P.genMin) || (r.cover >= HELP_P.show && r.hit >= HELP_P.min)).sort((a, b) => b.score - a.score);
+}
+/** 직접 적은 질문을 어떻게 답할지 — {kind: answer·othertab·choices·none·special, list: [{tab, i, h}], why}. ctx = {prevTitle: 앞에 답한 질문 제목} */
+function helpDecide(q, tab = HELP_TAB, ctx = null) {
+  const key = HELP_SETS[tab] ? tab : "live", qa = HS(key).qa;
+  const here = HELP_DOCS.filter((x) => x.tab === key), res = (kind, list, why) => ({ kind, list: list.map((r) => r.x || r), why });
+  const no = HELP_NO.test(q), exact = helpExact(q, qa);
+  if (exact >= 0 && !no) return res("answer", [here[exact]], "exact");
+  if (no) return res("special", [], "no");
+  if (HELP_CHANCE.test(q)) return res("special", [], "chance");
+  if (HELP_WHICH.test(q)) return res("special", [], "which");
+  // 바로 답하는 조건: 그 질문(많아야 두 질문)에만 있는 낱말이 적은 글에 둘 이상 있고 다음 후보보다 확실히 앞섬. 낱말 하나나 글자 겹침만으로는 고르기로
+  // (답이 없는 질문이 낱말 하나로 엉뚱한 답에 붙는 일이 많았음: '텔레그램 보고는 몇 시에' → 📋 숫자)
+  const sure = (r) => r.length > 0 && r[0].rare >= 2 && r[0].score - (r[1] ? r[1].score : 0) >= HELP_P.gap;
+  const mine = helpRank(q, here);
+  // ① 후속 질문: 앞에 답한 질문과 같은 주제 안에서 먼저
+  const prev = ctx && ctx.prevTitle ? here.find((x) => x.h[1] === ctx.prevTitle) : null;
+  if (prev && !sure(mine) && (HELP_FOLLOW.test(q.trim()) || helpSquash(q).length <= HELP_P.followLen)) {
+    const raw = helpRanks(q).replace(/[\s?？.!]+/g, "").toLowerCase();
+    const same = here.filter((x) => x.h[0] === prev.h[0] && x !== prev).map((x) => {
+      const spec = x.h[3].split(" ").filter((k) => k.length >= 2 && !HELP_GENERIC.has(k) && raw.includes(k.toLowerCase())).reduce((n, k) => n + k.length / 2, 0);
+      const hit = [...helpGrams(helpWiden(q))].filter((g) => x.doc.has(g)).reduce((n, g) => n + HELP_IDF(g), 0);
+      return { x, spec, hit, score: spec + hit / 8 };
+    }).filter((r) => r.spec || r.hit >= HELP_P.followMin).sort((a, b) => b.score - a.score);
+    if (same.length && (same.length === 1 || same[0].score - same[1].score >= HELP_P.followGap)) return res("answer", [same[0]], "follow");
+    if (same.length) return res("choices", same.slice(0, 3), "follow-choices");
+  }
+  if (sure(mine)) return res("answer", [mine[0]], "sure");
+  // ② 다른 탭: 탭 이름이 든 질문은 그 탭만 봄. 다른 탭 답은 이 탭 후보보다 훨씬 앞설 때만 바로 답함
+  const t = helpSquash(q), named = Object.keys(HELP_TAB_WORDS).find((k) => k !== key && HELP_TAB_WORDS[k].some((w) => t.includes(w)));
+  const others = helpRank(q, HELP_DOCS.filter((x) => x.tab !== key && !x.common && (!named || x.tab === named)));
+  if (sure(others) && (named || !mine.length || others[0].score >= mine[0].score * 2)) return res("othertab", [others[0]], named ? "named" : "other");
+  // ③ 나머지는 고르기로만(바로 답하지 않음) — 이 탭 후보 먼저, 다른 탭 후보는 이 탭 1등만큼은 닮았을 때
+  const far = others.filter((r) => !mine.length || r.score >= mine[0].score).slice(0, mine.length ? 2 : 3);
+  const cand = named ? [...far, ...mine.slice(0, 2)] : [...mine.slice(0, 4 - Math.min(far.length, 2)), ...far];
+  if (cand.length) return res("choices", cand.slice(0, 4), mine.length ? "choices" : "other-choices");
+  return res("none", [], "none");
+}
+// HELP-PURE-END
 const helpText = (h) => (IS_VIEWER && h[4]) || h[2];  // 다섯째 값 = NAS 웹앱에서 다른 답(11/25 사용자)
 // 카카오톡 같은 대화창(11/24 사용자 — stellaize ChatPanel 모양 참고). 왼쪽 = 도우미, 오른쪽 = 나, 대화는 창을 연 동안만.
 // 직접 적은 질문은 낱말로 맞는 답을 찾고, 없으면 없다고 솔직하게 말한다(사용자: 있다고 지어내지 말 것).
@@ -5042,36 +5149,12 @@ const helpClock = () => new Date().toLocaleTimeString("ko-KR", { hour: "numeric"
 const helpPrev = () => HELP_LOG.slice(0, -1).findLast((m) => Array.isArray(m.picks) && m.picks.length)?.picks;
 const helpSay = (who, text, picks = null) => HELP_LOG.push({ who, text, picks, at: helpClock() });
 function helpHello() {
-  HELP_LOG.length = 0;
+  HELP_LOG.length = 0; HELP_CTX = {};
   helpSay("bot", "안녕하세요, 지일 도우미입니다.\n" + HS().name + " 탭에서는 이 순서로 확인해 주세요.\n\n" + HS().qa[0][2] + "\n\n더 알고 싶은 주제를 골라 주세요.", "cats");
 }
-// 여러 질문에 두루 있는 낱말(해야·어디·언제·목록 …)은 그것 하나만 겹쳐서는 비슷한 질문으로 보지 않음(11/25 사용자 — '입찰해야 할 공고'에 '제가 할 일')
-const HELP_GENERIC = (() => {
-  const df = new Map();
-  Object.values(HELP_SETS).forEach((x) => x.qa.forEach((h) => new Set(h[3].split(" ")).forEach((w) => df.set(w, (df.get(w) || 0) + 1))));
-  const list = new Set("해야 어디 언제 어떤 무엇 목록 확인 있는 없는 결과 공고 입찰 참가 사유 파일 회사 버튼 바꾸 서류 메뉴".split(" "));
-  df.forEach((n, w) => n >= 4 && list.add(w));
-  return list;
-})();
-function helpMatch(q, qa = HS().qa) {
-  const t = q.replace(/[\s?？.!]+/g, "");
-  const scored = qa.map((h, i) => [i, h[3].split(" ").filter((w) => w.length >= 2 && t.includes(w))  /* 한 글자 낱말은 아무 문장에나 걸려서 뺌 */.length])
-    .filter(([i, n]) => n >= 2 || (n === 1 && qa[i][3].split(" ").some((w) => w.length >= 2 && t.includes(w) && !HELP_GENERIC.has(w)))).sort((a, b) => b[1] - a[1]);
-  const top = scored[0]?.[1] || 0, second = scored[1]?.[1] || 0;
-  const sure = top >= 2 && (top - second >= 2 || second * 2 <= top);  // 한 답이 확실히 앞설 때만
-  return { list: scored.map((x) => x[0]), sure };
-}
-// 직접 적은 질문: 질문 버튼 글과 거의 같을 때만 바로 답하고, 낱말만 겹치면 비슷한 질문을 보여 줌(11/24 사용자 — 엉뚱한 답 금지, 모르면 모른다고)
-function helpExact(q) {
-  const t = q.replace(/[\s?？.!'·]+/g, "");
-  if (t.length < 4) return -1;
-  return HS().qa.findIndex((h) => { const k = h[1].replace(/[\s?？.!'·]+/g, ""); return k === t || k.includes(t) || t.includes(k); });
-}
 // 공고번호·공고명을 물으면 웹앱이 가진 그 공고 정보만(11/25 사용자) — 지금 목록 → 낙찰 후 서류 → 판단 기록 → 제외된 공고 순서
-const HELP_NO = /(?<![A-Z0-9])(?:R\d{2}[A-Z]{2}\d{8}|\d{11})(?![0-9])/i;
 const helpNorm = (t) => String(t || "").replace(/[\s?？.!,·'"()[\]「」<>~-]+/g, "").toLowerCase();
 const HELP_STOP = /^(공고|공고문|공고명|이|이거|이건|그|그거|얘|얘는|쟤|쟤는|것|거|대해|대해서|관해|관련|정보|설명|내용|뭐야|뭐지|뭐에요|뭐예요|뭔가요|뭔데|무엇|무엇인가요|어때|어떤|어떤가요|알려줘|알려|알려주세요|설명해줘|보여줘|찾아줘|있어|있나요|좀|요|은|는|의|마감|언제|언제야|언제까지|금액|얼마|얼마야|낙찰|가능성|확률|될까|되나|높아)$/;
-const HELP_CHANCE = /(낙찰|수주|당첨|이길|1등|1순위).{0,8}(가능|확률|될까|되나|돼\?|할까|있을까|받을|높)|(가능성|확률).{0,6}(있|높|얼마|어때|몇)|^이길/;
 async function helpFind(q) {
   const no = (q.match(HELP_NO) || [""])[0].toUpperCase();
   const words = q.split(/\s+/).map(helpNorm).map((w) => w.replace(/(은|는|이|가|을|를|의)$/, (m) => (w.length > 3 ? "" : m))).filter((w) => w && !HELP_STOP.test(w));
@@ -5112,7 +5195,6 @@ const helpChance = (n) => "낙찰 가능성은 말씀드리기 어렵습니다.\
   ? "제안서 평가 결과에 달려 있어\n장담할 수 없습니다."
   : "예정가격 추첨과 다른 업체의 금액에 달려 있어\n장담할 수 없습니다.\n\n금액을 정하실 때는 서버 PC 웹앱의\n'투찰 계산기'를 참고해 주세요.");
 // '우리가 입찰해야 할 공고는?' — 정해 주지는 않고, 지금 목록에서 아직 판단하지 않은 공고를 마감 순으로(11/25 사용자)
-const HELP_WHICH = /(입찰|투찰|참가|참여|지원|판단|검토)\s*(해야|할|하면|하기)[^?]*(공고|거|것|게)|(어떤|무슨|추천|할\s*만한|괜찮은|좋은)\s*(입찰\s*)?공고|공고.*(추천|골라)/;
 function helpWhich() {
   const missing = (n) => (n.qual?.parts || []).some((x) => x.status === "미달");
   const todo = lastItems.filter((n) => n.sourceType !== "사전규격" && !DECISIONS.includes(partOf(n)) && deadlineAt(n.deadline) > Date.now())
@@ -5123,42 +5205,50 @@ function helpWhich() {
     + (fit.length ? "그중 마감이 가까운 공고입니다.\n" : "마감이 가까운 공고입니다.\n")
     + (fit.length ? fit : todo).slice(0, 3).map((n) => `• ${n.title}\n    ${fmtDT(n.deadline)} · ${n.noticeNo}`).join("\n") + "\n\n전체는 '실제 공고' 탭에서 봐 주세요.";
 }
+// 앞에 답한 질문·공고 — 짧은 후속 질문('그럼 6등은요?', '마감은요?')을 그 안에서 먼저 찾음(11/25 사용자, 대화창을 연 동안만 기억)
+let HELP_CTX = {};
+const HELP_FIELDS = [[/마감|언제까지|기한/, "마감"], [/금액|얼마|예산|사업비/, "금액"], [/자격|면허/, "자격"], [/기관|발주처|누가/, "기관"], [/싱크로/, "싱크로율"], [/낙찰방법|구분|종류/, "구분"]];
+/** [결과 이름, 알아들은 질문 제목] — 기록(data/help_questions.json)에 같이 남김 */
 async function helpAnswer(q) {
-  const exact = helpExact(q), hits = helpMatch(q), chance = HELP_CHANCE.test(q), no = HELP_NO.test(q);
-  if (exact >= 0 && !no) { helpSay("bot", helpText(HS().qa[exact]), []); return "답함"; }
-  if (!no && !chance && HELP_WHICH.test(q)) { helpSay("bot", helpWhich(), []); return "판단할 공고"; }
+  const d = helpDecide(q, HELP_TAB, HELP_CTX.last === "faq" ? { prevTitle: HELP_CTX.title } : null);
+  const faq = (x, head) => { HELP_CTX = x.tab === HELP_TAB ? { last: "faq", title: x.h[1] } : {}; helpSay("bot", head + helpText(x.h), []); return ["답함", x.h[1]]; };
+  if (d.why === "exact") return faq(d.list[0], "");
+  if (d.why === "which") { helpSay("bot", helpWhich(), []); return ["판단할 공고"]; }
+  const chance = d.why === "chance", prevNotice = HELP_CTX.last === "notice" ? HELP_CTX.notice : null;
   const found = await helpFind(q), one = found.list.length === 1 ? found.list[0] : null;
-  if (one) helpSay("bot", helpNotice(one), chance ? null : []);
+  if (one) { HELP_CTX = { last: "notice", notice: one }; helpSay("bot", helpNotice(one), chance ? null : []); }
   else if (found.list.length && !chance) {
     helpSay("bot", `이름이 맞는 공고가 ${found.list.length}건 있습니다.\n보실 공고의 번호를 적어 주세요.\n\n` + found.list.slice(0, 5).map((n) => `• ${n.title}\n    ${n.noticeNo}`).join("\n")
       + (found.list.length > 5 ? `\n그 밖에 ${found.list.length - 5}건은 이름을 더 적어 주세요.` : ""), []);
-    return "공고";
+    return ["공고"];
   }
-  if (chance) { helpSay("bot", helpChance(one), []); return "가능성"; }
-  if (one) return "공고";
-  if (no) { helpSay("bot", "이 번호의 공고를 찾지 못했습니다.\n번호가 맞는지 확인해 주세요.\n마감이 지났거나 아직 수집하지 않은 공고는\n나오지 않습니다.", []); return "공고 없음"; }
-  if (hits.sure) { helpSay("bot", helpText(HS().qa[hits.list[0]]), []); return "답함"; }
-  // 다른 탭 질문이면 그 탭 답을(어느 탭 것인지 밝힘)
-  const rest = Object.values(HELP_SETS).filter((x) => x !== HELP_SETS[HELP_TAB]).flatMap((x) => x.qa.map((h) => ({ tab: x.name, h })));
-  const other = helpMatch(q, rest.map((x) => x.h));
-  if (other.sure) { const x = rest[other.list[0]]; helpSay("bot", `'${x.tab}' 탭 안내입니다.
-[${x.h[1]}]
-
-${helpText(x.h)}`, []); return "답함"; }
-  if (hits.list.length) { helpSay("bot", "혹시 이 질문인가요?", hits.list.slice(0, 4)); return "고르기"; }
-  if (other.list.length) {
-    helpSay("bot", "이 탭에는 맞는 답이 없습니다.\n다른 탭에 비슷한 질문이 있습니다.\n\n" + other.list.slice(0, 3).map((i) => `• ${rest[i].tab} 탭: ${rest[i].h[1]}`).join("\n"), []);
-    return "다른 탭";
+  if (chance) { helpSay("bot", helpChance(one || prevNotice), []); return ["가능성"]; }
+  if (one) return ["공고"];
+  if (d.why === "no") { helpSay("bot", "이 번호의 공고를 찾지 못했습니다.\n번호가 맞는지 확인해 주세요.\n마감이 지났거나 아직 수집하지 않은 공고는\n나오지 않습니다.", []); return ["공고 없음"]; }
+  // 방금 본 공고에 이어 묻는 짧은 말('마감은요?', '금액은?')
+  const field = prevNotice && helpSquash(q).length <= 14 && d.kind !== "answer" ? HELP_FIELDS.find(([re]) => re.test(q)) : null;
+  if (field) {
+    const line = helpNotice(prevNotice).split("\n").find((l) => l.startsWith(`• ${field[1]}:`));
+    helpSay("bot", `${prevNotice.title}\n${line || `• ${field[1]}: 웹앱에 이 정보가 없습니다`}`, []);
+    return ["공고 이어 묻기"];
+  }
+  const x = d.list[0];
+  if (d.kind === "answer") return faq(x, `[${x.h[1]}]\n\n`);  // 어느 질문으로 알아들었는지 밝힘
+  if (d.kind === "othertab") return faq(x, `'${HELP_SETS[x.tab].name}' 탭 안내입니다.\n[${x.h[1]}]\n\n`);
+  if (d.kind === "choices") {
+    const mine = d.list.some((c) => c.tab === HELP_TAB);
+    helpSay("bot", mine ? "혹시 이 질문인가요?" : "이 탭에는 맞는 답이 없습니다.\n혹시 다른 탭의 이 질문인가요?", d.list.map((c) => (c.tab === HELP_TAB ? c.i : { tab: c.tab, i: c.i })));
+    return [mine ? "고르기" : "다른 탭"];
   }
   helpSay("bot", "이 질문에는 준비된 답이 없습니다.\n\n공고번호나 공고명을 적으시면\n그 공고의 정보를 알려 드립니다.\n사용법은 아래 주제에서 찾아보실 수 있습니다.", "cats");
-  return "모름";
+  return ["모름"];
 }
 function helpAsk(q) {
   helpSay("me", q);
   helpReply(async () => {
-    const result = await helpAnswer(q);
+    const [result, hit] = await helpAnswer(q);
     fetch("/api/help-question", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ q, result, tab: HELP_TAB }) }).catch(() => {});
+      body: JSON.stringify({ q, result, tab: HELP_TAB, hit: hit || "" }) }).catch(() => {});
   });
 }
 function renderHelp() {
@@ -5170,7 +5260,8 @@ function renderHelp() {
     const back = live && helpPrev() ? `<button type="button" class="hother" data-hback>← 질문 목록</button>` : "";
     const picks = !live || !m.picks ? ""
       : m.picks === "cats" ? `<div class="hpicks cats">${HS().cats.map((c, i) => `<button type="button" data-hcat="${i}">${esc(c)}</button>`).join("")}${back}</div>`
-      : m.picks.length ? `<div class="hpicks">${m.picks.map((i) => `<button type="button" data-hq="${i}">${esc(HS().qa[i][1])}</button>`).join("")}`
+      : m.picks.length ? `<div class="hpicks">${m.picks.map((c) => (typeof c === "number" ? `<button type="button" data-hq="${c}">${esc(HS().qa[c][1])}</button>`
+          : `<button type="button" data-hq="${c.i}" data-htab="${c.tab}">${esc(HS(c.tab).qa[c.i][1])} <small>${esc(HELP_SETS[c.tab].name)} 탭</small></button>`)).join("")}`
         + `<button type="button" class="hother" data-hmenu>다른 주제</button></div>` : "";
     const again = live && Array.isArray(m.picks) && !m.picks.length ? `<div class="hpicks${back ? " nav" : ""}">${back}<button type="button" class="hother" data-hmenu>다른 주제</button></div>` : "";
     html += `<li class="hmsg ${m.who}${first ? " first" : ""}${k >= HELP_SHOWN ? " new" : ""}">`
@@ -5208,7 +5299,13 @@ $("helpFab").onclick = () => helpOpen($("helpBox").hidden);
 $("helpBox").addEventListener("click", (e) => {
   const q = e.target.closest("[data-hq]");
   if (HELP_TYPING) return;
-  if (q) { const h = HS().qa[Number(q.dataset.hq)]; helpSay("me", h[1]); helpReply(() => helpSay("bot", helpText(h), [])); return; }
+  if (q) {
+    const far = q.dataset.htab, h = HS(far || HELP_TAB).qa[Number(q.dataset.hq)];
+    helpSay("me", h[1]);
+    HELP_CTX = far ? {} : { last: "faq", title: h[1] };
+    helpReply(() => helpSay("bot", (far ? `'${HELP_SETS[far].name}' 탭 안내입니다.\n\n` : "") + helpText(h), []));
+    return;
+  }
   const c = e.target.closest("[data-hcat]");
   if (c) {
     const n = Number(c.dataset.hcat);

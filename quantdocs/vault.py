@@ -431,6 +431,8 @@ def merge_tracks(old: list[dict], new: list[dict]) -> list[dict]:
                "계약일": t.get("계약일") or prev.get("계약일"), "준공일": t.get("준공일") or prev.get("준공일"),
                "계약금액(원)": t.get("계약금액(원)") if t.get("계약금액(원)") is not None else prev.get("계약금액(원)")}
         row["분야"] = prev.get("분야") or track_field(t["사업명"])
+        if not prev.get("발주기관") and t.get("발주기관"):
+            row["발주기관"] = t["발주기관"]
         if not prev.get("비고"):
             row["비고"] = t.get("비고")
         out.append(row)

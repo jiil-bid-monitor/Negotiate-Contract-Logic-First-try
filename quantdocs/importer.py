@@ -151,6 +151,7 @@ def read_orders(path: Path) -> list[dict]:
 
         c_no, c_name, c_kind = col("No.", "No", "번호"), col("사업명"), col("계약종류")
         c_period, c_amount = col("사업기간"), col("계약금", "계약금액")
+        c_org = col("발주기관", "발주처")  # 그리다 실적 모으기(scripts/grida_tracks.py)가 쓰는 칸(11/25)
         for r in ws.iter_rows(min_row=head_row + 1, values_only=True):
             name = str(r[c_name] or "").strip() if c_name is not None else ""
             no = r[c_no] if c_no is not None else None
@@ -159,11 +160,15 @@ def read_orders(path: Path) -> list[dict]:
             kind = str(r[c_kind] or "").strip() if c_kind is not None else ""
             start, end = _period(r[c_period] if c_period is not None else "")
             amount = r[c_amount] if c_amount is not None else None
+            if isinstance(amount, str) and re.fullmatch(r"[\d,]+", amount.strip()):
+                amount = int(amount.replace(",", ""))
+            org = str(r[c_org] or "").strip() if c_org is not None else ""
             note = [f"{ws.title} 시트", f"계약종류 {kind}" if kind else ""]
             if end is None:
                 note.append("준공일 확인 필요(사업기간 칸)")
             rows.append({"업무": _work(name, kind), "사업명": name, "계약일": start, "준공일": end,
                          "계약금액(원)": amount if isinstance(amount, (int, float)) else None,
+                         **({"발주기관": org} if org else {}),
                          "비고": " · ".join(x for x in note if x)})
     return rows
 

@@ -3368,11 +3368,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
     # 나라장터 번호를 모를 때만 공고문의 기관 공고번호('제2026-1129호')
     no_text = g2b_no or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")
     if title or no_text or ref_no:
-        vault = SimpleNamespace(info={**vault.info, "_title": title, "_notice_no": no_text,
-                                      # 기관공고번호 칸 = 나라장터 참조번호 그대로('전시사업부-1363' — 11/23 사용자, '제Y-N호' 모양이 아니어도),
-                                      # 없으면 공고문의 기관 공고번호
-                                      "_agency_no": ref_no.strip() or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")},
-                                docs=vault.docs, history=vault.history)
+        extra = {"_title": title, "_notice_no": no_text,
+                 # 기관공고번호 칸 = 나라장터 참조번호 그대로('전시사업부-1363' — 11/23 사용자, '제Y-N호' 모양이 아니어도),
+                 # 없으면 공고문의 기관 공고번호
+                 "_agency_no": ref_no.strip() or (f"제{notice_no[0]}-{notice_no[1]}호" if notice_no else "")}
+        # 묶음의 다른 값(지정 임원 agent·인력 staff 등)도 그대로 — 예전엔 info·docs·history만 옮겨, 공고 이름을 넘기는 실제 만들기에선
+        # 위임장 대리인·재직증명서(11/25 해남)·기술자 보유현황 '계' 열(staff)이 늘 비었음(시험은 공고 이름 없이 불러 통과했음)
+        vault = SimpleNamespace(**{**vars(vault), "info": {**vault.info, **extra}})
     zin = zipfile.ZipFile(src)
     out_entries = {}
     chars = _Chars(zin.read("Contents/header.xml").decode("utf-8"), face) if "Contents/header.xml" in zin.namelist() else None

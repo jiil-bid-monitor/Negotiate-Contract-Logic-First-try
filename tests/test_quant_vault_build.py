@@ -5175,7 +5175,7 @@ def test_grida_delegation_filled_even_as_manual_form(tmp_path: Path):
     for agent in ({"성명": "김대리", "주소": "가상시 집로 2", "입사일": "2023.07.01."}, {}):
         v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍대표", "주소": "회사시 본점로 1", "전화번호": "000-000-0000"})
         v.agent = agent
-        fill_hwpx(src, tmp_path / "o.hwpx", v, sign_only=True)
+        fill_hwpx(src, tmp_path / "o.hwpx", v, title="가상 공고", sign_only=True)  # 실제 만들기처럼 공고 이름을 넘김(11/25 원인)
         xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
         t1, t2 = (_cells(xml, t) for t in _spans(xml, "tbl"))
         g1 = {(c.row, c.col): c.text.strip() for c in t1}

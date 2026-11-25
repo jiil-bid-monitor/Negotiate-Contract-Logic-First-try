@@ -3004,7 +3004,6 @@ function applyFilters() {
       const ahead = sorted.filter(briefingAhead).sort((a, b) => briefingAt(a) - briefingAt(b));
       const list = ahead.length ? [...ahead, ...sorted.filter((n) => !briefingAhead(n))] : sorted;
       if (list.length === 0) return "";
-      const strong = list.filter((n) => n.confidence === "강력추천").length;
       // 불참으로 판단한 공고는 지우지 않고 칸 맨 아래 접힌 '불참' 칸으로 (11/24 사용자 요청 — 판단 기록에 남아 있음).
       // 이 화면에서 방금 판단한 공고는 사유를 고르는 동안 제자리에 둔다. 참가여부 필터로 '불참'을 고르면 접지 않음.
       const folds = filters.part !== "불참";
@@ -3020,8 +3019,6 @@ function applyFilters() {
         <div class="group" id="${key === "본공고" ? "grpMain" : "grpPre"}">
           <div class="group-head">
             <h2>${esc(key)} <span class="group-n">${list.length}건</span></h2>
-            ${strong ? `<span class="group-strong">강력추천 ${strong}건</span>` : ""}
-            ${ahead.length ? `<span class="group-strong">현장설명 예정 ${ahead.length}건</span>` : ""}
           </div>
           ${rest.map(renderNotice).join("")}
           ${skipBox}

@@ -66,7 +66,7 @@
 </style>
 </head>
 <body>
-<header><b>JIIL</b> 정량평가서 준비 <span>참가하기로 정한 공고 — 협상·적격심사·사업수행능력평가 등</span></header>
+<header><b>JIIL</b> 정량평가서 준비 <span>참가하기로 정한 공고: 협상·적격심사·사업수행능력평가 등</span></header>
 <main>
   <section class="card">
     <h2>1. 공고번호 입력</h2>
@@ -89,7 +89,7 @@
     <div id="notes"></div>
     <details class="card fold">
       <summary><h2>2. 필요 서식 <span id="fcount" class="fprog"></span> <span id="hwpneed" class="chip hwpneed" hidden>한글 파일 필요</span></h2><span class="tog"></span></summary>
-      <p id="hwpneedmsg" class="warn" hidden>서식이 PDF에만 있는 공고입니다 — 통합서식(한글)을 만들지 않습니다. 나라장터·발주기관에서 한글(HWP/HWPX) 서식을 받아 직접 작성하세요.</p>
+      <p id="hwpneedmsg" class="warn" hidden>서식이 PDF에만 있는 공고입니다. 통합서식(한글)을 만들지 않습니다. 나라장터·발주기관에서 한글(HWP/HWPX) 서식을 받아 직접 작성하세요.</p>
       <ul id="forms" class="flist"></ul>
     </details>
 
@@ -100,7 +100,7 @@
     </details>
 
     <details class="card fold">
-      <summary><h2>통합본에 넣을 회사 서류 <span class="muted" style="font-size:13px;font-weight:400">— 파일 이름 키워드로 골라 원본 그대로 이어 붙임</span></h2><span class="tog"></span></summary>
+      <summary><h2>통합본에 넣을 회사 서류 <span class="muted" style="font-size:13px;font-weight:400">파일 이름 키워드로 골라 원본 그대로 이어 붙임</span></h2><span class="tog"></span></summary>
       <div class="scroll"><table id="bundle"></table></div>
       <ul id="bmiss"></ul>
     </details>
@@ -111,14 +111,14 @@
       <details id="candBox" class="cands">
         <summary>실적 후보 <span id="candN"></span> <span class="op">펼치기</span><span class="cl">접기</span></summary>
         <div class="scroll"><table id="cands"></table></div>
-        <p class="muted">후보는 기간·금액(지분 반영)만으로 고른 것 — 제출할 실적은 담당자가 확정</p>
+        <p class="muted">후보는 기간·금액(지분 반영)만으로 고른 것: 제출할 실적은 담당자가 확정</p>
       </details>
     </details>
 
     <details class="card fold" id="staffBox">  <!-- 11/05 사용자 요청 (나): 자기평점 기술인력 점수에 넣을 사람 고르기 -->
       <summary><h2>기술인력 (자기평점) <span id="staffN" class="fprog"></span></h2><span class="tog"></span></summary>
       <p id="staffRule" class="muted"></p>
-      <p class="muted">체크한 사람만 자기평점 기술인력 점수에 넣습니다(처음엔 모두 해제 — 넣을 사람을 직접 체크). 회색 줄은 조건(퇴사·재직 기간·등급)에 안 맞아 빠지는 사람.</p>
+      <p class="muted">체크한 사람만 자기평점 기술인력 점수에 넣습니다(처음엔 모두 해제: 넣을 사람을 직접 체크). 회색 줄은 조건(퇴사·재직 기간·등급)에 안 맞아 빠지는 사람.</p>
       <div class="row" style="margin-bottom:6px"><button type="button" id="staffAll" class="ghost">모두 체크</button><button type="button" id="staffNone" class="ghost">모두 해제</button></div>
       <div class="scroll"><table id="staff"></table></div>
     </details>
@@ -133,20 +133,20 @@
     <div class="card">
       <h2>3. 정량평가서 만들기</h2>
       <div class="row"><button id="build">만들기</button><span id="bstatus" class="muted"></span></div>
-      <p class="muted">회사 정보·연혁·실적·보유 자격을 채우고, 자기평가표는 기술인력(위에서 고른 사람)·경영상태·신인도만 점수를 넣습니다 — 실적 등 나머지 점수는 직접.</p>
+      <p class="muted">회사 정보·연혁·실적·보유 자격을 채우고, 자기평가표는 기술인력(위에서 고른 사람)·경영상태·신인도만 점수를 넣습니다. 실적 등 나머지 점수는 직접.</p>
       <div id="dl" class="hide" style="margin-top:12px">
         <h2>4. 내려받기</h2>
         <a id="dlink" class="btn" href="#">정량평가서 묶음 내려받기 (.zip)</a>
-        <p class="muted">묶음 안: <b>통합서식.hwpx</b>(서식 전체를 공고 순서대로 이은 한글 파일 — 담당 PM·투입 인력 등은 여기서 직접 기입) ·
-          <b>통합본.pdf</b>(회사 서류 원본 PDF를 그대로 이은 것) — 제출 파일은 이 둘 · 그 밖에 준비표 · 연혁·실적 증빙 · 공고문.</p>
-        <p class="muted">회사 서류가 들어 있습니다 — 사내에서만 보관하세요. 서버의 작업 파일은 2시간 뒤 지워집니다.</p>
+        <p class="muted">묶음 안: <b>통합서식.hwpx</b>(서식 전체를 공고 순서대로 이은 한글 파일: 담당 PM·투입 인력 등은 여기서 직접 기입) ·
+          <b>통합본.pdf</b>(회사 서류 원본 PDF를 그대로 이은 것): 제출 파일은 이 둘 · 그 밖에 준비표 · 연혁·실적 증빙 · 공고문.</p>
+        <p class="muted">회사 서류가 들어 있습니다. 사내에서만 보관하세요. 서버의 작업 파일은 2시간 뒤 지워집니다.</p>
       </div>
     </div>
   </section>
 </main>
 <script>
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const esc = s => String(s ?? "").replace(/([다요])\s+—\s+/g, "$1. ").replace(/\s+—\s+/g, ": ").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const won = n => n == null || n === "" ? "" : Number(n).toLocaleString("ko-KR") + "원";
 let JOB = null, timer = null, PHASE = "#status";  // PHASE: 지금 진행 상태를 보일 자리(불러오기 #status · 만들기 #bstatus)
 if (location.search.includes("t=")) history.replaceState(null, "", location.pathname);
@@ -237,7 +237,7 @@ function render(j) {
       <td>${esc(it.name)}${it.code ? ` <span class="muted">(${esc(it.code)})</span>` : ""}${it.need ? ` <span class="chip">${esc(it.need)}</span>` : ""}</td>
       <td class="nw">${!j.vault_ok ? '<span class="muted">회사 자료 없음</span>' : it.held ? '<span class="tick">✓ 보유</span>' : '<span class="cross">✗ 미보유</span>'}</td>
       <td class="muted">${esc(it.docs.join(", "))}</td></tr>`).join("")).join("")
-      : `<tr><td colspan="4" class="muted">첨부 공고문에서 자격 요건을 찾지 못했습니다 — 원문 확인</td></tr>`);
+      : `<tr><td colspan="4" class="muted">첨부 공고문에서 자격 요건을 찾지 못했습니다. 원문 확인</td></tr>`);
   const b = s.bundle || [];
   $("#bundle").innerHTML = !j.vault_ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
     : b.length ? "<tr><th>순서</th><th>구분</th><th>파일</th><th>확인</th></tr>" +
@@ -280,9 +280,9 @@ function renderStaff(list, rule, ok) {
   const rank = g => { const i = GRADE_ORDER.indexOf(g); return i < 0 ? GRADE_ORDER.length : i; };
   list = [...list].sort((a, b) => rank(a.grade) - rank(b.grade) || String(a.joined).localeCompare(String(b.joined)));
   STAFF = list;
-  $("#staffRule").textContent = rule || (list.length ? "제안요청서에서 기술인력 배점 기준을 찾지 못함 — 체크한 사람은 그대로 넘김" : "");
+  $("#staffRule").textContent = rule || (list.length ? "제안요청서에서 기술인력 배점 기준을 찾지 못함: 체크한 사람은 그대로 넘김" : "");
   $("#staff").innerHTML = !ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
-    : !list.length ? '<tr><td class="muted">인력목록이 비어 있습니다 — jiil-quant-docs 폴더에 기술인력 엑셀(이름·입사일·등급)을 두거나 회사자료 인력목록에 적으세요</td></tr>'
+    : !list.length ? '<tr><td class="muted">인력목록이 비어 있습니다. jiil-quant-docs 폴더에 기술인력 엑셀(이름·입사일·등급)을 두거나 회사자료 인력목록에 적으세요</td></tr>'
     : '<tr><th class="chk">넣기</th><th>이름</th><th>등급</th><th>입사일</th><th>비고</th></tr>' + list.map(p =>
       `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="sp" data-name="${esc(p.name)}" data-grade="${esc(p.grade)}"></td>
        <td>${esc(p.name)}</td><td>${esc(p.grade)}</td><td>${esc(p.joined)}</td><td class="muted">${esc(p.why)}</td></tr>`).join("");
@@ -309,7 +309,7 @@ function renderPatents(list, rule, ok, on) {
   $("#patentRule").innerHTML = at < 0 ? esc(rule)
     : esc(rule.slice(0, at)) + ' · 인정: <b class="scope">' + esc(rule.slice(at + 7)) + "</b>";
   $("#patents").innerHTML = !ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
-    : !list.length ? '<tr><td class="muted">특허 자료가 없습니다 — jiil-quant-docs 폴더 \'특허\' 하위 폴더에 특허증을 두거나 회사자료 특허목록에 적으세요</td></tr>'
+    : !list.length ? '<tr><td class="muted">특허 자료가 없습니다. jiil-quant-docs 폴더 \'특허\' 하위 폴더에 특허증을 두거나 회사자료 특허목록에 적으세요</td></tr>'
     : '<tr><th class="chk">넣기</th><th>특허</th><th>비고</th></tr>' + list.map(p =>
       `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="pp" data-key="${esc(p.key)}"></td>
        <td>${esc(p.name)}</td><td class="muted">${esc(p.why)}</td></tr>`).join("");

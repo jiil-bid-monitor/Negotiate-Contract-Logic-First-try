@@ -180,7 +180,7 @@ dialog input[type=text] { width: 100%; height: 44px; border-radius: 8px; border:
     <label class="gsearch">
       <span class="sr">공고 찾기</span>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
-      <input id="gq" type="search" placeholder="공고번호·공고명·기관 — Enter로 공고 찾기" autocomplete="off">
+      <input id="gq" type="search" placeholder="공고번호·공고명·기관: Enter로 공고 찾기" autocomplete="off">
     </label>
     <a class="topbtn" href="/" title="지금 쓰는 화면(기존)으로 돌아갑니다">기존 화면</a>
     <button type="button" class="topbtn" id="meBtn"><span class="avatar" id="meAv">?</span><span id="meName">이름 넣기</span></button>
@@ -271,7 +271,7 @@ dialog input[type=text] { width: 100%; height: 44px; border-radius: 8px; border:
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const esc = (s) => String(s ?? "").replace(/([다요])\s+—\s+/g, "$1. ").replace(/\s+—\s+/g, ": ").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 무시 */ } } };
 
 // 기존 화면과 같은 사유 칩(webapp/static/index.html JOIN_TAGS·REASON_TAGS)
@@ -321,13 +321,13 @@ const statusOf = (n) => (part[n.noticeNo] || {}).status;
 const decided = (n) => DECISIONS.includes(statusOf(n));
 function qualLine(n) {
   const q = n.qual || {};
-  if (n.sourceType === "사전규격" && !q.checked) return { cls: "mute", text: "자격 확인 전 — 규격서로 판단" };
+  if (n.sourceType === "사전규격" && !q.checked) return { cls: "mute", text: "자격 확인 전: 규격서로 판단" };
   if (!q.checked) return { cls: "mute", text: "업종 제한 없음 · 공고문 확인" };
   if (!(q.missing || []).length) return { cls: "ok", text: "✓ 자격 충족" + (q.summary ? " · " + q.summary : "") };
   // 공동수급 정보 없음('정보 없음'·빈 괄호 '()공동수급불허' — 11/23)이면 가능·불허를 붙이지 않음(예전엔 정보 없음도 '불허'로 보였음)
   const jl = (n.joint || {}).label || "";
   const joint = !jl || jl === "정보 없음" || /^\(\s*\)/.test(jl) ? undefined : (n.joint || {}).allowed;
-  return { cls: "warn", text: "! 자격 일부 부족 — " + (q.missing || []).join(", ") + (joint === true ? " · 공동수급 가능" : joint === false ? " · 공동수급 불허" : "") };
+  return { cls: "warn", text: "! 자격 일부 부족: " + (q.missing || []).join(", ") + (joint === true ? " · 공동수급 가능" : joint === false ? " · 공동수급 불허" : "") };
 }
 const qualOk = (n) => { const q = n.qual || {}; return q.checked && !(q.missing || []).length; };
 const syncPct = (n) => (n.maxScore ? Math.round(n.maxScore * 100) + "%" : "-");
@@ -336,7 +336,7 @@ const syncPct = (n) => (n.maxScore ? Math.round(n.maxScore * 100) + "%" : "-");
 async function api(path, opts) {
   const res = await fetch(path, opts);
   const body = await res.json().catch(() => ({}));
-  if (res.status === 401 || body.unauthorized) throw new Error("접속 토큰이 필요합니다 — 기존 화면을 담당자에게 받은 주소(?t=… 포함)로 한 번 연 뒤 다시 오세요.");
+  if (res.status === 401 || body.unauthorized) throw new Error("접속 토큰이 필요합니다. 기존 화면을 담당자에게 받은 주소(?t=… 포함)로 한 번 연 뒤 다시 오세요.");
   if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
   return body;
 }
@@ -431,7 +431,7 @@ function renderList() {
     const s = statusOf(n), q = qualLine(n);
     return `<button type="button" class="row-n" data-open="${esc(n.noticeNo)}" aria-current="${n.noticeNo === selected}">
       <span class="m">${ddBadge(n)}<span class="tag">${esc(kindOf(n))}</span><span>${esc(n.demandInstitution || n.institution || "")}</span><span class="jg ${DECISIONS.includes(s) ? s : ""}">${esc(DECISIONS.includes(s) ? s : "미판단")}</span></span>
-      <span class="t"><b>${esc(n.title)}</b><span class="amt"><b>${esc(fmtAmt(n.budgetAmount))}</b></span><span class="sy" title="싱크로율 — 지일 과거 실적과 닮은 정도">${syncPct(n)}</span></span>
+      <span class="t"><b>${esc(n.title)}</b><span class="amt"><b>${esc(fmtAmt(n.budgetAmount))}</b></span><span class="sy" title="싱크로율: 지일 과거 실적과 닮은 정도">${syncPct(n)}</span></span>
       <span class="q ${q.cls}" style="display:block">${esc(q.text)}</span>
     </button>`;
   }).join("");
@@ -464,9 +464,9 @@ function renderDetail() {
     ${flags ? `<div><div class="note" style="margin-bottom:6px">확인할 것 (공고문)</div><div class="flags">${flags}</div></div>` : ""}
     ${scope.length ? `<div><div class="note" style="margin-bottom:6px">사업 범위</div><ul class="scope">${scope.map((x) => `<li>${esc(typeof x === "string" ? x : x.text || "")}</li>`).join("")}</ul></div>` : ""}
     <div class="step">
-      <div class="h">1단계 · 참가 판단 ${p.decidedBy ? `— 마지막 판단 <b>${esc(p.decidedBy)}</b> ${esc(fmtDT(p.decidedAt))}` : ""}</div>
+      <div class="h">1단계 · 참가 판단 ${p.decidedBy ? `: 마지막 판단 <b>${esc(p.decidedBy)}</b> ${esc(fmtDT(p.decidedAt))}` : ""}</div>
       <div class="grid3">${DECISIONS.map((d) => `<button type="button" class="jbtn" data-judge="${d}" aria-pressed="${s === d}">${d}</button>`).join("")}</div>
-      ${s ? `<div><div class="note" style="margin-bottom:6px">${s === "참가" ? "참가 이유" : "사유"} — 누르면 바로 저장</div><div class="chips">${tags.map((t) => `<button type="button" data-tag="${esc(t)}" aria-pressed="${(p.tags || []).includes(t)}">${esc(t)}</button>`).join("")}</div></div>` : `<p class="note">같은 단추를 한 번 더 누르면 판단이 풀립니다. 판단은 기존 화면과 같은 기록에 남습니다.</p>`}
+      ${s ? `<div><div class="note" style="margin-bottom:6px">${s === "참가" ? "참가 이유" : "사유"}: 누르면 바로 저장</div><div class="chips">${tags.map((t) => `<button type="button" data-tag="${esc(t)}" aria-pressed="${(p.tags || []).includes(t)}">${esc(t)}</button>`).join("")}</div></div>` : `<p class="note">같은 단추를 한 번 더 누르면 판단이 풀립니다. 판단은 기존 화면과 같은 기록에 남습니다.</p>`}
     </div>
     <div class="step">
       <div class="h">2단계 · 입찰 준비 (기존 화면 새 탭으로 열림)</div>
@@ -488,7 +488,7 @@ async function judge(payload) {
     const r = await api("/api/participation", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ noticeNo: n.noticeNo, title: n.title, by, ...payload }) });
     part[n.noticeNo] = r.participation;
     renderHome(); renderList();
-  } catch (err) { alert("저장 실패 — " + err.message); }
+  } catch (err) { alert("저장 실패: " + err.message); }
 }
 
 /* ── 수집 진행 ── */
@@ -497,7 +497,7 @@ function showJob(job) {
   const running = job && job.running;
   for (const id of ["jobLine", "jobLine2"]) {
     $(id).hidden = !running && !(job && job.error);
-    $(id).textContent = running ? `수집 중 ${job.pct || 0}% — ${job.stage || ""} (몇 분 걸립니다. 이 화면을 닫아도 계속됩니다)` : job && job.error ? "수집 실패 — " + job.error : "";
+    $(id).textContent = running ? `수집 중 ${job.pct || 0}%: ${job.stage || ""} (몇 분 걸립니다. 이 화면을 닫아도 계속됩니다)` : job && job.error ? "수집 실패: " + job.error : "";
   }
   document.querySelectorAll("[data-collect]").forEach((b) => { b.disabled = !!running || !canCollect; b.hidden = !canCollect; });
   clearTimeout(jobTimer);
@@ -527,7 +527,7 @@ document.addEventListener("click", (ev) => {
   const view = t.closest("[data-view]");
   if (view) { const v = views()[+view.dataset.view]; if (v) setSt({ ...v.st, join: false }); return; }
   if (t.closest("#saveView")) {
-    const name = prompt("이 조건의 이름 — 예: 전시·체험 협상");
+    const name = prompt("이 조건의 이름: 예: 전시·체험 협상");
     if (name && name.trim()) { const list = views(); list.push({ name: name.trim().slice(0, 30), st: { cat: st.cat, und: st.und, qual: st.qual, soon: st.soon, sort: st.sort } }); ls.set("v2-views", JSON.stringify(list)); renderViews(); }
     return;
   }

@@ -17,6 +17,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import secrets
 import sys
 import threading
@@ -346,6 +347,7 @@ def make_handler(app: App):
             self._send(status, json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
         def _error(self, status: int, message: str) -> None:
+            message = re.sub(r"\s+—\s+", ": ", re.sub(r"([다요])\s+—\s+", r"\1. ", message))  # 화면엔 긴 줄표를 안 씀(11/25 사용자)
             self._json({"error": message}, status)
 
         def _body(self) -> dict[str, Any]:

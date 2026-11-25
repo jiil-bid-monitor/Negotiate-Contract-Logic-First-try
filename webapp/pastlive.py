@@ -65,12 +65,15 @@ def project_folders(root: Path | None = None) -> list[tuple[int, Path, bool]]:
         for p in sorted(y.iterdir()):
             if not p.is_dir() or p.name.startswith((".", "~")):
                 continue
-            if p.name == BID_DIR:
-                out += [(year, q, False) for q in sorted(p.iterdir()) if q.is_dir() and not q.name.startswith((".", "~", "_"))]
-            elif p.name == DONE_DIR:
+            if p.name == DONE_DIR:
                 out += [(year, q, True) for q in sorted(p.iterdir()) if q.is_dir() and not q.name.startswith((".", "~"))]
             else:
                 out.append((year, p, False))
+    bid = root / BID_DIR  # 연도와 상관없이 진행 중인 낙찰 공고 한 곳 — 사업 연도는 공고번호(R26…)에서
+    for p in sorted(bid.iterdir()) if bid.is_dir() else ():
+        m = re.match(r"R(\d{2})[A-Z]{2}\d{8}", p.name)
+        if p.is_dir() and m:
+            out.append((max(FIRST_YEAR, 2000 + int(m.group(1))), p, False))
     return out
 
 

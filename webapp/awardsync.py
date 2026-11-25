@@ -4,8 +4,8 @@ NAS 웹앱 컨테이너는 jiil-webapp 공유 폴더만 볼 수 있어 사내 �
 1분마다 맞춘다. 담당자는 사내 공유 폴더 쪽 파일을 고치고(기준), 웹앱 '서류 현황'은 NAS 쪽을 읽으므로 고친 내용이 1분 안에 반영된다.
 규칙: 한쪽에만 있는 파일은 다른 쪽으로 복사, 둘 다 있으면 수정 시각이 늦은 쪽이 이김(copy2로 시각을 같이 옮겨 되풀이 안 함), 지우지 않음.
 사업 폴더(11/25 사용자): .env POSTAWARD_PROJECT_ROOT(사내 공유 '002 진행프로젝트')가 있으면 계약까지 온 공고(폴더에 1_계약이 있음)만
-'YYYY 프로젝트/입찰/번호_공고명'과 맞춤(적격심사 단계 폴더는 NAS에만). 탈락한 공고 폴더는 NAS 웹앱이 _탈락으로 옮기고(postaward.archive_lost)
-여기서 사내 공유 쪽 것도 _탈락으로 옮김(지우지 않음).
+'입찰/번호_공고명'과 맞춤(끝나서 'YYYY 프로젝트/실행완료'로 옮긴 것은 그곳)(적격심사 단계 폴더는 NAS에만). 탈락한 공고 폴더는 NAS 웹앱이 탈락으로 옮기고(postaward.archive_lost)
+여기서 사내 공유 쪽 것도 탈락으로 옮김. NAS의 탈락 폴더는 30일 뒤 지움(postaward.purge_lost, 11/25 사용자).
 켜기: 서버 PC .env의 POSTAWARD_SHARE_DIR(사내 공유 폴더 쪽 '낙찰후서류' 위치). NAS 쪽은 POSTAWARD_NAS_DIR(기본 \\\\jiilserver\\jiil-webapp\\낙찰후서류).
 shortcut: 1분마다 전체 비교 — 공고 폴더가 수백 개로 늘어 느려지면 바뀐 폴더만 보게 바꿀 것. 리빌드로 NAS가 사내 공유 폴더를 직접 보게 되면 이 동기화는 끔.
 """
@@ -16,12 +16,11 @@ import logging
 import os
 import shutil
 import threading
-from datetime import date
 from pathlib import Path
 
 NAS_DIR = Path(r"\\jiilserver\jiil-webapp\낙찰후서류")
 GROUPS = ("공사", "물품·용역")  # postaward.GROUPS의 폴더 이름(표준틀 폴더 _표준틀은 안 맞춤)
-LOST_DIR = "_탈락"
+LOST_DIR = "탈락"
 BID_DIR = "입찰"
 SLACK = 2.0  # 초 — 공유 폴더마다 시각 정밀도가 달라 이만큼은 같은 시각으로 봄
 
@@ -71,7 +70,7 @@ def free_path(p: Path) -> Path:
 
 
 def drop_lost(nas: Path, share: Path) -> None:
-    """NAS에서 _탈락으로 옮긴 공고 폴더가 사내 공유 쪽에 남아 있으면 거기서도 _탈락으로(안 옮기면 다음 맞춤 때 되살아남)."""
+    """NAS에서 탈락으로 옮긴 공고 폴더가 사내 공유 쪽에 남아 있으면 거기서도 탈락으로(안 옮기면 다음 맞춤 때 되살아남)."""
     lost = nas / LOST_DIR
     for f in lost.iterdir() if lost.is_dir() else ():
         for group in GROUPS:
@@ -83,24 +82,21 @@ def drop_lost(nas: Path, share: Path) -> None:
                     logging.debug("탈락 폴더 옮기기 건너뜀 %s: %s", f.name, err)
 
 
-def project_target(project_root: Path, name: str, year: int) -> Path:
-    """계약까지 온 공고의 사업 폴더 — 이미 있는 해의 것을 쓰고(해를 넘긴 사업·실행완료로 옮긴 사업), 없으면 올해."""
-    for sub in (BID_DIR, "실행완료"):
-        for found in sorted(project_root.glob(f"20?? 프로젝트/{sub}/{glob.escape(name)}"), reverse=True):
-            return found
-    return project_root / f"{year} 프로젝트" / BID_DIR / name
+def project_target(project_root: Path, name: str) -> Path:
+    """계약까지 온 공고의 사업 폴더 — 진행 중은 연도와 상관없이 '입찰' 한 곳(11/25 사용자: 해를 넘겨도 예전 연도를 찾아가지 않게).
+    담당자가 'YYYY 프로젝트/실행완료'로 옮긴 사업은 그곳."""
+    for found in sorted(project_root.glob(f"20?? 프로젝트/실행완료/{glob.escape(name)}"), reverse=True):
+        return found
+    return project_root / BID_DIR / name
 
 
-def sync_projects(nas: Path, project_root: Path, year: int | None = None) -> dict:
-    """계약까지 온 공고 폴더 ↔ 사업 폴더. 'YYYY 프로젝트'가 아직 없는 해면 만들지 않고 기다림."""
+def sync_projects(nas: Path, project_root: Path) -> dict:
+    """계약까지 온 공고 폴더 ↔ 사업 폴더."""
     done = {"to_share": 0, "to_nas": 0, "errors": 0}
     for group in GROUPS:
         for f in (nas / group).iterdir() if (nas / group).is_dir() else ():
-            if not (f / "1_계약").is_dir():  # 적격심사 단계(0_적격심사·공고문서만)는 NAS에만
-                continue
-            target = project_target(project_root, f.name, year or date.today().year)
-            if target.parent.parent.is_dir():
-                _sync_dir(f, target, done)
+            if (f / "1_계약").is_dir():  # 적격심사 단계(0_적격심사·공고문서만)는 NAS에만
+                _sync_dir(f, project_target(project_root, f.name), done)
     return done
 
 
@@ -158,7 +154,7 @@ def selfcheck() -> None:
         (nas / "공사" / "R1_A" / "2_착공").mkdir()
         (nas / "공사" / "R1_A" / "2_착공" / "착공서류.xlsx").write_text("new", encoding="utf-8")
         assert sync_once(nas, share)["to_share"] == 1  # 낙찰 뒤 웹앱이 더한 파일도 사내 공유로
-        # 탈락: NAS에서 _탈락으로 옮기면 사내 공유 쪽도 옮기고 되살리지 않음
+        # 탈락: NAS에서 탈락으로 옮기면 사내 공유 쪽도 옮기고 되살리지 않음
         (nas / LOST_DIR).mkdir()
         shutil.move(str(nas / "공사" / "R1_A"), str(nas / LOST_DIR / "R1_A"))
         assert sync_once(nas, share)["to_nas"] == 0
@@ -167,17 +163,18 @@ def selfcheck() -> None:
         root, r2 = Path(d) / "002", nas / "공사" / "R2_B"
         (r2 / "0_적격심사").mkdir(parents=True)
         (r2 / "0_적격심사" / "q.xlsx").write_text("q", encoding="utf-8")
-        assert sync_projects(nas, root, 2026)["to_share"] == 0  # 적격심사 단계
+        assert sync_projects(nas, root)["to_share"] == 0  # 적격심사 단계
         (r2 / "1_계약").mkdir()
-        assert sync_projects(nas, root, 2026)["to_share"] == 0 and not root.exists()  # 사업 폴더가 아직 없음
-        (root / "2026 프로젝트").mkdir(parents=True)
-        assert sync_projects(nas, root, 2026)["to_share"] == 1
-        bid = root / "2026 프로젝트" / BID_DIR / "R2_B"
+        assert sync_projects(nas, root)["to_share"] == 1
+        bid = root / BID_DIR / "R2_B"
         assert (bid / "0_적격심사" / "q.xlsx").is_file()
-        (root / "2027 프로젝트").mkdir()
-        assert sync_projects(nas, root, 2027)["to_share"] == 0 and not (root / "2027 프로젝트" / BID_DIR).exists()  # 해를 넘겨도 같은 폴더
         (bid / "2.txt").write_text("담당자", encoding="utf-8")
-        assert sync_projects(nas, root, 2027)["to_nas"] == 1 and (r2 / "2.txt").is_file()
+        assert sync_projects(nas, root)["to_nas"] == 1 and (r2 / "2.txt").is_file()
+        moved = root / "2027 프로젝트" / "실행완료" / "R2_B"  # 끝나서 담당자가 옮김 — 따라가고 '입찰'에 되살리지 않음
+        moved.parent.mkdir(parents=True)
+        bid.rename(moved)
+        (r2 / "3.txt").write_text("웹앱", encoding="utf-8")
+        assert sync_projects(nas, root)["to_share"] == 1 and (moved / "3.txt").is_file() and not bid.exists()
     print("ok")
 
 

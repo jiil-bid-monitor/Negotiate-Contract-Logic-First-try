@@ -232,6 +232,14 @@ class TeamStore:
             return p
 
     # ── 목록에 올리기·다시 빼기 ──
+    def forget_promoted(self) -> None:
+        """이 PC의 올리기 기록을 비움(NAS로 옮긴 뒤). 옮기기 전 것은 파일로 남김."""
+        with self._lock:
+            self.promo_path.with_name("promoted_옮기기전.json").write_text(
+                json.dumps(self.promoted, ensure_ascii=False, indent=1), encoding="utf-8")
+            self.promoted = {}
+            self._save()
+
     def promote(self, b: dict[str, Any]) -> dict[str, Any]:
         no = str(b.get("noticeNo") or "").strip()
         by = str(b.get("by") or "").strip()[:40]

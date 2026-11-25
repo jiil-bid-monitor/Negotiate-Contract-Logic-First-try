@@ -140,6 +140,7 @@ class App:
             return
         path = self.store.path.parent / "help_questions.json"
         row = {"q": q, "result": str(item.get("result") or "")[:20], "tab": str(item.get("tab") or "")[:20],
+               "hit": str(item.get("hit") or "")[:80],  # 어느 질문으로 알아들었는지(11/25) — 낱말·같은 뜻 표를 늘릴 때 봄
                "at": datetime.now().isoformat(timespec="seconds")}
         with self._seen_lock:
             rows = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []

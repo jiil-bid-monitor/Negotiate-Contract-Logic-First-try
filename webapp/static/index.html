@@ -2745,7 +2745,7 @@ function applyFilters() {
           <div class="group-head">
             <h2>${esc(key)} <span class="group-n">${list.length}건</span></h2>
             ${strong ? `<span class="group-strong">강력추천 ${strong}건</span>` : ""}
-            ${ahead.length ? `<span class="group-strong">현장설명 예정 ${ahead.length}건 · 맨 위</span>` : ""}
+            ${ahead.length ? `<span class="group-strong">현장설명 예정 ${ahead.length}건</span>` : ""}
           </div>
           ${rest.map(renderNotice).join("")}
           ${skipBox}

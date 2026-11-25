@@ -1081,6 +1081,8 @@ tr.nobody td { color: var(--faint); }
   margin-left: auto; font-size: 12px; font-weight: 600; padding: 3px 10px;
   background: var(--urgent-tint); color: var(--urgent); border: 1px solid var(--urgent);
 }
+/* 붉은 칩이 둘(강력추천·현장설명 예정)이면 둘 다 오른쪽에 나란히 — 둘째 칩은 auto 여백을 안 가짐 (2026-11-25 사용자 요청) */
+.group-strong + .group-strong { margin-left: 0; }
 .group-note { margin: 8px 0 12px; font-size: 12.5px; color: var(--muted); }
 .group { scroll-margin-top: 16px; }
 /* 구역 제목 밑줄과 첫 카드 왼쪽 띠가 이어지게 — 첫 카드는 위 테두리·위 모서리 둥글림 없음 (2026-11-18 사용자 요청) */

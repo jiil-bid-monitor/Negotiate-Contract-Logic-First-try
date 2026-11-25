@@ -88,6 +88,9 @@ _GUIDE_TEXT = re.compile(r"[(\[]?(?:※)?공동(?:도급|수급|이행)(?:으로
 
 # 값 칸에 미리 적힌 안내 '공고명을 기입하세요'(11/23 한가람 재개관전 입찰참가신청서 — 빨간 글) = 빈 칸(안내는 지우고 값)
 _FILL_ASK = re.compile(r"[가-힣()·]{1,15}(?:을|를)?(?:기입|기재|입력|작성)(?:하세요|하십시오|바랍니다|해주세요|하여주십시오)\.?")
+# 값 칸에 미리 적힌 작성 안내·예시(11/25 사용자 — 주민등록번호 칸 '뒷자리 첫째자리까지 기재'가 남음: 값 자리의 안내·예시는 지우고 값)
+# '…까지 기재'·'…로 기입'처럼 안내 동사로 끝나는 짧은 글(띄어쓰기 뺀 4~24자, 숫자 없음), '예)…'·'(예시)…'
+_FILL_HINT = re.compile(r"(?:[가-힣()·/]{2,20}(?:기재|기입|입력|작성|표기)(?:요망|바람|할것)?\.?|[(（]?예(?:시)?[)）:：].{0,20})")
 
 # 이름표 뒤에 끼워 넣은 값 표시(11/05 사용자 결정: 채운 글은 11pt) — 섹션을 다 채운 뒤 _apply_marks가 그 값만 11pt 글자 모양으로 떼어 냄
 _VS, _VE = "\ue000", "\ue001"
@@ -112,7 +115,8 @@ class Cell:
         """빈 칸 — 글이 없거나, 숫자 없는 자리표시('년 월', '총 명', '원', '건')뿐, 또는 작성 안내 글('공동도급참여시 대표사')뿐."""
         t = _sq(self.text)
         return (t == "" or (not re.search(r"\d", t) and re.fullmatch(r"[년월일총명원건～~\-.:/()]*", t) is not None)
-                or _GUIDE_TEXT.fullmatch(t) is not None or _FILL_ASK.fullmatch(t) is not None)
+                or _GUIDE_TEXT.fullmatch(t) is not None or _FILL_ASK.fullmatch(t) is not None
+                or (4 <= len(t) <= 24 and not re.search(r"\d", t) and _FILL_HINT.fullmatch(t) is not None))
 
 
 def _cells(xml: str, tbl: tuple[int, int]) -> list[Cell]:

@@ -1303,11 +1303,12 @@ def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
         f = _PLEDGE_FOR.search(text)
         if f:
             mode = _sq(f.group(1))
-        if sq.startswith("확인자"):
+        if sq.startswith("확인자") or sq == "접수자":  # 접수증 '접 수 자' 줄은 발주기관이 적음
             left = 0
             continue
-        if sq.startswith("서약자"):
-            left, done = 5, set()
+        # 접수증 '제 출 자 | 소속: 직위: 성명 : (인)'(11/25 사용자 요청 — 그리다 정선 제출본처럼 소속·직위·성명)
+        if sq.startswith("서약자") or sq == "제출자":
+            left, done = (2 if sq == "제출자" else 5), set()  # 제출자는 이름표 + 바로 옆 칸만(아래 다른 '성 명' 칸은 안 건드림)
         if left <= 0:
             continue
         left -= 1
@@ -3655,7 +3656,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         continue
                     if key == "대표자" and not target.blank and re.fullmatch(r"[ \u3000]*제\s*출\s*(?:자|인)\s*[:：]\s*", target.text):
                         # 접수증 '대 표 자 | (빈칸) 제출자 :'(11/24 해남 공룡박물관) — 대표자 이름은 칸 앞 빈칸 자리에, '제출자 :'는 그대로
-                        # (제출자·접수자는 사람이 적는 칸이라 비움)
+                        # (접수자는 발주기관이 적는 칸이라 비움)
                         seg = xml[target.start:target.end]
                         rep_name = value
                         m = re.search(r"(<(?:[\w.-]+:)?t>)([ \u3000]*)(제)", seg)
@@ -3663,6 +3664,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             pad = m.group(2)
                             keep = max(4, len(pad) - _span(rep_name) - 2)
                             seg = seg[:m.start(2)] + " " + _mark(rep_name) + " " * keep + seg[m.start(3):]
+                            # '제출자 :' 뒤에도 대표자 이름(11/25 사용자 요청 — 그리다 정선 접수증 제출본과 같게)
+                            seg = re.sub(r"(제\s*출\s*(?:자|인)\s*[:：])([ \u3000]*)(</(?:[\w.-]+:)?t>)",
+                                         lambda x: x.group(1) + " " + _mark(rep_name) + x.group(3), seg, count=1)
                             seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
                             edits.append((target, None, seg))
                             rep.filled.append(f"{_sq(c.text)} → {rep_name}")

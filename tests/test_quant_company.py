@@ -130,7 +130,7 @@ def test_grida_overview_and_history_from_env(monkeypatch, tmp_path):
     from quantdocs import fill, importer
 
     env = tmp_path / ".env"
-    env.write_text("QUANT_GRIDA_FOUNDED=2000-01-02\nQUANT_GRIDA_FIELD=제조,건설\nQUANT_GRIDA_CREDIT=BB0\n"
+    env.write_text("QUANT_GRIDA_NAME=㈜가상\nQUANT_GRIDA_ADDR=가상시 길 1\nQUANT_GRIDA_FOUNDED=2000-01-02\nQUANT_GRIDA_FIELD=제조,건설\nQUANT_GRIDA_CREDIT=BB0\n"
                    "QUANT_GRIDA_CREDIT_KIND=기업신용평가등급\n"
                    "QUANT_GRIDA_HISTORY=2000.01.02 법인설립|2001.03.04 공장등록\n", encoding="utf-8")
     monkeypatch.setattr(vault, "ENV_FILE", env)
@@ -143,8 +143,9 @@ def test_grida_overview_and_history_from_env(monkeypatch, tmp_path):
     company.use("grida")
     try:
         v = V()
-        v.info = {}
+        v.info = {"회사명": "주식회사 가상"}
         importer.enrich_vault(v)
+        assert v.info["회사명"] == "㈜가상" and v.info["주소"] == "가상시 길 1"
         assert v.info["신용평가등급"] == "BB0" and v.info["신용평가 종류"] == "기업신용평가등급"
         assert fill._value("사업분야", v) == "제조,건설"
         assert fill._value("설립일", v)

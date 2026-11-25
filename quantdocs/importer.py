@@ -566,6 +566,7 @@ def enrich_vault(vault, report: list | None = None) -> list[str]:
     items = [("FAX", "팩스번호"), ("TEL", "전화번호"), ("EMAIL", "이메일"), ("HOMEPAGE", "홈페이지"),
              ("CAPITAL", "자본금"), ("STAFF", "종업원 수"),
              # (11/25 사용자 요청 — 그리다 일반현황 서식 값) 설립일·사업분야·신용평가등급도 .env로
+             ("NAME", "회사명"), ("ADDR", "주소"),  # (11/25) 서류의 '주식회사 그리다'·'…75, 1층' 대신 제출본 표기('㈜그리다')로
              ("FOUNDED", "설립일"), ("FIELD", "사업분야"), ("CREDIT", "신용평가등급"), ("CREDIT_KIND", "신용평가 종류"),
              ("CREDIT_DATE", "신용평가 평가일"), ("CREDIT_END", "신용평가 유효기간")]
     if current() == DEFAULT:

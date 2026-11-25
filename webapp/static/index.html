@@ -1531,7 +1531,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hpicks.cats button { text-align: center; font-weight: 600; }
 .helpbox .hpicks.cats [data-hcat]:nth-child(odd):is(:last-child, :has(+ .hother)) { grid-column: 1 / -1; }
 .helpbox .hpicks.cats .hother { grid-column: 1 / -1; font-weight: 400; }
-.helpbox .hpicks .hother { border-style: dashed; color: var(--muted); border-color: var(--line); }
+.helpbox .hpicks .hother { color: var(--muted); border-color: var(--line); }
+.helpbox .hpicks.nav { flex-direction: row; }
+.helpbox .hpicks.nav button { flex: 1; }
 .helpbox .htyping { display: flex; gap: 4px; padding: 13px 14px; }
 .helpbox .htyping i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: help-dot 1s infinite; }
 .helpbox .htyping i:nth-child(2) { animation-delay: .15s; }
@@ -4990,7 +4992,7 @@ const HELP_SETS = {
 const HELP_COMMON = [
   [0, "NAS 웹앱과 서버 PC 웹앱은 뭐가 다른가요?", "두 곳에서 같이 쓰는 것\n• 공고 보기 · 참가 판단 · 낙찰 후 서류\n\n서버 PC 웹앱에만 있는 것\n• 공고 수집 · 투찰 계산기 · 정량평가서\n\n참가 판단과 낙찰 후 서류는\n어느 쪽에서 해도 같은 자료입니다.\n지금 어느 쪽인지는 도우미 맨 위에 있습니다.", "NAS 나스 서버 차이 구분"],
   [0, "서버 PC가 꺼져 있으면 어떻게 되나요?", "NAS 웹앱에서 공고 보기와 참가 판단,\n낙찰 후 서류는 그대로 됩니다.\n\n공고 수집·투찰 계산기·정량평가서는\n서버 PC를 켠 뒤에 쓸 수 있습니다.", "서버 꺼져 꺼지 켜져"],
-  [-1, "버튼을 눌렀는데 반응이 없으면 어떻게 하나요?", "① 키보드 F5를 눌러 화면을 새로 고칩니다.\n② 다시 눌러 봅니다.\n③ 그래도 안 되면 개발 담당에게 알려 주세요.", "안돼 오류 반응 에러 버튼"],
+  [-1, "버튼을 눌렀는데 반응이 없으면 어떻게 하나요?", "① 잠시 기다려 봅니다.\n    공고 불러오기와 서류 만들기는\n    시간이 걸립니다.\n② F5로 화면을 새로 고치고 다시 누릅니다.\n③ 웹앱 창을 닫고 다시 엽니다.", "안돼 오류 반응 에러 버튼"],
   [-1, "이 도우미는 외부 AI인가요?", "아닙니다.\n미리 정해 둔 답만 보여 드립니다.\n적은 질문은 회사 안에만 남고\n밖으로 나가지 않습니다.", "AI 외부 보안 챗봇 인공지능"],
 ];
 let HELP_TAB = "award";
@@ -5114,12 +5116,12 @@ function renderHelp() {
     const first = !prev || prev.who !== m.who;
     const lastOfGroup = !HELP_LOG[k + 1] || HELP_LOG[k + 1].who !== m.who;
     const live = k === HELP_LOG.length - 1;  // 고르기 버튼은 마지막 말 밑에만 — 지난 메뉴가 쌓이지 않게
-    const back = live && helpPrev() ? `<button type="button" class="hother" data-hback>← 이전 질문 보기</button>` : "";
+    const back = live && helpPrev() ? `<button type="button" class="hother" data-hback>← 질문 목록</button>` : "";
     const picks = !live || !m.picks ? ""
       : m.picks === "cats" ? `<div class="hpicks cats">${HS().cats.map((c, i) => `<button type="button" data-hcat="${i}">${esc(c)}</button>`).join("")}${back}</div>`
       : m.picks.length ? `<div class="hpicks">${m.picks.map((i) => `<button type="button" data-hq="${i}">${esc(HS().qa[i][1])}</button>`).join("")}`
-        + `<button type="button" class="hother" data-hmenu>다른 주제 보기</button></div>` : "";
-    const again = live && Array.isArray(m.picks) && !m.picks.length ? `<div class="hpicks">${back}<button type="button" class="hother" data-hmenu>다른 주제 보기</button></div>` : "";
+        + `<button type="button" class="hother" data-hmenu>다른 주제</button></div>` : "";
+    const again = live && Array.isArray(m.picks) && !m.picks.length ? `<div class="hpicks${back ? " nav" : ""}">${back}<button type="button" class="hother" data-hmenu>다른 주제</button></div>` : "";
     html += `<li class="hmsg ${m.who}${first ? " first" : ""}${k >= HELP_SHOWN ? " new" : ""}">`
       + (m.who === "bot" ? (first ? HELP_LOGO : `<span class="hav sp" aria-hidden="true"></span>`) : "")
       + `<div class="hcol">${m.who === "bot" && first ? `<span class="hname">지일 도우미</span>` : ""}`
@@ -5163,7 +5165,7 @@ $("helpBox").addEventListener("click", (e) => {
     helpReply(() => helpSay("bot", "이 주제에서 자주 묻는 질문입니다.\n궁금하신 것을 눌러 주세요.", HS().qa.map((h, i) => [h, i]).filter(([h]) => h[0] === n).map(([, i]) => i)));
     return;
   }
-  if (e.target.closest("[data-hback]")) { const prev = helpPrev(); helpReply(() => helpSay("bot", "이전에 보신 질문입니다.", prev)); return; }
+  if (e.target.closest("[data-hback]")) { const prev = helpPrev(); helpReply(() => helpSay("bot", "앞에서 보신 질문 목록입니다.", prev)); return; }
   if (e.target.closest("[data-hmenu]")) { helpReply(() => helpSay("bot", "궁금하신 주제를 골라 주세요.", "cats")); return; }
   if (e.target.closest("[data-hclose]")) helpOpen(false);
 });

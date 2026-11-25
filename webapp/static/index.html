@@ -3268,8 +3268,8 @@ function attachBadge(n) {
 // 적으면 좁은 화면에서 칩이 카드 선을 넘었음), 요약 표·원문·출처는 팝업에.
 const FLAG_LABEL = { 실적: "실적 요건", 현장설명회: "현장설명회 참가 필수", 인력: "기술인력 요건", 건축사사무소: "기술인력 요건", 업종: "업종 요건", 지역공동도급: "지역의무공동도급" };
 // 이름 사전에 없는 업종(코드 없이 이름만 적힘) — 지일 보유 여부를 판정하지 못한다 (2026-10-19 요청)
-// 지역의무공동도급(2026-11-25 요청) — 그 지역 업체와 공동계약해야 참가할 수 있음
-const FLAG_NOTE = { 지역공동도급: "이 지역 업체가 아니면 그 지역 업체와 공동계약(위 비율 이상)해야 참가할 수 있습니다 — 공동수급 상대를 확인하세요.",
+// 지역의무공동도급은 설명 문구 없음 — 요약·원문만(2026-11-25 사용자 요청)
+const FLAG_NOTE = { 지역공동도급: "",
   업종: CO_NAME + " 보유 업종 목록·코드 사전에 없는 이름이라 자동 판정하지 않았습니다 — 보유 여부를 공고문과 등록 현황에서 확인하세요." };
 const flagChipText = (f) => FLAG_LABEL[f.kind] || f.kind;
 function flagBadges(n) {
@@ -3278,7 +3278,7 @@ function flagBadges(n) {
     const body =
       (rows.length ? `<ul class="due-list">${rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join("")}</ul>` : "") +
       `<p class="q-label">공고문 원문</p><blockquote class="quote">${esc(f.text)}</blockquote>` +
-      `<p>${esc(FLAG_NOTE[f.kind] || "자동 판정하지 않습니다 — " + CO_NAME + " 실적·인력이 조건에 맞는지 공고문에서 확인하세요.")}</p>` +
+      (FLAG_NOTE[f.kind] === "" ? "" : `<p>${esc(FLAG_NOTE[f.kind] || "자동 판정하지 않습니다 — " + CO_NAME + " 실적·인력이 조건에 맞는지 공고문에서 확인하세요.")}</p>`) +
       (f.source ? `<p class="src">출처: ${esc(f.source)}</p>` : "");
     return tipBadge("warn", `⚠ ${esc(flagChipText(f))}`, `${esc(FLAG_LABEL[f.kind] || f.kind)} — 확인 필요`, body);
   });

@@ -1527,6 +1527,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpfab:active { transform: translateY(4px); box-shadow: inset 0 3px 5px rgba(255,255,255,.3), inset 0 -3px 6px rgba(0,0,0,.28), 0 1px 0 #0b3a29, 0 3px 8px rgba(0,0,0,.25); }
 .helpbox .hpicks.cats { display: grid; grid-template-columns: 1fr 1fr; }
 .helpbox .hpicks.cats button { text-align: center; font-weight: 600; }
+.helpbox .hpicks.cats .hother { grid-column: 1 / -1; font-weight: 400; }
 .helpbox .hpicks .hother { border-style: dashed; color: var(--muted); border-color: var(--line); }
 .helpbox .htyping { display: flex; gap: 4px; padding: 13px 14px; }
 .helpbox .htyping i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: help-dot 1s infinite; }
@@ -4998,6 +4999,8 @@ function helpReply(fn) {  // 바로 답하지 않고 잠깐 '입력 중' 점을 
   setTimeout(() => { HELP_TYPING = false; fn(); renderHelp(); }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 650);
 }
 const helpClock = () => new Date().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+// 바로 앞에 보여 준 질문 목록 — 답이나 주제 고르기 뒤에 '이전 질문 보기'로 돌아감(11/25 사용자)
+const helpPrev = () => HELP_LOG.slice(0, -1).findLast((m) => Array.isArray(m.picks) && m.picks.length)?.picks;
 const helpSay = (who, text, picks = null) => HELP_LOG.push({ who, text, picks, at: helpClock() });
 function helpHello() {
   HELP_LOG.length = 0;
@@ -5035,11 +5038,12 @@ function renderHelp() {
     const first = !prev || prev.who !== m.who;
     const lastOfGroup = !HELP_LOG[k + 1] || HELP_LOG[k + 1].who !== m.who;
     const live = k === HELP_LOG.length - 1;  // 고르기 버튼은 마지막 말 밑에만 — 지난 메뉴가 쌓이지 않게
+    const back = live && helpPrev() ? `<button type="button" class="hother" data-hback>← 이전 질문 보기</button>` : "";
     const picks = !live || !m.picks ? ""
-      : m.picks === "cats" ? `<div class="hpicks cats">${HS().cats.map((c, i) => `<button type="button" data-hcat="${i}">${esc(c)}</button>`).join("")}</div>`
+      : m.picks === "cats" ? `<div class="hpicks cats">${HS().cats.map((c, i) => `<button type="button" data-hcat="${i}">${esc(c)}</button>`).join("")}${back}</div>`
       : m.picks.length ? `<div class="hpicks">${m.picks.map((i) => `<button type="button" data-hq="${i}">${esc(HS().qa[i][1])}</button>`).join("")}`
         + `<button type="button" class="hother" data-hmenu>다른 주제 보기</button></div>` : "";
-    const again = live && Array.isArray(m.picks) && !m.picks.length ? `<div class="hpicks"><button type="button" class="hother" data-hmenu>다른 질문 보기</button></div>` : "";
+    const again = live && Array.isArray(m.picks) && !m.picks.length ? `<div class="hpicks">${back}<button type="button" class="hother" data-hmenu>다른 주제 보기</button></div>` : "";
     html += `<li class="hmsg ${m.who}${first ? " first" : ""}${k >= HELP_SHOWN ? " new" : ""}">`
       + (m.who === "bot" ? (first ? HELP_LOGO : `<span class="hav sp" aria-hidden="true"></span>`) : "")
       + `<div class="hcol">${m.who === "bot" && first ? `<span class="hname">지일 도우미</span>` : ""}`
@@ -5083,6 +5087,7 @@ $("helpBox").addEventListener("click", (e) => {
     helpReply(() => helpSay("bot", "이 주제에서 자주 묻는 질문입니다.\n궁금하신 것을 눌러 주세요.", HS().qa.map((h, i) => [h, i]).filter(([h]) => h[0] === n).map(([, i]) => i)));
     return;
   }
+  if (e.target.closest("[data-hback]")) { const prev = helpPrev(); helpReply(() => helpSay("bot", "이전에 보신 질문입니다.", prev)); return; }
   if (e.target.closest("[data-hmenu]")) { helpReply(() => helpSay("bot", "궁금하신 주제를 골라 주세요.", "cats")); return; }
   if (e.target.closest("[data-hclose]")) helpOpen(false);
 });

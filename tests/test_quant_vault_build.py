@@ -5202,3 +5202,19 @@ def test_seal_never_pushed_to_next_line(tmp_path: Path):
         text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
         assert re.search(r"신청인 +이가은 +\(인\)", text), text
         assert width(text) <= width(line), (width(text), width(line), text)
+
+
+def test_applicant_rep_group_rrn(tmp_path: Path):
+    """(11/25 사용자 — 해남 [서식 제4호] 제안응모 대표자 선임계) '응모자(대표자)' 세로 묶음 아래
+    '업체명(대표자) | … | 주민등록번호 | __' — 주민등록번호가 빔(묶음 이름을 '응모자'로만 봤음)."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    head = _c(0, 0, "응모자(대표자)").replace('rowSpan="1"', 'rowSpan="2"')
+    rows = [[head, _c(1, 0, "업체명(대표자)"), _c(2, 0, ""), _c(3, 0, "주민 등록번호"), _c(4, 0, "")],
+            [_c(1, 1, "소재지"), _c(2, 1, "", 3)]]
+    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl(rows))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍대표", "주소": "가상시 1", "대표자 주민등록번호": "000101-3******"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v, title="가상 공고")
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    g = {(c.row, c.col): c.text.strip() for c in _cells(xml, _spans(xml, "tbl")[0])}
+    assert g[(0, 4)] == "000101-3******", g

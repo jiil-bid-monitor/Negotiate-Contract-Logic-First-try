@@ -764,6 +764,8 @@ def _row_group(cells: list[Cell], c: Cell) -> str | None:
         t = re.sub(r"[(（][^)）]*[)）]$", "", _sq(o.text)) or _sq(o.text)
         if re.fullmatch(r"(?:입찰|신청|제안|응모)?(?:대표자|대표이사)|위임자|위임인", t):  # '입찰 대표자'(11/10 경남교육청 위임장)
             return "대표자"
+        if re.fullmatch(r"(?:응모|입찰|신청|제안)자[(（](?:대표자|대표이사)[)）]", _sq(o.text)):
+            return "대표자"  # '응모자(대표자)'(11/25 해남 제안응모 대표자 선임계 — 주민등록번호가 빔)
         if re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", t):
             return "대리인"
         if re.fullmatch(r"신청인|신청자|증명신청인|제출자", t):
@@ -3663,7 +3665,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         continue
                     if not key and "주민등록번호" in _sq(c.text):
                         # 대표자 줄의 주민등록번호만(위임장 '대 표 자 | 이름 | 주민등록번호 | __') — 대리인 줄은 비움, 뒷자리는 '*'
-                        if any(o.row == c.row and _sq(o.text).startswith("대표자") for o in cells):
+                        if c.row not in agent_rows and (group == "대표자" or any(o.row == c.row and _sq(o.text).startswith("대표자") for o in cells)):
                             rrn = _masked(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
                             target = by_pos.get((c.row, c.col + c.colspan))
                             if rrn and target is not None and target.blank:

@@ -708,6 +708,8 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 .decision-who { margin-left: auto; color: var(--muted); }
 .decision-who b { color: var(--ink-strong); }
 .pbtn.next-step { border-color: var(--brand); color: var(--brand); font-weight: 600; margin-right: 10px; }
+.next-note { flex: 1 1 100%; margin-top: 6px; padding: 7px 10px; background: var(--bg); border-left: 3px solid var(--brand); font-size: 12.5px; color: var(--ink); }
+.next-note b { margin-right: 6px; }
 .pbtn.next-step:hover { background: var(--brand); color: #fff; }
 .decision .linkish { padding-left: 8px; }
 .reason-form { display: flex; gap: 6px; flex: 1 1 360px; min-width: 0; }
@@ -3580,8 +3582,10 @@ let IS_VIEWER = false;
 /** 참가로 정한 공고만 — 다음 일로 바로(11/23 사용자): 협상·규격가격 → 정량평가서, 그 밖(입찰·수의) → 투찰 계산기. 공고번호를 채워 불러옴 */
 function nextStepButton(p) {
   if (IS_VIEWER || p?.status !== "참가" || p.meta?.sourceType === "사전규격") return "";
-  const quant = ["협상", "규격가격동시"].includes(p.meta?.bidMethod);
-  return `<button type="button" class="pbtn next-step" data-next="${quant ? "quant" : "calc"}" data-next-no="${esc(p.noticeNo)}">${quant ? "정량평가서 만들기 ›" : "투찰 계산 ›"}</button>`;
+  // 규격가격동시는 규격과 가격을 함께 내므로 버튼 둘(11/25 사용자)
+  const btn = (to, text) => `<button type="button" class="pbtn next-step" data-next="${to}" data-next-no="${esc(p.noticeNo)}">${text}</button>`;
+  const m = p.meta?.bidMethod;
+  return (["협상", "규격가격동시"].includes(m) ? btn("quant", "정량평가서 만들기 ›") : "") + (m !== "협상" ? btn("calc", "투찰 계산 ›") : "");
 }
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-next]");
@@ -3626,6 +3630,7 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
       ? `<span class="decision-reason"><b>${esc(p.status)} 사유</b> ${said}</span><button type="button" class="linkish" data-preason>사유 고치기</button>`
       : form}
     <span class="decision-who">${next ? nextStepButton(p) : ""}${who}${undo}</span>
+    ${next && p.meta?.bidMethod === "규격가격동시" && nextStepButton(p) ? `<div class="next-note"><b>규격가격동시입찰</b> 규격 입찰서와 가격 입찰서를 함께 냅니다. 정량평가서와 투찰금액을 둘 다 준비해 주세요.</div>` : ""}
     ${hasReason ? `<div class="reason-edit"${editOpen ? "" : " hidden"}>${chips}${form}</div>` : ""}
   </div>`;
 }
@@ -4876,7 +4881,7 @@ const HELP_SETS = {
   live: { name: "실제 공고", cats: ["처음 사용하기", "볼 공고 고르기", "참가할 수 있는지 확인", "참가 판단 남기기", "화면 표시 뜻", "문제가 생겼을 때"], qa: [
     [0, "무엇부터 보면 되나요?", "① 맨 위 '판단할 공고'\n② 목록 맨 위: 현장설명회가 남은 공고\n③ 카드의 마감 · 사업금액 · 자격 칩", "처음 열면 먼저 보면 뭐부터 오늘"],
     [0, "이 탭에서는 무엇을 하나요?", "나라장터 공고 중\n지일이 검토할 만한 공고를 모아 보여 드립니다.\n관심 키워드·세부품명·보유 면허로 모으고,\n정선 기관의 입찰 공고는 키워드 없이도 모읍니다.\n\n마감 지난 공고와 지역 제한에 걸리는 공고,\n요구 면허가 하나도 없는 공고는 뺍니다.\n면허가 일부만 없는 공고는\n'자격 미보유' 칩을 달고 남아 있습니다.", "이 탭 뭐 무엇 목적 이탭에서는"],
-    [0, "어떤 순서로 하나요?", "① 카드에서 마감·사업금액·자격을 봅니다.\n② 공고명을 눌러 공고문을 확인합니다.\n③ 참가·보류·불참을 누르고 사유를 고릅니다.\n\n참가로 정한 공고는\n투찰 계산(입찰·수의계약)이나\n정량평가서(협상)로 이어집니다.", "사용법 순서 쓰는 할 일"],
+    [0, "어떤 순서로 하나요?", "① 카드에서 마감·사업금액·자격을 봅니다.\n② 공고명을 눌러 공고문을 확인합니다.\n③ 참가·보류·불참을 누르고 사유를 고릅니다.\n④ 참가로 정하면 사유 줄 오른쪽에\n    버튼이 생깁니다. 눌러 주세요.\n    • 입찰·수의계약: 투찰 계산 ›\n    • 협상: 정량평가서 만들기 ›\n    • 규격가격동시: 두 버튼 모두\n\n사전규격에는 버튼이 없습니다.", "사용법 순서 쓰는 할 일", "① 카드에서 마감·사업금액·자격을 봅니다.\n② 공고명을 눌러 공고문을 확인합니다.\n③ 참가·보류·불참을 누르고 사유를 고릅니다.\n\n참가로 정한 다음에는 서버 PC 웹앱에서\n같은 공고 카드의 버튼을 눌러 주세요.\n• 입찰·수의계약: 투찰 계산 ›\n• 협상: 정량평가서 만들기 ›\n• 규격가격동시: 두 버튼 모두\n사전규격에는 버튼이 없습니다."],
     [0, "새 공고는 언제 들어오나요?", "이 서버 PC 웹앱에서 수집할 때 들어옵니다.\n기간을 고르고\n'나라장터에서 불러오기'를 눌러 주세요.\n끝나면 NAS 웹앱에도 저절로 보내집니다.", "언제 새로 수집 업데이트 갱신 올라온 반영", "서버 PC 웹앱에서 수집해야 들어옵니다.\n수집이 끝나면 이곳으로 저절로 옵니다.\n열어 둔 화면이면 F5를 눌러 주세요.\n맨 위 '마지막 수집'이 그 시각입니다."],
 
     [1, "아직 판단하지 않은 공고만 보고 싶습니다", "목록 위 '참가여부'에서\n'미지정'을 골라 주세요.\n참가·보류·불참을 정하지 않은\n공고만 남습니다.", "미지정 미판단 안한 손안댄 안본"],
@@ -4901,7 +4906,7 @@ const HELP_SETS = {
     [3, "비슷한 공고는 지난번에 어떻게 판단했나요?", "공고명이 비슷하거나 수요기관이 같은\n공고를 판단한 적이 있으면\n카드에 '비슷한 공고 지난 판단'으로\n2건까지 보입니다.\n그때의 판단과 사유가 같이 나옵니다.", "비슷한 지난번 지난판단 예전에 전에는"],
     [3, "'내가 맡기'는 언제 누르나요?", "그 공고의 담당을 나로 정할 때 누릅니다.\n맡은 뒤엔 '넘기기'로\n다른 팀원에게 넘길 수 있습니다.", "맡기 담당 넘기기"],
     [3, "팀원에게 의견을 남기고 싶습니다", "카드의 '대화 N건'을 누르고\n아래 칸에 적은 뒤\n'남기기'를 눌러 주세요.\n그 공고를 보는 팀원에게 보입니다.", "대화 의견 댓글 팀원 코멘트"],
-    [3, "참가로 정한 다음에는 무엇을 하나요?", "카드에 생기는 버튼을 눌러 주세요.\n• 협상·규격가격동시: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n사전규격에는 버튼이 없습니다.", "참가 참가한 다음 정량평가서 투찰 계산", "서버 PC 웹앱에서 같은 공고 카드의\n버튼을 눌러 주세요.\n• 협상·규격가격동시: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n사전규격에는 버튼이 없습니다."],
+    [3, "참가로 정한 다음에는 무엇을 하나요?", "카드에 생기는 버튼을 눌러 주세요.\n• 협상: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n• 규격가격동시: 두 버튼 모두\n사전규격에는 버튼이 없습니다.", "참가 참가한 다음 정량평가서 투찰 계산", "서버 PC 웹앱에서 같은 공고 카드의\n버튼을 눌러 주세요.\n• 협상: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n• 규격가격동시: 두 버튼 모두\n사전규격에는 버튼이 없습니다."],
     [3, "참가로 정한 공고의 마감을 한눈에 보고 싶습니다", "맨 위 '일정'을 눌러 주세요.\n참가로 정한 공고의 마감이\n날짜별로 보입니다.\n투찰을 기록한 공고의 개찰일과\n회사 서류 만료일도 같이 나옵니다.", "달력 일정 캘린더 개찰일 스케줄"],
 
     [4, "'판단할 공고' 숫자는 무슨 뜻인가요?", "최근 7일 보고에 나간 공고 중\n지금 목록에 있고\n아직 판단하지 않은 공고 수입니다.\n사전규격은 세지 않습니다.", "📋 숫자 판단할 텔레그램 빨간 판단할공고"],

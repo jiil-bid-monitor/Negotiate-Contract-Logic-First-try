@@ -1913,6 +1913,36 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   .notice.live.compact .badge, .notice.live.compact .due-tag, .notice.live.compact .grade { font-size: 12px; padding: 2px 7px; }
   .notice.live.compact .no-copy { min-height: 26px; font-size: 12px; padding: 2px 9px; }
 }
+
+/* ── 카드 숨 쉴 틈 (2026-11-25 사용자: 색·글자가 조밀하게 붙어 확인이 어려움) ──
+   묶음(판단 · 자격 · 지역·공동수급 · 확인할 것) 사이는 넓게 + 옅은 세로선, 묶음 안 칩은 6px,
+   칩 테두리는 글자색을 옅게 써서 상자가 겹쳐 보이지 않게, 줄 사이도 조금씩 띄움 */
+.notice.live.compact { padding: 16px 22px 14px; margin-bottom: 12px; }
+.notice.live.compact .card-head2 { gap: 6px 12px; }
+.notice.live.compact .card-head2 .badges { gap: 5px; }
+.notice.live.compact .facts-line { margin-top: 8px; }
+.notice.live.compact .facts div { padding: 0 16px; }
+.notice.live.compact .facts div:first-child { padding-left: 0; }
+.notice.live.compact .facts-line .notice-no { padding-left: 16px; }
+.notice.live.compact .card-foot { margin-top: 14px; padding-top: 12px; column-gap: 24px; }
+.notice.live.compact .card-foot .tag-rows { row-gap: 8px; }
+.notice.live.compact .card-foot .tag-group { gap: 6px; margin-right: 18px; padding-right: 0; border-right: 0; }
+.notice.live.compact .card-foot .tag-group:last-child { margin-right: 0; padding-right: 0; border-right: 0; }
+.notice.live.compact .card-foot .badge, .notice.live.compact .card-foot .grade {
+  font-size: 11.5px; line-height: 1.45; padding: 2px 8px; border-radius: 4px;
+  border-color: color-mix(in srgb, currentColor 35%, transparent);
+}
+.notice.live.compact .card-foot .badge .ico { margin-right: 1px; }
+.notice.live.compact .part-row { gap: 6px; }
+.notice.live.compact .part-owner { margin-left: 6px; }
+@media (max-width: 760px) {
+  .notice.live.compact { padding: 14px 16px 12px; }
+  .notice.live.compact .card-foot .tag-group { margin-right: 0; padding-right: 0; border-right: 0; flex-basis: 100%; }
+  .notice.live.compact .facts div + div { padding: 0 12px; }
+  .notice.live.compact .facts div:nth-child(2) { padding-left: 0; }
+  .notice.live.compact .facts-line .notice-no { padding-left: 0; }
+  .notice.live.compact .card-score b { min-width: 0; }
+}
 </style>
 </head>
 <body>

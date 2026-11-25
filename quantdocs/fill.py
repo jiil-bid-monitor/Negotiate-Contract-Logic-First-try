@@ -1433,6 +1433,9 @@ _EMP_LABELS = [  # 재직증명서 칸 이름표 → 지정 임원 값(11/25 사
 ]
 
 
+_EMP_SLOT = re.compile(r"[.\-~～/년월일부터까지현재]*")
+
+
 def _fill_employment(xml: str, vault, rep: FillReport) -> str:
     """재직증명서 표('성 명 | __ | 생년월일 | __ / 소 속 / 직 위 / 주 소 / 재직기간')를 위임장 대리인(지정 임원 — vault.agent)으로.
     지일은 vault.agent가 없어 그대로(11/05 직접 기입 서식)."""
@@ -1443,14 +1446,15 @@ def _fill_employment(xml: str, vault, rep: FillReport) -> str:
     for tbl in _all_tables(xml):
         cells = _cells(xml, tbl)
         labels = {_sq(c.text) for c in cells}
-        if not any(re.fullmatch(r"재직기간|근무기간", t) for t in labels):
+        if not any(re.fullmatch(r"재직(?:기간|일자|사항)?|근무기간|입사(?:일|일자|년월일)", re.sub(r"[()（）]", "", t)) for t in labels):
             continue
         by_pos = {(c.row, c.col): c for c in cells}
         for c in cells:
             lab = re.sub(r"[()（）]", "", _sq(c.text))
             fn = next((f for rx, f in _EMP_LABELS if re.fullmatch(rx, lab)), None)
             target = by_pos.get((c.row, c.col + c.colspan))
-            if fn is None or target is None or not target.blank:
+            # 빈 칸 또는 날짜 자리표시만 적힌 칸('    .   .   ~ 현재', '년 월 일 부터')도 채움(11/25 — 해남 재직증명서가 빔)
+            if fn is None or target is None or not (target.blank or _EMP_SLOT.fullmatch(_sq(target.text))):
                 continue
             val = fn(agent, vault)
             if val:
@@ -3417,7 +3421,11 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     seen_party.add(sig)
                 # 직접 기입 서식(실적증명서 등)은 표 안을 건드리지 않음 — 단 '신청인' 묶음 줄(업체명·대표자·사업자번호·소재지·전화)은 채움
                 # (11/10 경남교육청 사업이행 실적증명서 — 증명 내용은 발주처가, 신청인 칸은 지일이)
-                if sign_only and not any(_row_group(cells, x) == "신청인" for x in cells):
+                # 그리다 위임장 대리인 표('대표자 | … / 대리인 | …')는 직접 기입 서식으로 잘려도 채움(11/25 — 해남 '위임장 및 재직증명서'
+                # 한 서식이 제목의 '재직' 때문에 직접 기입 서식이 되어 대리인·대표자 칸이 모두 비었음)
+                deleg = bool(getattr(vault, "agent", None)) and any(
+                    re.fullmatch(r"대리인|수임인|위임받는자|위임받은자|피위임인", _sq(x.text)) for x in cells)
+                if sign_only and not deleg and not any(_row_group(cells, x) == "신청인" for x in cells):
                     continue
                 by_pos = {(c.row, c.col): c for c in cells}
                 colon_vals: dict[int, str] = {}  # ':'로 끝나는 이름표 옆 값 칸 → 원래 문단 모양(11/23 줄맞춤)
@@ -3497,7 +3505,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     if not scored:  # 자기평가표 아래 따로 놓인 '합 계 | 20 점 | __' 표
                         edits += _total_edits(cells, tally, rep)
                 for c in cells:
-                    if sign_only and _row_group(cells, c) != "신청인":
+                    if sign_only and not deleg and _row_group(cells, c) != "신청인":
                         continue
                     key = _label_key(c.text)
                     # 한 줄 서명 표 '서약자: | __ | 대 표 : | (서명 또는 날인)'(11/23 사용자: 띄어쓰기 무시하고 서명란에 '대표'가 있으면 대표자 성함) —

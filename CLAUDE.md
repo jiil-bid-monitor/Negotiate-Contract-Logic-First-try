@@ -30,6 +30,10 @@
 
 - 서버 PC `.env` `QUANT_GRIDA_CEO`(대표자 이름)·`QUANT_GRIDA_CEO_TITLE`(대표자 직위) — 서류에서 읽은 값보다 먼저(`importer.enrich_vault`, `_CEO_RRN`과 같은 자리).
   `QUANT_GRIDA_REP…`는 그대로 위임장 대리인 값(11/25 결정). 시험 `test_grida_overview_and_history_from_env`에 더함. 서버 코드 바뀜 — 웹앱 다시 켜기.
+- (같은 날 사용자 '여전히 대리인 칸이 빔' — .env 대리인 성명은 읽힘 확인) 원인 추정: 해남 '위임장 및 재직증명서'처럼 제목에 '재직'이 든 서식은
+  직접 기입 서식(`build._MANUAL_FORM`, sign_only)이라 표를 안 채웠음 → 그리다(vault.agent)면 '대리인' 머리가 있는 표는 sign_only여도 대표자·대리인 줄을 채움
+  (`fill_hwpx` `deleg`), 재직증명서 표는 '재직'·'입사일' 이름표로도 알아보고 날짜 자리표시('  .  .  ~ 현재')만 든 칸도 채움(`_EMP_SLOT`).
+  지일은 그대로. 실제 해남 서식 파일로는 미확인. 시험 `test_grida_delegation_filled_even_as_manual_form`(예전 코드로는 실패).
 
 ## 2026-11-25 — 그리다 재직증명서 = 지정 임원 · '대리인' 머리가 합친 칸이 아니어도 (브랜치 `claude/grida-agent-employment`, 사용자 제보 — 해남 위임장·재직증명서)
 

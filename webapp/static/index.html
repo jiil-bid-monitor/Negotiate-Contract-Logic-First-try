@@ -2346,15 +2346,17 @@ function checkKinds(n) {
   if ((n.qual?.parts || []).some((p) => p.status === "미달")) out.add("qual");
   // 업종 요건 칩은 자격 쪽, 나머지(실적·기술인력)는 실적·기술인력 쪽
   if ((n.textFlags || []).some((f) => f.kind === "업종")) out.add("qual");
-  if ((n.textFlags || []).some((f) => f.kind !== "업종")) out.add("perf");
+  if ((n.textFlags || []).some((f) => f.kind !== "업종" && f.kind !== "지역공동도급")) out.add("perf");
   if (consortiumCase(n)) out.add("consortium");
-  if (n.overseas || n.overseasSuspect || n.overseasAttachment || n.regionSuspect || n.linkedSystem || n.attachmentCount === 0) out.add("scope");
+  // 지역의무공동도급(11/25)은 지역 쪽 — 해외·지역 의심과 같은 묶음
+  if (n.overseas || n.overseasSuspect || n.overseasAttachment || n.regionSuspect || n.linkedSystem || n.attachmentCount === 0
+      || (n.textFlags || []).some((f) => f.kind === "지역공동도급")) out.add("scope");
   return out;
 }
 const CHECK_OPTS = [
   ["qual", "자격·품명", "자격요건·세부품명번호 미보유, 이름만 적힌 업종 요건(확인 필요)"],
   ["perf", "실적·기술인력", "첨부 공고문의 실적제한·기술인력 요건"],
-  ["scope", "확인할 것", "몽골 공고 유력·해외 개최 의심, 지역 제한 의심(첨부), 첨부 없음·국방전자조달"],
+  ["scope", "확인할 것", "몽골 공고 유력·해외 개최 의심, 지역 제한 의심(첨부), 지역의무공동도급, 첨부 없음·국방전자조달"],
   ["consortium", "컨소시엄 검토", "자격 미보유 — 보유 자격이 학술연구용역뿐"],
 ];
 const checkPass = (n, v) => v === "all" || checkKinds(n).has(v);
@@ -3264,9 +3266,11 @@ function attachBadge(n) {
 
 // 판정하지 않는 글로 된 요건 — 실적·기술인력(건축사사무소 포함)·업종. 칩에는 요건 종류만 적고(2026-10-20 요청 — 핵심 값까지
 // 적으면 좁은 화면에서 칩이 카드 선을 넘었음), 요약 표·원문·출처는 팝업에.
-const FLAG_LABEL = { 실적: "실적 요건", 현장설명회: "현장설명회 참가 필수", 인력: "기술인력 요건", 건축사사무소: "기술인력 요건", 업종: "업종 요건" };
+const FLAG_LABEL = { 실적: "실적 요건", 현장설명회: "현장설명회 참가 필수", 인력: "기술인력 요건", 건축사사무소: "기술인력 요건", 업종: "업종 요건", 지역공동도급: "지역의무공동도급" };
 // 이름 사전에 없는 업종(코드 없이 이름만 적힘) — 지일 보유 여부를 판정하지 못한다 (2026-10-19 요청)
-const FLAG_NOTE = { 업종: CO_NAME + " 보유 업종 목록·코드 사전에 없는 이름이라 자동 판정하지 않았습니다 — 보유 여부를 공고문과 등록 현황에서 확인하세요." };
+// 지역의무공동도급(2026-11-25 요청) — 그 지역 업체와 공동계약해야 참가할 수 있음
+const FLAG_NOTE = { 지역공동도급: "이 지역 업체가 아니면 그 지역 업체와 공동계약(위 비율 이상)해야 참가할 수 있습니다 — 공동수급 상대를 확인하세요.",
+  업종: CO_NAME + " 보유 업종 목록·코드 사전에 없는 이름이라 자동 판정하지 않았습니다 — 보유 여부를 공고문과 등록 현황에서 확인하세요." };
 const flagChipText = (f) => FLAG_LABEL[f.kind] || f.kind;
 function flagBadges(n) {
   return (n.textFlags || []).map((f) => {

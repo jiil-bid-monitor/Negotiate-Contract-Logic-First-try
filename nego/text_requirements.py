@@ -197,6 +197,12 @@ _FLAGS = (
     ("실적", re.compile(r"실적|준공한|수행한\s*경험"),
      re.compile(r"\d[\d,.]*\s*(?:(?:억|천만|백만|만)\s*원?|원|건)[^.\n]{0,15}?이\s*상")),
     ("건축사사무소", re.compile(r"건축사\s*사무소"), re.compile(r"개설|등록|신고")),
+    # 지역의무공동도급(2026-11-25 사용자 요청 — "본 공사는 지역의무공동도급이 적용되는 공사로서 서울특별시에 … 본점 소재지를 둔
+    # 지역업체의 시공참여비율이 전체 공사금액의 49% 이상으로 공동계약"). 지역 판정은 이 문장을 제한으로 안 보므로(`region._NOT_LIMIT_RE`
+    # '지역의무') 공고는 남고, 그 지역 업체와 공동계약해야 참가할 수 있다는 걸 칩으로 알림. PDF는 글자를 띄워 읽혀서 글자 사이 빈칸 허용.
+    ("지역공동도급",
+     re.compile(r"지\s*역\s*의\s*무\s*공\s*동\s*도\s*급|지\s*역\s*업\s*체[^.。\n]{0,80}?(?:시\s*공\s*)?참\s*여\s*비\s*율"),
+     re.compile(r"공\s*동\s*(?:계\s*약|도\s*급|수\s*급|이\s*행)|비\s*율|\d\s*%")),
     ("인력", re.compile(r"기술자|기술사|학예사|건축사|전문\s*인력|기사\s*자격"), re.compile(r"보유|소지|소속|재직|자격증")),
 )
 
@@ -260,6 +266,28 @@ def _with_context(sent: str, owner: dict) -> str:
     return "\n".join(flat(x) for x in lines)[:_MAX_CONTEXT_TEXT]
 
 
+def _joint_region_text(sent: str, items: list[str]) -> str:
+    """지역의무공동도급 원문 — 문장이 길어 PDF 줄 단위로 끊겨도(첫 줄만 잡힘) 항목 원문에서 그 줄부터 이어,
+    바로 뒤 "다만, … 단독으로 …" 문장(단독 참가 조건)까지."""
+    flat = lambda t: re.sub(r"\s+", " ", t).strip()
+    head = flat(sent)
+    for item in items:
+        body = flat(item)
+        at = body.find(head)
+        if at < 0:
+            continue
+        seg = body[at:at + _MAX_CONTEXT_TEXT]
+        end = re.search(r"\.\s*(?=다\s*만)", seg)  # 요건 문장 끝
+        if end:
+            tail = re.search(r"다\s*만[^.]*\.", seg[end.end():])
+            stop = end.end() + tail.end() if tail else end.end()
+        else:
+            first = re.search(r"\.(?:\s|$)", seg)
+            stop = first.end() if first else len(seg)
+        return seg[:stop].strip()
+    return head[:_MAX_FLAG_TEXT]
+
+
 def flag_requirements(
     items: list[str], held_code_names: dict[str, str] | None = None, lookup: dict[str, str] | None = None
 ) -> list[dict]:
@@ -287,7 +315,8 @@ def flag_requirements(
             # 「…」 안 법령·지침 이름은 요건 낱말로 안 본다 — 「소프트웨어기술자 경력 및 소프트웨어사업자 실적 관리 지침」의 "기술자"가
             # 기술인력 칩으로 잡혔음(2026-10-14 제보: 컴퓨터관련서비스사업 신고 + 직접생산확인 8115169901 요건 — 자격 판정이 보는 내용)
             if subject.search(_LAW_TITLE_RE.sub(" ", s)) and detail.search(s):
-                entry = {"kind": kind, "text": _with_context(s, owner)}
+                text = _joint_region_text(s, items) if kind == "지역공동도급" else _with_context(s, owner)
+                entry = {"kind": kind, "text": text}
                 out.setdefault(kind, entry)
                 break
     industry = _unknown_industry_flag(per_item, owner, held_code_names or {}, lookup or {})
@@ -525,6 +554,26 @@ def _office_summary(text: str) -> list[list[str]]:
     return rows
 
 
+def _joint_region_summary(text: str) -> list[list[str]]:
+    """지역의무공동도급 요약 — 지역·지역업체 참여 비율·단독 참가 조건."""
+    from .region import SIDO_ALIASES, _SIDO_RE, sido_of
+
+    rows: list[list[str]] = []
+    flat = re.sub(r"\s+", "", text)
+    sidos = list(dict.fromkeys(sido_of(m.group(0)) or m.group(0) for m in _SIDO_RE.finditer(flat)))
+    names = {k: v[0] for k, v in SIDO_ALIASES.items()}
+    if sidos:
+        rows.append(["지역", " · ".join(names.get(x, x) for x in sidos[:3])])
+    ratio = re.search(r"(\d+(?:\.\d+)?)%(이상)?", flat)
+    if ratio:
+        rows.append(["지역업체 참여 비율", f"{ratio.group(1)}%{' 이상' if ratio.group(2) else ''}"])
+    if "대표사가지역업체인경우에도" in flat:
+        rows.append(["대표사", "대표사가 지역업체여도 의무 비율 이상"])
+    if re.search(r"단독으로입찰|단독으로참여|단독입찰", flat):
+        rows.append(["단독 참가", "입찰참가자격을 모두 갖춘 그 지역 업체만"])
+    return rows
+
+
 def summarize_flag(flag: dict) -> list[list[str]]:
     text = flag.get("text", "")
     kind = flag.get("kind")
@@ -536,4 +585,6 @@ def summarize_flag(flag: dict) -> list[list[str]]:
         return _office_summary(text)
     if kind == "업종":
         return [["업종", " / ".join(flag.get("names") or [])]]
+    if kind == "지역공동도급":
+        return _joint_region_summary(text)
     return []

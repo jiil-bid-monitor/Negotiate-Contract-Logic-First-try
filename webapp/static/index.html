@@ -12,10 +12,6 @@
 <link rel="stylesheet" href="https://webfontworld.github.io/gmarket/GmarketSans.css" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" media="print" onload="this.media='all'">
 
-<script>
-  // 화면은 라이트만(11/24 사용자 — 다크·시스템 버튼 뺌). 그리기 전에 정해 OS 다크 설정을 따라가지 않게
-  document.documentElement.dataset.theme = "light";
-</script>
 
 <style>
 /* ── ji1.co.kr 디자인 토큰 ───────────────────────────────────────
@@ -1764,6 +1760,104 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   #tab-live, #tab-excluded { padding-bottom: 90px !important; }
 }
 @media print { body::after { display: none; } }
+
+/* ── 목록 위 정리 (2026-11-25 사용자 — '상단에 칩이 너무 많아서 어지러워') ── */
+/* 바로가기 링크: 위 짙은 띠 안 글자 링크 */
+.topbar .top-links { position: static; width: auto; display: flex; flex-direction: row; gap: 4px; margin-left: auto; }
+.topbar .top-links a { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 0; background: none; border-radius: 6px; color: rgba(255,255,255,.82); text-decoration: none; }
+.topbar .top-links a:hover { background: rgba(255,255,255,.1); box-shadow: none; color: #fff; }
+.topbar .top-links img { width: 16px; height: 16px; padding: 1px; grid-row: auto; }
+.topbar .top-links b { font-size: 13px; font-weight: 500; color: inherit; }
+.topbar .top-links small { display: none; }
+.topbar .top-links .go { font-size: 11px; color: rgba(255,255,255,.55); grid-row: auto; }
+.topbar .top-links + .docbell { margin-left: 0; }
+/* 마지막 수집 글은 불러오기 줄 안 */
+#liveTools .live-meta { margin: 0; font-size: 12.5px; color: var(--muted); }
+@media (min-width: 641px) {
+  #liveTools { flex-wrap: nowrap; }
+  #liveTools .live-meta { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #liveTools .tab-search { flex: 0 1 300px; margin-left: auto; }
+}
+/* 낙찰방법 탭: 낮은 밑줄 탭 */
+.cat-tabs { align-items: flex-end; margin: 4px 0 10px; border-bottom: 1px solid var(--line); }
+.cat-main { gap: 0; }
+.cat-tab { flex-direction: row; align-items: center; gap: 6px; min-width: 0; padding: 8px 14px 9px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; margin-bottom: -1px; }
+.cat-tab small { display: none; }
+.cat-tab:hover:not(:disabled) { border-color: transparent; border-bottom-color: var(--line-strong); }
+.cat-tab.on { border-color: transparent; border-bottom-color: var(--brand); box-shadow: none; background: none; }
+.cat-prod { border: 0; background: none; padding: 6px 4px; margin-bottom: 4px; color: var(--muted); }
+.cat-prod:hover { color: var(--brand); }
+.cat-prod.on { color: var(--brand); }
+/* 필터: 평소엔 글자 메뉴, 고른 것만 칩 */
+.filter-row .dd-btn { border-color: transparent; background: none; padding: 0 8px; }
+.filter-row .dd-btn:hover, .filter-row .dd.open .dd-btn { border-color: var(--line-strong); }
+.filter-row .dd.set .dd-btn { border-color: var(--brand); background: var(--brand-tint); padding: 0 12px; }
+.filter-row .filters { gap: 2px; }
+.sort-box select { border-color: var(--line); }
+/* 스크롤해도 필터·정렬 줄은 위에 */
+.filter-row { position: sticky; top: 0; z-index: 15; background: var(--bg); padding: 6px 0; }
+.filter-open, .filter-close, .filter-shade { display: none; }
+/* 카드 이름 칸: 값 없음은 흐리게 */
+.part-owner b.nil { color: var(--faint); font-weight: 400; }
+.pbtn.nil:not(:hover) { color: var(--muted); border-color: var(--line-soft); }
+@media (max-width: 1520px) { .me-row { display: none; } }
+@media (max-width: 760px) {
+  .topbar .top-links { margin-left: 0; }
+  .topbar .top-links b, .topbar .top-links .go { display: none; }
+}
+@media (max-width: 640px) {
+  /* 휴대폰: 필터·정렬은 버튼 하나 → 아래에서 올라오는 창 */
+  #liveTools .filter-open { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; font: inherit; font-size: 14px; cursor: pointer;
+    color: var(--ink-strong); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; }
+  .filter-open b { color: var(--brand); }
+  #liveTools .live-meta { flex: 1 1 100%; order: 5; }
+  #liveTools .tab-search { order: 6; }
+  #filterRow { display: none; }
+  body.filter-sheet #filterRow { display: flex; flex-direction: column; align-items: stretch; gap: 12px; position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 60;
+    max-height: 80vh; overflow-y: auto; margin: 0; padding: 14px 16px 24px; background: var(--panel); border-radius: 16px 16px 0 0; box-shadow: 0 -8px 30px rgba(0,0,0,.2); }
+  body.filter-sheet #filterRow .filters { flex-wrap: wrap; gap: 8px; }
+  body.filter-sheet #filterRow .dd-btn { border-color: var(--line-strong); padding: 0 12px; }
+  body.filter-sheet #filterRow .dd-menu { position: static; margin-top: 6px; max-width: none; box-shadow: none; }
+  body.filter-sheet #filterRow .sort-wrap { justify-content: space-between; margin-left: 0; }
+  .filter-close { display: block; align-self: flex-end; font: inherit; font-size: 14px; padding: 6px 12px; cursor: pointer; background: none; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--ink); }
+  body.filter-sheet .filter-shade { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.35); }
+  .cat-tabs { flex-wrap: nowrap; overflow-x: auto; }
+  .cat-main { flex-wrap: nowrap; }
+  .cat-tab { white-space: nowrap; padding: 8px 10px 9px; }
+  .cat-prod { white-space: nowrap; }
+  /* 카드 둘째 줄: 마감 / 수요기관 | 공고기관 | 금액 / 공고번호 */
+  .notice.live.compact .facts-line, .notice.live.compact .facts { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 3px 0; }
+  .notice.live.compact .facts div:first-child { flex: 1 1 100%; }
+  .notice.live.compact .facts div + div { padding: 0 10px; border-left: 1px solid var(--line); }
+  .notice.live.compact .facts div:nth-child(2) { padding-left: 0; border-left: 0; }
+  .notice.live.compact .facts-line .notice-no { flex: 1 1 100%; padding: 2px 0 0; border: 0; }
+}
+
+/* ── 탭마다 (2026-11-25) ── */
+/* 판단 기록: 줄 안 되돌리기는 줄 오른쪽 것 하나만, 찾기·고르기는 한 줄 */
+.log-row .decision [data-pundo] { display: none; }
+.log-search select { height: 40px; }
+@media (max-width: 760px) {
+  .log-line, .log-line.pickable { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .log-due, .log-act { grid-column: 1; }
+  .log-act { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+  .log-search { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .log-search input { grid-column: 1 / -1; }
+  .log-search select { width: 100%; min-width: 0; }
+}
+/* 투찰 계산기: 휴대폰에서 공고번호 칸과 불러오기 버튼을 한 줄에 */
+@media (max-width: 640px) {
+  .calc-lookup { flex-wrap: nowrap; }
+  .calc-lookup label { flex: 1 1 auto; min-width: 0; }
+  .calc-lookup input { width: auto; flex: 1 1 auto; min-width: 0; }
+  .calc-lookup button { flex: none; white-space: nowrap; padding-left: 12px; padding-right: 12px; }
+  #cLookupMsg { flex-basis: 100%; }
+}
+/* 과거사업 목록: 휴대폰에서 찾기·연도 한 줄 */
+@media (max-width: 640px) {
+  #tab-corpus .search { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  #tab-corpus .search select { width: auto; }
+}
 </style>
 </head>
 <body>
@@ -1794,6 +1888,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <p class="corpus-sum" id="corpusSum" hidden>과거 실적을 불러오는 중…</p>
     </div>
 
+    <nav class="side-links top-links" aria-label="바로가기">
+      <a href="https://www.g2b.go.kr/" target="_blank" rel="noopener" title="나라장터 새 창으로 열기"><img src="icons/g2b.ico" alt=""><b>나라장터</b><small>g2b.go.kr</small><span class="go">↗</span></a>
+      <a href="https://www.21line.co.kr/conty/?cd=first" target="_blank" rel="noopener" title="21라인 새 창으로 열기"><img src="icons/21line.ico" alt=""><b>21라인</b><small>21line.co.kr</small><span class="go">↗</span></a>
+    </nav>
     <div class="docbell" id="judgeBell" hidden>
       <button type="button" id="judgeBellBtn" aria-haspopup="true" aria-expanded="false" title="판단할 공고 (텔레그램 보고에 나간 공고)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/></svg><span class="lb">판단할 공고</span><span class="n" id="judgeBellN"></span></button>
       <div class="docbell-pop" id="judgeBellPop" hidden></div>
@@ -1811,12 +1909,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 </div>
 
 <div class="wrap">
-  <div class="me-row">
-    <nav class="side-links" aria-label="바로가기">
-      <a href="https://www.g2b.go.kr/" target="_blank" rel="noopener" title="나라장터 새 창으로 열기"><img src="icons/g2b.ico" alt=""><b>나라장터</b><small>g2b.go.kr</small><span class="go">↗</span></a>
-      <a href="https://www.21line.co.kr/conty/?cd=first" target="_blank" rel="noopener" title="21라인 새 창으로 열기"><img src="icons/21line.ico" alt=""><b>21라인</b><small>21line.co.kr</small><span class="go">↗</span></a>
-    </nav>
-  </div>
 
   <div class="tabbar">
     <div class="tabs" role="tablist">
@@ -1855,11 +1947,14 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <button type="button" id="refresh" title="고른 기간의 공고를 나라장터에서 새로 받고 첨부(공고문·과업지시서)까지 읽습니다. 몇 분 걸립니다">나라장터에서 불러오기</button>
       <button type="button" id="load" class="ghost" title="서버에 저장된 마지막 수집 결과와 팀원의 참가여부·대화를 다시 받아옵니다 (나라장터에 다시 묻지 않습니다)">판단 갱신</button>
       <span class="load-state" id="loadState" role="status"></span>
+      <span class="sub live-meta" id="liveMeta">화면을 열면 아직 마감되지 않은 공고를 자동으로 불러옵니다.</span>
+      <button type="button" class="filter-open ghost" id="filterOpen" aria-expanded="false" aria-controls="filterRow">필터 · 정렬 <b id="filterOpenN"></b></button>
       <!-- 찾기 칸 — 실제 공고 탭에선 수집 줄 오른쪽(2026-11-18), 제외된 공고 탭으로 가면 탭 줄 오른쪽으로 옮긴다(showTab) -->
       <input id="liveQ" class="tab-search" type="search" placeholder="공고명·수요기관·공고기관·공고번호 검색" autocomplete="off" aria-label="실제 공고 목록에서 찾기">
     </div>
     <div class="cat-tabs" id="catTabs" role="tablist" aria-label="공고 대분류"></div>
-    <div class="filter-row">
+    <div class="filter-row" id="filterRow">
+      <button type="button" class="filter-close" id="filterClose">닫기</button>
       <div class="filters" id="filters"></div>
       <div class="sort-wrap">
       <span class="af-sum" id="liveCount"></span>
@@ -1874,8 +1969,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       </label>
       </div>
     </div>
+    <div class="filter-shade" id="filterShade" aria-hidden="true"></div>
     <div class="active-filters" id="activeFilters" hidden></div>
-    <p class="sub" id="liveMeta" style="margin:0 0 12px">화면을 열면 아직 마감되지 않은 공고를 자동으로 불러옵니다.</p>
     <p class="sub enrich-meta" id="enrichMeta" role="status"></p>
     <div id="liveResults"></div>
     <div class="empty" id="kindEmpty" hidden></div>
@@ -2982,6 +3077,7 @@ function renderActiveFilters(shownN) {
   // 'N건 보는 중'은 정렬 칸 바로 왼쪽에(11/18 사용자: 빈 공간이 너무 큼 — 따로 한 줄을 쓰지 않게)
   $("liveCount").innerHTML = shownN == null || filters.kind === "review" ? "" : `${esc(what)} <b>${num(shownN)}건</b> 보는 중`;
   $("activeFilters").hidden = !on.length;
+  $("filterOpenN").textContent = on.length ? String(on.length) : "";
 }
 function dropdown(group, name, opts, tone = "", state = filters) {
   // 첫 항목(전체)을 고른 상태면 버튼에 "전체"라고만 쓴다
@@ -3084,7 +3180,6 @@ function renderNotice(n) {
       <div class="badges">
         ${promotedBadge(n)}
         ${briefingBadge(n)}
-        ${due}
         ${gradeBadge(n)}
         ${n.bidMethodCategory ? bidMethodBadge(n) : ""}
         ${businessTypeBadge(n)}
@@ -3726,14 +3821,16 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
   const editOpen = REASON_OPEN.has(p.noticeNo);
   const form = `<form class="reason-form${chips ? " optional" : ""}"><input maxlength="500" aria-label="${esc(p.status)} 사유" placeholder="${chips ? "자세히 적기 (선택)" : esc(p.status) + " 사유"}: ${esc(REASON_HINT[p.status] || "")}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">${chips ? "자세히 저장" : "사유 저장"}</button></form>`;
   const said = [tags.join(" · "), p.reason].filter(Boolean).map(esc).join(" · ");
+  // 판단 기록 탭(next=false)은 사유가 없어도 칩 줄을 접어 둠 — 한 건이 화면을 다 차지하지 않게 (2026-11-25 사용자)
+  const folded = hasReason || !next;
   return `<div class="decision">
-    ${hasReason ? "" : chips}
+    ${folded ? "" : chips}
     ${hasReason
       ? `<span class="decision-reason"><b>${esc(p.status)} 사유</b> ${said}</span><button type="button" class="linkish" data-preason>사유 고치기</button>`
-      : form}
+      : folded ? `<button type="button" class="linkish" data-preason>사유 적기</button>` : form}
     <span class="decision-who">${next ? nextStepButton(p) : ""}${who}${undo}</span>
     ${next && p.meta?.bidMethod === "규격가격동시" && nextStepButton(p) ? `<div class="next-note"><b>규격가격동시입찰</b> 규격 입찰서와 가격 입찰서를 함께 냅니다. 정량평가서와 투찰금액을 둘 다 준비해 주세요.</div>` : ""}
-    ${hasReason ? `<div class="reason-edit"${editOpen ? "" : " hidden"}>${chips}${form}</div>` : ""}
+    ${folded ? `<div class="reason-edit"${editOpen ? "" : " hidden"}>${chips}${form}</div>` : ""}
   </div>`;
 }
 
@@ -3828,9 +3925,9 @@ function partBlock(n) {
     <div class="part-row">
       <span class="part-label">참가여부</span>
       ${PART_STATUSES.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p?.status === s ? "on" : ""}" data-pstatus="${s}" aria-pressed="${p?.status === s ? "true" : "false"}">${s}</button>`).join("")}
-      <span class="part-owner">담당 <b>${esc(p?.owner || "없음")}</b>
+      <span class="part-owner">담당 <b class="${p?.owner ? "" : "nil"}">${esc(p?.owner || "없음")}</b>
         <button type="button" class="pbtn" data-powner>${p?.owner === myName() && myName() ? "넘기기" : "내가 맡기"}</button>
-        <button type="button" class="pbtn" data-ptalk aria-label="대화 ${talk}건 열기·닫기">대화 ${talk}건</button></span>
+        <button type="button" class="pbtn ${talk ? "" : "nil"}" data-ptalk aria-label="대화 ${talk}건 열기·닫기">대화 ${talk}건</button></span>
     </div>
     ${pastHint(n)}
     ${decisionRow(p)}
@@ -4557,21 +4654,16 @@ function renderExcludedCard(n) {
   const tone = (n.maxScore ?? 0) >= HIGH ? "hi" : (n.maxScore ?? 0) >= LOW ? "edge" : "";
   // 마감 전이면 어떤 사유로 빠졌든 올릴 수 있다 (2026-10-15 요청 — 서버가 올린 공고는 조건을 보지 않는다)
   const canPromote = n.excludedAt !== "마감" && !(daysLeft(n.deadline) < 0);
-  return `<div class="notice live">
-    <div class="card-top">
-      <div class="card-main">
-        <div class="badges">${exDueBadge(n)}${bidMethodOf(n) ? bidMethodBadge({ ...n, bidMethodCategory: bidMethodOf(n) }) : ""}${businessTypeBadge(n)}${n.sourceType === "사전규격" ? sourceTypeBadge(n) : ""}${n.reNotice ? reNoticeBadge() : ""}</div>
-        <h3>${title}${noticeNoTag(n.noticeNo)}</h3>
-        <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
-        ${exReasonBlock(n, kw)}
-        <div class="tag-rows">${exStepBadges(n)}</div>
-      </div>
-      <div class="card-score static ${tone}">
-        <b>${score}<i>%</i></b>
-        <span class="score-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, score))}%"></span></span>
-        <small>싱크로율</small>
-      </div>
+  // 2026-11-25: 실제 공고 카드와 같은 세 줄 — ① 배지·제목·싱크로율 ② 마감·기관·금액·공고번호 ③ 빠진 사유 · 올리기
+  return `<div class="notice live compact ex-card">
+    <div class="card-head2">
+      <div class="badges">${exDueBadge(n)}${bidMethodOf(n) ? bidMethodBadge({ ...n, bidMethodCategory: bidMethodOf(n) }) : ""}${businessTypeBadge(n)}${n.sourceType === "사전규격" ? sourceTypeBadge(n) : ""}${n.reNotice ? reNoticeBadge() : ""}</div>
+      <h3>${title}</h3>
+      <div class="card-score static ${tone}"><b>${score}<i>%</i></b><small>싱크로율</small></div>
     </div>
+    <div class="facts-line"><dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>${noticeNoTag(n.noticeNo)}</div>
+    ${exReasonBlock(n, kw)}
+    <div class="tag-rows">${exStepBadges(n)}</div>
     <div class="ex-foot">
       <details class="body"><summary>조건별 확인 결과 보기</summary>${renderSteps(diagnosedSteps(n), n.excludedAt)}</details>
       ${canPromote ? promoteAsk(n, kw) : ""}
@@ -5581,6 +5673,16 @@ function helpOpen(open) {
   if (open) { if (!HELP_LOG.length) helpHello(); renderHelp(); $("helpQ")?.focus(); }
 }
 $("helpFab").onclick = () => helpOpen($("helpBox").hidden);
+// 휴대폰: 필터·정렬은 버튼 하나 → 아래에서 올라오는 창 (2026-11-25 사용자 결정)
+function filterSheet(open) {
+  document.body.classList.toggle("filter-sheet", open);
+  $("filterOpen").setAttribute("aria-expanded", String(open));
+  if (open) $("filterClose").focus(); else $("filterOpen").focus();
+}
+$("filterOpen").onclick = () => filterSheet(!document.body.classList.contains("filter-sheet"));
+$("filterClose").onclick = () => filterSheet(false);
+$("filterShade").onclick = () => filterSheet(false);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.body.classList.contains("filter-sheet") && !document.querySelector(".dd.open")) filterSheet(false); });
 $("helpBox").addEventListener("click", (e) => {
   const q = e.target.closest("[data-hq]");
   if (HELP_TYPING) return;

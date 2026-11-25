@@ -24,6 +24,8 @@ run-name: >-
 # 수집이 실패하면(나라장터 접속 끊김 등) 1분 뒤 새 Run으로 다시 시도한다 — 최대 30회(약 3시간, 2026-10-22).
 #   담당자 방에는 실패 알림을 보내지 않는다. 개발자 방(TELEGRAM_DEV_CHAT_ID)에만
 #   ① 첫 시도 실패 ② 30회 모두 실패 ③ 재시도 끝에 성공했을 때 알린다 (2026-10-12·10-22 사용자 결정).
+# 수집 전 테스트가 실패해도 30분 뒤 새 Run으로 다시 시도한다 — 처음 실행 + 자동 재시작 최대 5번(2026-11-25 사용자 결정).
+#   새 Run은 그때의 main을 받으므로 그 사이 고친 코드가 병합되면 그 Run부터 성공한다(같은 코드면 같은 실패라 간격을 길게).
 #
 # 필요한 저장소 secrets: NARA_SERVICE_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
 #   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (텔레그램 두 개가 없으면 발송만 건너뜀),
@@ -95,6 +97,10 @@ env:
   # 예전엔 60분 간격 5회.
   RETRY_DELAY_MINUTES: "1"
   MAX_ATTEMPTS: "30"
+  # 테스트 실패 재시도(2026-11-25 사용자 결정 — '성공할 때까지 최대 5번 자동 재시작'): 처음 실행 + 5번 = 6회.
+  # 코드 문제라 1분 뒤엔 같은 실패 — 고친 코드가 병합될 시간을 두고 30분 간격(최대 약 2시간 반).
+  TEST_RETRY_DELAY_MINUTES: "30"
+  TEST_MAX_ATTEMPTS: "6"
 
 jobs:
   collect:
@@ -104,7 +110,9 @@ jobs:
     timeout-minutes: 90
     # 아래 retry 잡이 같은 실행 모드로 새 Run을 띄울 때 쓴다
     outputs:
-      failed: ${{ steps.fail.outputs.failed }}
+      failed: ${{ steps.fail.outputs.failed || steps.tfail.outputs.failed }}
+      # 테스트 실패면 재시도 간격·횟수를 테스트용으로
+      retry_delay: ${{ steps.tfail.outputs.failed == 'true' && env.TEST_RETRY_DELAY_MINUTES || env.RETRY_DELAY_MINUTES }}
       categories: ${{ steps.mode.outputs.categories }}
       complete_days: ${{ steps.mode.outputs.complete_days }}
       days: ${{ steps.mode.outputs.days }}
@@ -114,7 +122,7 @@ jobs:
       llm: ${{ steps.mode.outputs.llm }}
       attempt: ${{ steps.mode.outputs.attempt }}
       # 잡 if에선 env를 못 읽어서 retry 잡에 넘긴다
-      max_attempts: ${{ env.MAX_ATTEMPTS }}
+      max_attempts: ${{ steps.tfail.outputs.failed == 'true' && env.TEST_MAX_ATTEMPTS || env.MAX_ATTEMPTS }}
 
     steps:
       - name: 저장소 체크아웃
@@ -128,27 +136,6 @@ jobs:
 
       - name: 의존성 설치
         run: pip install -r requirements.txt pytest
-
-      # pytest로 돌린다 — 정량평가서 테스트(test_quant_*)가 pytest 형식이라 unittest로는 불러오지도 못한다(2026-11-05)
-      - name: 테스트
-        id: tests
-        run: |
-          set -o pipefail
-          python -m pytest -q tests 2>&1 | tee test.log
-
-      # 테스트에서 멈추면 아래 수집·개발자 알림·재시도가 모두 건너뛰어져 보고가 조용히 안 나간다(2026-11-06 사용자 결정 — 알림 추가).
-      # 코드 문제라 재시도해도 같으므로 재시도는 하지 않는다.
-      - name: 테스트 실패 알림 (개발자 방)
-        if: failure() && steps.tests.outcome == 'failure'
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          ERRORS=$( (grep -E "^(FAILED|ERROR) |^E  +[A-Za-z]*Error" test.log 2>/dev/null || true) | tail -5 | cut -c1-300)
-          [ -z "$ERRORS" ] && ERRORS="(오류 줄 없음 — Actions 로그 확인)"
-          TEXT=$(printf '[개발자 알림] 테스트 실패 — 수집을 시작하지 않아 담당자 보고가 나가지 않았습니다 (자동 재시도 없음).\n\n오류:\n%s\n\n로그: %s' "$ERRORS" "$RUN_URL")
-          python -m nego.telegram dev-alert "$TEXT"
 
       # 스케줄 실행에는 입력값이 없으므로 여기서 실행 모드를 정한다. 수동 실행은
       # 입력값을 그대로 쓴다. 아래 수집·재시도 단계는 모두 이 출력값만 본다.
@@ -232,6 +219,48 @@ jobs:
           echo "collect_days=$COMPLETE_DAYS" >> "$GITHUB_OUTPUT"
           if [ -n "$COMPLETE_DAYS" ]; then PERIOD="오늘 뺀 직전 ${COMPLETE_DAYS}일"; else PERIOD="최근 ${DAYS}일"; fi
           echo "유형=${CATEGORIES:-전체} / 기간=${PERIOD} / 사전규격=$PRESPEC / 텔레그램=$TELEGRAM / 보낸공고기록=$SENT_STATE / 보고기록=${REPORT_LOG:-없음} / 메일=$EMAIL / 시도 ${ATTEMPT}회차"
+
+      # pytest로 돌린다 — 정량평가서 테스트(test_quant_*)가 pytest 형식이라 unittest로는 불러오지도 못한다(2026-11-05)
+      - name: 테스트
+        id: tests
+        run: |
+          set -o pipefail
+          python -m pytest -q tests 2>&1 | tee test.log
+
+      # 테스트에서 멈추면 아래 수집이 모두 건너뛰어져 보고가 안 나간다(2026-11-06 사용자 결정 — 알림 추가).
+      # 2026-11-25 사용자 결정: 테스트 실패도 30분 간격으로 최대 5번 자동 재시작(위 TEST_* — 새 Run은 최신 main을 받음).
+      # 알림은 첫 실패·마지막 실패 때만(회복은 아래 '개발자 알림'이 알림).
+      # 수집을 안 하는 실행(백업 skip·verify·dev_test)은 재시도하지 않는다 — 백업 skip 실행이 재시도하면 이미 나간 보고가 또 나감.
+      - name: 테스트 실패 알림 (개발자 방)
+        if: >-
+          failure() && steps.tests.outcome == 'failure'
+          && (steps.mode.outputs.attempt == '1' || fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.TEST_MAX_ATTEMPTS)
+              || steps.mode.outputs.skip == 'true' || github.event.inputs.verify == 'true' || github.event.inputs.dev_test == 'true')
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ATTEMPT: ${{ steps.mode.outputs.attempt }}
+          NO_RETRY: ${{ steps.mode.outputs.skip == 'true' || github.event.inputs.verify == 'true' || github.event.inputs.dev_test == 'true' }}
+        run: |
+          ERRORS=$( (grep -E "^(FAILED|ERROR) |^E  +[A-Za-z]*Error" test.log 2>/dev/null || true) | tail -5 | cut -c1-300)
+          [ -z "$ERRORS" ] && ERRORS="(오류 줄 없음 — Actions 로그 확인)"
+          if [ "$NO_RETRY" = "true" ]; then
+            NEXT="(수집하지 않는 실행이라 재시도 없음)"
+          elif [ "${ATTEMPT:-1}" -ge "$TEST_MAX_ATTEMPTS" ]; then
+            NEXT="${ATTEMPT}회 모두 실패 — 자동 재시도를 멈춥니다. 고친 뒤 수동으로 실행해 주세요."
+          else
+            NEXT="${TEST_RETRY_DELAY_MINUTES}분 뒤부터 최대 $(( TEST_MAX_ATTEMPTS - 1 ))번 다시 시작합니다 (새 실행은 그때의 main을 받음 — 그 사이 고쳐 병합하면 성공)."
+          fi
+          TEXT=$(printf '[개발자 알림] 테스트 실패 — 수집을 시작하지 않아 담당자 보고가 나가지 않았습니다.\n%s\n\n오류:\n%s\n\n로그: %s' "$NEXT" "$ERRORS" "$RUN_URL")
+          python -m nego.telegram dev-alert "$TEXT"
+
+      - name: 테스트 실패 처리 (재시도 예약용)
+        id: tfail
+        if: >-
+          failure() && steps.tests.outcome == 'failure' && steps.mode.outputs.skip != 'true'
+          && github.event.inputs.verify != 'true' && github.event.inputs.dev_test != 'true'
+        run: echo "failed=true" >> "$GITHUB_OUTPUT"
 
       # 필드명이 비어 보이거나(예: 예가방법에 해당하는 실제 필드명을 모를 때)
       # 원본 응답을 직접 봐야 할 때 쓰는 1회성 진단. 이 스텝을 타면 아래
@@ -501,8 +530,9 @@ jobs:
     steps:
       - name: 다음 시도까지 대기
         run: |
-          echo "수집 실패 — ${RETRY_DELAY_MINUTES}분 뒤 $(( ${{ needs.collect.outputs.attempt }} + 1 ))번째 시도를 큐에 올립니다."
-          sleep $(( RETRY_DELAY_MINUTES * 60 ))
+          DELAY="${{ needs.collect.outputs.retry_delay }}"
+          echo "실패 — ${DELAY}분 뒤 $(( ${{ needs.collect.outputs.attempt }} + 1 ))번째 시도를 큐에 올립니다."
+          sleep $(( DELAY * 60 ))
 
       - name: 새 Run 재시도 예약
         env:

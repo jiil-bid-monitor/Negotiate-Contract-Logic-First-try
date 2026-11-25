@@ -3261,6 +3261,14 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
                 if c.row == row.cell.row and re.fullmatch(r"\(?해당(?:신용)?등급(?:표기|기재)\)?", _sq(c.text)):
                     out.append((c, [grade], False))
                     rep.filled.append(f"'{name}' 등급 표기 칸 → {grade}")
+            # 점수를 넣은 줄의 '비고' 칸에도 등급(11/25 사용자 요청 — 경영상태 '4.5 | __' 줄 비고 = 'BB+')
+            heads = [h for h in cells if _sq(h.text) == "비고" and h.row < cell.row]
+            if heads:
+                h = max(heads, key=lambda x: x.row)
+                note = next((c for c in cells if c.row == cell.row and h.col <= c.col < h.col + h.colspan and c is not cell), None)
+                if note is not None and note.blank and not any(note is e[0] for e in out):
+                    out.append((note, [grade], False))
+                    rep.filled.append(f"'{name}' 비고 → {grade}")
         # 기술인력 등급 줄마다 그 등급 점수 + 비고 '명 × 점 = 점'(11/13 사용자 요청: 부산 업사이클센터 '특급기술자 | 1.0점 | __ | 명 × 점 = 점')
         if row.grade_cells and row.crit is not None and item.kind == "staff":
             one = lambda v: (lambda t: t if "." in t else t + ".0")(f"{round(v, 2):g}")

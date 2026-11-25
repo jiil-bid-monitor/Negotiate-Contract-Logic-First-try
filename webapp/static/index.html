@@ -142,10 +142,11 @@ body.picking { overflow: hidden; }
 .co-pick-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .co-pick-btns button {
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 12px; cursor: pointer;
-  background: #fff; border: 2px solid var(--line); border-radius: 8px; color: var(--ink-strong);
+  background: var(--panel); border: 2px solid var(--line); border-radius: 8px; color: var(--ink-strong);
 }
-.co-pick-btns button b { font-family: var(--head); font-size: 28px; }
-.co-pick-btns button:hover, .co-pick-btns button:focus-visible { border-color: var(--brand); outline: none; background: #f3faf6; }
+.co-pick-btns button .logo { height: 60px; width: auto; max-width: 100%; margin-bottom: 14px; }
+.co-pick-btns button b { font-family: var(--head); font-size: 20px; font-weight: 600; }
+.co-pick-btns button:hover, .co-pick-btns button:focus-visible { border-color: var(--brand); outline: none; background: var(--brand-tint); }
 @media (max-width: 480px) { .co-pick-btns { grid-template-columns: 1fr; } .co-pick-btns button { padding: 24px 12px; } }
 
 /* 테마 토글. 상단바는 두 모드에서 모두 어두우므로 여기 색은 흰 계열로 고정한다. */
@@ -1679,16 +1680,17 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   <div class="co-pick-box">
     <h2 id="coPickTitle">어느 회사 공고를 볼까요?</h2>
     <div class="co-pick-btns">
-      <button type="button" data-co="jiil"><b>(주)지일</b></button>
-      <button type="button" data-co="grida"><b>(주)그리다</b></button>
+      <!-- 로고는 사용자가 준 이미지를 SVG로 옮긴 것 -->
+      <button type="button" data-co="jiil"><svg class="logo" viewBox="14 13 78 35" role="img" aria-label="JIIL" fill="currentColor"><path d="M23.8 14 L36.4 14 L36.4 25.5 C36.4 34 32.5 40.5 21.8 46.8 L17.4 33.2 L17.2 31.2 L22.4 26 L23.6 22.8 Z"/><rect x="40" y="14" width="12.5" height="33"/><rect x="57" y="14" width="13" height="33"/><path d="M74 14H86V33L89.4 37.6V47H74Z"/></svg><b>(주)지일</b></button>
+      <button type="button" data-co="grida"><svg class="logo" viewBox="0 0 153.2 100" role="img" aria-label="Grid_A" fill="currentColor"><path fill-rule="evenodd" d="M130.1 6.8L130.1 21.2L134.6 24.3L139.1 28.2L148.1 19.4L143.4 15.2L138.3 11.3L133.2 8.2ZM4.0 30.9L2.5 34.7L1.1 39.7L0.0 47.9L0.0 52.7L0.5 57.5L1.6 62.6L2.8 66.5L4.5 70.5L7.0 75.0L9.3 78.4L13.0 82.9L16.6 86.5L19.5 89.0L22.8 91.3L27.6 94.0L29.9 94.9L30.1 85.1L34.1 89.0L38.4 92.2L44.7 95.7L49.6 97.5L54.4 98.8L61.2 99.7L69.8 99.8L73.6 99.5L77.1 98.9L82.0 97.5L87.9 95.2L94.7 91.0L100.0 86.4L100.2 94.9L101.6 94.4L106.7 91.9L110.2 89.6L114.3 86.4L118.8 81.6L118.9 99.8L130.1 99.8L129.9 91.8L133.2 89.6L137.1 86.5L141.9 81.4L142.0 99.8L153.0 99.8L153.0 49.5L58.3 49.5L58.3 61.7L116.4 61.9L114.6 67.0L112.4 71.0L110.5 73.6L106.7 77.7L101.6 81.1L100.2 81.7L100.0 81.6L100.0 64.0L98.4 68.1L95.2 73.6L93.5 75.8L89.5 79.7L85.4 82.3L81.2 84.2L76.3 85.6L71.3 86.4L62.5 86.5L58.3 86.0L52.1 84.3L46.0 81.2L42.0 78.1L36.3 72.1L33.0 67.3L31.2 63.6L29.9 60.2L29.8 80.5L25.9 77.7L21.7 73.5L18.4 69.3L16.1 65.3L14.1 60.2L13.3 56.9L12.9 53.0L13.0 46.7L14.3 40.3L15.8 36.1L19.4 30.1L24.2 24.8L29.3 20.9L29.8 20.8L30.1 21.4L29.9 39.5L31.3 35.5L33.6 31.0L36.9 26.5L41.2 22.2L45.9 18.8L51.0 16.1L55.5 14.6L61.1 13.5L64.7 13.2L71.5 13.3L76.7 14.1L82.6 15.8L87.0 17.7L91.2 20.0L96.1 23.6L100.0 27.1L100.0 18.8L100.5 18.6L103.9 20.2L107.9 22.5L111.0 24.7L116.1 29.0L125.0 20.2L121.7 17.1L117.1 13.3L112.4 10.2L109.0 8.4L105.4 6.8L100.2 5.1L100.2 9.8L99.8 9.9L95.7 7.1L91.5 5.0L84.0 2.3L78.6 1.1L73.0 0.3L68.4 0.0L60.9 0.2L53.8 1.2L50.2 2.2L44.8 4.2L41.1 6.0L36.6 8.8L30.1 14.3L29.8 6.4L22.9 9.8L18.3 13.0L14.7 16.1L9.1 22.3L6.5 26.2ZM139.4 61.7L139.5 61.9L137.8 66.4L135.5 70.7L133.2 74.0L130.2 76.9L129.9 76.4L130.1 61.9Z"/></svg><b>(주)그리다</b></button>
     </div>
   </div>
 </div>
 
 <div class="topbar">
   <div class="inner">
-    <!-- JIIL 로고(사용자 제공 이미지를 SVG로, 10/15) — 다크 바 위에서 흰색으로 보이게 CSS가 반전시킨다 -->
-    <a href="#live" class="logo-home" title="실제 공고로" data-home><svg class="logo" width="67" height="30" viewBox="14 13 78 35" role="img" aria-label="JIIL" fill="currentColor"><path d="M23.8 14 L36.4 14 L36.4 25.5 C36.4 34 32.5 40.5 21.8 46.8 L17.4 33.2 L17.2 31.2 L22.4 26 L23.6 22.8 Z"/><rect x="40" y="14" width="12.5" height="33"/><rect x="57" y="14" width="13" height="33"/><path d="M74 14H86V33L89.4 37.6V47H74Z"/></svg></a>
+    <!-- 고른 회사 로고: 회사 고르기 버튼의 것을 아래 스크립트가 복사 (11/25) -->
+    <a href="#live" class="logo-home" title="실제 공고로" data-home></a>
     <span class="slash">|</span>
     <div class="co-switch">
       <button type="button" class="co-chip" id="coChip" title="다른 회사 공고 보기" aria-haspopup="true" aria-expanded="false">지일<span aria-hidden="true">▾</span></button>
@@ -6215,6 +6217,7 @@ setInterval(loadCalendar, 10 * 60 * 1000);
 
 // 회사 고르기 연결 (2026-11-24) — 이 탭에서 아직 안 골랐으면 첫 화면에 '지일 / 그리다'
 $("coChip").firstChild.textContent = CO_NAME;
+document.querySelector(".topbar .logo-home").innerHTML = document.querySelector(`#coPick [data-co="${CO}"] .logo`).outerHTML;
 // 회사 이름을 누르면 다른 회사 목록 — 누르면 바로 그 회사로(2026-11-24 사용자 요청, 예전엔 고르기 화면을 다시 띄웠음)
 $("coMenu").innerHTML = Object.entries(COMPANY_NAMES).filter(([id]) => id !== CO)
   .map(([id, name]) => `<button type="button" role="menuitem" data-co="${id}">${name}</button>`).join("");

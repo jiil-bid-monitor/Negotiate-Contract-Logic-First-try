@@ -9,8 +9,8 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%224%22 fill=%22%231d6b4f%22/%3E%3C/svg%3E">
 
 <!-- ji1.co.kr과 같은 폰트. 네트워크가 막혀도 아래 폴백 스택으로 읽힌다. -->
-<link rel="stylesheet" href="https://webfontworld.github.io/gmarket/GmarketSans.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="stylesheet" href="https://webfontworld.github.io/gmarket/GmarketSans.css" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" media="print" onload="this.media='all'">
 
 <script>
   // 화면은 라이트만(11/24 사용자 — 다크·시스템 버튼 뺌). 그리기 전에 정해 OS 다크 설정을 따라가지 않게
@@ -1687,6 +1687,83 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .award-autobox > summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 @media (max-width: 760px) { .award-docs li { grid-template-columns: 1fr; gap: 2px; } .award-docstate { justify-self: start; padding: 1px 8px; } }
 .award-files li { margin-bottom: 4px; word-break: keep-all; overflow-wrap: anywhere; }
+
+/* ── 실제 공고 카드 세 줄 (2026-11-25 사용자 결정 — 시안 2번) ──
+   ① 배지·제목·싱크로율 ② 마감·수요기관·금액·공고번호 ③ 자격 칩 | 참가여부·담당·대화 */
+.notice.live.compact { padding: 12px 18px; margin-bottom: 8px; }
+.notice.live.compact .card-head2 { display: flex; align-items: center; gap: 6px 10px; }
+.notice.live.compact .card-head2 .badges { flex: 0 1 auto; display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.notice.live.compact .card-head2 h3 { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 17px; font-weight: 600; line-height: 1.4; }
+.notice.live.compact .card-score {
+  flex: 0 0 auto; display: inline-flex; flex-direction: row-reverse; align-items: baseline; gap: 6px;
+  padding: 0; border: 0; text-align: right; line-height: 1.2;
+}
+.notice.live.compact .card-score b { display: inline; font-size: 17px; }
+.notice.live.compact .card-score b i { font-size: 12px; }
+.notice.live.compact .card-score small { display: inline; margin: 0; font-size: 12px; color: var(--muted); }
+.notice.live.compact .card-score .score-bar { display: none; }
+.notice.live.compact .facts-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin-top: 6px; font-size: 13.5px; }
+.notice.live.compact .facts { display: flex; flex-wrap: wrap; gap: 4px 0; margin: 0; padding: 0; border: 0; }
+.notice.live.compact .facts div { padding: 0 14px; border-left: 1px solid var(--line); }
+.notice.live.compact .facts div:first-child { padding-left: 0; border-left: 0; }
+.notice.live.compact .facts dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.notice.live.compact .facts dd { font-size: 13.5px; font-weight: 400; color: var(--ink); }
+.notice.live.compact .facts div:first-child dd, .notice.live.compact .facts div:last-child dd { font-weight: 700; color: var(--ink-strong); }
+.notice.live.compact .facts-line .notice-no { margin-left: 0; padding-left: 14px; border-left: 1px solid var(--line); vertical-align: 0; }
+.notice.live.compact .card-foot {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 16px;
+  margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line-soft);
+}
+.notice.live.compact .card-foot .tag-rows { margin: 0; padding: 0; border: 0; }
+/* 칩·버튼이 스스로 뜻을 말해서 이름표(자격·지역·공동수급·참가여부)는 화면에서만 숨김 — 화면 읽기 프로그램은 그대로 읽음 */
+.notice.live.compact .card-foot :is(.tg-label, .part-label) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.notice.live.compact .card-foot .tag-group { padding-right: 0; margin-right: 6px; border-right: 0; }
+.notice.live.compact .card-foot .tag-group:empty { display: none; }
+.notice.live.compact .card-foot .part { display: contents; }
+.notice.live.compact .card-foot { row-gap: 0; }
+.notice.live.compact .card-foot .part > * { grid-column: 1 / -1; margin-top: 8px; }
+.notice.live.compact .card-foot .part > details.talk:not([open]) { display: none; }
+.notice.live.compact .card-foot .part > .part-row { grid-column: 2; grid-row: 1; margin-top: 0; font-size: 13px; }
+@media (max-width: 760px) {
+  .notice.live.compact { padding: 12px 14px; }
+  .notice.live.compact .card-head2 { flex-wrap: wrap; }
+  .notice.live.compact .card-head2 .badges { flex: 1 1 auto; }
+  .notice.live.compact .card-head2 h3 { flex: 1 1 100%; order: 3; }
+  .notice.live.compact .facts-line, .notice.live.compact .facts { flex-direction: column; align-items: flex-start; gap: 3px; }
+  .notice.live.compact .facts div, .notice.live.compact .facts-line .notice-no { padding: 0; border: 0; }
+  .notice.live.compact .card-foot { grid-template-columns: minmax(0, 1fr); }
+  .notice.live.compact .card-foot { row-gap: 8px; }
+  .notice.live.compact .card-foot .part > .part-row { grid-column: 1; grid-row: auto; }
+}
+
+/* ── 점검 고침 (2026-11-25) ── */
+/* A: 키보드로 옮겨 온 칸·버튼은 초록 테두리로 보이게 (outline: none 규칙보다 뒤) */
+:is(input, select, textarea, button, a, [tabindex]):focus-visible { outline: 2px solid var(--brand) !important; outline-offset: 2px; }
+.me-top input:focus-visible { outline-color: #fff !important; }
+/* C: 누르는 버튼 크기 */
+.pbtn { font-size: 13px; padding: 6px 14px; min-height: 34px; }
+.no-copy { font-size: 12px; padding: 2px 10px; line-height: 20px; }
+@media (max-width: 640px) {
+  .pbtn { min-height: 44px; padding: 8px 16px; font-size: 14px; }
+  .no-copy { min-height: 32px; padding: 4px 12px; }
+}
+/* B: 넓지 않은 화면 — '사용법 안내'를 ? 위로 올려 카드와 덜 겹치게 */
+@media (max-width: 1520px) and (min-width: 561px) {
+  .helpnudge { right: 22px; bottom: 86px; }
+  .jump { bottom: 132px; }
+}
+/* B: 휴대폰 — 맨 위로·바로가기·? 를 화면 아래 한 줄에 모아 카드를 가리지 않게 */
+@media (max-width: 560px) {
+  body::after { content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: 60px; z-index: 19;
+    background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -2px 8px rgba(0,0,0,.06); }
+  .jump { left: 12px !important; right: 72px !important; bottom: 12px !important; top: auto !important;
+    flex-direction: row !important; align-items: center !important; gap: 6px !important; overflow-x: auto; z-index: 21; }
+  .jump a { min-width: 0 !important; white-space: nowrap; padding: 7px 12px !important; }
+  .helpfab { width: 44px; height: 44px; right: 12px; bottom: 8px; font-size: 22px; }
+  .helpbox { bottom: 70px; }
+  #tab-live, #tab-excluded { padding-bottom: 90px !important; }
+}
+@media print { body::after { display: none; } }
 </style>
 </head>
 <body>
@@ -3001,29 +3078,30 @@ function renderNotice(n) {
     : esc(n.title);
   const due = dueBadge(n);
   // 사진 시안대로: 위 배지(마감·낙찰방법·업무·재공고) → 제목 → 마감·수요기관·금액 → 자격|지역·공동수급 묶음, 오른쪽에 싱크로율
-  return `<div class="notice live ${band} ${due ? "due" : ""}">
-    <div class="card-top">
-      <div class="card-main">
-        <div class="badges">
-          ${promotedBadge(n)}
-          ${briefingBadge(n)}
-          ${due}
-          ${gradeBadge(n)}
-          ${n.bidMethodCategory ? bidMethodBadge(n) : ""}
-          ${businessTypeBadge(n)}
-          ${n.reNotice ? reNoticeBadge() : ""}
-          ${productOnly(n) ? productOnlyBadge(n) : ""}
-          ${(n.licenseMatch || []).length ? licenseBadge(n) : ""}
-          ${n.localMatch ? localBadge(n) : ""}
-          ${overseasBadges(n)}
-        </div>
-        <h3>${title}${n.detailUrl ? `<span class="ext" aria-hidden="true">↗</span>` : ""}${noticeNoTag(n.noticeNo)}</h3>
-        ${factsBlock(n)}
-        <div class="tag-rows" data-enrich="${esc(n.noticeNo)}">${enrichBadges(n)}</div>
+  // 2026-11-25 사용자 결정(시안 2번): 세 줄 — ① 배지·제목·싱크로율 ② 마감·기관·금액·공고번호 ③ 자격 칩 | 참가여부
+  return `<div class="notice live compact ${band} ${due ? "due" : ""}">
+    <div class="card-head2">
+      <div class="badges">
+        ${promotedBadge(n)}
+        ${briefingBadge(n)}
+        ${due}
+        ${gradeBadge(n)}
+        ${n.bidMethodCategory ? bidMethodBadge(n) : ""}
+        ${businessTypeBadge(n)}
+        ${n.reNotice ? reNoticeBadge() : ""}
+        ${productOnly(n) ? productOnlyBadge(n) : ""}
+        ${(n.licenseMatch || []).length ? licenseBadge(n) : ""}
+        ${n.localMatch ? localBadge(n) : ""}
+        ${overseasBadges(n)}
       </div>
+      <h3>${title}${n.detailUrl ? `<span class="ext" aria-hidden="true">↗</span>` : ""}</h3>
       ${scoreBox}
     </div>
-    ${partBlock(n)}
+    <div class="facts-line">${factsBlock(n)}${noticeNoTag(n.noticeNo)}</div>
+    <div class="card-foot">
+      <div class="tag-rows" data-enrich="${esc(n.noticeNo)}">${enrichBadges(n)}</div>
+      ${partBlock(n)}
+    </div>
   </div>`;
 }
 
@@ -3646,7 +3724,7 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
   // 사유(고른 칩·적은 글)가 있으면 칩 줄은 접고 '사유 고치기'로 연다 (11/24 사용자 요청)
   const hasReason = !!(p.reason || tags.length);
   const editOpen = REASON_OPEN.has(p.noticeNo);
-  const form = `<form class="reason-form${chips ? " optional" : ""}"><input maxlength="500" placeholder="${chips ? "자세히 적기 (선택)" : esc(p.status) + " 사유"}: ${esc(REASON_HINT[p.status] || "")}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">${chips ? "자세히 저장" : "사유 저장"}</button></form>`;
+  const form = `<form class="reason-form${chips ? " optional" : ""}"><input maxlength="500" aria-label="${esc(p.status)} 사유" placeholder="${chips ? "자세히 적기 (선택)" : esc(p.status) + " 사유"}: ${esc(REASON_HINT[p.status] || "")}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">${chips ? "자세히 저장" : "사유 저장"}</button></form>`;
   const said = [tags.join(" · "), p.reason].filter(Boolean).map(esc).join(" · ");
   return `<div class="decision">
     ${hasReason ? "" : chips}
@@ -3749,7 +3827,7 @@ function partBlock(n) {
   return `<div class="part" data-part="${esc(n.noticeNo)}" data-title="${esc(n.title)}">
     <div class="part-row">
       <span class="part-label">참가여부</span>
-      ${PART_STATUSES.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p?.status === s ? "on" : ""}" data-pstatus="${s}">${s}</button>`).join("")}
+      ${PART_STATUSES.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p?.status === s ? "on" : ""}" data-pstatus="${s}" aria-pressed="${p?.status === s ? "true" : "false"}">${s}</button>`).join("")}
       <span class="part-owner">담당 <b>${esc(p?.owner || "없음")}</b>
         <button type="button" class="pbtn" data-powner>${p?.owner === myName() && myName() ? "넘기기" : "내가 맡기"}</button>
         <button type="button" class="pbtn" data-ptalk aria-label="대화 ${talk}건 열기·닫기">대화 ${talk}건</button></span>
@@ -3967,7 +4045,7 @@ function renderLog() {
     return `<div class="log-row log-line${pick ? " pickable" : ""}" data-part="${esc(p.noticeNo)}" data-title="${esc(p.title || "")}">
       <span class="log-badge">${pick}<span class="badge pstat ${PART_TONE[st]}">${esc(st)}</span></span>
       <div class="log-main"><h3>${title}</h3><p class="log-meta">${sub}</p>${undecided ? "" : `<p class="log-why">${why || `<span class="faint-note">사유 없음</span>`}</p>`}
-        ${inList || st !== "미판단" ? "" : `<span class="log-judge" hidden>${DECISIONS.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p.status === s ? "on" : ""}" data-pstatus="${s}">${s}</button>`).join("")}</span>`}
+        ${inList || st !== "미판단" ? "" : `<span class="log-judge" hidden>${DECISIONS.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p.status === s ? "on" : ""}" data-pstatus="${s}" aria-pressed="${p?.status === s ? "true" : "false"}">${s}</button>`).join("")}</span>`}
         ${!undecided && !p.reason && !(p.tags || []).length ? decisionRow(p, false) : ""}</div>
       <div class="log-due${m.deadline && new Date(m.deadline) < new Date() ? " past" : ""}">${m.deadline ? `<span class="due-lab">마감</span> ` : ""}${dueText(m.deadline)}</div>
       <div class="log-act">${act}${!undecided && p.prev ? `<button type="button" class="linkish" data-pundo title="바로 앞 판단으로 되돌립니다">되돌리기</button>` : ""}</div>

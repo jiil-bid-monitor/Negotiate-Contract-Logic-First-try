@@ -33,6 +33,9 @@
   새 세션부터 스킬 목록에 나옴. 웹앱 화면을 고칠 때도 CLAUDE.md 규칙(설명 문구 새로 안 넣기 등)이 먼저.
 - (이어서 사용자 요청) `.claude/skills/taste-skill/`(Leonxlnx/taste-skill `d1a2bb4`, MIT, 스킬 이름 `design-taste-frontend`) — **지침·도구만**(SKILL.md·references·library·scripts, 약 2MB, 사용자 결정):
   사진·아이콘·예제 화면 `assets/`(38MB, 홍보용 웹사이트 소재)는 뺌 — SKILL.md가 assets를 가리키는 부분은 없으니 건너뛸 것. 원래 홍보 사이트용 지침이라 업무 화면엔 references 쪽만 참고.
+- (이어서 사용자 요청) **Playwright MCP** — `.mcp.json` `playwright` → `scripts/playwright_mcp.mjs`(`@playwright/mcp@0.0.86`, 화면 없이·프로필 저장 안 함): 클라우드 작업 환경은 미리 깔린 Chromium(`/opt/pw-browsers/chromium`)을 씀
+  (MCP가 기대하는 판과 달라 따로 지정), 다른 PC는 Playwright 브라우저(없으면 `npx playwright install chromium`). 스냅샷 폴더 `.playwright-mcp/`는 .gitignore. 새 세션부터 연결됨. 이 세션에서 실행·페이지 열기 확인.
+  **Figma MCP**는 저장소로 못 붙임(Figma 로그인 필요) — 사용자가 claude.ai 설정 → 커넥터에서 Figma를 연결한 뒤 새 세션.
 
 ## 2026-11-25 — 정량평가서 화면 고정 설명글 삭제 (브랜치 `claude/quant-drop-notes`, 사용자 요청)
 

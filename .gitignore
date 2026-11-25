@@ -28,3 +28,6 @@ vault/
 
 # 차장님이 주신 회사 자료(인증서 만료일 등) — 공개 저장소에 올리지 않음
 자료/
+
+# Playwright MCP 스냅샷·스크린샷
+.playwright-mcp/

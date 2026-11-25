@@ -1898,7 +1898,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 }
 .notice.live.compact .badge .ico { width: 12px; height: 12px; font-size: 9px; }
 .notice.live.compact .badges, .notice.live.compact .tag-group { gap: 4px; }
-.notice.live.compact .card-foot { margin-top: 7px; padding-top: 7px; }
+.notice.live.compact .card-foot { margin-top: 12px; padding-top: 10px; }  /* 둘째 줄과 칩 줄 사이 여유(11/25 사용자) */
 .notice.live.compact .facts-line { margin-top: 4px; }
 .notice.live.compact .no-copy { font-size: 11px; line-height: 16px; padding: 0 6px; min-height: 0; }
 .notice.live.compact .past-hint { margin-top: 6px; padding: 4px 10px; font-size: 12px; }
@@ -3871,7 +3871,7 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
   const options = tagsFor(p.status);
   const chips = options
     ? `<div class="reason-tags">
-        <p class="reason-tags-h"><b>${p.status === "참가" ? "참가 이유를" : "사유를"} 골라 주세요</b> <span>(여러 개 가능 · 누르면 바로 저장 · 다음 수집 때 비슷한 공고에 이 판단이 함께 보입니다)</span>${tags.length ? `<span class="reason-saved">✓ 저장됨</span>` : ""}</p>
+        <p class="reason-tags-h"><b>${p.status === "참가" ? "참가 이유를" : "사유를"} 골라 주세요</b>${tags.length ? `<span class="reason-saved">✓ 저장됨</span>` : ""}</p>
         <div class="reason-chips">${options.map((t) => `<button type="button" class="rchip ${tags.includes(t) ? "on" : ""}" data-rtag="${esc(t)}" aria-pressed="${tags.includes(t)}">${esc(t)}</button>`).join("")}</div>
       </div>`
     : "";

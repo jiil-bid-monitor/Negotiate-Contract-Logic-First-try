@@ -392,3 +392,49 @@ class TestParenOr(unittest.TestCase):
         item = "가. 측지측량업 또는 수치지도제작업을 등록한 업체"
         lookup = {**LOOKUP, "5021": "측지측량업", "5029": "수치지도제작업"}
         self.assertEqual([sorted(r.code for r in b) for b in name_bundles(item, HELD, lookup)], [["5021", "5029"]])
+
+
+class TestJointRegionFlag20261125(unittest.TestCase):
+    """(11/25 사용자 요청) 입찰참가자격의 지역의무공동도급 — '지역의무공동도급' 칩(요약: 지역·참여 비율·단독 참가)."""
+
+    # PDF에서 읽힌 모양 그대로(글자 띄움·줄바꿈) — 올려 준 공고문 3.1.1
+    PDF_ITEM = (
+        " 3.1. 「 정보통신공사업법령 」 에 의한  정보통신공사업 을 등록한 자이어야 합니다 . \n"
+        "  3.1.1.  본 공사는 지역의무공동도급 이 적용되는 공사로서 서울특별시 에 법인등 \n"
+        "기사항증명서상 본점 소재지 ( 개인사업자인 경우에는 사업자등록증 또는 관 \n"
+        "련 법령에 따른 허가 · 인가 · 면허 · 등록 · 신고 등에 관련된 서류에 기재된 \n"
+        "사업장의 소재지 ) 를 둔 지역업체 [ 입찰공고일 현재 해당업체의 전입일 다음 \n"
+        "날부터 기산하여 90 일 이상 소재하여야 하며 , 입찰일 ( 낙찰자는 계약체결일 ) \n"
+        "까지 계속 유지하여야 함 ] 의 시공참여비율이 전체 공사금액의 49 % 이상 ( 대 \n"
+        "표사가 지역업체인 경우에도 의무비율 이상이여야 함 ) 으로 공동계약을 하 \n"
+        "여야 합니다 .  다만 , 입찰참가자격을 모두 갖춘 지역업체는 단독으로 입찰에 \n"
+        "참여할 수 있습니다 .  \n"
+        "  3.1.2. ｢ 국가계약법 시행령 ｣ 제 72 조 제 4 항 ( 공동계약 ) 에 따라 해당 지역업체와 \n"
+        "그 외 지역업체 간에는 계열회사가 공동수급체를 구성할 수 없습니다 .")
+
+    def flag(self, items):
+        return next((f for f in flag_requirements(items) if f["kind"] == "지역공동도급"), None)
+
+    def test_pdf_text_chip_with_summary(self):
+        f = self.flag([self.PDF_ITEM])
+        self.assertIsNotNone(f)
+        self.assertEqual(dict(f["summary"]), {"지역": "서울특별시", "지역업체 참여 비율": "49% 이상",
+                                               "대표사": "대표사가 지역업체여도 의무 비율 이상",
+                                               "단독 참가": "입찰참가자격을 모두 갖춘 그 지역 업체만"})
+        self.assertIn("단독으로 입찰에 참여할 수 있습니다", f["text"])
+        self.assertNotIn("계열회사", f["text"])
+
+    def test_plain_wording_without_term(self):
+        item = "다. 경상북도에 본점을 둔 지역업체의 시공참여비율이 30% 이상이 되도록 공동도급하여야 합니다."
+        f = self.flag([item])
+        self.assertEqual(dict(f["summary"])["지역"], "경상북도")
+        self.assertEqual(dict(f["summary"])["지역업체 참여 비율"], "30% 이상")
+
+    def test_no_chip_for_plain_region_limit_or_affiliate_rule(self):
+        self.assertIsNone(self.flag(["가. 강원특별자치도에 본점 소재지를 둔 업체"]))
+        self.assertIsNone(self.flag(["해당 지역업체와 그 외 지역업체 간에는 계열회사가 공동수급체를 구성할 수 없습니다."]))
+
+    def test_region_judgement_still_ignores_it(self):
+        """지역 판정은 지역의무공동도급 문장을 참가 제한으로 보지 않는다 — 공고는 지역 미달로 빠지지 않고 칩만 붙음."""
+        from nego import region
+        self.assertIsNone(region.from_text([self.PDF_ITEM], "강원특별자치도 정선군"))

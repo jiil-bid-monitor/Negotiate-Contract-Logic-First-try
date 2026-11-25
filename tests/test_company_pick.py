@@ -51,6 +51,7 @@ def test_screen_has_picker():
     assert 'id="coMenu"' in html, "회사 이름 칩 → 다른 회사 바로 이동"
     assert 'id="coPick"' in html and 'data-co="jiil"' in html and 'data-co="grida"' in html
     assert "co=" in html and "sessionStorage" in html, "고른 회사를 요청마다 붙이고 이 탭에 기억"
+    assert 'aria-label="JIIL"' in html and 'aria-label="Grid_A"' in html, "고르기 버튼·상단 바에 회사마다 로고(11/25)"
 
 
 class CompanyServerTest(unittest.TestCase):

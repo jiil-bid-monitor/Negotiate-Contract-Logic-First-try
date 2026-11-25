@@ -156,3 +156,12 @@ def test_grida_staff_is_jiil_staff(monkeypatch):
         assert [s["이름"] for s in v.staff] == ["가지일"], "그리다 폴더 인력 엑셀이 있어도 지일 인력"
     finally:
         company.use("jiil")
+
+
+def test_grida_jiil_staff_no_note():
+    """(11/25 사용자) 그리다가 지일 인력을 쓸 때 안내 문구 없음."""
+    from quantdocs import importer
+
+    v = vault.Vault({}, staff=[{"이름": "가", "입사일": None, "재직": "재직", "등급": "특급"}], staff_src="지일 인력(x.xlsx)")
+    notes = importer.enrich_vault(v) or []
+    assert not any("기술인력" in n for n in notes)

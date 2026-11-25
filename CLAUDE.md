@@ -26,6 +26,12 @@
 새 세션은 이 대화를 모르므로 메시지만 읽고 시작할 수 있게 구체적으로(공고번호·브랜치 이름 포함). 그 내용은 `docs/HANDOFF.md`에도 반영할 것.
 **(11/18 사용자 요청) 오늘 한 일 정리·worklog·인수인계·다음 세션 시작 메시지엔 지금 세션에서 한 작업만** — 같은 날 다른 세션(팀원 등)이 한 PR·브랜치·기록은 언급하지 않음(커밋의 Claude-Session 줄로 가림).
 
+## 2026-11-25 — .env 읽기: 빈칸·export·한글 인코딩 줄도 (브랜치 `claude/env-read-tolerant`, 사용자 제보 — 해남 위임장 대리인 칸이 계속 빔)
+
+- `vault.read_env`: 'KEY=값'(예전 그대로 — 비밀번호는 글자 그대로)을 먼저, 없으면 'KEY = 값'·'export KEY=값'·따옴표, 메모장 ANSI(cp949) 저장 파일도.
+  대리인 칸(`QUANT_GRIDA_AGENT…`)이 비면 서버 PC에서 `py -c "from quantdocs.vault import read_env; print(read_env('QUANT_GRIDA_AGENT') or '없음')"`로 확인.
+  시험 `test_read_env_tolerant_lines`. 서버 코드 바뀜 — 웹앱 다시 켜기.
+
 ## 2026-11-25 — 자기평가표 경영상태 비고 칸 = 해당 등급 (브랜치 `claude/credit-grade-note`, 사용자 요청)
 
 - 경영상태 점수를 넣은 줄(등급 줄)의 '비고' 칸 = 회사정보 신용평가등급('BB+' — `fill._self_score_edits`, 표에 '비고' 머리가 있을 때, 빈 칸만).

@@ -251,3 +251,14 @@ def test_grida_licenses_from_held_file():
         company.use("jiil")
     assert "실내건축공사업" in text and "비디오물제작업" in text
     assert text.count("실내건축공사업") == 1
+
+
+def test_read_env_tolerant_lines(monkeypatch, tmp_path):
+    """(11/25) 'KEY = 값'·'export KEY=값'·메모장 한글 인코딩(ANSI) .env도 읽음 — 'KEY=값'은 예전처럼 글자 그대로."""
+    env = tmp_path / ".env"
+    monkeypatch.setattr(vault, "ENV_FILE", env)
+    env.write_bytes("QUANT_GRIDA_AGENT = 홍길동\n".encode("cp949"))
+    assert vault.read_env("QUANT_GRIDA_AGENT") == "홍길동"
+    env.write_text("export QUANT_GRIDA_AGENT=홍길동\r\nQUANT_VAULT_PASSPHRASE= a b \n", encoding="utf-8")
+    assert vault.read_env("QUANT_GRIDA_AGENT") == "홍길동"
+    assert vault.read_env("QUANT_VAULT_PASSPHRASE") == " a b "  # 정확한 줄은 글자 그대로

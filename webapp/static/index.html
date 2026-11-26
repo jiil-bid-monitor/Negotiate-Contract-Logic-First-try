@@ -2015,12 +2015,14 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 #load.icon-btn .ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (min-width: 641px) {
   #liveTools .tab-search, #exTools .tab-search {
-    flex: 0 0 auto; width: 38px; min-width: 0; padding-left: 36px; cursor: pointer;
-    background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23808080' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E") no-repeat 10px center / 18px;
+    flex: 0 0 auto; box-sizing: border-box; width: 38px; min-width: 0; padding: 0; cursor: pointer;
+    background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23808080' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E") no-repeat center / 18px;
     transition: width .2s ease;
   }
-  #liveTools .tab-search:not(:focus):placeholder-shown::placeholder, #exTools .tab-search:not(:focus):placeholder-shown::placeholder { color: transparent; }
-  #liveTools .tab-search:is(:focus, :not(:placeholder-shown)), #exTools .tab-search:is(:focus, :not(:placeholder-shown)) { width: 330px; cursor: text; }
+  #liveTools .tab-search:not(:focus):not(:hover):placeholder-shown::placeholder, #exTools .tab-search:not(:focus):not(:hover):placeholder-shown::placeholder { color: transparent; }
+  /* 커서만 대도 펼침(2026-11-26 사용자), 접혀 있을 땐 돋보기 정가운데 */
+  #liveTools .tab-search:is(:hover, :focus, :not(:placeholder-shown)), #exTools .tab-search:is(:hover, :focus, :not(:placeholder-shown)) {
+    width: 330px; padding: 0 10px 0 36px; background-position: 10px center; cursor: text; }
 }
 @media (prefers-reduced-motion: reduce) { #liveTools .tab-search, #exTools .tab-search { transition: none; } }
 /* 카드 참가·보류·불참·담당·대화 = 아이콘 (2026-11-26 사용자) */

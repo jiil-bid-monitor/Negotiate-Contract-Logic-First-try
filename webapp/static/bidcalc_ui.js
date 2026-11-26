@@ -842,7 +842,7 @@
       ${item("하한율", r.lowerRate != null ? `${r.lowerRate}%` : "-")}
       ${!(res.status === "완료" && res.outsource) && r.outsource && outRate(r) != null ? item("외주 금액 사정률 (어림)", `약 ${outRate(r).toFixed(2)}%`) : ""}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
-      </div>${compareBlock(r)}${outsourceBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button> <button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></div></td></tr>`;
+      </div>${compareBlock(r)}${outsourceBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot"><button type="button" data-act="refetch">결과 다시 받기</button> <button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></div></td></tr>`;
   }
   // 투찰 업체 전부(11/10 사용자 요청) — 개찰 완료 줄의 '결과 ▼'를 펼치면 결과 아래에 보임, 펼칠 때만 서버에서 받음
   const BIDDERS = new Map();   // id → 목록 | "loading" | {error}

@@ -5373,6 +5373,24 @@ def test_self_eval_score_head_right_of_points_head(tmp_path: Path):
     assert got[(12, 6)] == "10.55", got
 
 
+def test_score_column_found_by_empty_cells(tmp_path: Path):
+    """(11/26 사용자 '원인 제대로 파악해서 재발하지 않도록') 평점 칸은 머리 이름이 아니라 아래가 빈 열로 확인 —
+    '평점 | 평가점수'에서 '평점' 열 아래가 이미 '5점'으로 차 있으면 '평가점수'가 평점 칸. 다 채운 뒤에도 비어 있으면 ⚠."""
+    from quantdocs.fill import _cells, _spans
+    from quantdocs.selfscore import read_form, score_column_empty
+
+    c = lambda col, row, t="", span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                              f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항목"), c(1, 0, "배점"), c(2, 0, "세부 항목"), c(3, 0, "평점"), c(4, 0, "평가점수")],
+            [c(0, 1, "경영상태", rs=2), c(1, 1, "5", rs=2), c(2, 1, "BBB0 이상"), c(3, 1, "5점"), c(4, 1, "", rs=2)],
+            [c(2, 2, "BB+ 이하"), c(3, 2, "4.5점")]]
+    xml = "<hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    cells = _cells(xml, _spans(xml, "tbl")[0])
+    got = read_form(cells)
+    assert got and got[0].cell.col == 4, got
+    assert score_column_empty(cells)
+
+
 def test_form_staff_grades_without_score_head(tmp_path: Path):
     """(11/26 사용자 '왜 기술인원 칸이 없어') 평점 칸 머리를 못 알아본 표라도 '기술사/특급기술자 | 각 1.0점 · 고급기술자 | 각0.8점'
     등급표가 있으면 화면 기술인력 고르기 칸용 등급별 점수를 읽음."""

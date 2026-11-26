@@ -942,8 +942,8 @@ def _horizontal(rs, rows, pcol: int, scol: int, crit) -> tuple[dict, dict, list]
     return grade_cells, col_cells, zero
 
 
-def read_form(cells) -> list[FormRow]:
-    """자기평가표 표 칸들 → 점수 줄. '배점' 칸과 '자기평점'(또는 '평점') 칸이 있는 표만."""
+def _pick_heads(cells):
+    """자기평가표 머리 → (평점 칸 머리, 줄 배점 머리, 항목 배점 열) 또는 None."""
     plain = lambda t: re.sub(r"\([^)]*\)", "", _sq(t))  # '배점(점)'·'평점(점)'(11/10 경남교육청)
     item_pts_col = None
     # 머리 이름은 _SCORE_HEAD 순서대로 — '항목 | 배점 | 세부항목 | 평점 | 자기평가 점수'(11/26 사용자 제보)면 '자기평가 점수'가 평점 칸,
@@ -979,8 +979,53 @@ def read_form(cells) -> list[FormRow]:
                         and c.row <= head.row < c.row + max(1, c.rowspan)), key=lambda c: c.col)
         if len(twins) >= 2:
             item_pts_col, pts_head = twins[0].col, twins[-1]
+    if head is not None and pts_head is not None:
+        head, pts_head, item_pts_col = _empty_column_check(cells, head, pts_head, item_pts_col)
     if head is None or pts_head is None or not (pts_head.row <= head.row < pts_head.row + max(1, pts_head.rowspan)):
+        return None
+    return head, pts_head, item_pts_col
+
+
+def _below(cells, h):
+    """머리 칸 h 아래, 같은 열에서 시작하는 칸들(합계 줄 빼고)."""
+    return [c for c in cells if c.row >= h.row + max(1, h.rowspan) and c.col == h.col
+            and not re.fullmatch(r"(?:계|합계|소계|총계|총점)(?:\(.*\))?", _sq(c.text))]
+
+
+def _empty_column_check(cells, head, pts_head, item_pts_col):
+    """(11/26 사용자 '원인 제대로 파악해서 재발하지 않도록') 평점 칸은 이름이 아니라 '아래가 비어 있는 열'로 확인 —
+    고른 머리 열 아래가 이미 숫자('5점'·'4.75점'·'각 1.0점')로 차 있고, 오른쪽 머리 열 아래가 비어 있으면 그 오른쪽 열이 평점 칸,
+    고른 열은 줄 배점. 머리 이름('평점'·'점수'·'자기평가')은 공고마다 뜻이 달라 이름만으로는 다시 틀림."""
+    below = _below(cells, head)
+    filled = [c for c in below if not c.blank]
+    if not below or len(filled) * 2 < len(below) or not any(_num(c.text) is not None or _per_person(c.text) is not None for c in filled):
+        return head, pts_head, item_pts_col
+    for h in sorted((c for c in cells if c.col > head.col and c.row <= head.row < c.row + max(1, c.rowspan) and c.text.strip()),
+                    key=lambda c: c.col):
+        cand = _below(cells, h)
+        if cand and sum(c.blank for c in cand) * 2 >= len(cand) * 1 and sum(c.blank for c in cand) >= 1:
+            if pts_head is not None and pts_head.col < head.col:
+                item_pts_col = pts_head.col
+            return h, head, item_pts_col
+    return head, pts_head, item_pts_col
+
+
+def score_column_empty(cells) -> bool:
+    """자기평가표로 읽히는 표인데 평점 칸이 하나도 안 채워졌으면 True(채운 뒤 검사 — 화면·읽어보기 ⚠ 알림용, 11/26)."""
+    picked = _pick_heads(cells)
+    if picked is None:
+        return False
+    head = picked[0]
+    below = _below(cells, head)
+    return bool(below) and all(c.blank or re.fullmatch(r"\s*0(?:\.0+)?\s*점?\s*", c.text or "") for c in below)
+
+
+def read_form(cells) -> list[FormRow]:
+    """자기평가표 표 칸들 → 점수 줄. '배점' 칸과 '자기평점'(또는 '평점') 칸이 있는 표만."""
+    picked = _pick_heads(cells)
+    if picked is None:
         return []
+    head, pts_head, item_pts_col = picked
     rows: dict[int, list] = {}
     for c in cells:
         if c.row > head.row:

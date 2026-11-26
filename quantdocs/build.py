@@ -321,12 +321,18 @@ _BLANK_FORM = re.compile(r"질\s*의|공동\s*수급|공동\s*이행|분담\s*�
 
 def _note_unfilled(a: "Analysis", form, path: Path, sign_only: bool) -> None:
     """채운 서식에 회사 정보 이름표가 있는데 빈 자리가 남았으면 '⚠ 확인 필요' 알림(11/06 사용자 결정 — 담당자가 볼 곳을 바로 알게)."""
+    from .fill import _all_tables, _cells
+    from .selfscore import score_column_empty
+
     try:
         with zipfile.ZipFile(path) as z:
-            slots = [s for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n)
-                     for s in unfilled_slots(z.read(n).decode("utf-8"), sign_only)]
+            xmls = [z.read(n).decode("utf-8") for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n)]
     except (zipfile.BadZipFile, OSError, KeyError):
         return
+    slots = [s for x in xmls for s in unfilled_slots(x, sign_only)]
+    # 자기평가표인데 점수를 하나도 못 넣었으면 알림(11/26 사용자 '재발하지 않도록' — 예전엔 조용히 빈 채로 나감)
+    if not sign_only and any(score_column_empty(_cells(x, t)) for x in xmls for t in _all_tables(x)):
+        a.notes.append(f"⚠ 확인 필요 — 서식 {form.no} {form.title[:30]}: 자기평가 점수를 하나도 못 넣음 (한글에서 직접 기입)")
     if slots:
         names = list(dict.fromkeys(s.split(": ", 1)[-1] for s in slots))
         a.notes.append(f"⚠ 확인 필요 — 서식 {form.no} {form.title[:30]}: 채우지 못한 칸 " + ", ".join(names[:6])

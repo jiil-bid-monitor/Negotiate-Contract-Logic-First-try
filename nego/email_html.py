@@ -315,6 +315,11 @@ def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at
     if same:  # 그리다 메일 받는 사람에게 — 지일 메일과 같은 공고를 두 번 싣지 않았다는 것(2026-11-26 사용자 요청)
         header += (f'<div style="{meta}margin-top:6px;color:{INK};">지일 주간 메일에 이미 실린 공고 {len(same)}건은 중복해 싣지 않고, '
                    f"맨 아래 '지일 공고와 겹침'에 한 줄씩만 적었습니다. 자세한 내용은 지일 주간 메일에서 보시면 됩니다.</div>")
+    from .config import report_company
+
+    if not report_company():  # 지일 메일(2026-11-26 사용자 결정 — 그리다 메일은 그리다만의 공고가 있는 주에만 나가서)
+        header += (f'<div style="{meta}margin-top:6px;">그리다: 지일 공고와 겹치지 않는 그리다 공고가 있는 주에만 '
+                   f"그리다 메일을 따로 보냅니다.</div>")
     header += "</div>"
     own = [c for c in body_rows if c not in same]
     content = header + (_section(INTEREST, own) if own or not same else "") + (_shared_section(same) if same else "")

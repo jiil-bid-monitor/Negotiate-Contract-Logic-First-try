@@ -223,6 +223,13 @@ def _append_feedback_sheet(candidates, now) -> None:
         print(f"피드백 시트 기록: 추가 {result['appended']}건 · 이미 있음 {result['skipped']}건")
 
 
+def own_rows(candidates, shared: set[str]) -> list:
+    """메일 본문 공고 중 다른 회사(지일) 메일에 없던 것."""
+    from .email_html import split_body
+
+    return [c for c in split_body(candidates)[0] if c.notice.notice_no not in shared]
+
+
 def _shared_notices(folder: str | None) -> set[str]:
     """지일 보고 기록 폴더(같은 실행에서 먼저 쓴 output/report-log)의 공고번호 — 그리다 메일에서 겹치는 공고를 한 줄로(2026-11-26)."""
     from . import report_log
@@ -474,10 +481,17 @@ def main(argv: list[str] | None = None) -> int:
             _sent.save(Path(args.sent_state), _sent.mark(sent_state, candidates, now))
             print(f"보낸 공고 기록 저장: {args.sent_state}")
 
+    nothing_new = False
     if args.email:
-        delivered = _send_email(candidates, stats, paths.get("html"), now, _shared_notices(args.same_as)) or delivered
+        shared = _shared_notices(args.same_as)
+        if args.same_as and not own_rows(candidates, shared):
+            # (2026-11-26 사용자 결정) 그리다 — 지일 주간 메일과 겹치지 않는 공고가 없으면 메일을 안 보냄(지일 메일에 안내 한 줄)
+            nothing_new = True
+            print("지일 주간 메일과 겹치지 않는 공고가 없어 메일을 보내지 않습니다")
+        else:
+            delivered = _send_email(candidates, stats, paths.get("html"), now, shared) or delivered
 
-    if args.sent_mark and delivered:
+    if args.sent_mark and (delivered or nothing_new):  # 보낼 것이 없던 주도 '끝남' — 다시 도는 Run이 그리다를 또 수집하지 않게
         Path(args.sent_mark).parent.mkdir(parents=True, exist_ok=True)
         Path(args.sent_mark).touch()
 

@@ -321,7 +321,7 @@ body.picking { overflow: hidden; }
 .tg-label { font-size: 12px; font-weight: 600; color: var(--ink); margin-right: 4px; }
 .notice.live .badge { border-radius: 4px; font-size: 11.5px; padding: 3px 9px; }
 .notice.live .badge.qual.ok { background: var(--brand-tint); }
-.notice.live .grade, .notice.live .due-tag { border-radius: 4px; }
+.notice.live .due-tag { border-radius: 4px; }
 .badge.renotice { background: var(--warn-tint); color: var(--warn); border-color: var(--warn); font-weight: 600; }
 .notice.live .part { margin-top: 14px; }
 .part-owner .pbtn { margin-left: 6px; }
@@ -1133,12 +1133,6 @@ tr.nobody td { color: var(--faint); }
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 
-/* ── 추천등급 ─────────────────────────────────────────────── */
-.grade {
-  font-family: var(--head); font-size: 12px; font-weight: 700; padding: 3px 10px;
-  background: var(--bg); color: var(--muted); border: 1px solid var(--line-strong); letter-spacing: .02em;
-}
-.grade.urgent { background: var(--urgent); color: var(--on-urgent); border-color: var(--urgent); }
 .notice.urgent { border-left-color: var(--urgent); border-left-width: 4px; }
 
 
@@ -1942,7 +1936,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .notice.live.compact .card-score b { order: 3; min-width: 3.2em; text-align: right; }
 
 /* ── 카드 칩 작게 (2026-11-25 사용자: 칩이 커서 공고 정보가 한눈에 안 들어옴) — 글자 위주, 칩은 낮고 얇게 ── */
-.notice.live.compact .badge, .notice.live.compact .due-tag, .notice.live.compact .grade {
+.notice.live.compact .badge, .notice.live.compact .due-tag {
   font-size: 11px; line-height: 1.35; padding: 1px 6px; border-radius: 3px; letter-spacing: 0;
 }
 .notice.live.compact .badge .ico { width: 12px; height: 12px; font-size: 9px; }
@@ -1952,14 +1946,13 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .notice.live.compact .no-copy { font-size: 11px; line-height: 16px; padding: 0 6px; min-height: 0; }
 .notice.live.compact .past-hint { margin-top: 6px; padding: 4px 10px; font-size: 12px; }
 .notice.live.compact .past-hint .badge { font-size: 11px; }
-.notice.live.compact .grade { font-family: var(--body); font-weight: 600; }
 /* 참가 사유 칩·입력칸도 낮게 */
 .notice.live.compact .rchip { font-size: 12px; padding: 2px 10px; }
 .notice.live.compact .reason-chips { gap: 4px; }
 .notice.live.compact .reason-tags-h { margin: 0 0 5px; font-size: 12.5px; }
 .notice.live.compact .reason-form input, .notice.live.compact .reason-form button { padding-top: 3px; padding-bottom: 3px; }
 @media (max-width: 640px) {
-  .notice.live.compact .badge, .notice.live.compact .due-tag, .notice.live.compact .grade { font-size: 12px; padding: 2px 7px; }
+  .notice.live.compact .badge, .notice.live.compact .due-tag { font-size: 12px; padding: 2px 7px; }
   .notice.live.compact .no-copy { min-height: 26px; font-size: 12px; padding: 2px 9px; }
 }
 
@@ -1977,7 +1970,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .notice.live.compact .card-foot .tag-rows { row-gap: 8px; }
 .notice.live.compact .card-foot .tag-group { gap: 6px; margin-right: 18px; padding-right: 0; border-right: 0; }
 .notice.live.compact .card-foot .tag-group:last-child { margin-right: 0; padding-right: 0; border-right: 0; }
-.notice.live.compact .card-foot .badge, .notice.live.compact .card-foot .grade {
+.notice.live.compact .card-foot .badge {
   font-size: 11.5px; line-height: 1.45; padding: 2px 8px; border-radius: 4px;
   border-color: color-mix(in srgb, currentColor 35%, transparent);
 }
@@ -2643,7 +2636,7 @@ async function loadNotices(refresh) {
 }
 
 /** 현재 걸려 있는 필터 상태 */
-const filters = { cat: "all", work: "all", prod: "all", grade: "all", part: "all", check: "all", kind: "all", report: "all" };
+const filters = { cat: "all", work: "all", prod: "all", part: "all", check: "all", kind: "all", report: "all" };
 /** 가장 최근 보고 날짜 — kind 'daily'(텔레그램 입찰 보고)·'weekly', 없으면 둘 다. 📋 '모두 보기'·텔레그램 링크(#live=report)가 그 보고 공고만 본다(11/24 사용자) */
 function lastReport(kind) {
   let date = "";
@@ -2971,7 +2964,6 @@ function listFilterPass(n) {
     matchesLiveQuery(n) &&
     (filters.work === "all" || n.businessType === filters.work) &&
     (filters.prod === "all" || (n.productCodes || []).includes(filters.prod)) &&
-    (filters.grade === "all" || n.confidence === filters.grade) &&
     (filters.part === "all" || partOf(n) === filters.part) &&
     (filters.report === "all" || inReport(n)) &&
     checkPass(n, filters.check)
@@ -3167,7 +3159,6 @@ const LIVE_SORTS = {
   deadline: (a, b) => byDeadline(a, b) || byScore(a, b),
   bid: (a, b) => byBidDeadline(a, b) || byScore(a, b),
   score: (a, b) => byScore(a, b) || byDeadline(a, b),
-  grade: (a, b) => (b.confidence === "강력추천") - (a.confidence === "강력추천") || byDeadline(a, b) || byScore(a, b),
   amount: (a, b) => (b.budgetAmount ?? -1) - (a.budgetAmount ?? -1) || byDeadline(a, b),
   posted: (a, b) => postedTime(a) - postedTime(b) || byDeadline(a, b),
 };
@@ -3186,7 +3177,7 @@ $("liveSort").onchange = () => {
  * opts: [값, 이름, 개수(null이면 숨김), 설명(선택), 비활성(선택)]
  */
 /** 고른 필터를 '적용 중' 칩(✕로 하나씩 지우기)과 지금 보는 건수로 — 탭 아래 줄(2026-11-18 사용자 요청) */
-const FILTER_NAMES = { work: "업무", prod: "세부품명", grade: "추천", part: "참가여부", check: "확인 필요", kind: "검토필요", report: "보고" };
+const FILTER_NAMES = { work: "업무", prod: "세부품명", part: "참가여부", check: "확인 필요", kind: "검토필요", report: "보고" };
 function renderActiveFilters(shownN) {
   const label = (k, v) => {
     if (k === "prod") return heldProductList.find((h) => h.code === v)?.name || v;
@@ -3229,7 +3220,7 @@ function closeDropdowns(except) {
   });
 }
 
-const scoreBand = (n) => (n.confidence === "강력추천" ? "urgent" : n.maxScore >= HIGH ? "strong" : n.maxScore >= LOW ? "edge" : "");
+const scoreBand = (n) => (n.maxScore >= HIGH ? "strong" : n.maxScore >= LOW ? "edge" : "");
 
 /** 점수는 카드 오른쪽 위에 따로 — 배지 줄에 섞으면 정보가 전부 왼쪽에 몰린다. 담당자에게는 싱크로율(%)만 보인다 */
 function scoreBoxHtml(n, open = false) {
@@ -3307,7 +3298,6 @@ function renderNotice(n) {
       <div class="badges">
         ${promotedBadge(n)}
         ${briefingBadge(n)}
-        ${gradeBadge(n)}
         ${n.bidMethodCategory ? bidMethodBadge(n) : ""}
         ${businessTypeBadge(n)}
         ${n.reNotice ? reNoticeBadge() : ""}
@@ -3675,30 +3665,6 @@ function jointBadge(n) {
 const qtip = (title, body) => `<span class="qtip" role="tooltip"><h4>${title}</h4>${body}</span>`;
 /** 커서를 올리면 설명 박스가 뜨는 배지. inner·body는 이미 이스케이프한 HTML */
 const tipBadge = (cls, inner, title, body) => `<span class="badge qual ${cls}" tabindex="0">${inner}${qtip(title, body)}</span>`;
-
-/**
- * 추천등급. 강력추천 = 공고의 품목(물품분류번호)·업종이 지일 등록 품목·업종과 맞고, 제목·품명에 우리 키워드도 있을 때
- * (matchEngine.ts). 그 밖은 참고용. 무엇이 맞았는지 matchedBy로 보여 준다.
- */
-function gradeBadge(n) {
-  const strong = n.confidence === "강력추천";
-  const cls = `grade ${strong ? "urgent" : ""}`;
-  const by = n.matchedBy;
-  if (!by) return `<span class="${cls}">${esc(n.confidence)}</span>`;
-  const names = (xs) => xs.map((x) => `${esc(x.name)}(${esc(x.code)})`).join(", ");
-  const rows = [
-    by.products.length ? `<li class="lay-ok">✓ ${CO_NAME} 보유 품목: ${names(by.products)}</li>` : "",
-    by.industries.length ? `<li class="lay-ok">✓ ${CO_NAME} 보유 업종: ${names(by.industries)}</li>` : "",
-    by.keywords.length ? `<li class="lay-ok">✓ 제목·품명의 키워드: ${by.keywords.map(esc).join(", ")}</li>` : "",
-    by.classes.length ? `<li class="lay-ok">✓ 나라장터 조달분류: ${names(by.classes)}</li>` : "",
-    n.overseas ? `<li class="lay-ok">✓ 몽골 공고 유력: ${esc(n.overseas)}</li>` : "",
-  ].join("");
-  // 팝업 폭에서 한 줄씩 끝나게 짧게 끊는다
-  const rule = strong
-    ? `<p>품목·업종과 제목 키워드가 모두 맞았습니다.</p>`
-    : `<p>강력추천: 품목·업종과 제목 키워드가 모두 맞을 때</p><p>이 공고는 위 항목만 맞았습니다.</p>`;
-  return `<span class="${cls} qual" tabindex="0">${esc(n.confidence)}${qtip(`${esc(n.confidence)}인 이유`, `<ul>${rows}</ul>${rule}`)}</span>`;
-}
 
 /** 낙찰 방식 분류(협상·수의·규격가격동시·입찰). 나라장터 원문 값과 뜻을 함께 */
 const BID_METHOD_NOTE = {
@@ -5236,7 +5202,6 @@ const HELP_SETS = {
     [1, "협상·입찰·수의계약은 어떻게 다른가요?", "목록 위 탭으로 나뉩니다.\n• 협상: 제안서를 평가해 정함\n    (규격가격동시 포함)\n• 입찰: 적격심사·최저가\n• 수의계약: 적격심사 없이 견적 등으로 계약\n• 사전규격: 본공고 전 단계, 낙찰방법 미정", "협상 입찰 수의 사전규격 차이 탭"],
     [1, "'판단할 공고' 숫자는 무슨 뜻인가요?", "최근 7일 보고에 나간 공고 중\n지금 목록에 있고\n아직 판단하지 않은 공고 수입니다.\n사전규격은 세지 않습니다.", "📋 숫자 판단할 텔레그램 빨간 판단할공고"],
     [1, "싱크로율은 무슨 뜻인가요?", "지일 과거 실적과\n과업이 얼마나 닮았는지입니다.\n참가 여부를 정하는 점수는 아닙니다.\n누르면 닮은 과거 사업이 보입니다.", "싱크로율 유사 닮은 퍼센트 비슷한정도 예전사업과 오른쪽"],
-    [1, "'강력추천'·'참고용'은 무슨 뜻인가요?", "• 강력추천: 등록 품목이나 업종이 맞고\n    공고명 키워드도 맞음\n• 참고용: 그 밖의 공고\n칩에 커서를 대면 맞은 항목이 보입니다.", "강력추천 참고용 등급"],
     [1, "'검토필요'는 어떤 공고인가요?", "공고명에 관심 키워드와 제외 키워드가\n같이 있는 공고입니다.\n지일이 할 만한 공고면\n'목록에 올리기'를 누른 뒤 판단해 주세요.", "검토필요 검토 필요 제외낱말 관심낱말 함께"],
     [1, "'세부품명 공고'는 어떤 공고인가요?", "공고명엔 관심 키워드가 없지만\n지일이 등록한 세부품명으로 걸린 공고입니다.\n오른쪽 '세부품명 공고'에서 모아 볼 수 있습니다.", "세부품명 품명 따로"],
     [1, "'보유 면허로 수집'·'정선 사업으로 수집'은 무슨 뜻인가요?", "• 보유 면허로 수집:\n    키워드는 없지만 보유 공사 면허로\n    나라장터 면허 조건을 채우는 공사\n    (물품·용역은 공고명에 전시·연출 등이\n    있을 때만)\n• 정선 사업으로 수집:\n    이름에 '정선'이 든 기관의 입찰 공고", "보유 면허 정선 수집 배지"],
@@ -5581,7 +5546,7 @@ const HELP_SPOT = {
     "마감이 급한 공고부터 보고 싶습니다": "#liveSort", "아직 판단하지 않은 공고만 보고 싶습니다": '#filters [data-dd="part"]', "용역·물품·공사 중 하나만 보고 싶습니다": '#filters [data-dd="work"]', "공고 원문은 어디서 보나요?": "#liveResults .notice h3 a", "'검토필요'는 어떤 공고인가요?": "#reviewGroup > summary", "'세부품명 공고'는 어떤 공고인가요?": ".cat-prod",
     "참가·보류·불참은 어디서 정하나요?": "#liveResults [data-pstatus]", "잘못 눌렀는데 취소할 수 있나요?": "#liveResults [data-pundo]", "적은 사유를 고치고 싶습니다": "#liveResults [data-preason]",
     "불참한 공고를 다시 보고 싶습니다": "#liveResults .skip-group > summary", "'내가 맡기'는 언제 누르나요?": "#liveResults [data-powner]", "참가로 정한 다음에는 무엇을 하나요?": "#liveResults .next-step",
-    "싱크로율은 무슨 뜻인가요?": "#liveResults .card-score", "'강력추천'·'참고용'은 무슨 뜻인가요?": "#liveResults .grade", "참가할 수 있는 공고인지 어떻게 확인하나요?": "#liveResults .tag-group",
+    "싱크로율은 무슨 뜻인가요?": "#liveResults .card-score", "참가할 수 있는 공고인지 어떻게 확인하나요?": "#liveResults .tag-group",
     "'자격충족'·'자격 미보유'는 무슨 뜻인가요?": "#liveResults .tag-group", "카드의 마감은 어느 날짜인가요?": "#liveResults .facts", "사업금액은 어떤 금액인가요?": "#liveResults .facts",
     "비슷한 공고는 지난번에 어떻게 판단했나요?": "#liveResults .past-hint", "팀원에게 의견을 남기고 싶습니다": "#liveResults [data-ptalk]", "참가로 정한 공고의 마감을 한눈에 보고 싶습니다": "#calBellBtn", "'판단할 공고' 숫자는 무슨 뜻인가요?": "#judgeBellBtn", "'회사 서류' 숫자는 무슨 뜻인가요?": "#docBellBtn", "이름을 적으라고 나옵니다": "#judge", "어떤 순서로 하나요?": "#liveResults [data-pstatus]" },
   excluded: { "왜 빠졌는지 어디서 보나요?": "#exResults .ex-reason", "잘못 빠진 공고를 되살리고 싶습니다": "#exResults [data-promote]", "빠진 이유별로 모아 보고 싶습니다": "#exFilters", "특정 공고를 찾고 싶습니다": "#liveQ", "어떤 순서로 하나요?": "#exResults [data-promote]", "자격·지역 때문에 빠진 공고도 볼 수 있나요?": "#exFilters", "'세부품명 미달'은 무슨 뜻인가요?": "#exFilters" },

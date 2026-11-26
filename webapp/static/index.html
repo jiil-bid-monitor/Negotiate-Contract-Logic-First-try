@@ -1985,6 +1985,48 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   .notice.live.compact .facts-line .notice-no { padding-left: 0; }
   .notice.live.compact .card-score b { min-width: 0; }
 }
+
+/* ── 2026-11-26 사용자 '정보가 너무 많아 받아들이기 힘듦' — 위 띠·불러오기 줄·필터 줄 줄임 ── */
+/* ① 알림 버튼은 아이콘 + 숫자, 이름은 커서를 대거나 누르면 펼쳐짐 */
+.docbell > button { gap: 0; }
+.docbell > button .ic { margin-right: 0; }
+.docbell > button .lb { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; vertical-align: middle; transition: max-width .2s ease, opacity .15s ease, margin .2s ease; }
+.docbell > button:is(:hover, :focus-visible, [aria-expanded="true"]) .lb { max-width: 8em; opacity: 1; margin-left: 6px; }
+.docbell > button .n:not([hidden]):not(:empty) { margin-left: 6px; }
+@media (prefers-reduced-motion: reduce) { .docbell > button .lb { transition: none; } }
+/* 이름: 적어 두면 글자만, 누르면 고침 */
+.me-top:has(input:not(:placeholder-shown)) .me-lab { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.me-top input:not(:placeholder-shown):not(:focus) { background: transparent; border-color: transparent; font-weight: 600; cursor: pointer; }
+.me-top input:not(:placeholder-shown):not(:focus):hover { border-color: rgba(255,255,255,.35); }
+@supports (field-sizing: content) { .me-top input:not(:placeholder-shown):not(:focus) { field-sizing: content; width: auto; min-width: 3em; max-width: 12em; } }
+/* 밝기: 해·달 버튼 하나 */
+.theme { border: 0; }
+.theme #themeToggle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid rgba(255,255,255,.24); border-radius: 4px; background: rgba(255,255,255,.08); color: #fff; cursor: pointer; }
+.theme #themeToggle:hover { border-color: rgba(255,255,255,.7); }
+.theme #themeToggle .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.theme #themeToggle .sun, .theme #themeToggle[data-cur="dark"] .moon { display: none; }
+.theme #themeToggle[data-cur="dark"] .sun { display: inline; }
+/* ② 불러오기 줄: 평소 상태 글 없음(경고만) */
+#liveTools .load-state:empty, #liveTools .live-meta:empty { display: none; }
+/* ③ 넓은 화면: 필터는 버튼 하나, 'N건 보는 중'·정렬은 낙찰방법 탭 줄 오른쪽 */
+.fo-only { display: none; }
+@media (min-width: 641px) {
+  .cat-row { position: relative; display: flex; align-items: center; gap: 12px; margin: 4px 0 10px; border-bottom: 1px solid var(--line); }
+  .cat-row > .cat-tabs { flex: 1 1 auto; min-width: 0; margin: 0; border-bottom: 0; align-self: flex-end; }
+  .cat-row > .sort-wrap { flex: none; gap: 10px; margin-left: 0; }
+  .cat-row > .filter-open { display: inline-flex; align-items: center; gap: 6px; flex: none; height: 32px; padding: 0 12px; font: inherit; font-size: 13.5px; cursor: pointer;
+    color: var(--ink-strong); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 999px; }
+  .cat-row > .filter-open[aria-expanded="true"] { border-color: var(--brand); }
+  .cat-row > .filter-open b { color: var(--brand); }
+  .cat-row > .filter-open b:empty { display: none; }
+  .cat-row .fo-sort { display: none; }
+  .cat-row .fo-only { display: inline; }
+  #filterRow { display: none; }
+  body.filter-sheet #filterRow { display: flex; flex-direction: column; align-items: stretch; gap: 10px; position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; margin: 0;
+    padding: 14px 16px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.14); }
+  body.filter-sheet #filterRow .filters { flex-wrap: wrap; gap: 8px; }
+  body.filter-sheet #filterRow .dd-btn { border-color: var(--line-strong); padding: 0 12px; }
+}
 </style>
 </head>
 <body>
@@ -2027,10 +2069,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <button type="button" id="docBellBtn" aria-haspopup="true" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="lb">회사 서류</span><span class="n" id="docBellN"></span></button>
       <div class="docbell-pop" id="docBellPop" hidden></div>
     </div>
-    <label class="me-top">내 이름 <input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></label>
-    <div class="theme" role="group" aria-label="화면 밝기">
-      <button type="button" data-theme-set="light" aria-pressed="false">라이트</button>
-      <button type="button" data-theme-set="dark" aria-pressed="false">다크</button>
+    <label class="me-top"><span class="me-lab">내 이름</span> <input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></label>
+    <div class="theme">
+      <button type="button" id="themeToggle" aria-label="다크 화면으로"><svg class="ic sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="ic moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
     </div>
     <nav class="side-links top-links" aria-label="바로가기">
       <a href="https://www.g2b.go.kr/" target="_blank" rel="noopener"><img src="icons/g2b.ico" alt=""><b>나라장터</b><small>g2b.go.kr</small><span class="go">↗</span></a>
@@ -2078,11 +2119,12 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <button type="button" id="refresh">나라장터에서 불러오기</button>
       <button type="button" id="load" class="ghost">판단 갱신</button>
       <span class="load-state" id="loadState" role="status"></span>
-      <span class="sub live-meta" id="liveMeta">화면을 열면 아직 마감되지 않은 공고를 자동으로 불러옵니다.</span>
-      <button type="button" class="filter-open ghost" id="filterOpen" aria-expanded="false" aria-controls="filterRow">필터 · 정렬 <b id="filterOpenN"></b></button>
+      <span class="sub live-meta" id="liveMeta"></span>
+      <button type="button" class="filter-open ghost" id="filterOpen" aria-expanded="false" aria-controls="filterRow"><span class="fo-sort">필터 · 정렬</span><span class="fo-only">필터</span> <b id="filterOpenN"></b></button>
       <!-- 찾기 칸 — 실제 공고 탭에선 수집 줄 오른쪽(2026-11-18), 제외된 공고 탭으로 가면 탭 줄 오른쪽으로 옮긴다(showTab) -->
       <input id="liveQ" class="tab-search" type="search" placeholder="공고명·수요기관·공고기관·공고번호 검색" autocomplete="off" aria-label="실제 공고 목록에서 찾기">
     </div>
+    <div class="cat-row" id="catRow">
     <div class="cat-tabs" id="catTabs" role="tablist" aria-label="공고 대분류"></div>
     <div class="filter-row" id="filterRow">
       <button type="button" class="filter-close" id="filterClose">닫기</button>
@@ -2099,6 +2141,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         </select>
       </label>
       </div>
+    </div>
     </div>
     <div class="filter-shade" id="filterShade" aria-hidden="true"></div>
     <div class="active-filters" id="activeFilters" hidden></div>
@@ -2619,7 +2662,7 @@ async function loadNotices(refresh) {
       (data.prespecError ? `${stale ? " · " : ""}<span style="color:var(--warn)">사전규격 조회 실패</span>` : "") +
       // 서버 PC 화면 — NAS로 보낸 결과 (실패하면 서버가 1분마다 다시 시도한다)
       (data.push?.error ? `<br><span style="color:var(--urgent)">NAS로 보내지 못함: ${esc(data.push.error)} (1분마다 다시 시도)</span>` : "");
-    if (!jobTimer) $("loadState").textContent = "최근 갱신";
+    if (!jobTimer) $("loadState").textContent = "";  // 평소엔 비움 — 경고만 보임 (2026-11-26 사용자)
     renderNotices(data.items, (data.titleExcludedItems || []).filter(stillOpen), (data.heldItems || []).filter(stillOpen), data.heldProducts || []);
     // 공고문 세부품명 확인이 뒤에서 돌고 있으면 진행을 보여 주고, 찾을 때마다 세부품명 공고 탭을 다시 받는다
     lastDocFound = data.docScan?.found ?? 0;
@@ -5867,26 +5910,45 @@ function helpOpen(open) {
 }
 $("helpFab").onclick = () => helpOpen($("helpBox").hidden);
 // 화면 밝기 버튼 — 고르지 않았으면 지금 보이는 밝기(PC·휴대폰 설정)를 눌린 것으로
+// 해·달 버튼 하나 — 지금 밝기의 반대로 바꿈 (2026-11-26 사용자: 위 띠 정보를 줄임)
+const themeNow = () => document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 function themeMark() {
-  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  document.querySelectorAll("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === cur)));
+  const cur = themeNow();
+  $("themeToggle").dataset.cur = cur;
+  $("themeToggle").setAttribute("aria-label", cur === "dark" ? "밝은 화면으로" : "다크 화면으로");
 }
-document.querySelectorAll("[data-theme-set]").forEach((b) => (b.onclick = () => {
-  document.documentElement.dataset.theme = b.dataset.themeSet;
-  try { localStorage.setItem("ui-theme", b.dataset.themeSet); } catch (e) {}
+$("themeToggle").onclick = () => {
+  const next = themeNow() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("ui-theme", next); } catch (e) {}
   themeMark();
-}));
+};
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", themeMark);
 themeMark();
 // 휴대폰: 필터·정렬은 버튼 하나 → 아래에서 올라오는 창 (2026-11-25 사용자 결정)
 function filterSheet(open) {
   document.body.classList.toggle("filter-sheet", open);
   $("filterOpen").setAttribute("aria-expanded", String(open));
-  if (open) $("filterClose").focus(); else $("filterOpen").focus();
+  const inside = document.activeElement && document.activeElement.closest?.("#filterRow");
+  if (open) $("filterClose").focus(); else if (inside || !WIDE.matches) $("filterOpen").focus();
 }
 $("filterOpen").onclick = () => filterSheet(!document.body.classList.contains("filter-sheet"));
 $("filterClose").onclick = () => filterSheet(false);
 $("filterShade").onclick = () => filterSheet(false);
+// 넓은 화면: 필터는 '필터' 버튼 하나 → 아래로 펼침, 'N건 보는 중'·정렬은 낙찰방법 탭 줄 오른쪽 (2026-11-26 사용자: 정보가 너무 많음)
+// 휴대폰은 예전 그대로(필터·정렬 버튼은 불러오기 줄, 정렬은 아래에서 올라오는 창 안)
+const WIDE = matchMedia("(min-width: 641px)");
+function placeFilterUi() {
+  const sort = document.querySelector("#tab-live .sort-wrap");
+  if (WIDE.matches) { $("catRow").append($("filterOpen"), sort); }
+  else { $("liveQ").before($("filterOpen")); $("filterRow").append(sort); }
+}
+WIDE.addEventListener?.("change", () => { filterSheet(false); placeFilterUi(); });
+placeFilterUi();
+document.addEventListener("click", (e) => {
+  if (!WIDE.matches || !document.body.classList.contains("filter-sheet")) return;
+  if (!e.target.closest("#filterRow, #filterOpen")) filterSheet(false);
+});
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.body.classList.contains("filter-sheet") && !document.querySelector(".dd.open")) filterSheet(false); });
 $("helpBox").addEventListener("click", (e) => {
   const q = e.target.closest("[data-hq]");

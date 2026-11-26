@@ -746,11 +746,18 @@
     return lines ? `<span class="vs-lines">${lines}</span>` : "";
   }
   // 펼친 결과 — 외주 금액으로 투찰했다면(11/16)
+  // 비교 상자는 접어 두고(11/26 사용자 요청 — 상자가 너무 큼), 연 상자는 표를 다시 그려도 열린 채
+  const CMP_OPEN = new Set();
+  const cmpTag = (key) => `data-cmp="${key}"${CMP_OPEN.has(key) ? " open" : ""}`;
+  document.addEventListener("toggle", (e) => {
+    const k = e.target && e.target.dataset && e.target.dataset.cmp;
+    if (k) (e.target.open ? CMP_OPEN.add(k) : CMP_OPEN.delete(k));
+  }, true);
   function outsourceBlock(r) {
     const res = r.result || {}, s = res.status === "완료" ? res.outsource : null;
     if (!s) return "";
     const money = (v) => (v == null ? "-" : `${v >= 0 ? "+" : "−"}${won(Math.abs(v))}원`);
-    return `<div class="res-compare"><div class="res-compare-head">외주 추천 금액(${won(s.amount)}원)으로 투찰했다면${versus(res) ? `: ${VERSUS[versus(res)]}` : ""}</div>
+    return `<details class="res-compare" ${cmpTag(r.id + ":out")}><summary class="res-compare-head">외주 추천 금액(${won(s.amount)}원)으로 투찰했다면${versus(res) ? `: ${VERSUS[versus(res)]}` : ""}</summary>
       <div class="res-grid">
         <div><span>외주 금액 순위</span><b>${s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}위 / ${s.total}곳` : `하한선 미달 (${s.rank}등)`}</b></div>
         <div><span>외주 금액 − 낙찰하한가</span><b>${money(s.gapToFloor)}</b></div>
@@ -758,7 +765,7 @@
         <div><span>외주 금액 사정률</span><b>${s.rate != null ? pct3(s.rate) : "-"}</b></div>
         <div><span>외주 금액 투찰률</span><b>${s.bidRate != null ? pct3(s.bidRate) : "-"}</b></div>
         <div><span>웹앱 금액 순위</span><b>${shortPlace(webRank(res))}</b></div>
-      </div></div>`;
+      </div></details>`;
   }
   function resultCell(r) {
     const res = r.result;
@@ -792,16 +799,16 @@
     if (!s) return "";
     const gap = (v, lab) => (v == null ? "" : `<div><span>${lab}</span><b>${v >= 0 ? "+" : "−"}${won(Math.abs(v))}원</b></div>`);
     const real = res.own, fl = s.floor;
-    if (real) return `<div class="res-compare"><div class="res-compare-head">웹앱 기록 금액(${won(s.amount)}원)으로 투찰했다면: 위 결과는 실제 투찰 기준</div>
+    if (real) return `<details class="res-compare" ${cmpTag(r.id + ":web")}><summary class="res-compare-head">웹앱 기록 금액(${won(s.amount)}원)으로 투찰했다면: 위 결과는 실제 투찰 기준</summary>
       <div class="res-grid">
         <div><span>웹앱 금액 순위</span><b>${s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}위 / ${res.bidderCount}곳` : `하한선 미달 (${s.rank}등)`}</b></div>
         <div><span>웹앱 금액 − 낙찰하한가</span><b>${s.gapToFloor != null ? `${s.gapToFloor >= 0 ? "+" : "−"}${won(Math.abs(s.gapToFloor))}원` : "-"}</b></div>
         ${gap(s.gapToWinner, "웹앱 금액 − 실제 1순위")}
         <div><span>웹앱 금액 사정률</span><b>${s.rate != null ? pct3(s.rate) : "-"}</b></div>
         <div><span>웹앱 금액 투찰률</span><b>${s.bidRate != null ? pct3(s.bidRate) : "-"}</b></div>
-      </div></div>`;
+      </div></details>`;
     const realPlace = real ? (real.rank != null ? `${real.rank}위 / ${res.bidderCount}곳` : real.underRank != null ? `하한선 미달 (${real.underRank}등)` : esc(real.remark || "순위 없음")) : "참가 안 함";
-    return `<div class="res-compare"><div class="res-compare-head">비교 기록: 위 결과는 웹앱 기록 금액(${won(s.amount)}원) 기준, 아래는 실제 투찰${real ? "" : "(${OWN} 참가 없음)"}</div>
+    return `<details class="res-compare" ${cmpTag(r.id + ":web")}><summary class="res-compare-head">비교 기록: 위 결과는 웹앱 기록 금액(${won(s.amount)}원) 기준, 아래는 실제 투찰${real ? "" : "(${OWN} 참가 없음)"}</summary>
       <div class="res-grid">
         <div><span>웹앱 금액 − 낙찰하한가</span><b>${s.gapToFloor != null ? `${s.gapToFloor >= 0 ? "+" : "−"}${won(Math.abs(s.gapToFloor))}원` : "-"}</b></div>
         ${gap(s.gapToWinner, "웹앱 금액 − 실제 1순위")}
@@ -809,7 +816,7 @@
         <div><span>실제 투찰금액</span><b>${real && real.amount != null ? `${won(real.amount)}원` : "-"}</b>${real && real.amount != null && fl != null ? `<em class="res-floor">낙찰하한가 대비 ${real.amount - fl >= 0 ? "+" : "−"}${won(Math.abs(real.amount - fl))}</em>` : ""}</div>
         <div><span>실제 투찰률</span><b>${real && real.rate != null ? pct3(real.rate) : "-"}</b></div>
         <div><span>실제 순위</span><b>${realPlace}</b></div>
-      </div></div>`;
+      </div></details>`;
   }
   function rateCell(r) {
     const res = r.result;

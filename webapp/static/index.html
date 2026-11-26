@@ -1329,7 +1329,9 @@ footer b { color: var(--muted); }
 .bidlog-table .res-cmp { display: block; margin-top: 3px; font-size: 11px; font-weight: 700; color: #8a5a00; background: #fff3cf; border-radius: 4px; padding: 1px 6px; width: fit-content; }
 .bidders tr.ghost td { background: #fff3cf; font-weight: 700; color: #8a5a00; }
 .res-compare { margin-top: 12px; border: 1px solid #e8c56b; background: #fffaeb; border-radius: 6px; padding: 10px 12px; max-width: 900px; }
-.res-compare-head { font-size: 12px; font-weight: 700; color: #8a5a00; margin-bottom: 8px; }
+.res-compare-head { font-size: 12px; font-weight: 700; color: #8a5a00; cursor: pointer; }
+.res-compare[open] > .res-compare-head { margin-bottom: 8px; }
+.res-compare:not([open]) { padding-top: 6px; padding-bottom: 6px; }
 .res-grid em.res-floor { font-style: normal; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .res-foot { margin-top: 10px; font-size: 12px; color: var(--muted); }
 .bidders-head { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
@@ -1646,7 +1648,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hform button { font: inherit; font-size: 14px; font-weight: 600; padding: 0 14px; border: 0; border-radius: 18px; background: var(--brand); color: var(--on-brand); cursor: pointer; }
 .award-test-note { margin: 0 0 12px; padding: 8px 14px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; display: flex; align-items: center; gap: 10px; }
 .award-test-note[hidden] { display: none; }
-.award-act button.award-sim { display: block; border-style: dashed; margin-bottom: 6px; }
+.award-act button.award-sim { display: block; border-style: dashed; margin-bottom: 6px; white-space: normal; max-width: 100%; text-align: left; }
 #tab-award h3 { font-size: 17px; margin: 18px 0 8px; }
 .award-group { margin-top: 18px; }
 .award-group > summary { cursor: pointer; font-size: 16px; font-weight: 600; padding: 6px 0; }

@@ -221,7 +221,7 @@ function render(j) {
   const n = j.notice, s = j.summary;
   // 공고명 → 나라장터 공고 상세(웹앱 공고 목록·투찰 계산기와 같은 주소, 11/13 사용자 요청)
   const g2b = `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${encodeURIComponent(n.no)}&bidPbancOrd=${encodeURIComponent(n.ord || "000")}`;
-  $("#title").innerHTML = n.no ? `<a class="g2b" href="${g2b}" target="_blank" rel="noopener" title="나라장터에서 공고 보기">${esc(n.title)} <small>↗</small></a>` : esc(n.title);
+  $("#title").innerHTML = n.no ? `<a class="g2b" href="${g2b}" target="_blank" rel="noopener">${esc(n.title)} <small>↗</small></a>` : esc(n.title);
   $("#kind2").textContent = s.kind.name;
   $("#sub").textContent = [`${n.no}${n.ord ? "-" + n.ord : ""}`, n.institution, n.award].filter(Boolean).join(" · ");
   const info = [["공고번호", `${n.no}${n.ord ? "-" + n.ord : ""}`], ["발주기관", n.institution], ["업무", n.work],
@@ -234,7 +234,7 @@ function render(j) {
     `<div class="card"><ul>${s.notes.concat(n.skipped).map(x => `<li class="warn">${esc(x)}</li>`).join("")}</ul></div>` : "";
   $("#hwpneed").hidden = $("#hwpneedmsg").hidden = !s.hwp_needed;
   $("#fcount").textContent = s.forms.length ? `${s.forms.length}개` : "";
-  $("#forms").innerHTML = s.forms.length ? s.forms.map(f => `<li title="${esc(f.kind)}"><span class="fno">${esc(String(f.no))}</span>
+  $("#forms").innerHTML = s.forms.length ? s.forms.map(f => `<li><span class="fno">${esc(String(f.no))}</span>
       <span class="fname">${esc(f.name)}</span></li>`).join("")
     : '<li class="empty">공고 자료에서 서식 목록을 찾지 못했습니다</li>';
   $("#quals").innerHTML = "<tr><th>조건</th><th>자격</th><th>지일</th><th>첨부할 서류</th></tr>" +

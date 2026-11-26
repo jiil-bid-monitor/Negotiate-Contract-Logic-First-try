@@ -705,11 +705,11 @@
     if (!a) return "";
     // '투찰금액·외주 금액으로 투찰' 칩은 뺌(11/16 사용자 요청) — 어느 쪽인지는 안 낸 쪽 금액을 흐리게 해서 보임.
     // '다른 금액으로 투찰' 칩도 뺌(11/17 사용자 요청) — 투찰 안 함·기록과 다름만
-    if (a.kind === "web" || a.kind === "out" || a.kind === "other") return a.differs ? ` <span class="actual-warn" title="기록할 때 고른 금액과 나라장터 실제 투찰 금액이 다름">기록과 다름</span>` : "";
+    if (a.kind === "web" || a.kind === "out" || a.kind === "other") return a.differs ? ` <span class="actual-warn">기록과 다름</span>` : "";
     const lab = a.plan ? { web: "투찰금액으로 투찰", out: "외주 금액으로 투찰" }[a.kind]
       : { web: "투찰금액으로 투찰", out: "외주 금액으로 투찰", none: "투찰 안 함", other: `다른 금액으로 투찰 (${won(a.amount || 0)}원)` }[a.kind];
     const tip = a.plan ? "기록할 때 고른 금액: 개찰 뒤 나라장터 실제 금액으로 확인" : `나라장터 개찰 결과의 ${OWN} 실제 금액으로 확인`;
-    return ` <span class="cm actual actual-${a.kind}${a.plan ? " plan" : ""}" title="${tip}">${esc(lab)}</span>${a.differs ? `<span class="actual-warn">기록과 다름</span>` : ""}`;
+    return ` <span class="cm actual actual-${a.kind}${a.plan ? " plan" : ""}">${esc(lab)}</span>${a.differs ? `<span class="actual-warn">기록과 다름</span>` : ""}`;
   }
   // 실제로 낸 쪽 금액은 그대로, 다른 쪽은 흐리게
   const dimClass = (r, side) => { const a = actualSide(r); return a && a.kind !== side && (a.kind === "web" || a.kind === "out") ? " dim" : ""; };
@@ -821,7 +821,7 @@
     const main = place ? `<span class="rank-who">${OWN}</span><span class="nowrap">${place}</span>` :  // 웹앱·지일은 등수 바로 위 작은 글씨(11/13 사용자 요청)
       o ? (() => {  // 등수가 없으면 그 이유(나라장터 비고 — 오기입으로 '예가초과' 등, 11/20 사용자 확인)를 짧게, 비고도 없으면 '순위 없음'
         const why = (o.remark || "").replace("낙찰하한선미달", "하한선 미달").trim();
-        return `<span class="rank-who">${OWN}</span><span class="nowrap res-none" title="${esc(why || "나라장터 결과에 순위 없음")}">${esc(why && why.length <= 10 ? why : "순위 없음")}</span>`;
+        return `<span class="rank-who">${OWN}</span><span class="nowrap res-none">${esc(why && why.length <= 10 ? why : "순위 없음")}</span>`;
       })() : "";
     // 아래 줄의 실제·웹앱 사정률·기준 차이는 뺌(11/13 사용자 요청 — 펼친 결과 칸에 있음, 표가 좌우로 넘침)
     // 지일 등수는 진한 검은 글씨 하나로(11/11 사용자 요청 — 옆 칸에 '탈락'·'낙찰'이 이미 있음), 지일이 참가 안 한 공고의 통과/미달만 색
@@ -901,10 +901,10 @@
           + `<td class="num">${amt != null && planned && planned > a ? fx((amt - a) / (planned - a) * 100, 4) : "-"}</td></tr>`;
       };
       body = `<div class="bidders-wrap"><table class="bidders"><colgroup>${[5, 22, 13, 8, 10, 8, 12, 12, 10].map((w) => `<col style="width:${w}%">`).join("")}</colgroup><thead><tr><th>순위</th><th>업체명</th>`
-        + `<th title="아래 괄호: 1순위 금액과 차이">투찰금액<br><small>(1순위와 차이)</small></th><th>투찰률</th>`
-        + `<th title="이 금액이 낙찰하한선이 되는 사정률: 실제 사정률보다 낮으면 미달. 아래 괄호: −100">사정률<br><small>(−100)</small></th>`
-        + `<th title="투찰금액 ÷ 기초금액">기초금액<br>대비</th><th>사업자번호</th><th>비고</th>`
-        + `<th title="(투찰금액 − A값) ÷ (예정가격 − A값): 하한율보다 낮으면 미달">A값 제외<br>투찰률</th></tr></thead><tbody>${
+        + `<th>투찰금액<br><small>(1순위와 차이)</small></th><th>투찰률</th>`
+        + `<th>사정률<br><small>(−100)</small></th>`
+        + `<th>기초금액<br>대비</th><th>사업자번호</th><th>비고</th>`
+        + `<th>A값 제외<br>투찰률</th></tr></thead><tbody>${
           shown.map(row).join("")}</tbody></table></div>`;
     }
     return `<div class="bidders-box"><div class="bidders-head">투찰 업체 ${got && got.length ? `${got.length}곳` : ""}</div>${body}</div>`;
@@ -957,7 +957,7 @@
       const open = OPEN_ROWS.has(r.id);
       return `<tr data-id="${esc(r.id)}" class="${open ? "is-open" : ""}">
         <td class="when" data-l="기록일">${esc(day(r.recordedAt)).split(" ").map((x) => `<span class="nowrap">${x}</span>`).join(" ")}</td>
-        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType || r.contractMethod ? `<span class="sub">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}${r.contractMethod ? ` <span class="cm${/지명/.test(r.contractMethod) ? " designated" : ""}"${/지명/.test(r.contractMethod) ? ' title="지명경쟁: 투찰 경향 표본에서 빠짐"' : ""}>${esc(r.contractMethod)}</span>` : ""}${actualChip(r)}</span>` : actualChip(r) ? `<span class="sub">${actualChip(r)}</span>` : ""}</td>
+        <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType || r.contractMethod ? `<span class="sub">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}${r.contractMethod ? ` <span class="cm${/지명/.test(r.contractMethod) ? " designated" : ""}"${/지명/.test(r.contractMethod) ? '' : ""}>${esc(r.contractMethod)}</span>` : ""}${actualChip(r)}</span>` : actualChip(r) ? `<span class="sub">${actualChip(r)}</span>` : ""}</td>
         <td class="num bid${dimClass(r, "web")}" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub nowrap">기초 ${won(r.basis)}</span>${r.lowerRate != null ? `<span class="sub nowrap">하한율 ${r.lowerRate}%</span>` : ""}</td>
         <td class="num out${dimClass(r, "out")}" data-l="외주 금액">${outsourceCell(r, edit)}</td>
         <td class="num" data-l="기준 사정률">${pct3(r.rate)}</td>

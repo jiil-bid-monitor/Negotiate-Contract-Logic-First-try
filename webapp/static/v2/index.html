@@ -182,7 +182,7 @@ dialog input[type=text] { width: 100%; height: 44px; border-radius: 8px; border:
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
       <input id="gq" type="search" placeholder="공고번호·공고명·기관: Enter로 공고 찾기" autocomplete="off">
     </label>
-    <a class="topbtn" href="/" title="지금 쓰는 화면(기존)으로 돌아갑니다">기존 화면</a>
+    <a class="topbtn" href="/">기존 화면</a>
     <button type="button" class="topbtn" id="meBtn"><span class="avatar" id="meAv">?</span><span id="meName">이름 넣기</span></button>
   </div>
 </header>
@@ -431,7 +431,7 @@ function renderList() {
     const s = statusOf(n), q = qualLine(n);
     return `<button type="button" class="row-n" data-open="${esc(n.noticeNo)}" aria-current="${n.noticeNo === selected}">
       <span class="m">${ddBadge(n)}<span class="tag">${esc(kindOf(n))}</span><span>${esc(n.demandInstitution || n.institution || "")}</span><span class="jg ${DECISIONS.includes(s) ? s : ""}">${esc(DECISIONS.includes(s) ? s : "미판단")}</span></span>
-      <span class="t"><b>${esc(n.title)}</b><span class="amt"><b>${esc(fmtAmt(n.budgetAmount))}</b></span><span class="sy" title="싱크로율: 지일 과거 실적과 닮은 정도">${syncPct(n)}</span></span>
+      <span class="t"><b>${esc(n.title)}</b><span class="amt"><b>${esc(fmtAmt(n.budgetAmount))}</b></span><span class="sy">${syncPct(n)}</span></span>
       <span class="q ${q.cls}" style="display:block">${esc(q.text)}</span>
     </button>`;
   }).join("");

@@ -938,7 +938,11 @@ ol.steps li.first { background: var(--urgent-tint); }
 }
 
 /* 마감 임박 */
-.notice.due { border-left-color: var(--urgent); border-left-width: 4px; }
+.notice.due:not(.live) { border-left-color: var(--urgent); border-left-width: 4px; }
+/* 실제 공고 카드 왼쪽 띠 = 싱크로율 색(높음 초록 · 경계선 노랑 · 낮음 회색) — 2026-11-26 사용자 */
+.notice.live.compact { border-left-color: var(--muted); }
+.notice.live.compact.strong { border-left-color: var(--brand); }
+.notice.live.compact.edge { border-left-color: var(--warn); }
 .due-tag {
   font-family: var(--head); font-size: 12px; font-weight: 700; padding: 3px 10px; letter-spacing: .02em;
   background: var(--panel); color: var(--urgent); border: 1px solid var(--urgent); white-space: nowrap;

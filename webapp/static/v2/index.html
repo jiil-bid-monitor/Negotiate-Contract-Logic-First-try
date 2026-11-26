@@ -275,7 +275,7 @@ const esc = (s) => String(s ?? "").replace(/([다요])\s+—\s+/g, "$1. ").repla
 const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 무시 */ } } };
 
 // 기존 화면과 같은 사유 칩(webapp/static/index.html JOIN_TAGS·REASON_TAGS)
-const JOIN_TAGS = ["본업과 맞음", "유사 실적 있음", "자격 충족", "금액·규모 적정", "지역 유리", "공동수급 상대 있음", "아는 발주기관", "일정 여유", "새 분야·지역 진출"];
+const JOIN_TAGS = ["본업과 맞음", "유사 실적 있음", "자격 충족", "금액·규모 적정", "공동수급 상대 있음"];  // 지역 유리·아는 발주기관·일정 여유·새 분야·지역 진출은 뺌(2026-11-26 사용자)
 const REASON_TAGS = ["과업 성격 다름", "운영·유지보수 위주", "자격·면허 부족", "실적 요건 미달", "지역 제한", "금액 적음", "마감 촉박", "공동수급 상대 없음", "인력·일정 부족"];
 const DECISIONS = ["참가", "보류", "불참"];
 const FLAG_LABEL = { 실적: "실적 요건", 현장설명회: "현장설명회 참가 필수", 인력: "기술인력 요건", 건축사사무소: "기술인력 요건", 업종: "업종 요건" };

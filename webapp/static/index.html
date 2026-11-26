@@ -705,6 +705,11 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 .decision-reason { color: var(--ink); }
 .decision-reason b { color: var(--muted); font-weight: 600; margin-right: 4px; }
 .decision-who { margin-left: auto; color: var(--muted); }
+/* 판단 칸 — 사유 칩·메모를 옅은 바탕 한 상자로(2026-11-26 사용자 '지저분해') */
+.notice.live.compact .decision:has(.reason-tags, .reason-edit:not([hidden])) { padding: 8px 10px; background: var(--bg); border-radius: 8px; }
+.notice.live.compact .decision > .reason-tags { flex: 1 1 auto; flex-basis: auto; }
+.notice.live.compact .decision > .reason-form { flex: 0 1 300px; }
+.notice.live.compact .decision > .reason-form input { min-width: 0; }
 .decision-who b { color: var(--ink-strong); }
 .pbtn.next-step { border-color: var(--brand); color: var(--brand); font-weight: 600; margin-right: 10px; }
 .next-note { flex: 1 1 100%; margin-top: 6px; padding: 7px 10px; background: var(--bg); border-left: 3px solid var(--brand); font-size: 12.5px; color: var(--ink); }
@@ -3672,7 +3677,7 @@ function enrichBadges(n) {
     const html = list.filter(Boolean).join("");
     return html ? `<div class="tag-group">${label ? `<span class="tg-label">${label}</span>` : ""}${html}</div>` : "";
   };
-  return (p?.status ? group("", [partStatusBadge(p)]) : "") + group("자격", [qualChip(n, parts, missing)]) + group("지역·공동수급", area) + group("확인", check);
+  return group("자격", [qualChip(n, parts, missing)]) + group("지역·공동수급", area) + group("확인", check);
 }
 /** 자격 칩 하나 — 미달 하나라도 있으면 '자격 미달', 충족이 있으면 '자격 충족', 아니면 '자격 제한 없음'(확인 안 됨은 상자 안에 적음) */
 // 자격 칩 상자 칸마다 아이콘 — 업종·면허(증서) · 세부품명(상자) · 지역(핀) · 공동수급(두 사람) (2026-11-26 사용자)
@@ -4003,13 +4008,8 @@ const DECISIONS = ["참가", "보류", "불참"];
 /** 보류·불참의 주된 사유 버튼 (팀원 화면과 같은 9가지) */
 const REASON_TAGS = ["과업 성격 다름", "운영·유지보수 위주", "자격·면허 부족", "실적 요건 미달", "지역 제한", "금액 적음", "마감 촉박", "공동수급 상대 없음", "인력·일정 부족"];
 /** 참가의 주된 이유 버튼 — 주관식만 있으면 무엇을 적을지 헷갈린다 (2026-10-16 요청). 보류·불참 사유와 짝이 되게 */
-const JOIN_TAGS = ["본업과 맞음", "유사 실적 있음", "자격 충족", "금액·규모 적정", "지역 유리", "공동수급 상대 있음", "아는 발주기관", "일정 여유", "새 분야·지역 진출"];
+const JOIN_TAGS = ["본업과 맞음", "유사 실적 있음", "자격 충족", "금액·규모 적정", "공동수급 상대 있음"];  // 지역 유리·아는 발주기관·일정 여유·새 분야·지역 진출은 뺌(2026-11-26 사용자)
 const tagsFor = (status) => (status === "참가" ? JOIN_TAGS : status === "보류" || status === "불참" ? REASON_TAGS : null);
-const REASON_HINT = {
-  참가: "예: 실적·자격 충족, 규모 적정",
-  보류: "예: 공동수급 업체 확인 중",
-  불참: "예: 조경 면허 필수라 단독 수행 불가",
-};
 /**
  * 참가여부 버튼 아래 한 줄 — 누가 언제 무엇으로 판단했고 사유가 무엇인지, 되돌리기.
  * 판단했는데 사유가 비어 있으면 사유 입력칸을 바로 보여 준다 (판단 기록에 사유와 함께 쌓이게).
@@ -4051,7 +4051,6 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
   const options = tagsFor(p.status);
   const chips = options
     ? `<div class="reason-tags">
-        <p class="reason-tags-h"><b>${p.status === "참가" ? "참가 이유를" : "사유를"} 골라 주세요</b>${tags.length ? `<span class="reason-saved">✓ 저장됨</span>` : ""}</p>
         <div class="reason-chips">${options.map((t) => `<button type="button" class="rchip ${tags.includes(t) ? "on" : ""}" data-rtag="${esc(t)}" aria-pressed="${tags.includes(t)}">${esc(t)}</button>`).join("")}</div>
       </div>`
     : "";
@@ -4059,7 +4058,7 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
   // 사유(고른 칩·적은 글)가 있으면 칩 줄은 접고 '사유 고치기'로 연다 (11/24 사용자 요청)
   const hasReason = !!(p.reason || tags.length);
   const editOpen = REASON_OPEN.has(p.noticeNo);
-  const form = `<form class="reason-form${chips ? " optional" : ""}"><input maxlength="500" aria-label="${esc(p.status)} 사유" placeholder="${chips ? "자세히 적기 (선택)" : esc(p.status) + " 사유"}: ${esc(REASON_HINT[p.status] || "")}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">${chips ? "자세히 저장" : "사유 저장"}</button></form>`;
+  const form = `<form class="reason-form${chips ? " optional" : ""}"><input maxlength="500" aria-label="${esc(p.status)} 사유" placeholder="${chips ? "메모" : esc(p.status) + " 사유"}" value="${esc(p.reason || "")}" autocomplete="off"><button type="submit">저장</button></form>`;
   const said = [tags.join(" · "), p.reason].filter(Boolean).map(esc).join(" · ");
   // 판단 기록 탭(next=false)은 사유가 없어도 칩 줄을 접어 둠 — 한 건이 화면을 다 차지하지 않게 (2026-11-25 사용자)
   const folded = hasReason || !next;

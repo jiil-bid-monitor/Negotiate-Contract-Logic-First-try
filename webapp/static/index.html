@@ -2056,6 +2056,13 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .badge.pass .qtip .grp { white-space: normal; }
 .badge.pass .qtip p.q-label:first-of-type { margin-top: 0; }
 .badge.pass .qtip ul.q-extra { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.badge.pass .qtip :is(p.q-sec, li.q-row) { display: flex; align-items: center; gap: 7px; margin: 10px 0 4px; font-size: 12.5px; color: var(--ink-strong); font-weight: 600; }
+.badge.pass .qtip p.q-sec:first-of-type { margin-top: 0; }
+.badge.pass .qtip li.q-row { margin: 0; padding: 5px 0; border: 0; font-weight: 500; }
+.badge.pass .qtip .qic { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.badge.pass .qtip .q-st { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); text-align: right; }
+.badge.pass .qtip .q-st.ok { color: var(--brand); }
+.badge.pass .qtip .q-st.no { color: var(--urgent); }
 /* 카드 아래 버튼 높이 맞춤 — 참가·보류·불참, 맡기, 대화, 지난 판단 아이콘 */
 .part-row { align-items: center; }
 .part-owner { display: inline-flex; align-items: center; gap: 6px; }
@@ -3662,6 +3669,15 @@ function enrichBadges(n) {
   return (p?.status ? group("", [partStatusBadge(p)]) : "") + group("자격", [qualChip(n, parts, missing)]) + group("지역·공동수급", area) + group("확인", check);
 }
 /** 자격 칩 하나 — 미달 하나라도 있으면 '자격 미달', 충족이 있으면 '자격 충족', 아니면 '자격 제한 없음'(확인 안 됨은 상자 안에 적음) */
+// 자격 칩 상자 칸마다 아이콘 — 업종·면허(증서) · 세부품명(상자) · 지역(핀) · 공동수급(두 사람) · 수집 경로(깔때기) (2026-11-26 사용자)
+const qic = (d) => `<svg class="qic" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const QICON = {
+  industry: qic('<rect x="4" y="4" width="16" height="12" rx="1.5"/><path d="M8 8h8M8 11.5h5"/><circle cx="15.5" cy="17.5" r="2.5"/><path d="M14.3 19.6 13.5 22l2-.9 2 .9-.8-2.4"/>'),
+  product: qic('<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/>'),
+  region: qic('<path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>'),
+  joint: qic('<circle cx="8.5" cy="8.5" r="3"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M3 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M14.5 14.4c.6-.3 1.3-.4 2-.4 2.2 0 4 1.5 4.5 4.5"/>'),
+  path: qic('<path d="M4 5h16l-6 7.5V19l-4 1.5v-8z"/>'),
+};
 function qualChip(n, parts, missing) {
   if (!parts.length) return "";
   const met = parts.some((x) => x.status === "충족");
@@ -3670,20 +3686,22 @@ function qualChip(n, parts, missing) {
     const { body } = qualPartInfo(n, x, false, false);
     const head = x.key === "industry" ? "업종·면허" : x.key === "product" ? "세부품명" : esc(x.name);
     const st = x.status === "충족" ? "충족" : x.status === "미달" ? "미달" : x.status === "제한 없음" ? "제한 없음" : "확인 안 됨";
-    return `<p class="q-label">${head} · <b>${st}</b></p>${body}`;
+    const stc = x.status === "충족" ? "ok" : x.status === "미달" ? "no" : "";
+    return `<p class="q-sec">${QICON[x.key] || ""}<span>${head}</span><b class="q-st ${stc}">${st}</b></p>${body}`;
   }).join("");
   const extra = [];
+  const row = (ic, name, val, cls = "") => `<li class="q-row">${ic}<span>${name}</span><b class="q-st ${cls}">${val}</b></li>`;
   const r = n.regionCheck || {};
-  if (r.status === "충족") extra.push(`<li class="lay-ok">✓ 지역제한 충족 (${esc(regionList(r.required))})</li>`);
+  if (r.status === "충족") extra.push(row(QICON.region, "지역제한", `충족 · ${esc(regionList(r.required))}`, "ok"));
   if (!missing && n.sourceType === "본공고") {
     const j = jointLabel(n) || "정보 없음", rest = j.replace(/^공동수급\s*/, "");
-    extra.push(`<li>${/불허|정보 없음/.test(j) ? `공동수급 ${esc(rest)}` : `공동수급 가능 · ${esc(rest)}`}</li>`);
+    extra.push(row(QICON.joint, "공동수급", /불허|정보 없음/.test(j) ? esc(rest) : `가능 · ${esc(rest)}`));
   }
   const paths = [];
   if (productOnly(n)) paths.push(n.fromDoc ? "공고문 세부품명" : "세부품명으로만");
   if ((n.licenseMatch || []).length) paths.push(`보유 면허(${n.licenseMatch.map(esc).join(", ")})`);
   if (n.localMatch) paths.push(`${esc(n.localPlace || "정선")} 사업`);
-  if (paths.length) extra.push(`<li>수집 경로: ${paths.join(" · ")}</li>`);
+  if (paths.length) extra.push(row(QICON.path, "수집 경로", paths.join(" · ")));
   const body = sec + (extra.length ? `<ul class="q-extra">${extra.join("")}</ul>` : "");
   return `<span class="badge qual pass ${tone}" tabindex="0">${ico ? `<span class="ico" aria-hidden="true">${ico}</span>` : ""}${label}${qtip(label, body)}</span>`;
 }

@@ -3757,7 +3757,7 @@ function regionBadge(n) {
   const hq = r.company ? `<p>${CO_NAME} 본점 소재지: <b>${esc(r.company)}</b></p>` : "";
   const src = `<p class="src">출처: ${esc(r.source || "나라장터 참가가능지역 정보")}</p>`;
   if (r.status === "충족")
-    return tipBadge("okb", "✓ 지역제한 충족", "지역제한", `<p>참가 가능 지역: <b>${esc(req)}</b></p>${hq}${src}`);
+    return tipBadge("okb", '<span class="ico" aria-hidden="true">✓</span>지역제한 충족', "지역제한", `<p>참가 가능 지역: <b>${esc(req)}</b></p>${hq}${src}`);
   if (r.status === "미달")
     return tipBadge("block", "지역제한 · 참가 불가", "지역제한", `<p>참가 가능 지역: <b>${esc(req)}</b></p>${hq}${src}`);
   if ((n.regions || []).length)
@@ -3838,8 +3838,8 @@ function jointBadge(n) {
   const denied = /불허/.test(short);
   const rest = short.replace(/^공동수급\s*/, "");
   const tone = denied ? "warn" : "okb";
-  const label = denied ? (/^공동수급\s*/.test(short) ? `공동수급 ${rest}` : `공동수급 · ${short}`) : `✓ 공동수급 가능 · ${rest}`;
-  return tipBadge(tone, esc(label), "공동수급", jointTipBody(short, short));
+  const label = denied ? (/^공동수급\s*/.test(short) ? `공동수급 ${rest}` : `공동수급 · ${short}`) : `공동수급 가능 · ${rest}`;
+  return tipBadge(tone, (denied ? "" : '<span class="ico" aria-hidden="true">✓</span>') + esc(label), "공동수급", jointTipBody(short, short));
 }
 
 /**

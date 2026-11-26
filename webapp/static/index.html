@@ -1827,7 +1827,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 /* 낙찰방법 탭: 낮은 밑줄 탭 */
 .cat-tabs { align-items: flex-end; margin: 4px 0 10px; border-bottom: 1px solid var(--line); }
 .cat-main { gap: 0; }
-.cat-tab { flex-direction: row; align-items: center; gap: 6px; min-width: 0; padding: 8px 14px 9px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; margin-bottom: -1px; }
+.cat-tab { flex-direction: row; align-items: center; gap: 5px; min-width: 0; font-size: 13.5px; padding: 8px 10px 9px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; margin-bottom: -1px; }
 .cat-tab small { display: none; }
 .cat-tab:hover:not(:disabled) { border-color: transparent; border-bottom-color: var(--line-strong); }
 .cat-tab.on { border-color: transparent; border-bottom-color: var(--brand); box-shadow: none; background: none; }
@@ -2028,8 +2028,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   body.filter-sheet #filterRow .filters { flex-wrap: wrap; gap: 8px; }
   body.filter-sheet #filterRow .dd-btn { border-color: var(--line-strong); padding: 0 12px; }
   /* '세부품명 공고'는 정렬 칸 바로 아래 오른쪽 (2026-11-26 사용자) — 그 자리만큼 탭 줄 아래를 비워 둠 */
-  #catRow { margin-bottom: 40px; }
-  #catRow > .cat-tabs .cat-prod { position: absolute; top: calc(100% + 6px); right: 0; margin: 0; }
+  #catRow > .cat-tabs .cat-prod { position: absolute; top: calc(100% + 10px); right: 0; margin: 0; padding: 0 2px; line-height: 28px; }
+  #liveResults > .group:first-child > .group-head { padding-right: 170px; }  /* 본공고 제목 줄 오른쪽 = '세부품명 공고' 자리 */
 }
 </style>
 </head>

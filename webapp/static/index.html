@@ -879,6 +879,9 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 .due-more.warn .ico { background: var(--warn); }
 .qtip ul.due-list li { display: flex; gap: 12px; justify-content: space-between; }
 .qtip ul.due-list li span { color: var(--muted); font-size: 12px; }
+/* 입찰 일정 — 카드 마감(기준 마감) 줄만 진하게, 나머지는 연하게 (11/26 사용자, ★ 대신) */
+.qtip ul.due-list.sched li span, .qtip ul.due-list.sched li b { color: var(--muted); font-weight: 400; opacity: .75; }
+.qtip ul.due-list.sched li.on span, .qtip ul.due-list.sched li.on b { color: var(--ink-strong); font-weight: 700; opacity: 1; }
 .rs-promote {
   margin-left: 6px; padding: 4px 12px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
   background: var(--brand); color: var(--on-brand); border: 1px solid var(--brand);
@@ -3540,10 +3543,10 @@ function deadlineTip(n) {
     .map(([label, iso]) => {
       const star = label === n.deadlineKind && dtText(iso) === dtText(n.deadline);
       const dd = label === "공고 게시" || label === "개찰" ? "" : left(iso);
-      return `<li><span>${esc(label)}${star ? " ★" : ""}</span><b>${esc(dtText(iso))}${dd}</b></li>`;
+      return `<li${star ? ' class="on"' : ""}><span>${esc(label)}</span><b>${esc(dtText(iso))}${dd}</b></li>`;
     })
     .join("");
-  return { title: "입찰 일정", body: `<ul class="due-list">${rows}</ul>` };
+  return { title: "입찰 일정", body: `<ul class="due-list sched">${rows}</ul>` };
 }
 
 /** 마감 칸 한 줄 — 기준 마감 일시와 D-day. 일시에 커서를 대면 일정 전부 */

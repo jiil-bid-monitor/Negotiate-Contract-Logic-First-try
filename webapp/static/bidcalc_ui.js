@@ -334,17 +334,10 @@
       $("#cAItems").innerHTML = items.length
         ? `${items.map((i) => `${esc(i.name)} ${won(i.amount)}`).join(" + ")}${d.a_applies ? "" : ": A값 적용 표시가 없는 공고"}`
         : "";
+      // 발주기관·기초금액 출처·예비가격 방식·예가방법 안내 줄은 안 씀(11/26 사용자) — 복수예가가 아닌 공고 경고와 서버 경고만
       const notes = [];
-      // 발주기관 최종 판단(서버 judge — 낙찰자 결정기준 문구 → 공고문 인용 법령 → 기관 이름). 예비가격 방식·자동 계산이 이걸 따른다
-      if (d.agency_note) notes.push(`발주기관: ${d.agency_note}`);
-      if (d.basis != null) notes.push(`기초금액 출처: ${d.basis_source || "나라장터"}${d.basis_open_at ? ` (공개 ${d.basis_open_at})` : ""}`);
       REC_METHOD = d.method === "mois" ? "행자부" : d.method ? "조달청" : "";
-      if (d.method) {
-        const why = d.method_reason ? ` (${d.method_reason})` : "";
-        notes.push(`예비가격 방식: ${d.method === "mois" ? `지방계약${why}: 행자부난수추출` : `국가계약${why}: 조달청난수추출`} 권장`);
-      }
-      // 예가방법이 복수예가가 아니면(단일예가·비예가) 15개 추첨이 없는 공고 — 계산기가 맞지 않음
-      if (d.price_method) notes.push(`예가방법: ${d.price_method}${/복수/.test(d.price_method) ? "" : ": 복수예비가격 추첨이 없는 공고, 계산기 결과는 참고만"}`);
+      if (d.price_method && !/복수/.test(d.price_method)) notes.push(`예가방법: ${d.price_method}: 복수예비가격 추첨이 없는 공고, 계산기 결과는 참고만`);
       notes.push(...(d.notes || []));
       $("#cNotes").innerHTML = notes.map((n) => `<div>${esc(n)}</div>`).join("");
       lookupMsg(d.basis != null ? "불러옴" : "일부만 불러옴");
@@ -377,8 +370,7 @@
     if (!SLOTS.length) return "";
     AUTO = C.pickRandom(SLOTS.length, radio("cTake"));
     select(AUTO);
-    return `자동 계산: ${plan.name}(${plan.why}) → 무작위 번호 ${AUTO.join("·")}번: 모의 추첨 1회라 실제 예정가격과 다름. `
-      + "다시 뽑으려면 자동선택 '시작 → 적용'";
+    return "";  // 자동 계산 안내 줄은 안 씀(11/26 사용자)
   }
 
   // ── 협상에 의한 계약 — 가격 점수표(11/12 사용자 요청) ──

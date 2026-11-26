@@ -736,9 +736,10 @@
     const k = e.target && e.target.dataset && e.target.dataset.cmp;
     if (k) (e.target.open ? CMP_OPEN.add(k) : CMP_OPEN.delete(k));
   }, true);
+  const outIsActual = (res) => !!(res.outsource && res.own && res.own.amount != null && Math.abs(res.outsource.amount - res.own.amount) < 1);
   function outsourceBlock(r) {
     const res = r.result || {}, s = res.status === "완료" ? res.outsource : null;
-    if (!s) return "";
+    if (!s || outIsActual(res)) return "";   // 지일이 외주 금액으로 냈으면 위 칸(지일 투찰금액·투찰률·순위)과 같음(11/26 사용자 — 중복 삭제)
     const money = (v) => (v == null ? "-" : `${v >= 0 ? "+" : "−"}${won(Math.abs(v))}원`);
     return `<details class="res-compare" ${cmpTag(r.id + ":out")}><summary class="res-compare-head">외주 금액(${won(s.amount)}원)으로 투찰 시</summary>
       <div class="res-grid">
@@ -747,7 +748,6 @@
         <div><span>외주 금액 − 실제 1순위</span><b>${money(s.gapToWinner)}</b></div>
         <div><span>외주 금액 사정률</span><b>${s.rate != null ? pct3(s.rate) : "-"}</b></div>
         <div><span>외주 금액 투찰률</span><b>${s.bidRate != null ? pct3(s.bidRate) : "-"}</b></div>
-        <div><span>웹앱 금액 순위</span><b>${shortPlace(webRank(res))}</b></div>
       </div></details>`;
   }
   function resultCell(r) {
@@ -790,18 +790,12 @@
         <div><span>웹앱 금액 순위</span><b>${s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}위 / ${res.bidderCount}곳` : `하한선 미달 (${s.rank}등)`}</b></div>
         <div><span>웹앱 금액 − 낙찰하한가</span><b>${s.gapToFloor != null ? `${s.gapToFloor >= 0 ? "+" : "−"}${won(Math.abs(s.gapToFloor))}원` : "-"}</b></div>
         ${gap(s.gapToWinner, "웹앱 금액 − 실제 1순위")}
-        <div><span>웹앱 금액 사정률</span><b>${s.rate != null ? pct3(s.rate) : "-"}</b></div>
         <div><span>웹앱 금액 투찰률</span><b>${s.bidRate != null ? pct3(s.bidRate) : "-"}</b></div>
       </div></details>`;
-    const realPlace = real ? (real.rank != null ? `${real.rank}위 / ${res.bidderCount}곳` : real.underRank != null ? `하한선 미달 (${real.underRank}등)` : esc(real.remark || "순위 없음")) : "참가 안 함";
     return `<details class="res-compare" ${cmpTag(r.id + ":web")}><summary class="res-compare-head">웹앱 금액(${won(s.amount)}원)으로 투찰 시</summary>
       <div class="res-grid">
         <div><span>웹앱 금액 − 낙찰하한가</span><b>${s.gapToFloor != null ? `${s.gapToFloor >= 0 ? "+" : "−"}${won(Math.abs(s.gapToFloor))}원` : "-"}</b></div>
         ${gap(s.gapToWinner, "웹앱 금액 − 실제 1순위")}
-        <div><span>웹앱 금액 사정률</span><b>${s.rate != null ? pct3(s.rate) : "-"}</b></div>
-        <div><span>실제 투찰금액</span><b>${real && real.amount != null ? `${won(real.amount)}원` : "-"}</b>${real && real.amount != null && fl != null ? `<em class="res-floor">낙찰하한가 대비 ${real.amount - fl >= 0 ? "+" : "−"}${won(Math.abs(real.amount - fl))}</em>` : ""}</div>
-        <div><span>실제 투찰률</span><b>${real && real.rate != null ? pct3(real.rate) : "-"}</b></div>
-        <div><span>실제 순위</span><b>${realPlace}</b></div>
       </div></details>`;
   }
   function rateCell(r) {
@@ -846,7 +840,11 @@
       ${item("기록 시각", esc(day(r.recordedAt)))}
       ${item("기초금액", r.basis != null ? `${won(r.basis)}원` : "-")}
       ${item("하한율", r.lowerRate != null ? `${r.lowerRate}%` : "-")}
-      ${r.outsource && outRate(r) != null ? item("외주 금액 사정률 (어림)", `약 ${outRate(r).toFixed(2)}%`) : ""}
+      ${(() => {
+        const so = res.status === "완료" ? res.outsource : null;
+        if (so && outIsActual(res)) return `${item("외주 금액 사정률", so.rate != null ? pct3(so.rate) : "-")}${so.gapToWinner != null ? item(`${lab} − 실제 1순위`, `${so.gapToWinner >= 0 ? "+" : "−"}${won(Math.abs(so.gapToWinner))}원`) : ""}`;
+        return !so && r.outsource && outRate(r) != null ? item("외주 금액 사정률 (어림)", `약 ${outRate(r).toFixed(2)}%`) : "";
+      })()}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
       </div>${compareBlock(r)}${outsourceBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button> <button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></div></td></tr>`;
   }

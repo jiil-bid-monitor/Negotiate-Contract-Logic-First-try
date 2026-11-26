@@ -3896,7 +3896,8 @@ function reqBlocksHtml(all, mixed) {
       return `<li class="${cls}">${sym} ${optHtml(i, mixed)}</li>`;
     }).join("")}</ul></div>`);
   }
-  for (const r of all.filter((x) => !isMustReq(x))) {
+  // '보유 확인'(첨부에서 찾은 보유 자격) 칸은 안 그림 — 필수 보유 칸의 ✓와 겹침(2026-11-26 사용자)
+  for (const r of all.filter((x) => !isMustReq(x) && x.why !== "보유 확인")) {
     if (r.combos) {
       const combos = r.combos.map((c) => ({ ...c, rows: uniqBy(c.rows, (x) => x.label) }));
       const done = combos.some((c) => c.held);

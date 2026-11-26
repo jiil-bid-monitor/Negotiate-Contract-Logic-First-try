@@ -1,0 +1,274 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-26",
+ "reportedAt": "2026-11-25T23:59:08+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01857128",
+   "title": "직원 휴게 공간 조성 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "새만금개발청",
+    "budgetAmount": 18470000.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "공간"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 58,
+    "deadline": "2026-11-26T09:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01857128&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01856255",
+   "title": "*영세율적용*경강선 부발-여주간 52.200km등 14개소 방호울타리 개량 등 기타공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사수도권동부본부",
+    "budgetAmount": 309370000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "금속창호ㆍ지붕건축물조립공사업/4991"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 52,
+    "deadline": "2026-11-30T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01856255&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01852602",
+   "title": "범내골 수전선로 관로공사 실시설계 용역",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "부산교통공사",
+    "budgetAmount": 88901818.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 60,
+    "deadline": "2026-11-30T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01852602&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01856347",
+   "title": "서울 반려동물 테마파크 조성 통신공사 (장기계속)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "서울특별시 도시기반시설본부",
+    "budgetAmount": 1180912727.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 54,
+    "deadline": "2026-11-30T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01856347&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01854245",
+   "title": "중앙선 회기~중랑간 2.700km등 7개소 방호울타리 개량 등 기타공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사수도권동부본부",
+    "budgetAmount": 221036364.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "금속창호ㆍ지붕건축물조립공사업/4991"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 55,
+    "deadline": "2026-11-30T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01854245&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01855683",
+   "title": "평창읍 농촌중심지활성화사업 온세대딴짓아지트 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국농어촌공사 강원지역본부 원주지사",
+    "budgetAmount": 79000000.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 50,
+    "deadline": "2026-11-30T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01855683&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01853477",
+   "title": "항공관제센터 구축사업(관제실 구축)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "국군대전병원",
+    "budgetAmount": 83501318.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [
+     "영상정보디스플레이장치"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 59,
+    "deadline": "2026-12-02T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01853477&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01848857",
+   "title": "주문진고 강원형 학교시설 개축 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도교육청 강원특별자치도강릉교육지원청",
+    "budgetAmount": 379940000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 30,
+    "deadline": "2026-12-07T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01848857&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01856931",
+   "title": "경인선 부평역 등 6역 승강장안전문 영상감시장치 개량공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사 회계통합센터",
+    "budgetAmount": 1333562000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 54,
+    "deadline": "2026-12-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01856931&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01855829",
+   "title": "신평초등학교 공간재구조화 교사개축 정보통신공사(계속비)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "부산광역시교육청 부산광역시서부교육지원청",
+    "budgetAmount": 1075770909.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공간",
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 44,
+    "deadline": "2026-12-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01855829&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01854222",
+   "title": "창원여자중학교 창호교체 및 기타환경개선공사 입찰 공고",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "경상남도창원교육청 창원여자중학교",
+    "budgetAmount": 1537160000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990",
+     "금속창호ㆍ지붕건축물조립공사업/4991"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 64,
+    "deadline": "2026-12-10T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01854222&bidPbancOrd=000"
+   }
+  }
+ ]
+}

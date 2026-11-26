@@ -1732,7 +1732,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 
 /* ── 실제 공고 카드 세 줄 (2026-11-25 사용자 결정 — 시안 2번) ──
    ① 배지·제목·싱크로율 ② 마감·수요기관·금액·공고번호 ③ 자격 칩 | 참가여부·담당·대화 */
-.notice.live.compact { padding: 12px 18px; margin-bottom: 8px; }
+.notice.live.compact { padding: 16px 18px; margin-bottom: 10px; }
 .notice.live.compact .card-head2 { display: flex; align-items: center; gap: 6px 10px; }
 .notice.live.compact .card-head2 .badges { flex: 0 1 auto; display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
 .notice.live.compact .card-head2 h3 { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 17px; font-weight: 600; line-height: 1.4; }
@@ -1744,7 +1744,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .notice.live.compact .card-score b i { font-size: 12px; }
 .notice.live.compact .card-score small { display: inline; margin: 0; font-size: 12px; color: var(--muted); }
 .notice.live.compact .card-score .score-bar { display: none; }
-.notice.live.compact .facts-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin-top: 6px; font-size: 13.5px; }
+.notice.live.compact .facts-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin-top: 9px; font-size: 13.5px; }
 .notice.live.compact .facts { display: flex; flex-wrap: wrap; gap: 4px 0; margin: 0; padding: 0; border: 0; }
 .notice.live.compact .facts div { padding: 0 14px; border-left: 1px solid var(--line); }
 .notice.live.compact .facts div:first-child { padding-left: 0; border-left: 0; }
@@ -1754,7 +1754,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .notice.live.compact .facts-line .notice-no { margin-left: 0; padding-left: 14px; border-left: 1px solid var(--line); vertical-align: 0; }
 .notice.live.compact .card-foot {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 16px;
-  margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line-soft);
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft);
 }
 .notice.live.compact .card-foot .tag-rows { margin: 0; padding: 0; border: 0; }
 /* 칩·버튼이 스스로 뜻을 말해서 이름표(자격·지역·공동수급·참가여부)는 화면에서만 숨김 — 화면 읽기 프로그램은 그대로 읽음 */
@@ -1767,7 +1767,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .notice.live.compact .card-foot .part > details.talk:not([open]) { display: none; }
 .notice.live.compact .card-foot .part > .part-row { grid-column: 2; grid-row: 1; margin-top: 0; font-size: 13px; }
 @media (max-width: 760px) {
-  .notice.live.compact { padding: 12px 14px; }
+  .notice.live.compact { padding: 15px 14px; }
   .notice.live.compact .card-head2 { flex-wrap: wrap; }
   .notice.live.compact .card-head2 .badges { flex: 1 1 auto; }
   .notice.live.compact .card-head2 h3 { flex: 1 1 100%; order: 3; }

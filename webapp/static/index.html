@@ -2116,11 +2116,11 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 /* ③ 넓은 화면: 필터는 버튼 하나, 'N건 보는 중'·정렬은 낙찰방법 탭 줄 오른쪽 */
 .fo-only { display: none; }
 @media (min-width: 641px) {
-  .cat-row { position: relative; display: flex; align-items: center; gap: 12px; margin: 4px 0 10px; border-bottom: 1px solid var(--line); }
+  .cat-row { position: relative; display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; border-bottom: 1px solid var(--line); }
   .cat-row > .cat-tabs { flex: 1 1 auto; min-width: 0; margin: 0; border-bottom: 0; align-self: flex-end; }
   .cat-row > .sort-wrap { flex: none; gap: 10px; margin-left: 0; }
   .cat-row > .filter-open { display: inline-flex; align-items: center; gap: 6px; flex: none; height: 32px; padding: 0 12px; font: inherit; font-size: 13.5px; cursor: pointer;
-    color: var(--ink-strong); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 999px; }
+    color: var(--ink-strong); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; }
   .cat-row > .filter-open[aria-expanded="true"] { border-color: var(--brand); }
   .cat-row > .filter-open b { color: var(--brand); }
   .cat-row > .filter-open b:empty { display: none; }
@@ -2132,8 +2132,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   body.filter-sheet #filterRow .filters { flex-wrap: wrap; gap: 8px; }
   body.filter-sheet #filterRow .dd-btn { border-color: var(--line-strong); padding: 0 12px; }
   /* '세부품명 공고'는 정렬 칸 바로 아래 오른쪽 (2026-11-26 사용자) — 그 자리만큼 탭 줄 아래를 비워 둠 */
-  #catRow > .cat-tabs .cat-prod { position: absolute; top: calc(100% + 8px); right: 0; margin: 0; padding: 0 12px; height: 28px; line-height: 26px; }
-  #liveResults > .group:first-child > .group-head { padding-right: 170px; }  /* 본공고 제목 줄 오른쪽 = '세부품명 공고' 자리 */
+  /* 필터·정렬 줄과 양 끝을 맞추고 간격도 같게(8px), 테두리는 정렬 칸처럼 연하게 (2026-11-26 사용자) */
+  #catRow > .cat-tabs .cat-prod { position: absolute; top: calc(100% + 3px); right: 0; width: var(--prod-w, auto); justify-content: center; margin: 0; padding: 0 12px; height: 28px; line-height: 26px; border-color: var(--line); }
+  #liveResults > .group:first-child > .group-head { padding-right: calc(var(--prod-w, 160px) + 12px); }  /* 본공고 제목 줄 오른쪽 = '세부품명 공고' 자리 */
 }
 </style>
 </head>
@@ -6207,7 +6208,18 @@ function placeFilterUi() {
   const sort = document.querySelector("#tab-live .sort-wrap");
   if (WIDE.matches) { $("catRow").append($("filterOpen"), sort); }
   else { $("liveQ").before($("filterOpen")); $("filterRow").append(sort); }
+  fitProdChip();
 }
+// '세부품명 공고' 칩 너비 = 위 줄 '필터' 버튼 왼쪽 끝 ~ 정렬 칸 오른쪽 끝 (2026-11-26 사용자 — 양옆 길이 맞춤)
+function fitProdChip() {
+  const row = $("catRow"), sort = row && row.querySelector(".sort-wrap");
+  if (!row) return;
+  if (!WIDE.matches || !sort || !row.contains($("filterOpen"))) return void document.documentElement.style.removeProperty("--prod-w");
+  const w = sort.getBoundingClientRect().right - $("filterOpen").getBoundingClientRect().left;
+  if (w > 0) document.documentElement.style.setProperty("--prod-w", `${Math.round(w)}px`);
+}
+if (window.ResizeObserver) new ResizeObserver(fitProdChip).observe($("filterOpen"));
+addEventListener("resize", fitProdChip);
 WIDE.addEventListener?.("change", () => { filterSheet(false); placeFilterUi(); });
 placeFilterUi();
 document.addEventListener("click", (e) => {

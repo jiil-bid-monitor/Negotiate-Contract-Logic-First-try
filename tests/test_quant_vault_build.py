@@ -4459,7 +4459,7 @@ def test_joint_supply_form_recognized_by_body(tmp_path: Path):
     # (11/26 사용자 '공동수급 관련 서식은 무조건 공란') '□ 참여회사 명단 | 공동수급체 | 업체명 …' 표가 있는 대표자 선임계
     roster = _mini_hwpx(tmp_path / "r.hwpx", para("제안 응모에 관한 대표자로 선임합니다.") + para("□ 참여회사 명단")
                         + _tbl([[_c(0, 0, "공동 수급체"), _c(1, 0, "업체명"), _c(2, 0, "")]]))
-    assert _joint_body(roster)
+    assert not _joint_body(roster)  # (11/26 사용자 '대표자 정보는 왜 빠졌어') 서식은 채우고 명단 표만 비움 — test_rep_section_filled_roster_blank
 
 
 def test_signer_label_then_placeholder_two_lines(tmp_path: Path):
@@ -5344,3 +5344,29 @@ def test_form_staff_grades_without_score_head(tmp_path: Path):
     tb = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
     grades, _ = form_staff_grades([_mini_hwpx(tmp_path / "s.hwpx", tb)])
     assert grades == {"기술사": 1.0, "특급": 1.0, "고급": 0.8}
+
+
+def test_rep_section_filled_roster_blank(tmp_path: Path):
+    """(11/26 사용자 '대표자 정보는 왜 갑자기 빠진 거야') '□ 대 표 자 | 응모자(대표자)' 표 + '□ 참여회사 명단 | 공동 수급체' 표가 한 서식 —
+    대표자 표는 채우고 공동수급체 줄만 비움(예전엔 서식 전체를 공란)."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    head = _c(0, 0, "응모자(대표자)").replace('rowSpan="1"', 'rowSpan="2"')
+    rep = [[head, _c(1, 0, "업체명"), _c(2, 0, ""), _c(3, 0, "대표자"), _c(4, 0, "")],
+           [_c(1, 1, "주 소"), _c(2, 1, "", 3)]]
+    jhead = _c(0, 0, "공동 수급체").replace('rowSpan="1"', 'rowSpan="2"')
+    roster = [[jhead, _c(1, 0, "업체명"), _c(2, 0, ""), _c(3, 0, "대표자"), _c(4, 0, "")],
+              [_c(1, 1, "주 소"), _c(2, 1, "", 3)]]
+    body = para("□ 대 표 자") + _tbl(rep) + para("□ 참여회사 명단") + _tbl(roster)
+    src = _mini_hwpx(tmp_path / "s.hwpx", body)
+    from quantdocs.build import _joint_body
+    assert not _joint_body(src)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍대표", "주소": "가상시 1"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v, title="가상 공고")
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    t = _spans(xml, "tbl")
+    a = {(c.row, c.col): c.text.strip() for c in _cells(xml, t[0])}
+    b = {(c.row, c.col): c.text.strip() for c in _cells(xml, t[1])}
+    assert a[(0, 2)] == "(주)가상" and a[(0, 4)] == "홍대표" and a[(1, 2)] == "가상시 1", a
+    assert b[(0, 2)] == "" and b[(0, 4)] == "" and b[(1, 2)] == "", b

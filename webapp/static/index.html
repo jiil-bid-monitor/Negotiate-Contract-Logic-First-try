@@ -1999,8 +1999,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 @media (prefers-reduced-motion: reduce) { .docbell > button .lb { transition: none; } }
 /* 이름: 적어 두면 글자만, 누르면 고침 */
 .me-top:has(input:not(:placeholder-shown)) .me-lab { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.me-top input:not(:placeholder-shown):not(:focus) { background: transparent; border-color: transparent; font-weight: 600; cursor: pointer; }
-.me-top input:not(:placeholder-shown):not(:focus):hover { border-color: rgba(255,255,255,.35); }
+.me-top input:not(:placeholder-shown):not(:focus) { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.24); font-weight: 600; cursor: pointer; }  /* 다른 위 띠 버튼과 같은 테두리(사용자) */
+.me-top input:not(:placeholder-shown):not(:focus):hover { border-color: rgba(255,255,255,.7); }
 @supports (field-sizing: content) { .me-top input:not(:placeholder-shown):not(:focus) { field-sizing: content; width: auto; min-width: 3em; max-width: 12em; } }
 /* 밝기: 해·달 버튼 하나 */
 .theme { border: 0; }

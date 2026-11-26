@@ -123,9 +123,9 @@ class App:
 
     _seen_lock = threading.Lock()
 
-    def result_seen(self, add: list | None) -> list[str] | None:
-        """일정 창에서 본 개찰 결과(공고번호) — data/bid_result_seen.json. add가 None이면 읽기만(파일이 없으면 None = 처음)."""
-        path = self.store.path.parent / "bid_result_seen.json"
+    def result_seen(self, add: list | None, co: Company | None = None) -> list[str] | None:
+        """일정 창에서 본 개찰 결과(공고번호) — data/bid_result_seen.json(다른 회사는 data/<id>/). add가 None이면 읽기만(파일이 없으면 None = 처음)."""
+        path = (co.store if co is not None else self.store).path.parent / "bid_result_seen.json"
         with self._seen_lock:
             seen = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
             if add is None:
@@ -176,10 +176,13 @@ class App:
         self.promo_cache[co.id] = (time.time(), got)
         return got
 
-    def award_root(self, test: bool = False) -> Path:
-        """낙찰 후 서류 폴더를 만들 곳 — 공유 폴더 맨 위 '낙찰후서류'(POSTAWARD_DIR로 바꿈), 시험 페이지는 그 옆 '낙찰후서류_테스트'."""
+    def award_root(self, test: bool = False, co: Company | None = None) -> Path:
+        """낙찰 후 서류 폴더를 만들 곳 — 공유 폴더 맨 위 '낙찰후서류'(POSTAWARD_DIR로 바꿈), 시험 페이지는 그 옆 '낙찰후서류_테스트'.
+        지일 말고 다른 회사는 그 안 <회사 이름>/(2026-11-26 그리다 — 사내 공유 '입찰' 폴더 맞추기는 지일 폴더만)."""
         base = Path(os.environ.get("POSTAWARD_DIR", "").strip() or self.store.path.resolve().parents[2] / "낙찰후서류")
-        return base.parent / AWARD_TEST_FOLDER if test else base
+        if test:
+            return base.parent / AWARD_TEST_FOLDER
+        return base / co.name if co is not None and not co.default else base
 
     def reset_award_test(self, clear: bool = True) -> None:
         """시험 페이지를 처음 상태로 — clear면 시험 목록·투찰 기록·만든 시험 폴더를 지움. 공고는 시험 API를 처음 쓸 때 넣음(seed_award_test)."""
@@ -291,6 +294,8 @@ class App:
         co = holder["co"] = Company(cid, name, full_name, store, team, collector, docscan)
         # 투찰 기록도 회사마다(2026-11-24 그리다 투찰 계산기) — data/<id>/bid_log.json, 백업은 BACKUP_DIR/<id>
         co.bidlog = BidLog(folder, backup_dir=(backup_dir / cid) if backup_dir is not None else None)
+        # 낙찰 후 서류도 회사마다(2026-11-26) — data/<id>/postaward.json, 표준틀·회사 서류는 그 회사 폴더
+        co.postaward = PostAward(folder, co.bidlog, co.bizno(), company=name)
         self.companies[cid] = co
         link_collectors(self.companies)
         return co
@@ -303,6 +308,13 @@ class App:
     def bidlog_of(self, co: Company):
         """그 회사 투찰 기록 — 지일은 self.bidlog(NAS에선 main()이 서버 PC 사본과 합친 것으로 바꿈)."""
         return self.bidlog if co.default else co.bidlog
+
+    def postaward_of(self, co: Company):
+        """그 회사 낙찰 후 서류 — 지일은 self.postaward."""
+        return self.postaward if co.default else co.postaward
+
+    def bidlog_pull_of(self, co: Company):
+        return getattr(self, "bidlog_pull", None) if co.default else co.bidlog_pull
 
     def latest_run(self) -> dict[str, Any] | None:
         return self.companies["jiil"].latest_run()
@@ -432,6 +444,8 @@ def make_handler(app: App):
                 return self._quant("GET", url.path[len("/api/quant"):], None)
             q = parse_qs(url.query)
             co = app.company(q)  # 회사 고르기(2026-11-24) — 화면이 ?co=<id>를 붙인다, 없으면 지일
+            if pa is not app.postaward_test:
+                pa = app.postaward_of(co)
             if url.path == "/api/meta":
                 years: dict[str, int] = {}
                 for p in app.past.projects:
@@ -570,8 +584,8 @@ def make_handler(app: App):
             if url.path == "/api/bidlog":
                 return self._json({"entries": app.bidlog_of(co).entries()})
             if url.path == "/api/bidlog/seen":  # 아직 기록 파일이 없으면 null — 화면이 '처음'으로 보고 지금 결과를 본 것으로
-                return self._json({"seen": app.result_seen(None)})
-            if app.team_remote and pa is app.postaward and url.path.startswith("/api/postaward"):
+                return self._json({"seen": app.result_seen(None, co)})
+            if app.team_remote and pa is not app.postaward_test and url.path.startswith("/api/postaward"):
                 return self._remote_award("GET")
             if url.path == "/api/postaward":
                 return self._json({"items": pa.items()})
@@ -665,6 +679,8 @@ def make_handler(app: App):
                 url, pa = url._replace(path=url.path.replace("/api/test/", "/api/", 1)), app.postaward_test
                 app.seed_award_test()
             co = app.company(parse_qs(url.query))  # 회사 고르기(2026-11-24)
+            if not test:
+                pa = app.postaward_of(co)
             try:
                 if url.path == "/api/import-run":
                     return self._import_run(co)
@@ -756,8 +772,8 @@ def make_handler(app: App):
                     # 표준틀은 운영 폴더 것 — 시험 폴더(낙찰후서류_테스트)엔 _표준틀이 없음(NAS 컨테이너는 공유 폴더 주소로 틀을 못 찾아 root/_표준틀을 봄)
                     docs0 = Path(v0["folder"]) / "공고문서" if v0.get("folder") else None
                     had = {x.name for x in docs0.iterdir()} if docs0 and docs0.is_dir() else None
-                    folder, _ = pa.prepare(key, app.award_root(test), qual_only=data.get("stage") == "qual",
-                                           templates=template_dir(app.award_root(False)), contract_lookup=contract_lookup(),
+                    folder, _ = pa.prepare(key, app.award_root(test, co), qual_only=data.get("stage") == "qual",
+                                           templates=template_dir(app.award_root(False), pa.company), contract_lookup=contract_lookup(pa.own),
                                            refetch=bool(data.get("refetch")))
                     if test:
                         app.fill_award_test_sample(key, folder, before)
@@ -779,12 +795,12 @@ def make_handler(app: App):
                             from nego.bidrecommend import default_own_bizno
                             done = app.step_award_test(client, base, default_own_bizno())
                             return self._json({"ok": True, **done, "items": pa.items()})
-                        if getattr(app, "bidlog_pull", None):
-                            app.bidlog_pull.pull()
+                        if app.bidlog_pull_of(co):
+                            app.bidlog_pull_of(co).pull()
                         pa.sync_bidlog()
                         keys = [str(k) for k in data.get("keys") or []] or None
                         done = pa.check(client, base, keys)
-                        done["contracts"] = pa.check_contracts(contract_lookup())  # 계약이 올라왔으면 단계를 착공·착수로
+                        done["contracts"] = pa.check_contracts(contract_lookup(pa.own))  # 계약이 올라왔으면 단계를 착공·착수로
                     except (ConfigError, ApiError) as err:
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
@@ -814,7 +830,7 @@ def make_handler(app: App):
                     app.help_question(data)
                     return self._json({"ok": True})
                 if url.path == "/api/bidlog/seen":  # 일정 창에서 본 개찰 결과(공고번호) — PC가 달라도 같게(11/24)
-                    return self._json({"seen": app.result_seen(data.get("ids") or [])})
+                    return self._json({"seen": app.result_seen(data.get("ids") or [], co)})
                 if url.path == "/api/bidlog/delete":
                     app.bidlog_of(co).delete(str(data.get("id") or ""))
                     return self._json({"ok": True, "entries": app.bidlog_of(co).entries()})
@@ -935,8 +951,9 @@ def docs_manage(data: dict[str, Any]) -> dict[str, Any]:
     return {"message": message, "docs": docupload.all_docs(folder, today), "alert": docexpiry.web_alert(today)}
 
 
-def contract_lookup():
-    """낙찰 후 서류 — 나라장터 계약정보 조회 함수(공고 → 계약 한 줄). 인증키가 없으면 None(계약 값 없이 채움, 11/18)."""
+def contract_lookup(own_bizno: str = ""):
+    """낙찰 후 서류 — 나라장터 계약정보 조회 함수(공고 → 계약 한 줄). 인증키가 없으면 None(계약 값 없이 채움, 11/18).
+    own_bizno = 그 회사 사업자번호(비면 지일)."""
     from nego.bidrecommend import default_own_bizno
 
     from .postaward import find_contract
@@ -950,7 +967,7 @@ def contract_lookup():
     import dataclasses
 
     # 계약정보 목록은 하루 7~8천 건(용역) — 서버 기본 max_pages(5쪽 ≈ 5천 건)로는 지일 계약이 잘려 나갈 수 있음(11/18 모의 테스트)
-    client, own = bidcalc.make_client(dataclasses.replace(config.api, max_pages=40)), default_own_bizno()
+    client, own = bidcalc.make_client(dataclasses.replace(config.api, max_pages=40)), own_bizno or default_own_bizno()
     return lambda v: find_contract(client, v.get("no", ""), v.get("work", ""), own, (v.get("contract") or {}).get("no", ""),
                                    since=v.get("contractScan") or (v.get("winner") or {}).get("date", ""))
 
@@ -1014,12 +1031,14 @@ def start_nightly(app: App) -> None:
             postaward=None if app.team_remote else app.postaward,  # 서버 PC는 NAS 목록을 씀 — 낙찰 확인도 NAS가
             before=pull.pull if pull else None).start()
     # 그리다 등 다른 회사도 같은 밤 작업(2026-11-24 사용자 결정) — 그 회사 투찰 기록·수집 결과·사업자번호로,
-    # 낙찰 후 서류는 지일만. 엑셀·성적표는 투찰 이력 폴더 안 <회사 이름>/ 폴더에
+    # 낙찰 후 서류도 그 회사 목록(2026-11-26). 엑셀·성적표는 투찰 이력 폴더 안 <회사 이름>/ 폴더에
     _, archive = default_dirs()
     for co in app.companies.values():
         if co.default:
             continue
         Nightly(co.store.path.parent, app.bidlog_of(co), co.latest_run, make_client, co.bizno(),
+                postaward=None if app.team_remote else co.postaward,
+                before=co.bidlog_pull.pull if co.bidlog_pull else None,
                 archive_dir=archive / co.name, company=co.id).start()
 
 
@@ -1040,7 +1059,8 @@ def main(argv: list[str] | None = None) -> int:
     # 판단 기록 백업 폴더 — 구글 드라이브 데스크톱이 동기화하는 폴더 (webapp/backup.py). 비어 있으면 백업하지 않는다
     backup_dir = Path(os.environ["BACKUP_DIR"].strip()) if os.environ.get("BACKUP_DIR", "").strip() else None
     app = build_app(Path(args.db), token, backup_dir=backup_dir)
-    app.postaward.root = app.award_root()  # 낙찰되면 여기에 공고 폴더를 만듦(open_won)
+    for co in app.companies.values():  # 낙찰되면 여기에 공고 폴더를 만듦(open_won) — 다른 회사는 그 안 <회사 이름>/
+        app.postaward_of(co).root = app.award_root(co=co)
     app.viewer = os.environ.get("WEBAPP_ROLE", "").strip() == "viewer"
     # 서버 PC — 수집이 끝나면 결과를 NAS로 보낸다(webapp/resultpush.py). 판단 기록은 NAS에만 쌓이므로 아래 시트 쓰기는 끈다
     push_url = os.environ.get("RESULT_PUSH_URL", "").strip()
@@ -1080,6 +1100,14 @@ def main(argv: list[str] | None = None) -> int:
         app.postaward.bidlog = app.bidlog
         app.bidlog_pull = BidLogPull(mirror, pull_url, os.environ.get("BIDLOG_PULL_TOKEN", "").strip() or token or "")
         app.bidlog_pull.start()
+        for co in app.companies.values():  # 그리다 등도 같은 방식(2026-11-26 — 그 회사 낙찰 후 서류가 투찰 기록을 보게)
+            if co.default:
+                continue
+            mirror = MirrorLog(co.store.path.parent / MIRROR_DIR)
+            co.bidlog = CombinedLog(co.bidlog, mirror)
+            co.postaward.bidlog = co.bidlog
+            co.bidlog_pull = BidLogPull(mirror, pull_url, os.environ.get("BIDLOG_PULL_TOKEN", "").strip() or token or "", company=co.id)
+            co.bidlog_pull.start()
     # 보기 전용(NAS)은 기본 끔 — 낙찰 후 서류 확인이 이 밤 작업에 있어 NAS는 BID_NIGHTLY=1로 켠다
     if os.environ.get("BID_NIGHTLY", "0" if app.viewer else "1").strip() != "0":
         start_nightly(app)

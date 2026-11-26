@@ -138,6 +138,40 @@ class CompanyBidLogTest(CompanyServerTest):
         self.assertNotEqual(self.app.companies["jiil"].bizno(), grida.bizno())
 
 
+class CompanyAwardTest(CompanyServerTest):
+    """낙찰 후 서류·일정도 회사마다(2026-11-26) — 목록·폴더·표준틀·회사 서류·본 개찰 결과가 따로."""
+
+    def test_award_per_company(self):
+        import os
+        from unittest import mock
+
+        from webapp.postaward import company_docs_dir, template_dir
+
+        self.call("/api/postaward?co=grida", {"no": "R26BK01800002", "title": "그리다 공고", "work": "물품"})
+        self.assertEqual([v["no"] for v in self.call("/api/postaward?co=grida")[1]["items"]], ["R26BK01800002"])
+        self.assertEqual(self.call("/api/postaward")[1]["items"], [], "지일 목록엔 안 보임")
+        grida = self.app.companies["grida"]
+        pa = self.app.postaward_of(grida)
+        self.assertEqual((pa.path.parent.name, pa.company, pa.own), ("grida", "그리다", "1328802939"))
+        self.assertEqual(self.app.award_root(co=grida), self.app.award_root() / "그리다")
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"POSTAWARD_TEMPLATE_DIR": d, "COMPANY_DOCS_DIR": d}):
+            self.assertEqual(template_dir(Path("x"), "그리다"), Path(d) / "그리다")
+            self.assertEqual(template_dir(Path("x")), Path(d))
+            for name in ("지일", "그리다"):
+                (Path(d) / name / "[최신 서류]").mkdir(parents=True)
+            self.assertEqual(company_docs_dir("그리다"), Path(d) / "그리다")
+            self.assertEqual(company_docs_dir(), Path(d) / "지일")
+        self.call("/api/bidlog/seen?co=grida", {"ids": ["R26BK01800002"]})
+        self.assertEqual(self.call("/api/bidlog/seen?co=grida")[1]["seen"], ["R26BK01800002"])
+        self.assertIsNone(self.call("/api/bidlog/seen")[1]["seen"], "지일은 따로")
+
+
+def test_screen_shows_award_and_calendar_for_other_company():
+    html = (ROOT / "webapp" / "static" / "index.html").read_text(encoding="utf-8")
+    assert '$("calBell").hidden = true' not in html and "delete HELP_SETS.award" not in html
+    assert 'id="judgeBell" hidden' not in html, "판단할 공고 종은 회사와 상관없이 보임"
+
+
 def test_screen_shows_calc_for_other_company():
     html = (ROOT / "webapp" / "static" / "index.html").read_text(encoding="utf-8")
     assert 'ownRankHead' in html and "CO_NAME} 등수" in html

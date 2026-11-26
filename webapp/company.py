@@ -23,6 +23,8 @@ class Company:
         self.docscan = docscan
         self.push: Any = None  # 서버 PC → NAS 결과 보내기(webapp/resultpush.py) — main()이 켠다
         self.bidlog: Any = None  # 투찰 기록(지일은 App.bidlog — NAS에선 서버 PC 사본과 합친 것으로 바뀌어 App이 들고 있음)
+        self.postaward: Any = None  # 낙찰 후 서류(지일은 App.postaward) — 2026-11-26 그리다도
+        self.bidlog_pull: Any = None  # 서버 PC 투찰 기록 받아 오기(NAS, 지일은 App.bidlog_pull)
         self._run_cache: tuple[int | None, dict[str, Any] | None] = (None, None)
         self._held_raw: dict[str, Any] | None = None
         collector.company_name = name

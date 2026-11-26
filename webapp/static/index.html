@@ -2195,7 +2195,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <p class="corpus-sum" id="corpusSum" hidden>과거 실적을 불러오는 중…</p>
     </div>
 
-    <div class="docbell" id="judgeBell" hidden>
+    <div class="docbell" id="judgeBell">
       <button type="button" id="judgeBellBtn" aria-haspopup="true" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg><span class="lb">미판단 공고</span><span class="n" id="judgeBellN"></span></button>
       <div class="docbell-pop" id="judgeBellPop" hidden></div>
     </div>
@@ -5564,20 +5564,16 @@ const HELP_COMMON = [
   [-1, "버튼을 눌러도 반응이 없습니다", "① 잠시 기다려 봅니다.\n    공고 불러오기와 서류 만들기는\n    시간이 걸립니다.\n② F5로 화면을 새로 고치고 다시 누릅니다.\n③ 웹앱 창을 닫고 다시 엽니다.", "안돼 오류 반응 에러 버튼"],
   [-1, "이 도우미는 외부 AI인가요?", "아닙니다.\n미리 정해 둔 답만 보여 드립니다.\n적은 질문은 회사 안에만 남고\n밖으로 나가지 않습니다.", "AI 외부 보안 챗봇 인공지능 밖으로"],
 ];
-// 그리다 화면(11/25 사용자): 없는 기능(낙찰 후 서류·일정·정선 사업)은 질문째 빼고, 답의 회사 이름은 그리다로.
+// 그리다 화면(11/25 사용자): 없는 기능(정선 사업)은 질문째 빼고, 답의 회사 이름은 그리다로. 낙찰 후 서류·일정은 11/26부터 그리다에도.
 // 싱크로율·과거사업 목록은 그리다 화면에서도 지일 자료라 '지일' 그대로
 const HELP_CO = typeof CO === "undefined" ? "jiil" : CO;
-const HELP_CO_DROP = ["참가로 정한 공고의 마감을 한눈에 보고 싶습니다"];
+const HELP_CO_DROP = [];
 const HELP_CO_KEEP = ["싱크로율은 무슨 뜻인가요?", "새 공고는 언제 들어오나요?"];  // 두 회사를 함께 말하는 답도 그대로
 const HELP_CO_ANSWER = {  // {질문: [새 제목(같으면 ""), 답, NAS 답]}
   "실제 공고::이 탭에서는 무엇을 하나요?": ["", "나라장터 공고 중 그리다가 검토할 만한 공고를\n관심 키워드·세부품명·보유 면허로 모아 보여 드립니다.\n\n마감이 지난 공고, 다른 지역 업체만 참가할 수 있는 공고,\n요구 면허를 하나도 갖지 않은 공고, 제외 키워드·해외 개최 공고는 빠집니다.\n빠진 공고는 '제외된 공고' 탭에 있습니다.\n\n면허가 일부만 없는 공고는\n'자격 미달' 칩을 달고 남아 있습니다."],
   "실제 공고::키워드가 없는 공고는 왜 들어오나요?": ["", "관심 키워드가 없어도 아래 공고는 모읍니다.\n• 보유 공사 면허로 나라장터 면허 조건을\n    모두 채우는 공사.\n    물품·용역은 공고명에 전시·연출 등이 있을 때만.\n• 그리다가 등록한 세부품명으로 걸린 공고."],
-  "NAS 웹앱과 서버 PC 웹앱은 어떻게 다른가요?": ["", "두 곳에서 같이 쓰는 것\n• 공고 보기 · 참가 판단\n\n서버 PC 웹앱에만 있는 것\n• 공고 수집 · 투찰 계산기 · 정량평가서\n\n참가 판단은 어느 쪽에서 해도\n같은 자료입니다.\n\n지금 보시는 화면은 {여기}입니다."],
-  "서버 PC가 꺼져 있으면 무엇을 쓸 수 있나요?": ["", "NAS 웹앱에서 공고 보기와 참가 판단은\n그대로 됩니다.\n\n공고 수집·투찰 계산기·정량평가서는\n서버 PC를 켠 뒤에 쓸 수 있습니다."],
-  "버튼을 눌러도 반응이 없습니다": ["", "① 잠시 기다려 봅니다.\n    공고 불러오기와 정량평가서 만들기는\n    시간이 걸립니다.\n② F5로 화면을 새로 고치고 다시 누릅니다.\n③ 웹앱 창을 닫고 다시 엽니다."],
 };
 if (HELP_CO === "grida") {
-  delete HELP_SETS.award;
   const own = (t) => t && t.replace(/지일이/g, "그리다가").replace(/지일과/g, "그리다와").replace(/지일/g, "그리다");
   const change = (h, where) => {
     const x = HELP_CO_ANSWER[where + h[1]];
@@ -5958,7 +5954,7 @@ async function helpFind(q) {
   const get = (url) => getJson(url).catch(() => ({}));
   const sources = [
     async () => [...pick(lastItems, "실제 공고"), ...pick(lastHeld, "실제 공고 (세부품명으로 걸린 공고)"), ...pick(lastTitleExcluded, "실제 공고 (검토필요)")],
-    async () => (CO === "jiil" ? pick(((await get(AWARD_API)).items || []).map((v) => ({ ...(participation[v.no]?.meta || {}), noticeNo: v.no, title: v.title, institution: v.institution, businessType: v.work, status: v.status, rank: v.opening?.rank })), "낙찰 후 서류") : []),
+    async () => pick(((await get(AWARD_API)).items || []).map((v) => ({ ...(participation[v.no]?.meta || {}), noticeNo: v.no, title: v.title, institution: v.institution, businessType: v.work, status: v.status, rank: v.opening?.rank })), "낙찰 후 서류"),
     async () => pick(Object.values(participation).map((x) => ({ ...(x.meta || {}), noticeNo: x.noticeNo, title: x.title })), "판단 기록"),
     async () => pick(((exData || await get("/api/excluded")).items || []).filter((n) => !exPast(n)), "제외된 공고"),
   ];
@@ -6785,7 +6781,6 @@ function renderJudgeBell() {
   // 입찰(매일 보고)과 협상·규격가격(주간 보고) 따로(11/23 사용자) — 7일 안 매일 보고에 나갔으면 입찰 칸
   const daily = todo.filter((p) => p.reports.some((r) => r.kind === "daily" && (r.date || "").slice(0, 10) >= week));
   const weekly = todo.filter((p) => !daily.includes(p));
-  $("judgeBell").hidden = !todo.length && !Object.values(participation).some((p) => p.reports?.length);
   $("judgeBellN").textContent = left;
   $("judgeBellN").hidden = !left;
   const undecidedN = (list) => list.filter((p) => !JUDGE_DONE.has(p.noticeNo)).length;
@@ -6962,7 +6957,7 @@ async function loadCalendar() {
   const [docs, log, award, seen] = await Promise.all([get("/api/docs-all"), get("/api/bidlog"), get("/api/postaward"), get("/api/bidlog/seen")]);
   // 서버 기록이 아직 없으면(처음) 지금 나와 있는 결과는 본 것으로 — 지난 결과가 한꺼번에 '새 결과'로 뜨지 않게
   if (Array.isArray(seen.seen)) { calSeen = new Set(seen.seen); calFirst = false; } else calFirst = "seen" in seen;
-  for (const d of docs.docs || []) add(d.end, "doc", d.kind, { doc: 1 });
+  for (const d of coDocs(docs.docs)) add(d.end, "doc", d.kind, { doc: 1 });
   const seenNo = new Set();
   for (const e of (log.entries || []).slice().reverse()) {  // 같은 공고를 여러 번 기록했으면 하나만
     if (seenNo.has(e.noticeNo)) continue;
@@ -7102,10 +7097,7 @@ $("coPick").onclick = (ev) => { const b = ev.target.closest("[data-co]"); if (b)
 document.title = CO === "jiil" ? document.title : `${CO_NAME} · ${document.title}`;
 document.querySelector("footer").firstChild.textContent = `\n    (주)${CO_NAME} · 사내 전용\n  `;
 if (CO !== "jiil") {
-  // 낙찰 후 서류·일정은 아직 지일 자료로만 돈다 — 숨김. 정량평가서는 그 회사 서류 폴더로, 투찰 계산기는 그 회사 투찰 기록으로(11/24)
-  document.querySelectorAll('.tabs [data-tab="award"]').forEach((b) => { b.hidden = true; });
-  $("calBell").hidden = true;
-  if (location.hash.slice(1).split("=")[0] === "award") showTab("live");
+  // 낙찰 후 서류·일정·정량평가서·투찰 계산기 모두 그 회사 자료로(11/24·11/26) — 탭은 지일과 같음
   $("ownRankHead").textContent = `${CO_NAME} 등수`;
 }
 if (!CO_PICKED) showCompanyPick();

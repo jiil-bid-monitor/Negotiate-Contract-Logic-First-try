@@ -412,7 +412,7 @@ class Nightly:
                         self.postaward.sync_bidlog()
                         out["postaward"] = self.postaward.check(client, base)
                         from .server import contract_lookup  # 계약이 올라오면 단계를 착공·착수로(11/20)
-                        out["postaward"]["contracts"] = self.postaward.check_contracts(contract_lookup())
+                        out["postaward"]["contracts"] = self.postaward.check_contracts(contract_lookup(self.postaward.own))
                     out.update(self.collect(state, client, base, now))
                 except Exception as err:  # noqa: BLE001 — 받기가 실패해도 엑셀·성적표는 씀
                     log.exception("개찰 결과 받기 실패")

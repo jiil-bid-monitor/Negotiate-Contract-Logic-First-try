@@ -5848,7 +5848,14 @@ async function helpSpot(raw) {
   // 'A || B' = A가 보이면 A, 아니면 B(예: 투찰내역 화면이면 표 칸, 아니면 투찰내역 탭 버튼 — 11/26 사용자 '좀 정확하게')
   const parts = sel.split("||").map((x) => x.trim());
   const gen = HELP_GEN, moved = () => gen !== HELP_GEN;  // 기다리는 동안 사용자가 다른 탭을 누르면 그만둠
-  const pick = (one) => { const all = [...docOf().querySelectorAll(one)].filter((x) => !x.closest("#helpBox")); return all.find((x) => x.checkVisibility()) || all.find((x) => x.offsetParent !== null && x.closest("details:not([open])")); };
+  // 같은 것이 여럿(카드마다 있는 버튼 등)이면 지금 보는 화면 가운데에 가장 가까운 것 — 화면 안에 있으면 그 자리, 없으면 가까운 위·아래로 옮겨 감
+  // (11/26 사용자 — 예전엔 늘 목록 맨 위 카드로 올라갔음)
+  const gap = (x) => { const r = x.getBoundingClientRect(); return Math.abs(r.top + r.height / 2 - innerHeight / 2); };
+  const pick = (one) => {
+    const all = [...docOf().querySelectorAll(one)].filter((x) => !x.closest("#helpBox"));
+    const shown = all.filter((x) => x.checkVisibility());
+    return (shown.length > 1 ? shown.sort((a, b) => gap(a) - gap(b))[0] : shown[0]) || all.find((x) => x.offsetParent !== null && x.closest("details:not([open])"));
+  };
   const find = () => { for (const one of parts) { const x = pick(one); if (x) return x; } return null; };
   let el = find();
   // 방금 탭을 옮겼으면 화면(정량평가서 안쪽 화면·목록)이 그려질 때까지 조금 기다림

@@ -3067,7 +3067,6 @@ function bigCardHead(n, markWord) {
   const facts = [
     ["마감", due],
     ["수요기관", esc(n.demandInstitution || n.institution || "기관 미상")],
-    n.demandInstitution && n.institution && n.demandInstitution !== n.institution ? ["공고기관", esc(n.institution)] : null,
     ["사업금액", esc(money(n))],
   ].filter(Boolean);
   const method = bidMethodOf(n);
@@ -3600,7 +3599,6 @@ function factsBlock(n) {
   const facts = [
     ["마감", n.deadline ? dueCell(n) + dueKind(n) : "일정 미상"],
     ["수요기관", esc(demand)],
-    n.demandInstitution && n.institution && n.demandInstitution !== n.institution ? ["공고기관", esc(n.institution)] : null,
     ["사업금액", esc(money(n))],
   ].filter(Boolean);
   return `<dl class="facts" data-facts="${esc(n.noticeNo)}">${facts.map(([k, v]) => `<div data-k="${k}"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
@@ -4924,7 +4922,6 @@ function renderExcludedCard(n) {
   const facts = [
     ["마감", due],
     ["수요기관", esc(demand)],
-    n.demandInstitution && n.institution && n.demandInstitution !== n.institution ? ["공고기관", esc(n.institution)] : null,
     ["사업금액", esc(money(n))],
   ].filter(Boolean);
   const score = Math.round((n.maxScore ?? 0) * 100);

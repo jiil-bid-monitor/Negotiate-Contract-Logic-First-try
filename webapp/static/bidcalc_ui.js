@@ -664,6 +664,8 @@
 
   let LOG = [], EDITING = null;
   const day = (iso) => (iso ? iso.slice(0, 16).replace("T", " ") : "-");
+  // 표의 기록일은 날짜만 '11/24'(11/26 사용자 — 시각은 펼친 칸 '기록 시각')
+  const shortDay = (iso) => (iso ? `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}` : "-");
   const logMatch = (r, q) => !q || [r.noticeNo, r.title, r.institution].join(" ").toLowerCase().includes(q);
   // 개찰 결과 칸(11/06) — 순위/참가 · 실제 사정률, 줄을 펼치면 1순위 업체·금액·차이
   const pct3 = (v) => (v == null ? "-" : `${Number(v).toFixed(3)}%`);
@@ -708,8 +710,7 @@
     if (edit) return `<input class="edit" data-f="outsource" value="${r.outsource ? esc(Number(r.outsource).toLocaleString("ko-KR")) : ""}" placeholder="외주 금액">`
       + `<select class="edit" data-f="actual" aria-label="실제 투찰"><option value="web"${(r.actual || "web") === "web" ? " selected" : ""}>실제: 투찰금액</option><option value="out"${r.actual === "out" ? " selected" : ""}>실제: 외주 금액</option></select>`;
     if (!r.outsource) return `<span class="res-wait">-</span>`;
-    const rt = outRate(r);
-    return `${won(r.outsource)}${rt != null ? `<span class="sub nowrap">사정률 약 ${rt.toFixed(2)}%</span>` : ""}`;
+    return won(r.outsource);  // '사정률 약 N%'는 펼친 칸으로(11/26 사용자)
   }
   function versusLines(r) {
     const res = r.result || {};
@@ -762,7 +763,10 @@
     // 11/13 '비교 기록은 웹앱 금액 기준 N등 + 실제 투찰 N등 / M곳'과 '탈락 아래 하한선 미달' 줄을 대체)
     const real = res.own;
     if (!real) return `<span class="res-none">참가 기록 없음</span><span class="sub">참가 ${res.bidderCount}곳</span>`;
-    return real.rank === 1 ? `<b class="res-win">낙찰</b>` : `<b class="res-bad">탈락</b>`;
+    // 개찰 결과와 지일 등수는 한 칸 '11등 · 탈락'(11/26 사용자 — 예전 오른쪽 '지일 등수' 칸을 합침), 하한선 아래(-N등)는 '하한선 미달'
+    const why = (real.remark || "").replace("낙찰하한선미달", "하한선 미달").trim();
+    const place = real.rank != null ? `${real.rank}등` : real.underRank != null ? "하한선 미달" : (why && why.length <= 10 ? why : "순위 없음");
+    return `<span class="res-line nowrap"><b class="res-place">${esc(place)}</b> · ${real.rank === 1 ? `<b class="res-win">낙찰</b>` : `<b class="res-bad">탈락</b>`}</span>`;
   }
   // 웹앱 기록 금액 기준 '지일' 줄 — 비교 기록이면 웹앱 금액으로 셈한 등수·투찰률, 아니면 실제 투찰(= 웹앱 금액)
   function webOwn(res) {
@@ -826,7 +830,7 @@
   function detailRow(r) {
     const res = r.result || {}, o = mine(res), w = res.winner, lab = o && o.recorded ? "웹앱" : OWN;
     const item = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
-    return `<tr class="bidlog-detail" data-id="${esc(r.id)}"><td colspan="8"><div class="res-grid">
+    return `<tr class="bidlog-detail" data-id="${esc(r.id)}"><td colspan="7"><div class="res-grid">
       ${item("1순위 업체", w ? esc(w.name) : "-")}
       ${item("1순위 투찰금액", w && w.amount != null ? `${won(w.amount)}원` : "-")}
       ${item("1순위 투찰률", w && w.rate != null ? pct3(w.rate) : "-")}
@@ -839,8 +843,12 @@
       ${item(`${lab} 순위`, o ? (o.rank != null ? `${o.rank}위 / ${res.bidderCount}곳` : o.underRank != null ? `하한선 미달 (${o.underRank}등)` : esc(o.remark || "순위 없음")) : "참가 기록 없음")}
       ${item("예정가격 (실제)", res.plannedPrice != null ? `${won(res.plannedPrice)}원` : "-")}
       ${item("실제 사정률", pct3(res.assessmentRate))}
+      ${item("기록 시각", esc(day(r.recordedAt)))}
+      ${item("기초금액", r.basis != null ? `${won(r.basis)}원` : "-")}
+      ${item("하한율", r.lowerRate != null ? `${r.lowerRate}%` : "-")}
+      ${r.outsource && outRate(r) != null ? item("외주 금액 사정률 (어림)", `약 ${outRate(r).toFixed(2)}%`) : ""}
       ${item("기준 사정률 (기록)", r.rate != null ? `${pct3(r.rate)}${res.rateDiff != null ? ` (${signed(res.rateDiff, "%p")})` : ""}` : "-")}
-      </div>${compareBlock(r)}${outsourceBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button></div></td></tr>`;
+      </div>${compareBlock(r)}${outsourceBlock(r)}${res.status === "완료" ? biddersBlock(r) : ""}<div class="res-foot">${res.fetchedAt ? `결과 받은 시각 ${esc(day(res.fetchedAt))} · ` : ""}<button type="button" data-act="refetch">결과 다시 받기</button> <button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></div></td></tr>`;
   }
   // 투찰 업체 전부(11/10 사용자 요청) — 개찰 완료 줄의 '결과 ▼'를 펼치면 결과 아래에 보임, 펼칠 때만 서버에서 받음
   const BIDDERS = new Map();   // id → 목록 | "loading" | {error}
@@ -939,7 +947,7 @@
       : "";
     // 위 '외주 vs 웹앱 — 웹앱이 더 좋은 등수 …' 요약 줄은 뺌(11/20 사용자 요청 — 줄마다 웹앱·외주 등수가 있음)
     if (!rows.length) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="8" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다."}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="7" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다."}</td></tr>`;
       return;
     }
     $("#bidlogRows").innerHTML = rows.map((r) => {
@@ -947,16 +955,15 @@
       const link = `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${encodeURIComponent(r.noticeNo)}&bidPbancOrd=${encodeURIComponent(r.noticeOrd || "000")}`;
       const open = OPEN_ROWS.has(r.id);
       return `<tr data-id="${esc(r.id)}" class="${open ? "is-open" : ""}">
-        <td class="when" data-l="기록일">${esc(day(r.recordedAt)).split(" ").map((x) => `<span class="nowrap">${x}</span>`).join(" ")}</td>
+        <td class="when" data-l="기록일">${esc(shortDay(r.recordedAt))}</td>
         <td class="title" data-l="공고">${esc(r.title || "-")}<span class="sub nowrap"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(r.noticeNo)}${r.noticeOrd ? `-${esc(r.noticeOrd)}` : ""}</a></span>${r.institution || r.workType || r.contractMethod ? `<span class="sub">${[r.institution, r.workType].filter(Boolean).map(esc).join(" · ")}${r.contractMethod ? ` <span class="cm${/지명/.test(r.contractMethod) ? " designated" : ""}"${/지명/.test(r.contractMethod) ? '' : ""}>${esc(r.contractMethod)}</span>` : ""}${actualChip(r)}</span>` : actualChip(r) ? `<span class="sub">${actualChip(r)}</span>` : ""}</td>
-        <td class="num bid${dimClass(r, "web")}" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}<span class="sub nowrap">기초 ${won(r.basis)}</span>${r.lowerRate != null ? `<span class="sub nowrap">하한율 ${r.lowerRate}%</span>` : ""}</td>
+        <td class="num bid${dimClass(r, "web")}" data-l="투찰금액">${edit ? `<input class="edit" data-f="bid" value="${esc(Number(r.bid).toLocaleString("ko-KR"))}">` : won(r.bid)}</td>
         <td class="num out${dimClass(r, "out")}" data-l="외주 금액">${outsourceCell(r, edit)}</td>
         <td class="num" data-l="기준 사정률">${pct3(r.rate)}</td>
         <td class="res" data-l="개찰 결과"><div>${resultCell(r)}${versusLines(r)}</div></td>
-        <td class="num rankcol" data-l="등수">${rateCell(r)}</td>
         <td class="act">${edit
           ? `<button type="button" data-act="save">저장</button> <button type="button" data-act="cancel">취소</button>`
-          : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button><span class="act2"><button type="button" data-act="edit">고치기</button> <button type="button" data-act="del" class="del">삭제</button></span>`}</td>
+          : `<button type="button" data-act="toggle" class="more">${open ? "접기 ▲" : "결과 ▼"}</button>`}</td>
       </tr>${open ? detailRow(r) : ""}`;
     }).join("");
   }
@@ -980,7 +987,7 @@
     try {
       LOG = (await api("/api/bidlog")).entries || [];
     } catch (err) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="8" class="why">투찰내역을 불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="7" class="why">투찰내역을 불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
       return;
     }
     renderLog();

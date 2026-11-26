@@ -469,7 +469,7 @@ body.picking { overflow: hidden; }
 .docbell-pop li.judge-item .row1 .dd { margin-left: auto; }
 .docbell-pop li.judge-item.pick { display: flex; align-items: center; gap: 10px; }
 .docbell-pop li.judge-item .jmain { flex: 1; min-width: 0; }
-.docbell-pop .jmoves { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.docbell-pop .jmoves { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .docbell-pop li.judge-item .jpick { display: inline-flex; flex: none; margin-left: 0; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
 .docbell-pop li.judge-item .jp { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 22px; padding: 0; border: 0; background: var(--panel); color: var(--ink); cursor: pointer; }
 .docbell-pop li.judge-item .jp + .jp { border-left: 1px solid var(--line-strong); }
@@ -6824,10 +6824,13 @@ function renderJudgeBell() {
   const soon = (p) => Math.ceil((deadlineAt(p.meta?.deadline) - Date.now()) / 86400000) <= 2;  // 화면 D-N과 같은 셈
   const toggle = "";  // 오늘/7일 버튼은 뺌 — 아래 '오늘 보고 N건 모두 보기'가 따로 있음(2026-11-26 사용자)
   // 아래 이동 버튼은 둘만(11/26 사용자) — 오늘 매일 보고 공고 / 주간(협상·규격가격) 미판단 공고. 설명 문구 없음
-  const moves = [repN ? `<button type="button" class="linkbtn" data-report="daily:${rep}">금일 입찰 공고 ›</button>` : "",
-    weekly.length ? `<button type="button" class="linkbtn" data-all-todo="협상">주간 협상 · 규격가격 공고 ›</button>` : ""].filter(Boolean);
+  // 버튼마다 미판단 건수(11/26 사용자) — 금일 = 오늘 매일 보고 공고 중, 주간 = 협상·규격가격 칸
+  const nTag = (n) => ` ${n}건`;
+  const moves = [repN ? `<button type="button" class="linkbtn" data-report="daily:${rep}">금일 입찰 공고${nTag(undecidedN(daily.filter(isToday)))} ›</button>` : "",
+    weekly.length ? `<button type="button" class="linkbtn" data-all-todo="협상">주간 협상 · 규격가격 공고${nTag(undecidedN(weekly))} ›</button>` : ""].filter(Boolean);
   $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3>`
-    + section("입찰 · 매일 보고", dailyIn, "", "", toggle) + section("협상 · 규격가격 · 주간 보고", weekly, "", "", "", weekly.filter(soon).slice(0, 3))
+    + section("입찰 · 매일 보고", dailyIn, "", "", toggle, [])  // 입찰은 다 보므로 미리 보기 없음(11/26 사용자)
+    + section("협상 · 규격가격 · 주간 보고", weekly, "", "", "", weekly.filter(soon).slice(0, 3))
     + (todo.some((p) => !JUDGE_DONE.has(p.noticeNo)) || JUDGE_DONE.size ? "" : `<p class="row2">판단할 공고가 없습니다.</p>`)
     + (moves.length ? `<p class="how jmoves">${moves.join("")}</p>` : "");
 }

@@ -86,15 +86,17 @@ class CombinedLog:
 
 class BidLogPull:
     def __init__(self, mirror: MirrorLog, url: str, token: str, get: Callable[..., Any] = requests.get,
-                 now: Callable[[], datetime] = lambda: datetime.now(KST)):
+                 now: Callable[[], datetime] = lambda: datetime.now(KST), company: str | None = None):
         self.mirror, self.url, self.token, self.get, self.now = mirror, url.rstrip("/"), token, get, now
+        self.company = company  # 지일 말고 다른 회사면 그 회사 투찰 기록(?co=<id>, 2026-11-26)
         self.last: datetime | None = None
         self.error = ""
 
     def pull(self) -> bool:
         """한 번 받아 오기. 실패하면 사본을 그대로 두고 False(서버 PC가 꺼져 있을 때 등)."""
         try:
-            res = self.get(f"{self.url}/api/bidlog", headers={"X-App-Token": self.token}, timeout=15)
+            res = self.get(f"{self.url}/api/bidlog" + (f"?co={self.company}" if self.company else ""),
+                           headers={"X-App-Token": self.token}, timeout=15)
             res.raise_for_status()
             count = self.mirror.replace_from(res.json().get("entries") or [])
         except (requests.RequestException, ValueError, AttributeError) as err:

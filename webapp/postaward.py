@@ -142,11 +142,14 @@ def attachment_texts(files: list[Path]) -> list[str]:
     return out
 
 
-def company_docs_dir() -> Path | None:
-    from under100m.docs import company_dir
+def company_docs_dir(company: str = "") -> Path | None:
+    """그 회사 서류 폴더(회사서류_최신/지일·그리다 — 2026-11-26 나눔). company = 회사 이름, 비면 지일. 나누기 전이면 한 폴더."""
+    from under100m.docs import LATEST
     from webapp.docexpiry import docs_dir
 
-    d = company_dir(docs_dir())  # 낙찰 후 서류는 지일 — 회사별 폴더로 나눴으면 지일 폴더(2026-11-26)
+    root = docs_dir()
+    sub = root / (company or "지일")
+    d = sub if (sub / LATEST).is_dir() else root
     return d if d.is_dir() else None
 
 
@@ -204,16 +207,17 @@ def add_reissue_sheet(xlsx: Path, rows: list[tuple[str, str]]) -> None:
 NAS_TEMPLATES = Path(r"\\jiilserver\jiil-webapp\낙찰후서류\_표준틀")
 
 
-def template_dir(root: Path) -> Path:
-    """표준틀 폴더 — POSTAWARD_TEMPLATE_DIR > NAS 공유 폴더(서버 PC도 여기서 읽어 틀을 따로 복사하지 않음, 11/11) > root/_표준틀(NAS 컨테이너 안)."""
+def template_dir(root: Path, company: str = "") -> Path:
+    """표준틀 폴더 — POSTAWARD_TEMPLATE_DIR > NAS 공유 폴더(서버 PC도 여기서 읽어 틀을 따로 복사하지 않음, 11/11) > root/_표준틀(NAS 컨테이너 안).
+    지일 말고 다른 회사(company = 회사 이름)는 그 안 <회사 이름>/ 폴더(2026-11-26 그리다 — 로고·회사 정보가 그 회사 것)."""
     env = os.environ.get("POSTAWARD_TEMPLATE_DIR", "").strip()
     for d in ([Path(env)] if env else []) + [NAS_TEMPLATES]:
         try:
             if d.is_dir():
-                return d
+                return d / company if company else d
         except OSError:  # 공유 폴더가 안 닿으면 다음 후보로
             pass
-    return Path(root) / "_표준틀"
+    return Path(root) / "_표준틀" / company if company else Path(root) / "_표준틀"
 
 
 # 착수 틀은 물품·용역 하나(11/18 사용자 — 회사 원본은 물품·용역 서식이 같아 나눈 의미가 없음, 업무 칸으로 조직도 칸 이름만 바뀜)
@@ -719,8 +723,9 @@ def _memo(path: Path, text: str) -> None:
 
 
 class PostAward:
-    def __init__(self, data_dir: Path, bidlog=None, own_bizno: str = "", now=_now):
+    def __init__(self, data_dir: Path, bidlog=None, own_bizno: str = "", now=_now, company: str = ""):
         self._prog_cache: dict[str, tuple[float, str]] = {}
+        self.company = company  # 회사 이름 — 비면 지일. 다른 회사는 표준틀·회사 서류를 그 회사 폴더에서(2026-11-26 그리다)
         self.path = Path(data_dir) / STATE_FILE
         self.bidlog = bidlog
         self.own = _digits(own_bizno)
@@ -933,13 +938,13 @@ class PostAward:
                     shutil.copyfile(f, target)
                     if refetch and reuse:
                         new_docs.append(target.name)
-            tdir = Path(templates) if templates else template_dir(root)
+            tdir = Path(templates) if templates else template_dir(root, self.company)
             with self._lock:  # 서류 현황에서 착공·착수 값을 준공·청구로 옮길 때 같은 표준틀을 씀(시험 폴더엔 _표준틀이 없음)
                 items = self._read(); items[key]["templates"] = str(tdir); self._write(items)
             basic = [] if private else self._fill_qual(key, folder, nf, tdir)
             basic += (["[적격심사] 낙찰 전 — 0_적격심사·공고문서만 만듦(계약·착공 서류는 낙찰 뒤 '낙찰 서류 만들기')"] if qual_only
                       else self._fill_both(key, folder, nf, tdir, contract_lookup))
-            reissue = reissue_needed(attachment_texts(nf.files), company_docs_dir()) if nf.title else []
+            reissue = reissue_needed(attachment_texts(nf.files), company_docs_dir(self.company)) if nf.title else []
             if reissue:  # 이번에 만든 엑셀(적격심사서류·착공/착수서류 등)마다 '⚠새로발급' 탭 — 담당자가 고친 예전 파일은 안 건드림
                 for x in folder.rglob("*.xlsx"):
                     if "공고문서" in x.parts or x.name.startswith("~$") or x.stat().st_mtime < started or _has_sheet(x, REISSUE_SHEET):

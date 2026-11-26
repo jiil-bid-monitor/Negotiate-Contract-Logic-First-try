@@ -2025,7 +2025,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .docbell > button .n:not([hidden]):not(:empty) { margin-left: 6px; }
 @media (prefers-reduced-motion: reduce) { .docbell > button .lb { transition: none; } }
 /* 이름: 적어 두면 글자만, 누르면 고침 */
-.me-top:has(input:not(:placeholder-shown)) .me-lab { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .me-top input:not(:placeholder-shown):not(:focus) { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.24); font-weight: 600; cursor: pointer; }  /* 다른 위 띠 버튼과 같은 테두리(사용자) */
 .me-top input:not(:placeholder-shown):not(:focus):hover { border-color: rgba(255,255,255,.7); }
 @supports (field-sizing: content) { .me-top input:not(:placeholder-shown):not(:focus) { field-sizing: content; width: auto; min-width: 3em; max-width: 12em; } }
@@ -2171,7 +2170,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <button type="button" id="docBellBtn" aria-haspopup="true" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/></svg><span class="lb">회사 서류</span><span class="n" id="docBellN"></span></button>
       <div class="docbell-pop" id="docBellPop" hidden></div>
     </div>
-    <label class="me-top"><span class="me-lab">내 이름</span> <span class="me-box"><svg class="me-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg><input id="judge" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></span></label>
+    <label class="me-top"><span class="me-box"><svg class="me-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg><input id="judge" aria-label="내 이름" placeholder="예: 홍길동" maxlength="40" autocomplete="off"></span></label>
     <div class="theme">
       <button type="button" id="themeToggle" aria-label="다크 화면으로"><svg class="ic sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="ic moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span class="tl" id="themeLabel">다크 모드</span></button>
     </div>
@@ -2921,7 +2920,7 @@ async function setPromoted(btn, on) {
   const by = myName();
   if (!by) {
     $("judge").focus();
-    alert("위쪽 '내 이름' 칸에 이름을 먼저 입력해 주세요.");
+    alert("위쪽 사람 아이콘 칸에 이름을 먼저 입력해 주세요.");
     return;
   }
   const noticeNo = on ? btn.dataset.promote : btn.dataset.unpromote;
@@ -4215,7 +4214,7 @@ async function postParticipation(box, payload) {
   const by = myName();
   if (!by) {
     $("judge").focus();
-    alert("위쪽 '내 이름' 칸에 이름을 먼저 입력해 주세요.");
+    alert("위쪽 사람 아이콘 칸에 이름을 먼저 입력해 주세요.");
     return false;
   }
   TOUCHED.add(box.dataset.part);
@@ -5380,7 +5379,7 @@ const HELP_SETS = {
     [4, "참가로 정한 다음에는 무엇을 하나요?", "카드에 생기는 버튼을 눌러 주세요.\n• 협상: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n• 규격가격동시: 두 버튼 모두\n\n사전규격에는 버튼이 없습니다.", "참가 참가한 다음 정량평가서 투찰 계산", "서버 PC 웹앱에서 같은 공고 카드의\n버튼을 눌러 주세요.\n• 협상: 정량평가서 만들기 ›\n• 입찰·수의계약: 투찰 계산 ›\n• 규격가격동시: 두 버튼 모두\n\n사전규격에는 버튼이 없습니다."],
     [4, "참가로 정한 공고의 마감을 한눈에 보고 싶습니다", "위 띠의 달력 아이콘 '일정'을 눌러 주세요.\n참가로 정한 공고의 마감이\n날짜별로 보입니다.\n개찰일·계약일·준공예정일과\n회사 서류 만료일도 같이 나옵니다.\n\n마감은 판단할 때의 날짜입니다.\n정정공고로 바뀌었는지는\n공고문에서 확인해 주세요.", "달력 일정 캘린더 개찰일 스케줄"],
 
-    [5, "이름을 적으라고 나옵니다", "맨 위 '내 이름' 칸에 이름을 적어 주세요.\n판단 기록에 그 이름으로 남습니다.\n적어 둔 이름을 누르면 고칠 수 있습니다.", "이름 적으라 입력 저장 안"],
+    [5, "이름을 적으라고 나옵니다", "맨 위 사람 아이콘 칸에 이름을 적어 주세요.\n판단 기록에 그 이름으로 남습니다.\n적어 둔 이름을 누르면 고칠 수 있습니다.", "이름 적으라 입력 저장 안"],
     [5, "'이전 공고'라고 나옵니다", "예전 방식으로 받은 공고 목록이라는 뜻입니다.\n'나라장터에서 불러오기'를 다시 눌러 주세요.", "이전 공고 이전공고 예전 옛날 다시 불러", "서버 PC 웹앱에서 다시 수집하면\n없어집니다."],
     [5, "찾는 공고가 보이지 않습니다", "① 찾기 글자와 고른 필터를 지웁니다.\n    '필터' 버튼 옆 숫자가 없어지면 됩니다.\n② 탭을 '전체'로 바꿉니다.\n③ 칸 아래 '불참' 묶음과 '검토필요' 칸,\n    '세부품명 공고'를 봅니다.\n④ '제외된 공고' 탭에서 찾습니다.\n\n거기에도 없으면 수집한 기간 밖이거나\n마감이 지났거나 수집 조건에\n걸리지 않은 공고일 수 있습니다.", "안 보 없 빠진 사라 어제 안보여"],
   ] },
@@ -5397,7 +5396,7 @@ const HELP_SETS = {
     [2, "특정 공고를 찾고 싶습니다", "위쪽 요약 줄 오른쪽 돋보기를 누르고\n공고명·기관·공고번호를 적어 주세요.\n휴대폰은 목록 위 찾기 칸에 적습니다.", "찾기 검색 공고번호 찾으 찾고 찾는"],
     [2, "마감이 지난 공고도 나오나요?", "나오지 않습니다.", "마감 지난"],
 
-    [3, "잘못 빠진 공고를 되살리고 싶습니다", "맨 위 '내 이름'을 적고\n'실제 공고로 올리기'를 눌러 주세요.\n실제 공고 탭으로 옮겨져\n판단할 수 있습니다.\n올린 공고는 NAS와 서버 PC 웹앱에\n같이 보입니다.", "되살 올리기 잘못빠진 살리 복구 빠져있던"],
+    [3, "잘못 빠진 공고를 되살리고 싶습니다", "맨 위 사람 아이콘 칸에 이름을 적고\n'실제 공고로 올리기'를 눌러 주세요.\n실제 공고 탭으로 옮겨져\n판단할 수 있습니다.\n올린 공고는 NAS와 서버 PC 웹앱에\n같이 보입니다.", "되살 올리기 잘못빠진 살리 복구 빠져있던"],
     [3, "되살린 공고는 어떻게 표시되나요?", "실제 공고 탭의 그 카드에\n'담당자가 올림' 칩이 붙습니다.\n칩에 커서를 대면\n누가 언제 올렸는지 보입니다.", "올린 올림 담당자가 칩"],
     [3, "되살린 공고를 다시 빼고 싶습니다", "실제 공고 탭에서 그 카드의\n'담당자가 올림' 칩에 커서를 대고\n'목록에서 다시 빼기'를 눌러 주세요.", "다시빼기 다시빼 도로 원래대로 올린것 내리"],
   ] },
@@ -6391,7 +6390,7 @@ document.addEventListener("click", (ev) => {
   const bulkBtn = ev.target.closest("[data-bulk]");
   if (bulkBtn && LOG_PICK.size) {
     const tag = bulkBtn.dataset.bulk, nos = [...LOG_PICK];
-    if (!myName()) { $("judge").focus(); return void alert("위쪽 '내 이름' 칸에 이름을 먼저 입력해 주세요."); }
+    if (!myName()) { $("judge").focus(); return void alert("위쪽 사람 아이콘 칸에 이름을 먼저 입력해 주세요."); }
     bulkBtn.disabled = true;
     (async () => {
       let ok = 0;

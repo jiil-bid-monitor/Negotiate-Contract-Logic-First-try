@@ -1855,9 +1855,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .cat-tab small { display: none; }
 .cat-tab:hover:not(:disabled) { border-color: transparent; border-bottom-color: var(--line-strong); }
 .cat-tab.on { border-color: transparent; border-bottom-color: var(--brand); box-shadow: none; background: none; }
-.cat-prod { border: 0; background: none; padding: 6px 4px; margin-bottom: 4px; color: var(--muted); }
-.cat-prod:hover { color: var(--brand); }
-.cat-prod.on { color: var(--brand); }
+/* 세부품명 공고 = '필터' 버튼과 같은 둥근 칩(2026-11-26 사용자) */
+.cat-prod { height: 32px; padding: 0 12px; margin-bottom: 4px; color: var(--ink-strong); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 999px; font-size: 13.5px; }
+.cat-prod:hover { border-color: var(--brand); color: var(--brand); }
+.cat-prod.on { color: var(--brand); border-color: var(--brand); }
 /* 필터: 평소엔 글자 메뉴, 고른 것만 칩 */
 .filter-row .dd-btn { border-color: transparent; background: none; padding: 0 8px; }
 .filter-row .dd-btn:hover, .filter-row .dd.open .dd-btn { border-color: var(--line-strong); }
@@ -2031,6 +2032,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .theme #themeToggle .sun, .theme #themeToggle[data-cur="dark"] .moon { display: none; }
 .theme #themeToggle[data-cur="dark"] .sun { display: inline; }
 @media (min-width: 761px) { .topbar .theme { order: 100; } }  /* 밝기 버튼은 위 띠 맨 오른쪽(나라장터·21라인 뒤) */
+/* 넓은 화면은 화면 오른쪽 끝(스크롤바 바로 왼쪽)에 붙임 — 2026-11-26 사용자 */
+@media (min-width: 1300px) { .topbar { position: relative; } .topbar .theme { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); } }
 /* 판단 갱신 = 둥근 화살표 버튼, 찾기 = 돋보기 (누르면 칸이 펼쳐짐) — 2026-11-26 사용자 */
 #load.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 38px; padding: 0; }
 #load.icon-btn .ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -2118,7 +2121,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   body.filter-sheet #filterRow .filters { flex-wrap: wrap; gap: 8px; }
   body.filter-sheet #filterRow .dd-btn { border-color: var(--line-strong); padding: 0 12px; }
   /* '세부품명 공고'는 정렬 칸 바로 아래 오른쪽 (2026-11-26 사용자) — 그 자리만큼 탭 줄 아래를 비워 둠 */
-  #catRow > .cat-tabs .cat-prod { position: absolute; top: calc(100% + 10px); right: 0; margin: 0; padding: 0 2px; line-height: 28px; }
+  #catRow > .cat-tabs .cat-prod { position: absolute; top: calc(100% + 8px); right: 0; margin: 0; padding: 0 12px; height: 28px; line-height: 26px; }
   #liveResults > .group:first-child > .group-head { padding-right: 170px; }  /* 본공고 제목 줄 오른쪽 = '세부품명 공고' 자리 */
 }
 </style>
@@ -2225,7 +2228,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <div class="filters" id="filters"></div>
       <div class="sort-wrap">
       <span class="af-sum" id="liveCount"></span>
-      <label class="sort-box">정렬
+      <label class="sort-box">
         <select id="liveSort" aria-label="본공고·사전규격 정렬">
           <option value="deadline">자격등록 마감 순</option>
           <option value="bid">투찰 마감 임박 순</option>

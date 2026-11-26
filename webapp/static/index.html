@@ -2052,6 +2052,16 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .phint-pop .past-hint { margin: 0; padding: 9px 12px; background: var(--panel); border: 1px solid var(--line-strong); border-left: 3px solid var(--line-strong); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
 .phint:hover .phint-pop, .phint:focus-within .phint-pop { display: block; }
 @media (hover: none) { .phint { display: contents; } .phint > .ic { display: none; } .phint-pop { display: block; position: static; padding-top: 6px; width: 100%; max-width: none; } .phint-pop .past-hint { box-shadow: none; border-radius: 0; border-top: 0; border-right: 0; border-bottom: 0; } }
+.badge.pass .qtip { white-space: normal; width: min(460px, 86vw); }
+.badge.pass .qtip .grp { white-space: normal; }
+.badge.pass .qtip p.q-label:first-of-type { margin-top: 0; }
+.badge.pass .qtip ul.q-extra { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+/* 카드 아래 버튼 높이 맞춤 — 참가·보류·불참, 맡기, 대화, 지난 판단 아이콘 */
+.part-row { align-items: center; }
+.part-owner { display: inline-flex; align-items: center; gap: 6px; }
+.part-owner .pbtn { margin-left: 0; }
+.pbtn.ico, .phint { box-sizing: border-box; height: 28px; min-height: 28px; padding-top: 0; padding-bottom: 0; line-height: 1; vertical-align: middle; }
+.phint { width: 34px; margin-left: 0; }
 /* 카드 위 '입찰 · 공사'는 테두리 없는 글자 (2026-11-26 사용자) */
 .kind-line { display: inline-flex; align-items: center; }
 .kind-line > .badge, .notice.live .kind-line > .badge { border: 0 !important; background: none !important; padding: 0 !important; color: var(--muted); font-size: 12.5px; }
@@ -3638,15 +3648,10 @@ async function reloadHeld() {
 /** 카드의 두 번째 배지 줄 — 참가여부 · 자격 | 지역·공동수급 | 확인 */
 function enrichBadges(n) {
   const p = participation[n.noticeNo];
-  // 2026-11-26 사용자: 통과한 조건은 '✓ 참가 가능' 칩 하나에 모으고(커서를 대면 내용), 문제(미보유·지역 미달·판정 못 함)만 따로 칩
+  // 2026-11-26 사용자: 자격 칩은 '자격 충족'·'자격 미달'·'자격 제한 없음' 하나만 — 커서를 대면 요구 자격과 보유 여부(업종·면허, 세부품명)
   const parts = n.qual?.parts || [];
-  const qualHtml = nQualBadges(n);
-  const bad = (st) => st === "미달" || st === "미확인";
-  const qualBad = parts.map((x, i) => (bad(x.status) ? qualHtml[i] : "")).filter(Boolean);
   const missing = parts.some((x) => x.status === "미달");
-  const r = n.regionCheck || {};
-  const regionOk = r.status === "충족";
-  const regionChip = regionOk ? "" : regionBadge(n);
+  const regionChip = n.regionCheck?.status === "충족" ? "" : regionBadge(n);
   const area = [regionChip, missing ? jointBadge(n) : ""];
   if (n.regionSuspect) area.push(regionSuspectBadge(n));
   const check = [...flagBadges(n), attachBadge(n)];
@@ -3654,33 +3659,34 @@ function enrichBadges(n) {
     const html = list.filter(Boolean).join("");
     return html ? `<div class="tag-group">${label ? `<span class="tg-label">${label}</span>` : ""}${html}</div>` : "";
   };
-  const summary = passSummary(n, parts, regionOk, !missing,
-    qualBad.length || regionChip || n.regionSuspect || check.some(Boolean));
-  return (p?.status ? group("", [partStatusBadge(p)]) : "") + group("자격", [summary, ...qualBad]) + group("지역·공동수급", area) + group("확인", check);
+  return (p?.status ? group("", [partStatusBadge(p)]) : "") + group("자격", [qualChip(n, parts, missing)]) + group("지역·공동수급", area) + group("확인", check);
 }
-/** '✓ 참가 가능' 칩 — 충족한 자격·지역, (자격을 다 갖췄을 때) 공동수급, 수집 경로를 한 상자에 */
-function passSummary(n, parts, regionOk, jointHere, problems) {
-  const li = (ok, label, detail = "") => `<li class="${ok ? "lay-ok" : ""}">${ok ? "✓ " : ""}${label}${detail ? ` <span class="grp">${detail}</span>` : ""}</li>`;
-  const lines = [];
-  for (const x of parts) {
-    if (x.status !== "충족" && x.status !== "제한 없음") continue;
-    const names = uniqBy([...(x.satisfied || []).flatMap((q) => (q.items || []).filter((i) => i.held).map((i) => i.label)), ...(x.held || [])], (v) => v);
-    lines.push(li(true, esc(QUAL_LABEL[x.key]?.[x.status] || `${x.name} ${x.status}`), names.length ? esc(names.slice(0, 4).join(", ")) + (names.length > 4 ? " 외" : "") : ""));
-  }
-  if (regionOk) lines.push(li(true, "지역제한 충족", esc(regionList(n.regionCheck.required))));
-  if (jointHere && n.sourceType === "본공고") {
+/** 자격 칩 하나 — 미달 하나라도 있으면 '자격 미달', 충족이 있으면 '자격 충족', 아니면 '자격 제한 없음'(확인 안 됨은 상자 안에 적음) */
+function qualChip(n, parts, missing) {
+  if (!parts.length) return "";
+  const met = parts.some((x) => x.status === "충족");
+  const [tone, ico, label] = missing ? ["block", "!", "자격 미달"] : met ? ["ok", "✓", "자격 충족"] : ["faint", "", "자격 제한 없음"];
+  const sec = parts.map((x) => {
+    const { body } = qualPartInfo(n, x, false, false);
+    const head = x.key === "industry" ? "업종·면허" : x.key === "product" ? "세부품명" : esc(x.name);
+    const st = x.status === "충족" ? "충족" : x.status === "미달" ? "미달" : x.status === "제한 없음" ? "제한 없음" : "확인 안 됨";
+    return `<p class="q-label">${head} · <b>${st}</b></p>${body}`;
+  }).join("");
+  const extra = [];
+  const r = n.regionCheck || {};
+  if (r.status === "충족") extra.push(`<li class="lay-ok">✓ 지역제한 충족 (${esc(regionList(r.required))})</li>`);
+  if (!missing && n.sourceType === "본공고") {
     const j = jointLabel(n) || "정보 없음", rest = j.replace(/^공동수급\s*/, "");
-    lines.push(li(false, /불허|정보 없음/.test(j) ? `공동수급 ${esc(rest)}` : `공동수급 가능 · ${esc(rest)}`));
+    extra.push(`<li>${/불허|정보 없음/.test(j) ? `공동수급 ${esc(rest)}` : `공동수급 가능 · ${esc(rest)}`}</li>`);
   }
   const paths = [];
   if (productOnly(n)) paths.push(n.fromDoc ? "공고문 세부품명" : "세부품명으로만");
   if ((n.licenseMatch || []).length) paths.push(`보유 면허(${n.licenseMatch.map(esc).join(", ")})`);
   if (n.localMatch) paths.push(`${esc(n.localPlace || "정선")} 사업`);
-  if (paths.length) lines.push(li(false, `수집 경로: ${paths.join(" · ")}`));
-  if (!lines.length) return "";
-  const ok = !problems;
-  return tipBadge(ok ? "ok pass" : "okb pass", ok ? `<span class="ico" aria-hidden="true">✓</span>참가 가능` : "✓ 충족", ok ? "참가 가능" : "충족한 조건",
-    `<ul>${lines.join("")}</ul>`);
+  if (paths.length) extra.push(`<li>수집 경로: ${paths.join(" · ")}</li>`);
+  const body = sec + (extra.length ? `<ul class="q-extra">${extra.join("")}</ul>` : "") +
+    `<p class="lay-legend">✓ 보유 · ✗ 미보유 · – 이미 충족했거나 공동수급으로 채울 수 있어 없어도 됨</p>`;
+  return `<span class="badge qual pass ${tone}" tabindex="0">${ico ? `<span class="ico" aria-hidden="true">${ico}</span>` : ""}${label}${qtip(label, body)}</span>`;
 }
 
 /**
@@ -3909,15 +3915,13 @@ function reqBlocksHtml(all, mixed) {
   return blocks.join("");
 }
 
-function nQualBadges(n, noShare = false) {
-  const parts = n.qual?.parts || [];
+/** 자격 묶음 하나(업종·면허 / 세부품명)의 팝업 제목·내용 — 요구 자격과 보유 여부(✓·✗·–). legend=false면 범례 줄 없이 */
+function qualPartInfo(n, p, noShare = false, legend = true) {
   const denied = noShare || /불허/.test(jointLabel(n));
-  return parts.map((p) => {
-    const label = QUAL_LABEL[p.key]?.[p.status] || `${p.name} ${p.status}`;
-    // 미보유는 공동수급 가능 여부와 상관없이 늘 빨간 칩(2026-11-24 사용자 요청 — 공동수급은 옆 칩·팝업 문구로)
-    const tone = p.status === "충족" ? "ok" : p.status === "미달" ? "block" : "faint";
-    const ico = p.status === "충족" ? "✓" : p.status === "미달" ? "!" : "";
-    const ok = p.satisfied || [];
+    // 보유 목록(p.held)에 있는 자격은 ✓ — 충족 요건 항목에 보유 표시가 빠진 결과가 있어서(필수 보유가 ✗로 보였음)
+    const heldTxt = (p.held || []).join(" ");
+    const isHeld = (i) => i.held || (i.code && heldTxt.includes(`(${i.code})`)) || (p.held || []).includes(i.label);
+    const ok = (p.satisfied || []).map((r) => ({ ...r, items: (r.items || []).map((i) => ({ ...i, held: isHeld(i) })) }));
     const miss = p.missing || [];
     const mustFirst = (rs) => [...rs].sort((a, b) => Number(!isMustReq(a)) - Number(!isMustReq(b)));
     const all = [...mustFirst(miss), ...mustFirst(ok)];
@@ -3926,7 +3930,7 @@ function nQualBadges(n, noShare = false) {
     if (all.length) {
       const mixed = all.some((r) => new Set((r.items || []).map((i) => i.kind)).size > 1);
       title = `${esc(p.name)} ${all.length}건: 충족 ${ok.length} · 미달 ${miss.length}`;
-      body = reqBlocksHtml(all, mixed) + `<p class="lay-legend">✓ 보유 · ✗ 미보유 · – 이미 충족했거나 공동수급으로 채울 수 있어 없어도 됨<br>${esc(QUAL_NOTES[p.key])}</p>`;
+      body = reqBlocksHtml(all, mixed) + (legend ? `<p class="lay-legend">✓ 보유 · ✗ 미보유 · – 이미 충족했거나 공동수급으로 채울 수 있어 없어도 됨<br>${esc(QUAL_NOTES[p.key])}</p>` : "");
     } else if ((p.held || []).length) {
       title = "보유로 충족한 자격";
       body = `<ul>${p.held.map((x) => `<li class="lay-ok">✓ ${esc(x)}</li>`).join("")}</ul>`;
@@ -3940,6 +3944,15 @@ function nQualBadges(n, noShare = false) {
         : denied
         ? `<p class="warnline">공동수급 불허: 부족한 자격을 함께 채울 업체를 구할 수 없습니다.</p>`
         : `<p>공동수급이 허용되면 이 자격을 가진 업체와 함께 참가할 수 있습니다. 옆 공동수급 배지를 보세요.</p>`;
+  return { title, body };
+}
+function nQualBadges(n, noShare = false) {
+  return (n.qual?.parts || []).map((p) => {
+    const label = QUAL_LABEL[p.key]?.[p.status] || `${p.name} ${p.status}`;
+    // 미보유는 공동수급 가능 여부와 상관없이 늘 빨간 칩(2026-11-24 사용자 요청 — 공동수급은 옆 칩·팝업 문구로)
+    const tone = p.status === "충족" ? "ok" : p.status === "미달" ? "block" : "faint";
+    const ico = p.status === "충족" ? "✓" : p.status === "미달" ? "!" : "";
+    const { title, body } = qualPartInfo(n, p, noShare);
     return `<span class="badge qual ${tone}" tabindex="0">${ico ? `<span class="ico" aria-hidden="true">${ico}</span>` : ""}${esc(label)}${qtip(title, body)}</span>`;
   });
 }

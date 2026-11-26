@@ -52,6 +52,10 @@ class TestEmailHtml(unittest.TestCase):
         self.assertLess(body.index("R26EM0000"), body.index("지일 공고와 겹침 ("))
         self.assertGreater(body.index("○○전시관 전시물 제작설치 1"), body.index("지일 공고와 겹침 ("))
         self.assertNotIn("지일 공고와 겹침", render_email_html(self.cands, self.stats, NOW))
+        self.assertIn("그리다 메일을 따로 보냅니다", render_email_html(self.cands, self.stats, NOW), "지일 메일엔 안내 한 줄")
+        from nego.cli import own_rows
+        self.assertEqual([c.notice.notice_no for c in own_rows(self.cands, {"R26EM0001"})], ["R26EM0000"])
+        self.assertEqual(own_rows(self.cands, {"R26EM0000", "R26EM0001"}), [], "모두 겹치면 그리다 메일을 안 보냄")
         all_same = render_email_html(self.cands, self.stats, NOW, shared={"R26EM0000", "R26EM0001"})
         self.assertNotIn("조건에 맞는 공고가 없습니다", all_same, "모두 겹치면 빈 관심 공고 칸은 안 씀")
         self.assertIn("지일 공고와 겹침 (2건)", all_same)

@@ -1327,7 +1327,8 @@ def _fill_multi(seg: str, multi: list[tuple[str, str]], vault) -> tuple[str, lis
 
 _LEAF_P = re.compile(r"<(?:[\w.-]+:)?p\b[^>]*>(?:(?!<(?:[\w.-]+:)?p\b).)*?</(?:[\w.-]+:)?p>", re.S)
 _PLEDGE_FOR = re.compile(r"\(\s*([^()]{1,10}?)\s*용\s*\)")  # '보안서약서(업체대표용)'·'(참여인력용)'
-_SIGNER_INLINE = [(r"소\s*속", "회사명"), (r"직급\s*/\s*직위|직\s*위", "_rank"), (r"성\s*명", "대표자")]
+_SIGNER_INLINE = [(r"소\s*속", "회사명"), (r"직급\s*/\s*직위|직\s*위", "_rank"), (r"성\s*명", "대표자"),
+                  (r"생\s*년\s*월\s*일", "_birth")]  # 생년월일 = 대표자 주민번호 앞 6자리(11/26 사용자 제보)
 
 
 def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
@@ -1337,7 +1338,8 @@ def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
     '(참여인력용)' 서약서는 사람마다 쓰는 것이라, '확인자'(발주기관) 줄은 남의 것이라 비움."""
     info = vault.info
     vals = {"회사명": str(info.get("회사명") or ""), "대표자": str(info.get("대표자") or ""),
-            "_rank": str(info.get("대표자 직위") or "대표이사")}
+            "_rank": str(info.get("대표자 직위") or "대표이사"),
+            "_birth": _birth(next((str(v) for k, v in info.items() if "주민" in k and v), ""))}
     paras = list(_LEAF_P.finditer(xml))
     edits: list[tuple[int, int, str]] = []
     mode, left, done = "", 0, set()
@@ -1356,14 +1358,14 @@ def _fill_pledge_signer(xml: str, vault, rep: FillReport) -> str:
             left = 0
             continue
         if sq.startswith("서약자"):
-            left, done = 5, set()
+            left, done = 6, set()  # '년 월 일' 줄이 끼어도 마지막 '생년월일' 줄까지(11/26)
         if left <= 0:
             continue
         left -= 1
         if re.search(r"인력|직원|개인", mode):
             continue
         new = seg
-        colon = re.fullmatch(r"\s*(소\s*속|직\s*위|직급\s*/\s*직위|성\s*명)\s*[:：]\s*", text)
+        colon = re.fullmatch(r"\s*(소\s*속|직\s*위|직급\s*/\s*직위|성\s*명|생\s*년\s*월\s*일)\s*[:：]\s*", text)
         if colon:  # ① 칸 안 '소 속 :' 문단
             key = next(k for rx, k in _SIGNER_INLINE if re.fullmatch(rx, colon.group(1).strip()))
             if key not in done and vals[key]:

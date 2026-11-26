@@ -5272,3 +5272,18 @@ def test_bond_il_geum_won_jeong_and_spaced_budget(tmp_path: Path):
     fill_hwpx(src, tmp_path / "o.hwpx", vault.Vault({}, info={}), basis=60_000_000)
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert "보증금 : 일금 삼백만 원정 (￦ 3,000,000 )(입찰금액의 5%)" in text, text
+
+
+def test_pledge_signer_birth_line(tmp_path: Path):
+    """(11/26 사용자 제보) 서약자 서명 묶음 '업체명 : / 직 위 : / 성 명 : (서명) / 생 년 월 일 :' — 생년월일이 빔
+    → 대표자 주민등록번호 앞 6자리('1967. 02. 22.'), 중간에 '년 월 일' 줄이 끼어도."""
+    from quantdocs.fill import fill_hwpx
+
+    def para(t):
+        return f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = "".join(para(t) for t in ("서   약   자", "년     월     일", "업    체    명 : ", "직          위 : ",
+                                       "성          명 :                    (서명)", "생 년 월 일 : "))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "대표자 주민등록번호": "670222-2******"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"명 : 홍길동", text) and re.search(r"생 년 월 일 : 1967\. 02\. 22\.", text), text

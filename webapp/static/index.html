@@ -469,7 +469,6 @@ body.picking { overflow: hidden; }
 .docbell-pop li.judge-item .row1 .dd { margin-left: auto; }
 .docbell-pop li.judge-item.pick { display: flex; align-items: center; gap: 10px; }
 .docbell-pop li.judge-item .jmain { flex: 1; min-width: 0; }
-.docbell-pop .jmoves .jn { color: #d93025; font-weight: 600; }
 .docbell-pop .jmoves { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .docbell-pop li.judge-item .jpick { display: inline-flex; flex: none; margin-left: 0; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
 .docbell-pop li.judge-item .jp { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 22px; padding: 0; border: 0; background: var(--panel); color: var(--ink); cursor: pointer; }
@@ -6826,7 +6825,7 @@ function renderJudgeBell() {
   const toggle = "";  // 오늘/7일 버튼은 뺌 — 아래 '오늘 보고 N건 모두 보기'가 따로 있음(2026-11-26 사용자)
   // 아래 이동 버튼은 둘만(11/26 사용자) — 오늘 매일 보고 공고 / 주간(협상·규격가격) 미판단 공고. 설명 문구 없음
   // 버튼마다 미판단 건수(11/26 사용자) — 금일 = 오늘 매일 보고 공고 중, 주간 = 협상·규격가격 칸
-  const nTag = (n) => ` <span class="jn">미판단 ${n}건</span>`;
+  const nTag = (n) => ` ${n}건`;
   const moves = [repN ? `<button type="button" class="linkbtn" data-report="daily:${rep}">금일 입찰 공고${nTag(undecidedN(daily.filter(isToday)))} ›</button>` : "",
     weekly.length ? `<button type="button" class="linkbtn" data-all-todo="협상">주간 협상 · 규격가격 공고${nTag(undecidedN(weekly))} ›</button>` : ""].filter(Boolean);
   $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3>`

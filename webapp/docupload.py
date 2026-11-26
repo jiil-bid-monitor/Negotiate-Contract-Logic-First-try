@@ -2,7 +2,7 @@
 
 담당자 방(TELEGRAM_CHAT_ID)에서:
   /upload → 봇 "이 메시지에 답장으로 PDF" → PDF 답장 → 서류 종류 버튼 → 유효기간 답장(날짜 또는 '없음')
-  → `회사서류_최신/[최신 서류]/종류_오늘[_유효날짜].pdf`로 저장하고 바로 정리(under100m/docs.py — 옛 파일은 [이전 서류]).
+  → `회사서류_최신/(지일|그리다)/[최신 서류]/종류_오늘[_유효날짜].pdf`로 저장하고 바로 정리(under100m/docs.py — 옛 파일은 [이전 서류]).
 단체방의 봇은 일반 메시지를 못 받아서(privacy mode) 봇 메시지에 '답장'으로 주고받는다. 진행 상태는 메모리에만(재시작하면 처음부터).
 발급일은 받은 날(오늘)로 적는다 — 같은 종류 중 새 파일을 고르는 데만 쓴다.
 """
@@ -24,13 +24,17 @@ REPLY = {"force_reply": True}  # 버튼에서 시작한 질문 — 누른 사람
 
 
 def kinds(folder: Path) -> list[str]:
-    try:
-        rows = json.loads((folder / "_목록.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        rows = []
+    from under100m import docs
+
+    rows = []
+    for sub in docs.company_dirs(folder):  # 회사별 폴더(지일·그리다)면 두 목록을 합침(2026-11-26)
+        try:
+            rows += json.loads((sub / "_목록.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
     out = {r["종류"] for r in rows if r.get("종류")}
     # 인증서갱신.xlsx의 그리다 서류도 '(그리다) 이름'으로 고를 수 있게 — 지일 자격과 헷갈리지 않게(11/11 사용자)
-    cert = folder / docexpiry.CERT_FILE
+    cert = docexpiry.cert_path(folder)
     if cert.exists():
         out |= {k for k, _ in docexpiry.read_cert(cert) if k.startswith(docexpiry.GRIDA_TAG)}
     return sorted(out)
@@ -126,7 +130,7 @@ class Uploader:
         state = self.pending.get(chat)
         replied = (msg.get("reply_to_message") or {}).get("message_id")
         if re.match(r"^/upload(@\w+)?$", text):
-            if not (self.folder() / "[최신 서류]").is_dir():
+            if not docexpiry.ready(self.folder()):
                 self._say(chat, "회사서류_최신/[최신 서류] 폴더가 없어 받을 수 없습니다.", msg.get("message_id"))
                 return True
             ask = self._say(chat, "회사 서류 PDF를 <b>이 메시지에 답장</b>으로 보내 주세요. (그만두려면 답장으로 '취소')",
@@ -182,7 +186,7 @@ class Uploader:
     def start_renew(self, chat: str, kinds: list[str]) -> bool:
         """'갱신 완료' 버튼 — 그 서류의 새 PDF를 받는다(종류는 이미 앎). 여러 건이면 하나씩 차례로(2026-11-23 사용자 요청).
         담당자 방이 아니거나 폴더가 없으면 False."""
-        if chat not in self.chats or not kinds or not (self.folder() / "[최신 서류]").is_dir():
+        if chat not in self.chats or not kinds or not docexpiry.ready(self.folder()):
             return False
         self.pending[chat] = {"step": "file", "ask": None, "asks": set(), "kind": kinds[0], "queue": kinds[1:]}
         more = f"\n(이 서류 다음에 {len(kinds) - 1}건 더 차례로 받습니다)" if len(kinds) > 1 else ""
@@ -293,7 +297,7 @@ class Uploader:
 def cert_note(folder: Path, kind: str, value: date | str) -> str:
     """인증서갱신.xlsx(차장님 표)의 그 서류 만료일 칸도 고친다 — 알림·/docs가 이 표를 먼저 보므로(11/11 사용자 요청)."""
     try:
-        hit = docexpiry.set_cert(folder / docexpiry.CERT_FILE, kind, value)
+        hit = docexpiry.set_cert(docexpiry.cert_path(folder), kind, value)
     except OSError:
         return "⚠ 인증서갱신.xlsx가 열려 있어 못 고쳤습니다 — 엑셀을 닫고 직접 고쳐 주세요."
     if not hit:
@@ -320,6 +324,7 @@ def file_kind(folder: Path, kind: str) -> str:
     표 이름이 파일 종류와 다른 지일 서류가 많음(직접생산확인증명서(…) 등). 여럿이면 표 날짜와 같은 유효기간의 파일, 없으면 그대로."""
     from under100m import docs
 
+    folder = docs.company_dir(folder, kind)  # 그 서류의 회사 폴더(2026-11-26)
     try:
         rows = json.loads((folder / "_목록.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -332,7 +337,7 @@ def file_kind(folder: Path, kind: str) -> str:
         return kind
     hits = [k for k in files if docexpiry.same_doc(kind, k)]
     if len(hits) > 1:
-        cert = dict(docexpiry.read_cert(folder / docexpiry.CERT_FILE)) if (folder / docexpiry.CERT_FILE).exists() else {}
+        cert = dict(docexpiry.read_cert(docexpiry.cert_path(folder))) if docexpiry.cert_path(folder).exists() else {}
         hits = [k for k in hits if cert.get(kind) and files[k] == cert[kind].isoformat()] or hits[:1]
     return hits[0] if hits else kind
 
@@ -342,6 +347,7 @@ def save_doc(folder: Path, kind: str, data: bytes, end: date | None, today: date
     텔레그램 /upload·갱신 완료와 웹앱이 같이 쓴다(2026-11-23). → (저장한 파일 이름, 표 안내, 정리 안내들)"""
     from under100m import docs
 
+    folder = docs.company_dir(folder, kind)  # '(그리다) …'는 그리다 폴더, 그 밖은 지일 폴더(2026-11-26)
     fkind = file_kind(folder, kind)
     notes: list[str] = []
     # 같은 날 같은 서류를 또 올리면(잘못 올려 다시 올림) 앞 파일을 먼저 [이전 서류]로 — 발급일이 같으면 정리가 둘 다 남겨 중복이 됐음(2026-11-23)
@@ -369,6 +375,7 @@ def replace_doc(folder: Path, kind: str, data: bytes, today: date) -> str:
     날짜가 틀렸으면 '날짜 수정'으로 따로. 바꿀 파일이 없으면 ValueError."""
     from under100m import docs
 
+    folder = docs.company_dir(folder, kind)
     paths = _latest(folder, file_kind(folder, kind))
     if not paths:
         raise ValueError("바꿀 파일이 없습니다 — '새 서류 올리기'로 넣어 주세요")
@@ -389,6 +396,7 @@ def same_kind(folder: Path, name: str) -> str | None:
 def _latest(folder: Path, kind: str):
     from under100m import docs
 
+    folder = docs.company_dir(folder, kind)
     files = [(d, p) for p in (folder / "[최신 서류]").glob("*.pdf") if (d := docs.parse_name(p.name)) and d.kind == kind]
     return [p for _, p in sorted(files, key=lambda x: x[0].issued)]
 
@@ -397,6 +405,7 @@ def remove_doc(folder: Path, kind: str, today: date) -> tuple[int, str]:
     """그 종류 파일을 모두 [이전 서류]로(지우지 않음) + 표 '사용 안 함' → (옮긴 수, 표 안내)."""
     from under100m import docs
 
+    folder = docs.company_dir(folder, kind)
     old = folder / "[이전 서류]"
     old.mkdir(exist_ok=True)
     paths = _latest(folder, file_kind(folder, kind))
@@ -411,6 +420,7 @@ def edit_doc(folder: Path, kind: str, end: date | None, today: date) -> str:
     고친 곳이 하나도 없으면 ValueError."""
     from under100m import docs
 
+    folder = docs.company_dir(folder, kind)
     done = []
     paths = _latest(folder, file_kind(folder, kind))
     if paths:

@@ -143,9 +143,10 @@ def attachment_texts(files: list[Path]) -> list[str]:
 
 
 def company_docs_dir() -> Path | None:
+    from under100m.docs import company_dir
     from webapp.docexpiry import docs_dir
 
-    d = docs_dir()
+    d = company_dir(docs_dir())  # 낙찰 후 서류는 지일 — 회사별 폴더로 나눴으면 지일 폴더(2026-11-26)
     return d if d.is_dir() else None
 
 

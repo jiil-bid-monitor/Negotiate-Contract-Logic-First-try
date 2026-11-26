@@ -451,12 +451,12 @@ def make_handler(app: App):
                 # 상단 바 종 아이콘 — 텔레그램 갱신 알림과 같은 서류(30일 안에 끝나거나 상태를 표시해 둔 지난 서류) (2026-11-23)
                 # ready = 서류 폴더가 보임 — 갱신할 서류가 없어도 종을 띄워 '전체 서류 관리'로 들어가게
                 return self._json({"docs": docexpiry.web_alert(datetime.now().date()),
-                                   "ready": (docexpiry.docs_dir() / "[최신 서류]").is_dir()})
+                                   "ready": docexpiry.ready(docexpiry.docs_dir())})
             if url.path == "/api/docs-all":  # 서류 관리 창 — 전체 서류(2026-11-23)
                 from . import docupload
 
                 folder = docexpiry.docs_dir()
-                if not (folder / "[최신 서류]").is_dir():
+                if not docexpiry.ready(folder):
                     return self._json({"docs": [], "error": "회사서류_최신 폴더를 찾지 못했습니다"})
                 return self._json({"docs": docupload.all_docs(folder, datetime.now().date())})
             if url.path == "/api/bidcalc":
@@ -871,7 +871,7 @@ def docs_upload(data: dict[str, Any]) -> dict[str, Any]:
     from . import docupload
 
     folder = docexpiry.docs_dir()
-    if not (folder / "[최신 서류]").is_dir():
+    if not docexpiry.ready(folder):
         raise RuntimeError("회사서류_최신/[최신 서류] 폴더를 찾지 못했습니다 — NAS 웹앱에서 올려 주세요")
     kind = _known_kind(folder, data, allow_new=bool(data.get("new")))
     pdf = _pdf_of(data)
@@ -916,7 +916,7 @@ def docs_manage(data: dict[str, Any]) -> dict[str, Any]:
     from . import docupload
 
     folder = docexpiry.docs_dir()
-    if not (folder / "[최신 서류]").is_dir():
+    if not docexpiry.ready(folder):
         raise RuntimeError("회사서류_최신/[최신 서류] 폴더를 찾지 못했습니다 — NAS 웹앱에서 해 주세요")
     kind, today = _known_kind(folder, data), datetime.now().date()
     if data.get("action") == "edit":

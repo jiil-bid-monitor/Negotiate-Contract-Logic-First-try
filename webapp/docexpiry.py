@@ -26,7 +26,22 @@ def docs_dir() -> Path:
     return Path(os.environ.get("COMPANY_DOCS_DIR") or Path.cwd().parent / "회사서류_최신")
 
 
+def ready(root: Path) -> bool:
+    """서류 폴더가 보이는지 — 회사별 폴더(지일·그리다)로 나눴어도, 예전 한 폴더여도."""
+    from under100m.docs import LATEST, company_dirs
+
+    return any((d / LATEST).is_dir() for d in company_dirs(root))
+
+
 CERT_FILE = "인증서갱신.xlsx"
+
+
+def cert_path(folder: Path) -> Path:
+    """인증서갱신.xlsx — 두 회사 줄이 한 표라 회사별 폴더로 나눠도 위 폴더(회사서류_최신)에 하나(2026-11-26)."""
+    from under100m.docs import COMPANY_DIRS
+
+    here = folder / CERT_FILE
+    return folder.parent / CERT_FILE if folder.name in COMPANY_DIRS and not here.exists() else here
 _YMD = re.compile(r"(\d{2,4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})")
 
 
@@ -117,8 +132,11 @@ def set_cert(path: Path, kind: str, value: date | str) -> bool:
 
 def read_docs(folder: Path) -> list[tuple[str, date]]:
     """(종류, 유효기간 끝) — 인증서갱신.xlsx 날짜가 우선(2026-11-11 사용자 결정), 그 표에 없는 서류는 서류목록.xlsx 날짜."""
-    cert = read_cert(folder / CERT_FILE) if (folder / CERT_FILE).exists() else []
-    rest = [(k, d) for k, d in read_list(folder) if not any(same_doc(c, k) for c, _ in cert)]
+    from under100m.docs import company_dirs
+
+    cert = read_cert(cert_path(folder)) if cert_path(folder).exists() else []
+    listed = [x for d in company_dirs(folder) for x in read_list(d)]  # 회사별 폴더면 두 서류목록을 합침
+    rest = [(k, d) for k, d in listed if not any(same_doc(c, k) for c, _ in cert)]
     return sorted(cert + rest, key=lambda d: d[1])
 
 

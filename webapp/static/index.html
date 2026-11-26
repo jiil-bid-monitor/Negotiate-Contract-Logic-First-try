@@ -5689,19 +5689,46 @@ const HELP_SPOT = {
 const HELP_SPOT_CSS = `@keyframes help-spot { 0%, 100% { box-shadow: 0 0 0 3px #1b6e43, 0 0 0 9px rgba(27,110,67,.25); } 50% { box-shadow: 0 0 0 3px #1b6e43, 0 0 0 3px rgba(27,110,67,0); } }
 .help-spot { position: relative; z-index: 5; border-radius: 6px; box-shadow: 0 0 0 3px #1b6e43, 0 0 0 9px rgba(27,110,67,.25); animation: help-spot 1s ease-in-out 3; }`;
 const helpSpotOf = (h, tab = HELP_TAB) => (HELP_SPOT[tab] || {})[h[1]] || "";
-function helpSpot(sel) {
-  let doc = document;
-  if (HELP_TAB === "quant") {  // 같은 서버의 화면이라 안쪽 문서를 읽을 수 있음. 표시 모양은 한 번 넣어 둠
-    try { doc = $("quantFrame").contentDocument || document; } catch (e) { doc = document; }
-    if (doc !== document && !doc.getElementById("helpSpotCss")) { const st = doc.createElement("style"); st.id = "helpSpotCss"; st.textContent = HELP_SPOT_CSS; doc.head.appendChild(st); }
+// '@탭 선택자' = 그 탭의 자리 — 다른 탭에 있으면 그 탭으로 옮긴 뒤 표시(11/26 사용자 '다른 탭에 있을 때도 질문한 화면으로')
+const helpSpotFor = (h, tab) => { const sel = helpSpotOf(h, tab); return sel && tab !== HELP_TAB ? `@${tab} ${sel}` : sel; };
+const helpWait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function helpSpot(raw) {
+  let sel = raw;
+  const go = /^@(\w+)\s+/.exec(raw);
+  if (go) {
+    sel = raw.slice(go[0].length);
+    const btn = document.querySelector(`.tabs [data-tab="${go[1]}"]`);
+    if (go[1] !== HELP_TAB) {
+      if (!btn || btn.hidden) { helpSay("bot", "그 탭은 이 화면에 없습니다.\n서버 PC 웹앱에서 확인해 주세요.", []); return renderHelp(); }
+      btn.click();
+      await helpWait(400);
+    }
   }
+  const docOf = () => {
+    if (HELP_TAB !== "quant") return document;
+    let doc = document;  // 같은 서버의 화면이라 안쪽 문서를 읽을 수 있음. 표시 모양은 한 번 넣어 둠
+    try { doc = $("quantFrame").contentDocument || document; } catch (e) { doc = document; }
+    if (doc !== document && doc.head && !doc.getElementById("helpSpotCss")) { const st = doc.createElement("style"); st.id = "helpSpotCss"; st.textContent = HELP_SPOT_CSS; doc.head.appendChild(st); }
+    return doc;
+  };
   // 보이는 것 먼저, 없으면 접힌 묶음(불참 묶음 등) 안의 것. 접힌 묶음은 펼침
   // 'A || B' = A가 보이면 A, 아니면 B(예: 투찰내역 화면이면 표 칸, 아니면 투찰내역 탭 버튼 — 11/26 사용자 '좀 정확하게')
-  const pick = (one) => { const all = [...doc.querySelectorAll(one)].filter((x) => !x.closest("#helpBox")); return all.find((x) => x.checkVisibility()) || all.find((x) => x.offsetParent !== null && x.closest("details:not([open])")); };
-  const find = () => { for (const one of sel.split("||")) { const x = pick(one.trim()); if (x) return x; } return null; };
+  const parts = sel.split("||").map((x) => x.trim());
+  const pick = (one) => { const all = [...docOf().querySelectorAll(one)].filter((x) => !x.closest("#helpBox")); return all.find((x) => x.checkVisibility()) || all.find((x) => x.offsetParent !== null && x.closest("details:not([open])")); };
+  const find = () => { for (const one of parts) { const x = pick(one); if (x) return x; } return null; };
   let el = find();
+  // 방금 탭을 옮겼으면 화면(정량평가서 안쪽 화면·목록)이 그려질 때까지 조금 기다림
+  for (let i = 0; go && i < 25 && !el; i++) { await helpWait(100); el = find(); }
+  // 앞 선택자가 안 보이고 화면 나눔 버튼(투찰 계산 / 투찰내역)을 찾았으면 그 화면으로 옮긴 뒤 다시 찾음
+  if (el && parts.length > 1 && !el.matches(parts[0]) && el.matches("[data-calcpage]")) {
+    el.click();
+    for (let i = 0; i < 25 && (!el.isConnected || !el.matches(parts[0])); i++) { await helpWait(100); el = find() || el; }
+  }
   for (let d = el && el.closest("details:not([open])"); d && !el.checkVisibility(); d = d.parentElement.closest("details:not([open])")) d.open = true;
-  if (!el) { HELP_VIEW = "chat"; helpSay("bot", "지금 화면에는 그 자리가 보이지 않습니다.\n해당하는 공고나 기록이 생기면 나타납니다.", []); return renderHelp(); }
+  if (!el) {
+    if ($("helpBox").hidden) helpOpen(true);
+    HELP_VIEW = "chat"; helpSay("bot", "지금 화면에는 그 자리가 보이지 않습니다.\n해당하는 공고나 기록이 생기면 나타납니다.", []); return renderHelp();
+  }
   $("helpBox").hidden = true;  // 가리지 않게 잠깐 접었다가 다시 엶
   el.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   el.classList.add("help-spot");
@@ -5816,7 +5843,7 @@ const HELP_FIELDS = [[/마감|언제까지|기한/, "마감"], [/금액|얼마|�
 /** [결과 이름, 알아들은 질문 제목] — 기록(data/help_questions.json)에 같이 남김 */
 async function helpAnswer(q) {
   const d = helpDecide(q, HELP_TAB, HELP_CTX.last === "faq" ? { prevTitle: HELP_CTX.title } : null);
-  const faq = (x, head) => { HELP_CTX = x.tab === HELP_TAB ? { last: "faq", title: x.h[1] } : {}; helpSay("bot", head + helpText(x.h), [], x.tab === HELP_TAB ? helpSpotOf(x.h) : ""); return ["답함", x.h[1]]; };
+  const faq = (x, head) => { HELP_CTX = x.tab === HELP_TAB ? { last: "faq", title: x.h[1] } : {}; helpSay("bot", head + helpText(x.h), [], helpSpotFor(x.h, x.tab)); return ["답함", x.h[1]]; };
   if (d.why === "exact") return faq(d.list[0], "");
   if (d.why === "which") { helpSay("bot", helpWhich(), []); return ["판단할 공고"]; }
   if (d.kind === "serveronly") {
@@ -6049,7 +6076,7 @@ $("helpBox").addEventListener("click", (e) => {
     const far = q.dataset.htab, h = HS(far || HELP_TAB).qa[Number(q.dataset.hq)];
     helpSay("me", h[1]);
     HELP_CTX = far ? {} : { last: "faq", title: h[1] };
-    helpReply(() => helpSay("bot", (far ? `'${HELP_SETS[far].name}' 탭 안내입니다.\n\n` : "") + helpText(h), [], far ? "" : helpSpotOf(h)));
+    helpReply(() => helpSay("bot", (far ? `'${HELP_SETS[far].name}' 탭 안내입니다.\n\n` : "") + helpText(h), [], helpSpotFor(h, far || HELP_TAB)));
     return;
   }
   const view = e.target.closest("[data-hview]");

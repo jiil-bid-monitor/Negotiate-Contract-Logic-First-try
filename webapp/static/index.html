@@ -3684,8 +3684,7 @@ function qualChip(n, parts, missing) {
   if ((n.licenseMatch || []).length) paths.push(`보유 면허(${n.licenseMatch.map(esc).join(", ")})`);
   if (n.localMatch) paths.push(`${esc(n.localPlace || "정선")} 사업`);
   if (paths.length) extra.push(`<li>수집 경로: ${paths.join(" · ")}</li>`);
-  const body = sec + (extra.length ? `<ul class="q-extra">${extra.join("")}</ul>` : "") +
-    `<p class="lay-legend">✓ 보유 · ✗ 미보유 · – 이미 충족했거나 공동수급으로 채울 수 있어 없어도 됨</p>`;
+  const body = sec + (extra.length ? `<ul class="q-extra">${extra.join("")}</ul>` : "");
   return `<span class="badge qual pass ${tone}" tabindex="0">${ico ? `<span class="ico" aria-hidden="true">${ico}</span>` : ""}${label}${qtip(label, body)}</span>`;
 }
 
@@ -3936,9 +3935,10 @@ function qualPartInfo(n, p, noShare = false, legend = true) {
       body = `<ul>${p.held.map((x) => `<li class="lay-ok">✓ ${esc(x)}</li>`).join("")}</ul>`;
     } else {
       title = esc(p.name);
-      body = `<p>${esc(QUAL_EMPTY[p.key]?.[p.status] || "")}</p>`;
+      body = legend ? `<p>${esc(QUAL_EMPTY[p.key]?.[p.status] || "")}</p>` : "";
     }
-    if (p.status === "미달" && p.key === "industry")
+    // legend=false(자격 칩 상자) — 설명 문장 없이 요구 자격·보유 여부만 (2026-11-26 사용자: 설명글 필요 없음)
+    if (legend && p.status === "미달" && p.key === "industry")
       body += noShare
         ? `<p class="warnline">${CO_SUBJ} 보유한 요구 면허가 하나도 없어 공동수급으로도 맡을 부분이 없습니다.</p>`
         : denied

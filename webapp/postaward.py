@@ -156,7 +156,7 @@ def company_docs_dir(company: str = "") -> Path | None:
 def reissue_needed(texts: list[str], company_docs: Path | None) -> list[tuple[str, str]]:
     """첨부 글에 이름이 나온 '공고 때 새로 발급' 서류(under100m.docs.PER_NOTICE) — [(종류, 보유본 발급일 또는 '보유본 없음')].
     11/19 사용자: 낙찰 공고가 새로 발급할 서류를 요구하면 담당자가 여는 엑셀에 바로 보이게(서류_확인.txt만으론 아무도 안 봄)."""
-    from under100m.docs import LIST_JSON, PER_NOTICE
+    from under100m.docs import GRIDA_PREFIX, LIST_JSON, PER_NOTICE
 
     text = re.sub(r"\s+", "", " ".join(texts))
     # PER_NOTICE 낱말('납세증명' 등)은 국세·지방세가 함께 걸려 너무 넓음 — 어느 서류인지 가리는 꼴로 찾음(띄어쓰기 뺀 글)
@@ -167,8 +167,12 @@ def reissue_needed(texts: list[str], company_docs: Path | None) -> list[tuple[st
         records = json.loads((company_docs / LIST_JSON).read_text(encoding="utf-8")) if company_docs else []
     except (OSError, ValueError):
         records = []
-    issued = {r.get("종류"): r.get("발급일") for r in records}
-    return [(kind, issued.get(kind) or "보유본 없음") for kind in PER_NOTICE if re.search(pattern.get(kind, re.escape(kind)), text)]
+    # 그리다 서류는 '(그리다) 국세 납세증명서'·'(그리다) 4대보험 가입증명(고용·산재)'처럼 앞머리·덧붙임이 있음(11/26) — 앞머리 떼고 앞부분으로 맞춤
+    issued = {str(r.get("종류") or "").removeprefix(GRIDA_PREFIX).strip(): r.get("발급일") for r in records}
+
+    def held(kind: str) -> str:
+        return issued.get(kind) or next((d for k, d in issued.items() if k.startswith(kind) and d), "") or "보유본 없음"
+    return [(kind, held(kind)) for kind in PER_NOTICE if re.search(pattern.get(kind, re.escape(kind)), text)]
 
 
 def _has_sheet(xlsx: Path, name: str) -> bool:

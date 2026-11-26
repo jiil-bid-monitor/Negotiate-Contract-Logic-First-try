@@ -2527,7 +2527,10 @@ const CO = COMPANY_NAMES[CO_PICKED] ? CO_PICKED : "jiil";
 const CO_NAME = COMPANY_NAMES[CO];
 /* 회사 이름 + 주격 조사(지일이·그리다가) */
 const CO_SUBJ = CO_NAME + (((CO_NAME.charCodeAt(CO_NAME.length - 1) - 0xac00) % 28) ? "이" : "가");
+// <a href>로 받는 파일(낙찰 후 서류 파일·zip, 투찰내역 CSV)은 아래 fetch 감싸기를 안 거쳐 ?co가 안 붙음 — 주소에 직접(11/26)
+const CO_Q = CO === "jiil" ? "" : "&co=" + encodeURIComponent(CO);
 if (CO !== "jiil") {
+  $("bidlogCsv").href += "?co=" + encodeURIComponent(CO);
   const plainFetch = window.fetch.bind(window);
   window.fetch = (input, init) => {
     if (typeof input === "string" && input.startsWith("/api/") && !input.startsWith("/api/quant/")) {
@@ -5218,7 +5221,7 @@ async function loadAwardDetail(key) {
 }
 function awardDetailHtml(key, s) {
   if (!s.folder) return `<p class="sub">폴더가 없습니다.</p>`;
-  const link = (rel, name) => `<a href="${AWARD_API}/file?key=${encodeURIComponent(key)}&path=${encodeURIComponent(rel)}">${esc(name)}</a>`;
+  const link = (rel, name) => `<a href="${AWARD_API}/file?key=${encodeURIComponent(key)}&path=${encodeURIComponent(rel)}${CO_Q}">${esc(name)}</a>`;
   const local = !s.folder.startsWith("\\\\");
   const stages = s.stages.map((st) => {
     const state = st.doc ? (st.todo.length ? `<span class="badge warn">채울 칸 ${st.todo.length}</span>` : `<span class="badge okb">모두 채움</span>`)
@@ -5250,7 +5253,7 @@ function awardDetailHtml(key, s) {
         `<li><span class="award-docstate ${d.covered ? "ok" : "no"}">${d.covered ? "표준틀에 있음" : "따로 준비"}</span><span class="award-doctext">${esc(d.text)}</span></li>`).join("")}</ul>
         <p class="sub">출처: ${esc([...new Set(list.map((d) => d.source).filter(Boolean))].join(" · ") || "첨부")}</p></div>`).join("")
     : `<p class="sub">제출서류 목록 못 찾음</p>`}</div>`;
-  const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="${AWARD_API}/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}">zip으로 받기</a></li>`),
+  const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="${AWARD_API}/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}${CO_Q}">zip으로 받기</a></li>`),
     s.attach.length ? `<li><b>공고문서</b> ${s.attach.map((f) => link("공고문서/" + f, f)).join(" · ")}</li>` : ""].join("");
   return `<div class="award-path"><span>폴더</span><code>${escRaw(s.folder)}</code>
       <button type="button" data-award-copy="${escRaw(s.folder)}">경로 복사</button>
@@ -5318,7 +5321,7 @@ $("awardList").onclick = (e) => {
     // 묶음 zip 바로 내려받기(11/17 사용자) — 같은 폴더가 NAS와 사내 공유 폴더(서버 PC가 1분마다 복사)에도 있음
     const a = document.createElement("a");
     // 시험 페이지는 시험 목록의 zip, 이미 있던 폴더면 이번에 더해진 파일만(since)
-    a.href = `${AWARD_API}/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=${d.since ? "&since=" + d.since : ""}`;
+    a.href = `${AWARD_API}/zip?key=${encodeURIComponent(f.dataset.awardFolder)}&path=${d.since ? "&since=" + d.since : ""}${CO_Q}`;
     document.body.appendChild(a); a.click(); a.remove();
     if ("awardRefetch" in f.dataset && d.since) return (d.newDocs || []).length ? `새로 받은 첨부 ${d.newDocs.length}개: ${d.newDocs.join(", ")}. 이미 만든 서류는 그대로 두었으니 바뀐 내용을 확인해 주세요.`
       : "첨부를 다시 확인했습니다. 새로 받은 첨부가 없고, 이미 만든 서류는 그대로입니다.";
@@ -5566,6 +5569,7 @@ const HELP_CO_DROP = [];
 const HELP_CO_KEEP = ["싱크로율은 무슨 뜻인가요?", "새 공고는 언제 들어오나요?"];  // 두 회사를 함께 말하는 답도 그대로
 const HELP_CO_ANSWER = {  // {질문: [새 제목(같으면 ""), 답, NAS 답]}
   "실제 공고::이 탭에서는 무엇을 하나요?": ["", "나라장터 공고 중 그리다가 검토할 만한 공고를\n관심 키워드·세부품명·보유 면허로 모아 보여 드립니다.\n\n마감이 지난 공고, 다른 지역 업체만 참가할 수 있는 공고,\n요구 면허를 하나도 갖지 않은 공고, 제외 키워드·해외 개최 공고는 빠집니다.\n빠진 공고는 '제외된 공고' 탭에 있습니다.\n\n면허가 일부만 없는 공고는\n'자격 미달' 칩을 달고 남아 있습니다."],
+  "낙찰 후 서류::만든 서류는 어디에 있나요?": ["", "두 곳에 있습니다.\n\n① 내 PC '다운로드' 폴더:\n    만들 때 zip으로 받아집니다.\n\n② 폴더:\n    적격심사 서류는 NAS 웹앱 폴더,\n    계약 뒤 서류는 그리다 서버 폴더\n    '[진행중]_연도_공사진행_그리다'에 있습니다.\n    '서류 현황 ▾' → '경로 복사'를 누르고\n    탐색기 주소창에 붙여 넣으면 열립니다.\n    여기서 고쳐 저장하면 그대로 남습니다."],
   "실제 공고::키워드가 없는 공고는 왜 들어오나요?": ["", "관심 키워드가 없어도 아래 공고는 모읍니다.\n• 보유 공사 면허로 나라장터 면허 조건을\n    모두 채우는 공사.\n    물품·용역은 공고명에 전시·연출 등이 있을 때만.\n• 그리다가 등록한 세부품명으로 걸린 공고."],
 };
 if (HELP_CO === "grida") {
@@ -6614,7 +6618,7 @@ async function openDocMgr() {
       <div class="mgrhead"><h3>전체 회사 서류</h3><button type="button" class="act" data-close>닫기</button></div>
       <p class="uphint" style="margin:-4px 0 10px">새 PDF를 바꿀 서류 줄 위에 끌어다 놓아도 됩니다.</p>
       <ul><li data-new="1"><div class="row1"><span class="name">새 서류 추가</span></div>
-        <div class="up"><input class="newname" placeholder="서류 이름" maxlength="40">${UP}</div>
+        <div class="up"><input class="newname" placeholder="서류 이름" maxlength="${CO === "grida" ? 34 : 40}">${UP}</div>
         <div class="upbox"></div></li></ul>
       <input id="docMgrQ" class="mgrq" placeholder="서류 찾기"><ul id="docMgrList"></ul>
       <p class="how">빼기는 목록과 알림에서만 빼고, 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p></div></dialog>`);
@@ -6650,7 +6654,7 @@ function pdfBase64(file) {
 async function docUpload(li, file) {
   const isNew = !!li.dataset.new, box = li.querySelector(".upbox");
   const typed = isNew ? li.querySelector(".newname").value.trim() : "";
-  const kind = isNew ? (typed && CO === "grida" && !isGrida({ kind: typed }) ? `(그리다) ${typed}` : typed) : li.dataset.kind;
+  const kind = isNew ? (typed && CO === "grida" && !/^[(\[{（【]?\s*그리다/.test(typed) ? `(그리다) ${typed}` : typed) : li.dataset.kind;
   if (isNew && !kind) { box.innerHTML = `<p class="err">서류 이름을 먼저 적어 주세요.</p>`; return; }
   if (!file || !/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { box.innerHTML = `<p class="err">PDF 파일만 올릴 수 있습니다.</p>`; return; }
   box.innerHTML = "<p>올리는 중…</p>";

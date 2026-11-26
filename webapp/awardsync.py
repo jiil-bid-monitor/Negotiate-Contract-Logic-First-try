@@ -102,6 +102,9 @@ def grida_target(project_root: Path, name: str) -> Path:
     from datetime import date
 
     active = sorted(project_root.glob("[[]진행중[]]_20??_공사진행_그리다"))
+    for d in reversed(active):  # 해가 바뀌어도 이미 있는 사업은 그 폴더 그대로 — 새 연도 폴더에 사본이 생기지 않게
+        if (d / name).is_dir():
+            return d / name
     return (active[-1] if active else project_root / f"[진행중]_{date.today().year}_공사진행_그리다") / name
 
 
@@ -209,6 +212,8 @@ def selfcheck() -> None:
         (groot / "[진행중]_2026_공사진행_그리다" / "R3_C").rename(groot / "[진행완료]" / "R3_C")
         (g / "4.txt").write_text("웹앱", encoding="utf-8")
         assert sync_projects(nas / GRIDA, groot, grida_target)["to_share"] == 1 and (groot / "[진행완료]" / "R3_C" / "4.txt").is_file()
+        (groot / "[진행중]_2025_공사진행_그리다" / "R4_D").mkdir()  # 예전 연도 폴더에 있던 사업 — 새 연도로 옮겨 가지 않음
+        assert grida_target(groot, "R4_D") == groot / "[진행중]_2025_공사진행_그리다" / "R4_D"
     print("ok")
 
 

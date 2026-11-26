@@ -677,16 +677,7 @@
   // 개찰 결과 칸(11/06) — 순위/참가 · 실제 사정률, 줄을 펼치면 1순위 업체·금액·차이
   const pct3 = (v) => (v == null ? "-" : `${Number(v).toFixed(3)}%`);
   const signed = (v, unit, d = 3) => (v == null ? "" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${unit === "원" ? won(Math.abs(v)) : Math.abs(v).toFixed(d)}${unit}`);
-  // 외주 금액 비교(11/16 사용자 요청 — 3억 미만 공고 외주 추천 금액 vs 웹앱 금액) — 등수가 작을수록 좋고, 미달은 통과보다 나쁨(미달끼리는 하한선에 가까운 쪽)
-  const placeKey = (rank) => (rank == null ? Infinity : rank > 0 ? rank : 100000 - rank);
   const webRank = (res) => { const o = webOwn(res); return o ? (o.rank != null ? o.rank : o.underRank) : null; };
-  function versus(res) {
-    const s = res && res.status === "완료" ? res.outsource : null;
-    if (!s) return null;
-    const w = placeKey(webRank(res)), x = placeKey(s.rank);
-    return w === x ? "same" : w < x ? "web" : "out";
-  }
-  const VERSUS = { web: "웹앱이 나음", out: "외주가 나음", same: "같음" };
   const shortPlace = (rank) => (rank == null ? "순위 모름" : rank > 0 ? `${rank}등` : "하한선 미달");
   // 외주 금액이 하한선이 되는 사정률(투찰 업체 표 '사정률'과 같은 식) — 개찰 전엔 어림으로 보여 줌
   function outRate(r) {
@@ -757,7 +748,7 @@
     const res = r.result || {}, s = res.status === "완료" ? res.outsource : null;
     if (!s) return "";
     const money = (v) => (v == null ? "-" : `${v >= 0 ? "+" : "−"}${won(Math.abs(v))}원`);
-    return `<details class="res-compare" ${cmpTag(r.id + ":out")}><summary class="res-compare-head">외주 추천 금액(${won(s.amount)}원)으로 투찰했다면${versus(res) ? `: ${VERSUS[versus(res)]}` : ""}</summary>
+    return `<details class="res-compare" ${cmpTag(r.id + ":out")}><summary class="res-compare-head">외주 금액(${won(s.amount)}원)으로 투찰 시</summary>
       <div class="res-grid">
         <div><span>외주 금액 순위</span><b>${s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}위 / ${s.total}곳` : `하한선 미달 (${s.rank}등)`}</b></div>
         <div><span>외주 금액 − 낙찰하한가</span><b>${money(s.gapToFloor)}</b></div>
@@ -799,7 +790,7 @@
     if (!s) return "";
     const gap = (v, lab) => (v == null ? "" : `<div><span>${lab}</span><b>${v >= 0 ? "+" : "−"}${won(Math.abs(v))}원</b></div>`);
     const real = res.own, fl = s.floor;
-    if (real) return `<details class="res-compare" ${cmpTag(r.id + ":web")}><summary class="res-compare-head">웹앱 기록 금액(${won(s.amount)}원)으로 투찰했다면: 위 결과는 실제 투찰 기준</summary>
+    if (real) return `<details class="res-compare" ${cmpTag(r.id + ":web")}><summary class="res-compare-head">웹앱 금액(${won(s.amount)}원)으로 투찰 시</summary>
       <div class="res-grid">
         <div><span>웹앱 금액 순위</span><b>${s.rank == null ? "순위 모름" : s.rank > 0 ? `${s.rank}위 / ${res.bidderCount}곳` : `하한선 미달 (${s.rank}등)`}</b></div>
         <div><span>웹앱 금액 − 낙찰하한가</span><b>${s.gapToFloor != null ? `${s.gapToFloor >= 0 ? "+" : "−"}${won(Math.abs(s.gapToFloor))}원` : "-"}</b></div>
@@ -808,7 +799,7 @@
         <div><span>웹앱 금액 투찰률</span><b>${s.bidRate != null ? pct3(s.bidRate) : "-"}</b></div>
       </div></details>`;
     const realPlace = real ? (real.rank != null ? `${real.rank}위 / ${res.bidderCount}곳` : real.underRank != null ? `하한선 미달 (${real.underRank}등)` : esc(real.remark || "순위 없음")) : "참가 안 함";
-    return `<details class="res-compare" ${cmpTag(r.id + ":web")}><summary class="res-compare-head">비교 기록: 위 결과는 웹앱 기록 금액(${won(s.amount)}원) 기준, 아래는 실제 투찰${real ? "" : "(${OWN} 참가 없음)"}</summary>
+    return `<details class="res-compare" ${cmpTag(r.id + ":web")}><summary class="res-compare-head">웹앱 금액(${won(s.amount)}원)으로 투찰 시</summary>
       <div class="res-grid">
         <div><span>웹앱 금액 − 낙찰하한가</span><b>${s.gapToFloor != null ? `${s.gapToFloor >= 0 ? "+" : "−"}${won(Math.abs(s.gapToFloor))}원` : "-"}</b></div>
         ${gap(s.gapToWinner, "웹앱 금액 − 실제 1순위")}

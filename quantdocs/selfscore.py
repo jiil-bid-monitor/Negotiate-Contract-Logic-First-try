@@ -326,10 +326,32 @@ def form_staff_grades(paths: list[Path]) -> tuple[dict[str, float], float]:
             continue
         for xml in xmls:
             for tbl in _spans(xml, "tbl"):
-                for row in read_form(_cells(xml, tbl)):
+                cells = _cells(xml, tbl)
+                for row in read_form(cells):
                     if row.crit is not None and row.crit.kind == "staff" and row.crit.per_grade:
                         return dict(row.crit.per_grade), float(row.points or 0)
+                found = _grade_rows(cells)
+                if found:
+                    return found, 0.0
     return {}, 0.0
+
+
+def _grade_rows(cells) -> dict[str, float]:
+    """평점 칸 머리를 못 알아본 표라도 '고급기술자 | 각0.8점'처럼 등급 줄 바로 오른쪽에 1인당 점수가 있으면 등급별 점수
+    (11/26 사용자 '왜 기술인원 칸이 없어' — 화면 기술인력 고르기 칸은 서식 채점과 따로 이 등급표만 있어도 보이게). 등급 둘 이상일 때만."""
+    out: dict[str, float] = {}
+    for c in cells:
+        t = _sq(c.text)
+        if not re.fullmatch(r"(?:기술사/?)?(?:기술사|특급|고급|중급|초급)(?:기술자|기술인)?(?:이하)?", t):
+            continue
+        right = next((d for d in cells if d.row == c.row and d.col == c.col + c.colspan), None)
+        per = _per_person(right.text) if right is not None else None
+        if per is None:
+            continue
+        for g in GRADES:
+            if g in t:
+                out.setdefault(g, per)
+    return out if len(out) >= 2 else {}
 
 
 def _mark_style(text: str) -> str:

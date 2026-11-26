@@ -5331,3 +5331,16 @@ def test_self_eval_two_points_columns_and_staff_count(tmp_path: Path):
     assert got[(1, 6)] == "4.75" and got[(5, 6)] == "1.8" and got[(10, 6)] == "4", got
     assert [got[(r, 5)] for r in range(6, 10)] == ["1", "1", "0", "0"], got
     assert got[(12, 6)] == "10.55", got
+
+
+def test_form_staff_grades_without_score_head(tmp_path: Path):
+    """(11/26 사용자 '왜 기술인원 칸이 없어') 평점 칸 머리를 못 알아본 표라도 '기술사/특급기술자 | 각 1.0점 · 고급기술자 | 각0.8점'
+    등급표가 있으면 화면 기술인력 고르기 칸용 등급별 점수를 읽음."""
+    from quantdocs.selfscore import form_staff_grades
+
+    c = lambda col, row, t="": (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    rows = [[c(0, 0, "구분"), c(1, 0, "등급"), c(2, 0, "배점")], [c(1, 1, "기술사/특급기술자"), c(2, 1, "각 1.0점")], [c(1, 2, "고급기술자"), c(2, 2, "각0.8점")]]
+    tb = "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    grades, _ = form_staff_grades([_mini_hwpx(tmp_path / "s.hwpx", tb)])
+    assert grades == {"기술사": 1.0, "특급": 1.0, "고급": 0.8}

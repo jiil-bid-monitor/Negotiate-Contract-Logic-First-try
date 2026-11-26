@@ -1351,7 +1351,7 @@ footer b { color: var(--muted); }
 .bidlog-table .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .bidlog-table td.act { white-space: nowrap; text-align: right; }
 #tab-calc .bidlog-table td.act button { padding: 3px 8px; font-size: 12px; }
-#tab-calc .bidlog-table td.act button.del { color: var(--urgent); }
+#tab-calc .bidlog-table td.act button.del, #tab-calc .bidlog-table .res-foot button.del { color: var(--urgent); }
 .bidlog-table td.res { white-space: nowrap; }
 .bidlog-table .res-win { color: var(--good, #1b6e43); }
 .bidlog-table .res-top { color: var(--brand); }
@@ -1387,7 +1387,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 #tab-calc table.bidders .num { text-align: right; font-variant-numeric: tabular-nums; }
 #tab-calc table.bidders .paren { display: block; color: var(--muted); }
 #tab-calc table.bidders td.basis-rate { color: var(--urgent); }
-#tab-calc table.bidders tr.own td { font-weight: 700; color: var(--brand); }
+#tab-calc table.bidders tr.own td { font-weight: 700; color: var(--brand); background: var(--brand-tint); }
 #tab-calc table.bidders td.under { color: var(--urgent); }  /* 미달 순위 -1, -2 … 붉게(11/10) */
 #tab-calc .res-foot button, #tab-calc .bidlog-table td.act button.more { padding: 3px 8px; font-size: 12px; }
 #tab-calc .bidlog-table td.act button.more { color: var(--brand); border-color: var(--brand); }
@@ -2503,8 +2503,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         <span class="bidlog-actions"><span id="bidlogKind" class="kind-chips"></span><button type="button" id="bidlogReload">결과 새로 고침</button> <a id="bidlogCsv" class="bidlog-csv" href="/api/bidlog.csv" download="투찰내역.csv">엑셀(CSV) 내려받기</a></span>
       </div>
       <div class="bidlog-wrap"><table class="calc-form bidlog-table">
-        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>투찰금액</th><th>외주 금액</th><th>기준 사정률</th><th>개찰 결과</th><th id="ownRankHead">지일 등수</th><th></th></tr></thead>
-        <tbody id="bidlogRows"><tr><td colspan="8" class="why">불러오는 중…</td></tr></tbody>
+        <thead><tr><th>기록일</th><th>공고 (공고번호 · 발주처)</th><th>투찰금액</th><th>외주 금액</th><th>기준 사정률</th><th>개찰 결과</th><th></th></tr></thead>
+        <tbody id="bidlogRows"><tr><td colspan="7" class="why">불러오는 중…</td></tr></tbody>
       </table></div>
     </div>
   </section>
@@ -5462,7 +5462,7 @@ const HELP_SETS = {
     [1, "'기준 사정률'은 무슨 뜻인가요?", "추천 금액을 정할 때 가정한 사정률입니다.\n개찰 때 실제 사정률이 이 값 이하이면\n추천 금액이 하한선을 통과합니다.", "기준 사정률 뜻"],
     [1, "'경쟁 규모'는 무엇으로 고르나요?", "'자동'으로 두시면 됩니다.\n참가가 적을 공고라는 걸 알면\n'소규모'를 골라 주세요.", "경쟁 규모 자동 소규모 대규모"],
     [1, "난수표는 언제 쓰나요?", "모의 추첨용입니다.\n실제 예정가격은 나라장터가 정하니\n참고만 해 주세요.", "난수표 모의 추첨 예정가격 예비가격"],
-    [1, "'낙찰'·'탈락'과 등수는 어떻게 읽나요?", "• 낙찰: 개찰에서 지일이 1순위\n• 탈락: 1순위가 아님\n\n적격심사 전 금액 기준 순위라\n최종 낙찰과 다를 수 있습니다.\n\n• 지일 등수: 실제 등수.\n    '-'가 붙으면 하한선 미달입니다.\n    등수가 없으면 나라장터 비고\n    (예가초과 등)가 나옵니다.\n• 웹앱 N등 · 외주 N등:\n    내지 않은 쪽 금액으로 냈다면\n    몇 등이었을지입니다.", "낙찰 탈락 읽는 지일등수 마이너스 웹앱 2등 차례 6등 1순위"],
+    [1, "'낙찰'·'탈락'과 등수는 어떻게 읽나요?", "• 낙찰: 개찰에서 지일이 1순위\n• 탈락: 1순위가 아님\n\n적격심사 전 금액 기준 순위라\n최종 낙찰과 다를 수 있습니다.\n\n• 'N등 · 탈락': 지일 실제 등수.\n    '하한선 미달'이면 하한선 아래입니다.\n    등수가 없으면 나라장터 비고\n    (예가초과 등)가 나옵니다.\n• 웹앱 N등 · 외주 N등:\n    내지 않은 쪽 금액으로 냈다면\n    몇 등이었을지입니다.", "낙찰 탈락 읽는 지일등수 마이너스 웹앱 2등 차례 6등 1순위"],
 
     [2, "추천 투찰금액은 어떻게 정해지나요?", "비슷한 과거 공고에서\n하한선 통과가 60% 이상인 방식 중\n개찰 성적이 가장 좋은 방식으로 정합니다.\n맞는 방식이 없으면\n통과 비율이 가장 높은 방식을 쓰고,\n비교할 과거 공고가 적으면\n기준 사정률 100.55%를 씁니다.\n\n과거 성적일 뿐 낙찰을 보장하지는 않습니다.", "추천 투찰금액 정해 방식 근거 얼마쓰"],
     [2, "추천 금액 그대로 투찰해도 되나요?", "과거 개찰 성적으로 고른 금액이라\n낙찰을 보장하지는 않습니다.\n추천 금액 아래 숫자를 같이 봐 주세요.\n• 하한선 통과: 탈락하지 않았을 비율\n• 5위 안 · 1순위: 금액 기준 개찰 순위\n• 평균 순위: 참가 업체 중 상위 몇 %\n\n참가 업체가 많은 공고는\n1순위에 운의 비중이 큽니다.", "그대로 믿어도 믿을 보장 하한선통과 나온대로 이대로"],
@@ -5472,8 +5472,8 @@ const HELP_SETS = {
 
     [3, "투찰한 금액을 기록하고 싶습니다", "'투찰 기록' 칸의 금액을 확인하고\n'투찰 내역에 기록'을 눌러 주세요.", "기록 남기 투찰 내역 금액기록"],
     [3, "외주 추천 금액은 왜 적나요?", "적어 두시면 개찰 뒤\n웹앱 금액과 등수를 비교해 드립니다.\n투찰내역에서 그 줄의 '결과 ▼'를 펼치고\n'외주 금액(…원)으로 투찰 시'를 누르면 보입니다.", "외주 추천 금액 비교"],
-    [3, "외주 금액으로 투찰했습니다", "'투찰 기록' 칸에 '외주 추천 금액'을 적고\n'실제 투찰'에서 '외주 금액'을 골라 주세요.\n이미 기록했으면\n투찰내역의 '고치기'로 바꿀 수 있습니다.", "실제 투찰 외주 냈 고치"],
-    [3, "기록한 금액을 고치고 싶습니다", "'투찰내역'에서 그 줄의 '고치기'로\n투찰금액·외주 금액을 바꿀 수 있습니다.\n잘못 넣은 기록은 '삭제'로 지워 주세요.", "고치기 틀리게 오타 잘못기록 금액수정 더넣고 잘못넣 잘못적"],
+    [3, "외주 금액으로 투찰했습니다", "'투찰 기록' 칸에 '외주 추천 금액'을 적고\n'실제 투찰'에서 '외주 금액'을 골라 주세요.\n이미 기록했으면\n투찰내역 그 줄의 '결과 ▼' → '고치기'로\n바꿀 수 있습니다.", "실제 투찰 외주 냈 고치"],
+    [3, "기록한 금액을 고치고 싶습니다", "'투찰내역'에서 그 줄의 '결과 ▼'를 누르고\n'고치기'로 투찰금액·외주 금액을 바꿀 수 있습니다.\n잘못 넣은 기록은 '삭제'로 지워 주세요.", "고치기 틀리게 오타 잘못기록 금액수정 더넣고 잘못넣 잘못적"],
     [3, "개찰 결과는 언제 나오나요?", "웹앱이 켜져 있으면\n1시간마다 저절로 확인합니다.\n바로 보시려면 '투찰내역'에서\n'결과 새로 고침'을 눌러 주세요.", "개찰 결과 언제 등수 투찰내역"],
     [3, "지난 투찰을 엑셀로 받고 싶습니다", "'투찰내역'의 '엑셀(CSV) 내려받기'를\n눌러 주세요.", "엑셀 CSV 내려 받기 다운"],
 
@@ -5807,7 +5807,7 @@ const HELP_SPOT = {
   calc: { "무엇부터 보면 되나요?": "#cNo", "어떤 순서로 하나요?": "#cLookup", "추천 투찰금액은 어떻게 정해지나요?": ".calc-rec", "'경쟁 규모'는 무엇으로 고르나요?": "#cRecScale", "난수표는 언제 쓰나요?": "#cDraw > summary",
     "투찰한 금액을 기록하고 싶습니다": "#cRecord", "외주 추천 금액은 왜 적나요?": "#cRecOut", "외주 금액으로 투찰했습니다": ".rec-actual", "개찰 결과는 언제 나오나요?": '#bidlogReload || [data-calcpage="log"]', "공고번호를 찾지 못한다고 나옵니다": "#cNo",
     "추천 금액 그대로 투찰해도 되나요?": ".calc-rec", "A값·순공사원가는 직접 넣어야 하나요?": "#cA", "기초금액·하한율이 '-'로 나옵니다": "#cBasis",
-    "기록한 금액을 고치고 싶습니다": '#bidlogRows tr[data-id] [data-act="edit"] || [data-calcpage="log"]', "'낙찰'·'탈락'과 등수는 어떻게 읽나요?": '#bidlogRows tr[data-id] td.res || [data-calcpage="log"]', "지난 투찰을 엑셀로 받고 싶습니다": '#bidlogCsv || [data-calcpage="log"]' },
+    "기록한 금액을 고치고 싶습니다": '#bidlogRows tr[data-id] [data-act="edit"] || #bidlogRows tr[data-id] [data-act="toggle"] || [data-calcpage="log"]', "'낙찰'·'탈락'과 등수는 어떻게 읽나요?": '#bidlogRows tr[data-id] td.res || [data-calcpage="log"]', "지난 투찰을 엑셀로 받고 싶습니다": '#bidlogCsv || [data-calcpage="log"]' },
   award: { "무엇부터 보면 되나요?": "#awardList h3", "목록은 어떻게 나뉘어 있나요?": "#awardList h3", "단계 표시는 어떻게 보나요?": "#awardList .award-steps", "개찰 결과는 언제 나오나요?": "#awardCheck",
     "공고가 목록에 보이지 않습니다": "#tab-award details > summary", "공고를 목록에서 빼고 싶습니다": "#awardList .award-more > summary", "계약 단계로는 언제 넘어가나요?": "#awardCheck",
     "'낙찰 서류 만들기'가 눌리지 않습니다": "#awardList .award-more > summary", "만든 서류는 어디에 있나요?": "#awardList [data-award-open]", "'서류 다시 만들기'는 언제 누르나요?": "#awardList .award-more > summary",
@@ -7096,10 +7096,6 @@ document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setCoMen
 $("coPick").onclick = (ev) => { const b = ev.target.closest("[data-co]"); if (b) pickCompany(b.dataset.co); };
 document.title = CO === "jiil" ? document.title : `${CO_NAME} · ${document.title}`;
 document.querySelector("footer").firstChild.textContent = `\n    (주)${CO_NAME} · 사내 전용\n  `;
-if (CO !== "jiil") {
-  // 낙찰 후 서류·일정·정량평가서·투찰 계산기 모두 그 회사 자료로(11/24·11/26) — 탭은 지일과 같음
-  $("ownRankHead").textContent = `${CO_NAME} 등수`;
-}
 if (!CO_PICKED) showCompanyPick();
 </script>
 <!-- 투찰 계산기 — 계산은 bidcalc.js(BidCalc), 화면은 bidcalc_ui.js (2026-10-15, 21라인 복수예가산출프로그램 모양) -->

@@ -174,6 +174,5 @@ def test_screen_shows_award_and_calendar_for_other_company():
 
 def test_screen_shows_calc_for_other_company():
     html = (ROOT / "webapp" / "static" / "index.html").read_text(encoding="utf-8")
-    assert 'ownRankHead' in html and "CO_NAME} 등수" in html
     ui = (ROOT / "webapp" / "static" / "bidcalc_ui.js").read_text(encoding="utf-8")
     assert "const OWN = " in ui

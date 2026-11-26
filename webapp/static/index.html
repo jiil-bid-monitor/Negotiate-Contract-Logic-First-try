@@ -3785,7 +3785,7 @@ function regionSuspectBadge(n) {
   const req = regionList(t.required);
   const sum = t.summary || {};
   const rows = [["요건", sum.basis], ["기간", sum.period], ["개인사업자", sum.individual ? "공고문에 언급 있음" : null]].filter(([, v]) => v);
-  return tipBadge("warn", `⚠ 지역 제한 의심 ${esc(req)}`, "지역 제한 의심 (첨부 공고문)",
+  return tipBadge("warn", "⚠ 지역 제한", "지역 제한 의심 (첨부 공고문)",
     `<p>참가 가능 지역: <b>${esc(req)}</b></p>` +
       (rows.length ? `<ul class="due-list">${rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join("")}</ul>` : "") +
       (t.evidence ? `<p class="q-label">공고문 원문</p><blockquote class="quote">${esc(t.evidence)}</blockquote>` : "") );

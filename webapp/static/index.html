@@ -437,7 +437,16 @@ body.picking { overflow: hidden; }
 .calpop .grid button.other { opacity: .4; }  /* 앞뒤 달 날짜는 흐리게 — 이 달 날짜가 먼저 보이게 */
 .calpop .legend { font-size: 10.5px; gap: 8px; }
 .calpop .legend i { width: 6px; height: 6px; }
+/* 고른 기간은 칸 사이를 띄우지 않고 한 띠로 칠함, 시작 칸은 오른쪽·끝 칸은 왼쪽이 화살표 모양 (2026-11-26 사용자 — 항공권 달력처럼) */
+.calpop .grid { column-gap: 0; row-gap: 4px; }
 .calpop .grid button.inr { background: var(--brand-tint); color: var(--ink-strong); border-radius: 0; }
+.calpop .grid button.start, .calpop .grid button.end { position: relative; isolation: isolate; background: transparent; border-radius: 0; }
+.calpop .grid button.start { background: linear-gradient(to right, transparent 50%, var(--brand-tint) 50%); }
+.calpop .grid button.end { background: linear-gradient(to left, transparent 50%, var(--brand-tint) 50%); }
+.calpop .grid button.start::before, .calpop .grid button.end::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--brand); }
+.calpop .grid button.start::before { border-radius: 6px 0 0 6px; clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); }
+.calpop .grid button.end::before { border-radius: 0 6px 6px 0; clip-path: polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%); }
+.calpop .grid button.start:hover, .calpop .grid button.end:hover { background-color: transparent; }
 .calpop .span { margin: 10px 0 0; font-size: 12px; font-weight: 700; color: var(--brand); }
 .calpop .day { font-size: 11.5px; }
 .calpop li.ev { font-size: 12px; padding: 5px 0; }
@@ -6982,6 +6991,8 @@ function calSpan() {
 }
 const calEdge = (key) => { const [f, t] = calSpan(); return !!f && (key === f || key === t); };
 const calIn = (key) => { const [f, t] = calSpan(); return !!f && key >= f && key <= t; };
+/** 기간의 시작('start')·끝('end') 칸 — 하루만 고르면 둘 다 아님 */
+const calEnd = (key) => { const [f, t] = calSpan(); return !f || f === t ? "" : key === f ? "start" : key === t ? "end" : ""; };
 function renderCalendar() {
   const now = new Date(), today = ymd(now);
   const month = CAL.month || today.slice(0, 7);
@@ -6994,7 +7005,7 @@ function renderCalendar() {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), key = ymd(d);
     if (i % 7 === 0 && i >= 28 && d.getMonth() !== m - 1) break;  // 다음 달로 넘어간 줄은 안 그림
     const kinds = [...new Set((byDay.get(key) || []).map((e) => e.kind))].slice(0, 4);
-    cells += `<button type="button" data-cday="${key}" class="${[d.getMonth() !== m - 1 ? "other" : "", key === today ? "today" : "", calEdge(key) ? "sel" : "", calIn(key) && !calEdge(key) ? "inr" : ""].join(" ")}">${d.getDate()}`
+    cells += `<button type="button" data-cday="${key}" class="${[d.getMonth() !== m - 1 ? "other" : "", key === today ? "today" : "", calEdge(key) ? "sel" : "", calIn(key) && !calEdge(key) ? "inr" : "", calEnd(key)].join(" ")}">${d.getDate()}`
       + `<span class="dots">${kinds.map((k) => `<i class="k-${k}"></i>`).join("")}</span></button>`;
   }
   // 아래 목록 — 달력에서 고른 날(처음엔 오늘) 또는 기간(날짜 두 번 — 11/26 사용자)

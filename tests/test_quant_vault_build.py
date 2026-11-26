@@ -5287,3 +5287,43 @@ def test_pledge_signer_birth_line(tmp_path: Path):
     fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
     text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
     assert re.search(r"명 : 홍길동", text) and re.search(r"생 년 월 일 : 1967\. 02\. 22\.", text), text
+
+
+def test_self_eval_two_points_columns_and_staff_count(tmp_path: Path):
+    """(11/26 사용자 제보) '평가항목 | 배점 | 평가요소 | 평가기준 | 배점 | 자체평가' — 배점 머리가 둘(왼쪽 = 항목 배점, 오른쪽 = 줄 배점)이라
+    경영상태·기술능력 기준을 못 읽어 빔, 화면 기술인력 칸도 안 나옴, 성실성 만점·합계 누락. 기술능력 등급표 '등급 | 배점 | 인원'의 인원 칸 = 사람 수."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore, form_staff_grades
+
+    c = lambda col, row, t="", span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                              f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    tb = lambda rows: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    rows = [
+        [c(0, 0, "평가항목"), c(1, 0, "배점"), c(2, 0, "평가요소"), c(3, 0, "평가기준"), c(4, 0, "배점", 2), c(6, 0, "자체평가")],
+        [c(0, 1, "경영상태", rs=4), c(1, 1, "5", rs=4), c(2, 1, "기업 신용평가 등급", rs=4), c(3, 1, "AAA, AA+, AA0, AA- A+, A0, A-, BBB+, BBB0"), c(4, 1, "5점", 2), c(6, 1, "", rs=4)],
+        [c(3, 2, "BBB-, BB+, BB0, BB-"), c(4, 2, "4.75점", 2)],
+        [c(3, 3, "B+, B0, B-"), c(4, 3, "4.5점", 2)],
+        [c(3, 4, "CCC+ 이하"), c(4, 4, "3.5점", 2)],
+        [c(0, 5, "기술능력", rs=5), c(1, 5, "5", rs=5), c(2, 5, "기술 인력 보유 정도", rs=5), c(3, 5, "등급"), c(4, 5, "배점"), c(5, 5, "인원"), c(6, 5, "", rs=5)],
+        [c(3, 6, "기술사/특급기술자"), c(4, 6, "각 1.0점"), c(5, 6, "")],
+        [c(3, 7, "고급기술자"), c(4, 7, "각0.8점"), c(5, 7, "")],
+        [c(3, 8, "중급기술자"), c(4, 8, "각0.6점"), c(5, 8, "")],
+        [c(3, 9, "초급기술자"), c(4, 9, "각0.4점"), c(5, 9, "")],
+        [c(0, 10, "성실성", rs=2), c(1, 10, "4", rs=2), c(2, 10, "부정당업자 종 제재기간", rs=2), c(3, 10, "2년 이상"), c(4, 10, "△2.0", 2), c(6, 10, "", rs=2)],
+        [c(3, 11, "3월 미만"), c(4, 11, "△0.3", 2)],
+        [c(0, 12, "합계"), c(1, 12, "20"), c(2, 12, "", 4), c(6, 12, "")],
+    ]
+    src = _mini_hwpx(tmp_path / "s.hwpx", tb(rows))
+    assert form_staff_grades([src])[0].get("특급") == 1.0
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"},
+                    staff=[{"이름": "가1", "등급": "특급", "입사일": "2015-01-01"}, {"이름": "가2", "등급": "고급", "입사일": "2015-01-01"}])
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 26)))
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {}
+    for tc in re.findall(r"<hp:tc>.*?</hp:tc>", xml, re.S):
+        col, row = re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', tc).groups()
+        got[(int(row), int(col))] = re.sub(r"<[^>]+>", "", tc).strip()
+    assert got[(1, 6)] == "4.75" and got[(5, 6)] == "1.8" and got[(10, 6)] == "4", got
+    assert [got[(r, 5)] for r in range(6, 10)] == ["1", "1", "0", "0"], got
+    assert got[(12, 6)] == "10.55", got

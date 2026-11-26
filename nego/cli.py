@@ -223,7 +223,19 @@ def _append_feedback_sheet(candidates, now) -> None:
         print(f"피드백 시트 기록: 추가 {result['appended']}건 · 이미 있음 {result['skipped']}건")
 
 
-def _send_email(candidates, stats, html_path, now) -> bool:
+def _shared_notices(folder: str | None) -> set[str]:
+    """지일 보고 기록 폴더(같은 실행에서 먼저 쓴 output/report-log)의 공고번호 — 그리다 메일에서 겹치는 공고를 한 줄로(2026-11-26)."""
+    from . import report_log
+
+    out: set[str] = set()
+    for f in sorted(Path(folder).glob("*.json")) if folder else ():
+        entry = report_log.parse(f.read_text(encoding="utf-8"))
+        if entry and not entry.get("company"):
+            out |= {n["noticeNo"] for n in entry["notices"]}
+    return out
+
+
+def _send_email(candidates, stats, html_path, now, shared: set[str] | None = None) -> bool:
     """주간 리포트 메일(2026-10-19 통합 결정 15번). 실패해도 종료코드는 그대로 — 텔레그램과 같은 이유.
     본문은 메일 전용 HTML(nego/email_html.py — 메일 프로그램이 <style>을 지워도 안 깨지게), 첨부는 텔레그램과 같은 HTML(2026-10-20).
     (10/21 사용자 요청) 관심 공고·세부품명 공고를 따로 한 통씩 — 한 통이 길면 지메일이 뒤를 잘라서. 첨부(전체 리포트)는 첫 통에만."""
@@ -235,7 +247,7 @@ def _send_email(candidates, stats, html_path, now) -> bool:
         return False
     for i, (part, rows) in enumerate(split_parts(candidates)):
         subject = subject_for(now.strftime("%Y-%m-%d"), len(rows), bool(stats.failed_operations), part)
-        body = render_email_html(candidates, stats, now, part, attached=i == 0)
+        body = render_email_html(candidates, stats, now, part, attached=i == 0, shared=shared)
         error = send(subject, body, Path(html_path) if i == 0 else None)
         if error:
             logging.error(error)
@@ -305,6 +317,10 @@ def main(argv: list[str] | None = None) -> int:
         "--email",
         action="store_true",
         help="HTML 리포트를 메일로 보낸다(주간 보고용, SMTP_* 환경변수·config/recipients.json — 통합 결정 15번)",
+    )
+    parser.add_argument(
+        "--same-as",
+        help="다른 회사 보고 기록 폴더(예: output/report-log) — 그 보고에 나간 공고는 메일 맨 아래 '지일 공고와 겹침'에 한 줄씩(그리다 주간 메일)",
     )
     parser.add_argument(
         "--company",
@@ -455,7 +471,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"보낸 공고 기록 저장: {args.sent_state}")
 
     if args.email:
-        delivered = _send_email(candidates, stats, paths.get("html"), now) or delivered
+        delivered = _send_email(candidates, stats, paths.get("html"), now, _shared_notices(args.same_as)) or delivered
 
     # 주간 보고는 메일로만 나가므로(2026-11-16) 보고 기록·시트는 텔레그램·메일 어느 쪽이든 보낸 실행에서 남긴다
     if args.report_log and candidates and (args.telegram or args.email):

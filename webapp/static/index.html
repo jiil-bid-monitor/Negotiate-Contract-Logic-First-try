@@ -522,11 +522,6 @@ body.picking { overflow: hidden; }
 .docbell-pop .err { color: #d93025; }
 .docmgr { padding: 0; border: 0; background: transparent; max-width: calc(100vw - 32px); }
 .docmgr::backdrop { background: rgba(0,0,0,.35); }
-.docmgr .mgrtabs { display: flex; gap: 6px; margin: 10px 0 2px; }
-.docmgr .mgrtabs button { font: inherit; font-size: 13px; font-weight: 600; padding: 5px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--ink); cursor: pointer; }
-.docmgr .mgrtabs button span { font-weight: 400; color: var(--muted); margin-left: 2px; }
-.docmgr .mgrtabs button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
-.docmgr .mgrtabs button.on span { color: rgba(255,255,255,.8); }
 .docmgr .docbell-pop { position: static; width: 560px; max-width: 100%; max-height: 80vh; overflow: auto; box-sizing: border-box; }
 .docmgr .mgrhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .docmgr .newname { font: inherit; font-size: 12.5px; padding: 4px 8px; flex: 1 1 220px; min-width: 0; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel); color: var(--ink); }
@@ -6602,16 +6597,13 @@ async function loadDocBell() {
   renderDocBell();
 }
 // 지일 / 그리다 서류 따로(11/24 사용자 — 쌓이면 보기 어려움). 그리다 서류는 이름이 '(그리다) …'
-let DOC_CO = CO_NAME;  // 관리 창은 고른 회사 쪽부터(2026-11-24 회사 고르기)
+// 종·관리 창 모두 고른 회사 서류만(11/26 사용자 — 그리다 화면엔 지일 서류가 필요 없음, 회사 고르기 칩 뺌)
 const isGrida = (d) => /그리다/.test(d.kind);
 const coDocs = (docs) => (docs || []).filter((d) => isGrida(d) === (CO === "grida"));  // 종은 고른 회사 서류만
 function renderDocMgr() {
   const q = ($("docMgrQ")?.value || "").replace(/\s+/g, "");
   const hit = DOC_ALL.filter((d) => !q || d.kind.replace(/\s+/g, "").includes(q));
-  const by = { 지일: hit.filter((d) => !isGrida(d)), 그리다: hit.filter(isGrida) };
-  $("docMgrTabs").innerHTML = Object.entries(by).map(([co, list]) =>
-    `<button type="button" data-co="${co}" aria-pressed="${DOC_CO === co}" class="${DOC_CO === co ? "on" : ""}">${co} <span>${list.length}</span></button>`).join("");
-  const rows = by[DOC_CO];
+  const rows = coDocs(hit);
   $("docMgrList").innerHTML = rows.map((d) => d.later ? docItem(d, `<button type="button" class="act" data-unlater>알림 지우기</button>`) : docItem(d, (d.file ? `<label class="act">파일 바꾸기<input type="file" data-replace accept="application/pdf,.pdf" hidden></label>` : "")
     + `<button type="button" class="act" data-edit>날짜 수정</button>`
     + `<button type="button" class="act" data-remove>빼기</button>`)).join("") || "<li>찾는 서류가 없습니다.</li>";
@@ -6624,11 +6616,10 @@ async function openDocMgr() {
       <ul><li data-new="1"><div class="row1"><span class="name">새 서류 추가</span></div>
         <div class="up"><input class="newname" placeholder="서류 이름" maxlength="40">${UP}</div>
         <div class="upbox"></div></li></ul>
-      <input id="docMgrQ" class="mgrq" placeholder="서류 찾기"><div class="mgrtabs" id="docMgrTabs" role="group" aria-label="회사"></div><ul id="docMgrList"></ul>
+      <input id="docMgrQ" class="mgrq" placeholder="서류 찾기"><ul id="docMgrList"></ul>
       <p class="how">빼기는 목록과 알림에서만 빼고, 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p></div></dialog>`);
     wireDocs($("docMgr"));
     $("docMgrQ").oninput = renderDocMgr;
-    $("docMgrTabs").onclick = (ev) => { const b = ev.target.closest("[data-co]"); if (b) { DOC_CO = b.dataset.co; renderDocMgr(); } };
     $("docMgr").addEventListener("click", (ev) => { if (ev.target.closest("[data-close]") || ev.target === $("docMgr")) $("docMgr").close(); });
   }
   $("docBellPop").hidden = true;
@@ -6658,7 +6649,8 @@ function pdfBase64(file) {
 }
 async function docUpload(li, file) {
   const isNew = !!li.dataset.new, box = li.querySelector(".upbox");
-  const kind = isNew ? li.querySelector(".newname").value.trim() : li.dataset.kind;
+  const typed = isNew ? li.querySelector(".newname").value.trim() : "";
+  const kind = isNew ? (typed && CO === "grida" && !isGrida({ kind: typed }) ? `(그리다) ${typed}` : typed) : li.dataset.kind;
   if (isNew && !kind) { box.innerHTML = `<p class="err">서류 이름을 먼저 적어 주세요.</p>`; return; }
   if (!file || !/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { box.innerHTML = `<p class="err">PDF 파일만 올릴 수 있습니다.</p>`; return; }
   box.innerHTML = "<p>올리는 중…</p>";

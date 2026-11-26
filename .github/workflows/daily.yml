@@ -361,7 +361,7 @@ jobs:
           python -m nego "${ARGS[@]}" 2>&1 | tee collect.log
 
       # (주)그리다 — 같은 수집을 그리다 보유 자격으로 한 번 더(2026-11-24 사용자 결정). 매일 입찰은 그리다 방(Secret
-      # TELEGRAM_GRIDA_CHAT_ID), 주간은 메일(config/companies/grida/recipients.json, 없으면 지일과 같은 받는 사람).
+      # TELEGRAM_GRIDA_CHAT_ID — 11/26 지금은 안 씀, 없으면 매일 보고만 건너뜀), 주간은 메일(config/companies/grida/recipients.json).
       # 보고 제목 앞 [그리다], 보고 기록은 reports/{날짜}-{종류}-grida.json → 사내 웹앱 그리다 판단 기록, 피드백 시트는 같은 시트의
       # '피드백_그리다' 탭. 그리다 방 Secret이 없으면 건너뜀. 실패해도 지일 보고·기록·재시도엔 영향 없음(그리다만 그날 빠짐).
       - name: 그리다 수집 실행
@@ -392,7 +392,8 @@ jobs:
           COMPLETE_DAYS: ${{ steps.mode.outputs.collect_days }}
           PRESPEC: ${{ steps.mode.outputs.prespec }}
         run: |
-          if [ -z "$TELEGRAM_CHAT_ID" ]; then echo "그리다 방(TELEGRAM_GRIDA_CHAT_ID)이 없어 그리다 보고는 건너뜁니다"; exit 0; fi
+          # 그리다는 주간 메일만(2026-11-26 사용자 — 텔레그램 방은 안 만듦). 그리다 방 Secret이 없으면 매일 입찰 보고만 건너뜀
+          if [ -z "$TELEGRAM_CHAT_ID" ] && [ "$PRESPEC" != "true" ]; then echo "그리다 방(TELEGRAM_GRIDA_CHAT_ID)이 없어 그리다 매일 보고는 건너뜁니다"; exit 0; fi
           ARGS=(--company grida --output output/grida --store data/notices_grida.jsonl --fetch-attachment-text --no-supabase)
           [ -n "$CATEGORIES" ] && ARGS+=(--categories "$CATEGORIES")
           [ -n "$COMPLETE_DAYS" ] && ARGS+=(--complete-days "$COMPLETE_DAYS")
@@ -400,7 +401,7 @@ jobs:
           [ "$PRESPEC" = "true" ] && ARGS+=(--pre-spec)
           [ "$SENT_STATE" = "true" ] && ARGS+=(--sent-state state/sent_bids_grida.json)
           [ -n "$REPORT_LOG" ] && ARGS+=(--report-log "$REPORT_LOG")
-          [ "$EMAIL" = "true" ] && ARGS+=(--email)
+          [ "$EMAIL" = "true" ] && ARGS+=(--email --same-as output/report-log)  # 지일 주간 메일에 나간 공고는 맨 아래 한 줄씩
           python -m nego "${ARGS[@]}"
 
       # 텔레그램 발송 뒤 기록을 상태 전용 브랜치 bot-state에 커밋 (코드 브랜치와 섞이지 않게).

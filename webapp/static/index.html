@@ -6561,9 +6561,8 @@ function renderDocBell() {
   $("docBellN").textContent = DOC_BELL.length;
   $("docBellN").hidden = !DOC_BELL.length;
   $("docBellPop").innerHTML = (DOC_BELL.length ? `<h3>회사 서류 갱신 알림 ${DOC_BELL.length}건</h3>` : "<h3>지금 갱신할 회사 서류가 없습니다</h3>") + "<ul>"
-    + DOC_BELL.map((d) => docItem(d, `<span class="uphint">또는 PDF를 이 줄에 끌어다 놓기</span>`)).join("")
-    + "</ul>" + (DOC_BELL.length ? "<p class=\"how\"><b>갱신했으면</b> 새로 받은 서류 PDF를 그 서류 줄에 올려 주세요.<br>"
-    + "서류에 적힌 유효기간을 골라 저장하면 인증서갱신.xlsx도 고칩니다.</p>" : "")
+    + DOC_BELL.map((d) => docItem(d, "")).join("")
+    + "</ul>"
     + `<p class="how"><button type="button" class="linkbtn" data-open-mgr>전체 서류 관리 (추가 · 수정 · 빼기) ›</button></p>`;
 }
 async function loadDocBell() {
@@ -6590,10 +6589,8 @@ async function openDocMgr() {
   if (!$("docMgr")) {
     document.body.insertAdjacentHTML("beforeend", `<dialog id="docMgr" class="docmgr"><div class="docbell-pop">
       <div class="mgrhead"><h3>전체 회사 서류</h3><button type="button" class="act" data-close>닫기</button></div>
-      <p class="uphint" style="margin:-4px 0 10px">새 PDF를 바꿀 서류 줄 위에 끌어다 놓아도 됩니다.</p>
       <ul><li data-new="1"><div class="row1"><span class="name">새 서류 추가</span></div>
-        <div class="up"><input class="newname" placeholder="서류 이름 (예: 조경식재공사업 등록증)" maxlength="40">${UP}</div>
-        <p class="uphint" style="margin:6px 0 0">그리다 서류는 이름 앞에 <b>(그리다)</b>를 붙여 주세요. 예: (그리다) 여성기업. 그래야 그리다 쪽에 따로 보입니다.</p>
+        <div class="up"><input class="newname" placeholder="서류 이름" maxlength="40">${UP}</div>
         <div class="upbox"></div></li></ul>
       <input id="docMgrQ" class="mgrq" placeholder="서류 찾기"><div class="mgrtabs" id="docMgrTabs" role="group" aria-label="회사"></div><ul id="docMgrList"></ul>
       <p class="how">빼기는 목록과 알림에서만 빼고, 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p></div></dialog>`);
@@ -6638,7 +6635,7 @@ async function docUpload(li, file) {
     // 만료일은 PDF에서 읽지 않고 늘 고르게(2026-11-23 사용자 결정 — 잘못 읽으면 엑셀을 다시 고쳐야 해서)
     const r = await awardPost("/api/docs-upload", { action: "read", kind, pdf, new: isNew });
     const btn = (end, label) => `<button type="button" data-end="${end}">${esc(label)}</button>`;
-    box.innerHTML = `<p><b>${esc(file.name)}</b><br>서류에 적힌 유효기간 끝나는 날을 골라 주세요.</p>`
+    box.innerHTML = `<p><b>${esc(file.name)}</b></p>`
       + `<div class="choices">${r.cands.map((c, n) => btn(c, `${n + 1}년 → ${c}`)).join("")}</div>`
       + `<div class="choices other">다른 날짜 <input type="date" value="${esc(r.cands[0] || "")}"> <button type="button" data-end="pick">저장</button>`
       + ` ${btn("", "유효기간 없는 서류")} <button type="button" data-cancel>취소</button></div>`;
@@ -6665,9 +6662,9 @@ async function docUpload(li, file) {
 function docManage(li, action) {
   const box = li.querySelector(".upbox"), kind = li.dataset.kind, d = DOC_ALL.find((x) => x.kind === kind) || {};
   box.innerHTML = action === "edit"
-    ? `<p>새 파일 없이 유효기간만 고칩니다(잘못 적었을 때).</p><div class="choices other">유효기간 끝 <input type="date" value="${esc(d.end || "")}">`
+    ? `<div class="choices other">유효기간 끝 <input type="date" value="${esc(d.end || "")}">`
       + ` <button type="button" data-go="date">저장</button> <button type="button" data-go="none">유효기간 없는 서류</button> <button type="button" data-cancel>취소</button></div>`
-    : `<p><b>${esc(kind)}</b>: 목록과 알림에서 뺄까요?<br>파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>`
+    : `<p><b>${esc(kind)}</b>: 목록과 알림에서 뺄까요?</p>`
       + `<div class="choices"><button type="button" data-go="remove" class="danger">빼기</button> <button type="button" data-cancel>취소</button></div>`;
   box.onclick = async (ev) => {
     const b = ev.target.closest("button");
@@ -6687,8 +6684,7 @@ async function docReplace(li, file) {  // 잘못 올린 파일 바꾸기 — 발
   const box = li.querySelector(".upbox"), kind = li.dataset.kind, d = DOC_ALL.find((x) => x.kind === kind) || {};
   if (!file || !/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { box.innerHTML = `<p class="err">PDF 파일만 올릴 수 있습니다.</p>`; return; }
   const pdf = await pdfBase64(file);
-  box.innerHTML = `<p>지금 파일 <b>${esc(d.file || "")}</b>을(를)<br><b>${esc(file.name)}</b>(으)로 바꿀까요?<br>`
-    + "발급일·유효기간은 그대로입니다. 날짜가 틀렸으면 '날짜 수정'. 앞 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>"
+  box.innerHTML = `<p>지금 파일 <b>${esc(d.file || "")}</b>을(를)<br><b>${esc(file.name)}</b>(으)로 바꿀까요?</p>`
     + `<div class="choices"><button type="button" data-go="replace" class="go">바꾸기</button> <button type="button" data-cancel>취소</button></div>`;
   box.onclick = async (ev) => {
     const b = ev.target.closest("button");

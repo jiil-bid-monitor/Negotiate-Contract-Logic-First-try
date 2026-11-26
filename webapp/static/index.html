@@ -3383,7 +3383,9 @@ function renderActiveFilters(shownN) {
   // 'N건 보는 중'은 정렬 칸 바로 왼쪽에(11/18 사용자: 빈 공간이 너무 큼 — 따로 한 줄을 쓰지 않게)
   $("liveCount").innerHTML = "";  // 'N건 보는 중'은 안 보임 (2026-11-26 사용자)
   $("activeFilters").hidden = !on.length;
-  $("filterOpenN").textContent = on.length ? String(on.length) : "";
+  // 필터 버튼 숫자는 펼친 다섯 칸에서 고른 것만 — '보고'(미판단 공고 창 버튼)는 칸이 없어 빼고 '적용 중' 칩으로만(11/26 사용자)
+  const picked = on.filter((k) => k !== "report").length;
+  $("filterOpenN").textContent = picked ? String(picked) : "";
 }
 function dropdown(group, name, opts, tone = "", state = filters) {
   // 첫 항목(전체)을 고른 상태면 버튼에 "전체"라고만 쓴다

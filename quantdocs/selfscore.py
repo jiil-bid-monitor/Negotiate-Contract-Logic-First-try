@@ -945,8 +945,18 @@ def _horizontal(rs, rows, pcol: int, scol: int, crit) -> tuple[dict, dict, list]
 def read_form(cells) -> list[FormRow]:
     """자기평가표 표 칸들 → 점수 줄. '배점' 칸과 '자기평점'(또는 '평점') 칸이 있는 표만."""
     plain = lambda t: re.sub(r"\([^)]*\)", "", _sq(t))  # '배점(점)'·'평점(점)'(11/10 경남교육청)
-    head = next((c for c in cells if plain(c.text) in _SCORE_HEAD), None)
+    item_pts_col = None
+    # 머리 이름은 _SCORE_HEAD 순서대로 — '항목 | 배점 | 세부항목 | 평점 | 자기평가 점수'(11/26 사용자 제보)면 '자기평가 점수'가 평점 칸,
+    # 그 왼쪽 '평점'은 줄 배점(예전엔 왼쪽부터 처음 맞는 '평점'을 평점 칸으로 봐서 하나도 안 채움)
+    head = next((c for name in _SCORE_HEAD for c in cells if plain(c.text) == name), None)
     pts_head = next((c for c in cells if plain(c.text) in ("배점", "총배점")), None)  # '총 배 점(상한점수)'(11/13)
+    if head is not None and plain(head.text) != "평점":
+        row_pts = next((c for c in cells if plain(c.text) == "평점" and c.col < head.col
+                        and c.row <= head.row < c.row + max(1, c.rowspan)), None)
+        if row_pts is not None:
+            if pts_head is not None and pts_head.col < row_pts.col:
+                item_pts_col = pts_head.col
+            pts_head = row_pts
     if head is None:  # '배점한도 | 배점'(11/18 봉평 서식 20 정량적 평가 요약서) — 한도 칸이 상한, 빈 '배점' 칸이 자기평점
         limit = next((c for c in cells if plain(c.text) in ("배점한도", "배점상한", "한도")), None)
         if limit is not None and pts_head is not None and pts_head.row == limit.row:
@@ -971,7 +981,6 @@ def read_form(cells) -> list[FormRow]:
             item_pts_col, pts_head = twins[0].col, twins[-1]
     if head is None or pts_head is None or not (pts_head.row <= head.row < pts_head.row + max(1, pts_head.rowspan)):
         return []
-    item_pts_col = locals().get("item_pts_col")
     rows: dict[int, list] = {}
     for c in cells:
         if c.row > head.row:

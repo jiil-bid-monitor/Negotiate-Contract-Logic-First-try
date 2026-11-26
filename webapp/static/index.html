@@ -2041,6 +2041,14 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 }
 @media (hover: none) { .pstat { flex-wrap: wrap; } .pstat-pop { display: block; position: static; padding: 4px 0 0; flex: 1 1 100%; } .pstat-pop::before { display: none; } }
 @media (prefers-reduced-motion: reduce) { .pbtn.ico .pl { transition: none !important; } }
+/* 비슷한 공고 지난 판단 = 시계 아이콘, 커서를 대면 펼침 (2026-11-26 사용자) */
+.phint { position: relative; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; width: 34px; height: 24px; margin-left: 6px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--muted); cursor: default; }
+.phint > .ic { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.phint:hover, .phint:focus-visible { border-color: var(--muted); color: var(--ink); }
+.phint-pop { display: none; position: absolute; top: 100%; right: 0; z-index: 30; padding-top: 6px; width: max-content; max-width: min(640px, 80vw); text-align: left; }
+.phint-pop .past-hint { margin: 0; padding: 9px 12px; background: var(--panel); border: 1px solid var(--line-strong); border-left: 3px solid var(--line-strong); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+.phint:hover .phint-pop, .phint:focus-within .phint-pop { display: block; }
+@media (hover: none) { .phint { display: contents; } .phint > .ic { display: none; } .phint-pop { display: block; position: static; padding-top: 6px; width: 100%; max-width: none; } .phint-pop .past-hint { box-shadow: none; border-radius: 0; border-top: 0; border-right: 0; border-bottom: 0; } }
 /* ② 불러오기 줄: 평소 상태 글 없음(경고만) */
 #liveTools .load-state:empty, #liveTools .live-meta:empty { display: none; }
 /* ③ 넓은 화면: 필터는 버튼 하나, 'N건 보는 중'·정렬은 낙찰방법 탭 줄 오른쪽 */
@@ -4054,6 +4062,12 @@ function pastHint(n) {
     })
     .join("")}</div>`;
 }
+/** 비슷한 공고 지난 판단 — 늘 펼쳐 두지 않고 아이콘에 커서를 대면 위 내용이 펼쳐짐(2026-11-26 사용자). 터치 화면은 늘 보임 */
+function pastHintPop(n) {
+  const hint = pastHint(n);
+  const icon = svgIc('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4.5l3 2"/>');
+  return hint ? `<span class="phint" tabindex="0" aria-label="비슷한 공고 지난 판단">${icon}<span class="phint-pop">${hint}</span></span>` : "";
+}
 
 /**
  * 이 공고가 어떤 경로로 수집됐나 — 판단 기록으로 수집 조건을 조금씩 고칠 때 원인을 묶는 데 쓴다(11/16 사용자 요청).
@@ -4117,9 +4131,8 @@ function partBlock(n) {
       <span class="pstat">${PART_STATUSES.map((s) => `<button type="button" class="pbtn ico ${PART_TONE[s]} ${p?.status === s ? "on" : ""}" data-pstatus="${s}" aria-pressed="${p?.status === s ? "true" : "false"}">${PART_ICON[s]}<span class="pl">${s}</span></button>`).join("")}${decisionPop(p)}</span>
       <span class="part-owner"><span class="vh">담당</span>${p?.owner ? `<span class="owner">${ICON_PERSON}<b>${esc(p.owner)}</b></span>` : `<span class="vh">없음</span>`}
         <button type="button" class="pbtn ico" data-powner>${ICON_TAKE}<span class="pl">${p?.owner === myName() && myName() ? "넘기기" : "내가 맡기"}</span></button>
-        <button type="button" class="pbtn ico ${talk ? "" : "nil"}" data-ptalk aria-label="대화 ${talk}건 열기·닫기">${ICON_TALK}<span class="pl">대화</span>${talk ? `<span class="cnt">${talk}</span>` : ""}</button></span>
+        <button type="button" class="pbtn ico ${talk ? "" : "nil"}" data-ptalk aria-label="대화 ${talk}건 열기·닫기">${ICON_TALK}<span class="pl">대화</span>${talk ? `<span class="cnt">${talk}</span>` : ""}</button>${pastHintPop(n)}</span>
     </div>
-    ${pastHint(n)}
     ${decisionRow(p)}
     <details class="talk">
       <summary>대화 ${talk}건</summary>
@@ -5651,7 +5664,7 @@ const HELP_SPOT = {
     "불참한 공고를 다시 보고 싶습니다": "#liveResults .skip-group > summary", "'내가 맡기'는 언제 누르나요?": "#liveResults [data-powner]", "참가로 정한 다음에는 무엇을 하나요?": "#liveResults .next-step",
     "싱크로율은 무슨 뜻인가요?": "#liveResults .card-score", "참가할 수 있는 공고인지 어떻게 확인하나요?": "#liveResults .tag-group",
     "'자격충족'·'자격 미보유'는 무슨 뜻인가요?": "#liveResults .tag-group", "카드의 마감은 어느 날짜인가요?": "#liveResults .facts", "사업금액은 어떤 금액인가요?": "#liveResults .facts",
-    "비슷한 공고는 지난번에 어떻게 판단했나요?": "#liveResults .past-hint", "팀원에게 의견을 남기고 싶습니다": "#liveResults [data-ptalk]", "참가로 정한 공고의 마감을 한눈에 보고 싶습니다": "#calBellBtn", "'판단할 공고' 숫자는 무슨 뜻인가요?": "#judgeBellBtn", "'회사 서류' 숫자는 무슨 뜻인가요?": "#docBellBtn", "이름을 적으라고 나옵니다": "#judge", "어떤 순서로 하나요?": "#liveResults [data-pstatus]" },
+    "비슷한 공고는 지난번에 어떻게 판단했나요?": "#liveResults .phint", "팀원에게 의견을 남기고 싶습니다": "#liveResults [data-ptalk]", "참가로 정한 공고의 마감을 한눈에 보고 싶습니다": "#calBellBtn", "'판단할 공고' 숫자는 무슨 뜻인가요?": "#judgeBellBtn", "'회사 서류' 숫자는 무슨 뜻인가요?": "#docBellBtn", "이름을 적으라고 나옵니다": "#judge", "어떤 순서로 하나요?": "#liveResults [data-pstatus]" },
   excluded: { "왜 빠졌는지 어디서 보나요?": "#exResults .ex-reason", "잘못 빠진 공고를 되살리고 싶습니다": "#exResults [data-promote]", "빠진 이유별로 모아 보고 싶습니다": "#exFilters", "특정 공고를 찾고 싶습니다": "#liveQ", "어떤 순서로 하나요?": "#exResults [data-promote]", "자격·지역 때문에 빠진 공고도 볼 수 있나요?": "#exFilters", "'세부품명 미달'은 무슨 뜻인가요?": "#exFilters" },
   log: { "참가한 공고만 보고 싶습니다": "#logStatus", "엑셀로 받고 싶습니다": "#logCsv", "판단을 취소하고 싶습니다": "#logList [data-pundo]", "지난주 기록은 어디에 있나요?": "#logList .log-week summary", "지난번에 왜 불참했는지 보고 싶습니다": "#logQ", "어떤 순서로 하나요?": "#logStatus" },
   corpus: { "특정 사업을 찾고 싶습니다": "#corpusQ", "진행 중인 사업은 어떻게 정해지나요?": ".corpus-ongoing > summary", "무엇부터 보면 되나요?": ".corpus-ongoing > summary", "어떤 순서로 하나요?": "#corpusQ", "지난 사업의 과업 내용을 보고 싶습니다": "#corpusRows .proj" },

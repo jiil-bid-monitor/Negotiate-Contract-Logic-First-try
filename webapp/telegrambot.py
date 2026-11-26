@@ -191,12 +191,13 @@ class TelegramBot:
             return
         self.tidied_at = now
         folder = docexpiry.docs_dir()
-        if not (folder / "[최신 서류]").is_dir():
+        if not docexpiry.ready(folder):
             return
         from nego.telegram import send_dev_alert
         from under100m import docs
 
-        docs.run(folder, datetime.now().date(), send_dev_alert, alert_due=False)
+        for sub in docs.company_dirs(folder):  # 회사별 폴더(지일·그리다)면 폴더마다(2026-11-26)
+            docs.run(sub, datetime.now().date(), send_dev_alert, alert_due=False)
 
     def check_docs(self, now: datetime) -> int:
         """아침 9시가 지나면 하루 한 번 — 한 달·7일 안에 끝나는 회사 서류를 담당자 방에 알린다. 보낸 방 수."""

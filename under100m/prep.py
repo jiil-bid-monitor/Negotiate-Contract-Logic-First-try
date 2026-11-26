@@ -15,7 +15,7 @@ import shutil
 from datetime import date, timedelta
 from pathlib import Path
 
-from .docs import LATEST, LIST_JSON
+from .docs import LATEST, LIST_JSON, company_dir
 
 log = logging.getLogger("under100m")
 
@@ -278,12 +278,13 @@ def checklist_rows(texts: list[str], form_names: list[str], listed: list[str] | 
 
 def cert_dates(docs_root: Path) -> list[tuple[str, str]]:
     """회사서류_최신/인증서갱신.xlsx의 지일 서류 (정리한 이름, 만료일) — 표가 없거나 못 읽으면 빈 목록(서류 파일 날짜만 씀)."""
-    from webapp.docexpiry import CERT_ALIASES, GRIDA, _norm, read_cert
+    from webapp.docexpiry import CERT_ALIASES, GRIDA, _norm, cert_path, read_cert
 
-    if not (docs_root / CERT_FILE).exists():
+    path = cert_path(docs_root)  # 지일 폴더로 받아도 위 폴더의 표
+    if not path.exists():
         return []
     try:
-        return [(CERT_ALIASES.get(_norm(k), _norm(k)), d.isoformat()) for k, d in read_cert(docs_root / CERT_FILE) if not k.startswith(GRIDA)]
+        return [(CERT_ALIASES.get(_norm(k), _norm(k)), d.isoformat()) for k, d in read_cert(path) if not k.startswith(GRIDA)]
     except Exception as err:  # noqa: BLE001 — 표를 못 읽어도 체크리스트는 만든다
         log.warning("%s 읽기 실패: %s", CERT_FILE, err)
         return []
@@ -302,6 +303,7 @@ def prepare(prep: Path | None, texts: list[str], form_names: list[str], docs_roo
     """체크리스트를 만들고 쓸 수 있는 회사 서류를 복사한다. `prep`이 None이면 판단만 — 재공고 때 담당자가 넣은 파일을 안 건드리려고.
     돌려주는 값: (새로 준비할 것 [(항목, 파일, 사유)], 판단 기준일)."""
     ref = max(deadline or today.isoformat(), today.isoformat())
+    docs_root = company_dir(docs_root)  # 1억 미만은 지일 — 회사별 폴더로 나눴으면 지일 폴더(2026-11-26)
     source = docs_root / LATEST if (docs_root / LATEST).is_dir() else docs_root
     records = _load(docs_root / LIST_JSON, [])
     rule = rule or {}

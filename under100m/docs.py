@@ -49,6 +49,21 @@ ALERT_DAYS = 7
 # 같은 종류가 여럿일 수 있어 옮기지 않음 — 사업마다 있는 실적증명서, 품목이 이름에 없는 직접생산확인증명서
 NO_MOVE = {"실적증명서", "직접생산확인증명서"}
 HEADERS = ["상태", "종류", "사유", "발급일", "유효기간(기준)", "대표자", "원본 위치"]
+# 회사서류_최신을 회사별 폴더로 나눔(2026-11-26 사용자 — 섞여 있어 확인하기 어려움). 이름이 '(그리다) …'면 그리다 폴더.
+COMPANY_DIRS = ("지일", "그리다")
+GRIDA_PREFIX = "(그리다)"
+
+
+def company_dirs(root: Path) -> list[Path]:
+    """root 아래 회사별 서류 폴더([최신 서류]가 있는 지일·그리다) — 나누기 전 한 폴더면 [root]."""
+    subs = [root / name for name in COMPANY_DIRS if (root / name / LATEST).is_dir()]
+    return subs or [root]
+
+
+def company_dir(root: Path, kind: str = "") -> Path:
+    """그 서류(kind)가 들어갈 폴더 — '(그리다) …'는 그리다, 그 밖은 지일. 나누기 전이거나 이미 회사 폴더면 root 그대로."""
+    sub = root / ("그리다" if kind.startswith(GRIDA_PREFIX) else "지일")
+    return sub if (sub / LATEST).is_dir() else root
 
 
 @dataclass(frozen=True)
@@ -119,8 +134,9 @@ def status_of(record: dict, today: date) -> tuple[str, str]:
 
 
 def issue_lines(folder: Path, notice_text: str = "") -> list[str]:
-    """새 공고 알림에 적을 '공고 때 새로 발급' 서류 — 보유본 날짜, 공고문에 이름이 있으면 표시. 목록을 못 읽으면 빈 목록."""
-    records = _load_json(folder / LIST_JSON, [])
+    """새 공고 알림에 적을 '공고 때 새로 발급' 서류 — 보유본 날짜, 공고문에 이름이 있으면 표시. 목록을 못 읽으면 빈 목록.
+    지일 서류(1억 미만 공고) — 회사별 폴더로 나눴으면 지일 폴더의 목록."""
+    records = _load_json(company_dir(folder) / LIST_JSON, [])
     if not records:
         return []
     issued = {r.get("종류"): r.get("발급일") for r in records}
@@ -302,9 +318,10 @@ def main(argv: list[str] | None = None) -> int:
         elif errors:
             log.warning("텔레그램 알림 실패: %s", str(errors)[:200])
 
-    result = run(Path(args.dir), datetime.now().date(), notify)
-    log.info("끝 — 갱신 필요 %d건, 새 서류 %d건, 옮김 %d건, 확인 필요 %d건", len(result["due"]), len(result["added"]),
-             len(result["moved"]), len(result["issues"]))
+    for folder in company_dirs(Path(args.dir)):  # 회사별 폴더(지일·그리다)면 폴더마다(2026-11-26)
+        result = run(folder, datetime.now().date(), notify)
+        log.info("%s 끝 — 갱신 필요 %d건, 새 서류 %d건, 옮김 %d건, 확인 필요 %d건", folder.name, len(result["due"]), len(result["added"]),
+                 len(result["moved"]), len(result["issues"]))
     return 0
 
 

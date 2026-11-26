@@ -3914,7 +3914,11 @@ const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted"
 
 async function loadParticipation() {
   try {
-    participation = (await getJson("/api/participation")).participation || {};
+    // 오류 응답(NAS 연결 잠깐 실패 등 — participation 없음)이면 받아 둔 기록을 그대로 둠.
+    // 예전엔 빈 기록으로 덮어써 10초 동안 📋 버튼·카드 판단이 사라졌다 다시 나타났음(2026-11-26 사용자 제보)
+    const data = await getJson("/api/participation");
+    if (!data || typeof data.participation !== "object" || data.participation === null) return;
+    participation = data.participation;
   } catch (e) {
     return;
   }

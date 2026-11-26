@@ -6765,9 +6765,10 @@ function renderJudgeBell() {
   };
   // 칸마다 마감이 가장 급한 3건만(11/23 사용자 — 길게 늘어놓지 않게), 나머지는 실제 공고 탭 그 대분류 탭에서
   // preview — 창에 펼쳐 보일 공고(기본 앞 3건), 나머지는 링크로
-  const section = (title, list, cat, extra = "", tail = "", preview = list.slice(0, 3)) => `<h4 class="judge-sec">${title} <span>${undecidedN(list)}건</span>${tail}</h4>`
-    + (preview.length ? `<ul>${preview.map(item).join("")}</ul>` : list.length ? "" : `<p class="row2">판단할 공고가 없습니다.</p>`)
-    + extra;
+  // 펼쳐 보일 공고가 없는 칸은 제목도 안 씀 — 아래 이동 버튼과 겹쳐서(11/26 사용자)
+  const section = (title, list, cat, extra = "", tail = "", preview = list.slice(0, 3)) => preview.length
+    ? `<h4 class="judge-sec">${title} <span>${undecidedN(list)}건</span>${tail}</h4><ul>${preview.map(item).join("")}</ul>` + extra
+    : extra;
   // 가장 최근 매일 보고 공고 전부(판단한 것도) — 텔레그램 보고와 같은 목록을 실제 공고 탭에서(11/24 사용자)
   const rep = lastDailyReport();
   const repN = rep ? [...dailyReportNos(rep)].filter((no) => shown.has(no)).length : 0;
@@ -6783,6 +6784,7 @@ function renderJudgeBell() {
     weekly.length ? `<button type="button" class="linkbtn" data-all-todo="협상">주간 협상 · 규격가격 공고 ›</button>` : ""].filter(Boolean);
   $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3>`
     + section("입찰 · 매일 보고", dailyIn, "", "", toggle) + section("협상 · 규격가격 · 주간 보고", weekly, "", "", "", weekly.filter(soon).slice(0, 3))
+    + (todo.some((p) => !JUDGE_DONE.has(p.noticeNo)) || JUDGE_DONE.size ? "" : `<p class="row2">판단할 공고가 없습니다.</p>`)
     + (moves.length ? `<p class="how jmoves">${moves.join("")}</p>` : "");
 }
 // 📋 창에서 바로 불참 — 넘기던 공고를 몇 초에 정리(11/24 사용자, 놓침 94건 vs 판단 20건). 참가는 카드에서

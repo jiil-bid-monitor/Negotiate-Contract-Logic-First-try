@@ -1547,7 +1547,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 16px 16px 4px 16px; box-shadow: 0 3px 10px rgba(0,0,0,.12);
   animation: help-in .4s ease-out .8s both; white-space: nowrap; }
 .helpnudge:hover { border-color: var(--brand); color: var(--brand); }
-.helpbox { position: fixed; right: 22px; bottom: 86px; z-index: 40; width: min(var(--hw, 380px), calc(100vw - 32px)); height: min(var(--hh, 580px), calc(100vh - 110px));
+.helpbox { position: fixed; right: 22px; bottom: 86px; z-index: 40; width: min(var(--hw, 380px), calc(100vw - 32px)); height: min(var(--hh, 580px), calc(100vh - 110px)); height: min(var(--hh, 580px), calc(100dvh - 110px));
   display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.16); overflow: hidden; font-size: 15px; }
 .helpbox[hidden] { display: none; }
 .helpbox .hgrip { position: absolute; left: 0; top: 0; width: 24px; height: 24px; padding: 0; border: 0; background: none; cursor: nwse-resize; touch-action: none; color: var(--muted); }
@@ -5238,10 +5238,10 @@ document.addEventListener("toggle", (e) => {
 // HELP-PURE-BEGIN (여기부터 HELP-PURE-END까지는 화면 없이도 도는 코드: scripts/help_eval.js가 그대로 읽어 시험함)
 const HELP_SETS = {
   live: { name: "실제 공고", cats: ["처음 사용하기", "화면 표시 뜻", "볼 공고 고르기", "참가할 수 있는지 확인", "참가 판단 남기기", "문제가 생겼을 때"], qa: [
-    [0, "무엇부터 보면 되나요?", "① 맨 위 '판단할 공고'\n② 목록 맨 위: 현장설명회가 남은 공고\n③ 카드의 마감 · 사업금액 · 자격 칩", "처음 열면 먼저 보면 뭐부터 오늘"],
-    [0, "이 탭에서는 무엇을 하나요?", "나라장터 공고 중\n지일이 검토할 만한 공고를 모아 보여 드립니다.\n관심 키워드·세부품명·보유 면허로 모으고,\n정선 기관의 입찰 공고는 키워드 없이도 모읍니다.\n\n아래 공고는 빠집니다.\n• 마감이 지난 공고\n• 다른 지역 업체만 참가할 수 있는 공고\n• 요구 면허를 지일이 하나도 갖지 않은 공고\n• 제외 키워드·해외 개최 공고\n빠진 공고는 '제외된 공고' 탭에 있습니다\n(마감이 지난 공고는 빼고).\n\n면허가 일부만 없는 공고는\n'자격 미보유' 칩을 달고 남아 있습니다.", "이 탭 뭐 무엇 목적 이탭에서는"],
+    [0, "무엇부터 보면 되나요?", "① 맨 위 '판단할 공고' (보고된 공고가 있을 때)\n② 목록 맨 위: 현장설명회가 남은 공고\n③ 카드의 마감 · 사업금액 · 자격 칩", "처음 열면 먼저 보면 뭐부터 오늘"],
+    [0, "이 탭에서는 무엇을 하나요?", "나라장터 공고 중 지일이 검토할 만한 공고를\n관심 키워드·세부품명·보유 면허로 모아 보여 드립니다.\n정선 기관의 입찰 공고는 키워드 없이도 모읍니다.\n\n마감이 지난 공고, 다른 지역 업체만 참가할 수 있는 공고,\n요구 면허를 하나도 갖지 않은 공고, 제외 키워드·해외 개최 공고는 빠집니다.\n빠진 공고는 '제외된 공고' 탭에 있습니다.\n\n면허가 일부만 없는 공고는\n'자격 미보유' 칩을 달고 남아 있습니다.", "이 탭 뭐 무엇 목적 이탭에서는"],
     [0, "어떤 순서로 하나요?", "① 카드에서 마감·사업금액·자격을 봅니다.\n② 공고명을 눌러 공고문을 확인합니다.\n③ 참가·보류·불참을 누르고 사유를 고릅니다.\n④ 참가로 정하면 사유 줄 오른쪽에\n    버튼이 생깁니다. 눌러 주세요.\n    • 입찰·수의계약: 투찰 계산 ›\n    • 협상: 정량평가서 만들기 ›\n    • 규격가격동시: 두 버튼 모두\n\n사전규격에는 버튼이 없습니다.", "사용법 순서 쓰는 할 일", "① 카드에서 마감·사업금액·자격을 봅니다.\n② 공고명을 눌러 공고문을 확인합니다.\n③ 참가·보류·불참을 누르고 사유를 고릅니다.\n\n참가로 정한 다음에는 서버 PC 웹앱에서\n같은 공고 카드의 버튼을 눌러 주세요.\n• 입찰·수의계약: 투찰 계산 ›\n• 협상: 정량평가서 만들기 ›\n• 규격가격동시: 두 버튼 모두\n사전규격에는 버튼이 없습니다."],
-    [0, "새 공고는 언제 들어오나요?", "이 서버 PC 웹앱에서 수집할 때 들어옵니다.\n기간을 고르고\n'나라장터에서 불러오기'를 눌러 주세요.\n끝나면 NAS 웹앱에도 저절로 보내집니다.\n지일과 그리다는 화면마다 따로 불러오고\n한쪽이 불러오는 중이면 기다려야 합니다.", "언제 새로 수집 업데이트 갱신 올라온 반영", "서버 PC 웹앱에서 수집해야 들어옵니다.\n수집이 끝나면 이곳으로 저절로 옵니다.\n열어 둔 화면이면 F5를 눌러 주세요."],
+    [0, "새 공고는 언제 들어오나요?", "이 서버 PC 웹앱에서 수집할 때 들어옵니다.\n기간을 고르고\n'나라장터에서 불러오기'를 눌러 주세요.\n끝나면 NAS 웹앱에도 저절로 보내집니다.\n지일 화면과 그리다 화면은 따로 불러오고\n한쪽이 불러오는 중이면 기다려야 합니다.", "언제 새로 수집 업데이트 갱신 올라온 반영", "서버 PC 웹앱에서 수집해야 들어옵니다.\n수집이 끝나면 이곳으로 저절로 옵니다.\n열어 둔 화면이면 F5를 눌러 주세요."],
 
     [1, "협상·입찰·수의계약은 어떻게 다른가요?", "목록 위 탭으로 나뉩니다.\n• 협상: 제안서를 평가해 정함\n    (규격가격동시 포함)\n• 입찰: 적격심사·최저가\n• 수의계약: 적격심사 없이 견적 등으로 계약\n• 사전규격: 본공고 전 단계, 낙찰방법 미정", "협상 입찰 수의 사전규격 차이 탭"],
     [1, "'판단할 공고' 숫자는 무슨 뜻인가요?", "최근 7일 보고에 나간 공고 중\n지금 목록에 있고\n아직 판단하지 않은 공고 수입니다.\n사전규격은 세지 않습니다.", "📋 숫자 판단할 텔레그램 빨간 판단할공고"],
@@ -5257,10 +5257,10 @@ const HELP_SETS = {
     [2, "특정 공고를 찾고 싶습니다", "목록 위 찾기 칸에\n공고명·기관·공고번호를 적어 주세요.\n띄어쓰기는 상관없습니다.", "찾기 검색 공고번호 찾으 찾고 찾는"],
     [2, "공고 원문은 어디서 보나요?", "공고명을 누르면\n나라장터 공고가 새 창으로 열립니다.", "원문 나라장터 공고문 첨부 상세"],
 
-    [3, "참가할 수 있는 공고인지 어떻게 확인하나요?", "카드의 칩 세 묶음을 봐 주세요.\n• 자격: 요구 면허·세부품명을 가졌는지\n• 지역·공동수급: 지역제한과 공동수급 허용\n• 확인: 실적·기술인력 요건 등\n\n칩에 커서를 대면 근거가 보입니다.\n마지막 확인은 공고문으로 해 주세요.", "참가할수 참가가능 가능한지 되는지 조건 들어갈수"],
+    [3, "참가할 수 있는 공고인지 어떻게 확인하나요?", "카드 셋째 줄의 칩을 봐 주세요.\n• 자격충족 / 자격 미보유: 요구 면허·세부품명\n• ✓ 지역제한 충족, ✓ 공동수급 가능 등: 지역·공동수급\n• ⚠ 실적 요건 등: 공고문에 따로 적힌 조건\n\n칩에 커서를 대면 근거가 보입니다.\n마지막 확인은 공고문으로 해 주세요.", "참가할수 참가가능 가능한지 되는지 조건 들어갈수"],
     [3, "'자격충족'·'자격 미보유'는 무슨 뜻인가요?", "• 자격충족: 요구 면허를 모두 가짐\n• 자격 미보유: 빠진 면허가 있음\n칩에 커서를 대면 빠진 면허가 보입니다.\n\n자격 미보유여도 공동수급이 허용되면\n그 면허를 가진 업체와 함께\n참가할 수 있어 목록에 남겨 둡니다.\n공동수급 허용 여부는 옆 칩에서 봐 주세요.", "자격 충족 미보유 면허 칩 면허하나 못들어"],
-    [3, "지역제한·공동수급은 어디서 보나요?", "카드의 '지역·공동수급' 칩에서 봅니다.\n• ✓ 지역제한 충족: 본점 소재지 조건을 채움\n• ⚠ 지역제한: 판정하지 못함, 공고문 확인\n• ✓ 공동수급 가능: 공동수급 허용\n• 공동수급 불허: 노란 칩\n• 공동수급 정보 없음: 공고문 확인\n\n지역제한이 없는 공고는 지역 칩이 없습니다.", "지역제한 지역 공동수급 공동 컨소시엄 소재지"],
-    [3, "'실적 요건'·'기술인력 요건'은 무슨 뜻인가요?", "공고문에 실적·인력 조건이 있다는 표시입니다.\n칩에 커서를 대면 원문이 보입니다.", "실적 요건 기술인력 확인 필요"],
+    [3, "지역제한·공동수급은 어디서 보나요?", "카드 셋째 줄의 칩에서 봅니다.\n• ✓ 지역제한 충족: 본점 소재지 조건을 채움\n• ⚠ 지역제한: 판정하지 못함, 공고문 확인\n• ✓ 공동수급 가능: 공동수급 허용\n• 공동수급 불허: 노란 칩\n• 공동수급 정보 없음: 공고문 확인\n\n지역제한이 없는 공고는 지역 칩이 없습니다.", "지역제한 지역 공동수급 공동 컨소시엄 소재지"],
+    [3, "'실적 요건'·'기술인력 요건'은 무슨 뜻인가요?", "공고문에 따로 적힌 참가 조건을 알리는 칩입니다.\n• 실적 요건: 수행 실적 조건\n• 기술인력 요건: 인력·자격 조건\n• 업종 요건: 판정하지 못한 업종 조건\n• 지역의무공동도급: 지역업체와 함께 참가해야 함\n\n칩에 커서를 대면 원문이 보입니다.", "실적 요건 기술인력 확인 필요 업종 요건 지역의무공동도급 지역업체 참여비율"],
     [3, "카드의 마감은 어느 날짜인가요?", "자격등록·입찰·의견등록 마감 중\n가장 이른 날짜입니다.\n셋 다 없으면 첨부 공고문의 마감이고\n그것도 없으면 '일정 미상'으로 나옵니다.\n\n날짜에 커서를 대면\n그 공고의 일정이 모두 보입니다.\n공동수급협정 마감은\n공동수급으로 참가할 때만 해당해\n기준에서 뺍니다.", "마감일 자격등록 날짜 기한 언제까지 어느마감"],
     [3, "현장설명회가 있는 공고는 어떻게 아나요?", "붉은 칩 '현장설명 11/20(목) 14:00'이 붙고\n목록 맨 위에 나옵니다.\n설명회가 지나면\n'현장설명 지남'으로 바뀝니다.\n\n참석한 업체만 투찰할 수 있는\n공고가 많습니다.\n참석 의무인지는 공고문에서 확인해 주세요.", "현장설명회 현장설명 설명회 현설 참석"],
     [3, "사업금액은 어떤 금액인가요?", "나라장터의 추정가격입니다.\n추정가격이 없으면 배정예산을 쓰고\n금액 옆에 '(배정)'이라고 적습니다.\n둘 다 없으면 '금액 모름'으로 나옵니다.\n\n추정가격은 부가세를 뺀 금액이고\n배정예산은 부가세가 든 금액입니다.", "사업금액 추정가격 배정예산 배정 금액모름 부가세"],
@@ -5371,16 +5371,16 @@ const HELP_SETS = {
     [0, "먼저 연습해 볼 수 있나요?", "네. 연습용 화면이 따로 있습니다.\n[[연습 화면 열기|/award-test]]\n여기서 누른 것은\n실제 공고·폴더에 영향이 없습니다.", "연습 시험 테스트 award-test 해보 해 보 미리"],
 
     [1, "목록은 어떻게 나뉘어 있나요?", "• 지금 할 일: 개찰 1등·낙찰·\n    서류를 만든 공고\n• 결과를 기다리는 공고: 개찰·낙찰 결과 대기\n• 끝난 공고: 하한선 미달 · 6등부터\n    (지명경쟁은 2등부터) · 다른 업체 낙찰", "묶음 세 칸 지금 할 일 기다리 끝난 구분"],
-    [1, "단계 표시는 어떻게 보나요?", "그 공고가 어디까지 왔는지 보여 줍니다.\n진하게 칠해진 칸이 지금 단계입니다.\n\n나라장터에 계약이 올라온 공고는\n착공·착수, 준공, 청구 서류의\n제출일·청구일을 채워 저장하면\n다음 단계로 넘어갑니다.", "단계 줄 칸 색 칠 진행"],
+    [1, "단계 표시는 어떻게 보나요?", "그 공고가 어디까지 왔는지 보여 줍니다.\n진하게 칠해진 칸이 지금 단계입니다.\n\n나라장터에 계약이 올라온 공고는\n착공·착수, 준공, 청구 서류의\n제출일·청구일을 채워 저장하면\n다음 단계로 넘어갑니다.\n단계마다 채울 칸은 '서류 현황 ▾'에서 봅니다.", "단계 줄 칸 색 칠 진행 절차 순서 착공 준공 청구 어디까지"],
     [1, "개찰 등수는 무슨 뜻인가요?", "개찰 때 나온 지일의 순위입니다.\n낙찰이 확정된 순위는 아닙니다.\n\n적격심사는 1순위부터 차례로 하고\n앞 순위가 떨어지면 다음 순위로 넘어갑니다.\n\n1등은 '지금 할 일'에 올라오고\n2등부터는 앞 순위를 기다립니다.\n목록에서는 5등까지 '결과를 기다리는 공고',\n6등부터 '끝난 공고'에 있습니다.\n5등은 나라장터 규정이 아니라\n웹앱에서 정한 기준입니다.", "등수 순위 5등 기준 6등"],
     [1, "'하한선 미달'은 무슨 뜻인가요?", "투찰금액이 낙찰하한선보다 낮아\n낙찰 대상에서 빠졌다는 뜻입니다.\n따로 하실 일은 없습니다.", "하한선 미달 무효 뜻"],
     [1, "'서류_확인.txt'에는 무엇이 적혀 있나요?", "공고문에서 읽은 제출서류 목록입니다.\n표준틀에 있는 것과\n따로 준비할 것이 나뉘어 있고\n웹앱이 채운 칸도 적혀 있습니다.\n공고 폴더 안 '공고문서' 폴더에 있습니다.", "서류 확인 txt 제출서류 따로 준비"],
-    [1, "파랑·초록·노랑 칸은 무슨 뜻인가요?", "• 파랑: 웹앱이 채우는 칸\n    계약서와 맞는지 봐 주세요.\n    비어 있으면 직접 적어 주세요.\n• 초록: 회사 정보\n• 노랑: 직접 적으실 칸\n    미리 적힌 값도 맞는지 봐 주세요.", "색 색깔 색상 파랑 파란 노랑 노란 초록 칸"],
+    [1, "파랑·초록·노랑 칸은 무슨 뜻인가요?", "• 파랑: 웹앱이 채우는 칸.\n    계약서와 맞는지 봐 주세요.\n    비어 있으면 직접 적어 주세요.\n• 초록: 회사 정보\n• 노랑: 직접 적으실 칸.\n    미리 적힌 값도 맞는지 봐 주세요.", "색 색깔 색상 파랑 파란 노랑 노란 초록 칸"],
 
     [2, "개찰 1등이면 무엇을 하나요?", "'지금 할 일'에 올라오고\n'적격심사 서류 만들기' 버튼이 켜집니다.\n\n수의계약은 적격심사가 없어\n낙찰이 확인될 때까지 기다립니다.", "1등 1순위 개찰"],
     [2, "개찰 2등부터는 무엇을 하나요?", "앞 순위가 포기하거나\n적격심사에서 떨어질 때까지 기다립니다.\n그때 다음 순위로 차례가 옵니다.\n\n발주처 연락을 받으면 그 공고의\n'더 보기' → '적격심사 서류 만들기\n(심사 통보받음)'을 눌러 주세요.\n\n수의계약은 적격심사가 없어\n낙찰이 확인될 때까지 기다립니다.\n\n6등부터(지명경쟁은 2등부터)는\n목록에서 '끝난 공고'에 있지만\n탈락이 확정된 것은 아닙니다.", "2등 3등 4등 5등 6등 차례 통보 순위 포기 포기각서 통보받 심사통보 밖 낮"],
     [2, "지명경쟁은 왜 1등만 보나요?", "2등부터 차례가 오는 일이 거의 없어\n1등만 기다리는 것으로 정했습니다.\n나라장터 규정은 아니고\n웹앱에서 정한 기준입니다.", "지명 경쟁 1등"],
-    [2, "개찰 결과는 언제 나오나요?", "서버 PC 웹앱이 켜져 있으면\n1시간마다 저절로 확인합니다.\n\n'지금 낙찰자 확인'은\n낙찰자와 계약을 확인하는 버튼입니다.", "개찰 결과 언제 낙찰 22시 확인 입력 누가"],
+    [2, "개찰 결과는 언제 나오나요?", "웹앱이 저절로 확인합니다.\n• 개찰 등수: 평일 낮 1시간마다\n    서버 PC의 투찰 기록에서 가져옵니다.\n• 낙찰·계약: 1시간마다 나라장터에서 확인\n\n바로 보시려면 '지금 낙찰자 확인'을 눌러 주세요.", "개찰 결과 언제 낙찰 22시 확인 입력 누가"],
     [2, "공고가 목록에 보이지 않습니다", "투찰 계산기에서 투찰을 기록한\n공고만 올라옵니다.\n평일 낮에 1시간마다 가져오니\n바로 보시려면 '지금 낙찰자 확인'을\n눌러 주세요.\n\n투찰 기록이 없는 공고는\n위쪽 '공고번호로 직접 넣기'를 눌러\n공고번호를 넣어 주세요.", "목록 안 보 없 추가 넣 안나 공고번호 투찰한게 안떠"],
     [2, "공고를 목록에서 빼고 싶습니다", "그 공고의 '더 보기' → '목록에서 빼기'를\n눌러 주세요.\n만든 폴더·파일은 그대로 남습니다.\n\n다시 보시려면 '공고번호로 직접 넣기'로\n같은 번호를 넣어 주세요.", "빼 지우 삭제 제거 필요없 리스트에서"],
 
@@ -5389,7 +5389,7 @@ const HELP_SETS = {
     [3, "적격심사 서식을 직접 골라야 하나요?", "보통은 고르지 않으셔도 됩니다.\n공고의 업무·금액·지역에 맞는\n틀로 만들어집니다.\n\n학술연구용역은 저절로 고르지 못하니\n서식을 바꿔 주세요.\n용역은 공고문의 심사 기준과\n맞는지 확인해 주세요.\n\n맞는 틀이 없으면\n'서류_확인.txt'에 이유를 적습니다.", "적격심사 틀 고르 표준틀 어떤 지역 금액"],
     [3, "수의계약도 적격심사가 있나요?", "없습니다.\n계약이 올라오면 바로\n'낙찰 서류 만들기'가 켜집니다.", "수의 계약 수의계약 적격"],
     [3, "용역도 적격심사를 받나요?", "드물지만 있습니다.\n강원·경기·경남·조달청 틀과\n기술용역 틀이 준비돼 있어\n맞는 틀이 있으면 저절로 만들어집니다.\n\n맞는 틀이 없으면 발주처 서식에 맞춰\n내시면 됩니다.", "용역 적격심사 적격 용역건"],
-    [3, "만든 서류는 어디에 있나요?", "두 곳에 있습니다.\n\n① 내 PC '다운로드' 폴더\n    만들 때 zip으로 받아집니다.\n\n② 회사 공유 폴더\n    '서류 현황 ▾' → '경로 복사'를 누르고\n    탐색기 주소창에 붙여 넣으면 열립니다.\n    여기서 고쳐 저장하면 그대로 남습니다.", "어디 폴더 zip 파일 저장 위치 경로"],
+    [3, "만든 서류는 어디에 있나요?", "두 곳에 있습니다.\n\n① 내 PC '다운로드' 폴더\n    만들 때 zip으로 받아집니다.\n\n② 폴더\n    적격심사 서류는 NAS 웹앱 폴더,\n    계약 뒤 서류는 회사 공유 폴더 '입찰'에 있습니다.\n    '서류 현황 ▾' → '경로 복사'를 누르고\n    탐색기 주소창에 붙여 넣으면 열립니다.\n    여기서 고쳐 저장하면 그대로 남습니다.", "어디 폴더 zip 파일 저장 위치 경로"],
     [3, "낙찰되면 폴더가 저절로 생기나요?", "네. 낙찰이 확인되면\n공고 폴더가 저절로 생깁니다.\n안에 있는 '폴더_안내.txt'를\n먼저 봐 주세요.\n\n서류는 '낙찰 서류 만들기'를\n눌러야 만들어집니다.\n폴더 이름은 바꾸지 말아 주세요.", "저절로생기 처음폴더 폴더_안내 안내문 폴더생"],
     [3, "탈락한 공고의 폴더는 어떻게 되나요?", "적격심사 서류를 만든 뒤\n다른 업체 낙찰이 확인되면\n'탈락' 폴더로 옮겨지고\n30일 뒤에 지워집니다.\n\n남기고 싶은 파일은\n그 전에 다른 곳에 복사해 주세요.", "탈락 탈락한 30일 사라진"],
     [3, "두 번째 zip에 파일이 적게 들어 있습니다", "정상입니다.\n두 번째 zip에는\n이번에 새로 만들거나 바뀐 파일만 들어 있습니다.\n처음 zip과 같은 곳에 풀면\n한 폴더로 합쳐집니다.", "zip 추가 적 두 번째 일부 합치"],
@@ -5408,7 +5408,7 @@ const HELP_SETS = {
     [4, "공유 폴더에서 고치면 언제 반영되나요?", "'경로 복사'로 연 폴더에서 저장했으면\n'서류 현황 ▾'을 다시 열 때 보입니다.\n바로 안 보이면 1분쯤 뒤에\n다시 열어 주세요.", "공유 폴더 고친 반영 저장 동기화 언제"],
     [4, "착공계·착수계 수신은 누구로 적나요?", "착공계와 착수계 모두\n기관 이름이 미리 들어가 있습니다.\n• 계약한 기관\n• 나라장터에 계약이 없으면 수요기관\n\n조달청을 통한 공고\n• 물품·용역: 조달청장\n• 공사: 수요기관\n\n발주처가 다르게 요청하면 고쳐 주세요.", "수신 착수계 착공계 받는 조달청"],
 
-    [5, "착공·준공·청구 중 어디까지 왔는지 보고 싶습니다", "공고 줄의 단계 줄에서\n지금 단계를 볼 수 있습니다.\n제출일·청구일을 적어 저장하면\n다음 단계로 넘어갑니다.\n단계마다 채울 칸은\n'서류 현황 ▾'에서 확인해 주세요.", "절차 단계 순서 착공 준공 청구 확인 진행"],
+
     [5, "실적증명서는 어디서 받나요?", "공고마다 발급하는 곳이 다릅니다.\n적격심사 서류의 증빙 탭에\n받을 곳이 적혀 있으니 확인해 주세요.\n\n기술용역·PQ·학술연구용역은\n실적증명서 서식이 함께 들어 있으니\n채워서 기관 확인을 받아 주세요.", "실적 증명서 이행 시공"],
     [5, "청구할 때 무엇을 내나요?", "공문 · 청구서 · 통장사본입니다.\n국세·지방세 완납증명서는\n청구할 때 새로 발급해 함께 내 주세요.", "청구 청구서 통장 완납 증명 대금 구비서류 준공금 청구시"],
     [5, "'○○ 귀하'는 고쳐도 되나요?", "네. 미리 채워 두었지만\n발주처 요청대로 고쳐 주세요.", "귀하 수신 수신자"],
@@ -5432,9 +5432,9 @@ const HELP_COMMON = [
 // 싱크로율·과거사업 목록은 그리다 화면에서도 지일 자료라 '지일' 그대로
 const HELP_CO = typeof CO === "undefined" ? "jiil" : CO;
 const HELP_CO_DROP = ["참가로 정한 공고의 마감을 한눈에 보고 싶습니다"];
-const HELP_CO_KEEP = ["싱크로율은 무슨 뜻인가요?"];
+const HELP_CO_KEEP = ["싱크로율은 무슨 뜻인가요?", "새 공고는 언제 들어오나요?"];  // 두 회사를 함께 말하는 답도 그대로
 const HELP_CO_ANSWER = {  // {질문: [새 제목(같으면 ""), 답, NAS 답]}
-  "실제 공고::이 탭에서는 무엇을 하나요?": ["", "나라장터 공고 중\n그리다가 검토할 만한 공고를 모아 보여 드립니다.\n관심 키워드·세부품명·보유 면허로 모읍니다.\n\n아래 공고는 빠집니다.\n• 마감이 지난 공고\n• 다른 지역 업체만 참가할 수 있는 공고\n• 요구 면허를 그리다가 하나도 갖지 않은 공고\n• 제외 키워드·해외 개최 공고\n빠진 공고는 '제외된 공고' 탭에 있습니다\n(마감이 지난 공고는 빼고).\n\n면허가 일부만 없는 공고는\n'자격 미보유' 칩을 달고 남아 있습니다."],
+  "실제 공고::이 탭에서는 무엇을 하나요?": ["", "나라장터 공고 중 그리다가 검토할 만한 공고를\n관심 키워드·세부품명·보유 면허로 모아 보여 드립니다.\n\n마감이 지난 공고, 다른 지역 업체만 참가할 수 있는 공고,\n요구 면허를 하나도 갖지 않은 공고, 제외 키워드·해외 개최 공고는 빠집니다.\n빠진 공고는 '제외된 공고' 탭에 있습니다.\n\n면허가 일부만 없는 공고는\n'자격 미보유' 칩을 달고 남아 있습니다."],
   "실제 공고::'보유 면허로 수집'·'정선 사업으로 수집'은 무슨 뜻인가요?": ["'보유 면허로 수집'은 무슨 뜻인가요?", "키워드는 없지만 보유 공사 면허로\n나라장터 면허 조건을 채우는 공사입니다.\n물품·용역은 공고명에 전시·연출 등이\n있을 때만 모읍니다."],
   "NAS 웹앱과 서버 PC 웹앱은 어떻게 다른가요?": ["", "두 곳에서 같이 쓰는 것\n• 공고 보기 · 참가 판단\n\n서버 PC 웹앱에만 있는 것\n• 공고 수집 · 투찰 계산기 · 정량평가서\n\n참가 판단은 어느 쪽에서 해도\n같은 자료입니다.\n\n지금 보시는 화면은 {여기}입니다."],
   "서버 PC가 꺼져 있으면 무엇을 쓸 수 있나요?": ["", "NAS 웹앱에서 공고 보기와 참가 판단은\n그대로 됩니다.\n\n공고 수집·투찰 계산기·정량평가서는\n서버 PC를 켠 뒤에 쓸 수 있습니다."],
@@ -5566,8 +5566,14 @@ function helpDecide(q, tab = HELP_TAB, ctx = null) {
   if (sure(mine)) return res("answer", [mine[0]], "sure");
   // ② 다른 탭: 탭 이름이 든 질문은 그 탭만 봄. 다른 탭 답은 탭 이름을 말했을 때만 바로 답함
   const t = helpSquash(q), named = Object.keys(HELP_TAB_WORDS).find((k) => k !== key && HELP_TAB_WORDS[k].some((w) => t.includes(w)));
-  const others = helpRank(q, HELP_DOCS.filter((x) => x.tab !== key && !x.common && (!named || x.tab === named)));
+  const others = helpRank(q, HELP_DOCS.filter((x) => x.tab !== key && !x.common && (!named || x.tab === named) && !(typeof IS_VIEWER !== "undefined" && IS_VIEWER && (x.tab === "calc" || x.tab === "quant"))));
   if (sure(others) && named) return res("othertab", [others[0]], "named");
+  // NAS(보기 전용)엔 투찰 계산기·정량평가서 탭이 없음 — 그 탭 질문이면 서버 PC 웹앱에서 보라고 안내(11/26 사용자)
+  if (typeof IS_VIEWER !== "undefined" && IS_VIEWER) {
+    const pcTab = ["calc", "quant"].includes(named) ? named : null;
+    const pc = helpRank(q, HELP_DOCS.filter((x) => (x.tab === "calc" || x.tab === "quant") && !x.common && (!pcTab || x.tab === pcTab)));
+    if (pcTab || (sure(pc) && (!mine.length || pc[0].score >= mine[0].score * 1.5))) return res("serveronly", pc.slice(0, 1), pcTab || pc[0].x.tab);
+  }
   // ③ 나머지는 고르기로만(바로 답하지 않음) — 이 탭 후보 먼저, 다른 탭 후보는 이 탭 1등만큼은 닮았을 때
   // 후보 거르기(11/25 사용자 '후보 버튼도 질문과 맞게'): 두 검토자가 후보 510개를 채점하니 절반만 맞았고, 틀린 것은 낱말 하나만 겹친 다른 탭 질문과 2등 이하 후보였음
   const both = HELP_BOTH.test(q);  // 두 가지를 한 번에 물으면 둘째 후보도 남김
@@ -5603,7 +5609,7 @@ const HELP_SPOT = {
   award: { "무엇부터 보면 되나요?": "#awardList h3", "목록은 어떻게 나뉘어 있나요?": "#awardList h3", "단계 표시는 어떻게 보나요?": "#awardList .award-steps", "개찰 결과는 언제 나오나요?": "#awardCheck",
     "공고가 목록에 보이지 않습니다": "#tab-award details > summary", "공고를 목록에서 빼고 싶습니다": "#awardList .award-more > summary", "계약 단계로는 언제 넘어가나요?": "#awardCheck",
     "'낙찰 서류 만들기'가 눌리지 않습니다": "#awardList .award-more > summary", "만든 서류는 어디에 있나요?": "#awardList [data-award-open]", "'서류 다시 만들기'는 언제 누르나요?": "#awardList .award-more > summary",
-    "공고문에서 내라는 서류는 어디서 보나요?": "#awardList [data-award-open]", "아직 안 채운 칸은 어디서 보나요?": "#awardList [data-award-open]", "착공·준공·청구 중 어디까지 왔는지 보고 싶습니다": "#awardList .award-steps",
+    "공고문에서 내라는 서류는 어디서 보나요?": "#awardList [data-award-open]", "아직 안 채운 칸은 어디서 보나요?": "#awardList [data-award-open]",
     "회사 서류를 새것으로 바꾸고 싶습니다": "#docBellBtn", "개찰 2등부터는 무엇을 하나요?": "#awardList .award-more > summary",
     "어떤 순서로 하나요?": "#awardList .award-main" },
   // 정량평가서 탭은 화면이 따로(iframe) 들어가 있어 그 안에서 찾음
@@ -5628,8 +5634,9 @@ function helpSpot(sel) {
   $("helpBox").hidden = true;  // 가리지 않게 잠깐 접었다가 다시 엶
   el.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   el.classList.add("help-spot");
+  const tab = HELP_TAB;
   const again = setInterval(() => { if (!el.isConnected) el = find() || el; el.classList.add("help-spot"); }, 100);  // 목록이 다시 그려지면 새 요소에 이어서 표시
-  setTimeout(() => { clearInterval(again); el.classList.remove("help-spot"); if ($("helpFab").getAttribute("aria-expanded") === "true") $("helpBox").hidden = false; }, 3200);
+  setTimeout(() => { clearInterval(again); el.classList.remove("help-spot"); if (HELP_TAB === tab && $("helpFab").getAttribute("aria-expanded") === "true") $("helpBox").hidden = false; }, 3200);
 }
 // 카카오톡 같은 대화창(11/24 사용자 — stellaize ChatPanel 모양 참고). 왼쪽 = 도우미, 오른쪽 = 나, 대화는 창을 연 동안만.
 // 직접 적은 질문은 낱말로 맞는 답을 찾고, 없으면 없다고 솔직하게 말한다(사용자: 있다고 지어내지 말 것).
@@ -5637,9 +5644,14 @@ const HELP_LOG = [];
 const HELP_LOGO = `<span class="hav" aria-hidden="true"><svg viewBox="14 13 78 35" fill="currentColor"><path d="M23.8 14 L36.4 14 L36.4 25.5 C36.4 34 32.5 40.5 21.8 46.8 L17.4 33.2 L17.2 31.2 L22.4 26 L23.6 22.8 Z"/><rect x="40" y="14" width="12.5" height="33"/><rect x="57" y="14" width="13" height="33"/><path d="M74 14H86V33L89.4 37.6V47H74Z"/></svg></span>`;
 let HELP_SHOWN = 0;      // 이미 그린 말 수 — 새 말에만 올라오는 움직임
 let HELP_TYPING = false; // 도우미가 '입력 중…'
+let HELP_GEN = 0;        // 탭이 바뀔 때마다 올림 — 기다리던 답이 다른 탭 대화에 섞이지 않게
 function helpReply(fn) {  // 바로 답하지 않고 잠깐 '입력 중' 점을 보여 줌(11/24 사용자 — 딱딱하지 않게)
+  const gen = HELP_GEN;
   HELP_TYPING = true; renderHelp();
-  setTimeout(async () => { try { await fn(); } finally { HELP_TYPING = false; renderHelp(); } }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 650);
+  setTimeout(async () => {
+    if (gen !== HELP_GEN) return;
+    try { await fn(); } finally { if (gen === HELP_GEN) { HELP_TYPING = false; renderHelp(); } }
+  }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 650);
 }
 const helpClock = () => new Date().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
 // k번째 말의 바로 앞 질문 목록(번호) — '이전 질문'으로 돌아감(11/26 사용자). 되살린 목록은 원래 자리(from)부터 거슬러 올라가 같은 목록끼리 오가지 않게
@@ -5736,6 +5748,10 @@ async function helpAnswer(q) {
   const faq = (x, head) => { HELP_CTX = x.tab === HELP_TAB ? { last: "faq", title: x.h[1] } : {}; helpSay("bot", head + helpText(x.h), [], x.tab === HELP_TAB ? helpSpotOf(x.h) : ""); return ["답함", x.h[1]]; };
   if (d.why === "exact") return faq(d.list[0], "");
   if (d.why === "which") { helpSay("bot", helpWhich(), []); return ["판단할 공고"]; }
+  if (d.kind === "serveronly") {
+    helpSay("bot", `'${HELP_SETS[d.why].name}' 탭은 서버 PC 웹앱에만 있습니다.\n서버 PC 웹앱에서 열어 확인해 주세요.` + (d.list[0] ? `\n\n[${d.list[0].h[1]}]\n\n${helpText(d.list[0].h)}` : ""), []);
+    return ["서버 PC 안내", d.list[0] ? d.list[0].h[1] : ""];
+  }
   const chance = d.why === "chance", prevNotice = HELP_CTX.last === "notice" ? HELP_CTX.notice : null;
   const found = await helpFind(q), one = found.list.length === 1 ? found.list[0] : null;
   if (one) { HELP_CTX = { last: "notice", notice: one }; helpSay("bot", helpNotice(one), chance ? null : []); }
@@ -5785,7 +5801,7 @@ function helpItems(text) {
     para.split("\n").forEach((raw) => {
       const l = raw.trim(), prev = items[items.length - 1];
       if (!l) return;
-      if (prev && !HELP_MARK.test(l) && !/[.?!:›]$/.test(prev.text)) prev.text += " " + l;
+      if (prev && !HELP_MARK.test(l) && !/(?:[.?!:›]|\]\])$/.test(prev.text)) prev.text += " " + l;
       else items.push({ text: l, mark: HELP_MARK.test(l), sub: /^\s{2,}/.test(raw) });
     });
     return items;
@@ -5845,7 +5861,7 @@ function renderHelp() {
     const back = live && k && m.who === "bot" ? (helpPrev(k) >= 0 ? `<button type="button" class="hsub" data-hback="prev">‹ 이전 질문</button>` : "")
       + `<button type="button" class="hsub" data-hback="start">처음으로</button>` : "";
     const faqBtn = (lead = "") => `<div class="hsubs">${lead}${back}<button type="button" class="hsub" data-hview="faq">${k ? "다른 질문" : "전체 질문"}</button></div>`;
-    const startBtns = `<div class="hpicks">${[["first", "처음 써 봅니다"], ["use", "쓰다가 궁금합니다"]].map(([v, t]) => `<button type="button" data-hstart="${v}">${t}</button>`).join("")}</div>`;
+    const startBtns = `<div class="hpicks">${[["first", "처음 써 봅니다"], ["use", "쓰다가 궁금합니다"]].map(([v, t]) => `<button type="button" data-hstart="${v}">${t}</button>`).join("")}<div class="hsubs"><button type="button" class="hsub" data-hview="faq">전체 질문</button></div></div>`;
     const list = !live || !Array.isArray(m.picks) ? [] : m.picks;
     const picks = !live || !m.picks ? "" : m.picks === "start" ? startBtns : list.length ? `<div class="hpicks">${list.map((c) => (typeof c === "number" ? `<button type="button" data-hq="${c}">${esc(HS().qa[c][1])}</button>`
           : `<button type="button" data-hq="${c.i}" data-htab="${c.tab}">${esc(HS(c.tab).qa[c.i][1])} <small>${esc(HELP_SETS[c.tab].name)} 탭</small></button>`)).join("")}${faqBtn()}</div>`
@@ -5859,12 +5875,16 @@ function renderHelp() {
   if (HELP_TYPING) html += `<li class="hmsg bot new${prev && prev.who === "bot" ? "" : " first"}">${prev && prev.who === "bot" ? `<span class="hav sp"></span>` : HELP_LOGO}`
     + `<div class="hcol"><div class="hline"><p class="hb tail htyping" aria-label="입력 중"><i></i><i></i><i></i></p></div></div></li>`;
   HELP_SHOWN = HELP_LOG.length;
+  const typed = $("helpQ") ? $("helpQ").value : "", wasIn = $("helpBox").contains(document.activeElement), inQ = document.activeElement && document.activeElement.id === "helpQ";
   $("helpBox").innerHTML = head
     + `<p class="hsafe">🔒 외부 AI를 쓰지 않습니다</p>`
     + `<ol class="hlog" role="log" aria-live="polite">${html}</ol>`
     + `<form class="hform"><input id="helpQ" placeholder="궁금한 것이나 공고번호를 적어 주세요" autocomplete="off" aria-label="직접 물어보기"><button type="submit">보내기</button></form>`;
   const log = $("helpBox").querySelector(".hlog");
   log.scrollTop = log.scrollHeight;
+  $("helpQ").value = typed;
+  if (inQ) $("helpQ").focus();
+  else if (wasIn) ($("helpBox").querySelector(".hmsg:last-child .hpicks button") || $("helpQ")).focus();  // 누른 버튼이 사라져도 키보드 자리가 남게
 }
 // 창 크기 조절 — 오른쪽 아래에 붙은 창이라 왼쪽 위 손잡이로. 이 브라우저에 기억(11/25 사용자, 기본은 처음 크기 380×580)
 function helpSize(w, h, save) {
@@ -5953,7 +5973,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.body.classList.contains("filter-sheet") && !document.querySelector(".dd.open")) filterSheet(false); });
 $("helpBox").addEventListener("click", (e) => {
   const q = e.target.closest("[data-hq]");
-  if (HELP_TYPING) return;
+  if (HELP_TYPING && e.target.closest("[data-hq], [data-hback], [data-hstart], [data-hspot]")) return;
   if (q) {
     const far = q.dataset.htab, h = HS(far || HELP_TAB).qa[Number(q.dataset.hq)];
     helpSay("me", h[1]);
@@ -5992,19 +6012,24 @@ $("helpBox").addEventListener("click", (e) => {
   }
   const spot = e.target.closest("[data-hspot]");
   if (spot) return helpSpot(spot.dataset.hspot);
-  if (e.target.closest("[data-hclose]")) helpOpen(false);
+  if (e.target.closest("[data-hclose]")) { helpOpen(false); $("helpFab").focus(); }
 });
+$("helpBox").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); helpOpen(false); $("helpFab").focus(); } });
 $("helpBox").addEventListener("input", (e) => { if (e.target.id === "helpFind") { HELP_FAQ = { cat: -1, q: -1, find: e.target.value }; $("helpFaq").innerHTML = helpFaqList(); } });
 $("helpBox").addEventListener("submit", (e) => {
   e.preventDefault();
   const v = $("helpQ").value.trim();
   if (!v || HELP_TYPING) return;
+  $("helpQ").value = "";
   helpAsk(v);
   $("helpQ").focus();
 });
 function showTab(tab) {
   $("helpFab").hidden = !HELP_SETS[tab];
-  if (HELP_TAB !== tab) { HELP_TAB = tab; HELP_LOG.length = 0; HELP_VIEW = "chat"; HELP_FAQ = { cat: -1, q: -1, find: "" }; $("helpBox").hidden = true; }  // 탭이 바뀌면 그 탭 안내로 새로
+  if (HELP_TAB !== tab) {  // 탭이 바뀌면 그 탭 안내로 새로. 기다리던 답·'어디인지 보기' 뒤 다시 열기도 멈춤
+    HELP_TAB = tab; HELP_GEN++; HELP_TYPING = false; HELP_LOG.length = 0; HELP_VIEW = "chat"; HELP_FAQ = { cat: -1, q: -1, find: "" };
+    if (!$("helpBox").hidden || $("helpFab").getAttribute("aria-expanded") === "true") helpOpen(false);
+  }
   helpNudge();
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   for (const name of ["live", "excluded", "corpus", "log", "calc", "quant", "award"]) $("tab-" + name).hidden = tab !== name;

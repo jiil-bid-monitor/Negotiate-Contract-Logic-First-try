@@ -5598,6 +5598,15 @@ function helpReply(fn) {  // 바로 답하지 않고 잠깐 '입력 중' 점을 
   setTimeout(async () => { try { await fn(); } finally { HELP_TYPING = false; renderHelp(); } }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 650);
 }
 const helpClock = () => new Date().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+// k번째 말의 바로 앞 질문 목록(번호) — '이전 질문'으로 돌아감(11/26 사용자). 되살린 목록은 원래 자리(from)부터 거슬러 올라가 같은 목록끼리 오가지 않게
+function helpPrev(k) {
+  const m = HELP_LOG[k], own = Array.isArray(m && m.picks), key = own && JSON.stringify(m.picks);
+  for (let i = (own && m.from != null ? m.from : k) - 1; i >= 0; i--) {
+    const x = HELP_LOG[i];
+    if (x.who === "bot" && Array.isArray(x.picks) && x.picks.length && JSON.stringify(x.picks) !== key) return i;
+  }
+  return -1;
+}
 const helpSay = (who, text, picks = null, spot = "") => HELP_LOG.push({ who, text, picks, spot, at: helpClock() });
 // 처음 볼 때 묻는 것과 쓰다가 생기는 궁금함을 나눔(11/25 사용자). 자주 묻는 것만 — 나머지는 '자주 묻는 질문'에서
 const HELP_FIRST_CATS = ["처음 사용하기", "화면 표시 뜻"];
@@ -5764,8 +5773,10 @@ function renderHelp() {
     const first = !prev || prev.who !== m.who;
     const lastOfGroup = !HELP_LOG[k + 1] || HELP_LOG[k + 1].who !== m.who;
     const live = k === HELP_LOG.length - 1;  // 고르기 버튼은 마지막 말 밑에만 — 지난 메뉴가 쌓이지 않게
-    // 버튼은 다음에 할 일만: 후보(최대 4) · 어디인지 보기 · 다른 질문
-    const faqBtn = `<button type="button" class="hsub" data-hview="faq">${k ? "다른 질문" : "전체 질문"}</button>`;
+    // 버튼은 다음에 할 일만: 후보(최대 4) · 어디인지 보기 · 이전 질문 · 처음으로 · 다른 질문
+    const back = live && k && m.who === "bot" ? (helpPrev(k) >= 0 ? `<button type="button" class="hsub" data-hback="prev">‹ 이전 질문</button>` : "")
+      + `<button type="button" class="hsub" data-hback="start">처음으로</button>` : "";
+    const faqBtn = back + `<button type="button" class="hsub" data-hview="faq">${k ? "다른 질문" : "전체 질문"}</button>`;
     const startBtns = `<div class="hpicks">${[["first", "처음 써 봅니다"], ["use", "쓰다가 궁금합니다"]].map(([v, t]) => `<button type="button" data-hstart="${v}">${t}</button>`).join("")}</div>`;
     const list = !live || !Array.isArray(m.picks) ? [] : m.picks;
     const picks = !live || !m.picks ? "" : m.picks === "start" ? startBtns : list.length ? `<div class="hpicks">${list.map((c) => (typeof c === "number" ? `<button type="button" data-hq="${c}">${esc(HS().qa[c][1])}</button>`
@@ -5865,6 +5876,16 @@ $("helpBox").addEventListener("click", (e) => {
   }
   const view = e.target.closest("[data-hview]");
   if (view) { HELP_VIEW = view.dataset.hview; HELP_FAQ = { cat: -1, q: -1, find: "" }; renderHelp(); if (HELP_VIEW === "chat") $("helpQ").focus(); return; }
+  const back = e.target.closest("[data-hback]");
+  if (back) {
+    const i = back.dataset.hback === "prev" ? helpPrev(HELP_LOG.length - 1) : -1;
+    helpReply(() => {
+      if (i < 0) return helpSay("bot", "어느 쪽이 궁금하세요?", "start");
+      helpSay("bot", "앞에서 본 질문입니다.", HELP_LOG[i].picks);
+      HELP_LOG[HELP_LOG.length - 1].from = HELP_LOG[i].from ?? i;
+    });
+    return;
+  }
   const start = e.target.closest("[data-hstart]");
   if (start) {
     const top = (HELP_TOP[HELP_TAB] || {})[start.dataset.hstart] || [];

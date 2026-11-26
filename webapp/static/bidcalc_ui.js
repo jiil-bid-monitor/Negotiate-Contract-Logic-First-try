@@ -347,7 +347,7 @@
       if (d.price_method) notes.push(`예가방법: ${d.price_method}${/복수/.test(d.price_method) ? "" : ": 복수예비가격 추첨이 없는 공고, 계산기 결과는 참고만"}`);
       notes.push(...(d.notes || []));
       $("#cNotes").innerHTML = notes.map((n) => `<div>${esc(n)}</div>`).join("");
-      lookupMsg(d.basis != null ? "불러옴: 값을 확인하세요" : "일부만 불러옴");
+      lookupMsg(d.basis != null ? "불러옴" : "일부만 불러옴");
       SLOTS = []; SELECTED.clear(); AUTO = []; $("#cAuto").textContent = "-";
       render();
       const auto = autoRun(d.method);
@@ -371,7 +371,7 @@
   // 모의 추첨 1회일 뿐 — 실제 예정가격은 개찰 때 업체들이 고른 번호로 정해짐. 기초금액이 없으면 하지 않음
   function autoRun(method) {
     const missing = [["기초금액", "#cBasis"], ["변동폭", "#cLo"], ["변동폭", "#cHi"]].filter(([, id]) => numIn(id) == null).map(([n]) => n);
-    if (missing.length) return `자동 계산 안 함: ${[...new Set(missing)].join("·")} 정보 없음(-). 직접 입력한 뒤 추출 버튼을 누르세요`;
+    if (missing.length) return `자동 계산 안 함: ${[...new Set(missing)].join("·")} 정보 없음(-)`;
     const plan = C.autoPlan({ method, lo: numIn("#cLo"), hi: numIn("#cHi"), n: radio("cN") });
     generate(plan.method);
     if (!SLOTS.length) return "";
@@ -395,7 +395,7 @@
       · ${f(r.lower)}% 미만: 배점의 ${f(r.under)}% · 최저가가 ${f(r.floor)}% 미만이면 ${f(r.floor)}%로 계산`;
     const src = NEGO.rule_found
       ? `제안요청서 '${esc(r.file || "")}'의 입찰가격 평정산식${r.kind ? `(${r.kind}계약)` : ""}`
-      : "제안요청서에서 식을 못 찾아 지방계약 기본 식으로 계산: 제안요청서 '입찰가격 평가'를 확인하세요";
+      : "제안요청서에서 식을 못 찾음: 지방계약 기본 식으로 계산";
     let over = false;
     const rows = base > 0 ? NEGO_MINE.map((m) => {
       const price = (base * m) / 100;
@@ -407,16 +407,15 @@
       }).join("");
       return `<tr><th>${m}%</th><td class="num">${won(Math.round(price))}</td>${cells}</tr>`;
     }).join("") : "";
-    $("#cRec").innerHTML = `<div class="rec-flag">협상에 의한 계약 공고: 낙찰하한율이 없어 사정률 추천 대신 <b>가격 점수표</b>를 보여 줍니다.
-        낙찰은 기술 점수 + 가격 점수 합계 순으로 협상합니다.</div>
+    $("#cRec").innerHTML = `<div class="rec-flag">협상에 의한 계약 공고: <b>가격 점수표</b></div>
       <div class="nego-bar"><label>기준 금액(${esc(r.base)}) <input id="cNegoBase" inputmode="numeric" value="${base ? won(base) : ""}"> 원</label>
         <span class="why">${base ? `처음 값: ${esc(NEGO.base_source || "")}` : "기준 금액을 넣어 주세요"}: 실제 ${esc(r.base)}과 다를 수 있음</span></div>
       <div class="why nego-formula">${formula} ${tip(`${esc(src)}${r.quote ? `<br><br>원문: ${esc(r.quote)}` : ""}`)}</div>
       ${rows ? `<table class="nego-table"><thead><tr><th>내 제안가격</th><th>금액</th>
           <th colspan="${NEGO_RIVALS.length}">다른 업체 최저가(${esc(r.base)} 대비)에 따른 내 가격 점수</th></tr>
           <tr><th></th><th></th>${NEGO_RIVALS.map((x) => `<th>${x}%</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>` : ""}
-      ${over ? `<div class="rec-warn">식대로 계산하면 ${f(r.upper)}% 미만 가격에서 배점(${f(r.weight)}점)을 넘는 칸이 있어요. 배점 상한이 따로 있는지 제안요청서·발주처에 확인하세요</div>` : ""}
-      <div class="why">${f(r.lower)}% 미만으로 내면 배점의 ${f(r.under)}%(${f((r.weight * r.under) / 100)}점)만 받아요(붉은 줄).</div>`;
+      ${over ? `<div class="rec-warn">식대로 계산하면 ${f(r.upper)}% 미만 가격에서 배점(${f(r.weight)}점)을 넘는 칸이 있음</div>` : ""}
+      <div class="why">${f(r.lower)}% 미만: 배점의 ${f(r.under)}%(${f((r.weight * r.under) / 100)}점)</div>`;
     const inp = $("#cNegoBase");
     inp.addEventListener("input", (e) => commaInput(e.target));
     inp.addEventListener("change", renderNego);
@@ -551,14 +550,14 @@
           ${stat("1순위", pctOf(rate(t, "win")), cnt(t, "win"), "같은 방법으로 금액 기준 1순위였을 비율이에요(적격심사 서류 심사 전 순위).")}
           ${stat("평균 순위", rankOf(t), t.ranked ? `상위 · ${t.ranked}건` : "-", "과거 비슷한 공고에서 참가 업체 중 평균 몇 % 안에 들었는지예요(작을수록 앞). 하한선 미달은 꼴찌(100%)로 쳐요. 1순위가 거의 안 나오는 공고에서 방식을 고르는 기준이에요.")}
         </div>` : "";
-      const luck = large ? `<div class="rec-flag">참가 업체가 많은 공고(약 ${Math.round(b.median)}곳): 1순위는 운의 비중이 커요 ${tip(
+      const luck = large ? `<div class="rec-flag">참가 업체 많음(약 ${Math.round(b.median)}곳) ${tip(
         "업체가 수백 곳이면 1순위는 하한선 바로 위(금액으로 몇천~몇만 원 차이)에서 갈려서, 어떤 방법도 1순위 비율이 1~2% 안팎이에요. 하한선 통과와 5위 안을 함께 보세요.")}</div>` : "";
       // 순공사원가 조건(공고문에서 읽음) — 적용 여부를 카드에 바로 보임
       const netOn = NET_RULE && numIn("#cNet") > 0;
       const netFlag = netOn
         ? `<div class="rec-flag">순공사원가 조건 반영: 공고문: ${NET_RULE.limit ? `예정가격 ${NET_RULE.limit / 1e8}억 원 미만이면 ` : ""}순공사원가의 ${NET_RULE.rate}% 미만 투찰은 제외.
             금액 = 이 사정률의 하한선과 순공사원가 선 중 높은 쪽 ${tip(esc(NET_RULE.quote || ""))}</div>`
-        : numIn("#cNet") > 0 ? `<div class="rec-flag">순공사원가 금액은 있는데 공고문에서 순공사원가 조건 문장을 못 찾아 금액에 반영하지 않았어요. 공고문을 확인하세요</div>` : "";
+        : numIn("#cNet") > 0 ? `<div class="rec-flag">순공사원가 조건 문장 못 찾음: 금액에 반영 안 함</div>` : "";
       card = `<div class="rec-pick${p.mode === "fixed" ? " weak" : ""}">
         <div class="rec-pick-top">
           <div><div class="rec-pick-label">추천 투찰금액</div>
@@ -948,7 +947,7 @@
       : "";
     // 위 '외주 vs 웹앱 — 웹앱이 더 좋은 등수 …' 요약 줄은 뺌(11/20 사용자 요청 — 줄마다 웹앱·외주 등수가 있음)
     if (!rows.length) {
-      $("#bidlogRows").innerHTML = `<tr><td colspan="8" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다. '투찰 계산'에서 공고를 불러와 '투찰 내역에 기록'을 누르세요."}</td></tr>`;
+      $("#bidlogRows").innerHTML = `<tr><td colspan="8" class="why">${LOG.length ? "찾는 기록이 없습니다." : "아직 기록이 없습니다."}</td></tr>`;
       return;
     }
     $("#bidlogRows").innerHTML = rows.map((r) => {

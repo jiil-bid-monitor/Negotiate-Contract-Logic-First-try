@@ -100,7 +100,7 @@
     <div id="notes"></div>
     <details class="card fold">
       <summary><h2>2. 필요 서식 <span id="fcount" class="fprog"></span> <span id="hwpneed" class="chip hwpneed" hidden>한글 파일 필요</span></h2><span class="tog"></span></summary>
-      <p id="hwpneedmsg" class="warn" hidden>서식이 PDF에만 있는 공고입니다. 통합서식(한글)을 만들지 않습니다. 나라장터·발주기관에서 한글(HWP/HWPX) 서식을 받아 직접 작성하세요.</p>
+      <p id="hwpneedmsg" class="warn" hidden>서식이 PDF에만 있음: 통합서식(한글) 안 만듦</p>
       <ul id="forms" class="flist"></ul>
     </details>
 
@@ -180,7 +180,7 @@ async function api(path, body) {
 }
 api("/api/meta").then(m => {
   $("#meta").innerHTML = `<span class="${m.vault.ok ? "ok" : "err"}">${esc(m.vault.msg)}</span>` +
-    (m.hwp ? "" : ` · <span class="warn">옛 한글(.hwp) 서식은 이 PC에서 만들 수 없고 .hwpx 서식만 됩니다</span>`);
+    (m.hwp ? "" : ` · <span class="warn">옛 한글(.hwp) 서식은 이 PC에서 못 만듦</span>`);
 }).catch(e => $("#meta").textContent = e.message);
 
 $("#no").addEventListener("keydown", e => { if (e.key === "Enter") $("#go").click(); });
@@ -287,7 +287,7 @@ function renderStaff(list, rule, ok) {
   STAFF = list;
   $("#staffRule").textContent = rule || (list.length ? "제안요청서에서 기술인력 배점 기준을 찾지 못함: 체크한 사람은 그대로 넘김" : "");
   $("#staff").innerHTML = !ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
-    : !list.length ? '<tr><td class="muted">인력목록이 비어 있습니다. jiil-quant-docs 폴더에 기술인력 엑셀(이름·입사일·등급)을 두거나 회사자료 인력목록에 적으세요</td></tr>'
+    : !list.length ? '<tr><td class="muted">인력목록이 비어 있습니다</td></tr>'
     : '<tr><th class="chk">넣기</th><th>이름</th><th>등급</th><th>입사일</th><th>비고</th></tr>' + list.map(p =>
       `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="sp" data-name="${esc(p.name)}" data-grade="${esc(p.grade)}"></td>
        <td>${esc(p.name)}</td><td>${esc(p.grade)}</td><td>${esc(p.joined)}</td><td class="muted">${esc(p.why)}</td></tr>`).join("");
@@ -314,7 +314,7 @@ function renderPatents(list, rule, ok, on) {
   $("#patentRule").innerHTML = at < 0 ? esc(rule)
     : esc(rule.slice(0, at)) + ' · 인정: <b class="scope">' + esc(rule.slice(at + 7)) + "</b>";
   $("#patents").innerHTML = !ok ? '<tr><td class="muted">회사 자료 묶음이 열려야 고를 수 있습니다</td></tr>'
-    : !list.length ? '<tr><td class="muted">특허 자료가 없습니다. jiil-quant-docs 폴더 \'특허\' 하위 폴더에 특허증을 두거나 회사자료 특허목록에 적으세요</td></tr>'
+    : !list.length ? '<tr><td class="muted">특허 자료가 없습니다</td></tr>'
     : '<tr><th class="chk">넣기</th><th>특허</th><th>비고</th></tr>' + list.map(p =>
       `<tr class="${p.ok ? "" : "off"}"><td class="chk"><input type="checkbox" class="pp" data-key="${esc(p.key)}"></td>
        <td>${esc(p.name)}</td><td class="muted">${esc(p.why)}</td></tr>`).join("");

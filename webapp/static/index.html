@@ -455,7 +455,16 @@ body.picking { overflow: hidden; }
 .docbell-pop li.judge-item .jp { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 22px; padding: 0; border: 0; background: var(--panel); color: var(--ink); cursor: pointer; }
 .docbell-pop li.judge-item .jp + .jp { border-left: 1px solid var(--line-strong); }
 .docbell-pop li.judge-item .jp:hover { background: var(--bg); color: var(--brand); }
-.docbell-pop li.judge-item .jp .ic { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.docbell-pop li.judge-item .jp .ic { display: block; width: 13px; height: 13px; margin: 0; vertical-align: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }  /* 위 띠 .docbell .ic의 아래로 내림·오른쪽 여백을 지워 칸 정가운데(11/26 사용자) */
+/* 판단할 공고 창 글자 한 단계 작게 (2026-11-26 사용자 '너무 컴팩트') */
+#judgeBellPop { font-size: 12.5px; }
+#judgeBellPop h3 { font-size: 13px; }
+#judgeBellPop .judge-sec { font-size: 12.5px; }
+#judgeBellPop .name { font-size: 12.5px; line-height: 1.45; }
+#judgeBellPop .dd { font-size: 11.5px; }
+#judgeBellPop .row2 { font-size: 11px; margin-top: 3px; }
+#judgeBellPop .how { font-size: 11.5px; }
+#judgeBellPop li { padding: 9px 0; }
 .docbell-pop li.judge-item.done { cursor: default; opacity: .75; }
 .docbell-pop li.judge-item.asking { cursor: default; }
 .docbell-pop li.judge-item.done:hover .name { color: inherit; text-decoration: none; }

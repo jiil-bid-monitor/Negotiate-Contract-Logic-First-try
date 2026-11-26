@@ -2020,6 +2020,27 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   #liveTools .tab-search:is(:focus, :not(:placeholder-shown)), #exTools .tab-search:is(:focus, :not(:placeholder-shown)) { width: 330px; cursor: text; }
 }
 @media (prefers-reduced-motion: reduce) { #liveTools .tab-search, #exTools .tab-search { transition: none; } }
+/* 카드 참가·보류·불참·담당·대화 = 아이콘 (2026-11-26 사용자) */
+.pbtn.ico { display: inline-flex; align-items: center; justify-content: center; gap: 0; }
+.pbtn .ic, .part-owner .owner .ic { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pbtn.ico .pl { margin-left: 5px; }
+.pbtn.ico .cnt { margin-left: 5px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.part-owner .owner { display: inline-flex; align-items: center; gap: 4px; }
+.part-owner .owner .ic { color: var(--muted); }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pstat { position: relative; display: inline-flex; gap: 6px; align-items: center; }
+.pstat-pop { display: none; position: absolute; top: 100%; right: 0; z-index: 30; padding-top: 6px; white-space: nowrap; }
+.pstat-pop::before { content: ""; position: absolute; inset: 6px 0 0; z-index: -1; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+.pstat-pop { padding: 12px 12px 6px; font-size: 12.5px; color: var(--muted); }
+.pstat-pop b { color: var(--ink-strong); }
+.pstat:hover .pstat-pop, .pstat:focus-within .pstat-pop { display: block; }
+@media (hover: hover) {
+  .pbtn.ico { min-width: 34px; padding-left: 9px; padding-right: 9px; }
+  .pbtn.ico:not(.on) .pl { display: inline-block; max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; white-space: nowrap; transition: max-width .2s ease, opacity .15s ease, margin .2s ease; }
+  .pbtn.ico:not(.on):is(:hover, :focus-visible) .pl { max-width: 6em; margin-left: 5px; opacity: 1; }
+}
+@media (hover: none) { .pstat { flex-wrap: wrap; } .pstat-pop { display: block; position: static; padding: 4px 0 0; flex: 1 1 100%; } .pstat-pop::before { display: none; } }
+@media (prefers-reduced-motion: reduce) { .pbtn.ico .pl { transition: none !important; } }
 /* ② 불러오기 줄: 평소 상태 글 없음(경고만) */
 #liveTools .load-state:empty, #liveTools .live-meta:empty { display: none; }
 /* ③ 넓은 화면: 필터는 버튼 하나, 'N건 보는 중'·정렬은 낙찰방법 탭 줄 오른쪽 */
@@ -3893,7 +3914,11 @@ const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted"
 
 async function loadParticipation() {
   try {
-    participation = (await getJson("/api/participation")).participation || {};
+    // 오류 응답(NAS 연결 잠깐 실패 등 — participation 없음)이면 받아 둔 기록을 그대로 둠.
+    // 예전엔 빈 기록으로 덮어써 10초 동안 📋 버튼·카드 판단이 사라졌다 다시 나타났음(2026-11-26 사용자 제보)
+    const data = await getJson("/api/participation");
+    if (!data || typeof data.participation !== "object" || data.participation === null) return;
+    participation = data.participation;
   } catch (e) {
     return;
   }
@@ -3981,7 +4006,7 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
     ${hasReason
       ? `<span class="decision-reason"><b>${esc(p.status)} 사유</b> ${said}</span><button type="button" class="linkish" data-preason>사유 고치기</button>`
       : folded ? `<button type="button" class="linkish" data-preason>사유 적기</button>` : form}
-    <span class="decision-who">${next ? nextStepButton(p) : ""}${who}${undo}</span>
+    <span class="decision-who">${next ? nextStepButton(p) : `${who}${undo}`}</span>
     ${next && p.meta?.bidMethod === "규격가격동시" && nextStepButton(p) ? `<div class="next-note"><b>규격가격동시입찰</b> 규격 입찰서와 가격 입찰서를 함께 냅니다. 정량평가서와 투찰금액을 둘 다 준비해 주세요.</div>` : ""}
     ${folded ? `<div class="reason-edit"${editOpen ? "" : " hidden"}>${chips}${form}</div>` : ""}
   </div>`;
@@ -4069,6 +4094,18 @@ function decisionMeta(noticeNo) {
   };
 }
 
+// 카드 버튼 아이콘 — 넓은 화면은 아이콘만, 커서를 대면 이름이 펼쳐짐(고른 판단은 이름도 늘 보임). 터치 화면은 이름도 늘 (2026-11-26 사용자)
+const svgIc = (d) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const PART_ICON = { 참가: svgIc('<path d="M5 12.5l4.5 4.5L19 7.5"/>'), 보류: svgIc('<path d="M9 6v12M15 6v12"/>'), 불참: svgIc('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>') };
+const ICON_PERSON = svgIc('<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>');
+const ICON_TAKE = svgIc('<circle cx="10" cy="8.5" r="3.5"/><path d="M3.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.4 0 2.6.4 3.6 1M18 13v6M15 16h6"/>');
+const ICON_TALK = svgIc('<path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h10a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 17 16h-6l-4.5 3.5V16H7a2.5 2.5 0 0 1-2.5-2.5z"/>');
+/** 판단자·시각·되돌리기 — 참가·보류·불참 버튼에 커서를 대면 아래에 펼쳐짐 */
+function decisionPop(p) {
+  if (!p || !DECISIONS.includes(p.status) || !p.decidedBy) return "";
+  return `<span class="pstat-pop">판단 <b>${esc(p.decidedBy)}</b>${p.decidedAt ? ` · ${esc(fmtDT(p.decidedAt))}` : ""}${p.prev ? `<button type="button" class="linkish" data-pundo>되돌리기</button>` : ""}</span>`;
+}
+
 function partBlock(n) {
   const p = participation[n.noticeNo];
   const comments = p?.comments || [];
@@ -4077,10 +4114,10 @@ function partBlock(n) {
   return `<div class="part" data-part="${esc(n.noticeNo)}" data-title="${esc(n.title)}">
     <div class="part-row">
       <span class="part-label">참가여부</span>
-      ${PART_STATUSES.map((s) => `<button type="button" class="pbtn ${PART_TONE[s]} ${p?.status === s ? "on" : ""}" data-pstatus="${s}" aria-pressed="${p?.status === s ? "true" : "false"}">${s}</button>`).join("")}
-      <span class="part-owner">담당 <b class="${p?.owner ? "" : "nil"}">${esc(p?.owner || "없음")}</b>
-        <button type="button" class="pbtn" data-powner>${p?.owner === myName() && myName() ? "넘기기" : "내가 맡기"}</button>
-        <button type="button" class="pbtn ${talk ? "" : "nil"}" data-ptalk aria-label="대화 ${talk}건 열기·닫기">대화 ${talk}건</button></span>
+      <span class="pstat">${PART_STATUSES.map((s) => `<button type="button" class="pbtn ico ${PART_TONE[s]} ${p?.status === s ? "on" : ""}" data-pstatus="${s}" aria-pressed="${p?.status === s ? "true" : "false"}">${PART_ICON[s]}<span class="pl">${s}</span></button>`).join("")}${decisionPop(p)}</span>
+      <span class="part-owner"><span class="vh">담당</span>${p?.owner ? `<span class="owner">${ICON_PERSON}<b>${esc(p.owner)}</b></span>` : `<span class="vh">없음</span>`}
+        <button type="button" class="pbtn ico" data-powner>${ICON_TAKE}<span class="pl">${p?.owner === myName() && myName() ? "넘기기" : "내가 맡기"}</span></button>
+        <button type="button" class="pbtn ico ${talk ? "" : "nil"}" data-ptalk aria-label="대화 ${talk}건 열기·닫기">${ICON_TALK}<span class="pl">대화</span>${talk ? `<span class="cnt">${talk}</span>` : ""}</button></span>
     </div>
     ${pastHint(n)}
     ${decisionRow(p)}

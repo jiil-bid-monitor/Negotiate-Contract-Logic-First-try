@@ -2837,9 +2837,11 @@ const lastDailyReport = () => lastReport("daily");
 const reportHit = (r, date, kind) => (!kind || r.kind === kind) && (r.date || "").slice(0, 10) === date;
 /** 그 날 보고에 나간 공고번호(차수 없이) — filters.report 값은 'daily:날짜' 또는 'any:날짜' */
 function reportNosOf(value) {
+  if (value === "past") return new Set(PAST_TODO);  // 📋 '지난 미판단 공고' — 오늘 매일 보고 밖의 입찰 미판단(11/26 사용자)
   const [k, date] = value.split(":"), kind = k === "daily" ? "daily" : "";
   return new Set(Object.values(participation).filter((p) => p.reports?.some((r) => reportHit(r, date, kind))).map((p) => p.noticeNo));
 }
+let PAST_TODO = [];
 const dailyReportNos = (date) => reportNosOf(`daily:${date}`);
 let reportNos = new Set();
 /** 📋 창에서 방금 불참한 공고 — 공고번호 → { tag, open } */
@@ -3366,6 +3368,7 @@ function renderActiveFilters(shownN) {
     if (k === "prod") return heldProductList.find((h) => h.code === v)?.name || v;
     if (k === "check") return CHECK_OPTS.find(([c]) => c === v)?.[1] || v;
     if (k === "kind") return "검토필요만";
+    if (k === "report" && v === "past") return "지난 미판단 공고";
     if (k === "report") return `${mdOf(v.split(":")[1])} ${v.startsWith("daily:") ? "매일 " : ""}보고`;
     return v;
   };
@@ -6826,9 +6829,13 @@ function renderJudgeBell() {
   // 아래 이동 버튼은 둘만(11/26 사용자) — 오늘 매일 보고 공고 / 주간(협상·규격가격) 미판단 공고. 설명 문구 없음
   // 버튼마다 미판단 건수(11/26 사용자) — 금일 = 오늘 매일 보고 공고 중, 주간 = 협상·규격가격 칸
   const nTag = (n) => ` ${n}건`;
+  // 지난 미판단 공고 = 입찰 칸 중 오늘 매일 보고 밖(11/26 사용자 — 금일·주간 합이 전체보다 적어 지난 공고가 안 보였음)
+  const past = daily.filter((p) => !isToday(p) && !JUDGE_DONE.has(p.noticeNo));
+  PAST_TODO = past.map((p) => p.noticeNo);
   const moves = [repN ? `<button type="button" class="linkbtn" data-report="daily:${rep}">금일 입찰 공고${nTag(undecidedN(daily.filter(isToday)))} ›</button>` : "",
-    weekly.length ? `<button type="button" class="linkbtn" data-all-todo="협상">주간 협상 · 규격가격 공고${nTag(undecidedN(weekly))} ›</button>` : ""].filter(Boolean);
-  $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3>`
+    weekly.length ? `<button type="button" class="linkbtn" data-all-todo="협상">주간 협상 · 규격가격 공고${nTag(undecidedN(weekly))} ›</button>` : "",
+    past.length ? `<button type="button" class="linkbtn" data-report="past">지난 미판단 공고${nTag(past.length)} ›</button>` : ""].filter(Boolean);
+  $("judgeBellPop").innerHTML = `<h3>미판단 공고 ${left}건</h3>`
     + section("입찰 · 매일 보고", dailyIn, "", "", toggle, [])  // 입찰은 다 보므로 미리 보기 없음(11/26 사용자)
     + section("협상 · 규격가격 · 주간 보고", weekly, "", "", "", weekly.filter(soon).slice(0, 3))
     + (todo.some((p) => !JUDGE_DONE.has(p.noticeNo)) || JUDGE_DONE.size ? "" : `<p class="row2">판단할 공고가 없습니다.</p>`)

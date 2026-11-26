@@ -5104,6 +5104,14 @@ def test_bid_application_agent_name_and_group_name_label(tmp_path: Path):
         text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
         assert ("김대리" in text) == want, text
         assert re.search(r"단체\(또는 법인\) 명 : ?\(주\)가상", text), text
+    # 줄 끝에 '(서명)'이 미리 적힌 대리인 성명 줄(11/26 사용자 제보)
+    cell2 = cell.replace("- 성       명 : ", "성     명 :          (서명)")
+    src2 = _mini_hwpx(tmp_path / "s2.hwpx", _tbl([[_c(0, 0, "대리인 사용인감"), cell2]]))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    v.agent = {"성명": "김대리"}
+    fill_hwpx(src2, tmp_path / "o2.hwpx", v)
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o2.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"명 : 김대리\s+\(서명\)", text), text
 
 
 def test_credit_grade_in_note_column(tmp_path: Path):

@@ -1832,8 +1832,9 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         agent = getattr(vault, "agent", None) or {}
         if not key and seal and agent.get("성명") and re.sub(r"[^가-힣]", "", label) in ("대리인", "수임인"):
             value = agent["성명"]  # 위임장 끝 '○ 대 리 인 :      (인)'(11/25 그리다 샘플) — 지정 임원, 지일은 vault.agent가 없어 그대로 비움
+        # 줄 끝에 '(서명)'이 미리 적힌 '성     명 :      (서명)'도(11/26 사용자 제보 — 해남 그리다 대리인 성명이 빔)
         # ('- 성       명 :'은 머리 떼기(_party_head)가 '성'을 머리로 보고 '명'만 남겨 원래 줄 글로 봄)
-        raw_lab = re.fullmatch(r"\s*[-·○◦]?\s*((?:성|생년월일|주소|주민등록번호)[\s가-힣]{0,12}?)\s*[:：]\s*", _text(xml[s:e]))
+        raw_lab = re.fullmatch(rf"\s*[-·○◦]?\s*((?:성|생년월일|주소|주민등록번호)[\s가-힣]{{0,12}}?)\s*[:：]\s*(?:{_SEAL_TAIL})?\s*", _text(xml[s:e]))
         raw_lab = re.sub(r"[^가-힣]", "", raw_lab.group(1)) if raw_lab else ""
         if not key and agent.get("성명") and raw_lab in ("성명", "생년월일", "주소", "주민등록번호"):
             # 입찰참가신청서 '대리인(사용인감) | 본 입찰에 관한 일체의 권한을 다음의 자에게 위임합니다. / - 성 명 :'(11/25 사용자 — 해남 그리다)

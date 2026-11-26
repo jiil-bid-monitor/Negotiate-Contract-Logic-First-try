@@ -448,7 +448,11 @@ body.picking { overflow: hidden; }
 .docbell-pop li.judge-item { cursor: pointer; }
 .docbell-pop li.judge-item:hover .name { color: var(--brand); text-decoration: underline; }
 .docbell-pop li.judge-item .row1 .dd { margin-left: auto; }
-.docbell-pop li.judge-item .jskip { margin-left: 8px; padding: 2px 10px; font-size: 12px; flex: none; }
+.docbell-pop li.judge-item .jpick { display: inline-flex; flex: none; margin-left: 8px; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.docbell-pop li.judge-item .jp { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 26px; padding: 0; border: 0; background: var(--panel); color: var(--ink); cursor: pointer; }
+.docbell-pop li.judge-item .jp + .jp { border-left: 1px solid var(--line-strong); }
+.docbell-pop li.judge-item .jp:hover { background: var(--bg); color: var(--brand); }
+.docbell-pop li.judge-item .jp .ic { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .docbell-pop li.judge-item.done { cursor: default; opacity: .75; }
 .docbell-pop li.judge-item.asking { cursor: default; }
 .docbell-pop li.judge-item.done:hover .name { color: inherit; text-decoration: none; }
@@ -458,9 +462,6 @@ body.picking { overflow: hidden; }
 #judgeBellPop .judge-sec { margin: 12px 0 2px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-strong); }
 #judgeBellPop .judge-sec span { font-weight: 400; color: var(--muted); }
 #judgeBellPop .judge-sec { display: flex; align-items: center; gap: 6px; }
-#judgeBellPop .jtoggle { margin-left: auto; display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-#judgeBellPop .jtoggle button { border: 0; background: none; padding: 1px 10px; font-size: 12px; color: var(--muted); cursor: pointer; }
-#judgeBellPop .jtoggle button.on { background: var(--ink-strong); color: var(--bg, #fff); }
 .docbell-pop .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .docbell-pop .name { font-weight: 600; color: var(--ink-strong); }
 .docbell-pop .dd { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -878,6 +879,9 @@ mark.kw { background: var(--warn-tint); color: var(--warn); font-weight: 700; pa
 .due-more.warn .ico { background: var(--warn); }
 .qtip ul.due-list li { display: flex; gap: 12px; justify-content: space-between; }
 .qtip ul.due-list li span { color: var(--muted); font-size: 12px; }
+/* 입찰 일정 — 카드 마감(기준 마감) 줄만 진하게, 나머지는 연하게 (11/26 사용자, ★ 대신) */
+.qtip ul.due-list.sched li span, .qtip ul.due-list.sched li b { color: var(--muted); font-weight: 400; opacity: .75; }
+.qtip ul.due-list.sched li.on span, .qtip ul.due-list.sched li.on b { color: var(--ink-strong); font-weight: 700; opacity: 1; }
 .rs-promote {
   margin-left: 6px; padding: 4px 12px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
   background: var(--brand); color: var(--on-brand); border: 1px solid var(--brand);
@@ -3539,10 +3543,10 @@ function deadlineTip(n) {
     .map(([label, iso]) => {
       const star = label === n.deadlineKind && dtText(iso) === dtText(n.deadline);
       const dd = label === "공고 게시" || label === "개찰" ? "" : left(iso);
-      return `<li><span>${esc(label)}${star ? " ★" : ""}</span><b>${esc(dtText(iso))}${dd}</b></li>`;
+      return `<li${star ? ' class="on"' : ""}><span>${esc(label)}</span><b>${esc(dtText(iso))}${dd}</b></li>`;
     })
     .join("");
-  return { title: "입찰 일정", body: `<ul class="due-list">${rows}</ul>` };
+  return { title: "입찰 일정", body: `<ul class="due-list sched">${rows}</ul>` };
 }
 
 /** 마감 칸 한 줄 — 기준 마감 일시와 D-day. 일시에 커서를 대면 일정 전부 */
@@ -3982,7 +3986,7 @@ const partOf = (n) => {
 let participation = {};
 let REPORT_LINK = false;
 let CAL_READY = false;  // 일정 달력 코드가 읽힌 뒤에만 다시 그림
-let JUDGE_TODAY = true;  // 📋 입찰 칸 '오늘'만 — 처음엔 오늘(11/24 사용자)
+let JUDGE_TODAY = false;  // 📋 입찰 칸은 7일 전부(오늘 보고 먼저) — 오늘/7일 버튼은 11/26 뺌
 const PART_STATUSES = ["참가", "보류", "불참"];  // 검토중 버튼은 2026-11-18 사용자 결정으로 뺌
 const PART_TONE = { 검토중: "", 참가: "hi", 보류: "warn", 불참: "muted", 미판단: "todo", 놓침: "missed", 참고: "muted" };
 
@@ -4171,6 +4175,7 @@ function decisionMeta(noticeNo) {
 const svgIc = (d) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const ICON_PERSON = svgIc('<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>');
 const ICON_TAKE = svgIc('<circle cx="10" cy="8.5" r="3.5"/><path d="M3.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.4 0 2.6.4 3.6 1M18 13v6M15 16h6"/>');
+const JICON = { 참가: svgIc('<path d="M5 12.5l4.5 4.5L19 7.5"/>'), 보류: svgIc('<path d="M9 6v12M15 6v12"/>'), 불참: svgIc('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>') };
 const ICON_TALK = svgIc('<path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h10a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 17 16h-6l-4.5 3.5V16H7a2.5 2.5 0 0 1-2.5-2.5z"/>');
 /** 판단자·시각·되돌리기 — 참가·보류·불참 버튼에 커서를 대면 아래에 펼쳐짐 */
 function decisionPop(p) {
@@ -6755,7 +6760,7 @@ function renderJudgeBell() {
       + `<div class="row2">불참 저장 · ${esc(done.tag)} <button type="button" class="linkbtn" data-jtags>사유 바꾸기</button> <button type="button" class="linkbtn" data-jundo>취소</button></div>`
       + (done.open ? `<div class="jtags">${BULK_TAGS.map((g) => `<button type="button" class="pbtn muted${g === done.tag ? " on" : ""}" data-jtag="${esc(g)}">${esc(g)}</button>`).join("")}</div>` : "") + `</li>`;
     return `<li class="judge-item" data-goto-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span>`
-      + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span><button type="button" class="pbtn muted jskip" data-jskip="${esc(p.noticeNo)}">불참</button></div>`
+      + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span><span class="jpick" role="group" aria-label="판단"><button type="button" class="jp" data-jgo="참가" data-jno="${esc(p.noticeNo)}" aria-label="참가">${JICON.참가}</button><button type="button" class="jp" data-jgo="보류" data-jno="${esc(p.noticeNo)}" aria-label="보류">${JICON.보류}</button><button type="button" class="jp jskip" data-jskip="${esc(p.noticeNo)}" aria-label="불참">${JICON.불참}</button></span></div>`
       + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
   };
   // 칸마다 마감이 가장 급한 3건만(11/23 사용자 — 길게 늘어놓지 않게), 나머지는 실제 공고 탭 그 대분류 탭에서
@@ -6773,7 +6778,7 @@ function renderJudgeBell() {
   const dailyIn = JUDGE_TODAY && rep ? daily.filter(isToday) : [...daily.filter(isToday), ...daily.filter((p) => !isToday(p))];
   // 주간 보고는 마감 D-2 안 공고만 펼쳐 보임(11/24 사용자 — 창이 길어 읽기 싫어짐), 나머지는 링크로
   const soon = (p) => Math.ceil((deadlineAt(p.meta?.deadline) - Date.now()) / 86400000) <= 2;  // 화면 D-N과 같은 셈
-  const toggle = rep ? `<span class="jtoggle" role="group" aria-label="보고 기간">${[[true, rep === todayText() ? "오늘" : mdOf(rep)], [false, "7일"]].map(([v, l]) => `<button type="button" data-jtoday="${v ? 1 : 0}" aria-pressed="${JUDGE_TODAY === v}" class="${JUDGE_TODAY === v ? "on" : ""}">${l}</button>`).join("")}</span>` : "";
+  const toggle = "";  // 오늘/7일 버튼은 뺌 — 아래 '오늘 보고 N건 모두 보기'가 따로 있음(2026-11-26 사용자)
   const repLink = repN ? `<p class="how"><button type="button" class="linkbtn" data-report="daily:${rep}">${rep === todayText() ? "오늘" : mdOf(rep)} 보고 ${repN}건 모두 보기 ›</button></p>` : "";
   $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3><p class="row2">보고에 나간 공고 중 판단 안 한 것 · 7일 안</p>`
     + section("입찰 · 매일 보고", dailyIn, JUDGE_TODAY && rep ? "" : "입찰", repLink, toggle) + section("협상 · 규격가격 · 주간 보고", weekly, "협상", "", "", weekly.filter(soon).slice(0, 3))
@@ -6794,6 +6799,17 @@ $("judgeBellPop").addEventListener("click", (ev) => {
   const t = ev.target;
   const tg = t.closest("[data-jtoday]");
   if (tg) { ev.stopPropagation(); JUDGE_TODAY = tg.dataset.jtoday === "1"; return void renderJudgeBell(); }
+  const go = t.closest("[data-jgo]");
+  if (go) {  // 참가·보류는 카드에서 사유를 고르게 — 그 카드로 가서 같은 버튼을 누름
+    ev.stopPropagation();
+    $("judgeBellPop").hidden = true;
+    $("judgeBellBtn").setAttribute("aria-expanded", "false");
+    if (gotoNotice(go.dataset.jno)) {
+      const btn = document.querySelector(`.part[data-part="${CSS.escape(go.dataset.jno)}"] [data-pstatus="${go.dataset.jgo}"]`);
+      if (btn && !btn.classList.contains("on")) btn.click();
+    }
+    return;
+  }
   const skip = t.closest("[data-jskip]");
   if (skip) { ev.stopPropagation(); JUDGE_ASK.add(skip.dataset.jskip); return void renderJudgeBell(); }
   const askLi = t.closest("li.asking");

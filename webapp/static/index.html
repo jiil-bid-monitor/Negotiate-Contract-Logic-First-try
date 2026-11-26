@@ -5524,6 +5524,12 @@ function helpDecide(q, tab = HELP_TAB, ctx = null) {
   const t = helpSquash(q), named = Object.keys(HELP_TAB_WORDS).find((k) => k !== key && HELP_TAB_WORDS[k].some((w) => t.includes(w)));
   const others = helpRank(q, HELP_DOCS.filter((x) => x.tab !== key && !x.common && (!named || x.tab === named) && !(typeof IS_VIEWER !== "undefined" && IS_VIEWER && (x.tab === "calc" || x.tab === "quant"))));
   if (sure(others) && named) return res("othertab", [others[0]], "named");
+  // NAS(보기 전용)엔 투찰 계산기·정량평가서 탭이 없음 — 그 탭 질문이면 서버 PC 웹앱에서 보라고 안내(11/26 사용자)
+  if (typeof IS_VIEWER !== "undefined" && IS_VIEWER) {
+    const pcTab = ["calc", "quant"].includes(named) ? named : null;
+    const pc = helpRank(q, HELP_DOCS.filter((x) => (x.tab === "calc" || x.tab === "quant") && !x.common && (!pcTab || x.tab === pcTab)));
+    if (pcTab || (sure(pc) && (!mine.length || pc[0].score >= mine[0].score * 1.5))) return res("serveronly", pc.slice(0, 1), pcTab || pc[0].x.tab);
+  }
   // ③ 나머지는 고르기로만(바로 답하지 않음) — 이 탭 후보 먼저, 다른 탭 후보는 이 탭 1등만큼은 닮았을 때
   // 후보 거르기(11/25 사용자 '후보 버튼도 질문과 맞게'): 두 검토자가 후보 510개를 채점하니 절반만 맞았고, 틀린 것은 낱말 하나만 겹친 다른 탭 질문과 2등 이하 후보였음
   const both = HELP_BOTH.test(q);  // 두 가지를 한 번에 물으면 둘째 후보도 남김
@@ -5698,6 +5704,10 @@ async function helpAnswer(q) {
   const faq = (x, head) => { HELP_CTX = x.tab === HELP_TAB ? { last: "faq", title: x.h[1] } : {}; helpSay("bot", head + helpText(x.h), [], x.tab === HELP_TAB ? helpSpotOf(x.h) : ""); return ["답함", x.h[1]]; };
   if (d.why === "exact") return faq(d.list[0], "");
   if (d.why === "which") { helpSay("bot", helpWhich(), []); return ["판단할 공고"]; }
+  if (d.kind === "serveronly") {
+    helpSay("bot", `'${HELP_SETS[d.why].name}' 탭은 서버 PC 웹앱에만 있습니다.\n서버 PC 웹앱에서 열어 확인해 주세요.` + (d.list[0] ? `\n\n[${d.list[0].h[1]}]\n\n${helpText(d.list[0].h)}` : ""), []);
+    return ["서버 PC 안내", d.list[0] ? d.list[0].h[1] : ""];
+  }
   const chance = d.why === "chance", prevNotice = HELP_CTX.last === "notice" ? HELP_CTX.notice : null;
   const found = await helpFind(q), one = found.list.length === 1 ? found.list[0] : null;
   if (one) { HELP_CTX = { last: "notice", notice: one }; helpSay("bot", helpNotice(one), chance ? null : []); }

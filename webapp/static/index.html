@@ -1000,8 +1000,6 @@ ol.steps li.first { background: var(--urgent-tint); }
 .off-group > summary::before { content: "▸"; color: var(--muted); font-size: 13px; }
 .off-group[open] > summary::before { content: "▾"; }
 .off-group > summary h2 { color: var(--muted); }
-.skip-group { margin-top: 16px; }
-.skip-group > summary .skip-note { color: var(--muted); font-size: 13px; }
 .enrich-meta { margin: -6px 0 12px; color: var(--brand); font-size: 12.5px; }
 .enrich-meta:empty { display: none; } /* 비어 있으면 자리 안 차지(11/18 사용자: 빈 공간이 너무 큼) */
 
@@ -3252,24 +3250,17 @@ function applyFilters() {
       const ahead = sorted.filter(briefingAhead).sort((a, b) => briefingAt(a) - briefingAt(b));
       const list = ahead.length ? [...ahead, ...sorted.filter((n) => !briefingAhead(n))] : sorted;
       if (list.length === 0) return "";
-      // 불참으로 판단한 공고는 지우지 않고 칸 맨 아래 접힌 '불참' 칸으로 (11/24 사용자 요청 — 판단 기록에 남아 있음).
-      // 이 화면에서 방금 판단한 공고는 사유를 고르는 동안 제자리에 둔다. 참가여부 필터로 '불참'을 고르면 접지 않음.
-      const folds = filters.part !== "불참";
-      const skip = folds ? list.filter((n) => partOf(n) === "불참" && !TOUCHED.has(n.noticeNo)) : [];
-      const rest = skip.length ? list.filter((n) => !skip.includes(n)) : list;
-      const skipBox = skip.length
-        ? `<details class="off-group skip-group" data-skipkey="${esc(key)}"${SKIP_OPEN.has(key) ? " open" : ""}>
-            <summary><h2>불참 <span class="group-n">${skip.length}건</span></h2><span class="skip-note">판단 기록에도 있습니다</span></summary>
-            ${skip.map(renderNotice).join("")}
-          </details>`
-        : "";
+      // 불참으로 판단한 공고는 실제 공고 탭에서 뺌 — 판단 기록 탭에서만 봄(11/26 사용자 요청, 11/24 접힌 '불참' 칸을 대체).
+      // 이 화면에서 방금 판단한 공고는 사유를 고르는 동안 제자리에 둔다. 참가여부 필터로 '불참'을 고르면 보임.
+      const hides = filters.part !== "불참";
+      const rest = hides ? list.filter((n) => !(partOf(n) === "불참" && !TOUCHED.has(n.noticeNo))) : list;
+      if (rest.length === 0) return "";
       return `
         <div class="group" id="${key === "본공고" ? "grpMain" : "grpPre"}">
           <div class="group-head">
-            <h2>${esc(key)} <span class="group-n">${list.length}건</span></h2>
+            <h2>${esc(key)} <span class="group-n">${rest.length}건</span></h2>
           </div>
           ${rest.map(renderNotice).join("")}
-          ${skipBox}
         </div>`;
     })
     .join("");
@@ -5420,7 +5411,7 @@ const HELP_SETS = {
     [4, "참가·보류·불참은 어디서 정하나요?", "카드 오른쪽 '참가 · 보류 · 불참' 버튼을 누르고\n사유를 골라 주세요(메모도 됩니다).\nNAS와 서버 PC 웹앱에 같이 보입니다.", "참가 보류 불참 판단 사유 버튼"],
     [4, "잘못 눌렀는데 취소할 수 있나요?", "고른 판단 버튼에 커서를 대면\n'되돌리기'가 보입니다.\n누르면 바로 전 판단으로 돌아갑니다.\n같은 버튼을 다시 누르면\n판단이 지워집니다.", "잘못 취소 되돌리 바꾸 수정 눌러버 잘못눌"],
     [4, "적은 사유를 고치고 싶습니다", "카드의 '사유 고치기'를 눌러 주세요.", "사유 고치 수정 메모 오타 사유수정"],
-    [4, "불참한 공고를 다시 보고 싶습니다", "본공고·사전규격 칸마다 맨 아래\n'불참' 묶음에 접혀 있습니다.\n판단 기록 탭에도 있습니다.", "불참 사라 어디 접혀"],
+    [4, "불참한 공고를 다시 보고 싶습니다", "판단 기록 탭에 있습니다.\n실제 공고 탭에서는 '필터'의 참가여부를 '불참'으로 고르면 보입니다.", "불참 사라 어디 접혀"],
     [4, "비슷한 공고는 지난번에 어떻게 판단했나요?", "공고명이 비슷한 공고를\n판단한 적이 있으면\n카드에 시계 모양 아이콘이 붙습니다.\n커서를 대면 2건까지 보이고\n그때의 판단과 사유가 같이 나옵니다.", "비슷한 지난번 지난판단 예전에 전에는"],
     [4, "'내가 맡기'는 언제 누르나요?", "카드 오른쪽 사람 모양 버튼입니다.\n그 공고의 담당을 나로 정할 때 누릅니다.\n참가·보류·불참을 누르면\n누른 분이 저절로 담당이 됩니다.\n맡은 뒤엔 '넘기기'로\n다른 팀원에게 넘길 수 있습니다.", "맡기 담당 넘기기"],
     [4, "팀원에게 의견을 남기고 싶습니다", "카드의 말풍선 아이콘(대화)을 누르고\n아래 칸에 적은 뒤\n'남기기'를 눌러 주세요.\n그 공고를 보는 팀원에게 보입니다.", "대화 의견 댓글 팀원 코멘트"],
@@ -5818,7 +5809,7 @@ const HELP_SPOT = {
   live: { "무엇부터 보면 되나요?": "#judgeBellBtn", "새 공고는 언제 들어오나요?": "#refresh", "협상·입찰·수의계약은 어떻게 다른가요?": "#catTabs", "특정 공고를 찾고 싶습니다": "#liveQ",
     "마감이 급한 공고부터 보고 싶습니다": "#liveSort || #filterOpen", "아직 판단하지 않은 공고만 보고 싶습니다": "#filterOpen", "용역·물품·공사 중 하나만 보고 싶습니다": "#filterOpen", "공고 원문은 어디서 보나요?": "#liveResults .notice h3 a", "'검토필요'는 어떤 공고인가요?": "#reviewGroup > summary", "'세부품명 공고'는 어떤 공고인가요?": ".cat-prod",
     "참가·보류·불참은 어디서 정하나요?": "#liveResults [data-pstatus]", "잘못 눌렀는데 취소할 수 있나요?": "#liveResults [data-pstatus].on", "적은 사유를 고치고 싶습니다": "#liveResults [data-preason]",
-    "불참한 공고를 다시 보고 싶습니다": "#liveResults .skip-group > summary", "'내가 맡기'는 언제 누르나요?": "#liveResults [data-powner]", "참가로 정한 다음에는 무엇을 하나요?": "#liveResults .next-step",
+    "불참한 공고를 다시 보고 싶습니다": "#filterOpen", "'내가 맡기'는 언제 누르나요?": "#liveResults [data-powner]", "참가로 정한 다음에는 무엇을 하나요?": "#liveResults .next-step",
     "싱크로율은 무슨 뜻인가요?": "#liveResults .card-score", "카드 왼쪽 띠 색은 무슨 뜻인가요?": "#liveResults .notice.live.compact", "'이전 공고'라고 나옵니다": "#liveMeta .meta-old", "참가할 수 있는 공고인지 어떻게 확인하나요?": "#liveResults .tag-group",
     "'자격 충족'·'자격 미달'은 무슨 뜻인가요?": "#liveResults .badge.qual.pass", "카드의 마감은 어느 날짜인가요?": "#liveResults .facts", "사업금액은 어떤 금액인가요?": "#liveResults .facts",
     "비슷한 공고는 지난번에 어떻게 판단했나요?": "#liveResults .phint", "팀원에게 의견을 남기고 싶습니다": "#liveResults [data-ptalk]", "참가로 정한 공고의 마감을 한눈에 보고 싶습니다": "#calBellBtn", "'미판단 공고' 숫자는 무슨 뜻인가요?": "#judgeBellBtn", "'회사 서류' 숫자는 무슨 뜻인가요?": "#docBellBtn", "이름을 적으라고 나옵니다": "#judge", "어떤 순서로 하나요?": "#liveResults [data-pstatus]" },

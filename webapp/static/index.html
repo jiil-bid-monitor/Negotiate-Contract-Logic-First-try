@@ -1542,10 +1542,11 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   box-shadow: inset 0 3px 5px rgba(255,255,255,.35), inset 0 -5px 8px rgba(0,0,0,.28), 0 5px 0 #0b3a29, 0 9px 18px rgba(0,0,0,.28); }
 .helpfab span { display: block; text-shadow: 0 2px 2px rgba(0,0,0,.35); transform: translateY(-1px); }
 /* 초록 지구 (2026-11-26 사용자) — 바탕 구슬 그대로, 대륙은 밝은 초록·경위선은 흰 선 */
-.helpfab { overflow: hidden; }
-.helpfab .globe { display: block; width: 100%; height: 100%; border-radius: 50%; }
-.helpfab .globe .land { fill: #8fdcae; opacity: .9; }
-.helpfab .globe .grid { fill: none; stroke: rgba(255,255,255,.35); stroke-width: 1; }
+/* 도우미 버튼 = 웃는 지구 + 새싹 (2026-11-26 사용자가 고른 그림 모양으로 직접 그림) — 구슬 바탕·그림자는 없앰 */
+.helpfab { background: none !important; box-shadow: none !important; width: 64px; height: 64px; filter: drop-shadow(0 4px 6px rgba(0,0,0,.25)); }
+.helpfab:active { box-shadow: none !important; }
+.helpfab .globe { display: block; width: 100%; height: 100%; overflow: visible; }
+.helpfab .globe .ln, .helpfab .globe .ln path { stroke: #1f2a2a; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
 @keyframes help-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 .helpfab.nudge { animation: help-bob 1.6s ease-in-out 3; }
 .helpnudge { position: fixed; right: 88px; bottom: 34px; z-index: 40; font: inherit; font-size: 13.5px; padding: 7px 12px; cursor: pointer;
@@ -2290,7 +2291,16 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   </section>
 
   <!-- 낙찰 후 서류(2026-11-10) — 투찰 기록·직접 넣은 공고의 낙찰자 확인(webapp/postaward.py), 공사 / 물품·용역 구분, 공고 폴더 만들기 -->
-  <button type="button" class="helpfab" id="helpFab" hidden aria-expanded="false" aria-label="도움말"><svg class="globe" viewBox="0 0 56 56" aria-hidden="true"><defs><clipPath id="globeClip"><circle cx="28" cy="28" r="28"/></clipPath><radialGradient id="globeShine" cx="32%" cy="26%" r="75%"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></radialGradient></defs><g clip-path="url(#globeClip)"><path class="land" d="M9 17c3-5 9-8 14-7 3 1 2 4 5 5 3 1 1 5-2 6-3 1-4 4-7 4-2 0-2 3-4 4-3 1-5-2-6-5-1-2-1-5 0-7z"/><path class="land" d="M30 26c3-1 7 0 9 2 2 3 0 6 1 9 0 3-3 6-6 7-2 0-3-3-3-5 0-3-3-4-3-7 0-2 0-5 2-6z"/><path class="land" d="M37 9c4 1 8 4 10 8 1 3-2 4-5 3-2-1-3-3-5-3-2 0-4-2-3-4 0-2 1-4 3-4z"/><path class="land" d="M13 38c2 0 4 2 5 4 1 2-1 4-3 4-2-1-4-3-4-5 0-2 1-3 2-3z"/><g class="grid"><ellipse cx="28" cy="28" rx="11" ry="27.5"/><ellipse cx="28" cy="28" rx="22" ry="27.5"/><path d="M28 0v56M0 28h56M3 16h50M3 40h50"/></g><circle cx="28" cy="28" r="28" fill="url(#globeShine)"/></g></svg></button>
+  <button type="button" class="helpfab" id="helpFab" hidden aria-expanded="false" aria-label="도움말"><svg class="globe" viewBox="0 0 60 60" aria-hidden="true"><defs><clipPath id="earthClip"><circle cx="30" cy="35" r="23"/></clipPath></defs>
+<g class="ln"><path d="M30 12.5V7" fill="none"/><path d="M30 8c-1-3.5-4.5-5.2-7.6-4.2 .6 3.3 4 5.2 7.6 4.2z" fill="#6dbb45"/><path d="M30 8c1-3.5 4.5-5.2 7.6-4.2-.6 3.3-4 5.2-7.6 4.2z" fill="#6dbb45"/></g>
+<circle cx="30" cy="35" r="23" fill="#8fdff2"/>
+<g clip-path="url(#earthClip)"><path d="M40 16c6 3 9 9 8 16-3-2-6-1-8-4-1-4-5-6-4-10z M33 46c4-2 10-1 12 3-2 4-8 6-13 4z" fill="#5bb3cc"/>
+<g class="ln" fill="#6dbb45"><path d="M7 26c2-6 7-10 13-11 2 2-1 4 1 6 2 1 4 0 4 3-2 2-5 1-7 3-1 2 1 4-1 6-2 1-4 0-5 2l-2 3c-2-3-4-7-3-12z"/><path d="M26 13c2-1 5-1 6 1 0 2-2 4-4 5-2-1-3-3-2-6z"/><path d="M15 39c3-2 7-1 9 2 2 2 1 5-1 7-1 3-2 6-4 8-2-3-3-7-4-10-1-2-1-5 0-7z"/><path d="M44 22c3 0 6 3 8 7 1 4 1 9 0 13-2 3-4 6-6 8-1-3 0-6-2-9-2-2-4-2-4-5 0-3 3-4 3-7 0-2 0-5 1-7z"/></g>
+<path d="M12 28c1-4 3-7 6-9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="11" cy="33" r="1.2" fill="#fff"/></g>
+<circle cx="30" cy="35" r="23" fill="none" class="ln"/>
+<circle cx="25" cy="33" r="1.7" fill="#1f2a2a"/><circle cx="35" cy="33" r="1.7" fill="#1f2a2a"/>
+<path d="M27.5 37.5c1.4 1.6 3.6 1.6 5 0" fill="none" stroke="#1f2a2a" stroke-width="1.4" stroke-linecap="round"/>
+<circle cx="21.5" cy="37.5" r="2" fill="#ff6b57"/><circle cx="38.5" cy="37.5" r="2" fill="#ff6b57"/></svg></button>
   <button type="button" class="helpnudge" id="helpNudge" hidden>사용법 안내</button>
   <div class="helpbox" id="helpBox" hidden role="dialog" aria-label="도움말"></div>
   <section id="tab-award" hidden>

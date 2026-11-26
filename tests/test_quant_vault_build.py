@@ -4456,6 +4456,10 @@ def test_joint_supply_form_recognized_by_body(tmp_path: Path):
     assert _joint_body(joint)
     single = _mini_hwpx(tmp_path / "s.hwpx", para("입찰참가 신청서") + para("※ 공동수급의 경우 대표사가 제출"))
     assert not _joint_body(single)
+    # (11/26 사용자 '공동수급 관련 서식은 무조건 공란') '□ 참여회사 명단 | 공동수급체 | 업체명 …' 표가 있는 대표자 선임계
+    roster = _mini_hwpx(tmp_path / "r.hwpx", para("제안 응모에 관한 대표자로 선임합니다.") + para("□ 참여회사 명단")
+                        + _tbl([[_c(0, 0, "공동 수급체"), _c(1, 0, "업체명"), _c(2, 0, "")]]))
+    assert _joint_body(roster)
 
 
 def test_signer_label_then_placeholder_two_lines(tmp_path: Path):

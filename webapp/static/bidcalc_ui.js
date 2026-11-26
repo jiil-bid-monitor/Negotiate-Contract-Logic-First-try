@@ -451,7 +451,7 @@
     const ticket = ++REC_TICKET;
     REC_PICK = null; REC_OPTIONS = []; REC_LOADING = true;
     renderResult();
-    $("#cRec").innerHTML = `<div class="why">비슷한 과거 공고로 추천을 계산하고 있어요… 처음 한 번은 수십 초 걸릴 수 있어요.</div>`;
+    $("#cRec").innerHTML = "";
     $("#cRecMsg").textContent = "계산 중…";
     $("#cRecBtn").disabled = true;
     try {

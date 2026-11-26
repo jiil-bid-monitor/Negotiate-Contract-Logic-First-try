@@ -1621,6 +1621,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 @keyframes help-spot { 0%, 100% { box-shadow: 0 0 0 3px var(--brand), 0 0 0 9px rgba(27,110,67,.25); } 50% { box-shadow: 0 0 0 3px var(--brand), 0 0 0 3px rgba(27,110,67,0); } }
 .help-spot { position: relative; z-index: 5; border-radius: 6px; box-shadow: 0 0 0 3px var(--brand), 0 0 0 9px rgba(27,110,67,.25); animation: help-spot 1s ease-in-out 3; }
 @media (prefers-reduced-motion: reduce) { .help-spot { animation: none; } }
+/* 표 칸은 그림자가 이웃 칸에 가려 모서리만 보임 — 칸 안쪽 테두리로 깜빡임(11/26 사용자) */
+@keyframes help-spot-cell { 0%, 100% { outline-color: var(--brand); } 50% { outline-color: transparent; } }
+:is(td, th).help-spot { box-shadow: none; outline: 3px solid var(--brand); outline-offset: -3px; border-radius: 0; animation: help-spot-cell 1s ease-in-out 3; }
 .helpbox .hpicks button small { color: var(--muted); font-size: 12px; margin-left: 4px; }
 .helpbox .htyping { display: flex; gap: 4px; padding: 13px 14px; }
 .helpbox .htyping i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: help-dot 1s infinite; }
@@ -5320,7 +5323,7 @@ const HELP_SETS = {
     [2, "아직 판단하지 않은 공고만 보고 싶습니다", "낙찰방법 탭 줄 오른쪽 '필터'를 누르고\n'참가여부'에서 '미지정'을 골라 주세요.\n휴대폰은 '필터 · 정렬' 버튼을 누릅니다.\n참가·보류·불참을 정하지 않은\n공고만 남습니다.\n검토필요 칸에는 걸리지 않습니다.", "미지정 미판단 안한 손안댄 안본"],
     [2, "마감이 급한 공고부터 보고 싶습니다", "낙찰방법 탭 줄 오른쪽 '정렬'에서\n'자격등록 마감 순'을 골라 주세요.\n휴대폰은 '필터 · 정렬' 버튼 안에 있습니다.\n자격등록·입찰·의견등록 마감 중\n가장 이른 날짜 순으로 나옵니다.\n투찰 마감·싱크로율·금액·최근 게시 순도 있고\n마지막에 고른 정렬이 기억됩니다.\n\n현장설명회가 남은 공고는 정렬과 상관없이\n본공고·사전규격 칸 맨 위에 나옵니다.", "정렬 순서 마감 금액 급한 임박 빠른순 나열 높은것 큰순 끝나는 위로"],
     [2, "용역·물품·공사 중 하나만 보고 싶습니다", "낙찰방법 탭 줄 오른쪽 '필터'를 누르고\n'업무'에서 골라 주세요.\n협상·입찰·수의계약 탭과\n같이 쓸 수 있습니다.", "용역 물품 공사 업무 용역만 물품만 공사만"],
-    [2, "특정 공고를 찾고 싶습니다", "목록 위 찾기 칸에\n공고명·기관·공고번호를 적어 주세요.\n띄어쓰기는 상관없습니다.", "찾기 검색 공고번호 찾으 찾고 찾는"],
+    [2, "특정 공고를 찾고 싶습니다", "불러오기 줄 오른쪽 돋보기를 누르고\n공고명·기관·공고번호를 적어 주세요.\n띄어쓰기는 상관없습니다.\n휴대폰은 목록 위 찾기 칸에 적습니다.", "찾기 검색 공고번호 찾으 찾고 찾는"],
     [2, "공고 원문은 어디서 보나요?", "공고명을 누르면\n나라장터 공고가 새 창으로 열립니다.", "원문 나라장터 공고문 첨부 상세"],
 
     [3, "참가할 수 있는 공고인지 어떻게 확인하나요?", "카드 셋째 줄의 칩을 봐 주세요.\n• 자격충족 / 자격 미보유: 요구 면허·세부품명\n• ✓ 지역제한 충족, ✓ 공동수급 가능 등: 지역·공동수급\n• ⚠ 실적 요건 등: 공고문에 따로 적힌 조건\n\n칩에 커서를 대면 근거가 보입니다.\n마지막 확인은 공고문으로 해 주세요.", "참가할수 참가가능 가능한지 되는지 조건 들어갈수"],
@@ -5354,7 +5357,7 @@ const HELP_SETS = {
     [2, "왜 빠졌는지 어디서 보나요?", "카드에 빠진 이유가 나옵니다.\n제외 키워드로 빠졌으면\n공고명 안 그 낱말이 형광으로 보입니다.", "왜 빠진 이유 사유"],
     [2, "빠진 이유별로 모아 보고 싶습니다", "위쪽 '제외 사유' 메뉴에서\n보고 싶은 이유를 골라 주세요.", "이유별 사유별 메뉴 거르"],
     [2, "자격·지역 때문에 빠진 공고도 볼 수 있나요?", "네. '제외 사유'에서 골라 주세요.\n• 보유하지 않은 자격 필요:\n    요구 면허를 하나도 갖지 않은 공고\n• 다른 지역 업체만:\n    다른 지역 업체만 참가할 수 있는 공고\n\n면허가 일부만 없는 공고는 빠지지 않고\n실제 공고 탭에 '자격 미보유'로 남습니다.", "자격 면허 지역제한 다른지역 보유하지 경기도 지역업체 업체만"],
-    [2, "특정 공고를 찾고 싶습니다", "목록 위 찾기 칸에\n공고명·기관·공고번호를 적어 주세요.", "찾기 검색 공고번호 찾으 찾고 찾는"],
+    [2, "특정 공고를 찾고 싶습니다", "위쪽 요약 줄 오른쪽 돋보기를 누르고\n공고명·기관·공고번호를 적어 주세요.\n휴대폰은 목록 위 찾기 칸에 적습니다.", "찾기 검색 공고번호 찾으 찾고 찾는"],
     [2, "마감이 지난 공고도 나오나요?", "나오지 않습니다.", "마감 지난"],
 
     [3, "잘못 빠진 공고를 되살리고 싶습니다", "맨 위 '내 이름'을 적고\n'실제 공고로 올리기'를 눌러 주세요.\n실제 공고 탭으로 옮겨져\n판단할 수 있습니다.\n올린 공고는 NAS와 서버 PC 웹앱에\n같이 보입니다.", "되살 올리기 잘못빠진 살리 복구 빠져있던"],
@@ -5658,8 +5661,8 @@ const helpText = (h) => ((IS_VIEWER && h[4]) || h[2]).replace("{여기}", IS_VIE
 // '어디인지 보기'(11/25 사용자) — 답에 나온 버튼·칸을 실제 화면에서 잠깐 표시. 캡처 그림 대신 화면의 그 요소를 가리켜 화면을 고쳐도 낡지 않음.
 // {탭: {질문 제목: CSS 선택자}} — 맞는 요소 중 화면에 보이는 첫 번째. 요소 이름을 바꾸면 여기도 같이(없으면 '지금 화면에는 없습니다'라고 말함)
 const HELP_SPOT = {
-  live: { "무엇부터 보면 되나요?": "#judgeBellBtn", "새 공고는 언제 들어오나요?": "#load, #liveMeta", "협상·입찰·수의계약은 어떻게 다른가요?": "#catTabs", "특정 공고를 찾고 싶습니다": "#liveQ",
-    "마감이 급한 공고부터 보고 싶습니다": "#liveSort", "아직 판단하지 않은 공고만 보고 싶습니다": "#filterOpen", "용역·물품·공사 중 하나만 보고 싶습니다": "#filterOpen", "공고 원문은 어디서 보나요?": "#liveResults .notice h3 a", "'검토필요'는 어떤 공고인가요?": "#reviewGroup > summary", "'세부품명 공고'는 어떤 공고인가요?": ".cat-prod",
+  live: { "무엇부터 보면 되나요?": "#judgeBellBtn", "새 공고는 언제 들어오나요?": "#refresh", "협상·입찰·수의계약은 어떻게 다른가요?": "#catTabs", "특정 공고를 찾고 싶습니다": "#liveQ",
+    "마감이 급한 공고부터 보고 싶습니다": "#liveSort || #filterOpen", "아직 판단하지 않은 공고만 보고 싶습니다": "#filterOpen", "용역·물품·공사 중 하나만 보고 싶습니다": "#filterOpen", "공고 원문은 어디서 보나요?": "#liveResults .notice h3 a", "'검토필요'는 어떤 공고인가요?": "#reviewGroup > summary", "'세부품명 공고'는 어떤 공고인가요?": ".cat-prod",
     "참가·보류·불참은 어디서 정하나요?": "#liveResults [data-pstatus]", "잘못 눌렀는데 취소할 수 있나요?": "#liveResults [data-pundo]", "적은 사유를 고치고 싶습니다": "#liveResults [data-preason]",
     "불참한 공고를 다시 보고 싶습니다": "#liveResults .skip-group > summary", "'내가 맡기'는 언제 누르나요?": "#liveResults [data-powner]", "참가로 정한 다음에는 무엇을 하나요?": "#liveResults .next-step",
     "싱크로율은 무슨 뜻인가요?": "#liveResults .card-score", "참가할 수 있는 공고인지 어떻게 확인하나요?": "#liveResults .tag-group",
@@ -5669,9 +5672,9 @@ const HELP_SPOT = {
   log: { "참가한 공고만 보고 싶습니다": "#logStatus", "엑셀로 받고 싶습니다": "#logCsv", "판단을 취소하고 싶습니다": "#logList [data-pundo]", "지난주 기록은 어디에 있나요?": "#logList .log-week summary", "지난번에 왜 불참했는지 보고 싶습니다": "#logQ", "어떤 순서로 하나요?": "#logStatus" },
   corpus: { "특정 사업을 찾고 싶습니다": "#corpusQ", "진행 중인 사업은 어떻게 정해지나요?": ".corpus-ongoing > summary", "무엇부터 보면 되나요?": ".corpus-ongoing > summary", "어떤 순서로 하나요?": "#corpusQ", "지난 사업의 과업 내용을 보고 싶습니다": "#corpusRows .proj" },
   calc: { "무엇부터 보면 되나요?": "#cNo", "어떤 순서로 하나요?": "#cLookup", "추천 투찰금액은 어떻게 정해지나요?": ".calc-rec", "'경쟁 규모'는 무엇으로 고르나요?": "#cRecScale", "난수표는 언제 쓰나요?": "#cDraw > summary",
-    "투찰한 금액을 기록하고 싶습니다": "#cRecord", "외주 추천 금액은 왜 적나요?": "#cRecOut", "외주 금액으로 투찰했습니다": ".rec-actual", "개찰 결과는 언제 나오나요?": '[data-calcpage="log"]', "공고번호를 찾지 못한다고 나옵니다": "#cNo",
+    "투찰한 금액을 기록하고 싶습니다": "#cRecord", "외주 추천 금액은 왜 적나요?": "#cRecOut", "외주 금액으로 투찰했습니다": ".rec-actual", "개찰 결과는 언제 나오나요?": '#bidlogReload || [data-calcpage="log"]', "공고번호를 찾지 못한다고 나옵니다": "#cNo",
     "추천 금액 그대로 투찰해도 되나요?": ".calc-rec", "A값·순공사원가는 직접 넣어야 하나요?": "#cA", "기초금액·하한율이 '-'로 나옵니다": "#cBasis",
-    "기록한 금액을 고치고 싶습니다": '[data-calcpage="log"]', "'낙찰'·'탈락'과 등수는 어떻게 읽나요?": '[data-calcpage="log"]', "지난 투찰을 엑셀로 받고 싶습니다": '[data-calcpage="log"]' },
+    "기록한 금액을 고치고 싶습니다": '#bidlogRows tr[data-id] [data-act="edit"] || [data-calcpage="log"]', "'낙찰'·'탈락'과 등수는 어떻게 읽나요?": '#bidlogRows tr[data-id] td.res || [data-calcpage="log"]', "지난 투찰을 엑셀로 받고 싶습니다": '#bidlogCsv || [data-calcpage="log"]' },
   award: { "무엇부터 보면 되나요?": "#awardList h3", "목록은 어떻게 나뉘어 있나요?": "#awardList h3", "단계 표시는 어떻게 보나요?": "#awardList .award-steps", "개찰 결과는 언제 나오나요?": "#awardCheck",
     "공고가 목록에 보이지 않습니다": "#tab-award details > summary", "공고를 목록에서 빼고 싶습니다": "#awardList .award-more > summary", "계약 단계로는 언제 넘어가나요?": "#awardCheck",
     "'낙찰 서류 만들기'가 눌리지 않습니다": "#awardList .award-more > summary", "만든 서류는 어디에 있나요?": "#awardList [data-award-open]", "'서류 다시 만들기'는 언제 누르나요?": "#awardList .award-more > summary",
@@ -5693,7 +5696,9 @@ function helpSpot(sel) {
     if (doc !== document && !doc.getElementById("helpSpotCss")) { const st = doc.createElement("style"); st.id = "helpSpotCss"; st.textContent = HELP_SPOT_CSS; doc.head.appendChild(st); }
   }
   // 보이는 것 먼저, 없으면 접힌 묶음(불참 묶음 등) 안의 것. 접힌 묶음은 펼침
-  const find = () => { const all = [...doc.querySelectorAll(sel)].filter((x) => !x.closest("#helpBox")); return all.find((x) => x.checkVisibility()) || all.find((x) => x.offsetParent !== null && x.closest("details:not([open])")); };
+  // 'A || B' = A가 보이면 A, 아니면 B(예: 투찰내역 화면이면 표 칸, 아니면 투찰내역 탭 버튼 — 11/26 사용자 '좀 정확하게')
+  const pick = (one) => { const all = [...doc.querySelectorAll(one)].filter((x) => !x.closest("#helpBox")); return all.find((x) => x.checkVisibility()) || all.find((x) => x.offsetParent !== null && x.closest("details:not([open])")); };
+  const find = () => { for (const one of sel.split("||")) { const x = pick(one.trim()); if (x) return x; } return null; };
   let el = find();
   for (let d = el && el.closest("details:not([open])"); d && !el.checkVisibility(); d = d.parentElement.closest("details:not([open])")) d.open = true;
   if (!el) { HELP_VIEW = "chat"; helpSay("bot", "지금 화면에는 그 자리가 보이지 않습니다.\n해당하는 공고나 기록이 생기면 나타납니다.", []); return renderHelp(); }

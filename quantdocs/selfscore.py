@@ -937,8 +937,19 @@ def read_form(cells) -> list[FormRow]:
             if head is not None:
                 pts_head = next((c for c in cells if c is not head and plain(c.text) in ("배점", "총배점")
                                  and c.row <= head.row < c.row + max(1, c.rowspan)), None)
+            elif group.rowspan >= 1 and not any(c.row == group.row + max(1, group.rowspan) and group.col <= c.col < group.col + group.colspan
+                                                and c.text.strip() for c in cells):
+                head = group  # '자체평가' 머리 아래 칸이 바로 평점 칸(11/26 — 아래에 '배점' 머리가 없는 표)
+    if head is not None and pts_head is not None:
+        # 머리 줄에 '배점'이 둘 — '평가항목 | 배점 | 평가요소 | 평가기준 | 배점 | (평점)'(11/26 사용자 제보: 경영상태·기술능력이 빔 —
+        # 왼쪽 항목 배점 칸을 줄 배점으로 읽어 기준을 하나도 못 읽었음). 줄 배점 = 평점 칸에 가까운 오른쪽 '배점', 항목 배점 = 왼쪽
+        twins = sorted((c for c in cells if plain(c.text) in ("배점", "총배점") and c.col < head.col
+                        and c.row <= head.row < c.row + max(1, c.rowspan)), key=lambda c: c.col)
+        if len(twins) >= 2:
+            item_pts_col, pts_head = twins[0].col, twins[-1]
     if head is None or pts_head is None or not (pts_head.row <= head.row < pts_head.row + max(1, pts_head.rowspan)):
         return []
+    item_pts_col = locals().get("item_pts_col")
     rows: dict[int, list] = {}
     for c in cells:
         if c.row > head.row:
@@ -1022,7 +1033,8 @@ def read_form(cells) -> list[FormRow]:
             q = _sq(t)
             return bool(q) and not (parse_range(t) and len(q) <= 20) and not any(g in q for g in GRADES) \
                 and q not in ("해당없음", "해당") and not re.search(r"회사채|기업어음|^[A-D][A-D0-9+\-]*", q)
-        label = " ".join(re.sub(r"\s+", " ", c.text).strip() for c in first if c.col < min(pcol, scol) and is_label(c.text))
+        label = " ".join(re.sub(r"\s+", " ", c.text).strip() for c in first if c.col < min(pcol, scol) and is_label(c.text)
+                         and c.col != item_pts_col)  # 항목 배점 칸('5')은 이름이 아님(11/26)
         if re.fullmatch(r"\s*(?:계|합\s*계|소\s*계|총\s*계|총\s*점)\s*(?:[(（][^)）]*[)）])?\s*", label):  # '합 계(20점)'(11/18)
             out.append(FormRow(label, None, target, total=True))
             continue
@@ -1080,8 +1092,11 @@ def read_form(cells) -> list[FormRow]:
                     # 여러 줄을 합친 칸(항목 평점 칸)은 등급 줄 칸이 아님 — 항목 점수를 '기술사 0명 = 0.0'으로 덮어썼음(11/16 사용자 제보)
                     sc = next((c for c in line if c.col <= scol < c.col + c.colspan and c.blank and c.rowspan == 1), None)
                     nc = next((c for c in line if c.col > scol and re.search(r"명\s*[×xX*]", c.text)), None)
-                    if (sc is not None or nc is not None) and not any(g in k for k in grade_cells for g in gs):
-                        grade_cells[gs] = (sc, nc)
+                    # 등급표 머리 '등급 | 배점 | 인원'의 '인원' 칸 아래 빈 칸 = 그 등급 사람 수(11/26 사용자 제보)
+                    kc = next((c for c in line if c.blank and any(_sq(h.text) == "인원" and h.col == c.col and h.row < r
+                                                                 for r2 in rs for h in rows[r2])), None)
+                    if (sc is not None or nc is not None or kc is not None) and not any(g in k for k in grade_cells for g in gs):
+                        grade_cells[gs] = (sc, nc, kc)
                 continue
             if pts is None:
                 continue
@@ -1123,6 +1138,10 @@ def read_form(cells) -> list[FormRow]:
             hg, col_cells, zero_cells = _horizontal(rs, rows, pcol, scol, crit)
             grade_cells = grade_cells or hg
         points = cap if cap is not None else (max(nums) if nums else None)
+        if item_pts_col is not None:  # 항목 배점 칸('경영상태 | 5')이 따로 있으면 그 값이 상한(11/26)
+            ip = _num(next((c.text for c in first if c.col <= item_pts_col < c.col + c.colspan), ""))
+            if ip is not None:
+                points = ip
         if points is None or (crit.per_grade and cap is None):
             # 상한 줄 없이 등급별 1인당 점수만 있는 표 — 항목 이름 '기술능력(6점)'의 괄호 점수가 상한(11/20 사용자 제보: 상한 0점으로 읽어 0점)
             lp = re.search(r"[(（]\s*(\d+(?:\.\d+)?)\s*점\s*[)）]", label)

@@ -3369,7 +3369,7 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
         # 기술인력 등급 줄마다 그 등급 점수 + 비고 '명 × 점 = 점'(11/13 사용자 요청: 부산 업사이클센터 '특급기술자 | 1.0점 | __ | 명 × 점 = 점')
         if row.grade_cells and row.crit is not None and item.kind == "staff":
             one = lambda v: (lambda t: t if "." in t else t + ".0")(f"{round(v, 2):g}")
-            for gs, (sc, nc) in row.grade_cells.items():
+            for gs, (sc, nc, *kc) in row.grade_cells.items():
                 gs = (gs,) if isinstance(gs, str) else gs  # 한 줄에 등급 여럿('기술사 또는 특급기술자')이면 인원을 더함(11/16)
                 per = row.crit.per_grade.get(gs[0])
                 if per is None:
@@ -3381,6 +3381,8 @@ def _self_score_edits(cells: list[Cell], ctx, rep: FillReport, tally: dict | Non
                     out.append((sc, [one(v)], False))
                 if nc is not None:
                     out.append((nc, [f"{n}명 × {one(per)}점 = {one(v)}점"], False))
+                if kc and kc[0] is not None:  # '인원' 칸 — 사람 수만(11/26)
+                    out.append((kc[0], [str(n)], False))
                 rep.filled.append(f"자기평점 '{name}' {g} {n}명 × {one(per)}점 = {one(v)}점")
     total = next((r for r in rows if r.total), None)
     done = [it for _, it in scored if it.score is not None]

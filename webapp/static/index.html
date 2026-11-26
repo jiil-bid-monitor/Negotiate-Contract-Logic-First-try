@@ -2006,6 +2006,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .theme #themeToggle .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .theme #themeToggle .sun, .theme #themeToggle[data-cur="dark"] .moon { display: none; }
 .theme #themeToggle[data-cur="dark"] .sun { display: inline; }
+@media (min-width: 761px) { .topbar .theme { order: 100; } }  /* 밝기 버튼은 위 띠 맨 오른쪽(나라장터·21라인 뒤) */
 /* ② 불러오기 줄: 평소 상태 글 없음(경고만) */
 #liveTools .load-state:empty, #liveTools .live-meta:empty { display: none; }
 /* ③ 넓은 화면: 필터는 버튼 하나, 'N건 보는 중'·정렬은 낙찰방법 탭 줄 오른쪽 */

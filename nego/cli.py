@@ -319,6 +319,10 @@ def main(argv: list[str] | None = None) -> int:
         help="HTML 리포트를 메일로 보낸다(주간 보고용, SMTP_* 환경변수·config/recipients.json — 통합 결정 15번)",
     )
     parser.add_argument(
+        "--sent-mark",
+        help="텔레그램·메일을 실제로 보냈을 때만 이 파일을 만든다 — 워크플로가 bot-state sent/에 올려 같은 날 다시 도는 Run이 이 회사를 건너뜀(2026-11-26)",
+    )
+    parser.add_argument(
         "--same-as",
         help="다른 회사 보고 기록 폴더(예: output/report-log) — 그 보고에 나간 공고는 메일 맨 아래 '지일 공고와 겹침'에 한 줄씩(그리다 주간 메일)",
     )
@@ -472,6 +476,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.email:
         delivered = _send_email(candidates, stats, paths.get("html"), now, _shared_notices(args.same_as)) or delivered
+
+    if args.sent_mark and delivered:
+        Path(args.sent_mark).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.sent_mark).touch()
 
     # 주간 보고는 메일로만 나가므로(2026-11-16) 보고 기록·시트는 텔레그램·메일 어느 쪽이든 보낸 실행에서 남긴다
     if args.report_log and candidates and (args.telegram or args.email):

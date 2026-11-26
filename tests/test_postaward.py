@@ -25,6 +25,12 @@ class PostAwardTest(unittest.TestCase):
             self.assertEqual(reissue_needed(["사업자등록증 사본"], d), [])
             both = [k for k, _ in reissue_needed(["국세 및 지방세 완납증명서, 4대보험 가입자명부"], d)]
             self.assertEqual(both, ["국세 납세증명서", "지방세 납세증명서", "4대보험 가입증명"])
+            g = d / "그리다"  # 그리다 서류 이름은 '(그리다) …'·덧붙임 있음(11/26)
+            g.mkdir()
+            (g / "_목록.json").write_text(json.dumps([{"종류": "(그리다) 국세 납세증명서", "발급일": "2025-12-11"},
+                                                    {"종류": "(그리다) 4대보험 가입증명(고용·산재)", "발급일": "2025-11-03"}], ensure_ascii=False), encoding="utf-8")
+            self.assertEqual(reissue_needed(["국세 완납증명서, 4대보험 가입자명부"], g),
+                             [("국세 납세증명서", "2025-12-11"), ("4대보험 가입증명", "2025-11-03")])
             wb = Workbook(); wb.active.title = "기본사항"; wb.create_sheet("공문"); wb.save(d / "t.xlsx")
             add_reissue_sheet(d / "t.xlsx", rows)
             add_reissue_sheet(d / "t.xlsx", rows)  # 두 번 넣어도 탭 하나

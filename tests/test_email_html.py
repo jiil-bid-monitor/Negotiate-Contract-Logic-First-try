@@ -52,6 +52,9 @@ class TestEmailHtml(unittest.TestCase):
         self.assertLess(body.index("R26EM0000"), body.index("지일 공고와 겹침 ("))
         self.assertGreater(body.index("○○전시관 전시물 제작설치 1"), body.index("지일 공고와 겹침 ("))
         self.assertNotIn("지일 공고와 겹침", render_email_html(self.cands, self.stats, NOW))
+        all_same = render_email_html(self.cands, self.stats, NOW, shared={"R26EM0000", "R26EM0001"})
+        self.assertNotIn("조건에 맞는 공고가 없습니다", all_same, "모두 겹치면 빈 관심 공고 칸은 안 씀")
+        self.assertIn("지일 공고와 겹침 (2건)", all_same)
 
     def test_main_and_prespec_sub_sections(self):
         """2026-10-21 사용자 요청: 본공고·사전규격이 섞이면 소구역, 사전규격 자격 미확인은 그 이유를 적음."""

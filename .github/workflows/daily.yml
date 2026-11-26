@@ -380,11 +380,11 @@ jobs:
           [ "$SENT_STATE" = "true" ] && ARGS+=(--sent-state state/sent_bids.json)
           [ -n "$REPORT_LOG" ] && ARGS+=(--report-log "$REPORT_LOG")
           [ "$EMAIL" = "true" ] && ARGS+=(--email)
+          # 보냄 표시(실제로 보냈을 때만) — 아래 '보낸 공고 기록 저장'이 bot-state sent/에 올림(다시 도는 Run이 지일을 건너뛰게)
+          [ -n "$REPORT_LOG" ] && ARGS+=(--sent-mark "state/sent/$(date +%F)-${REPORT_LOG}-jiil")
           # 개발자 알림에 마지막 오류 줄을 붙이려고 로그를 파일로도 남긴다(output/ 밖 — 아티팩트에 안 올림)
           set -o pipefail
           python -m nego "${ARGS[@]}" 2>&1 | tee collect.log
-          # 보냄 표시 — 아래 '보낸 공고 기록 저장'이 bot-state sent/에 올림(다시 도는 Run이 지일을 건너뛰게)
-          if [ -n "$REPORT_LOG" ]; then mkdir -p state/sent && touch "state/sent/$(date +%F)-${REPORT_LOG}-jiil"; fi
 
       # (주)그리다 — 같은 수집을 그리다 보유 자격으로 한 번 더(2026-11-24 사용자 결정). 매일 입찰은 그리다 방(Secret
       # TELEGRAM_GRIDA_CHAT_ID — 11/26 지금은 안 씀, 없으면 매일 보고만 건너뜀), 주간은 메일(config/companies/grida/recipients.json).
@@ -430,9 +430,9 @@ jobs:
           [ "$SENT_STATE" = "true" ] && ARGS+=(--sent-state state/sent_bids_grida.json)
           [ -n "$REPORT_LOG" ] && ARGS+=(--report-log "$REPORT_LOG")
           [ "$EMAIL" = "true" ] && ARGS+=(--email --same-as output/report-log)  # 지일 주간 메일에 나간 공고는 맨 아래 한 줄씩
+          [ -n "$REPORT_LOG" ] && ARGS+=(--sent-mark "state/sent/$(date +%F)-${REPORT_LOG}-grida")
           set -o pipefail
           python -m nego "${ARGS[@]}" 2>&1 | tee collect_grida.log
-          if [ -n "$REPORT_LOG" ]; then mkdir -p state/sent && touch "state/sent/$(date +%F)-${REPORT_LOG}-grida"; fi
 
       # 지일·그리다 결과 합치기 — 어느 한쪽이라도 실패하면 새 Run으로 다시(이미 보낸 회사는 건너뜀). 건너뜀(이미 보냄)은 성공으로 셈
       - name: 수집 결과
@@ -521,8 +521,8 @@ jobs:
       # 재시도가 1분 간격·최대 30회라 중간 실패까지 알리면 방이 넘친다.
       - name: 개발자 알림 (첫 실패 · 최종 실패 · 회복)
         if: >-
-          (steps.result.outputs.outcome == 'failure' && (fromJSON(steps.mode.outputs.attempt) == 1 || fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.MAX_ATTEMPTS)))
-          || (steps.result.outputs.outcome == 'success' && fromJSON(steps.mode.outputs.attempt) > 1)
+          !cancelled() && ((steps.result.outputs.outcome == 'failure' && (fromJSON(steps.mode.outputs.attempt) == 1 || fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.MAX_ATTEMPTS)))
+          || (steps.result.outputs.outcome == 'success' && fromJSON(steps.mode.outputs.attempt) > 1))
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_DEV_CHAT_ID: ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
@@ -541,7 +541,7 @@ jobs:
           if [ "$OUTCOME" = "failure" ]; then
             ERRORS=$( (grep -E " ERROR |Error|조회 실패" collect.log collect_grida.log 2>/dev/null || true) | tail -5 | cut -c1-300)
             [ -z "$ERRORS" ] && ERRORS="(오류 줄 없음 — Actions 로그 확인)"
-            REPORT="${WHO} 보고는 나가지 않았습니다(다른 회사 보고는 그대로 나감)."
+            REPORT="${WHO} 보고는 나가지 않았습니다."
             [ "$TELEGRAM" != "true" ] && REPORT="(텔레그램 발송을 켜지 않은 실행)"
             if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
               TEXT=$(printf '[개발자 알림] 나라장터 수집 실패 — %s회 모두 실패, 자동 재시도 중단\n%s\n%s\n\n마지막 오류:\n%s\n\n로그: %s' \
@@ -559,12 +559,12 @@ jobs:
           python -m nego.telegram dev-alert "$TEXT"
 
       - name: 재시도 소진
-        if: steps.result.outputs.outcome == 'failure' && fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.MAX_ATTEMPTS)
+        if: "!cancelled() && steps.result.outputs.outcome == 'failure' && fromJSON(steps.mode.outputs.attempt) >= fromJSON(env.MAX_ATTEMPTS)"
         run: echo "::error::${{ steps.mode.outputs.attempt }}번째 시도에서도 실패 — 최대 재시도 소진, 자동 재시도를 중단합니다."
 
       - name: 실패 처리
         id: fail
-        if: steps.result.outputs.outcome == 'failure'
+        if: "!cancelled() && steps.result.outputs.outcome == 'failure'"
         run: |
           echo "failed=true" >> "$GITHUB_OUTPUT"
           exit 1

@@ -6605,7 +6605,7 @@ function renderDocBell() {
   $("docBellN").textContent = DOC_BELL.length;
   $("docBellN").hidden = !DOC_BELL.length;
   $("docBellPop").innerHTML = (DOC_BELL.length ? `<h3>회사 서류 갱신 알림 ${DOC_BELL.length}건</h3>` : "<h3>지금 갱신할 회사 서류가 없습니다</h3>") + "<ul>"
-    + DOC_BELL.map((d) => docItem(d, `<span class="uphint">PDF 끌어다 놓기</span>`)).join("")
+    + DOC_BELL.map((d) => docItem(d, `<span class="uphint">혹은 PDF 끌어다 놓기</span>`)).join("")
     + "</ul>"
     + `<p class="how"><button type="button" class="linkbtn" data-open-mgr>전체 서류 관리 (추가 · 수정 · 빼기) ›</button></p>`;
 }

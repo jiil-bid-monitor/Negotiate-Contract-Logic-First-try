@@ -1542,7 +1542,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   box-shadow: inset 0 3px 5px rgba(255,255,255,.35), inset 0 -5px 8px rgba(0,0,0,.28), 0 5px 0 #0b3a29, 0 9px 18px rgba(0,0,0,.28); }
 .helpfab span { display: block; text-shadow: 0 2px 2px rgba(0,0,0,.35); transform: translateY(-1px); }
 /* 초록 지구 (2026-11-26 사용자) — 바탕 구슬 그대로, 대륙은 밝은 초록·경위선은 흰 선 */
-/* 도우미 버튼 = 웃는 지구 + 새싹 (2026-11-26 사용자가 고른 그림 모양으로 직접 그림) — 구슬 바탕·그림자는 없앰 */
+/* 도우미 버튼 = 웃는 지구 + 노란 고리 (2026-11-26 사용자 — 고른 그림과 다르게 새로 그림) — 구슬 바탕·그림자는 없앰 */
 .helpfab { background: none !important; box-shadow: none !important; width: 64px; height: 64px; filter: drop-shadow(0 4px 6px rgba(0,0,0,.25)); }
 .helpfab:active { box-shadow: none !important; }
 /* '사용법 안내' 말풍선은 지구 버튼 왼쪽, 가운데 높이 (2026-11-26 사용자 — 예전 '?' 버튼 때 모양) */
@@ -2297,16 +2297,17 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   </section>
 
   <!-- 낙찰 후 서류(2026-11-10) — 투찰 기록·직접 넣은 공고의 낙찰자 확인(webapp/postaward.py), 공사 / 물품·용역 구분, 공고 폴더 만들기 -->
-  <button type="button" class="helpfab" id="helpFab" hidden aria-expanded="false" aria-label="도움말"><svg class="globe" viewBox="0 0 60 60" aria-hidden="true"><defs><clipPath id="earthClip"><circle cx="30" cy="35" r="23"/></clipPath></defs>
-<g class="ln"><path d="M30 12.5V7" fill="none"/><path d="M30 8c-1-3.5-4.5-5.2-7.6-4.2 .6 3.3 4 5.2 7.6 4.2z" fill="#6dbb45"/><path d="M30 8c1-3.5 4.5-5.2 7.6-4.2-.6 3.3-4 5.2-7.6 4.2z" fill="#6dbb45"/></g>
-<circle cx="30" cy="35" r="23" fill="#8fdff2"/>
-<g clip-path="url(#earthClip)"><path d="M40 16c6 3 9 9 8 16-3-2-6-1-8-4-1-4-5-6-4-10z M33 46c4-2 10-1 12 3-2 4-8 6-13 4z" fill="#5bb3cc"/>
-<g class="ln" fill="#6dbb45"><path d="M7 26c2-6 7-10 13-11 2 2-1 4 1 6 2 1 4 0 4 3-2 2-5 1-7 3-1 2 1 4-1 6-2 1-4 0-5 2l-2 3c-2-3-4-7-3-12z"/><path d="M26 13c2-1 5-1 6 1 0 2-2 4-4 5-2-1-3-3-2-6z"/><path d="M15 39c3-2 7-1 9 2 2 2 1 5-1 7-1 3-2 6-4 8-2-3-3-7-4-10-1-2-1-5 0-7z"/><path d="M44 22c3 0 6 3 8 7 1 4 1 9 0 13-2 3-4 6-6 8-1-3 0-6-2-9-2-2-4-2-4-5 0-3 3-4 3-7 0-2 0-5 1-7z"/></g>
-<path d="M12 28c1-4 3-7 6-9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="11" cy="33" r="1.2" fill="#fff"/></g>
-<circle cx="30" cy="35" r="23" fill="none" class="ln"/>
-<circle cx="25" cy="33" r="1.7" fill="#1f2a2a"/><circle cx="35" cy="33" r="1.7" fill="#1f2a2a"/>
-<path d="M27.5 37.5c1.4 1.6 3.6 1.6 5 0" fill="none" stroke="#1f2a2a" stroke-width="1.4" stroke-linecap="round"/>
-<circle cx="21.5" cy="37.5" r="2" fill="#ff6b57"/><circle cx="38.5" cy="37.5" r="2" fill="#ff6b57"/></svg></button>
+  <button type="button" class="helpfab" id="helpFab" hidden aria-expanded="false" aria-label="도움말"><svg class="globe" viewBox="0 0 60 60" aria-hidden="true"><defs><clipPath id="earthClip"><circle cx="30" cy="31" r="21"/></clipPath><radialGradient id="earthSea" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#b6f0e0"/><stop offset="1" stop-color="#5cc4ab"/></radialGradient></defs>
+<ellipse cx="30" cy="31" rx="28" ry="8" fill="none" stroke="#f4c95d" stroke-width="2" transform="rotate(-18 30 31)" class="ring-back"/>
+<circle cx="30" cy="31" r="21" fill="url(#earthSea)"/>
+<g clip-path="url(#earthClip)" fill="#3f9d5e"><circle cx="16" cy="20" r="7"/><circle cx="22" cy="16" r="5"/><circle cx="44" cy="22" r="6"/><circle cx="47" cy="30" r="4"/><circle cx="18" cy="44" r="6"/><circle cx="25" cy="48" r="4"/><circle cx="43" cy="45" r="5"/></g>
+<circle cx="22" cy="21" r="4" fill="#fff" opacity=".55"/>
+<circle cx="30" cy="31" r="21" fill="none" stroke="#2f6b4a" stroke-width="1.6"/>
+<path d="M22.5 31c1-1.6 3-1.6 4 0M33.5 31c1-1.6 3-1.6 4 0" fill="none" stroke="#24453a" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M27 35.5c1.5 2.4 4.5 2.4 6 0z" fill="#24453a"/>
+<ellipse cx="20.5" cy="35" rx="2.4" ry="1.6" fill="#ff8a7a" opacity=".85"/><ellipse cx="39.5" cy="35" rx="2.4" ry="1.6" fill="#ff8a7a" opacity=".85"/>
+<path d="M2.5 37.5C10 43 50 30 57.5 24.5" fill="none" stroke="#f4c95d" stroke-width="2" stroke-linecap="round"/>
+<circle cx="55" cy="18" r="2.2" fill="#f4c95d"/></svg></button>
   <button type="button" class="helpnudge" id="helpNudge" hidden>사용법 안내</button>
   <div class="helpbox" id="helpBox" hidden role="dialog" aria-label="도움말"></div>
   <section id="tab-award" hidden>

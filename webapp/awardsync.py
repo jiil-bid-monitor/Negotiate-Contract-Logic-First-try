@@ -6,6 +6,7 @@ NAS 웹앱 컨테이너는 jiil-webapp 공유 폴더만 볼 수 있어 사내 �
 사업 폴더(11/25 사용자): .env POSTAWARD_PROJECT_ROOT(사내 공유 '002 진행프로젝트')가 있으면 계약까지 온 공고(폴더에 1_계약이 있음)만
 '입찰/번호_공고명'과 맞춤(끝나서 'YYYY 프로젝트/실행완료'로 옮긴 것은 그곳)(적격심사 단계 폴더는 NAS에만). 탈락한 공고 폴더는 NAS 웹앱이 탈락으로 옮기고(postaward.archive_lost)
 여기서 사내 공유 쪽 것도 탈락으로 옮김. NAS의 탈락 폴더는 30일 뒤 지움(postaward.purge_lost, 11/25 사용자).
+그리다(11/26): NAS '낙찰후서류/그리다' → 그리다 서버 폴더(GRIDA_PROJECT_ROOT, .env POSTAWARD_GRIDA_PROJECT_ROOT로 바꿈)의 '[진행중]_연도_공사진행_그리다'(끝난 사업은 '[진행완료]'), 지일 사업 폴더를 맞출 때 같이.
 켜기: 서버 PC .env의 POSTAWARD_SHARE_DIR(사내 공유 폴더 쪽 '낙찰후서류' 위치). NAS 쪽은 POSTAWARD_NAS_DIR(기본 \\\\jiilserver\\jiil-webapp\\낙찰후서류).
 shortcut: 1분마다 전체 비교 — 공고 폴더가 수백 개로 늘어 느려지면 바뀐 폴더만 보게 바꿀 것. 리빌드로 NAS가 사내 공유 폴더를 직접 보게 되면 이 동기화는 끔.
 """
@@ -19,6 +20,9 @@ import threading
 from pathlib import Path
 
 NAS_DIR = Path(r"\\jiilserver\jiil-webapp\낙찰후서류")
+# 그리다 사업 폴더(2026-11-26 사용자 — 사내 공유의 그리다 서버 폴더): 진행 중은 '[진행중]_<연도>_공사진행_그리다', 끝난 사업은 '[진행완료]'
+GRIDA_PROJECT_ROOT = Path(r"\\jiilserver\007 그리다\04_그리다")
+GRIDA = "그리다"  # NAS 낙찰후서류 안 그리다 폴더(webapp App.award_root)
 GROUPS = ("공사", "물품·용역")  # postaward.GROUPS의 폴더 이름(표준틀 폴더 _표준틀은 안 맞춤)
 LOST_DIR = "탈락"
 BID_DIR = "입찰"
@@ -90,20 +94,32 @@ def project_target(project_root: Path, name: str) -> Path:
     return project_root / BID_DIR / name
 
 
-def sync_projects(nas: Path, project_root: Path) -> dict:
+def grida_target(project_root: Path, name: str) -> Path:
+    """그리다 사업 폴더 — 담당자가 '[진행완료]'로 옮긴 사업은 그곳, 아니면 가장 최근 연도 '[진행중]_<연도>_공사진행_그리다'(없으면 올해 이름으로)."""
+    done = project_root / "[진행완료]" / name
+    if done.is_dir():
+        return done
+    from datetime import date
+
+    active = sorted(project_root.glob("[[]진행중[]]_20??_공사진행_그리다"))
+    return (active[-1] if active else project_root / f"[진행중]_{date.today().year}_공사진행_그리다") / name
+
+
+def sync_projects(nas: Path, project_root: Path, target=project_target) -> dict:
     """계약까지 온 공고 폴더 ↔ 사업 폴더."""
     done = {"to_share": 0, "to_nas": 0, "errors": 0}
     for group in GROUPS:
         for f in (nas / group).iterdir() if (nas / group).is_dir() else ():
             if (f / "1_계약").is_dir():  # 적격심사 단계(0_적격심사·공고문서만)는 NAS에만
-                _sync_dir(f, project_target(project_root, f.name), done)
+                _sync_dir(f, target(project_root, f.name), done)
     return done
 
 
 class AwardShareSync(threading.Thread):
-    def __init__(self, nas: Path, share: Path | None, every: int = 60, project: Path | None = None):
+    def __init__(self, nas: Path, share: Path | None, every: int = 60, project: Path | None = None,
+                 grida: Path | None = None):
         super().__init__(daemon=True, name="award-share-sync")
-        self.nas, self.share, self.every, self.project = nas, share, every, project
+        self.nas, self.share, self.every, self.project, self.grida = nas, share, every, project, grida
         self.stop = threading.Event()
 
     @classmethod
@@ -112,8 +128,10 @@ class AwardShareSync(threading.Thread):
         project = os.environ.get("POSTAWARD_PROJECT_ROOT", "").strip()
         if not share and not project:
             return None
+        grida = os.environ.get("POSTAWARD_GRIDA_PROJECT_ROOT", "").strip()
         return cls(Path(os.environ.get("POSTAWARD_NAS_DIR", "").strip() or NAS_DIR), Path(share) if share else None,
-                   project=Path(project) if project else None)
+                   project=Path(project) if project else None,
+                   grida=Path(grida) if grida else (GRIDA_PROJECT_ROOT if project else None))
 
     def run(self) -> None:
         while not self.stop.is_set():
@@ -122,6 +140,9 @@ class AwardShareSync(threading.Thread):
                 if self.project is not None:  # 사업 폴더를 쓰면 예전 시험 폴더(POSTAWARD_SHARE_DIR)는 안 맞춤
                     if self.project.is_dir():
                         d = sync_projects(self.nas, self.project)
+                    if self.grida is not None and self.grida.is_dir():  # 그리다는 그리다 서버 폴더로
+                        g = sync_projects(self.nas / GRIDA, self.grida, grida_target)
+                        d = {k: d[k] + g[k] for k in d}
                 else:
                     self.share.mkdir(parents=True, exist_ok=True)
                     d = sync_once(self.nas, self.share)
@@ -175,6 +196,19 @@ def selfcheck() -> None:
         bid.rename(moved)
         (r2 / "3.txt").write_text("웹앱", encoding="utf-8")
         assert sync_projects(nas, root)["to_share"] == 1 and (moved / "3.txt").is_file() and not bid.exists()
+        # 그리다: NAS 낙찰후서류/그리다 → 그리다 서버 폴더의 가장 최근 '[진행중]_연도_공사진행_그리다', 끝난 사업은 '[진행완료]'
+        groot, g = Path(d) / "04_그리다", nas / GRIDA / "물품·용역" / "R3_C"
+        (g / "1_계약").mkdir(parents=True)
+        (g / "1_계약" / "c.xlsx").write_text("c", encoding="utf-8")
+        for year in ("2025", "2026"):
+            (groot / f"[진행중]_{year}_공사진행_그리다").mkdir(parents=True)
+        assert sync_projects(nas / GRIDA, groot, grida_target)["to_share"] == 1
+        assert (groot / "[진행중]_2026_공사진행_그리다" / "R3_C" / "1_계약" / "c.xlsx").is_file()
+        assert not (root / BID_DIR / "R3_C").exists() and sync_projects(nas, root)["to_share"] == 0, "그리다는 지일 '입찰'로 안 감"
+        (groot / "[진행완료]").mkdir()
+        (groot / "[진행중]_2026_공사진행_그리다" / "R3_C").rename(groot / "[진행완료]" / "R3_C")
+        (g / "4.txt").write_text("웹앱", encoding="utf-8")
+        assert sync_projects(nas / GRIDA, groot, grida_target)["to_share"] == 1 and (groot / "[진행완료]" / "R3_C" / "4.txt").is_file()
     print("ok")
 
 

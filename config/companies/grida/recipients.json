@@ -1,0 +1,6 @@
+{
+  "_comment": "(주)그리다 주간 리포트 메일을 받을 사람(2026-11-26 사용자 지정). 이 파일이 없으면 지일과 같은 목록(config/recipients.json)으로 갑니다.",
+  "recipients": [
+    "gaeunleee@ji1.co.kr"
+  ]
+}

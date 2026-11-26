@@ -264,10 +264,28 @@ def split_parts(candidates: list[Candidate]) -> list[tuple[str, list[Candidate]]
     return [(INTEREST, split_body(candidates)[0])]
 
 
+def _shared_section(rows: list[Candidate]) -> str:
+    """지일 주간 메일에도 나간 공고 — 한 줄씩만(그리다 메일, 2026-11-26 사용자: 겹치면 표시하고 지일 공고는 최소한으로)."""
+    head = (f'<h3 style="margin:28px 0 8px;padding-bottom:6px;border-bottom:1px solid {LINE};'
+            f'font-size:14px;line-height:20px;color:{DIM};">지일 공고와 겹침 ({len(rows)}건)</h3>')
+    items = ""
+    for c in rows:
+        n = c.notice
+        title = _esc(n.title)
+        if n.detail_url:
+            title = f'<a href="{_esc(n.detail_url)}" style="color:{LINK};text-decoration:none;">{title}</a>'
+        tail = " · ".join(x for x in (_deadline(c), _fmt_money(n.budget) or "") if x)
+        items += (f'<div style="font-size:13px;line-height:20px;padding:5px 0;border-bottom:1px solid {LINE};">'
+                  f'<span style="{PILL}background:#f3f4f6;color:{DIM};">지일</span>{title}'
+                  + (f'<span style="color:{DIM};"> · {_esc(tail)}</span>' if tail else "") + "</div>")
+    return head + items
+
+
 def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at: datetime, part: str | None = None,
-                      attached: bool = True) -> str:
+                      attached: bool = True, shared: set[str] | None = None) -> str:
     """메일 본문(본문 공고는 split_body). part는 제목 뒤에 붙일 구역 이름.
-    attached=False면(첨부 없는 두 번째 통) '첨부 파일을 여세요' 안내를 뺀다."""
+    attached=False면(첨부 없는 두 번째 통) '첨부 파일을 여세요' 안내를 뺀다.
+    shared = 다른 회사(지일) 주간 메일에 나간 공고번호 — 그 공고는 맨 아래 한 줄씩(그리다 메일)."""
     period = ""
     if stats.period_begin and stats.period_end:
         period = f"조회 기간: {_fmt_kr_date(stats.period_begin)} ~ {_fmt_kr_date(stats.period_end)} · "
@@ -288,7 +306,8 @@ def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at
         why = " · ".join(f"{k} {v}" for k, v in hidden.items() if v)
         header += (f'<div style="{meta}margin-top:6px;">본문 {len(body_rows)}건 · 첨부 리포트에만 {sum(hidden.values())}건 ({_esc(why)})</div>')
     header += "</div>"
-    content = header + _section(INTEREST, body_rows)
+    same = [c for c in body_rows if c.notice.notice_no in (shared or ())]
+    content = header + _section(INTEREST, [c for c in body_rows if c not in same]) + (_shared_section(same) if same else "")
     # 바깥 표로 가운데 정렬 — div의 margin:auto를 무시하는 메일 프로그램도 표의 align은 지킨다
     return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
             f'style="width:100%;background:{PAGE_BG};border-collapse:collapse;">\n'

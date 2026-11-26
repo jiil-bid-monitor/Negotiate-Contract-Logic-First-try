@@ -43,6 +43,15 @@ class TestEmailHtml(unittest.TestCase):
             self.assertNotIn(banned, body, f"메일 본문에 {banned}가 있으면 지메일에서 깨진다")
         self.assertIn("키워드:전시관", body)
 
+    def test_shared_with_jiil_one_line(self):
+        """2026-11-26 사용자: 그리다 메일 — 지일 주간 메일에도 나간 공고는 맨 아래 '지일 공고와 겹침'에 한 줄씩."""
+        body = render_email_html(self.cands, self.stats, NOW, shared={"R26EM0001"})
+        self.assertEqual(body.count(">공고번호</font>"), 1, "겹친 공고는 카드 없이")
+        self.assertIn("지일 공고와 겹침 (1건)", body)
+        self.assertLess(body.index("R26EM0000"), body.index("지일 공고와 겹침"))
+        self.assertGreater(body.index("○○전시관 전시물 제작설치 1"), body.index("지일 공고와 겹침"))
+        self.assertNotIn("지일 공고와 겹침", render_email_html(self.cands, self.stats, NOW))
+
     def test_main_and_prespec_sub_sections(self):
         """2026-10-21 사용자 요청: 본공고·사전규격이 섞이면 소구역, 사전규격 자격 미확인은 그 이유를 적음."""
         import dataclasses

@@ -1574,8 +1574,15 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hmore summary { cursor: pointer; color: var(--brand); font-size: 14px; margin-top: 6px; list-style: none; }
 .helpbox .hmore summary::-webkit-details-marker { display: none; }
 .helpbox .hmore summary::after { content: " ▾"; font-size: 12px; }
+.helpbox .hmore summary { font-weight: 600; }
 .helpbox .hmore[open] summary { display: none; }
-.helpbox .hpicks.nav { flex-direction: row; flex-wrap: wrap; }
+.helpbox .hsubs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.helpbox .hsubs > :first-child:nth-last-child(odd) { grid-column: 1 / -1; }  /* 버튼이 홀수면 첫 버튼이 한 줄을 다 써 늘 두 개씩(11/26 사용자) */
+.helpbox .hb .hp, .helpbox .fans .hp { margin: 0; white-space: normal; }
+.helpbox .hp + .hp, .helpbox .hmore .hp:first-child { margin-top: .55em; }
+.helpbox .hl { display: block; }
+.helpbox .hl.hm { padding-left: 1.15em; text-indent: -1.15em; }
+.helpbox .hl.hs { margin-left: 1.15em; }
 .helpbox .hpicks .hsub { color: var(--muted); border-color: var(--line); }
 .helpbox .fnone { color: var(--muted); font-size: 14px; }
 /* '어디인지 보기'로 가리킨 자리 — 테두리가 세 번 깜빡임(움직임 줄이기 설정이면 테두리만) */
@@ -5733,14 +5740,38 @@ function helpAsk(q) {
 }
 let HELP_VIEW = "chat";  // 대화 / 자주 묻는 질문(11/25 사용자 — FAQ를 대화와 나눔)
 const helpHtml = (text) => esc(text).replace(/\[\[([^|\]]+)\|(\/[\w-]*)\]\]/g, '<a href="$2" target="_blank">$1 ›</a>');
-/** 답 모양: '[질문]'은 제목으로, 여덟 줄이 넘으면 첫 문단만 보이고 나머지는 '자세히'(좁은 창에 글이 가득 차지 않게) */
+/** 답 글을 창 폭에 맞게 — 미리 끊어 둔 줄은 이어 붙이고(문장이 끝난 줄·글머리 줄은 새 줄), 글머리 줄은 둘째 줄이 글머리 뒤에서 시작(11/26 사용자) */
+const HELP_MARK = /^(?:[•·\-→※]|[①-⑳]|\d+[.)](?=\s)|[가-하]\.(?=\s))/;
+function helpItems(text) {
+  return text.split(/\n{2,}/).map((para) => {
+    const items = [];
+    para.split("\n").forEach((raw) => {
+      const l = raw.trim(), prev = items[items.length - 1];
+      if (!l) return;
+      if (prev && !HELP_MARK.test(l) && !/[.?!:›]$/.test(prev.text)) prev.text += " " + l;
+      else items.push({ text: l, mark: HELP_MARK.test(l), sub: /^\s{2,}/.test(raw) });
+    });
+    return items;
+  }).filter((items) => items.length);
+}
+const helpParas = (paras) => paras.map((items) => `<p class="hp">${items.map((x) => `<span class="hl${x.mark ? " hm" : ""}${x.sub ? " hs" : ""}">${helpHtml(x.text)}</span>`).join("")}</p>`).join("");
+/** 답 모양: '[질문]'은 제목으로, 길면(빈칸 뺀 글자 110자 넘게) 앞부분만 보이고 나머지는 '자세히 보기' */
 function helpBody(text) {
-  const m = /^\[(?!\[)([^\]]+)\]\n\n([\s\S]*)$/.exec(text), head = m ? `<b class="hq">${esc(m[1])}</b>` : "", body = m ? m[2] : text;
-  const parts = body.split("\n\n");
-  let n = 1;
-  while (n < parts.length && parts.slice(0, n).join("\n").split("\n").length < 3) n++;  // 첫 문단이 너무 짧으면 다음 것까지
-  if (body.split("\n").length <= 8 || n >= parts.length) return head + helpHtml(body);
-  return head + helpHtml(parts.slice(0, n).join("\n\n")) + `<details class="hmore"><summary>자세히</summary>${helpHtml(parts.slice(n).join("\n\n"))}</details>`;
+  const m = /^\[(?!\[)([^\]]+)\]\n\n([\s\S]*)$/.exec(text), head = m ? `<b class="hq">${esc(m[1])}</b>` : "";
+  const paras = helpItems(m ? m[2] : text), size = (ps) => ps.flat().reduce((n, x) => n + x.text.replace(/\s/g, "").length, 0);
+  if (size(paras) <= 110) return head + helpParas(paras);
+  // 앞에서부터 줄 단위로 60자쯤까지 보이고 나머지는 접음. 남는 것이 짧으면 접지 않음
+  const flat = paras.flatMap((items, p) => items.map((x) => ({ p, x }))), group = (rows) => rows.reduce((ps, r, i) => {
+    if (!i || rows[i - 1].p !== r.p) ps.push([]);
+    ps[ps.length - 1].push(r.x);
+    return ps;
+  }, []);
+  let n = 0, got = 0;
+  while (n < flat.length && got < 60) got += flat[n++].x.text.replace(/\s/g, "").length;
+  if (n > 1 && flat[n] && flat[n].x.mark && !flat[n - 1].x.mark && flat[n].p === flat[n - 1].p) n--;  // 글머리 목록을 여는 줄만 남지 않게
+  const more = flat.slice(n);
+  if (size([more.map((r) => r.x)]) < 25) return head + helpParas(paras);
+  return head + helpParas(group(flat.slice(0, n))) + `<details class="hmore"><summary>자세히 보기</summary>${helpParas(group(more))}</details>`;
 }
 /** 자주 묻는 질문 — 한 화면에 한 가지만: 주제 → 질문 → 답. 찾는 중이면 맞는 질문만 */
 let HELP_FAQ = { cat: -1, q: -1, find: "" };
@@ -5749,7 +5780,7 @@ function helpFaqList() {
   const row = ({ h, i }) => `<button type="button" class="frow" data-fq="${i}">${esc(h[1])}</button>`;
   if (HELP_FAQ.q >= 0) {
     const h = HS().qa[HELP_FAQ.q], spot = helpSpotOf(h);
-    return `<button type="button" class="fback" data-fback="q">‹ ${esc(key ? "찾은 질문" : HS().cats[h[0]])}</button><h3 class="ftitle">${esc(h[1])}</h3><div class="fans">${helpHtml(helpText(h))}</div>`
+    return `<button type="button" class="fback" data-fback="q">‹ ${esc(key ? "찾은 질문" : HS().cats[h[0]])}</button><h3 class="ftitle">${esc(h[1])}</h3><div class="fans">${helpParas(helpItems(helpText(h)))}</div>`
       + (spot ? `<button type="button" class="fgo" data-hspot="${esc(spot)}">어디인지 보기</button>` : "");
   }
   if (key) {
@@ -5776,12 +5807,12 @@ function renderHelp() {
     // 버튼은 다음에 할 일만: 후보(최대 4) · 어디인지 보기 · 이전 질문 · 처음으로 · 다른 질문
     const back = live && k && m.who === "bot" ? (helpPrev(k) >= 0 ? `<button type="button" class="hsub" data-hback="prev">‹ 이전 질문</button>` : "")
       + `<button type="button" class="hsub" data-hback="start">처음으로</button>` : "";
-    const faqBtn = back + `<button type="button" class="hsub" data-hview="faq">${k ? "다른 질문" : "전체 질문"}</button>`;
+    const faqBtn = (lead = "") => `<div class="hsubs">${lead}${back}<button type="button" class="hsub" data-hview="faq">${k ? "다른 질문" : "전체 질문"}</button></div>`;
     const startBtns = `<div class="hpicks">${[["first", "처음 써 봅니다"], ["use", "쓰다가 궁금합니다"]].map(([v, t]) => `<button type="button" data-hstart="${v}">${t}</button>`).join("")}</div>`;
     const list = !live || !Array.isArray(m.picks) ? [] : m.picks;
     const picks = !live || !m.picks ? "" : m.picks === "start" ? startBtns : list.length ? `<div class="hpicks">${list.map((c) => (typeof c === "number" ? `<button type="button" data-hq="${c}">${esc(HS().qa[c][1])}</button>`
-          : `<button type="button" data-hq="${c.i}" data-htab="${c.tab}">${esc(HS(c.tab).qa[c.i][1])} <small>${esc(HELP_SETS[c.tab].name)} 탭</small></button>`)).join("")}${faqBtn}</div>`
-      : `<div class="hpicks nav">${m.spot ? `<button type="button" data-hspot="${esc(m.spot)}">어디인지 보기</button>` : ""}${faqBtn}</div>`;
+          : `<button type="button" data-hq="${c.i}" data-htab="${c.tab}">${esc(HS(c.tab).qa[c.i][1])} <small>${esc(HELP_SETS[c.tab].name)} 탭</small></button>`)).join("")}${faqBtn()}</div>`
+      : `<div class="hpicks nav">${faqBtn(m.spot ? `<button type="button" data-hspot="${esc(m.spot)}">어디인지 보기</button>` : "")}</div>`;
     html += `<li class="hmsg ${m.who}${first ? " first" : ""}${k >= HELP_SHOWN ? " new" : ""}">`
       + (m.who === "bot" ? (first ? HELP_LOGO : `<span class="hav sp" aria-hidden="true"></span>`) : "")
       + `<div class="hcol">${m.who === "bot" && first ? `<span class="hname">${CO_NAME} 도우미</span>` : ""}`

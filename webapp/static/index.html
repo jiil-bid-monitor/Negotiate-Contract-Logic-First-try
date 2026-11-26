@@ -448,11 +448,14 @@ body.picking { overflow: hidden; }
 .docbell-pop li.judge-item { cursor: pointer; }
 .docbell-pop li.judge-item:hover .name { color: var(--brand); text-decoration: underline; }
 .docbell-pop li.judge-item .row1 .dd { margin-left: auto; }
-.docbell-pop li.judge-item .jpick { display: inline-flex; flex: none; margin-left: 8px; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
-.docbell-pop li.judge-item .jp { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 26px; padding: 0; border: 0; background: var(--panel); color: var(--ink); cursor: pointer; }
+.docbell-pop li.judge-item.pick { display: flex; align-items: center; gap: 10px; }
+.docbell-pop li.judge-item .jmain { flex: 1; min-width: 0; }
+.docbell-pop .jmoves { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.docbell-pop li.judge-item .jpick { display: inline-flex; flex: none; margin-left: 0; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.docbell-pop li.judge-item .jp { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 22px; padding: 0; border: 0; background: var(--panel); color: var(--ink); cursor: pointer; }
 .docbell-pop li.judge-item .jp + .jp { border-left: 1px solid var(--line-strong); }
 .docbell-pop li.judge-item .jp:hover { background: var(--bg); color: var(--brand); }
-.docbell-pop li.judge-item .jp .ic { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.docbell-pop li.judge-item .jp .ic { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .docbell-pop li.judge-item.done { cursor: default; opacity: .75; }
 .docbell-pop li.judge-item.asking { cursor: default; }
 .docbell-pop li.judge-item.done:hover .name { color: inherit; text-decoration: none; }
@@ -6559,8 +6562,7 @@ function renderDocBell() {
   $("docBellN").hidden = !DOC_BELL.length;
   $("docBellPop").innerHTML = (DOC_BELL.length ? `<h3>회사 서류 갱신 알림 ${DOC_BELL.length}건</h3>` : "<h3>지금 갱신할 회사 서류가 없습니다</h3>") + "<ul>"
     + DOC_BELL.map((d) => docItem(d, `<span class="uphint">또는 PDF를 이 줄에 끌어다 놓기</span>`)).join("")
-    + "</ul>" + (DOC_BELL.length ? "<p class=\"how\"><b>갱신했으면</b> 새로 받은 서류 PDF를 그 서류 줄에 올려 주세요.<br>"
-    + "서류에 적힌 유효기간을 골라 저장하면 인증서갱신.xlsx도 고칩니다.</p>" : "")
+    + "</ul>"
     + `<p class="how"><button type="button" class="linkbtn" data-open-mgr>전체 서류 관리 (추가 · 수정 · 빼기) ›</button></p>`;
 }
 async function loadDocBell() {
@@ -6589,8 +6591,7 @@ async function openDocMgr() {
       <div class="mgrhead"><h3>전체 회사 서류</h3><button type="button" class="act" data-close>닫기</button></div>
       <p class="uphint" style="margin:-4px 0 10px">새 PDF를 바꿀 서류 줄 위에 끌어다 놓아도 됩니다.</p>
       <ul><li data-new="1"><div class="row1"><span class="name">새 서류 추가</span></div>
-        <div class="up"><input class="newname" placeholder="서류 이름 (예: 조경식재공사업 등록증)" maxlength="40">${UP}</div>
-        <p class="uphint" style="margin:6px 0 0">그리다 서류는 이름 앞에 <b>(그리다)</b>를 붙여 주세요. 예: (그리다) 여성기업. 그래야 그리다 쪽에 따로 보입니다.</p>
+        <div class="up"><input class="newname" placeholder="서류 이름" maxlength="40">${UP}</div>
         <div class="upbox"></div></li></ul>
       <input id="docMgrQ" class="mgrq" placeholder="서류 찾기"><div class="mgrtabs" id="docMgrTabs" role="group" aria-label="회사"></div><ul id="docMgrList"></ul>
       <p class="how">빼기는 목록과 알림에서만 빼고, 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p></div></dialog>`);
@@ -6635,7 +6636,7 @@ async function docUpload(li, file) {
     // 만료일은 PDF에서 읽지 않고 늘 고르게(2026-11-23 사용자 결정 — 잘못 읽으면 엑셀을 다시 고쳐야 해서)
     const r = await awardPost("/api/docs-upload", { action: "read", kind, pdf, new: isNew });
     const btn = (end, label) => `<button type="button" data-end="${end}">${esc(label)}</button>`;
-    box.innerHTML = `<p><b>${esc(file.name)}</b><br>서류에 적힌 유효기간 끝나는 날을 골라 주세요.</p>`
+    box.innerHTML = `<p><b>${esc(file.name)}</b></p>`
       + `<div class="choices">${r.cands.map((c, n) => btn(c, `${n + 1}년 → ${c}`)).join("")}</div>`
       + `<div class="choices other">다른 날짜 <input type="date" value="${esc(r.cands[0] || "")}"> <button type="button" data-end="pick">저장</button>`
       + ` ${btn("", "유효기간 없는 서류")} <button type="button" data-cancel>취소</button></div>`;
@@ -6662,9 +6663,9 @@ async function docUpload(li, file) {
 function docManage(li, action) {
   const box = li.querySelector(".upbox"), kind = li.dataset.kind, d = DOC_ALL.find((x) => x.kind === kind) || {};
   box.innerHTML = action === "edit"
-    ? `<p>새 파일 없이 유효기간만 고칩니다(잘못 적었을 때).</p><div class="choices other">유효기간 끝 <input type="date" value="${esc(d.end || "")}">`
+    ? `<div class="choices other">유효기간 끝 <input type="date" value="${esc(d.end || "")}">`
       + ` <button type="button" data-go="date">저장</button> <button type="button" data-go="none">유효기간 없는 서류</button> <button type="button" data-cancel>취소</button></div>`
-    : `<p><b>${esc(kind)}</b>: 목록과 알림에서 뺄까요?<br>파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>`
+    : `<p><b>${esc(kind)}</b>: 목록과 알림에서 뺄까요?</p>`
       + `<div class="choices"><button type="button" data-go="remove" class="danger">빼기</button> <button type="button" data-cancel>취소</button></div>`;
   box.onclick = async (ev) => {
     const b = ev.target.closest("button");
@@ -6684,8 +6685,7 @@ async function docReplace(li, file) {  // 잘못 올린 파일 바꾸기 — 발
   const box = li.querySelector(".upbox"), kind = li.dataset.kind, d = DOC_ALL.find((x) => x.kind === kind) || {};
   if (!file || !/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { box.innerHTML = `<p class="err">PDF 파일만 올릴 수 있습니다.</p>`; return; }
   const pdf = await pdfBase64(file);
-  box.innerHTML = `<p>지금 파일 <b>${esc(d.file || "")}</b>을(를)<br><b>${esc(file.name)}</b>(으)로 바꿀까요?<br>`
-    + "발급일·유효기간은 그대로입니다. 날짜가 틀렸으면 '날짜 수정'. 앞 파일은 지우지 않고 [이전 서류]로 옮깁니다.</p>"
+  box.innerHTML = `<p>지금 파일 <b>${esc(d.file || "")}</b>을(를)<br><b>${esc(file.name)}</b>(으)로 바꿀까요?</p>`
     + `<div class="choices"><button type="button" data-go="replace" class="go">바꾸기</button> <button type="button" data-cancel>취소</button></div>`;
   box.onclick = async (ev) => {
     const b = ev.target.closest("button");
@@ -6759,15 +6759,14 @@ function renderJudgeBell() {
     if (done) return `<li class="judge-item done" data-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span></div>`
       + `<div class="row2">불참 저장 · ${esc(done.tag)} <button type="button" class="linkbtn" data-jtags>사유 바꾸기</button> <button type="button" class="linkbtn" data-jundo>취소</button></div>`
       + (done.open ? `<div class="jtags">${BULK_TAGS.map((g) => `<button type="button" class="pbtn muted${g === done.tag ? " on" : ""}" data-jtag="${esc(g)}">${esc(g)}</button>`).join("")}</div>` : "") + `</li>`;
-    return `<li class="judge-item" data-goto-no="${esc(p.noticeNo)}"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span>`
-      + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span><span class="jpick" role="group" aria-label="판단"><button type="button" class="jp" data-jgo="참가" data-jno="${esc(p.noticeNo)}" aria-label="참가">${JICON.참가}</button><button type="button" class="jp" data-jgo="보류" data-jno="${esc(p.noticeNo)}" aria-label="보류">${JICON.보류}</button><button type="button" class="jp jskip" data-jskip="${esc(p.noticeNo)}" aria-label="불참">${JICON.불참}</button></span></div>`
-      + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></li>`;
+    return `<li class="judge-item pick" data-goto-no="${esc(p.noticeNo)}"><div class="jmain"><div class="row1"><span class="name">${esc(p.title || p.noticeNo)}</span>`
+      + `<span class="dd${left <= 3 ? " urgent" : ""}">${Number.isFinite(left) ? `D-${Math.max(left, 0)}` : ""}</span></div>`
+      + `<div class="row2">${[m.institution, m.budgetAmount ? won(m.budgetAmount) : "", rep ? `${md(rep)} 보고` : ""].filter(Boolean).map(esc).join(" · ")}</div></div><span class="jpick" role="group" aria-label="판단"><button type="button" class="jp" data-jgo="참가" data-jno="${esc(p.noticeNo)}" aria-label="참가">${JICON.참가}</button><button type="button" class="jp" data-jgo="보류" data-jno="${esc(p.noticeNo)}" aria-label="보류">${JICON.보류}</button><button type="button" class="jp jskip" data-jskip="${esc(p.noticeNo)}" aria-label="불참">${JICON.불참}</button></span></li>`;
   };
   // 칸마다 마감이 가장 급한 3건만(11/23 사용자 — 길게 늘어놓지 않게), 나머지는 실제 공고 탭 그 대분류 탭에서
   // preview — 창에 펼쳐 보일 공고(기본 앞 3건), 나머지는 링크로
   const section = (title, list, cat, extra = "", tail = "", preview = list.slice(0, 3)) => `<h4 class="judge-sec">${title} <span>${undecidedN(list)}건</span>${tail}</h4>`
     + (preview.length ? `<ul>${preview.map(item).join("")}</ul>` : list.length ? "" : `<p class="row2">판단할 공고가 없습니다.</p>`)
-    + (list.length > preview.length && cat ? `<p class="how"><button type="button" class="linkbtn" data-all-todo="${cat}">${preview.length ? "그 밖의 " : ""}${list.length - preview.length}건은 실제 공고 탭에서 판단 ›</button></p>` : "")
     + extra;
   // 가장 최근 매일 보고 공고 전부(판단한 것도) — 텔레그램 보고와 같은 목록을 실제 공고 탭에서(11/24 사용자)
   const rep = lastDailyReport();
@@ -6779,10 +6778,12 @@ function renderJudgeBell() {
   // 주간 보고는 마감 D-2 안 공고만 펼쳐 보임(11/24 사용자 — 창이 길어 읽기 싫어짐), 나머지는 링크로
   const soon = (p) => Math.ceil((deadlineAt(p.meta?.deadline) - Date.now()) / 86400000) <= 2;  // 화면 D-N과 같은 셈
   const toggle = "";  // 오늘/7일 버튼은 뺌 — 아래 '오늘 보고 N건 모두 보기'가 따로 있음(2026-11-26 사용자)
-  const repLink = repN ? `<p class="how"><button type="button" class="linkbtn" data-report="daily:${rep}">${rep === todayText() ? "오늘" : mdOf(rep)} 보고 ${repN}건 모두 보기 ›</button></p>` : "";
-  $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3><p class="row2">보고에 나간 공고 중 판단 안 한 것 · 7일 안</p>`
-    + section("입찰 · 매일 보고", dailyIn, JUDGE_TODAY && rep ? "" : "입찰", repLink, toggle) + section("협상 · 규격가격 · 주간 보고", weekly, "협상", "", "", weekly.filter(soon).slice(0, 3))
-    + (todo.length ? `<p class="how">공고를 누르면 그 공고로 갑니다. 판단하면 숫자가 줄어듭니다.</p>` : "");
+  // 아래 이동 버튼은 둘만(11/26 사용자) — 오늘 매일 보고 공고 / 주간(협상·규격가격) 미판단 공고. 설명 문구 없음
+  const moves = [repN ? `<button type="button" class="linkbtn" data-report="daily:${rep}">금일 입찰 공고 ›</button>` : "",
+    weekly.length ? `<button type="button" class="linkbtn" data-all-todo="협상">주간 협상 · 규격가격 공고 ›</button>` : ""].filter(Boolean);
+  $("judgeBellPop").innerHTML = `<h3>판단할 공고 ${left}건</h3>`
+    + section("입찰 · 매일 보고", dailyIn, "", "", toggle) + section("협상 · 규격가격 · 주간 보고", weekly, "", "", "", weekly.filter(soon).slice(0, 3))
+    + (moves.length ? `<p class="how jmoves">${moves.join("")}</p>` : "");
 }
 // 📋 창에서 바로 불참 — 넘기던 공고를 몇 초에 정리(11/24 사용자, 놓침 94건 vs 판단 20건). 참가는 카드에서
 async function judgeSkip(no, tag) {

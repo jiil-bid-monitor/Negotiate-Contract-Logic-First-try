@@ -1608,8 +1608,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hform input { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); color: var(--ink); }
 .helpbox .hform input:focus { outline: none; border-color: var(--brand); }
 .helpbox .hform button { font: inherit; font-size: 14px; font-weight: 600; padding: 0 14px; border: 0; border-radius: 18px; background: var(--brand); color: var(--on-brand); cursor: pointer; }
-.award-test-note { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; line-height: 1.7; }
-.award-test-note button { margin-left: 6px; }
+.award-test-note { margin: 0 0 12px; padding: 8px 14px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; display: flex; align-items: center; gap: 10px; }
+.award-test-note[hidden] { display: none; }
 .award-act button.award-sim { display: block; border-style: dashed; margin-bottom: 6px; }
 #tab-award h3 { font-size: 17px; margin: 18px 0 8px; }
 .award-group { margin-top: 18px; }
@@ -2137,9 +2137,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   <button type="button" class="helpnudge" id="helpNudge" hidden>사용법 안내</button>
   <div class="helpbox" id="helpBox" hidden role="dialog" aria-label="도움말"></div>
   <section id="tab-award" hidden>
-    <p class="award-test-note" id="awardTestNote" hidden>시험 페이지예요. 운영 목록·폴더와 따로 씁니다. 과거 수주 사업 <b>광양시 교통안전체험관(R25BK01125448)</b>은 '지금 낙찰자 확인'을 누를 때마다
-      한 단계씩(① 개찰 결과 → ② 낙찰 확인 → ③ 계약 등록) 진행되고, 기다림·끝난 공고 예시는 운영 투찰 기록에서 복사해 넣었어요.
-      만든 폴더는 <code>\\jiilserver\jiil-webapp\낙찰후서류_테스트</code>에 생깁니다. <button type="button" id="awardReset">처음으로 되돌리기</button></p>
+    <p class="award-test-note" id="awardTestNote" hidden><b>시험 페이지</b> <button type="button" id="awardReset">처음으로 되돌리기</button></p>
     <!-- 공고번호 칸은 가끔만 써서 접어 둠(11/24 사용자 — 칸이 화면을 너무 차지함) -->
     <div class="award-top">
       <p class="award-lead">투찰한 공고는 저절로 올라옵니다.</p>

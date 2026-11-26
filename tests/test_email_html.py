@@ -48,8 +48,9 @@ class TestEmailHtml(unittest.TestCase):
         body = render_email_html(self.cands, self.stats, NOW, shared={"R26EM0001"})
         self.assertEqual(body.count(">공고번호</font>"), 1, "겹친 공고는 카드 없이")
         self.assertIn("지일 공고와 겹침 (1건)", body)
-        self.assertLess(body.index("R26EM0000"), body.index("지일 공고와 겹침"))
-        self.assertGreater(body.index("○○전시관 전시물 제작설치 1"), body.index("지일 공고와 겹침"))
+        self.assertIn("지일 주간 메일에 이미 실린 공고 1건은 중복해 싣지 않고", body, "받는 사람에게 겹친 공고를 왜 짧게 적었는지")
+        self.assertLess(body.index("R26EM0000"), body.index("지일 공고와 겹침 ("))
+        self.assertGreater(body.index("○○전시관 전시물 제작설치 1"), body.index("지일 공고와 겹침 ("))
         self.assertNotIn("지일 공고와 겹침", render_email_html(self.cands, self.stats, NOW))
 
     def test_main_and_prespec_sub_sections(self):

@@ -305,8 +305,11 @@ def render_email_html(candidates: list[Candidate], stats: RunStats, generated_at
     if sum(hidden.values()):
         why = " · ".join(f"{k} {v}" for k, v in hidden.items() if v)
         header += (f'<div style="{meta}margin-top:6px;">본문 {len(body_rows)}건 · 첨부 리포트에만 {sum(hidden.values())}건 ({_esc(why)})</div>')
-    header += "</div>"
     same = [c for c in body_rows if c.notice.notice_no in (shared or ())]
+    if same:  # 그리다 메일 받는 사람에게 — 지일 메일과 같은 공고를 두 번 싣지 않았다는 것(2026-11-26 사용자 요청)
+        header += (f'<div style="{meta}margin-top:6px;color:{INK};">지일 주간 메일에 이미 실린 공고 {len(same)}건은 중복해 싣지 않고, '
+                   f"맨 아래 '지일 공고와 겹침'에 제목만 적었습니다. 자세한 내용은 지일 주간 메일에서 보시면 됩니다.</div>")
+    header += "</div>"
     content = header + _section(INTEREST, [c for c in body_rows if c not in same]) + (_shared_section(same) if same else "")
     # 바깥 표로 가운데 정렬 — div의 margin:auto를 무시하는 메일 프로그램도 표의 align은 지킨다
     return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '

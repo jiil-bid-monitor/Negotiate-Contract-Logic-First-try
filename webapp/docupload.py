@@ -358,6 +358,7 @@ def save_doc(folder: Path, kind: str, data: bytes, end: date | None, today: date
     target = docs._unique(folder / "[최신 서류]" / name)
     target.write_bytes(data)
     docs.run(folder, today, notes.append, settle=OURS, alert_due=False)
+    docexpiry.set_later(kind, None)  # 다시 넣었으면 '추가 필요'는 지움
     return target.name, cert_note(folder, kind, end) if end else "", notes
 
 
@@ -412,6 +413,7 @@ def remove_doc(folder: Path, kind: str, today: date) -> tuple[int, str]:
     for path in paths:
         path.replace(docs._unique(old / path.name))
     docs.run(folder, today, lambda text: None, settle=OURS, alert_due=False)
+    docexpiry.set_later(kind, today)  # 나중에 다시 넣을 서류로 '추가 필요'(2026-11-26 사용자 요청)
     return len(paths), cert_note(folder, kind, "사용 안 함")
 
 
@@ -456,4 +458,5 @@ def all_docs(folder: Path, today: date) -> list[dict]:
         d["file"] = paths[-1].name if paths else ""
         if paths and not d["end"] and (note := docs.missing_expiry_note(d["kind"])):
             d["note"] = note  # 웹앱 서류 관리 창에 빨간 글씨
-    return out
+    have = {d["kind"] for d in out}
+    return docexpiry.later_docs_of(have) + out

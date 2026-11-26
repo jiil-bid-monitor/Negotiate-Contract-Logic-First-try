@@ -901,7 +901,7 @@ def _known_kind(folder: Path, data: dict[str, Any], allow_new: bool = False) -> 
     from . import docupload
 
     kind = str(data.get("kind") or "")
-    if kind in dict(docexpiry.read_docs(folder)) or kind in docupload.kinds(folder):
+    if kind in dict(docexpiry.read_docs(folder)) or kind in docupload.kinds(folder) or kind in docexpiry.load_later():
         return kind
     if allow_new and (name := docupload.new_kind_name(kind)):
         # 띄어쓰기만 다른 같은 이름이면 그 서류로(새 줄을 만들지 않음 — 중복 막기, 2026-11-23)
@@ -919,7 +919,10 @@ def docs_manage(data: dict[str, Any]) -> dict[str, Any]:
     if not docexpiry.ready(folder):
         raise RuntimeError("회사서류_최신/[최신 서류] 폴더를 찾지 못했습니다 — NAS 웹앱에서 해 주세요")
     kind, today = _known_kind(folder, data), datetime.now().date()
-    if data.get("action") == "edit":
+    if data.get("action") == "unlater":  # '추가 필요' 알림 지우기
+        docexpiry.set_later(kind, None)
+        message = "'추가 필요'를 지웠습니다."
+    elif data.get("action") == "edit":
         end = date.fromisoformat(str(data["end"])) if data.get("end") else None
         message = docupload.edit_doc(folder, kind, end, today)
     elif data.get("action") == "replace":  # 잘못 올린 파일 바꾸기 — 날짜는 그대로
@@ -928,7 +931,7 @@ def docs_manage(data: dict[str, Any]) -> dict[str, Any]:
         moved, cert = docupload.remove_doc(folder, kind, today)
         message = f"파일 {moved}개를 [이전 서류]로 옮겼습니다." + (f"\n{cert}" if cert else "")
     else:
-        raise ValueError("action은 edit·replace·remove")
+        raise ValueError("action은 edit·replace·remove·unlater")
     return {"message": message, "docs": docupload.all_docs(folder, today), "alert": docexpiry.web_alert(today)}
 
 

@@ -6588,11 +6588,12 @@ boot();
 // → 서류에 적힌 유효기간을 사람이 골라 저장(텔레그램 /upload와 같은 저장, 서버 /api/docs-upload).
 // '전체 서류 관리' 창(#docMgr)에서 새 서류 추가·유효기간 수정·빼기(/api/docs-all·/api/docs-manage) — 텔레그램 /upload·/remove와 같은 일
 let DOC_BELL = [], DOC_ALL = [], DOC_READY = false;
-const ddText = (d) => d.left == null ? "유효기간 없음" : d.left < 0 ? `유효기간 ${-d.left}일 지남` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
+const ddText = (d) => d.later ? "추가 필요" : d.left == null ? "유효기간 없음" : d.left < 0 ? `유효기간 ${-d.left}일 지남` : d.left === 0 ? "오늘 만료" : `D-${d.left}`;
 const UP = `<label class="upbtn">새 서류 올리기<input type="file" accept="application/pdf,.pdf" hidden></label>`;
 function docItem(d, extra = "") {
   return `<li data-kind="${esc(d.kind)}"><div class="row1"><span class="name">${esc(d.kind)}</span>`
-    + `<span class="dd${d.left != null && d.left <= 7 ? " urgent" : ""}">${ddText(d)}</span></div>`
+    + `<span class="dd${d.later || d.left != null && d.left <= 7 ? " urgent" : ""}">${ddText(d)}</span></div>`
+    + (d.later ? `<div class="row2">뺀 날 ${esc(d.later)}</div>` : "")
     + (d.end ? `<div class="row2">만료일 ${esc(d.end)}${d.state ? ` · ${esc(d.state)}` : ""}</div>` : "")
     + (d.file ? `<div class="row2 file">지금 파일: ${esc(d.file)}</div>` : "")
     + (d.note ? `<div class="row2 docnote">${esc(d.note)}</div>` : "")
@@ -6623,7 +6624,7 @@ function renderDocMgr() {
   $("docMgrTabs").innerHTML = Object.entries(by).map(([co, list]) =>
     `<button type="button" data-co="${co}" aria-pressed="${DOC_CO === co}" class="${DOC_CO === co ? "on" : ""}">${co} <span>${list.length}</span></button>`).join("");
   const rows = by[DOC_CO];
-  $("docMgrList").innerHTML = rows.map((d) => docItem(d, (d.file ? `<label class="act">파일 바꾸기<input type="file" data-replace accept="application/pdf,.pdf" hidden></label>` : "")
+  $("docMgrList").innerHTML = rows.map((d) => d.later ? docItem(d, `<button type="button" class="act" data-unlater>알림 지우기</button>`) : docItem(d, (d.file ? `<label class="act">파일 바꾸기<input type="file" data-replace accept="application/pdf,.pdf" hidden></label>` : "")
     + `<button type="button" class="act" data-edit>날짜 수정</button>`
     + `<button type="button" class="act" data-remove>빼기</button>`)).join("") || "<li>찾는 서류가 없습니다.</li>";
 }
@@ -6765,6 +6766,12 @@ function wireDocs(root) {  // 종 창·관리 창 같이 — 파일 고르기·�
   });
   root.addEventListener("click", (ev) => {
     if (ev.target.closest("[data-open-mgr]")) return void openDocMgr();
+    const un = ev.target.closest("[data-unlater]");
+    if (un) return void (async () => {
+      const li = un.closest("li"), box = li.querySelector(".upbox");
+      try { await awardPost("/api/docs-manage", { action: "unlater", kind: li.dataset.kind }); afterSave(); }
+      catch (err) { box.innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+    })();
     const act = ev.target.closest("[data-edit], [data-remove]");
     if (act) docManage(act.closest("li"), act.hasAttribute("data-edit") ? "edit" : "remove");
   });

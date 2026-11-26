@@ -177,6 +177,43 @@ STATES = {"n": ("신청해야 함", "신청해야 함 — 갱신 신청을 해 �
           "p": ("신청 중", "신청 중 — 발급 받으면 /upload 로 최신 서류를 올려 주세요")}
 
 
+# 빼기한 서류 — 나중에 다시 넣을 서류로 종 창·관리 창에 '추가 필요'(2026-11-26 사용자 요청). {종류: 뺀 날}
+def _later_path() -> Path:
+    return APPLY_PATH.with_name("doc_later.json")  # 신청 상태 기록 옆(서버 PC는 DOC_STATES_FILE로 NAS 쪽)
+
+
+def load_later(path: Path | None = None) -> dict[str, str]:
+    try:
+        data = json.loads((path or _later_path()).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+
+def set_later(kind: str, day: date | None, path: Path | None = None) -> None:
+    """day가 있으면 '추가 필요'로 남기고, None이면 지움(새 서류를 올렸거나 알림 지우기)."""
+    path = path or _later_path()
+    data = load_later(path)
+    if day is None:
+        if kind not in data:
+            return
+        data.pop(kind)
+    else:
+        data[kind] = day.isoformat()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def later_docs() -> list[dict]:
+    return later_docs_of(set())
+
+
+def later_docs_of(have: set[str]) -> list[dict]:
+    """'추가 필요' 서류 — 이미 목록에 있는 종류(다른 방법으로 다시 넣음)는 뺌."""
+    return [{"kind": k, "end": None, "left": None, "state": "", "file": "", "later": v}
+            for k, v in sorted(load_later().items()) if k not in have]
+
+
 def apply_key(kind: str, end: date) -> str:
     return f"{kind}|{end}"
 
@@ -218,7 +255,7 @@ def web_alert(today: date) -> list[dict]:
         return []
     return [{"kind": k, "end": d.isoformat(), "left": (d - today).days,
              "state": STATES[states[apply_key(k, d)]][0] if apply_key(k, d) in states else ""}
-            for k, d in _button_docs(docs, today, states)]
+            for k, d in _button_docs(docs, today, states)] + later_docs()
 
 
 def renew_kinds(docs: list[tuple[str, date]], data: str, today: date | None = None,

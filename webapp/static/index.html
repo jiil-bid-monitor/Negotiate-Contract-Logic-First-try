@@ -1827,7 +1827,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 /* 낙찰방법 탭: 낮은 밑줄 탭 */
 .cat-tabs { align-items: flex-end; margin: 4px 0 10px; border-bottom: 1px solid var(--line); }
 .cat-main { gap: 0; }
-.cat-tab { flex-direction: row; align-items: center; gap: 6px; min-width: 0; padding: 8px 14px 9px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; margin-bottom: -1px; }
+.cat-tab { flex-direction: row; align-items: center; gap: 5px; min-width: 0; font-size: 13.5px; padding: 8px 10px 9px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; margin-bottom: -1px; }
 .cat-tab small { display: none; }
 .cat-tab:hover:not(:disabled) { border-color: transparent; border-bottom-color: var(--line-strong); }
 .cat-tab.on { border-color: transparent; border-bottom-color: var(--brand); box-shadow: none; background: none; }
@@ -2007,6 +2007,19 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .theme #themeToggle .sun, .theme #themeToggle[data-cur="dark"] .moon { display: none; }
 .theme #themeToggle[data-cur="dark"] .sun { display: inline; }
 @media (min-width: 761px) { .topbar .theme { order: 100; } }  /* 밝기 버튼은 위 띠 맨 오른쪽(나라장터·21라인 뒤) */
+/* 판단 갱신 = 둥근 화살표 버튼, 찾기 = 돋보기 (누르면 칸이 펼쳐짐) — 2026-11-26 사용자 */
+#load.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 38px; padding: 0; }
+#load.icon-btn .ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (min-width: 641px) {
+  #liveTools .tab-search, #exTools .tab-search {
+    flex: 0 0 auto; width: 38px; min-width: 0; padding-left: 36px; cursor: pointer;
+    background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23808080' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E") no-repeat 10px center / 18px;
+    transition: width .2s ease;
+  }
+  #liveTools .tab-search:not(:focus):placeholder-shown::placeholder, #exTools .tab-search:not(:focus):placeholder-shown::placeholder { color: transparent; }
+  #liveTools .tab-search:is(:focus, :not(:placeholder-shown)), #exTools .tab-search:is(:focus, :not(:placeholder-shown)) { width: 330px; cursor: text; }
+}
+@media (prefers-reduced-motion: reduce) { #liveTools .tab-search, #exTools .tab-search { transition: none; } }
 /* ② 불러오기 줄: 평소 상태 글 없음(경고만) */
 #liveTools .load-state:empty, #liveTools .live-meta:empty { display: none; }
 /* ③ 넓은 화면: 필터는 버튼 하나, 'N건 보는 중'·정렬은 낙찰방법 탭 줄 오른쪽 */
@@ -2027,6 +2040,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     padding: 14px 16px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.14); }
   body.filter-sheet #filterRow .filters { flex-wrap: wrap; gap: 8px; }
   body.filter-sheet #filterRow .dd-btn { border-color: var(--line-strong); padding: 0 12px; }
+  /* '세부품명 공고'는 정렬 칸 바로 아래 오른쪽 (2026-11-26 사용자) — 그 자리만큼 탭 줄 아래를 비워 둠 */
+  #catRow > .cat-tabs .cat-prod { position: absolute; top: calc(100% + 10px); right: 0; margin: 0; padding: 0 2px; line-height: 28px; }
+  #liveResults > .group:first-child > .group-head { padding-right: 170px; }  /* 본공고 제목 줄 오른쪽 = '세부품명 공고' 자리 */
 }
 </style>
 </head>
@@ -2118,7 +2134,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         <input type="date" id="toDate" aria-label="종료일">
       </span>
       <button type="button" id="refresh">나라장터에서 불러오기</button>
-      <button type="button" id="load" class="ghost">판단 갱신</button>
+      <button type="button" id="load" class="ghost icon-btn" aria-label="판단 갱신"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
       <span class="load-state" id="loadState" role="status"></span>
       <span class="sub live-meta" id="liveMeta"></span>
       <button type="button" class="filter-open ghost" id="filterOpen" aria-expanded="false" aria-controls="filterRow"><span class="fo-sort">필터 · 정렬</span><span class="fo-only">필터</span> <b id="filterOpenN"></b></button>
@@ -3237,7 +3253,7 @@ function renderActiveFilters(shownN) {
     ? `<span class="af-lab">적용 중</span>${on.map((k) => `<button type="button" class="af-chip" data-clear="${k}">${esc(FILTER_NAMES[k])}: ${esc(label(k, filters[k]))} <span aria-hidden="true">✕</span></button>`).join("")}<button type="button" class="af-reset" data-clear="*">모두 지우기</button>`
     : "");
   // 'N건 보는 중'은 정렬 칸 바로 왼쪽에(11/18 사용자: 빈 공간이 너무 큼 — 따로 한 줄을 쓰지 않게)
-  $("liveCount").innerHTML = shownN == null || filters.kind === "review" ? "" : `${esc(what)} <b>${num(shownN)}건</b> 보는 중`;
+  $("liveCount").innerHTML = "";  // 'N건 보는 중'은 안 보임 (2026-11-26 사용자)
   $("activeFilters").hidden = !on.length;
   $("filterOpenN").textContent = on.length ? String(on.length) : "";
 }

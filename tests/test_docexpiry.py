@@ -311,3 +311,20 @@ class TestNoDuplicate(TestDocManage):
             self.assertEqual(server._known_kind(self.f, {"kind": "사업자 등록증"}, allow_new=True), "사업자등록증")
             self.assertEqual(server._known_kind(self.f, {"kind": "사업자등록증명"}, allow_new=True), "사업자등록증명",
                              "글자 포함만으로는 같은 서류로 안 봄")
+
+
+class TestLater(TestDocManage):
+    """빼기한 서류는 '추가 필요'로 남고, 다시 올리면 지워짐(2026-11-26 사용자 요청)."""
+
+    def test_removed_doc_shows_until_added(self):
+        from webapp import docupload as U
+
+        today = date(2026, 11, 26)
+        with mock_states():
+            U.remove_doc(self.f, "사업자등록증", today)
+            rows = {d["kind"]: d for d in U.all_docs(self.f, today)}
+            self.assertEqual(rows["사업자등록증"]["later"], "2026-11-26")
+            self.assertIn("사업자등록증", [d["kind"] for d in D.web_alert(today)])
+            U.save_doc(self.f, "사업자등록증", b"%PDF", None, today)
+            self.assertNotIn("later", {d["kind"]: d for d in U.all_docs(self.f, today)}["사업자등록증"])
+            self.assertEqual(D.load_later(), {})

@@ -2070,10 +2070,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .pbtn.ico, .phint { box-sizing: border-box; height: 28px; min-height: 28px; padding-top: 0; padding-bottom: 0; line-height: 1; vertical-align: middle; }
 .phint { width: 34px; margin-left: 0; }
 /* 카드 위 '입찰 · 공사'는 테두리 없는 글자 (2026-11-26 사용자) */
-.kind-line { display: inline-flex; align-items: center; }
-.kind-line > .badge, .notice.live .kind-line > .badge { border: 0 !important; background: none !important; padding: 0 !important; color: var(--muted); font-size: 12.5px; }
-.kind-line > .badge + .badge::before { content: "·"; margin: 0 4px 0 0; color: var(--faint); }
-.kind-line > .badge + .badge { margin-left: 4px; }
+.kind-line { display: inline-flex; align-items: center; gap: 4px; }  /* '입찰'·'공사'는 다시 칩으로(사용자: 글자만은 잘 안 보임) */
+/* 수요기관·공고기관은 이름표를 작게 보임(사용자: 어느 쪽인지 분간이 힘듦) */
+.notice.live.compact .facts div:is([data-k="수요기관"], [data-k="공고기관"]) dt { position: static; width: auto; height: auto; overflow: visible; clip: auto; display: inline; margin-right: 5px; font-size: 11.5px; font-weight: 400; color: var(--faint); }
+.notice.live.compact .facts div:is([data-k="수요기관"], [data-k="공고기관"]) { display: flex; align-items: baseline; }
 /* ② 불러오기 줄: 평소 상태 글 없음(경고만) */
 #liveTools .load-state:empty, #liveTools .live-meta:empty { display: none; }
 /* ③ 넓은 화면: 필터는 버튼 하나, 'N건 보는 중'·정렬은 낙찰방법 탭 줄 오른쪽 */
@@ -3528,7 +3528,7 @@ function factsBlock(n) {
     n.demandInstitution && n.institution && n.demandInstitution !== n.institution ? ["공고기관", esc(n.institution)] : null,
     ["사업금액", esc(money(n))],
   ].filter(Boolean);
-  return `<dl class="facts" data-facts="${esc(n.noticeNo)}">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
+  return `<dl class="facts" data-facts="${esc(n.noticeNo)}">${facts.map(([k, v]) => `<div data-k="${k}"><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
 }
 
 // ── 마감 임박 ──────────────────────────────────────────────

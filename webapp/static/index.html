@@ -1971,7 +1971,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .notice.live.compact .facts-line .notice-no { padding-left: 16px; }
 .notice.live.compact .card-foot { margin-top: 14px; padding-top: 12px; column-gap: 24px; }
 .notice.live.compact .card-foot .tag-rows { row-gap: 8px; }
-.notice.live.compact .card-foot .tag-group { gap: 6px; margin-right: 18px; padding-right: 0; border-right: 0; }
+.notice.live.compact .card-foot .tag-group { gap: 6px; margin-right: 6px; padding-right: 0; border-right: 0; }
 .notice.live.compact .card-foot .tag-group:last-child { margin-right: 0; padding-right: 0; border-right: 0; }
 .notice.live.compact .card-foot .badge {
   font-size: 11.5px; line-height: 1.45; padding: 2px 8px; border-radius: 4px;
@@ -2221,7 +2221,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <div class="empty" id="kindEmpty" hidden></div>
     <details class="group off-group rescue-group" id="reviewGroup" hidden>
       <summary><h2>검토필요 <span class="group-n" id="reviewN"></span></h2></summary>
-      <p class="group-note">제목에 <b>관심 키워드</b>와 <b>제외 키워드</b>가 함께 있어 목록에서 뺀 공고입니다. 다른 조건(마감·금액·자격·지역 등)은 모두 통과했습니다. 우리 공고라고 판단되면 <b>목록에 올리기</b>를 누르세요. 본공고·사전규격 목록에 들어가고 팀원 모두에게 보입니다.</p>
       <div class="cat-tabs review-cats" id="reviewCats" role="tablist" aria-label="검토필요 낙찰방법"></div>
       <div id="reviewList"></div>
     </details>
@@ -2253,7 +2252,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
   </section>
 
   <section id="tab-corpus" hidden>
-    <p class="search-intro">지일이 제안하거나 수행한 사업입니다. 사업명을 누르면 과업 내용이 펼쳐집니다.</p>
     <div class="search">
       <input id="corpusQ" type="search" placeholder="사업명으로 찾기: 예: 과학관, 놀이터, 조형물" autocomplete="off" aria-label="사업명으로 찾기">
       <select id="corpusYear" aria-label="연도"><option value="">전체 연도</option></select>
@@ -2280,7 +2278,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       </select>
     </div>
     <div id="logList"></div>
-    <div class="log-empty" id="logEmpty" hidden>아직 판단 기록이 없습니다. 실제 공고 카드에서 참가·보류·불참을 고르면 사유와 함께 여기에 남습니다.</div>
+    <div class="log-empty" id="logEmpty" hidden>아직 판단 기록이 없습니다.</div>
     <div id="logAgg"></div>
   </section>
 
@@ -2292,7 +2290,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <p class="award-test-note" id="awardTestNote" hidden><b>시험 페이지</b> <button type="button" id="awardReset">처음으로 되돌리기</button></p>
     <!-- 공고번호 칸은 가끔만 써서 접어 둠(11/24 사용자 — 칸이 화면을 너무 차지함) -->
     <div class="award-top">
-      <p class="award-lead">투찰한 공고는 저절로 올라옵니다.</p>
       <details class="award-addbox"><summary>공고번호로 직접 넣기</summary>
         <div class="search">
           <input id="awardNo" type="search" placeholder="공고번호, 예: R26BK01800345-000" autocomplete="off" aria-label="공고번호">
@@ -2359,7 +2356,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
         <button type="button" id="cRecBtn">추천 보기</button>
         <span id="cRecMsg" class="job"></span>
       </div>
-      <div id="cRec" class="why">공고를 불러오면 비슷한 과거 공고의 개찰 결과로 <b>추천 투찰금액</b>과 방식별 성적을 보여 줍니다.</div>
+      <div id="cRec" class="why"></div>
     </div>
 
 
@@ -2418,9 +2415,8 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 
     <table class="calc-form calc-summary">
       <tr><th>구 분</th><th>금 액</th><th>사정률 = (예정가격 / 기초금액) × 100</th></tr>
-      <tbody id="cSummary"><tr><td colspan="3" class="why">예비가격을 만들고 번호를 고르면 나옵니다.</td></tr></tbody>
+      <tbody id="cSummary"><tr><td colspan="3" class="why">-</td></tr></tbody>
     </table>
-    <p class="why">예비가격·예정가격·하한선은 이 화면에서 <b>모의로 만든 값</b>입니다. 실제 예비가격 15개는 나라장터가 무작위로 만들고, 예정가격은 개찰 때 업체들이 많이 고른 번호 4개의 평균으로 정해집니다. 투찰금액은 모의 값이 아니라 위 추천 칸(비슷한 과거 공고의 개찰 결과)으로 정합니다.</p>
     </details>
 
     </div><!-- /calcPage -->
@@ -2651,7 +2647,7 @@ function watchJob(job, mine) {
     if (j.error) {
       $("loadState").classList.add("err");
       $("loadState").textContent = "수집 실패";
-      $("liveMeta").innerHTML = `<span style="color:var(--urgent)">수집 실패: ${esc(j.error)}</span><br>지난 수집 결과를 그대로 보여 줍니다.`;
+      $("liveMeta").innerHTML = `<span style="color:var(--urgent)">수집 실패: ${esc(j.error)}</span>`;
       return;
     }
     loadNotices(false);
@@ -2877,10 +2873,7 @@ function promotedBadge(n) {
   if (!pr) return "";
   const when = new Date(pr.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
   const body =
-    `<p class="lead">${esc(pr.by)} 님이 ${esc(when)}에 목록에 올렸습니다.</p>` +
-    (pr.reason
-      ? `<p>${esc(pr.reason)} 때문에 목록에서 빠졌었지만, 담당자가 우리 공고로 판단해 올렸습니다.</p>`
-      : `<p>제목의 '${esc(pr.keyword)}' 때문에 목록에서 빠졌었지만, 담당자가 우리 공고로 판단해 올렸습니다.</p>`) +
+    `<ul class="due-list"><li><span>올린 사람</span><b>${esc(pr.by)} · ${esc(when)}</b></li><li><span>빠졌던 이유</span><b>${pr.reason ? esc(pr.reason) : `제목의 '${esc(pr.keyword)}'`}</b></li></ul>` +
     `<p><button type="button" class="linkish" data-unpromote="${esc(n.noticeNo)}">목록에서 다시 빼기</button></p>`;
   return `<span class="badge qual okb" tabindex="0">담당자가 올림 · ${esc(pr.by)}${qtip("직접 올린 공고", body)}</span>`;
 }
@@ -2984,8 +2977,7 @@ function renderProductView(shown) {
 
 /** 검토필요·보유 품목 카드의 공통 윗부분 — 배지, 제목(강조할 낱말), 마감·수요기관·사업금액 */
 // 사전규격은 낙찰방법이 아직 없음 — 비워 두지 않고 '낙찰방법 미정'(2026-11-20 사용자 요청 — 검토필요 카드도 낙찰방법 표기)
-const methodPendingBadge = () => tipBadge("", "낙찰방법 미정", "낙찰 방식",
-  "<p>사전규격은 공고 전 단계라 나라장터에 낙찰방법(협상·입찰 등)이 아직 없습니다.<br>본공고가 나오면 그 공고에서 확인합니다.</p>");
+const methodPendingBadge = () => tipBadge("", "낙찰방법 미정", "낙찰 방식", "");
 function bigCardHead(n, markWord) {
   let titleHtml = esc(n.title);
   if (markWord) {
@@ -3435,32 +3427,23 @@ const productOnly = (n) => !!n.matchedBy?.products?.length && !n.matchedBy?.keyw
 /** 제목 키워드 없이 지일 공사 면허로 참가 조건을 다 채워 수집한 공고 (2026-11-12 — 외주 추천 낙석방지책 4991 공고) */
 function licenseBadge(n) {
   const names = n.licenseMatch.map((x) => esc(x)).join(", ");
-  return tipBadge("warn", "보유 면허로 수집", "보유 면허로 수집한 공고",
-    `<p>제목에 관심 키워드가 없지만, 나라장터 면허제한을 ${CO_NAME} 공사 면허 <b>${names}</b>로 모두 채워 수집한 공고입니다.</p>` +
-      `<p>쓰는 면허: 실내건축공사업·정보통신공사업·금속구조물·창호·온실공사업·금속창호·지붕건축물조립공사업. 제목의 조건부 제외 키워드('정비' 등)는 이 경로에선 보지 않습니다.</p>`);
+  return tipBadge("warn", "보유 면허로 수집", "보유 면허로 수집한 공고", `<p>쓴 면허: <b>${names}</b></p>`);
 }
 /** 제목 키워드 없이 정선 기관(수요·공고기관)의 입찰 공고라 수집한 공고 (2026-11-23 사용자 결정 — 사업 규모와 상관없이 일반 공고로) */
 function localBadge(n) {
   const place = n.localPlace || "정선";
-  return tipBadge("warn", `${place} 사업으로 수집`, `${place} 사업으로 수집한 공고`,
-    `<p>제목에 관심 키워드가 없지만, <b>${esc(n.localMatch)}</b>이(가) 낸 입찰 공고라 수집했습니다(${esc(CO_NAME)} 소재지).</p>` +
-      `<p>사업 규모와 상관없이 일반 공고로 봅니다. 제목의 조건부 제외 키워드('정비' 등)는 이 경로에선 보지 않고, 무조건 제외 키워드는 그대로 뺍니다.</p>`);
+  return tipBadge("warn", `${place} 사업으로 수집`, `${place} 사업으로 수집한 공고`, `<p>기관: <b>${esc(n.localMatch)}</b></p>`);
 }
 function productOnlyBadge(n) {
   const names = n.matchedBy.products.map((x) => `${esc(x.name)}(${esc(x.code)})`).join(", ");
   // 공고문 참가자격에서 찾은 세부품명 — 나라장터 분류(용역분류)에는 없어 공고문을 읽고 찾은 공고 (서버 webapp/docscan.py)
   if (n.fromDoc) {
     return tipBadge("warn", "공고문 세부품명으로 수집", "공고문 세부품명으로 수집한 공고",
-      `<p>제목에 관심 키워드가 없지만, 공고문 참가자격에 ${CO_NAME} 등록 세부품명 <b>${names}</b>이(가) 적혀 있어 찾은 공고입니다.</p>` +
-        `<p>나라장터 공고 분류에는 세부품명이 없는 용역 공고라 공고문을 읽어야 보입니다. 매일 텔레그램 보고에는 나가지 않습니다.</p>` +
-        `<p>과업 내용이 맞는지 공고 원문을 확인하세요.</p>`);
+      `<p>공고문 세부품명: <b>${names}</b></p><p>매일 보고: 안 나감</p>`);
   }
   return tipBadge("warn", "세부품명으로만 수집", "세부품명으로만 수집한 공고",
-    `<p>제목에 관심 키워드가 없고, 세부품명 <b>${names}</b>이(가) ${CO_NAME} 등록 품목이라 들어온 공고입니다.</p>` +
-      (n.outside
-        ? `<p>매일 텔레그램 보고에는 나가지 않는 공고입니다${n.excludedDetail ? `<br>(${esc(n.excludedDetail)})` : ""}.</p>`
-        : `<p>매일 텔레그램 보고에는 나가는 공고입니다.</p>`) +
-      `<p>과업 내용이 맞는지 공고 원문을 확인하세요.</p>`);
+    `<p>세부품명: <b>${names}</b></p>` +
+      (n.outside ? `<p>매일 보고: 안 나감${n.excludedDetail ? ` (${esc(n.excludedDetail)})` : ""}</p>` : `<p>매일 보고: 나감</p>`));
 }
 
 /**
@@ -3495,7 +3478,7 @@ document.addEventListener("click", (ev) => {
   else fallback();
 });
 
-const reNoticeBadge = () => tipBadge("renotice", "재공고", "재공고", `<p>나라장터에 재공고로 올라온 공고입니다.</p>`);
+const reNoticeBadge = () => tipBadge("renotice", "재공고", "재공고", "");
 
 /**
  * 제목 아래 핵심 정보 — 언제까지, 누가 발주했나. 공고기관(조달청 등)이 수요기관과 다르면 따로 적는다.
@@ -3522,9 +3505,7 @@ function deadlineTip(n) {
       return `<li><span>${esc(label)}${star ? " ★" : ""}</span><b>${esc(dtText(iso))}${dd}</b></li>`;
     })
     .join("");
-  const notes = ["★ = 기준 마감: 자격등록·입찰·의견등록 마감 중 가장 이른 것 (셋 다 없으면 첨부 공고문 마감)."];
-  if (list.some(([label]) => label === "공동수급협정 마감")) notes.push("공동수급협정 마감은 공동수급으로 참가할 때만 해당해 기준에서 뺍니다.");
-  return { title: "입찰 일정", body: `<ul class="due-list">${rows}</ul><p>${notes.map(esc).join("<br>")}</p>` };
+  return { title: "입찰 일정", body: `<ul class="due-list">${rows}</ul>` };
 }
 
 /** 마감 칸 한 줄 — 기준 마감 일시와 D-day. 일시에 커서를 대면 일정 전부 */
@@ -3582,12 +3563,11 @@ function briefingBadge(n) {
   const t = briefingAt(n);
   if (!t || isNaN(t)) return "";
   const when = `${t.getMonth() + 1}/${t.getDate()}(${"일월화수목금토"[t.getDay()]}) ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
-  const body = `<p>현장설명회: <b>${esc(when)}</b>${n.siteBriefingPlace ? ` · ${esc(n.siteBriefingPlace)}` : ""}</p>` +
-    `<p>설명회에 참석해 등록한 업체만 투찰할 수 있는 공고가 많습니다. 참석 의무인지는 공고문에서 확인하세요.</p>`;
+  const body = `<p>현장설명회: <b>${esc(when)}</b>${n.siteBriefingPlace ? ` · ${esc(n.siteBriefingPlace)}` : ""}</p>` ;
   return briefingAhead(n)
     ? `<span class="due-tag today qual" tabindex="0">현장설명 ${esc(when)}${qtip("현장설명회: 참가 자격 확인", body)}</span>`
     : tipBadge("", `현장설명 지남 (${t.getMonth() + 1}/${t.getDate()})`, "현장설명회가 이미 열림",
-        body + `<p>설명회에 참석하지 않았다면 참가할 수 없을 수 있습니다.</p>`);
+        body);
 }
 
 function dueBadge(n) {
@@ -3716,15 +3696,14 @@ function regionBadge(n) {
   const hq = r.company ? `<p>${CO_NAME} 본점 소재지: <b>${esc(r.company)}</b></p>` : "";
   const src = `<p class="src">출처: ${esc(r.source || "나라장터 참가가능지역 정보")}</p>`;
   if (r.status === "충족")
-    return tipBadge("okb", "✓ 지역제한 충족", "지역제한", `<p>본점 소재지가 <b>${esc(req)}</b>인 업체만 참가할 수 있습니다. 조건을 충족합니다.</p>${hq}${src}`);
+    return tipBadge("okb", "✓ 지역제한 충족", "지역제한", `<p>참가 가능 지역: <b>${esc(req)}</b></p>${hq}${src}`);
   if (r.status === "미달")
-    return tipBadge("block", "지역제한 · 참가 불가", "지역제한", `<p>본점 소재지가 <b>${esc(req)}</b>인 업체만 참가할 수 있습니다.</p>${hq}${src}`);
+    return tipBadge("block", "지역제한 · 참가 불가", "지역제한", `<p>참가 가능 지역: <b>${esc(req)}</b></p>${hq}${src}`);
   if ((n.regions || []).length)
     return tipBadge("warn", `⚠ 지역제한 ${esc(n.regions.slice(0, 2).join("·"))}${n.regions.length > 2 ? " 외" : ""}`, "지역제한",
-      `<p>나라장터 참가가능지역: <b>${esc(n.regions.join(", "))}</b></p><p>지역 이름을 알아보지 못해 충족 여부를 판정하지 못했습니다.</p>${hq}`);
+      `<p>나라장터 참가가능지역: <b>${esc(n.regions.join(", "))}</b></p>${hq}`);
   if (n.sourceType === "사전규격")
-    return tipBadge("", "지역제한 미정", "지역제한",
-      `<p>사전규격에는 나라장터 참가가능지역 정보가 없습니다.<br>지역제한은 본공고가 나올 때 정해질 수 있으니 본공고에서 확인하세요.</p>`);
+    return tipBadge("", "지역제한 미정", "지역제한", "");
   // 지역제한이 없으면 칩을 안 보임 — 충족·미달·판정 못 함일 때만 (2026-11-18 사용자 결정)
   return "";
 }
@@ -3746,11 +3725,9 @@ function regionSuspectBadge(n) {
   const sum = t.summary || {};
   const rows = [["요건", sum.basis], ["기간", sum.period], ["개인사업자", sum.individual ? "공고문에 언급 있음" : null]].filter(([, v]) => v);
   return tipBadge("warn", `⚠ 지역 제한 의심 ${esc(req)}`, "지역 제한 의심 (첨부 공고문)",
-    `<p class="lead">첨부 공고문에 <b>${esc(req)}</b> 소재 업체만 참가할 수 있다는 문구가 있습니다.</p>` +
-      `<p>나라장터 참가가능지역에는 제한이 없어 목록에서 빼지 않았습니다. 공고문 판정은 표시만 합니다.</p>` +
+    `<p>참가 가능 지역: <b>${esc(req)}</b></p>` +
       (rows.length ? `<ul class="due-list">${rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join("")}</ul>` : "") +
-      (t.evidence ? `<p class="q-label">공고문 원문</p><blockquote class="quote">${esc(t.evidence)}</blockquote>` : "") +
-      `<p>원문에서 참가할 수 있는지 확인하세요.</p>`);
+      (t.evidence ? `<p class="q-label">공고문 원문</p><blockquote class="quote">${esc(t.evidence)}</blockquote>` : "") );
 }
 
 /** 첨부를 못 읽은 까닭 — 다른 조달시스템(국방전자조달)에 규격서가 있거나, 나라장터 첨부가 없음 */
@@ -3758,9 +3735,9 @@ function attachBadge(n) {
   const ls = n.linkedSystem;
   if (ls)
     return tipBadge("warn", `${esc(ls.name)}에서 확인`, `${esc(ls.name)} 공고`,
-      `<p>나라장터엔 첨부가 없고 규격서·상세는 ${esc(ls.name)}에 있습니다. 자격·과업은 거기서 확인하세요.</p><p><a href="${esc(ls.url)}" target="_blank" rel="noopener">${esc(ls.url)}</a></p>`);
+      `<p><a href="${esc(ls.url)}" target="_blank" rel="noopener">${esc(ls.url)}</a></p>`);
   if (n.attachmentCount === 0)
-    return tipBadge("faint", "첨부 없음", "나라장터 첨부 없음", `<p>나라장터에 올라온 첨부파일이 없어 자격·확인 필요 요건을 읽지 못했습니다.<br>공고 상세에서 직접 확인하세요.</p>`);
+    return tipBadge("faint", "첨부 없음", "나라장터 첨부 없음", "");
   return "";
 }
 
@@ -3778,7 +3755,6 @@ function flagBadges(n) {
     const body =
       (rows.length ? `<ul class="due-list">${rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join("")}</ul>` : "") +
       `<p class="q-label">공고문 원문</p><blockquote class="quote">${esc(f.text)}</blockquote>` +
-      (FLAG_NOTE[f.kind] === "" ? "" : `<p>${esc(FLAG_NOTE[f.kind] || "자동 판정하지 않습니다. " + CO_NAME + " 실적·인력이 조건에 맞는지 공고문에서 확인하세요.")}</p>`) +
       (f.source ? `<p class="src">출처: ${esc(f.source)}</p>` : "");
     return tipBadge("warn", `⚠ ${esc(flagChipText(f))}`, `${esc(FLAG_LABEL[f.kind] || f.kind)}: 확인 필요`, body);
   });
@@ -3797,7 +3773,7 @@ function jointLabel(n) {
 function jointBadge(n) {
   if (n.sourceType !== "본공고") return "";
   const j = { ...(n.joint || {}), label: jointLabel(n) };
-  if (!j.label || j.label === "정보 없음") return tipBadge("faint", "공동수급 정보 없음", "공동수급", `<p>나라장터 공동수급 정보가 없습니다. 공고 원문에서 공동수급 허용 여부를 확인하세요.</p>`);
+  if (!j.label || j.label === "정보 없음") return tipBadge("faint", "공동수급 정보 없음", "공동수급", "");
   const short = j.label;
   // 허용이면 지역제한 충족 칩과 같은 초록 칩 '✓ 공동수급 가능 · 공동이행' (2026-11-18 사용자 결정), 불허는 노란 칩 그대로
   const denied = /불허/.test(short);
@@ -3814,7 +3790,7 @@ function jointBadge(n) {
  */
 const qtip = (title, body) => `<span class="qtip" role="tooltip"><h4>${title}</h4>${body}</span>`;
 /** 커서를 올리면 설명 박스가 뜨는 배지. inner·body는 이미 이스케이프한 HTML */
-const tipBadge = (cls, inner, title, body) => `<span class="badge qual ${cls}" tabindex="0">${inner}${qtip(title, body)}</span>`;
+const tipBadge = (cls, inner, title, body) => body ? `<span class="badge qual ${cls}" tabindex="0">${inner}${qtip(title, body)}</span>` : `<span class="badge qual ${cls}">${inner}</span>`;
 
 /** 낙찰 방식 분류(협상·수의·규격가격동시·입찰). 나라장터 원문 값과 뜻을 함께 */
 const BID_METHOD_NOTE = {
@@ -3824,7 +3800,7 @@ const BID_METHOD_NOTE = {
 };
 function bidMethodBadge(n) {
   const note = BID_METHOD_NOTE[n.bidMethodCategory];
-  const body = (n.bidMethod ? `<p>나라장터 표기: <b>${esc(n.bidMethod)}</b></p>` : "") + (note ? `<p>${note}</p>` : "");
+  const body = n.bidMethod ? `<p>나라장터 표기: <b>${esc(n.bidMethod)}</b></p>` : "";
   return tipBadge("", esc(n.bidMethodCategory), "낙찰 방식", body);
 }
 
@@ -3836,18 +3812,18 @@ function overseasBadges(n) {
   const out = [];
   // 몽골·몽골 지명이 공고명이나 첨부 장소에 있으면 "해외 의심" 대신 (2026-10-19 사용자 요청)
   if (n.overseas) out.push(tipBadge("okb", "몽골 공고 유력", "몽골 공고 유력",
-    `<p>근거: ${esc(n.overseas)}</p><p>지일이 진출 중인 시장이라 해외 개최여도 목록에서 빼지 않습니다.<br>사업 장소를 원문에서 확인하세요.</p>`));
+    `<p>근거: ${esc(n.overseas)}</p>`));
   if (n.overseasSuspect) out.push(tipBadge("warn", "해외 개최 의심", "해외 개최 의심",
-    `<p class="lead">${esc(n.overseasSuspect)}</p><p>해외 개최 제외 규칙에는 걸리지 않아 목록에 남겼습니다.<br>개최지가 해외인지 공고 원문에서 확인하세요.</p>`));
+    `<p>근거: ${esc(n.overseasSuspect)}</p>`));
   if (n.overseasAttachment) out.push(tipBadge("warn", "해외 개최 (첨부)", "첨부의 개최·사업 장소",
-    `<p>첨부 공고문·과업지시서의 장소: <b>${esc(n.overseasAttachment)}</b></p><p>첨부 판정은 표시만 합니다. 원문에서 확인하세요.</p>`));
+    `<p>첨부의 장소: <b>${esc(n.overseasAttachment)}</b></p>`));
   return out.join("");
 }
 
 /** 참가여부 — 담당과 마지막으로 바뀐 때 */
 function partStatusBadge(p) {
   const at = p.updatedAt ? new Date(p.updatedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
-  const body = `<p>담당: <b>${p.owner ? esc(p.owner) : "없음"}</b></p>` + (p.reason ? `<p>사유: ${esc(p.reason)}</p>` : "") + (at ? `<p>마지막 변경: ${esc(at)}</p>` : "") + `<p>카드 아래 참가여부 버튼으로 바꿀 수 있습니다.</p>`;
+  const body = `<p>담당: <b>${p.owner ? esc(p.owner) : "없음"}</b></p>` + (p.reason ? `<p>사유: ${esc(p.reason)}</p>` : "") + (at ? `<p>마지막 변경: ${esc(at)}</p>` : "");
   return `<span class="badge pstat qual ${PART_TONE[p.status]}" tabindex="0">${esc(p.status)}${p.owner ? " · " + esc(p.owner) : ""}${qtip("참가여부", body)}</span>`;
 }
 
@@ -3866,7 +3842,7 @@ function jointTipBody(raw, short) {
     .filter(([k]) => short.includes(k))
     .map(([k, v]) => `<li><b>${k}</b><span class="def">${v}</span></li>`)
     .join("");
-  return `<p>나라장터 표기: <b>${esc(raw)}</b></p>` + (notes ? `<ul>${notes}</ul>` : "");
+  return `<p>나라장터 표기: <b>${esc(raw)}</b></p>`;
 }
 
 /**
@@ -3947,21 +3923,15 @@ function qualPartInfo(n, p, noShare = false, legend = true) {
     if (all.length) {
       const mixed = all.some((r) => new Set((r.items || []).map((i) => i.kind)).size > 1);
       title = `${esc(p.name)} ${all.length}건: 충족 ${ok.length} · 미달 ${miss.length}`;
-      body = reqBlocksHtml(all, mixed) + (legend ? `<p class="lay-legend">✓ 보유 · ✗ 미보유 · – 이미 충족했거나 공동수급으로 채울 수 있어 없어도 됨<br>${esc(QUAL_NOTES[p.key])}</p>` : "");
+      body = reqBlocksHtml(all, mixed);
     } else if ((p.held || []).length) {
       title = "보유로 충족한 자격";
       body = `<ul>${p.held.map((x) => `<li class="lay-ok">✓ ${esc(x)}</li>`).join("")}</ul>`;
     } else {
       title = esc(p.name);
-      body = legend ? `<p>${esc(QUAL_EMPTY[p.key]?.[p.status] || "")}</p>` : "";
+      body = "";
     }
     // legend=false(자격 칩 상자) — 설명 문장 없이 요구 자격·보유 여부만 (2026-11-26 사용자: 설명글 필요 없음)
-    if (legend && p.status === "미달" && p.key === "industry")
-      body += noShare
-        ? `<p class="warnline">${CO_SUBJ} 보유한 요구 면허가 하나도 없어 공동수급으로도 맡을 부분이 없습니다.</p>`
-        : denied
-        ? `<p class="warnline">공동수급 불허: 부족한 자격을 함께 채울 업체를 구할 수 없습니다.</p>`
-        : `<p>공동수급이 허용되면 이 자격을 가진 업체와 함께 참가할 수 있습니다. 옆 공동수급 배지를 보세요.</p>`;
   return { title, body };
 }
 function nQualBadges(n, noShare = false) {
@@ -4084,7 +4054,6 @@ function decisionRow(p, next = true) {  // next=false: 판단 기록 줄(다음 
       ? `<span class="decision-reason"><b>${esc(p.status)} 사유</b> ${said}</span><button type="button" class="linkish" data-preason>사유 고치기</button>`
       : folded ? `<button type="button" class="linkish" data-preason>사유 적기</button>` : form}
     <span class="decision-who">${next ? nextStepButton(p) : `${who}${undo}`}</span>
-    ${next && p.meta?.bidMethod === "규격가격동시" && nextStepButton(p) ? `<div class="next-note"><b>규격가격동시입찰</b> 규격 입찰서와 가격 입찰서를 함께 냅니다. 정량평가서와 투찰금액을 둘 다 준비해 주세요.</div>` : ""}
     ${folded ? `<div class="reason-edit"${editOpen ? "" : " hidden"}>${chips}${form}</div>` : ""}
   </div>`;
 }
@@ -4581,34 +4550,16 @@ const STAGE_LABEL = {
   "과업 내용": "전시 사업 아님",
 };
 const stageLabel = (s) => STAGE_LABEL[s] || s;
-/** 빠진 이유 배지 팝업 — 그 조건이 무엇인지 (판정 규칙은 diagnose.ts) */
-const STAGE_NOTE = {
-  마감: "입찰 마감(사전규격은 의견 마감)이 지난 공고입니다.<br>사전규격은 본공고가 올라오면 본공고 목록에 나옵니다.",
-  "본공고 게시": "사전규격 공고인데 본공고가 이미 나왔습니다.<br>본공고에서 확인하세요.",
-  검토필요: "제목에 관심 키워드와 제외 키워드가 함께 있어 '검토필요' 칸에 둔 공고입니다.",
-  제외키워드: "제목에 " + CO_NAME + " 업무와 무관한 공고를 거르는 단어가 들어 있습니다.",
-  최소예산: "사업금액이 설정한 최소 금액보다 작습니다.",
-  낙찰방법: "수집하지 않는 낙찰방법입니다(수의계약, 설계공모).",
-  해외개최: "몽골이 아닌 해외 개최 공고입니다. 제목에 한국관이 있거나, 전시회·해외 지명과 단체관이 함께 있거나, USA·UAE 같은 영문 국가 약자가 있으면 해외 개최로 봅니다.",
-  "키워드·품목": "공고명·품명에 등록 키워드가 없고, 공고의 세부품명(용역은 용역분류)도 " + CO_NAME + " 등록 품목이 아닙니다.<br>다른 조건(금액·자격·지역·마감)은 모두 통과한 공고만 싣습니다.",
-  참가자격: "나라장터 업종제한의 요구 면허를 " + CO_SUBJ + " 하나도 보유하지 않았습니다.<br>공동수급으로도 " + CO_SUBJ + " 맡을 몫이 없습니다.",
-  참가지역: "다른 지역(시·도, 시·군 단위)에 본사가 있는 업체만 참가할 수 있는 공고입니다.<br>나라장터 참가가능지역 정보로만 판단합니다. 첨부 문서의 지역 문구는 '지역 제한 의심' 표시만 합니다.",
-  "과업 내용": "첨부 과업지시서를 읽어 보니 전시·제작 사업이 아닙니다.<br>제목에 키워드가 없고 과업에도 전시·제작 내용이 없거나, 사업 목적이 휴게·독서 공간 조성입니다.",
-};
 function excludedBadge(n) {
-  if (!n.excludedAt) return tipBadge("hi", "목록에 있음", "목록에 있음", `<p>모든 조건을 통과해 공고 목록에 올라 있습니다.</p>`);
-  const body = `<p>${STAGE_NOTE[n.excludedAt] || ""}</p>` + (n.excludedDetail ? `<p>판정: ${esc(n.excludedDetail)}</p>` : "");
+  if (!n.excludedAt) return tipBadge("hi", "목록에 있음", "목록에 있음", "");
+  const body = n.excludedDetail ? `<p>판정: ${esc(n.excludedDetail)}</p>` : "";
   return tipBadge("warn", `빠진 이유 · ${esc(stageLabel(n.excludedAt))}`, "목록에서 빠진 이유", body);
 }
 /** 공고 구분 — 본공고 / 사전규격 */
 function sourceTypeBadge(n) {
-  const note =
-    n.sourceType === "사전규격"
-      ? "본공고 전에 규격을 미리 공개해 의견을 받는 단계입니다.<br>입찰은 본공고가 나온 뒤에 합니다."
-      : "입찰에 참가할 수 있는 공고입니다.";
-  return tipBadge("", esc(n.sourceType), "공고 구분", `<p>${note}</p>`);
+  return tipBadge("", esc(n.sourceType), "공고 구분", "");
 }
-const businessTypeBadge = (n) => tipBadge("", esc(n.businessType), "업무 구분", `<p>나라장터 공고의 업무 구분(물품·용역·공사)입니다.</p>`);
+const businessTypeBadge = (n) => tipBadge("", esc(n.businessType), "업무 구분", "");
 /** 조건별 확인 목록에 쓰는 이름 (통과·탈락 모두에 어울리게) */
 const STEP_NAME = {
   마감: "마감",
@@ -4644,7 +4595,7 @@ async function loadExcluded() {
   }
 }
 
-/** 빠진 이유 표의 '기준' 칸 — 판정 규칙 한 줄 (자세한 설명은 카드 배지 팝업 STAGE_NOTE) */
+/** 빠진 이유 표의 '기준' 칸 — 판정 규칙 한 줄 */
 const STAGE_RULE = {
   마감: "입찰 마감(사전규격은 의견 마감)이 지남",
   "본공고 게시": "사전규격인데 본공고가 이미 나옴",
@@ -4794,14 +4745,14 @@ function exStepBadges(n) {
         : /^자격 미보유/.test(q.detail)
           ? tipBadge("block", "자격 미보유 · 공동수급 확인", "참가 자격", `<p>${esc(q.detail)}</p>`)
           : /업종제한 없음/.test(q.detail)
-            ? tipBadge("faint", "자격요건 제한 없음", "참가 자격", `<p>나라장터 면허제한정보에 업종제한이 없습니다.</p>`)
+            ? tipBadge("faint", "자격요건 제한 없음", "참가 자격", "")
             : tipBadge("faint", n.sourceType === "사전규격" ? "자격 판정 안 함" : "자격 확인 실패", "참가 자격", `<p>${esc(q.detail)}</p>`);
   const region = !r
     ? ""
     : !r.ok
       ? tipBadge("block", "지역제한 · 참가 불가", "참가 지역", `<p>${esc(r.detail)}</p>`)
       : /지역제한 없음/.test(r.detail)
-        ? tipBadge("faint", "지역제한 없음", "참가 지역", `<p>나라장터 참가가능지역 정보에 지역제한이 없습니다.</p>`)
+        ? tipBadge("faint", "지역제한 없음", "참가 지역", "")
         : n.sourceType === "사전규격"
           ? tipBadge("faint", "지역제한 미정", "참가 지역", `<p>${esc(r.detail)}</p>`)
           : tipBadge("okb", "지역제한 · 본점 충족", "참가 지역", `<p>${esc(r.detail)}</p>`);
@@ -4811,7 +4762,7 @@ function exStepBadges(n) {
   // 그 밖에는 첨부 공고문을 읽지 않아 세부품명 요건은 확인하지 않았다 — 사실대로 '미확인'
   const product = k && !k.ok
     ? productMissBadge(n, k)
-    : tipBadge("faint", "세부품명번호 미확인", "세부품명", `<p>제외된 공고는 첨부 공고문을 읽지 않아<br>세부품명번호 요건을 확인하지 않았습니다.</p>`);
+    : tipBadge("faint", "세부품명번호 미확인", "세부품명", "");
   return group("자격", qual + product) + group("지역", region);
 }
 
@@ -4828,13 +4779,12 @@ function productMissBadge(n, k) {
   const kw = blk("관심 키워드", "miss", "✗", k.name ? "공고명·품명에 없음" : "공고명에 없음");
   if (pre && !k.name)
     return tipBadge("faint", "사전규격 · 품목 정보 없음", "세부품명: 사전규격 (판정 못 함)",
-      kw + blk("세부품명번호", "lay-spare", "–", "정보 없음", "사전규격 응답에는 번호가 없습니다") +
-      `<p class="lay-legend">본공고가 나오면 다시 판정합니다.</p>`);
+      kw + blk("세부품명번호", "lay-spare", "–", "정보 없음"));
   const prod = k.name
     ? blk(`${esc(k.what || "세부품명")} (나라장터)`, "miss", "✗", esc(k.name), CO_NAME + " 등록 품목이 아님")
     : blk("세부품명번호", "miss", "✗", "공고에 번호가 없음");
   return tipBadge("block", "세부품명번호 미달", pre ? "세부품명: 미달 (사전규격)" : "세부품명: 미달",
-    kw + prod + `<p class="lay-legend">관심 키워드나 ${CO_NAME} 등록 품목 중 하나라도 맞으면 수집합니다.</p>`);
+    kw + prod);
 }
 
 /**
@@ -4897,12 +4847,11 @@ function promoteAsk(n, kw) {
     : n.excludedAt === "낙찰방법" ? (method === "설계공모" ? "설계공모" : "수의계약") : stageLabel(n.excludedAt);
   const others = (n.steps || []).filter((s) => !s.ok && s.step !== n.excludedAt);
   const body =
-    `<p class="lead"><b>${LEAD[n.excludedAt] || `${esc(stageLabel(n.excludedAt))} 때문에 빠진 공고입니다.`}</b></p>` +
+    `<p class="lead"><b>빠진 이유: ${esc(reason)}</b></p>` +
     (n.excludedDetail ? `<p>${esc(n.excludedDetail)}</p>` : "") +
-    (others.length ? `<p class="q-label">이 밖에도 걸린 조건</p><ul>${others.map((s) => `<li class="miss">✗ ${esc(STEP_NAME[s.step] || s.step)}: ${esc(s.detail)}</li>`).join("")}</ul>` : "") +
-    `<p>올리면 실제 공고 목록에 들어가고 팀원 모두에게 보입니다.<br>목록에서 '다시 빼기'로 되돌릴 수 있습니다.</p>`;
+    (others.length ? `<p class="q-label">이 밖에도 걸린 조건</p><ul>${others.map((s) => `<li class="miss">✗ ${esc(STEP_NAME[s.step] || s.step)}: ${esc(s.detail)}</li>`).join("")}</ul>` : "") ;
   return `<span class="promote-ask">참가할 만한 공고라면
-    <span class="qual promote-tip" tabindex="0"><button type="button" class="rs-promote" data-promote="${esc(n.noticeNo)}" data-title="${esc(n.title)}" data-keyword="${esc(kw || "")}" data-reason="${esc(reason)}">실제 공고로 올리기</button>${qtip("올리기 전에 확인하세요", body).replace('class="qtip"', 'class="qtip right"')}</span>
+    <span class="qual promote-tip" tabindex="0"><button type="button" class="rs-promote" data-promote="${esc(n.noticeNo)}" data-title="${esc(n.title)}" data-keyword="${esc(kw || "")}" data-reason="${esc(reason)}">실제 공고로 올리기</button>${qtip("빠진 이유", body).replace('class="qtip"', 'class="qtip right"')}</span>
   </span>`;
 }
 
@@ -5133,28 +5082,27 @@ function awardStage(v, kind) {
   const [ws, wd] = awardWords(v);
   const pg = v.progress || {}, mdd = (s) => String(s).slice(5, 10).split("-").map(Number).join("/");
   // 11/20 사용자: 착수·납품·청구는 서류 날짜로 단계 — 담당자가 서류의 제출일·청구일을 채워 저장하면 다음 단계로
-  if (v.status === "낙찰" && cdate && pg.claim) return ["청구 완료", 6, `청구서 ${mdd(pg.claim)} 제출. 대금 지급을 기다리는 중`];
-  if (v.status === "낙찰" && cdate && pg.done) return ["청구 서류", 5, `${wd}계 ${mdd(pg.done)} 제출. 청구서의 청구일을 채우면 청구 완료`];
-  if (v.status === "낙찰" && cdate && pg.start) return [`${wd} 서류`, 4, `${ws}계 ${mdd(pg.start)} 제출${(v.contract || {}).due ? ` · ${wd} 기한 ${mdd(v.contract.due)}` : ""}. ${wd}계의 제출일을 채우면 다음 단계`];
-  if (v.status === "낙찰" && cdate) return [`${ws} 서류`, 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결. ${v.folder && !v.qualOnly ? `서류 현황에서 ${ws} 서류를 확인하세요` : "'낙찰 서류 만들기'를 누르세요"}`];
-  if (v.status === "낙찰") return v.folder && !v.qualOnly ? ["계약 서류", 2, `나라장터에 계약이 올라오면 ${ws} 단계로 넘어갑니다`]
-    : ["낙찰 (계약 등록 기다림)", 2, "나라장터에 계약이 올라오면 '낙찰 서류 만들기'가 켜집니다. 계약서를 먼저 받았으면 '더 보기'에서 만드세요"];
-  if (v.folder) return ["적격심사 서류", 1, "심사 서류를 내고 낙찰을 기다립니다"];
-  if (kind === "todo") return ["적격심사 대상", 1, "개찰 1순위입니다. 심사 통보를 확인하세요"];
+  if (v.status === "낙찰" && cdate && pg.claim) return ["청구 완료", 6, `청구서 ${mdd(pg.claim)} 제출`];
+  if (v.status === "낙찰" && cdate && pg.done) return ["청구 서류", 5, `${wd}계 ${mdd(pg.done)} 제출`];
+  if (v.status === "낙찰" && cdate && pg.start) return [`${wd} 서류`, 4, `${ws}계 ${mdd(pg.start)} 제출${(v.contract || {}).due ? ` · ${wd} 기한 ${mdd(v.contract.due)}` : ""}`];
+  if (v.status === "낙찰" && cdate) return [`${ws} 서류`, 3, `계약 ${cdate.slice(5).replace("-", "/")} 체결`];
+  if (v.status === "낙찰") return v.folder && !v.qualOnly ? ["계약 서류", 2, ""]
+    : ["낙찰 (계약 등록 기다림)", 2, ""];
+  if (v.folder) return ["적격심사 서류", 1, ""];
+  if (kind === "todo") return ["적격심사 대상", 1, "개찰 1순위"];
   if (kind === "done") {
     if (v.status === "다른 업체 낙찰") return ["끝남 (다른 업체 낙찰)", -1, "할 일 없음"];
     if (o && rank == null) return ["끝남 (하한선 미달)", -1, "할 일 없음"];
-    if (o) return [`끝남 (개찰 ${rank}등)`, -1, d ? "지명경쟁은 2등부터 차례가 오는 일이 거의 없음" : "차례가 올 가능성이 낮음 (웹앱 기준 5등 밖)"];
+    if (o) return [`끝남 (개찰 ${rank}등)`, -1, d ? "지명경쟁 2등부터" : "5등 밖"];
     return ["끝남", -1, ""];
   }
-  if (o && v.private && rank === 1) return ["개찰 1등 (낙찰 확인 기다림)", 0, "수의계약은 적격심사가 없습니다. 낙찰이 확인되면 '낙찰 서류 만들기'가 켜집니다"];
+  if (o && v.private && rank === 1) return ["개찰 1등 (낙찰 확인 기다림)", 0, ""];
   // 11/20 사용자: 2등 차례는 나라장터로 알 수 없음 — 개찰 뒤 오래 낙찰자가 안 나오면 1순위 심사가 길어지는 것으로 보고 미리 표시
   const waited = o && o.at ? Math.floor((Date.now() - new Date(o.at + "T00:00:00")) / 86400000) : 0;
   if (o && waited >= AWARD_LONG_WAIT) return [`개찰 ${rank}등 (1순위 심사가 길어짐)`, v.private ? 0 : 1,
-    `개찰 뒤 ${waited}일째 낙찰자가 안 나왔습니다. 1순위가 포기·탈락하면 차례가 옵니다. 발주처 연락을 받으면 '더 보기'에서 ${v.private ? "낙찰 서류" : "적격심사 서류"} 만들기`];
-  if (o) return [`개찰 ${rank}등 (차례 기다림)`, v.private ? 0 : 1, v.private ? "앞 순위가 계약을 못 하면 차례가 옵니다. 낙찰이 확인되면 '낙찰 서류 만들기'"
-    : "앞 순위가 심사에서 떨어지면 차례가 옵니다. 심사 통보를 받으면 '더 보기'에서 적격심사 서류 만들기"];
-  if (v.status === "대기") return ["개찰 결과 기다림", 0, v.private ? "수의계약은 적격심사 없이 낙찰이 확인되면 계약합니다" : "개찰 1순위면 적격심사 서류를 만들 수 있습니다"];
+    `개찰 뒤 ${waited}일째 낙찰자 없음`];
+  if (o) return [`개찰 ${rank}등 (차례 기다림)`, v.private ? 0 : 1, ""];
+  if (v.status === "대기") return ["개찰 결과 기다림", 0, ""];
   return [v.status || "결과 기다림", 0, ""];
 }
 function renderAward(items) {
@@ -5211,7 +5159,7 @@ function renderAward(items) {
   const todo = pick("todo"), wait = pick("wait"), done = pick("done");
   // '지금 할 일' = 개찰 1등·낙찰·서류 폴더 있는 공고 — 0건이면 무엇이 올라오는지 설명(11/20 사용자)
   $("awardList").innerHTML = `<h3>지금 할 일 ${todo.length}건</h3>` + (todo.length ? table(todo)
-    : `<p class="sub">지일이 개찰 1등이거나 낙찰된 공고가 생기면 여기에 올라와, 적격심사·계약 서류를 만들 수 있습니다.</p>`)
+    : `<p class="sub">없음</p>`)
     + (wait.length ? `<details class="award-group" open><summary>결과를 기다리는 공고 ${wait.length}건</summary>${table(wait)}</details>` : "")
     + (done.length ? `<details class="award-group"><summary>끝난 공고 ${done.length}건 <span class="sub">하한선 미달·등수 밖·다른 업체 낙찰</span></summary>${table(done, true)}</details>` : "");
   AWARD_OPEN.forEach(loadAwardDetail);
@@ -5223,7 +5171,7 @@ async function loadAwardDetail(key) {
   catch (err) { box.textContent = err.message; }
 }
 function awardDetailHtml(key, s) {
-  if (!s.folder) return `<p class="sub">폴더가 없습니다. '더 보기' → '서류 다시 만들기'로 다시 만들어 주세요.</p>`;
+  if (!s.folder) return `<p class="sub">폴더가 없습니다.</p>`;
   const link = (rel, name) => `<a href="${AWARD_API}/file?key=${encodeURIComponent(key)}&path=${encodeURIComponent(rel)}">${esc(name)}</a>`;
   const local = !s.folder.startsWith("\\\\");
   const stages = s.stages.map((st) => {
@@ -5238,10 +5186,10 @@ function awardDetailHtml(key, s) {
     <div class="award-box todo"><h4>${esc(doc.name)}: 담당자가 채울 칸 <span class="sub">${esc(doc.dir)}/${esc(doc.doc)}</span></h4>
       <p class="award-hwpx"><button type="button" data-award-hwpx="${escRaw(key)}" data-path="${escRaw(doc.dir + "/" + doc.doc)}">한글로 받기</button> <span class="sub" role="status"></span></p>
       ${doc.todo.length ? `<ul class="award-chips">${doc.todo.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p>필수 칸을 모두 채웠습니다.</p>`}
-      ${doc.auto.length ? `<details class="award-autobox"><summary>자동으로 채운 칸 ${doc.auto.length}개, 원문과 대조</summary><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl></details>` : ""}
+      ${doc.auto.length ? `<details class="award-autobox"><summary>자동으로 채운 칸 ${doc.auto.length}개</summary><dl class="award-auto">${doc.auto.map(([k, val]) => `<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join("")}</dl></details>` : ""}
     </div>` : `<div class="award-box todo"><p>${esc(doc.error)}</p></div>`).join("");
   // 공고문이 요구한 '새로 발급할 서류'(11/19) — 맨 앞 붉은 상자
-  const reissue = (s.reissue || []).length ? `<div class="award-box reissue"><h4>⚠ 새로 발급할 서류 <span class="sub">공고문에 이름이 나옵니다. 원문의 발급 기준을 확인하세요</span></h4><ul>${s.reissue.map((r) => `<li><b>${esc(r.kind)}</b>, 가진 것: ${esc(r.have)}</li>`).join("")}</ul></div>` : "";
+  const reissue = (s.reissue || []).length ? `<div class="award-box reissue"><h4>⚠ 새로 발급할 서류 </h4><ul>${s.reissue.map((r) => `<li><b>${esc(r.kind)}</b>, 가진 것: ${esc(r.have)}</li>`).join("")}</ul></div>` : "";
   const notes = s.notes.length ? `<div class="award-box"><h4>확인할 것</h4><ul class="award-notes">${s.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>` : "";
   // 공고문 제출서류 — '[입찰참여 시] …' 앞말로 단계별 묶음, 줄마다 '표준틀에 있음 / 따로 준비' + 서류 이름, 어느 첨부에서 읽었는지는 묶음 아래 작게
   const groups = new Map();
@@ -5251,16 +5199,16 @@ function awardDetailHtml(key, s) {
     if (!groups.has(when)) groups.set(when, []);
     groups.get(when).push({ ...d, text: m ? d.text.slice(m[0].length) : d.text });
   }
-  const docs = `<div class="award-box award-wide"><h4>공고문 제출서류 <span class="sub">첨부를 끝까지 읽은 결과입니다. 원문과 대조하세요</span></h4>${s.docList.length
+  const docs = `<div class="award-box award-wide"><h4>공고문 제출서류</h4>${s.docList.length
     ? [...groups].map(([when, list]) => `<div class="award-docgroup"><h5>${esc(when)}</h5><ul class="award-docs">${list.map((d) =>
         `<li><span class="award-docstate ${d.covered ? "ok" : "no"}">${d.covered ? "표준틀에 있음" : "따로 준비"}</span><span class="award-doctext">${esc(d.text)}</span></li>`).join("")}</ul>
         <p class="sub">출처: ${esc([...new Set(list.map((d) => d.source).filter(Boolean))].join(" · ") || "첨부")}</p></div>`).join("")
-    : `<p class="sub">첨부에서 제출서류 목록을 찾지 못했습니다. 공고문을 직접 확인하세요.</p>`}</div>`;
+    : `<p class="sub">제출서류 목록 못 찾음</p>`}</div>`;
   const files = [...s.stages.filter((st) => st.files.length).map((st) => `<li><b>${esc(st.name)}</b> ${st.files.map((f) => link(st.dir + "/" + f, f)).join(" · ")} · <a href="${AWARD_API}/zip?key=${encodeURIComponent(key)}&path=${encodeURIComponent(st.dir)}">zip으로 받기</a></li>`),
     s.attach.length ? `<li><b>공고문서</b> ${s.attach.map((f) => link("공고문서/" + f, f)).join(" · ")}</li>` : ""].join("");
   return `<div class="award-path"><span>폴더</span><code>${escRaw(s.folder)}</code>
       <button type="button" data-award-copy="${escRaw(s.folder)}">경로 복사</button>
-      <span class="sub">${local ? "서버 PC 안 폴더라 다른 PC에서는 열리지 않습니다. 아래 파일을 내려받으세요." : "탐색기 주소창에 붙여 넣으면 열립니다. 여기서 파일을 열어 채우고 저장하면 그대로 남습니다."}</span></div>
+</div>
     <ul class="award-stages">${stages}</ul>
     ${reissue}
     ${todo ? `<div class="award-grid">${todo}</div>` : ""}

@@ -1,0 +1,33 @@
+[
+ {
+  "id": "r-001",
+  "tab": "live",
+  "q": "우리가 입찰해야 할 공고는 어떤 게 있어?",
+  "expect": null,
+  "type": "special",
+  "why": "which"
+ },
+ {
+  "id": "r-002",
+  "tab": "live",
+  "q": "우리가 입찰로 봤을 때 젤 우선순위 공고는 어떤게 있을까?",
+  "expect": null,
+  "type": "special",
+  "why": "which"
+ },
+ {
+  "id": "r-003",
+  "tab": "live",
+  "q": "판단 기록은 어디서 봐야해?",
+  "expect": "이 탭에서는 무엇을 하나요?",
+  "expectTab": "log",
+  "type": "real"
+ },
+ {
+  "id": "r-004",
+  "tab": "live",
+  "q": "참가로 정하고 이제 뭐해?",
+  "expect": "참가로 정한 다음에는 무엇을 하나요?",
+  "type": "real"
+ }
+]

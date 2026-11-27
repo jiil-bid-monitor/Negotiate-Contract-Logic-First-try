@@ -93,10 +93,41 @@ class RulePreviewTest(unittest.TestCase):
         d = Path(tempfile.mkdtemp())
         store = Store(d / "web.sqlite3")
         store.save_run("2026-11-16T09:00:00", {"days": 7}, self.payload())
-        res = analyze(store, None, [], [{"add_hard": ["영인"]}, {"nothing": ["x"]}])
+        res = analyze(store, None, [], [{"add_hard": ["영인"]}, {"nothing": ["x"]}, "잘못된 값", {"add_hard": "영인"}],
+                      run=store.latest_run())
         self.assertIn("R1", res["previews"][0]["drop"])
-        self.assertIsNone(res["previews"][1])
+        self.assertEqual(res["previews"][1:], [None, None, None])   # 이상한 변경은 건너뜀(서버가 끊기지 않게)
         self.assertEqual(res["bid"], ["아직 개찰된 투찰이 없어 판단할 수 없음"])
+
+    def test_rate_offset_holdout(self):
+        """기준 사정률 폭(11/27): 실제 1위보다 살짝 비싸게 낸 개찰이 이어지면, 앞 절반으로 고른 '낮추는' 폭이 뒤 절반에서도 1순위를 늘림."""
+        from webapp.devanalysis import rate_offsets
+        entries, lists = [], {}
+        for i in range(32):
+            eid = f"e{i}"
+            basis, rate, lower = 100_000_000, 100.0, 90.0
+            mine = basis * rate / 100 * lower / 100   # Δ=0일 때 내 금액
+            entries.append({"id": eid, "basis": basis, "rate": rate, "lowerRate": lower, "openingAt": f"2026-10-{i % 28 + 1:02d}",
+                            "result": {"status": "완료", "plannedPrice": basis * 0.995, "aValue": 0, "own": None}})
+            lists[eid] = [{"rank": 1, "amount": mine - 30_000, "remark": ""}, {"rank": 2, "amount": mine + 500_000, "remark": ""}]
+        out = rate_offsets(entries, lists.get)
+        self.assertEqual(out["n"], 32)
+        self.assertLess(out["best"], 0)                 # 낮추는 쪽
+        self.assertTrue(out["holdout"]["better"] and out["ok"])
+        self.assertEqual(out["grid"][10]["d"], 0.0)
+        self.assertEqual(rate_offsets(entries[:4], lists.get)["ok"], False)   # 업체 목록 있는 개찰이 적으면 제안 안 함
+        # 뒤 절반(최근)은 1위가 한참 싸서 낮춰도 못 이김 — 앞 절반에서만 맞는 폭은 제안 안 함
+        late = {e["id"]: [{"rank": 1, "amount": 90_000_000 - 5_000_000, "remark": ""}] for e in entries
+                if e["openingAt"] >= "2026-10-13"}   # 날짜순 뒤 16건
+        out = rate_offsets(entries, lambda i: late.get(i) or lists[i])
+        self.assertFalse(out["holdout"]["better"] or out["ok"])
+        # 같은 공고를 두 번 기록했으면 한 번만 셈
+        dup = [{**e, "noticeNo": "R26BK01810177", "noticeOrd": "000", "recordedAt": f"2026-10-0{k}"} for k, e in enumerate(entries[:2])]
+        self.assertEqual(rate_offsets(dup, lists.get)["n"], 1)
+        # 순공사원가로 무효된 업체가 있는 공고 — 그 선 아래 금액은 1순위가 아니라 무효
+        net = [{"rank": None, "amount": 90_100_000, "remark": "순공사원가 98%미만"}, {"rank": 1, "amount": 90_200_000, "remark": ""}]
+        g = rate_offsets(entries[:1], lambda i: net)["grid"][10]
+        self.assertEqual((g["wins"], g["pass"]), (0, 0))
 
 
 if __name__ == "__main__":

@@ -77,6 +77,14 @@ class CombinedLog:
     def set_own_field(self, entry_id: str, key: str, value: Any) -> None:
         self._owner(entry_id).set_own_field(entry_id, key, value)
 
+    def set_result_field(self, entry_id: str, key: str, value: Any) -> None:
+        self._owner(entry_id).set_result_field(entry_id, key, value)
+
+    def fill_outsource(self, entry_id: str, amount: float) -> bool:
+        """외주 금액 칸은 서버 PC 값을 받아 오므로(_KEEP 밖) 사본 기록은 채우지 않음 — 서버 PC가 채움."""
+        owner = self._owner(entry_id)
+        return False if owner is self.mirror else owner.fill_outsource(entry_id, amount)
+
     def set_times(self, entry_id: str, times: dict[str, str]) -> None:
         self._owner(entry_id).set_times(entry_id, times)
 

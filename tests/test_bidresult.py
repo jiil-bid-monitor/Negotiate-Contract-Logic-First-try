@@ -158,6 +158,39 @@ class TestFill(unittest.TestCase):
         self.assertEqual(fill_results(log, None, "u", OWN, ids=[a["id"]], force=True, fetch=fake)["fetched"], 1)
         self.assertIn("1순위 업체", log.csv())
 
+    def test_completed_without_bidder_list_refetched_once(self):
+        """11/27: 투찰 업체 목록 저장 전에 받은 '완료' 결과는 다시 받아 목록을 채움. 다시 받기가 실패해도 받아 둔 결과는
+        안 지우고(지우면 다음에 '새 결과' 알림이 또 감), 3번 실패하면 그만."""
+        log = BidLog(Path(tempfile.mkdtemp()))
+        a = log.add({"noticeNo": "R26BK01810177", "title": "태백 통신공사", "bid": 173_500_000, "rate": 100.55, "workType": "공사"})
+        sent = []
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(BIDDERS), notify=sent.append)
+        log._bidders_path(a["id"]).unlink()   # 예전(목록 저장 전) 결과처럼
+        fail = lambda c, b, n: result([], error="하루 한도")  # noqa: E731
+        for _ in range(3):
+            self.assertEqual(fill_results(log, None, "u", OWN, fetch=fail, notify=sent.append)["fetched"], 1)
+            self.assertEqual(log.entries()[0]["result"]["own"]["rank"], 3)       # 받아 둔 결과 그대로
+        self.assertEqual(fill_results(log, None, "u", OWN, fetch=fail)["fetched"], 0)   # 3번 실패 — 그만
+        self.assertEqual(len(sent), 1)                                            # 알림은 처음 한 번만
+        log.set_result_field(a["id"], "biddersTries", 0)
+        self.assertEqual(fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(BIDDERS), notify=sent.append)["fetched"], 1)
+        self.assertEqual(len(log.bidders(a["id"])), 4)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(BIDDERS))["fetched"], 0)   # 목록이 생기면 또 안 받음
+
+    def test_nas_combined_log_fills_result_fields(self):
+        """NAS(서버 PC 사본 + NAS 기록) — 결과 칸 채우기가 멈추지 않음, 사본 기록의 외주 금액은 서버 PC 값 그대로(11/27 교차 검증)."""
+        from webapp.bidlogpull import CombinedLog, MirrorLog
+        root = Path(tempfile.mkdtemp())
+        mirror = MirrorLog(root / "mirror")
+        mirror.replace_from([{"id": "m1", "noticeNo": "R26BK01810177", "title": "태백", "bid": 173_000_000, "rate": 100.55,
+                              "lowerRate": 89.745, "workType": "공사", "recordedAt": "2026-11-20T10:00:00"}])
+        log = CombinedLog(BidLog(root / "own"), mirror)
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(BIDDERS))
+        e = log.entries()[0]
+        self.assertEqual(e["result"]["status"], "완료")
+        self.assertFalse(e.get("outsource"))
+
     def test_new_result_notified_once(self):
         """11/24 사용자: 개찰 결과가 처음 '완료'가 될 때만 한 통 — 개찰 전·다시 받기는 안 보냄."""
         log = BidLog(Path(tempfile.mkdtemp()))

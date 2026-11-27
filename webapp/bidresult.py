@@ -248,6 +248,15 @@ def telegram_notify(lines: list[str]) -> None:
     send_dev_alert(text, chat_env="TELEGRAM_CHAT_ID")
 
 
+BIDDER_TRIES = 3  # 업체 목록 채우기 다시 받기 — 이만큼 실패(한도·장애·결과 없음)하면 그만
+
+
+def _needs_bidders(log, entry: dict[str, Any]) -> bool:
+    """투찰 업체 목록을 저장하기 전에 받은 '완료' 결과 — 다시 받아 목록을 채움(11/27, 개발자 탭 기준 사정률 폭 계산용)."""
+    res = entry.get("result") or {}
+    return res.get("status") == "완료" and int(res.get("biddersTries") or 0) < BIDDER_TRIES and log.bidders(entry["id"]) is None
+
+
 def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str] | None = None, force: bool = False,
                  fetch: Callable[..., BidResult] | None = None,
                  times: Callable[[Any, dict[str, Any]], dict[str, str]] | None = None,
@@ -261,16 +270,23 @@ def fill_results(log, client: Any, base_url: str, own_bizno: str, ids: list[str]
     if ids:
         targets = [e for e in entries if e.get("id") in ids and (force or needs_fetch(e, now))]
     else:
-        targets = [e for e in entries if needs_fetch(e, now)]
+        targets = [e for e in entries if needs_fetch(e, now) or _needs_bidders(log, e)]
     done = targets[:MAX_PER_CALL]
     lookup = times or _lookup_times
     fresh: list[str] = []  # 이번에 처음 '완료'가 된 결과 — notify로 한 번만(다시 받기는 이미 완료라 안 셈)
     for e in done:
         res = fetch_entry(client, base_url, e, own_bizno, fetch)
-        if res.get("status") == "완료" and (e.get("result") or {}).get("status") != "완료":
-            fresh.append(result_line(e, res))
-        log.set_result(e["id"], res)
-        if _needs_times(e, res.get("status")):
+        old = e.get("result") or {}
+        keep = old.get("status") == "완료" and res.get("status") != "완료"
+        if keep:
+            # 받아 둔 결과를 다시 받다 실패(한도·장애·결과 없음) — 예전 결과를 지우지 않음(지우면 다음에 '새 결과'로 알림이 또 감)
+            if _needs_bidders(log, e):
+                log.set_result_field(e["id"], "biddersTries", int(old.get("biddersTries") or 0) + 1)
+        else:
+            if res.get("status") == "완료" and old.get("status") != "완료":
+                fresh.append(result_line(e, res))
+            log.set_result(e["id"], res)
+        if _needs_times(e, old.get("status") if keep else res.get("status")):
             log.set_times(e["id"], lookup(client, e))
     # 11/10 전에 받은 '완료' 결과 — 지일 미달 등수(-N)를 저장된 투찰 업체 목록으로 채움(목록이 없으면 '결과 다시 받기' 때)
     for e in entries:

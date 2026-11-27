@@ -2807,6 +2807,11 @@ _SEAL_RX = re.compile(_SEAL_TAIL)
 def _seal_spots(xml: str, chars: "_Chars") -> list[tuple[float | None, str, int]]:
     """'(인)' 등 도장 글이 든 문단마다 (도장 글이 시작하는 가로 자리 어림, 그 앞 글, 도장 글 크기) — 문서 순서.
     자리는 줄(표 칸 안이면 칸 안쪽) 왼쪽 끝부터 HWPUNIT. 줄이 여럿이거나 줄 너비를 모르면 None."""
+    return [(x, lab, h) for x, lab, h, _at, _al, _cid in _seal_spots_at(xml, chars)]
+
+
+def _seal_spots_at(xml: str, chars: "_Chars") -> list[tuple]:
+    """`_seal_spots`와 같고, 끝에 (도장 글이 시작하는 글자 자리, 문단 정렬, 그 글 조각 글자 모양 id)도."""
     cells = _all_spans(xml, "tc")
     out = []
     for ps, pe in _all_spans(xml, "p"):
@@ -2821,6 +2826,8 @@ def _seal_spots(xml: str, chars: "_Chars") -> list[tuple[float | None, str, int]
                 break
         if hit is None:
             continue
+        runs = re.findall(r'<(?:[\w.-]+:)?run\b[^>]*?charPrIDRef="(\d+)"', para[:hit])
+        seal_cid = runs[-1] if runs else "0"
         open_end = para.index(">") + 1
         close = para.rfind("</")
         # 문단 안 줄바꿈(lineBreak)이 있으면 도장 글이 든 줄만 셈 — 위임장 '(빈 줄) ⏎ 대리인 :      (인)'(11/27)
@@ -2833,8 +2840,9 @@ def _seal_spots(xml: str, chars: "_Chars") -> list[tuple[float | None, str, int]
         h = chars.height(cur)
         line_w = _line_width(xml, ps, cells)
         pm = re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', para)
+        align0 = chars.geom(pm.group(1))[0] if pm else "LEFT"
         if line_w is None:
-            out.append((None, label, h))
+            out.append((None, label, h, ps + hit, align0, seal_cid))
             continue
         tw, _c = _prefix_width(lead + para[line_s:line_e], chars)
         align, left, intent, right = chars.geom(pm.group(1)) if pm else ("LEFT", 0, 0, 0)
@@ -2842,11 +2850,104 @@ def _seal_spots(xml: str, chars: "_Chars") -> list[tuple[float | None, str, int]
         start = left + ind
         area = line_w - left - right - ind
         if area <= 0 or tw > area * 1.02:  # 한 줄에 안 듦 — 자리를 어림할 수 없음
-            out.append((None, label, h))
+            out.append((None, label, h, ps + hit, align, seal_cid))
             continue
         x = start + pw + {"CENTER": (area - tw) / 2, "RIGHT": area - tw}.get(align, 0)
-        out.append((x, label, h))
+        out.append((x, label, h, ps + hit, align, seal_cid))
     return out
+
+
+def _shrink_seal_values(before: str, after: str, chars: "_Chars | None") -> str:
+    """빈칸을 한 칸까지 줄여도 '(인)'이 오른쪽으로 밀린 줄(원래 빈칸보다 회사명·이름이 넓음)은 그 줄의 채운 값 글자만 줄여 '(인)'을 원래 자리에
+    (11/27 사용자 '서식과 다르면 같게' — 서명 칸 '이름 (서명 또는 날인)' 한 줄 규칙(11/23)처럼 7pt까지). 줄인 뒤 빈칸을 다시 맞춤."""
+    if chars is None:
+        return after
+    for _round in range(3):
+        base = {new: (cid, face) for (cid, _h, face), new in chars.added.items()}
+        b, a = _seal_spots_at(before, chars), _seal_spots_at(after, chars)
+        if len(a) != len(b):
+            return after
+        paras = _all_spans(after, "p")
+        todo = []
+        for (xb, *_r), (xa, _l, _h, at, align, cid) in zip(b, a):
+            sp = chars.char_width(cid, " ")
+            if xb is None or xa is None or align not in ("LEFT", "JUSTIFY", "DISTRIBUTE", "CENTER") or sp <= 0 or xa - xb <= sp * 0.6:
+                continue
+            ps, pe = min(((s0, e0) for s0, e0 in paras if s0 <= at < e0), key=lambda x: x[1] - x[0], default=(None, None))
+            if ps is None:
+                continue
+            runs = [m for m in re.finditer(r'(<(?:[\w.-]+:)?run\b[^>]*?charPrIDRef=")(\d+)("[^>]*>)(.*?)(</(?:[\w.-]+:)?run>)',
+                                           after[ps:pe], re.S) if m.group(2) in base and ps + m.start() < at]
+            text = lambda m: unescape(re.sub(r"<[^>]+>", "", m.group(4)))
+            width = sum(sum(chars.char_width(m.group(2), ch) for ch in text(m)) for m in runs)
+            if not runs or width <= 0:
+                continue
+            need = (xa - xb) * (2 if align == "CENTER" else 1)  # 가운데 정렬은 줄인 만큼의 반만 옮겨 감(빈칸 맞춤이 나머지를 채움)
+            todo.append((ps, runs, max(0.0, (width - need) / width)))
+        if not todo:
+            return after
+        for ps, runs, scale in sorted(todo, key=lambda x: -x[0]):
+            for m in reversed(runs):
+                cid, face = base[m.group(2)]
+                h = chars.height(m.group(2))
+                new_h = max(MIN_HEIGHT, int(h * scale) // 10 * 10)
+                if new_h >= h:
+                    continue
+                nid = chars.variant(cid, new_h)
+                s0 = ps + m.start(2)
+                after = after[:s0] + nid + after[s0 + len(m.group(2)):]
+        after = restore_seals(before, after, chars)
+    return after
+
+
+def restore_seals(before: str, after: str, chars: "_Chars | None") -> str:
+    """채운 뒤 '(인)'이 원래 자리에서 빈칸 반 칸 넘게 옮겨 갔으면 '(인)' 바로 앞 빈칸 수를 고쳐 원래 자리로(11/27 사용자 '서식과 다르면 같게 하면
+    되잖아' — 이름·회사명이 원래 빈칸보다 넓거나 좁아 어긋난 줄). 왼쪽·양쪽 정렬은 앞 빈칸만 늘이고 줄임, 가운데 정렬은 앞 빈칸을 '(인)' 뒤로
+    옮겨(줄 길이 그대로 — 이름표 자리도 그대로). 이름과 '(인)' 사이는 한 칸까지만 줄임 — 그래도 모자라면 남은 만큼 옮겨 간 채로(공통 검사가 알림).
+    오른쪽 정렬·자리를 어림 못 한 줄은 그대로."""
+    if chars is None:
+        return after
+    b = _seal_spots_at(before, chars)
+    for _round in range(4):
+        a = _seal_spots_at(after, chars)
+        if len(a) != len(b):
+            return after
+        fixes = []
+        for (xb, _lb, _hb, _pb, _ab, _cb), (xa, _la, _ha, at, align, cid) in zip(b, a):
+            if xb is None or xa is None or align not in ("LEFT", "JUSTIFY", "DISTRIBUTE", "CENTER"):
+                continue
+            sp = chars.char_width(cid, " ")
+            if sp <= 0 or abs(xa - xb) <= sp * 0.6:
+                continue
+            fixes.append((at, int(round((xa - xb) / sp)), align == "CENTER"))
+        if not fixes:
+            return after
+        for at, n, center in sorted(fixes, reverse=True):
+            t_start = after.rfind(">", 0, at) + 1  # 도장 글이 든 글 조각의 글 시작
+            t_end = after.find("<", at)
+            head, tail = after[t_start:at], after[at:t_end]
+            lead = len(head) - len(head.rstrip(" "))
+            m = _SEAL_RX.match(tail)
+            seal_end = m.end() if m else 0
+            trail = len(tail) - len(tail.rstrip(" "))
+            k = n  # 가운데 정렬도 빈칸을 앞↔뒤로 옮기면 줄 길이가 그대로라 한 칸씩 옮겨 감
+            if k > 0:  # 오른쪽으로 갔음 — 앞 빈칸을 줄임(한 칸은 남김)
+                k = min(k, max(0, lead - 1))
+                if not k:
+                    continue
+                head = head[:len(head) - k]
+                if center:
+                    tail = tail[:seal_end] + " " * k + tail[seal_end:] if seal_end else tail + " " * k
+            else:  # 왼쪽으로 갔음 — 앞 빈칸을 늘림
+                k = -k
+                head = head + " " * k
+                if center:
+                    cut = min(k, trail)
+                    if cut:
+                        tail = tail[:len(tail) - cut]
+                    head = head + " " * (k - cut)  # 뒤 빈칸이 모자라면 앞에 더(가운데 정렬은 반 칸씩 옮겨 감)
+            after = after[:t_start] + head + tail + after[t_end:]
+    return after
 
 
 def seal_moves(before: str, after: str, chars: "_Chars | None") -> list[str]:
@@ -4247,7 +4348,9 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     xml = _split_long_tables(xml, chars, rep, escape(first))
                 xml = _split_track_tables(xml, chars, rep, track_marks)
                 xml = _keep_table_heights(before_fill, xml, chars, rep)
-                rep.seal_moved += seal_moves(orig_sec, xml, chars)  # '(인)' 자리가 원래 서식과 달라졌는지(11/27 공통 검사)
+                xml = restore_seals(orig_sec, xml, chars)  # 어긋난 '(인)'은 앞 빈칸으로 원래 자리에(11/27)
+                xml = _shrink_seal_values(orig_sec, xml, chars)  # 빈칸이 모자라면 그 줄의 채운 값 글자를 줄여서(11/27)
+                rep.seal_moved += seal_moves(orig_sec, xml, chars)  # 그래도 남은 줄은 알림(11/27 공통 검사)
             data = xml.encode("utf-8")
         out_entries[name] = data
     if chars is not None:

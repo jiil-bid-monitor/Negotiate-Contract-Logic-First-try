@@ -847,11 +847,11 @@ def test_seal_cell_seal_stays_in_place(tmp_path: Path):
         rep = fill_hwpx(src, tmp_path / f"o{align}.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
         zo = zipfile.ZipFile(tmp_path / f"o{align}.hwpx")
         out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
-        assert re.search(r"\(주\)가상 홍길동  \(인\)", re.sub(r"<[^>]+>", "", out)), out
+        assert re.search(r"\(주\)가상 홍길동 +\(인\)", re.sub(r"<[^>]+>", "", out)), out
         chars = _Chars(head)
         (x0, _l, _h), = [s for s in _seal_spots("<hs:sec>" + body + "</hs:sec>", chars) if s[0] is not None]
         (x1, _l, _h), = [s for s in _seal_spots(out, chars) if s[0] is not None]
-        assert abs(x1 - x0) < 1100, (align, x0, x1)
+        assert abs(x1 - x0) < 600, (align, x0, x1)
         assert rep.seal_moved == [], rep.seal_moved
 
 
@@ -5661,6 +5661,27 @@ def test_grida_delegation_seals_exact_at_14pt(tmp_path: Path):
     assert "홍길동" in text and "김대리" in text, text
     after = [x for x, _l, _h in _seal_spots(sec(tmp_path / "o.hwpx"), _Chars(out.read("Contents/header.xml").decode()))]
     assert len(after) == 2 and all(abs(a - b) <= 350 for a, b in zip(after, before)), (before, after)
+
+
+def test_company_and_rep_line_seal_restored(tmp_path: Path):
+    """(11/27 사용자 '서식과 다르면 같게 하면 되잖아') '업체명:    대표자:    (인)' 한 줄 — 회사명·이름 너비가 원래 빈칸과 달라 '(인)'이 옮겨 가면
+    (인) 앞 빈칸으로 원래 자리에, 빈칸이 모자라면 그 줄 채운 값 글자를 줄여서. 알림 없이 (인)은 빈칸 반 칸 안쪽."""
+    from quantdocs.fill import _Chars, _seal_spots, fill_hwpx
+
+    p = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    v = vault.Vault({}, info={"회사명": "(주)가상회사", "대표자": "홍길동"})
+    for i, body in enumerate([p("업체명:" + " " * 12 + "대표자:" + " " * 12 + "(인)"),
+                              p("        업체명 :" + " " * 7 + "      대표자 :" + " " * 7 + "(인)")]):
+        src = _mini_hwpx(tmp_path / f"s{i}.hwpx", _SEAL_PAGE + body)
+        with zipfile.ZipFile(src, "a") as z:
+            z.writestr("Contents/header.xml", _SEAL_HEADER)
+        rep = fill_hwpx(src, tmp_path / f"o{i}.hwpx", v)
+        out = zipfile.ZipFile(tmp_path / f"o{i}.hwpx")
+        sec = out.read("Contents/section0.xml").decode()
+        assert "(주)가상회사" in sec and "홍길동" in sec, sec
+        x0 = _seal_spots(f"<hs:sec>{_SEAL_PAGE}{body}</hs:sec>", _Chars(_SEAL_HEADER))[0][0]
+        x1 = _seal_spots(f"<hs:sec>{sec}</hs:sec>", _Chars(out.read("Contents/header.xml").decode()))[0][0]
+        assert abs(x1 - x0) < 600 and rep.seal_moved == [], (i, x0, x1, rep.seal_moved)
 
 
 def test_seal_move_check_catches_pulled_seal():

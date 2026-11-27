@@ -1244,10 +1244,14 @@ def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None
     if use_left:
         new_open = open_m.group(0).replace(f'paraPrIDRef="{pid}"', f'paraPrIDRef="{chars.left_at(pid, max(left, 0) + offset)}"', 1)
         tail_out = seg[j + 1:]
-        if len(lines) == 1 and unescape(re.sub(r"<[^>]+>", "", tail_out)).strip():
+        tail_text = unescape(re.sub(r"<[^>]+>", "", tail_out))
+        if len(lines) == 1 and tail_text.strip():
             # (11/20 사용자 지적: '대 표 자 : 이운봉' 뒤 (인)이 다음 줄로 — ':' 자리는 지킨 채 값 뒤 오른쪽 빈칸을 줄임) 왼쪽 정렬로 바꾼 줄은
-            # 줄 길이를 맞출 까닭이 없음 → (인) 뒤 빈칸은 지우고 이름과 (인) 사이는 한 칸(원래 가운데 정렬 길이를 맞추던 빈칸이 줄을 넘겼음)
-            tail_out = _shrink_tail(tail_out, 10 ** 6)
+            # 줄 길이를 맞출 까닭이 없음 → (인) 뒤 빈칸은 지움. (11/27 사용자 지적: 서식은 건들지 않는다 — 예전엔 이름과 (인) 사이를 한 칸으로
+            # 줄여 (인)이 이름 바로 옆으로 당겨졌음) 이름과 (인) 사이는 값을 넣을 때 이미 이름 너비만큼만 뺐으니(`_after_colon`) 그대로 —
+            # (인)은 원래 자리
+            trail = len(tail_text) - len(tail_text.rstrip(" "))
+            tail_out = _shrink_tail(tail_out, trail)
         out = new_open + no_lines(seg[open_m.end():i] + _mark(lines[0]) + tail_out)
         for x in lines[1:]:
             out += f"{new_open}{blank}{_mark(x)}</{ns}t></{ns}run></{ns}p>"

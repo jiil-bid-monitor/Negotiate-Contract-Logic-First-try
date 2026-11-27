@@ -1164,5 +1164,20 @@
   "expect": null,
   "type": "special",
   "why": "which"
+ },
+ {
+  "id": "b2-t1",
+  "tab": "calc",
+  "q": "계삼기 어케 씀",
+  "expect": "어떤 순서로 하나요?",
+  "type": "typo"
+ },
+ {
+  "id": "b2-t2",
+  "tab": "live",
+  "q": "게산기 어떻게 써요",
+  "expect": "어떤 순서로 하나요?",
+  "expectTab": "calc",
+  "type": "typo"
  }
 ]

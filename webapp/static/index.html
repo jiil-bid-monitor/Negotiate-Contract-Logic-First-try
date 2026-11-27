@@ -5825,6 +5825,14 @@ const helpPlain = (q) => String(q || "").replace(/[ㅋㅎㅠㅜ]{2,}|[~^]+/g, " 
 // 짧은 대답 — 바로 앞 도우미 말의 버튼 하나를 고르는 말로 봄(화면 쪽 helpAsk)
 const HELP_YES = /^(ㅇㅇ+|ㅇㅋ+|ㄱㄱ+|ㅇ|ㄱ|응+|어+|웅|엉|네+|넹+|넵|예|yes|y|ok|okay|오케이|오키|좋아요?|그래요?|고고|그거요?|맞아요?|맞습니다|남겨\s*(줘|주세요)?|남기기)$/i;
 const HELP_NAY = /^(ㄴㄴ+|ㄴ|아니(요|오|야)?|아뇨|노+|no|n|싫어요?|됐어요?|괜찮아요?|ㄴㅇ)$/i;
+// 짧은 인사·감사·대꾸(11/27 — 채팅에선 흔한데 '준비된 답이 없습니다'가 나왔음). 글 전체가 이것뿐일 때만
+const HELP_SMALL = [
+  [/^(ㅇㅋ+|ㅇㅇ+|ㅇ|응+|네+|넵|예|오케이|오키|ok|okay|좋아요?)?(알겠(어|어요|습니다|음)|알았(어|어요|습니다)|확인(했어요|했습니다)?)?(감사(합니다|해요|해|드려요|드립니다)?|고마(워|워요|웠어요|웠습니다|워용|습니다)|땡큐|ㄳ|ㄱㅅ|thx|thanks?(you)?)(요)?$/i, "thanks"],
+  [/^(안녕(하세요|하십니까)?|ㅎㅇ|하이|hi|hello|반가워요?|반갑습니다)$/i, "hello"],
+  [/^(수고(하세요|하셨습니다|하셨어요|해요|요)?|ㅅㄱ|잘가요?|ㅂㅂ|ㅂㅇ|바이|bye|다음에봐요?)$/i, "bye"],
+  [/^(ㅇㅋ+|ㅇㅇ+|ㅇ|응+|네+|넵|예|오케이|오키|ok|okay|좋아요?)?(알겠(어|어요|습니다|음)|알았(어|어요|습니다)|확인(했어요|했습니다)?)?(ㅎ+)?$/i, "ack"],
+];
+const helpSmall = (q) => { const t = String(q).replace(/[\s.!?？,~^ㅋㅠㅜ]+/g, ""); const hit = HELP_SMALL.find(([re]) => re.test(t)); return hit ? hit[1] : ""; };
 const helpYesNo = (q) => { const t = helpPlain(q).replace(/[\s.!?？,]+/g, ""); return HELP_YES.test(t) ? "yes" : HELP_NAY.test(t) ? "no" : ""; };
 // 쓰는 법만 묻는 말('투찰계산기 어케 씀', '순서 알려줘') — 그 탭의 '어떤 순서로 하나요?'로 답함
 const HELP_HOW = /어케|어캐|어떻게|어떡해|어떡케|쓰는\s*법|사용\s*법|사용\s*방법|순서|절차|방법/;
@@ -5855,6 +5863,8 @@ function helpDecide(q0, tab = HELP_TAB, ctx = null, asQuestion = false) {
   const no = HELP_NO.test(q), exact = helpExact(q, qa);
   if (exact >= 0 && !no) return res("answer", [here[exact]], "exact");
   if (no) return res("special", [], "no");
+  const small = helpSmall(q0);
+  if (small) return res("special", [], "small-" + small);
   if (!asQuestion && HELP_REQ.test(q) && !/[?？]\s*$/.test(q)) return res("special", [], "request");  // '…만들어줘?'는 묻는 말
   if (HELP_NONE.test(q)) return res("none", [], "unsupported");
   if (HELP_CHANCE.test(q)) return res("special", [], "chance");
@@ -6225,9 +6235,10 @@ function helpNoticeLines(n) {
     why.length ? `• ${n.excludedAt ? "걸린 키워드" : "들어온 이유"}: ${why.join(" · ")}` : "",
     n.reviewExclude ? `• 검토필요 이유: 공고명에 제외 키워드 '${n.reviewExclude}'가\n    관심 키워드와 같이 있습니다.` : "",
     flags.length ? `• 확인할 것: ${flags.join(" · ")}` : "",
-    n.maxScore ? `• 싱크로율: ${Math.round(n.maxScore * 100)}%${n.sync?.basis && n.sync.basis !== "과업 원문" ? (n.excludedAt ? " (과업 문서 없이 공고 제목만 비교)" : " (과업 문서를 읽지 못해 공고 제목만 비교)") : ""}` : "",
-    n.maxScore && top ? `• 가장 닮은 지난 사업: ${top.title}` : "",
-    n.excludedAt ? `• 빠진 이유: ${stageLabel(n.excludedAt)}${n.excludedDetail ? ` (${n.excludedDetail})` : ""}` : "",
+    n.maxScore ? `• 싱크로율: ${Math.round(n.maxScore * 100)}% (${[n.maxScore >= HIGH ? "높음" : n.maxScore >= LOW ? "경계선" : "낮음",
+      n.sync?.basis && n.sync.basis !== "과업 원문" ? (n.excludedAt ? "과업 문서 없이 공고 제목만 비교" : "과업 문서를 읽지 못해 공고 제목만 비교") : ""].filter(Boolean).join(", ")})` : "",
+    n.maxScore >= LOW && top ? `• 가장 닮은 지난 사업: ${top.title}` : "",  // 낮으면 닮은 사업 이름이 오히려 헷갈림
+    n.excludedAt ? `• 빠진 이유: ${stageLabel(n.excludedAt)}${n.excludedDetail ? ` · ${n.excludedDetail}` : ""}` : "",
     n.rank ? `• 개찰: ${n.rank}등` : "", n.status ? `• 낙찰 확인: ${n.status}` : "",
     DECISIONS.includes(part?.status) ? `• 판단: ${part.status}${part.decidedBy ? ` (${part.decidedBy})` : ""}` : "",
     n.linkedSystem ? "• 국방전자조달에서 확인하는 공고입니다." : "",
@@ -6261,6 +6272,10 @@ let HELP_REQ_TEXT = "";  // '남길까요?'에 답을 기다리는 글
 async function helpAnswer(q, gen = HELP_GEN, asQuestion = false) {
   const helpSay = (...x) => { if (gen === HELP_GEN) say(...x); };  // 탭을 옮긴 뒤 늦게 끝난 답은 버림
   const d = helpDecide(q, HELP_TAB, HELP_CTX.last === "faq" ? { prevTitle: HELP_CTX.title } : null, asQuestion);
+  if (String(d.why).startsWith("small-")) {
+    helpSay("bot", { thanks: "네. 더 궁금한 것이 있으면 언제든 적어 주세요.", hello: "안녕하세요. 궁금한 것을 적어 주세요.", bye: "수고하셨습니다.", ack: "알겠습니다." }[d.why.slice(6)], []);
+    return ["인사"];
+  }
   if (d.why === "request") { HELP_REQ_TEXT = q; helpSay("bot", `${helpDevs()}에게\n이 내용을 남길까요?`, "request"); return ["요청 확인"]; }
   const faq = (x, head) => { HELP_CTX = x.tab === HELP_TAB ? { last: "faq", title: x.h[1] } : {}; helpSay("bot", head + helpText(x.h), [], helpSpotFor(x.h, x.tab), helpNextOf(x.h, x.tab)); return ["답함", x.h[1]]; };
   const prevN = HELP_CTX.last === "notice" ? HELP_CTX.notice : null;
@@ -6333,7 +6348,7 @@ function helpAsk(q) {
   helpSay("me", q);
   helpReply(async () => {
     const gen = HELP_GEN, [result, hit] = await helpAnswer(q, gen);
-    if (gen !== HELP_GEN || result === "요청 확인") return;  // 남길지 물은 글은 답을 받은 뒤에 남김
+    if (gen !== HELP_GEN || result === "요청 확인" || result === "인사") return;  // 인사는 질문 기록에 안 남김  // 남길지 물은 글은 답을 받은 뒤에 남김
     helpLogQ({ q, result, tab: HELP_TAB, hit: hit || "" });
   });
 }

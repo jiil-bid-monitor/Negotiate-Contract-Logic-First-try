@@ -59,7 +59,7 @@ for (const file of sets) {
     const d = helpDecide(it.q, it.tab, it.prevTitle ? { prevTitle: it.prevTitle } : null);
     const hit = d.list.some((x) => want.some((w) => w.tab === x.tab && w.title === x.h[1]));
     const single = d.kind === "answer" || d.kind === "othertab", list = d.kind === "choices";
-    const o = d.kind === "special" ? "special"
+    const o = d.kind === "special" ? (it.why && d.why !== it.why ? "wrong" : "special")  // why를 적은 문제는 그 종류여야(인사 등)
       : !want.length ? (d.kind === "none" ? "correctNone" : single ? "wrong" : "shownOutOfScope")
       : single ? (hit ? "correct" : "wrong") : list ? (hit ? "choicesHit" : "choicesMiss") : "falseNone";
     count[o]++;

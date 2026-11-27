@@ -2052,5 +2052,69 @@
   "q": "등수",
   "expect": "개찰 등수는 무슨 뜻인가요?",
   "type": "casual"
+ },
+ {
+  "id": "c-s01",
+  "tab": "live",
+  "q": "고마워요",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-thanks"
+ },
+ {
+  "id": "c-s02",
+  "tab": "live",
+  "q": "넵 감사합니다!",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-thanks"
+ },
+ {
+  "id": "c-s03",
+  "tab": "live",
+  "q": "안녕하세요",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-hello"
+ },
+ {
+  "id": "c-s04",
+  "tab": "live",
+  "q": "수고하세요~",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-bye"
+ },
+ {
+  "id": "c-s05",
+  "tab": "live",
+  "q": "ㅇㅋ 알겠어",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-ack"
+ },
+ {
+  "id": "c-s06",
+  "tab": "live",
+  "q": "확인했습니다",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-ack"
+ },
+ {
+  "id": "c-s07",
+  "tab": "live",
+  "q": "ㅋㅋㅋ",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-ack"
+ },
+ {
+  "id": "c-s08",
+  "tab": "live",
+  "q": "ㅎㅇ",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-hello"
  }
 ]

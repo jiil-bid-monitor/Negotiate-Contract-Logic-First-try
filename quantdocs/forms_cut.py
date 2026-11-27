@@ -81,11 +81,11 @@ def _with_sec_pr(prefix: str, body: str) -> str:
     옮길 수 없으면 예전처럼 prefix + body."""
     if not prefix:
         return body
-    whole = re.search(r"<((?:[\w.-]+:)?run)\b[^>]*>(?:(?!</\1>).)*?<(?:[\w.-]+:)?secPr\b.*?</\1>", prefix, re.S)
+    spans = _sec_pr_runs(prefix)
     head = re.match(r"<(?:[\w.-]+:)?p\b[^>]*>", body)
-    if not whole or not head:
+    if not spans or not head:
         return prefix + body
-    run = re.sub(r"<((?:[\w.-]+:)?t)\b[^>]*>\s*</\1>|<(?:[\w.-]+:)?t\b[^>]*/>", "", whole.group(0))
+    run = re.sub(r"<((?:[\w.-]+:)?t)\b[^>]*>\s*</\1>|<(?:[\w.-]+:)?t\b[^>]*/>", "", prefix[spans[0][0]:spans[0][1]])
     first_p = body[:_para_end(body)]
     char = re.search(r'<(?:[\w.-]+:)?run\b[^>]*\bcharPrIDRef="(\d+)"', first_p)
     if char:
@@ -99,7 +99,29 @@ def _drop_sec_pr(body: str) -> str:
     """잘라 낸 서식 본문 안의 쪽 설정 run(secPr·단 설정)을 뺌 — 통합서식엔 구역마다 쪽 설정이 하나만(11/20 사용자 제보 '문서 열람이 멈췄어').
     잘라 낸 서식 파일은 쪽 설정을 첫 문단 안에 품어서(`_with_sec_pr`), 그대로 이으면 서식마다 쪽 설정이 하나씩(장성 17개, 첫 문단엔 2개) 들어가
     한글이 둘째 서식 뒤에서 멈췄음. 구역 첫 문단의 쪽 설정은 merge가 원본에서 다시 넣음."""
-    return re.sub(r"<((?:[\w.-]+:)?run)\b[^>]*>(?:(?!</\1>).)*?<(?:[\w.-]+:)?secPr\b.*?</\1>", "", body, flags=re.S)
+    for a, b in reversed(_sec_pr_runs(body)):
+        body = body[:a] + body[b:]
+    return body
+
+
+def _sec_pr_runs(text: str) -> list[tuple[int, int]]:
+    """쪽 설정(secPr)이 든 run의 위치 — run 안의 run(머리말·꼬리말 문단)까지 세어 끝을 찾음(11/27 태백 LED전광판 R26BK01860338:
+    쪽 설정 run에 로고 머리말이 들어 있어, 처음 나오는 '</run>'(머리말 안)을 끝으로 보고 run을 반만 옮겨 문단 하나가 안 닫혔고
+    통합서식 잇기가 'list index out of range'로 멈췄음)."""
+    out, depth, start = [], 0, 0
+    for m in _TAG.finditer(text):
+        closing, _, name, _, selfclose = m.groups()
+        if name != "run" or selfclose:
+            continue
+        if not closing:
+            if depth == 0:
+                start = m.start()
+            depth += 1
+        else:
+            depth -= 1
+            if depth == 0 and re.search(r"<(?:[\w.-]+:)?secPr\b", text[start:m.end()]):
+                out.append((start, m.end()))
+    return out
 
 
 def _para_end(body: str) -> int:
@@ -493,6 +515,8 @@ def merge(path: Path, parts: list[tuple[CutForm, Path]], out: Path, fit_pages: b
                     xml = re.sub(rf'{k["ref"]}="(\d+)"', lambda m, r=remap, a=k["ref"]: f'{a}="{r.get(m.group(1), m.group(1))}"', xml)
         paras = _top_paragraphs(xml)
         body_paras = paras[-len(f.paras):]  # 채우기는 문단 안만 바꾸므로 문단 수는 그대로 — 앞의 쪽 설정 문단은 뺌
+        if not body_paras:  # 문단을 못 읽은 서식 파일 — 만들기 전체가 멈추지 않게 이유를 알림(build가 서식별 파일로 내 줌)
+            raise ValueError(f"서식 {f.no} 파일의 문단을 읽지 못함")
         body = _drop_blank_tail(_drop_sec_pr(xml[body_paras[0].start:body_paras[-1].end]))
         bodies.setdefault(f.section, []).append((f, body))
     kept = [s for s in sec_names if s in bodies]

@@ -335,6 +335,37 @@ def _sign_table(cells: list[Cell], by_pos: dict) -> bool:
     return False
 
 
+# 이름표 낱말 바로 뒤 '의 …'(꾸밈말 — 뜻은 뒤 낱말: '제안업체의 유동비율'·'업체의 부채비율', 11/27 사용자 지적). '…의 명칭·이름·상호'는 그대로 그 낱말
+_POSSESSIVE = re.compile(r"의(?!명칭|이름|상호|명$|명\()\S")
+
+
+def _none_rule_text(text: str):
+    """'해당 사항이 없을 경우 "해당 없음" 기재'·'해당사항이 없으면 “해당 없음” 표기'·'“해당 없음”을 기재' 안내."""
+    return re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", text, re.S) \
+        or re.search(r"[\"“”'‘’「]\s*해\s*당\s*(?:사\s*항\s*)?없\s*음\s*[\"“”'‘’」]\s*(?:을|를|으로|로|이라고|라고)?\s*(?:기재|표기|기입|작성|적)", text)
+
+
+def _none_rule_tables(xml: str) -> set:
+    """'해당 없음' 안내가 붙은 표(11/27 사용자 — 서식 하나에 안내가 있다고 그 서식의 모든 빈 표에 넣지 않게). 안내가 표 칸 안에 있으면 그 표,
+    표 밖이면 바로 앞에서 끝난 표(안내 '주)'는 보통 표 아래), 앞에서 끝난 표가 없으면 바로 뒤에 시작하는 표."""
+    tables = sorted(_all_tables(xml))
+    out = set()
+    for ts, te in tables:  # 안에 다른 표가 없는 표 — 칸 안 안내
+        if not any(ts < x and y < te for x, y in tables) and _none_rule_text(_text(xml[ts:te])):
+            out.add((ts, te))
+    cuts = sorted({0, len(xml)} | {t[0] for t in tables} | {t[1] for t in tables})
+    for a, b in zip(cuts, cuts[1:]):
+        if any(x <= a and b <= y and not any(x < u and v < y for u, v in tables) for x, y in tables):
+            continue  # 안쪽 표 칸 안(위에서 봄)
+        if not _none_rule_text(_text(xml[a:b])):
+            continue
+        prev = [t for t in tables if t[1] == a]
+        nxt = [t for t in tables if t[0] == b]
+        if prev or nxt:
+            out.add((prev or nxt)[0])
+    return out
+
+
 def _label_key(text: str) -> str | None:
     t = _sq(text).strip(":：")
     # 글자 수로 거르지 않음(11/13 사용자 요청 — '회사채(또는기업어음)에대한신용평가등급또는기업신용평가등급'이 16자를 넘어 빠졌음).
@@ -397,12 +428,15 @@ def _label_key(text: str) -> str | None:
         # '참여인력현황'·'투입인력현황'·'기술인력현황'은 사업 투입 인력이라 안 채움
         return "종업원 수"
     for words, key in LABELS:  # 앞머리가 맞는 것 먼저('홈페이지주소'는 주소가 아니라 홈페이지)
-        if any(t.startswith(w) for w in words):
+        if any(t.startswith(w) and not _POSSESSIVE.match(t[len(w):]) for w in words):
             return key
     if "사업자등록번호" in t:
         return "사업자등록번호"
     # 이름표 안에 든 낱말 — 여럿이면 뒤에 나온 것(한국어 이름표는 끝말이 뜻: '…에대한신용평가등급또는기업신용평가등급')
     hits = [(t.rfind(w) + len(w), key) for words, key in LABELS for w in words if w in t]
+    # 낱말 바로 뒤가 '의 …'면 그 낱말은 꾸밈말이고 이름표의 뜻은 뒤 낱말(11/27 사용자 지적 — 경영상태 자료 '제안업체의 유동비율 :'에
+    # 회사명이 들어갔음). 그런 낱말은 이름표로 안 봄
+    hits = [h for h in hits if not _POSSESSIVE.match(t[h[0]:])]
     if hits:
         return max(hits, key=lambda h: h[0])[1]
     # 괄호로 같은 뜻을 덧붙인 이름표 '영업소재지(주소)'(11/11 필암 서식 17 실적증명서) — 괄호 앞 이름으로, 안 되면 괄호 안 이름으로
@@ -3474,8 +3508,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
             # 서식이 '해당 사항이 없을 경우 "해당 없음" 기재'라고 적었으면 빈 표 첫 칸에 '해당 없음'(11/04 사용자 요청 — 행정처분내용 등)
             # '해당사항이 없으면 "해당 없음" 표기'(11/12 당진 서식 10호 행정처분 확인서)도 같은 뜻
             # 앞 조건 없이 '“해당 없음”을 기재'·'‘해당없음’으로 표기'만 적힌 안내도(11/20 사용자 요청 — 문구에 '해당 없음 기재'가 있으면 위 표에)
-            none_rule = re.search(r"(?:없을|없는|없으면|없을\s*시).{0,12}?(?:경우|때|면|시)?.{0,40}?해당\s*(?:사항\s*)?없음", _text(xml), re.S) \
-                or re.search(r"[\"“”'‘’「]\s*해\s*당\s*(?:사\s*항\s*)?없\s*음\s*[\"“”'‘’」]\s*(?:을|를|으로|로|이라고|라고)?\s*(?:기재|표기|기입|작성|적)", _text(xml))
+            none_rule = _none_rule_text(_text(xml))
+            # (11/27 사용자 지적 — 태백 서식 13 '경영상태 및 행정처분 내용': 행정처분 표 아래 안내 때문에 위 경영상태 표에도 '해당 없음')
+            # 안내 문구가 붙은 표에만 — 그 표 칸 안, 또는 표 바로 뒤(다음 표 전) 글. 첫 표는 바로 앞 글도
+            none_tables = _none_rule_tables(xml) if none_rule else set()
             sinindo = "신인도" in _sq(_text(xml))  # 신인도 서식 — '해당 없음'은 첫 열을 건너뜀(11/20)
             tally = {"sum": 0.0, "n": 0, "missing": False}  # 이 서식에서 넣은 자기평점 합(따로 놓인 합계 표용, 11/13)
             seen_party: set = set()  # 회사 정보 표 모양 — 같은 모양이 또 나오면 공동수급 구성원용 사본이라 비움(11/13)
@@ -3993,7 +4029,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         for start, pid in colon_vals.items():
                             if start not in before and chars.align(pid) != "LEFT":
                                 para_override[start] = chars.left_any(pid)
-                if none_rule and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
+                if none_rule and tbl in none_tables and not any(tbl[0] <= e[0].start < tbl[1] for e in edits):
                     head = [c for c in cells if c.row == 0]
                     body = [c for c in cells if c.row > 0]
                     # '계 | __ | __' 합계 줄은 빼고 봄(11/18 사용자 제보 — 행정처분 내용 표 아래 '계' 줄 때문에 빈 표로 안 봐 '해당 없음'이 빠짐)

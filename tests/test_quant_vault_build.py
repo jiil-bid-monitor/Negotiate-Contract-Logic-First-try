@@ -4577,6 +4577,27 @@ def test_history_grid_dotted_head(tmp_path: Path):
         assert f"|{head}|내 용|비 고|2009.09|법인 설립|2012.08|사업자 등록|" in text, (head, text)
 
 
+def test_none_rule_only_on_table_with_instruction(tmp_path: Path):
+    """11/27 사용자 지적(태백 서식 13 '경영상태 및 행정처분 내용'): 행정처분 표 아래 '해당사항이 없으면 “해당 없음” 표기' 때문에
+    위 경영상태 표에도 '해당 없음'이 들어감 — 안내가 붙은 표에만. 같은 표 '제안업체의 유동비율 :'에 회사명이 붙던 것도('…의 유동비율'은 회사 칸 아님)."""
+    from quantdocs.fill import _label_key, fill_hwpx
+
+    c = lambda col, row, t: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                             f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                             f'<hp:cellSz width="9000" height="1500"/></hp:tc>')
+    tbl = lambda heads: ('<hp:p><hp:run><hp:tbl rowCnt="2" colCnt="2"><hp:sz width="18000" height="3000"/><hp:tr>'
+                         + "".join(c(i, 0, h) for i, h in enumerate(heads)) + "</hp:tr><hp:tr>"
+                         + "".join(c(i, 1, "") for i in range(len(heads))) + "</hp:tr></hp:tbl></hp:run></hp:p>")
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (tbl(["금 액", "비 율"]) + para("주) 1. 결산서 첨부") + para("행정처분 내용") + tbl(["처분 사유", "처분 일시"])
+            + para("주) 2. 해당사항이 없으면 “해당 없음” 표기"))
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+    assert "|금 액|비 율|주) 1." in text and "|처분 사유|처분 일시|해당 없음|" in text, text
+    assert _label_key("제안업체의 유동비율 :") is None and _label_key("제안업체명") == "회사명"
+
+
 def test_wrapped_value_prefix_two_spaces_per_hangul(tmp_path: Path):
     """11/23 사용자 지적: 서약서 서명 묶음 '주    소 : 강원특별자치도 / 정선군 남면 …' — 넘어간 줄이 '강'보다 반 글자쯤 왼쪽.
     앞부분의 한글 자리를 전각 빈칸(U+3000)으로 채웠는데 한글에서 한글 한 글자보다 좁게 찍힘. '글꼴에 어울리는 빈칸'이 꺼진 글자 모양은

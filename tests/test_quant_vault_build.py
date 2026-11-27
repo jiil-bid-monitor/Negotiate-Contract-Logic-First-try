@@ -826,30 +826,33 @@ def test_number_cells_follow_centered_sibling(tmp_path: Path):
     assert re.search(r'paraPrIDRef="7"(?:(?!paraPrIDRef).)*?033-111-2222 \(a@b\.kr\)', out, re.S)
 
 
-def test_seal_cell_name_left_seal_right(tmp_path: Path):
-    """'(인)'이 오른쪽 정렬이던 칸에 이름을 넣을 때 — 11/11 사용자 요청: 이름은 다른 값 칸처럼 왼쪽(앞쪽), '(인)'은 칸 오른쪽 끝
-    (11/04의 '가운데 정렬'을 대체). 왼쪽 정렬 사본 문단 모양 + 칸 너비만큼 빈칸."""
-    from quantdocs.fill import fill_hwpx
+def test_seal_cell_seal_stays_in_place(tmp_path: Path):
+    """'(인)'만 있던 표 칸에 이름을 넣어도 '(인)'은 원래 서식 자리 그대로(11/27 사용자 '원래 자리로' — 11/11 '(인)은 칸 오른쪽 끝'·
+    11/04 '가운데 정렬'을 대체). 오른쪽·가운데 정렬 칸 모두 — 왼쪽 정렬 + 왼쪽 여백 사본으로 이름이 (인) 바로 앞에서 끝남."""
+    from quantdocs.fill import _Chars, _seal_spots, fill_hwpx
 
-    header = ('<hh:head><hh:paraProperties itemCnt="2"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/></hh:paraPr>'
-              '<hh:paraPr id="5"><hh:align horizontal="RIGHT"/><hh:margin left="1"/></hh:paraPr></hh:paraProperties>'
-              '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
-    seal = ('<hp:tc><hp:subList><hp:p paraPrIDRef="5"><hp:run charPrIDRef="0"><hp:t>(인)</hp:t></hp:run></hp:p></hp:subList>'
-            '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="20000" height="2000"/>'
-            '<hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
-    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl([[_c(0, 0, "상호·법인명(대표성명)"), seal]]))
-    with zipfile.ZipFile(src, "a") as z:
-        z.writestr("Contents/header.xml", header)
-    fill_hwpx(src, tmp_path / "so.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
-    zo = zipfile.ZipFile(tmp_path / "so.hwpx")
-    out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
-    pid = re.search(r'paraPrIDRef="(\d+)"(?:(?!paraPrIDRef).)*?\(주\)가상 홍길동', out, re.S).group(1)
-    assert pid == "6" and 'paraProperties itemCnt="3"' in head
-    block = re.search(r'<hh:paraPr id="6".*?</hh:paraPr>', head, re.S).group(0)
-    assert 'horizontal="LEFT"' in block and '<hh:margin left="1"/>' in block  # 여백 등은 원래 모양 그대로
-    text = re.sub(r"<[^>]+>", "", out).replace("\ue000", "").replace("\ue001", "")
-    gap = re.search(r"\(주\)가상 홍길동( +)\(인\)", text).group(1)
-    assert len(gap) > 10  # 20000 칸이면 (인)이 오른쪽 끝 가까이 — 빈칸이 넉넉히
+    mg = lambda left: ('<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="%d" unit="HWPUNIT"/>'
+                       '<hc:right value="0" unit="HWPUNIT"/></hh:margin>' % left)
+    for align, margin in (("RIGHT", mg(100)), ("CENTER", mg(0))):
+        header = ('<hh:head><hh:paraProperties itemCnt="2"><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/></hh:paraPr>'
+                  f'<hh:paraPr id="5"><hh:align horizontal="{align}"/>{margin}</hh:paraPr></hh:paraProperties>'
+                  '<hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+        seal = ('<hp:tc><hp:subList><hp:p paraPrIDRef="5"><hp:run charPrIDRef="0"><hp:t>(인)</hp:t></hp:run></hp:p></hp:subList>'
+                '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="20000" height="2000"/>'
+                '<hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+        body = _tbl([[_c(0, 0, "상호·법인명(대표성명)"), seal]])
+        src = _mini_hwpx(tmp_path / f"s{align}.hwpx", body)
+        with zipfile.ZipFile(src, "a") as z:
+            z.writestr("Contents/header.xml", header)
+        rep = fill_hwpx(src, tmp_path / f"o{align}.hwpx", vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"}))
+        zo = zipfile.ZipFile(tmp_path / f"o{align}.hwpx")
+        out, head = zo.read("Contents/section0.xml").decode(), zo.read("Contents/header.xml").decode()
+        assert re.search(r"\(주\)가상 홍길동  \(인\)", re.sub(r"<[^>]+>", "", out)), out
+        chars = _Chars(head)
+        (x0, _l, _h), = [s for s in _seal_spots("<hs:sec>" + body + "</hs:sec>", chars) if s[0] is not None]
+        (x1, _l, _h), = [s for s in _seal_spots(out, chars) if s[0] is not None]
+        assert abs(x1 - x0) < 1100, (align, x0, x1)
+        assert rep.seal_moved == [], rep.seal_moved
 
 
 def test_other_party_zone_and_placeholder_signature(tmp_path: Path):
@@ -2439,8 +2442,9 @@ def test_spaced_rep_label_not_party_head(tmp_path: Path):
     assert text.count("이윤봉") == 2 and re.search(r"이윤봉 +\(인\)", text)
 
 
-def test_seal_on_next_line_moves_up(tmp_path: Path):
-    """11/11 청렴계약 이행서약서 — '서  약  자 :' 아래 문단이 '(인)'뿐(원본 서식). 이름 줄로 올리고 아래 줄은 빈 줄로(사용자 결정)."""
+def test_seal_on_next_line_stays(tmp_path: Path):
+    """청렴계약 이행서약서 — '서  약  자 :' 아래 문단이 '(인)'뿐(원본 서식). 이름은 서약자 줄에, '(인)'은 원래 아래 줄 그대로
+    (11/27 사용자 '원래 자리로' — 11/11 '이름 줄로 올림'을 대체)."""
     from quantdocs.fill import fill_hwpx
 
     p = lambda t: f'<hp:p><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
@@ -2449,7 +2453,8 @@ def test_seal_on_next_line_moves_up(tmp_path: Path):
     xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
     paras = [re.sub(r"<[^>]+>", "", m) for m in re.findall(r"<hp:p\b[^>]*>(.*?)</hp:p>", xml, re.S)]
     i = next(k for k, t in enumerate(paras) if "서  약  자" in t)
-    assert re.search(r"서  약  자 : 이윤봉 +\(인\)", paras[i]) and paras[i + 1].strip() == "" and paras[i + 2] == "본문 끝"
+    assert "이윤봉" in paras[i] and "(인)" not in paras[i], paras
+    assert paras[i + 1] == " " * 54 + "(인)" and paras[i + 2] == "본문 끝", paras
 
 
 def test_office_address_with_paren_label(tmp_path: Path):
@@ -5581,3 +5586,56 @@ def test_placeholder_company_cell_alone(tmp_path: Path):
     assert "OOO회사" not in text
     assert re.search(r"신청인 : \(주\)가상", text), text
     assert "○○○회사(공동수급체대표자)" in text  # 이름표 없는 협정서 문장은 그대로
+
+
+_SEAL_HEADER = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties>'
+                '<hh:paraProperties itemCnt="2">'
+                + "".join(f'<hh:paraPr id="{i}"><hh:align horizontal="{a}"/><hh:margin><hc:intent value="0" unit="HWPUNIT"/>'
+                          '<hc:left value="0" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/></hh:margin></hh:paraPr>'
+                          for i, a in (("0", "LEFT"), ("7", "CENTER")))
+                + '</hh:paraProperties></hh:head>')
+_SEAL_PAGE = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:secPr><hp:pagePr width="59528" height="84188"><hp:margin header="2834" '
+              'footer="2834" left="5669" right="5669" top="5669" bottom="5669"/></hp:pagePr></hp:secPr></hp:run></hp:p>')
+
+
+def test_seal_positions_kept_on_every_signature_shape(tmp_path: Path):
+    """(11/27 사용자 '서식은 건들지 않는다') 서명 줄 모양마다 이름을 넣어도 '(인)'은 원래 자리 — 서명 줄을 채우는 길이 여럿이라
+    모양별로 한 묶음 시험. 서명 규칙을 고칠 때마다 이 시험이 모두 통과해야 함. 공통 검사(rep.seal_moved)가 비어 있어야 함."""
+    from quantdocs.fill import fill_hwpx
+
+    p = lambda t, pid="0": f'<hp:p paraPrIDRef="{pid}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    sp = " " * 20
+    shapes = {
+        "쌍점 서명 줄": p(f"대 표 자 :{sp}(인)"),
+        "쌍점 없는 서약자": p(f"서 약 자{sp}(인)"),
+        "서약자 상호 대표자": p(f"서 약 자 상 호{sp}대표자{sp}(인)"),
+        "신청인 (주) 성명": p(f"신청인 : 대표자 (주){sp}대표자 성명 :{sp}(인)"),
+        "업체 대표 미리 적힘": p(f"서 약 자 : 업체 대표{sp}(인)"),
+        "자리표시 서명 줄": p("   ○○○업체 대표자 :      ○○○ (인)"),
+        "대표(자 없이)": p(f"업 체 명 :{sp}") + p(f"대    표 :{sp}(인)"),
+        "가운데 정렬 묶음": p(f"업 체 명 :{sp}", "7") + p(f"주    소 :{sp}", "7") + p(f"대 표 자 :{sp}(인)", "7"),
+        # 그리다 위임장(11/27 사용자 지적 — 운리단길): 가운데 정렬, 대리인 줄은 문단 안 줄바꿈 뒤
+        "위임장 대표자·대리인": p(f"대표자(대표사) :{sp}(인)", "7")
+        + f'<hp:p paraPrIDRef="7"><hp:run charPrIDRef="0"><hp:t>{" " * 10}<hp:lineBreak/>{" " * 12}대리인 :{sp}(인)</hp:t></hp:run></hp:p>',
+    }
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동", "주소": "강원 정선"})
+    v.agent = {"성명": "김대리", "주민등록번호": "800101-1******", "주소": "경기 파주", "직위": "이사"}
+    for i, (shape, body) in enumerate(shapes.items()):
+        src = _mini_hwpx(tmp_path / f"s{i}.hwpx", _SEAL_PAGE + body)
+        with zipfile.ZipFile(src, "a") as z:
+            z.writestr("Contents/header.xml", _SEAL_HEADER)
+        rep = fill_hwpx(src, tmp_path / f"o{i}.hwpx", v)
+        text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / f"o{i}.hwpx").read("Contents/section0.xml").decode())
+        assert re.search(r"홍길동 +\(인\)", text), (shape, text)
+        assert rep.seal_moved == [], (shape, rep.seal_moved)
+
+
+def test_seal_move_check_catches_pulled_seal():
+    """공통 검사는 '(인)'이 이름 옆으로 당겨진 줄을 찾아냄 — 11/20 가운데 정렬 묶음에서 실제로 난 일."""
+    from quantdocs.fill import _Chars, seal_moves
+
+    chars = _Chars(_SEAL_HEADER)
+    para = lambda t: f'<hs:sec>{_SEAL_PAGE}<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hs:sec>'
+    before = para("대 표 자 :" + " " * 20 + "(인)")
+    assert seal_moves(before, para("대 표 자 : 홍길동" + " " * 13 + "(인)"), chars) == []
+    assert seal_moves(before, para("대 표 자 : 홍길동 (인)"), chars) == ["대 표 자 : 홍길동"]

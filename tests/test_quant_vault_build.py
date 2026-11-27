@@ -4494,6 +4494,32 @@ def test_form_head_after_line_break_in_previous_paragraph(tmp_path: Path):
         assert x.count("<hp:p ") == x.count("</hp:p>")
 
 
+def test_credit_grade_blocks_with_merged_score_cells():
+    """11/27 사용자 지적(운리단길 서식 9-6 정량적 평가 자체 평가표): 경영상태 점수·배점 칸이 등급마다 '회사채·기업어음·기업신용' 세 줄을
+    세로로 합친 칸이라 등급마다 따로 떨어진 작은 항목으로 읽혀(11/18 규칙) 이름 없는 줄이 되고, 기업신용 줄 등급도 못 읽어 하나도 못 채웠음."""
+    from datetime import date
+    from quantdocs import selfscore
+    from quantdocs.fill import Cell
+
+    cells, add = [], lambda r, c, t, rs=1, cs=1: cells.append(Cell(0, 0, r, c, cs, t, rs))
+    for c, t in enumerate(["항목", "", "세부 항목", "배점", "평점"]):
+        if t or c == 0:
+            add(0, c, t, cs=2 if c == 0 else 1)
+    add(1, 0, "경영상태(신용평가등급)", rs=9)
+    for k, (grade, pts) in enumerate([("AAA, AA+, BBB+, BBB°", "6점"), ("BBB-, BB+, BB°, BB-", "4점"), ("B+, B°, B-", "2점")]):
+        r = 1 + k * 3
+        for i, kind in enumerate(["회사채", "기업어음", "기업신용"]):
+            add(r + i, 1, kind)
+            add(r + i, 2, "A3-" if kind == "기업어음" else grade)
+        add(r, 3, pts, rs=3)
+        add(r, 4, "", rs=3)
+    rows = [r for r in selfscore.read_form(cells) if not r.total]
+    assert len(rows) == 1 and rows[0].crit.kind == "credit"
+    v = vault.Vault({}, info={"신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"})
+    (row, item), = selfscore.score_form(rows, [], v, date(2026, 11, 27))
+    assert item.score == 4.0 and row.by_points[4.0].row == 4
+
+
 def test_joint_supply_form_recognized_by_body(tmp_path: Path):
     """11/20 사용자 '공동수급 관련 문서는 기입 대상이 아니야': 이름엔 '공동수급'이 없는 '대표자 선임계'
     ('…참여업체의 대표자를 … 선임하고 모든 권한을 공동수급체 대표자에게 위임합니다. ※ 단독 참가시는 필요 없음.')도 공란 서식."""

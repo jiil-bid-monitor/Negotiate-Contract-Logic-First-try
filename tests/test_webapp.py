@@ -6,12 +6,14 @@ jiil-past-contracts(비공개)가 옆에 없으면 싱크로율 실계산 테스
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import threading
 import time
 import unittest
 import urllib.error
+from unittest import mock
 import urllib.request
 from datetime import datetime
 from http.server import ThreadingHTTPServer
@@ -544,6 +546,14 @@ class TestServer(unittest.TestCase):
         res = self.call("/api/results")[1]
         self.assertTrue(meta["static_version"])
         self.assertEqual(meta["static_version"], res["static_version"])
+
+    def test_help_request_logged_with_who_and_devs_from_env(self):
+        """도우미(11/27): 바라는 점·질문 기록에 적은 사람·회사, 개발 담당 이름은 서버 설정에서만(공개 저장소에 안 적음)."""
+        with mock.patch.dict(os.environ, {"HELP_DEVELOPERS": "가나·다라"}):
+            self.assertEqual(self.call("/api/meta")[1]["help_devs"], ["가나", "다라"])
+        self.assertEqual(self.call("/api/help-question", {"q": "필터를 크게 해 주세요", "result": "요청", "tab": "live", "who": "홍길동", "co": "grida"})[0], 200)
+        rows = json.loads((self.app.store.path.parent / "help_questions.json").read_text(encoding="utf-8"))
+        self.assertEqual((rows[-1]["result"], rows[-1]["who"], rows[-1]["co"]), ("요청", "홍길동", "grida"))
 
     def test_bidlog_routes(self):
         """투찰 계산기 '투찰내역'(2026-11-06): 기록·목록·고치기·지우기, 토큰 없으면 막힘."""

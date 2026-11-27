@@ -1,0 +1,2120 @@
+[
+ {
+  "id": "c-001",
+  "tab": "live",
+  "q": "이거 어케 쓰는거야",
+  "expect": "어떤 순서로 하나요?",
+  "type": "casual",
+  "altExpect": [
+   "무엇부터 보면 되나요?"
+  ]
+ },
+ {
+  "id": "c-002",
+  "tab": "live",
+  "q": "마감?",
+  "expect": "카드의 마감은 어느 날짜인가요?",
+  "type": "casual",
+  "altExpect": [
+   "마감이 급한 공고부터 보고 싶습니다",
+   "마감 옆 D-day가 빨간 것은 무슨 뜻인가요?"
+  ]
+ },
+ {
+  "id": "c-003",
+  "tab": "live",
+  "q": "금액",
+  "expect": "사업금액은 어떤 금액인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-004",
+  "tab": "live",
+  "q": "왜 자격미달임",
+  "expect": "'자격 충족'·'자격 미달'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-005",
+  "tab": "live",
+  "q": "왜 금액이 없어",
+  "expect": "사업금액은 어떤 금액인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-006",
+  "tab": "live",
+  "q": "금액모름 뜨는데 왜그래",
+  "expect": "사업금액은 어떤 금액인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-007",
+  "tab": "live",
+  "q": "싱크로율 낮은데 넣어도 됨?",
+  "expect": "싱크로율이 낮으면 참가하지 말아야 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-008",
+  "tab": "live",
+  "q": "싱크로율 0이야 왜",
+  "expect": "싱크로율이 0%로 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-009",
+  "tab": "live",
+  "q": "초록줄 노란줄 뭐야",
+  "expect": "카드 왼쪽 띠 색은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-010",
+  "tab": "live",
+  "q": "디데이 빨간거",
+  "expect": "마감 옆 D-day가 빨간 것은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-011",
+  "tab": "live",
+  "q": "검토필요 어딨어",
+  "expect": "검토필요 칸은 어디에 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-012",
+  "tab": "live",
+  "q": "어제 본 공고 없어졌어",
+  "expect": "찾는 공고가 보이지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-013",
+  "tab": "live",
+  "q": "불참한거 어디감",
+  "expect": "불참한 공고를 다시 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-014",
+  "tab": "live",
+  "q": "잘못눌렀어",
+  "expect": "잘못 눌렀는데 취소할 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-015",
+  "tab": "live",
+  "q": "사유 오타남",
+  "expect": "적은 사유를 고치고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-016",
+  "tab": "live",
+  "q": "공고번호 복사",
+  "expect": "공고번호를 복사하고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-017",
+  "tab": "live",
+  "q": "첨부파일 어디서 받아",
+  "expect": "공고 원문은 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-018",
+  "tab": "live",
+  "q": "필터 다 풀고싶어",
+  "expect": "고른 필터를 한꺼번에 풀고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-019",
+  "tab": "live",
+  "q": "용역만 보기",
+  "expect": "판단 안 한 공고나 용역·물품·공사만 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-020",
+  "tab": "live",
+  "q": "미판단만 볼래",
+  "expect": "판단 안 한 공고나 용역·물품·공사만 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-021",
+  "tab": "live",
+  "q": "금액큰순으로",
+  "expect": "마감이 급한 공고부터 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-022",
+  "tab": "live",
+  "q": "현설 있는거",
+  "expect": "현장설명회가 있는 공고는 어떻게 아나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-023",
+  "tab": "live",
+  "q": "공동수급 되는지 어케알아",
+  "expect": "지역제한·공동수급은 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-024",
+  "tab": "live",
+  "q": "확인안됨 왜뜸",
+  "expect": "자격 칩 상자에 '확인 안 됨'이 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-025",
+  "tab": "live",
+  "q": "키워드도 없는데 왜 들어옴",
+  "expect": "키워드가 없는 공고는 왜 들어오나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-026",
+  "tab": "live",
+  "q": "몽골 공고도 나와?",
+  "expect": "해외 공고도 들어오나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-027",
+  "tab": "live",
+  "q": "새공고 언제 들어와",
+  "expect": "새 공고는 언제 들어오나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-028",
+  "tab": "live",
+  "q": "최근 30일치 보고싶어",
+  "expect": "수집 기간은 어떻게 고르나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-029",
+  "tab": "live",
+  "q": "동그란 화살표 뭐야",
+  "expect": "둥근 화살표 버튼은 무엇인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-030",
+  "tab": "live",
+  "q": "수집실패 떴어",
+  "expect": "'수집 실패'라고 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-031",
+  "tab": "live",
+  "q": "팀원한테 메모 남기기",
+  "expect": "팀원에게 의견을 남기고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-032",
+  "tab": "live",
+  "q": "담당 넘기기",
+  "expect": "'내가 맡기'는 언제 누르나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-033",
+  "tab": "live",
+  "q": "참가 누른 다음엔 뭐해",
+  "expect": "참가로 정한 다음에는 무엇을 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-034",
+  "tab": "live",
+  "q": "정량평가서 어케 만들어",
+  "expect": "어떤 순서로 하나요?",
+  "type": "casual",
+  "altExpect": [
+   "참가로 정한 다음에는 무엇을 하나요?"
+  ]
+ },
+ {
+  "id": "c-035",
+  "tab": "live",
+  "q": "키워드 추가해주세요",
+  "expect": "관심·제외 키워드를 넣거나 빼고 싶습니다",
+  "type": "request"
+ },
+ {
+  "id": "c-036",
+  "tab": "live",
+  "q": "필터 버튼 좀 크게 해줘",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-037",
+  "tab": "live",
+  "q": "카드에 담당자 이름 크게 보였으면 좋겠어요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-038",
+  "tab": "live",
+  "q": "정렬 기본값 마감순으로 바꿔주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-039",
+  "tab": "live",
+  "q": "다크모드 기본으로 바꿔주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-040",
+  "tab": "live",
+  "q": "이거 낙찰 될까",
+  "expect": null,
+  "type": "special"
+ },
+ {
+  "id": "c-041",
+  "tab": "live",
+  "q": "이 공고 들어가야 돼?",
+  "expect": null,
+  "type": "special"
+ },
+ {
+  "id": "c-042",
+  "tab": "live",
+  "q": "공고 즐겨찾기 어떻게 해",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-043",
+  "tab": "live",
+  "q": "카톡으로도 알림와?",
+  "expect": "공고 알림은 언제, 어디로 오나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-044",
+  "tab": "live",
+  "q": "공고목록 엑셀로 뽑기",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-045",
+  "tab": "live",
+  "q": "글씨 넘 작아",
+  "expect": "글자가 너무 작습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-046",
+  "tab": "live",
+  "q": "폰으로 볼수있음?",
+  "expect": "휴대폰에서도 열 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-047",
+  "tab": "live",
+  "q": "주소 까먹음",
+  "expect": "비밀번호나 웹앱 주소를 잊어버렸습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-048",
+  "tab": "live",
+  "q": "버튼 안눌려",
+  "expect": "버튼을 눌러도 반응이 없습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-049",
+  "tab": "live",
+  "q": "사전규격도 판단함?",
+  "expect": "사전규격 공고도 판단해야 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-050",
+  "tab": "live",
+  "q": "클립보드 숫자",
+  "expect": "'회사 서류' 숫자는 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-051",
+  "tab": "live",
+  "q": "체크박스 아이콘 숫자 뭐임",
+  "expect": "'미판단 공고' 숫자는 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-052",
+  "tab": "live",
+  "q": "조형물만 보기",
+  "expect": "특정 세부품명 공고만 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-053",
+  "tab": "live",
+  "q": "협상이랑 입찰 차이",
+  "expect": "협상·입찰·수의계약은 어떻게 다른가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-054",
+  "tab": "live",
+  "q": "판단 두명이 하면",
+  "expect": "같은 공고를 두 사람이 판단하면 어떻게 되나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-055",
+  "tab": "live",
+  "q": "판단 바꾸면 이력 남아?",
+  "expect": "판단을 바꾸면 예전 판단은 남나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-056",
+  "tab": "live",
+  "q": "싱크로룰 뭐야",
+  "expect": "싱크로율은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-057",
+  "tab": "live",
+  "q": "현장설멍회",
+  "expect": "현장설명회가 있는 공고는 어떻게 아나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-058",
+  "tab": "live",
+  "q": "공동수금 가능?",
+  "expect": "지역제한·공동수급은 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-059",
+  "tab": "live",
+  "q": "검토필오",
+  "expect": "'검토필요'는 어떤 공고인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-060",
+  "tab": "live",
+  "q": "왜 지역제한 참가불가임",
+  "expect": "지역제한·공동수급은 어디서 보나요?",
+  "type": "casual",
+  "altExpect": [
+   "참가할 수 있는 공고인지 어떻게 확인하나요?"
+  ]
+ },
+ {
+  "id": "c-061",
+  "tab": "live",
+  "q": "왜 마감날짜가 공고문이랑 달라",
+  "expect": "카드의 마감은 어느 날짜인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-062",
+  "tab": "live",
+  "q": "왜 검토필요로 감",
+  "expect": "'검토필요'는 어떤 공고인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-063",
+  "tab": "live",
+  "q": "금액옆에 배정 이건 뭐야",
+  "expect": "사업금액은 어떤 금액인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-064",
+  "tab": "live",
+  "q": "해외의심 왜 떠",
+  "expect": "'해외 개최 의심' 칩은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-065",
+  "tab": "live",
+  "q": "다른컴에서 이름 다시 적어야돼?",
+  "expect": "다른 PC에서 열면 이름을 다시 적어야 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-066",
+  "tab": "live",
+  "q": "새 서류 종류 추가하는법",
+  "expect": "새 종류의 회사 서류를 넣고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-067",
+  "tab": "live",
+  "q": "불편해요 필터가 너무 많아서",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-068",
+  "tab": "live",
+  "q": "알림 카톡으로도 보내주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-069",
+  "tab": "live",
+  "q": "공고 인쇄",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-070",
+  "tab": "live",
+  "q": "입찰보증금 얼마",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-071",
+  "tab": "live",
+  "q": "공인인증서 갱신",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-072",
+  "tab": "live",
+  "q": "공고 자동으로 입찰해줘",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-073",
+  "tab": "live",
+  "q": "나라장터 로그인 안돼",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-074",
+  "tab": "live",
+  "q": "연차 신청",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-075",
+  "tab": "live",
+  "q": "필터",
+  "expect": "판단 안 한 공고나 용역·물품·공사만 보고 싶습니다",
+  "type": "casual",
+  "altExpect": [
+   "고른 필터를 한꺼번에 풀고 싶습니다",
+   "특정 세부품명 공고만 보고 싶습니다"
+  ]
+ },
+ {
+  "id": "c-076",
+  "tab": "live",
+  "q": "정렬",
+  "expect": "마감이 급한 공고부터 보고 싶습니다",
+  "type": "casual",
+  "altExpect": [
+   "고른 필터와 정렬은 다음에도 남나요?"
+  ]
+ },
+ {
+  "id": "c-077",
+  "tab": "live",
+  "q": "뭐임",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-078",
+  "tab": "excluded",
+  "q": "이 공고 왜 빠졌어",
+  "expect": "왜 빠졌는지 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-079",
+  "tab": "excluded",
+  "q": "왜제외됨",
+  "expect": "왜 빠졌는지 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-080",
+  "tab": "excluded",
+  "q": "이거 살려줘",
+  "expect": "잘못 빠진 공고를 되살리고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-081",
+  "tab": "excluded",
+  "q": "다시 올리는법",
+  "expect": "잘못 빠진 공고를 되살리고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-082",
+  "tab": "excluded",
+  "q": "제외키워드 빼주세요",
+  "expect": "제외 키워드를 고치고 싶습니다",
+  "type": "request"
+ },
+ {
+  "id": "c-083",
+  "tab": "excluded",
+  "q": "세부품명미달 뭐임",
+  "expect": "'세부품명 미달'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-084",
+  "tab": "excluded",
+  "q": "본공고 따로나옴 뜻",
+  "expect": "'본공고가 따로 나옴'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-085",
+  "tab": "excluded",
+  "q": "30개밖에 안보여",
+  "expect": "제외된 공고가 30건만 보입니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-086",
+  "tab": "excluded",
+  "q": "어떤 키워드로 제일 많이 빠짐",
+  "expect": "어떤 제외 키워드로 많이 빠졌는지 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-087",
+  "tab": "excluded",
+  "q": "지역때문에 빠진거",
+  "expect": "자격·지역 때문에 빠진 공고도 볼 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-088",
+  "tab": "excluded",
+  "q": "사유별로",
+  "expect": "빠진 이유별로 모아 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-089",
+  "tab": "excluded",
+  "q": "여기서 참가 누를수 있어?",
+  "expect": "제외된 공고에서 바로 판단할 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-090",
+  "tab": "excluded",
+  "q": "싱크로율 안열려",
+  "expect": "제외된 공고의 싱크로율은 왜 눌러도 안 열리나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-091",
+  "tab": "excluded",
+  "q": "검색어가 실제공고에도 남아있네",
+  "expect": "찾기 글자가 실제 공고 탭에도 남아 있습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-092",
+  "tab": "excluded",
+  "q": "조건별 확인결과",
+  "expect": "'조건별 확인 결과 보기'는 무엇인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-093",
+  "tab": "excluded",
+  "q": "제외된거 언제 수집한거야",
+  "expect": "제외된 공고는 언제 수집한 것인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-094",
+  "tab": "excluded",
+  "q": "올린거 다시 빼",
+  "expect": "되살린 공고는 어떻게 보이고, 다시 뺄 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-095",
+  "tab": "excluded",
+  "q": "제외공고 엑셀 다운",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-096",
+  "tab": "excluded",
+  "q": "되살리고십어요",
+  "expect": "잘못 빠진 공고를 되살리고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-097",
+  "tab": "excluded",
+  "q": "왜 해외로 빠짐",
+  "expect": "'해외 개최'로 빠진 공고는 어떤 공고인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-098",
+  "tab": "excluded",
+  "q": "제외 이유 글씨 키워줘",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-099",
+  "tab": "excluded",
+  "q": "이 도우미 ai야?",
+  "expect": "이 도우미는 외부 AI인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-100",
+  "tab": "excluded",
+  "q": "텔레그램 알림 몇시",
+  "expect": "공고 알림은 언제, 어디로 오나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-101",
+  "tab": "excluded",
+  "q": "이유",
+  "expect": "왜 빠졌는지 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-102",
+  "tab": "log",
+  "q": "엑셀",
+  "expect": "엑셀로 받고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-103",
+  "tab": "log",
+  "q": "csv 다운",
+  "expect": "엑셀로 받고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-104",
+  "tab": "log",
+  "q": "미판단 어딨",
+  "expect": "아직 판단하지 않은 공고는 어디에 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-105",
+  "tab": "log",
+  "q": "참가만",
+  "expect": "참가한 공고만 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-106",
+  "tab": "log",
+  "q": "저번주꺼",
+  "expect": "지난주 기록은 어디에 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-107",
+  "tab": "log",
+  "q": "판단 지우기",
+  "expect": "판단을 취소하고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-108",
+  "tab": "log",
+  "q": "내꺼만",
+  "expect": "내가 판단한 기록만 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-109",
+  "tab": "log",
+  "q": "금액적음으로 불참한거만",
+  "expect": "특정 사유로 불참한 공고만 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-110",
+  "tab": "log",
+  "q": "사유없음 고치기",
+  "expect": "'사유 없음'으로 나온 기록에 사유를 적고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-111",
+  "tab": "log",
+  "q": "기록 언제까지 남아",
+  "expect": "판단 기록은 언제까지 남나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-112",
+  "tab": "log",
+  "q": "주간보고만",
+  "expect": "매일 보고·주간 보고로 나눠 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-113",
+  "tab": "log",
+  "q": "목록에서보기 누르면",
+  "expect": "'목록에서 보기'를 누르면 어디로 가나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-114",
+  "tab": "log",
+  "q": "주 묶음 기준",
+  "expect": "주 묶음은 어느 날짜 기준인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-115",
+  "tab": "log",
+  "q": "여기서 투찰계산 바로",
+  "expect": "판단 기록에서 투찰 계산으로 바로 가고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-116",
+  "tab": "log",
+  "q": "csv에 뭐 들어있어",
+  "expect": "판단 기록 CSV에는 무엇이 들어 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-117",
+  "tab": "log",
+  "q": "판단기록 그래프로 보여주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-118",
+  "tab": "log",
+  "q": "참가율 통계",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-119",
+  "tab": "log",
+  "q": "작년 기록 보기",
+  "expect": "지난주 기록은 어디에 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-120",
+  "tab": "log",
+  "q": "판단기록엑셀다운로드",
+  "expect": "엑셀로 받고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-121",
+  "tab": "log",
+  "q": "왜 미판단이 여기 없어",
+  "expect": "아직 판단하지 않은 공고는 어디에 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-122",
+  "tab": "log",
+  "q": "판단기록 화면 좀 넓혔으면",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-123",
+  "tab": "log",
+  "q": "오늘 점심 뭐먹지",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-124",
+  "tab": "log",
+  "q": "이번달 몇건 참가했어",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-125",
+  "tab": "log",
+  "q": "그리다화면",
+  "expect": "지일·그리다 회사 화면은 어떻게 고르나요?",
+  "type": "casual",
+  "altExpect": [
+   "지일 화면과 그리다 화면은 무엇이 다른가요?"
+  ]
+ },
+ {
+  "id": "c-126",
+  "tab": "log",
+  "q": "일정 여러날 보기",
+  "expect": "일정 창에서 여러 날을 한꺼번에 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-127",
+  "tab": "log",
+  "q": "업데이트됐습니다 뜸",
+  "expect": "'화면이 업데이트됐습니다'라고 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-128",
+  "tab": "log",
+  "q": "취소",
+  "expect": "판단을 취소하고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-129",
+  "tab": "corpus",
+  "q": "예전에 했던거 찾기",
+  "expect": "특정 사업을 찾고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-130",
+  "tab": "corpus",
+  "q": "2024년꺼만",
+  "expect": "특정 연도 사업만 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-131",
+  "tab": "corpus",
+  "q": "과업내용 보기",
+  "expect": "지난 사업의 과업 내용을 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-132",
+  "tab": "corpus",
+  "q": "진행중 기준",
+  "expect": "진행 중인 사업은 어떻게 정해지나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-133",
+  "tab": "corpus",
+  "q": "새로 딴 사업 안보여",
+  "expect": "새 사업이 보이지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-134",
+  "tab": "corpus",
+  "q": "청구남음 뭐임",
+  "expect": "사업명 아래 '준공 전'·'청구 남음'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-135",
+  "tab": "corpus",
+  "q": "안펼쳐짐",
+  "expect": "사업명을 눌러도 펼쳐지지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-136",
+  "tab": "corpus",
+  "q": "사업 삭제",
+  "expect": "목록의 사업을 고치거나 지울 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-137",
+  "tab": "corpus",
+  "q": "분야로 검색되나",
+  "expect": "분야나 과업 낱말로도 찾을 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-138",
+  "tab": "corpus",
+  "q": "태그 뭐야",
+  "expect": "분야·과업 칸은 무엇인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-139",
+  "tab": "corpus",
+  "q": "발주기관별로 보고싶어",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-140",
+  "tab": "corpus",
+  "q": "사업비 합계",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-141",
+  "tab": "corpus",
+  "q": "이 탭 뭐하는데",
+  "expect": "이 탭에서는 무엇을 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-142",
+  "tab": "corpus",
+  "q": "사업 추가해주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-143",
+  "tab": "corpus",
+  "q": "연도 순서 거꾸로 해주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-144",
+  "tab": "corpus",
+  "q": "왜 진행중으로 나와",
+  "expect": "진행 중인 사업은 어떻게 정해지나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-145",
+  "tab": "corpus",
+  "q": "nas랑 서버pc 차이",
+  "expect": "NAS 웹앱과 서버 PC 웹앱은 어떻게 다른가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-146",
+  "tab": "corpus",
+  "q": "도우미 창 크게",
+  "expect": "도우미 창 크기를 바꾸고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-147",
+  "tab": "corpus",
+  "q": "매출 얼마야",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-148",
+  "tab": "corpus",
+  "q": "작년 수주율",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-149",
+  "tab": "corpus",
+  "q": "검색",
+  "expect": "특정 사업을 찾고 싶습니다",
+  "type": "casual",
+  "altExpect": [
+   "분야나 과업 낱말로도 찾을 수 있나요?"
+  ]
+ },
+ {
+  "id": "c-150",
+  "tab": "calc",
+  "q": "사정률 뭐임",
+  "expect": "'기준 사정률'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-151",
+  "tab": "calc",
+  "q": "추천금액 어떻게 나옴",
+  "expect": "추천 투찰금액은 어떻게 정해지나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-152",
+  "tab": "calc",
+  "q": "이대로 써도됨?",
+  "expect": "추천 금액 그대로 투찰해도 되나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-153",
+  "tab": "calc",
+  "q": "하한율 안나와",
+  "expect": "기초금액·하한율이 '-'로 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-154",
+  "tab": "calc",
+  "q": "a값 뭐야",
+  "expect": "A값은 무엇인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-155",
+  "tab": "calc",
+  "q": "순공사원가 넣어야돼?",
+  "expect": "A값·순공사원가는 직접 넣어야 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-156",
+  "tab": "calc",
+  "q": "난수표 왜씀",
+  "expect": "난수표는 언제 쓰나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-157",
+  "tab": "calc",
+  "q": "다시뽑기",
+  "expect": "난수표 번호를 다시 뽑고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-158",
+  "tab": "calc",
+  "q": "행자부랑 조달청 차이",
+  "expect": "난수표 추출 버튼은 어떻게 다른가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-159",
+  "tab": "calc",
+  "q": "천원단위로 자르기",
+  "expect": "끝자리 절상·절사는 어디서 바꾸나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-160",
+  "tab": "calc",
+  "q": "투찰한거 기록",
+  "expect": "투찰한 금액을 기록하고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-161",
+  "tab": "calc",
+  "q": "기록 금액 틀림",
+  "expect": "기록한 금액을 고치고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-162",
+  "tab": "calc",
+  "q": "기록 삭제",
+  "expect": "투찰 기록을 지우고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-163",
+  "tab": "calc",
+  "q": "두번 기록함",
+  "expect": "같은 공고를 두 번 기록했습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-164",
+  "tab": "calc",
+  "q": "외주금액 왜적어",
+  "expect": "외주 추천 금액은 왜 적나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-165",
+  "tab": "calc",
+  "q": "외주금액으로 냄",
+  "expect": "외주 금액으로 투찰했습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-166",
+  "tab": "calc",
+  "q": "마이너스 등수 뭐임",
+  "expect": "'낙찰'·'탈락'과 등수는 어떻게 읽나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-167",
+  "tab": "calc",
+  "q": "하한가 얼마",
+  "expect": "낙찰하한가는 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-168",
+  "tab": "calc",
+  "q": "다른업체 얼마썼는지",
+  "expect": "다른 업체 투찰금액을 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-169",
+  "tab": "calc",
+  "q": "참가기록없음",
+  "expect": "'참가 기록 없음'이라고 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-170",
+  "tab": "calc",
+  "q": "기록과다름",
+  "expect": "'기록과 다름'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-171",
+  "tab": "calc",
+  "q": "공고번호 못찾음",
+  "expect": "공고번호를 찾지 못한다고 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-172",
+  "tab": "calc",
+  "q": "추천금액 자꾸 바뀜",
+  "expect": "추천 금액이 불러올 때마다 달라집니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-173",
+  "tab": "calc",
+  "q": "하한율 고쳤는데 그대로",
+  "expect": "값을 고쳤는데 추천이 그대로입니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-174",
+  "tab": "calc",
+  "q": "경쟁규모 자동 뭐임",
+  "expect": "'경쟁 규모'는 무엇으로 고르나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-175",
+  "tab": "calc",
+  "q": "협상공고 금액은",
+  "expect": "협상 공고는 투찰금액을 어떻게 정하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-176",
+  "tab": "calc",
+  "q": "예가개수",
+  "expect": "예가개수·선택개수는 무엇인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-177",
+  "tab": "calc",
+  "q": "받지못함 뜸",
+  "expect": "개찰 결과가 '받지 못함'으로 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-178",
+  "tab": "calc",
+  "q": "분석용웹앱 뭐임",
+  "expect": "'분석용 웹앱'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-179",
+  "tab": "calc",
+  "q": "투찰 엑셀",
+  "expect": "지난 투찰을 엑셀로 받고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-180",
+  "tab": "calc",
+  "q": "그리다 투찰 기록",
+  "expect": "그리다로 낸 투찰은 어디에 기록하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-181",
+  "tab": "calc",
+  "q": "1등 할수있어?",
+  "expect": null,
+  "type": "special"
+ },
+ {
+  "id": "c-182",
+  "tab": "calc",
+  "q": "추천금액 하나만 크게 보여주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-183",
+  "tab": "calc",
+  "q": "나라장터에 바로 투찰해줘",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-184",
+  "tab": "calc",
+  "q": "번호 직접 고르기",
+  "expect": "번호를 직접 골라 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-185",
+  "tab": "calc",
+  "q": "개찰전 뭐임",
+  "expect": "'개찰 전'·'아직 안 받음'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-186",
+  "tab": "calc",
+  "q": "외주금액 자동으로 들어가있네",
+  "expect": "외주 금액이 저절로 들어가 있습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-187",
+  "tab": "calc",
+  "q": "난수퓨 다시뽑기",
+  "expect": "난수표 번호를 다시 뽑고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-188",
+  "tab": "calc",
+  "q": "낙찰하헌가",
+  "expect": "낙찰하한가는 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-189",
+  "tab": "calc",
+  "q": "기쵸금액 안나옴",
+  "expect": "기초금액·하한율이 '-'로 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-190",
+  "tab": "calc",
+  "q": "왜 추천금액이 하한선보다 낮아",
+  "expect": "추천 금액 그대로 투찰해도 되나요?",
+  "type": "casual",
+  "altExpect": [
+   "추천 투찰금액은 어떻게 정해지나요?"
+  ]
+ },
+ {
+  "id": "c-191",
+  "tab": "calc",
+  "q": "왜 등수가 마이너스야",
+  "expect": "'낙찰'·'탈락'과 등수는 어떻게 읽나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-192",
+  "tab": "calc",
+  "q": "왜 개찰결과 안나와",
+  "expect": "개찰 결과는 언제 나오나요?",
+  "type": "casual",
+  "altExpect": [
+   "'개찰 전'·'아직 안 받음'은 무슨 뜻인가요?"
+  ]
+ },
+ {
+  "id": "c-193",
+  "tab": "calc",
+  "q": "계산기에 엑셀 붙여넣기 기능 추가해주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-194",
+  "tab": "calc",
+  "q": "추천 근거 설명이 더 있었으면 좋겠습니다",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-195",
+  "tab": "calc",
+  "q": "세금계산서",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-196",
+  "tab": "calc",
+  "q": "낙찰되면 수익 얼마",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-197",
+  "tab": "calc",
+  "q": "예정가격 맞춰줘",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-198",
+  "tab": "calc",
+  "q": "다크모드",
+  "expect": "화면을 어둡게 하고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-199",
+  "tab": "calc",
+  "q": "일정 점 색깔",
+  "expect": "일정 창의 점 색은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-200",
+  "tab": "calc",
+  "q": "건의하고싶어",
+  "expect": "바라는 점을 개발자에게 남기고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-201",
+  "tab": "calc",
+  "q": "하한율",
+  "expect": "기초금액·하한율이 '-'로 나옵니다",
+  "type": "casual",
+  "altExpect": [
+   "낙찰하한가는 어디서 보나요?"
+  ]
+ },
+ {
+  "id": "c-202",
+  "tab": "quant",
+  "q": "서식 뭐내야돼",
+  "expect": "내야 할 서식은 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-203",
+  "tab": "quant",
+  "q": "자격 갖췄나",
+  "expect": "요구 자격을 갖췄는지 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-204",
+  "tab": "quant",
+  "q": "통합본에 뭐 들어감",
+  "expect": "통합본에는 어떤 회사 서류가 들어가나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-205",
+  "tab": "quant",
+  "q": "기술인력 체크 왜함",
+  "expect": "기술인력은 왜 체크하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-206",
+  "tab": "quant",
+  "q": "특허 뭐 체크",
+  "expect": "특허는 어떤 것을 체크하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-207",
+  "tab": "quant",
+  "q": "실적 그대로 내도됨",
+  "expect": "실적 후보를 그대로 내도 되나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-208",
+  "tab": "quant",
+  "q": "zip안에 뭐있어",
+  "expect": "받은 zip에는 무엇이 들어 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-209",
+  "tab": "quant",
+  "q": "빈칸 어디",
+  "expect": "직접 채워야 하는 칸은 어디인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-210",
+  "tab": "quant",
+  "q": "자기평가 점수",
+  "expect": "자기평가 점수는 어떻게 들어가나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-211",
+  "tab": "quant",
+  "q": "파일 언제까지 받을수있어",
+  "expect": "만든 파일은 언제까지 받을 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-212",
+  "tab": "quant",
+  "q": "한글파일필요",
+  "expect": "'한글 파일 필요'라고 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-213",
+  "tab": "quant",
+  "q": "경고 뜸",
+  "expect": "⚠ 표시가 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-214",
+  "tab": "quant",
+  "q": "다시만들기",
+  "expect": "체크를 바꿔 다시 만들고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-215",
+  "tab": "quant",
+  "q": "넘 오래걸림",
+  "expect": "불러오기가 오래 걸립니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-216",
+  "tab": "quant",
+  "q": "만들기 안눌려",
+  "expect": "'만들기'가 눌리지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-217",
+  "tab": "quant",
+  "q": "실적기준일",
+  "expect": "'실적 기준일'은 무엇인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-218",
+  "tab": "quant",
+  "q": "회색줄 뭐야",
+  "expect": "기술인력 목록의 회색 줄은 무엇인가요?",
+  "type": "casual",
+  "altExpect": [
+   "특허 목록의 회색 줄은 무엇인가요?"
+  ]
+ },
+ {
+  "id": "c-219",
+  "tab": "quant",
+  "q": "등급 틀려",
+  "expect": "기술인력 등급이 틀립니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-220",
+  "tab": "quant",
+  "q": "회사 주소 틀리게 들어감",
+  "expect": "회사 정보가 틀리게 들어갔습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-221",
+  "tab": "quant",
+  "q": "그리다 정량",
+  "expect": "그리다 정량평가서는 어떻게 만드나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-222",
+  "tab": "quant",
+  "q": "첨부 뭐 읽었어",
+  "expect": "어떤 첨부를 읽었는지 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-223",
+  "tab": "quant",
+  "q": "작업이 없다고 나옴",
+  "expect": "'작업이 없습니다'라고 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-224",
+  "tab": "quant",
+  "q": "정성평가 제안서 써줘",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-225",
+  "tab": "quant",
+  "q": "제안서 ppt 만들어줘",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-226",
+  "tab": "quant",
+  "q": "통합본 순서 바꿔주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-227",
+  "tab": "quant",
+  "q": "기술인력 자동으로 다 체크되게 바꿔주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-228",
+  "tab": "quant",
+  "q": "통함본 순서",
+  "expect": "통합본에는 어떤 회사 서류가 들어가나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-229",
+  "tab": "quant",
+  "q": "기술인럭",
+  "expect": "기술인력은 왜 체크하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-230",
+  "tab": "quant",
+  "q": "왜 공동수급 서식은 비어있음",
+  "expect": "공동수급 서식이 비어 있습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-231",
+  "tab": "quant",
+  "q": "왜 진행중인 사업 실적 빠짐",
+  "expect": "진행 중인 사업은 실적에 왜 없나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-232",
+  "tab": "quant",
+  "q": "왜 hwp 필요하대",
+  "expect": "'한글 파일 필요'라고 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-233",
+  "tab": "quant",
+  "q": "실적 금액 작은게 왜 있어",
+  "expect": "실적 후보에 금액이 작은 사업도 있습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-234",
+  "tab": "quant",
+  "q": "폰으로 됨?",
+  "expect": "휴대폰에서도 열 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-235",
+  "tab": "quant",
+  "q": "서류 유효기간 수정",
+  "expect": "회사 서류 유효기간을 고치고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-236",
+  "tab": "quant",
+  "q": "나라장터 바로가기",
+  "expect": "나라장터 사이트로 바로 가고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-237",
+  "tab": "quant",
+  "q": "서식",
+  "expect": "내야 할 서식은 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-238",
+  "tab": "award",
+  "q": "연습",
+  "expect": "먼저 연습해 볼 수 있나요?",
+  "type": "casual",
+  "altExpect": [
+   "시험 페이지를 처음으로 되돌리고 싶습니다",
+   "시험 페이지에서 단계를 넘기고 싶습니다"
+  ]
+ },
+ {
+  "id": "c-239",
+  "tab": "award",
+  "q": "단계 어디까지 왔는지",
+  "expect": "단계 표시는 어떻게 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-240",
+  "tab": "award",
+  "q": "하한선미달",
+  "expect": "'하한선 미달'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-241",
+  "tab": "award",
+  "q": "서류확인txt",
+  "expect": "'서류_확인.txt'에는 무엇이 적혀 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-242",
+  "tab": "award",
+  "q": "파란칸",
+  "expect": "파랑·초록·노랑 칸은 무슨 뜻인가요?",
+  "type": "casual",
+  "altExpect": [
+   "'자동으로 채운 칸'은 어디서 보나요?"
+  ]
+ },
+ {
+  "id": "c-243",
+  "tab": "award",
+  "q": "1등했어 뭐해",
+  "expect": "개찰 1등이면 무엇을 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-244",
+  "tab": "award",
+  "q": "지명경쟁 왜 1등만",
+  "expect": "지명경쟁은 왜 1등만 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-245",
+  "tab": "award",
+  "q": "공고가 목록에 없음",
+  "expect": "공고가 목록에 보이지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-246",
+  "tab": "award",
+  "q": "목록에서 빼기",
+  "expect": "공고를 목록에서 빼고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-247",
+  "tab": "award",
+  "q": "계약 언제 넘어감",
+  "expect": "계약 단계로는 언제 넘어가나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-248",
+  "tab": "award",
+  "q": "적격심사 틀 골라야됨?",
+  "expect": "적격심사 서식을 직접 골라야 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-249",
+  "tab": "award",
+  "q": "수의계약 적격심사?",
+  "expect": "수의계약도 적격심사가 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-250",
+  "tab": "award",
+  "q": "탈락하면 폴더",
+  "expect": "탈락한 공고의 폴더는 어떻게 되나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-251",
+  "tab": "award",
+  "q": "두번째 zip 파일이 적어",
+  "expect": "두 번째 zip에 파일이 적게 들어 있습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-252",
+  "tab": "award",
+  "q": "계약서도 만들어줘?",
+  "expect": "계약서도 만들어 주나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-253",
+  "tab": "award",
+  "q": "날짜 어떻게 적어",
+  "expect": "날짜는 어떻게 적나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-254",
+  "tab": "award",
+  "q": "현장대리인 누구",
+  "expect": "선임신고서에는 누구를 적나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-255",
+  "tab": "award",
+  "q": "수신 누구로",
+  "expect": "수신('○○ 귀하')은 누구로 적나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-256",
+  "tab": "award",
+  "q": "도장파일 써도돼",
+  "expect": "저장해 둔 도장 파일을 써도 되나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-257",
+  "tab": "award",
+  "q": "경로복사 안됨",
+  "expect": "'경로 복사'가 되지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-258",
+  "tab": "award",
+  "q": "새로발급 뭐",
+  "expect": "'⚠ 새로 발급' 표시는 무엇인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-259",
+  "tab": "award",
+  "q": "심사길어짐",
+  "expect": "'1순위 심사가 길어짐'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-260",
+  "tab": "award",
+  "q": "폴더 이름 바꿔도돼?",
+  "expect": "폴더·파일 이름을 바꿔도 되나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-261",
+  "tab": "award",
+  "q": "낙찰자확인 버튼",
+  "expect": "'지금 낙찰자 확인'은 무엇을 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-262",
+  "tab": "award",
+  "q": "끝난공고 다시보기",
+  "expect": "'끝난 공고'를 다시 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-263",
+  "tab": "award",
+  "q": "하자보수 기간",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-264",
+  "tab": "award",
+  "q": "선급금 신청",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-265",
+  "tab": "award",
+  "q": "착공계 고치면 준공도 바뀜?",
+  "expect": "착공·착수서류를 고치면 준공 서류도 바뀌나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-266",
+  "tab": "award",
+  "q": "계약금액 틀림",
+  "expect": "계약일·금액이 계약서와 다릅니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-267",
+  "tab": "award",
+  "q": "폴더 자동으로 생기면 좋겠어요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-268",
+  "tab": "award",
+  "q": "연락책임자",
+  "expect": "연락책임자는 누구로 적나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-269",
+  "tab": "award",
+  "q": "예정공종표",
+  "expect": "예정공정표는 어떻게 만드나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-270",
+  "tab": "award",
+  "q": "적겸심사 틀",
+  "expect": "적격심사 서식을 직접 골라야 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-271",
+  "tab": "award",
+  "q": "청구서류뭐내",
+  "expect": "청구할 때 무엇을 내나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-272",
+  "tab": "award",
+  "q": "왜 낙찰서류 버튼이 안켜져",
+  "expect": "'낙찰 서류 만들기'가 눌리지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-273",
+  "tab": "award",
+  "q": "왜 2등인데 기다려",
+  "expect": "개찰 2등부터는 무엇을 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-274",
+  "tab": "award",
+  "q": "왜 공고가 안떠",
+  "expect": "공고가 목록에 보이지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-275",
+  "tab": "award",
+  "q": "왜 엑셀이 빈칸이야",
+  "expect": "엑셀을 열었는데 칸이 비어 보입니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-276",
+  "tab": "award",
+  "q": "공정표 색 더 넣어주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-277",
+  "tab": "award",
+  "q": "적격심사 틀 용역도 만들어주세요",
+  "expect": null,
+  "type": "request"
+ },
+ {
+  "id": "c-278",
+  "tab": "award",
+  "q": "하자보증서",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-279",
+  "tab": "award",
+  "q": "계약보증금 얼마",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-280",
+  "tab": "award",
+  "q": "발주처 담당자 전화번호",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-281",
+  "tab": "award",
+  "q": "준공검사 언제 받아",
+  "expect": null,
+  "type": "out-of-scope"
+ },
+ {
+  "id": "c-282",
+  "tab": "award",
+  "q": "화면 어둡게",
+  "expect": "화면을 어둡게 하고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-283",
+  "tab": "award",
+  "q": "잘못된 pdf 올림",
+  "expect": "잘못된 서류 PDF를 올렸습니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-284",
+  "tab": "award",
+  "q": "접근권한없음",
+  "expect": "'접근 권한이 없습니다'라고 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "c-285",
+  "tab": "award",
+  "q": "신청중 표시 바꾸기",
+  "expect": "'신청 중'·'신청해야 함' 표시는 어디서 바꾸나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-286",
+  "tab": "award",
+  "q": "폴더",
+  "expect": "만든 서류는 어디에 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-287",
+  "tab": "award",
+  "q": "등수",
+  "expect": "개찰 등수는 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "c-s01",
+  "tab": "live",
+  "q": "고마워요",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-thanks"
+ },
+ {
+  "id": "c-s02",
+  "tab": "live",
+  "q": "넵 감사합니다!",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-thanks"
+ },
+ {
+  "id": "c-s03",
+  "tab": "live",
+  "q": "안녕하세요",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-hello"
+ },
+ {
+  "id": "c-s04",
+  "tab": "live",
+  "q": "수고하세요~",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-bye"
+ },
+ {
+  "id": "c-s05",
+  "tab": "live",
+  "q": "ㅇㅋ 알겠어",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-ack"
+ },
+ {
+  "id": "c-s06",
+  "tab": "live",
+  "q": "확인했습니다",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-ack"
+ },
+ {
+  "id": "c-s07",
+  "tab": "live",
+  "q": "ㅋㅋㅋ",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-ack"
+ },
+ {
+  "id": "c-s08",
+  "tab": "live",
+  "q": "ㅎㅇ",
+  "expect": null,
+  "type": "small-talk",
+  "why": "small-hello"
+ }
+]

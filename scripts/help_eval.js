@@ -1,5 +1,5 @@
 // 도우미가 직접 적은 질문을 얼마나 맞히는지 재기 (2026-11-25).
-// 쓰는 법: node scripts/help_eval.js [시험세트.json ...] [--rows] [--grida]   (기본: scripts/help_evalset.dev.json, .hold.json, .blind.json)
+// 쓰는 법: node scripts/help_eval.js [시험세트.json ...] [--rows] [--grida]   (기본: scripts/help_evalset.dev.json, .hold.json, .blind.json, .casual.json, .casual2.json — casual = 반말·오타·단답·요청 295문장, casual2 = 처음 보는 말투 160문장(따로 만든 것), 11/27)
 // 화면 코드(webapp/static/index.html의 HELP-PURE-BEGIN ~ HELP-PURE-END)를 그대로 읽어 돌린다. 화면 코드를 따로 옮겨 적지 않음.
 // 시험 항목: {id, tab, q, expect(질문 제목 또는 null), expectTab, altExpect["제목" 또는 "탭::제목"], prev, prevTitle, type}
 // 가장 나쁜 결과는 wrong(엉뚱한 답을 바로 냄). 도우미 답·낱말을 고친 뒤엔 wrong이 늘지 않았는지 볼 것.
@@ -10,7 +10,7 @@ const a = html.indexOf("// HELP-PURE-BEGIN"), b = html.indexOf("// HELP-PURE-END
 if (a < 0 || b < a) throw new Error("index.html에서 HELP-PURE-BEGIN/END를 찾지 못함");
 const box = {};
 const GRIDA = process.argv.includes("--grida");  // 그리다 화면의 질문으로 재기
-vm.runInNewContext((GRIDA ? 'var CO = "grida";\n' : "") + html.slice(a, b) + "\n;Object.assign(out, { HELP_SETS, HS, helpDecide, helpExact, helpRank, HELP_DOCS, HELP_P });", { out: box });
+vm.runInNewContext((GRIDA ? 'var CO = "grida";\n' : "") + html.slice(a, b) + "\n;Object.assign(out, { HELP_SETS, HS, helpDecide, helpExact, helpRank, HELP_DOCS, HELP_P, HELP_CHAT_ONLY, HELP_NEXT, helpListed });", { out: box });
 if (process.env.HELP_P) Object.assign(box.HELP_P, JSON.parse(process.env.HELP_P));  // 문턱값을 바꿔 가며 잴 때
 const { HELP_SETS, HS, helpDecide } = box;
 const has = (tab, title) => !!HELP_SETS[tab] && HS(tab).qa.some((h) => h[1] === title);
@@ -21,10 +21,31 @@ for (const tab of Object.keys(HELP_SETS)) for (const h of HS(tab).qa) {
   const d = helpDecide(h[1], tab, null);
   if (!(d.kind === "answer" && d.list[0].h[1] === h[1])) { bad++; console.log(`제목 그대로인데 다른 결과: [${tab}] ${h[1]} → ${d.kind} ${d.list.map((x) => x.h[1]).join(" / ")}`); }
 }
+// 화면에서 숨긴 질문(채팅 전용): 모두 있는 질문이어야 하고, 처음 고르기(HELP_TOP)·꼬리 질문(HELP_NEXT) 버튼엔 안 나와야 함
+for (const k of box.HELP_CHAT_ONLY) {
+  const [tab, title] = k.split("::");
+  if (!(tab === "*" ? Object.keys(HELP_SETS).every((t) => has(t, title)) : has(tab, title))) { bad++; console.log(`숨긴 질문이 도우미에 없음: ${k}`); }
+}
+const topAt = html.indexOf("{", html.indexOf("const HELP_TOP = ")), topEnd = html.slice(topAt).search(/\};\r?\nfunction helpHello/);
+const HELP_TOP = vm.runInNewContext("(" + html.slice(topAt, topAt + topEnd + 1) + ")");
+const shown = (tab, title) => { if (!has(tab, title) || !box.helpListed([0, title], tab)) { bad++; console.log(`화면 버튼에 없거나 숨긴 질문: [${tab}] ${title}`); } };
+Object.entries(HELP_TOP).forEach(([tab, x]) => [...x.first, ...x.use].forEach((t) => shown(tab, t)));
+Object.entries(box.HELP_NEXT).forEach(([tab, x]) => Object.values(x).flat().forEach((t) => (t.includes("::") ? shown(...t.split("::")) : shown(tab, t))));
+// 개발 담당에게 바라는 점(HELP_REQ): 요청 말투는 '남길까요?'로, 묻는 말은 평소 답으로
+const asReq = (q) => helpDecide(q, "live").why === "request";
+["필터 버튼을 더 크게 해 주시면 좋겠습니다", "정렬 기본값을 마감순으로 바꿔 주세요", "알림이 너무 많아 불편합니다", "카드에 담당자 전화번호도 있었으면 해요",
+  "엑셀 받기 버튼 추가해 주세요"].forEach((q) => { if (!asReq(q)) { bad++; console.log(`요청인데 요청으로 안 봄: ${q}`); } });
+["계약서도 만들어 주나요?", "필터는 어떻게 바꾸나요?", "사유를 고치고 싶습니다", "판단을 바꾸고 싶어요", "제안 발표용 PPT도 만들어 주나요?", "바라는 점을 개발자에게 남기고 싶습니다",
+  "개발자에게 요청하고 싶어요", "건의 사항이 있습니다", "개발자한테 건의하려면"].forEach((q) => { if (asReq(q)) { bad++; console.log(`묻는 말인데 요청으로 봄: ${q}`); } });
+// '어디인지 보기' 자리표(HELP_SPOT)의 질문 제목이 지금 도우미에 있는지 — 제목을 바꾸면 자리도 같이 바꿔야 함
+const spotAt = html.indexOf("{", html.indexOf("const HELP_SPOT = ")), spotEnd = html.slice(spotAt).search(/\};\r?\n/);
+Object.entries(vm.runInNewContext("(" + html.slice(spotAt, spotAt + spotEnd + 1) + ")")).forEach(([tab, x]) => Object.keys(x).forEach((t) => {
+  if (!(tab === "*" ? Object.keys(HELP_SETS).every((k) => has(k, t)) : has(tab, t))) { bad++; console.log(`자리표에 있는데 도우미에 없는 질문: [${tab}] ${t}`); }
+}));
 
 const args = process.argv.slice(2), rows = args.includes("--rows");
 const files = args.filter((x) => !x.startsWith("--"));
-const sets = files.length ? files : ["help_evalset.dev.json", "help_evalset.hold.json", "help_evalset.blind.json"].map((f) => path.join(__dirname, f)).filter(fs.existsSync);
+const sets = files.length ? files : ["help_evalset.dev.json", "help_evalset.hold.json", "help_evalset.blind.json", "help_evalset.casual.json", "help_evalset.casual2.json"].map((f) => path.join(__dirname, f)).filter(fs.existsSync);
 const KEYS = ["correct", "wrong", "choicesHit", "choicesMiss", "falseNone", "correctNone", "shownOutOfScope", "special"];
 let wrongTotal = 0;
 for (const file of sets) {
@@ -38,7 +59,7 @@ for (const file of sets) {
     const d = helpDecide(it.q, it.tab, it.prevTitle ? { prevTitle: it.prevTitle } : null);
     const hit = d.list.some((x) => want.some((w) => w.tab === x.tab && w.title === x.h[1]));
     const single = d.kind === "answer" || d.kind === "othertab", list = d.kind === "choices";
-    const o = d.kind === "special" ? "special"
+    const o = d.kind === "special" ? (it.why && d.why !== it.why ? "wrong" : "special")  // why를 적은 문제는 그 종류여야(인사 등)
       : !want.length ? (d.kind === "none" ? "correctNone" : single ? "wrong" : "shownOutOfScope")
       : single ? (hit ? "correct" : "wrong") : list ? (hit ? "choicesHit" : "choicesMiss") : "falseNone";
     count[o]++;

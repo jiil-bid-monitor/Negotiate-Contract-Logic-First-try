@@ -11,7 +11,7 @@
   "id": "b-002",
   "tab": "live",
   "q": "손 안댄 것만 남기려면",
-  "expect": "아직 판단하지 않은 공고만 보고 싶습니다",
+  "expect": "판단 안 한 공고나 용역·물품·공사만 보고 싶습니다",
   "altExpect": [],
   "type": "in"
  },
@@ -27,7 +27,7 @@
   "id": "b-004",
   "tab": "live",
   "q": "공사 건만 추려볼수있나",
-  "expect": "용역·물품·공사 중 하나만 보고 싶습니다",
+  "expect": "판단 안 한 공고나 용역·물품·공사만 보고 싶습니다",
   "altExpect": [],
   "type": "in"
  },
@@ -46,7 +46,9 @@
   "tab": "live",
   "q": "나라장터 페이지로 바로 넘어가는 링크 있어?",
   "expect": "공고 원문은 어디서 보나요?",
-  "altExpect": [],
+  "altExpect": [
+   "나라장터 사이트로 바로 가고 싶습니다"
+  ],
   "type": "in"
  },
  {
@@ -178,7 +180,7 @@
   "id": "b-021",
   "tab": "excluded",
   "q": "살려놓은거 다시 내리려면",
-  "expect": "되살린 공고를 다시 빼고 싶습니다",
+  "expect": "되살린 공고는 어떻게 보이고, 다시 뺄 수 있나요?",
   "altExpect": [],
   "type": "in"
  },
@@ -547,17 +549,17 @@
   "id": "b-063",
   "tab": "live",
   "q": "공고 들어오면 카톡으로 알림 받을수 있나요",
-  "expect": null,
+  "expect": "공고 알림은 언제, 어디로 오나요?",
   "altExpect": [],
-  "type": "out-of-scope"
+  "type": "in"
  },
  {
   "id": "b-064",
   "tab": "live",
   "q": "관심 키워드에 '스마트팜' 추가하고 싶어요",
-  "expect": null,
+  "expect": "관심·제외 키워드를 넣거나 빼고 싶습니다",
   "altExpect": [],
-  "type": "out-of-scope"
+  "type": "in"
  },
  {
   "id": "b-065",
@@ -571,9 +573,9 @@
   "id": "b-066",
   "tab": "live",
   "q": "해외 입찰도 검색되나",
-  "expect": null,
+  "expect": "해외 공고도 들어오나요?",
   "altExpect": [],
-  "type": "out-of-scope"
+  "type": "in"
  },
  {
   "id": "b-067",
@@ -587,9 +589,9 @@
   "id": "b-068",
   "tab": "excluded",
   "q": "제외 키워드 목록을 내가 직접 편집할 수 있어?",
-  "expect": null,
+  "expect": "제외 키워드를 고치고 싶습니다",
   "altExpect": [],
-  "type": "out-of-scope"
+  "type": "in"
  },
  {
   "id": "b-069",

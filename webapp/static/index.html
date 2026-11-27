@@ -2231,6 +2231,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <button role="tab" aria-selected="false" data-tab="log">판단 기록</button>
       <button role="tab" aria-selected="false" data-tab="excluded">제외된 공고</button>
       <button role="tab" aria-selected="false" data-tab="corpus">과거사업 목록</button>
+      <button role="tab" aria-selected="false" data-tab="dev" hidden>개발자</button>
       </span>
     </div>
   </div>
@@ -2327,7 +2328,6 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 
   <section id="tab-log" hidden>
     <p class="log-head" id="logMeta"></p>
-    <p class="sub log-agg-note" id="logAggNote"></p>
     <div class="search log-search" id="logSearch" hidden>
       <input id="logQ" type="search" placeholder="공고명·공고번호·판단자·사유로 찾기" autocomplete="off" aria-label="판단 기록에서 찾기">
       <select id="logStatus" aria-label="판단">
@@ -2344,6 +2344,11 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     </div>
     <div id="logList"></div>
     <div class="log-empty" id="logEmpty" hidden>아직 판단 기록이 없습니다.</div>
+  </section>
+
+  <!-- 개발자 탭(11/27 사용자) — 주소 끝 ?dev=1일 때만 보임. 담당자 화면과 비교할 수 있게 다른 탭은 그대로 두고 개발자용 내용은 여기만 -->
+  <section id="tab-dev" hidden>
+    <p class="sub log-agg-note" id="logAggNote"></p>
     <div id="logAgg"></div>
   </section>
 
@@ -2937,7 +2942,7 @@ function renderNotices(items, titleExcluded = [], held = [], heldProducts = []) 
   renderReview();
   renderJudgeBell();  // 📋는 이 목록에 있는 공고만 셈 — 목록이 바뀌면 다시
   // 텔레그램 링크(#log)로 바로 들어오면 목록보다 판단 기록이 먼저 그려져 '판단하러 가기'가 빠졌음
-  if (!$("tab-log").hidden) renderLog();
+  if (!$("tab-log").hidden || !$("tab-dev").hidden) renderLog();
 }
 
 let lastTitleExcluded = [];
@@ -4291,7 +4296,7 @@ function refreshCards(what, force = false) {
     });
     renderEnrichMeta();
   }
-  if (what === "part" && !$("tab-log").hidden) renderLog();
+  if (what === "part" && (!$("tab-log").hidden || !$("tab-dev").hidden)) renderLog();
   if (what === "part") {
     document.querySelectorAll(".part[data-part]").forEach((el) => {
       const n = byNo.get(el.dataset.part);
@@ -4321,6 +4326,7 @@ const DEV_VIEW = (() => {
     return localStorage.getItem("ui-dev") === "1";
   } catch { return q === "1"; }
 })();
+document.querySelector('.tabs [data-tab="dev"]').hidden = !DEV_VIEW;
 /**
  * 판단 기록 탭에 보이는 상태 — 참가·보류·불참, 또는 텔레그램으로 보고됐는데 아직 판단하지 않았으면 '미판단',
  * 판단 없이 마감이 지났으면 '놓침' (2026-10-19, 4단계). 보고되지 않았고 판단도 없으면 null (싣지 않는다).
@@ -4407,7 +4413,7 @@ function renderLog() {
     `판단 기록 <b>${num(entries.length)}</b>건: ${DECISIONS.map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
     `<button type="button" class="linkish" id="logCsv">${logFilterOn() ? `CSV 내려받기 (고른 ${num(logFiltered(entries).length)}건)` : "CSV 내려받기"}</button>` +
     "";
-  $("logAggNote").textContent = DEV_VIEW ? `개발자 화면: 아래 집계는 판단할 때의 관심 키워드·수집 경로 기준${all.length < LOG_AGG_MIN ? ` (판단 ${all.length}건: ${LOG_AGG_MIN}건쯤부터 비율이 믿을 만함)` : ""}. 끄려면 주소 끝에 ?dev=0` : "";
+  $("logAggNote").textContent = DEV_VIEW ? `판단 기록 집계: 판단할 때의 관심 키워드·수집 경로 기준${all.length < LOG_AGG_MIN ? ` (판단 ${all.length}건: ${LOG_AGG_MIN}건쯤부터 비율이 믿을 만함)` : ""}. 끄려면 주소 끝에 ?dev=0` : "";
   $("logSearch").hidden = entries.length === 0;
   $("logEmpty").hidden = entries.length > 0;
 
@@ -4478,7 +4484,7 @@ function renderLog() {
     ? list.length ? top + (top && weeks.length ? '<h3 class="log-sec-title log-sec-past">지난 기록 <span class="faint-note">판단한 공고</span></h3>' : "") + weeks.map(weekHtml).join("")
       : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
     : "";
-  $("logAgg").innerHTML = DEV_VIEW && all.length ? logAggHtml(all) : "";
+  $("logAgg").innerHTML = DEV_VIEW ? (all.length ? logAggHtml(all) : '<div class="empty">아직 판단 기록이 없습니다.</div>') : "";
 }
 
 /** 필터(키워드·경로)를 바꿔도 줄지 않는 불참 사유 — 이 사유만 고른 판단은 조정용 집계에서 뺀다 */
@@ -6640,7 +6646,7 @@ function showTab(tab) {
   }
   helpNudge();
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
-  for (const name of ["live", "excluded", "corpus", "log", "calc", "quant", "award"]) $("tab-" + name).hidden = tab !== name;
+  for (const name of ["live", "excluded", "corpus", "log", "calc", "quant", "award", "dev"]) $("tab-" + name).hidden = tab !== name;
   // 정량평가서도 고른 회사 자료로(2026-11-24) — iframe 주소에 ?co=를 붙이면 그 화면이 API에 붙여 보냄
   if (tab === "quant" && !$("quantFrame").getAttribute("src")) $("quantFrame").setAttribute("src", CO === "jiil" ? "/quant/" : `/quant/?co=${encodeURIComponent(CO)}`);
   fitQuant(tab === "quant");
@@ -6650,7 +6656,7 @@ function showTab(tab) {
   if (tab === "live") $("liveTools").appendChild($("liveQ"));
   else if (tab === "excluded") $("exTools").appendChild($("liveQ"));
   if (tab === "excluded") exData ? renderExcluded() : loadExcluded();
-  if (tab === "log") renderLog();
+  if (tab === "log" || tab === "dev") renderLog();
   if (tab === "award") loadAward();
 }
 document.querySelector(".tabs").onclick = (e) => {
@@ -6893,7 +6899,7 @@ if (AWARD_TEST) {  // 시험 페이지: 탭 줄을 숨기고 낙찰 후 서류 �
 (function openHashTab() {
   if (AWARD_TEST) return;
   const [tab, arg] = decodeURIComponent(location.hash.slice(1)).split("=");
-  if (!["live", "excluded", "corpus", "log", "calc", "quant", "award"].includes(tab)) return showTab("live");  // 탭 없는 주소로 열 때도 첫 화면 도우미(?)가 보이게
+  if (![...["live", "excluded", "corpus", "log", "calc", "quant", "award"], ...(DEV_VIEW ? ["dev"] : [])].includes(tab)) return showTab("live");  // 탭 없는 주소로 열 때도 첫 화면 도우미(?)가 보이게
   showTab(tab);
   if (tab === "live" && arg === "report") REPORT_LINK = true;  // 텔레그램 '판단하러 가기' — 판단 기록을 받은 뒤 그 보고 공고만
   if (tab === "calc" && arg) {

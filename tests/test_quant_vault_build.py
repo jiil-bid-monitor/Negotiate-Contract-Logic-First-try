@@ -1325,6 +1325,7 @@ def test_hangul_history_table_date_line_then_content(tmp_path: Path, monkeypatch
     assert read_overview(text) == {"회사명": "(가상)회사", "대표자": "(가상)대표", "팩스번호": "000-000-0000", "종업원 수": "7명"}
     from quantdocs.fill import _label_key, _value
     assert _label_key("총직원수") == "종업원 수" and _label_key("총 종업원 수") == "종업원 수"
+    assert _label_key("총 종사자수") == "종업원 수" and _label_key("참여 종사자수") != "종업원 수"  # 11/27 태백 일반현황
     assert _value("종업원 수", vault.Vault({}, info={"종업원 수": "7"})) == "7명"
     # 예전 모양('2005.03 법인 설립' 한 줄)도 그대로
     assert read_history("2005.03 (가상) 법인 설립")[0]["내용"] == "(가상) 법인 설립"

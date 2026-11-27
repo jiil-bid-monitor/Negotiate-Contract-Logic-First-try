@@ -5434,7 +5434,7 @@ const HELP_SETS = {
     [0, "무엇부터 보면 되나요?", "① 참가로 정한 공고의 마감\n② 보류한 공고의 마감과 사유", "처음 열면 먼저 보면 뭐부터 오늘"],
     [0, "이 탭에서는 무엇을 하나요?", "참가·보류·불참으로 판단한 공고 목록입니다.\n누가·언제·왜 판단했는지 남습니다.", "이 탭 뭐 무엇 목적 누가 판단자 이탭에서는"],
     [0, "어떤 순서로 하나요?", "① 위쪽에서 참가·보류·불참을 고릅니다.\n② 엑셀이 필요하면 'CSV 내려받기'를\n    누릅니다.\n\n기록은 실제 공고 탭에서 판단하면\n저절로 쌓입니다.", "사용법 순서 쓰는 할 일"],
-    [0, "아직 판단하지 않은 공고는 어디에 있나요?", "여기엔 없습니다.\n실제 공고 탭에서 판단해 주세요.", "미판단 판단안 안정한 정하지 내리지"],
+    [0, "아직 판단하지 않은 공고는 어디에 있나요?", "여기엔 없습니다.\n위 띠 체크 상자 아이콘 '미판단 공고'를 누르거나\n실제 공고 탭에서 판단해 주세요.", "미판단 판단안 안정한 정하지 내리지"],
 
     [1, "참가한 공고만 보고 싶습니다", "위쪽에서 전체·참가·보류·불참을\n골라 주세요.", "참가 보류 불참 고르 거르 참가만 불참만 보류만"],
     [1, "엑셀로 받고 싶습니다", "'CSV 내려받기'를 누르면\n지금 고른 기록만 엑셀로 받습니다.", "엑셀 CSV 내려 받기 다운"],
@@ -5815,21 +5815,30 @@ const HELP_SPOT = {
     "참가·보류·불참은 어디서 정하나요?": "#liveResults [data-pstatus]", "잘못 눌렀는데 취소할 수 있나요?": "#liveResults [data-pstatus].on || #liveResults [data-pstatus]", "적은 사유를 고치고 싶습니다": "#liveResults [data-preason] || #liveResults [data-pstatus]",
     "불참한 공고를 다시 보고 싶습니다": "#filterOpen", "'내가 맡기'는 언제 누르나요?": "#liveResults [data-powner]", "참가로 정한 다음에는 무엇을 하나요?": "#liveResults .next-step || #liveResults [data-pstatus]",
     "싱크로율은 무슨 뜻인가요?": "#liveResults .card-score", "카드 왼쪽 띠 색은 무슨 뜻인가요?": "#liveResults .notice.live.compact", "'이전 공고'라고 나옵니다": "#liveMeta .meta-old", "참가할 수 있는 공고인지 어떻게 확인하나요?": "#liveResults .tag-group",
-    "'자격 충족'·'자격 미달'은 무슨 뜻인가요?": "#liveResults .badge.qual.pass || #liveResults .badge.qual", "카드의 마감은 어느 날짜인가요?": "#liveResults .facts", "사업금액은 어떤 금액인가요?": "#liveResults .facts",
+    "'자격 충족'·'자격 미달'은 무슨 뜻인가요?": "#liveResults .badge.qual.pass", "카드의 마감은 어느 날짜인가요?": "#liveResults .facts [data-k=\"마감\"] dd", "사업금액은 어떤 금액인가요?": "#liveResults .facts [data-k=\"사업금액\"] dd",
+    "지역제한·공동수급은 어디서 보나요?": "#liveResults .badge.qual :: 지역 || #liveResults .badge.qual :: 공동수급",
+    "'실적 요건'·'기술인력 요건'은 무슨 뜻인가요?": "#liveResults .badge.qual :: 요건 || #liveResults .badge.qual :: 지역의무공동도급",
+    "현장설명회가 있는 공고는 어떻게 아나요?": "#liveResults .qual :: 현장설명", "찾는 공고가 보이지 않습니다": "#filterOpen",
     "비슷한 공고는 지난번에 어떻게 판단했나요?": "#liveResults .phint", "팀원에게 의견을 남기고 싶습니다": "#liveResults [data-ptalk]", "참가로 정한 공고의 마감을 한눈에 보고 싶습니다": "#calBellBtn", "'미판단 공고' 숫자는 무슨 뜻인가요?": "#judgeBellBtn", "'회사 서류' 숫자는 무슨 뜻인가요?": "#docBellBtn", "이름을 적으라고 나옵니다": "#judge", "어떤 순서로 하나요?": "#liveResults [data-pstatus]" },
-  excluded: { "왜 빠졌는지 어디서 보나요?": "#exResults .ex-reason", "잘못 빠진 공고를 되살리고 싶습니다": "#exResults [data-promote]", "빠진 이유별로 모아 보고 싶습니다": "#exFilters", "특정 공고를 찾고 싶습니다": "#liveQ", "어떤 순서로 하나요?": "#exResults [data-promote]", "자격·지역 때문에 빠진 공고도 볼 수 있나요?": "#exFilters", "'세부품명 미달'은 무슨 뜻인가요?": "#exFilters" },
-  log: { "참가한 공고만 보고 싶습니다": "#logStatus", "엑셀로 받고 싶습니다": "#logCsv", "판단을 취소하고 싶습니다": "#logList .log-line", "지난주 기록은 어디에 있나요?": "#logList .log-week summary", "지난번에 왜 불참했는지 보고 싶습니다": "#logQ", "어떤 순서로 하나요?": "#logStatus" },
-  corpus: { "특정 사업을 찾고 싶습니다": "#corpusQ", "진행 중인 사업은 어떻게 정해지나요?": ".corpus-ongoing > summary || #corpusQ", "무엇부터 보면 되나요?": ".corpus-ongoing > summary || #corpusQ", "어떤 순서로 하나요?": "#corpusQ", "지난 사업의 과업 내용을 보고 싶습니다": "#corpusRows .proj" },
-  calc: { "무엇부터 보면 되나요?": "#cNo", "어떤 순서로 하나요?": "#cLookup", "추천 투찰금액은 어떻게 정해지나요?": ".calc-rec", "'경쟁 규모'는 무엇으로 고르나요?": "#cRecScale", "난수표는 언제 쓰나요?": "#cDraw > summary",
+  excluded: { "왜 빠졌는지 어디서 보나요?": "#exResults .ex-reason", "잘못 빠진 공고를 되살리고 싶습니다": "#exResults [data-promote]", "빠진 이유별로 모아 보고 싶습니다": "#exFilters", "특정 공고를 찾고 싶습니다": "#liveQ", "어떤 순서로 하나요?": "#exResults [data-promote]", "자격·지역 때문에 빠진 공고도 볼 수 있나요?": "#exFilters", "'세부품명 미달'은 무슨 뜻인가요?": "#exFilters", "무엇부터 보면 되나요?": "#exFilters",
+    "되살린 공고는 어떻게 보이고, 다시 뺄 수 있나요?": "@live #liveResults .badge.qual :: 담당자가 올림" },
+  log: { "참가한 공고만 보고 싶습니다": "#logStatus", "엑셀로 받고 싶습니다": "#logCsv", "판단을 취소하고 싶습니다": "#logList .log-line", "지난주 기록은 어디에 있나요?": "#logList .log-week summary", "지난번에 왜 불참했는지 보고 싶습니다": "#logQ", "어떤 순서로 하나요?": "#logStatus", "아직 판단하지 않은 공고는 어디에 있나요?": "#judgeBellBtn" },
+  corpus: { "특정 사업을 찾고 싶습니다": "#corpusQ", "진행 중인 사업은 어떻게 정해지나요?": ".corpus-ongoing > summary", "무엇부터 보면 되나요?": ".corpus-ongoing > summary || #corpusQ", "어떤 순서로 하나요?": "#corpusQ", "지난 사업의 과업 내용을 보고 싶습니다": "#corpusRows .proj" },
+  calc: { "무엇부터 보면 되나요?": "#cNo", "'기준 사정률'은 무슨 뜻인가요?": "#cRec .rec-pick-sub || .calc-rec",
+    "협상 공고는 투찰금액을 어떻게 정하나요?": "#cRec .rec-flag :: 협상 || .calc-rec", "어떤 순서로 하나요?": "#cLookup", "추천 투찰금액은 어떻게 정해지나요?": ".calc-rec", "'경쟁 규모'는 무엇으로 고르나요?": "#cRecScale", "난수표는 언제 쓰나요?": "#cDraw > summary",
     "투찰한 금액을 기록하고 싶습니다": "#cRecord", "외주 추천 금액은 왜 적나요?": "#cRecOut", "외주 금액으로 투찰했습니다": ".rec-actual", "개찰 결과는 언제 나오나요?": '#bidlogReload || [data-calcpage="log"]', "공고번호를 찾지 못한다고 나옵니다": "#cNo",
     "추천 금액 그대로 투찰해도 되나요?": ".calc-rec", "A값·순공사원가는 직접 넣어야 하나요?": "#cA", "기초금액·하한율이 '-'로 나옵니다": "#cBasis",
     "기록한 금액을 고치고 싶습니다": '#bidlogRows tr[data-id] [data-act="edit"] || #bidlogRows tr[data-id] [data-act="toggle"] || [data-calcpage="log"]', "'낙찰'·'탈락'과 등수는 어떻게 읽나요?": '#bidlogRows tr[data-id] td.res || [data-calcpage="log"]', "지난 투찰을 엑셀로 받고 싶습니다": '#bidlogCsv || [data-calcpage="log"]' },
   award: { "무엇부터 보면 되나요?": "#awardList h3", "목록은 어떻게 나뉘어 있나요?": "#awardList h3", "단계 표시는 어떻게 보나요?": "#awardList .award-steps", "개찰 결과는 언제 나오나요?": "#awardCheck",
-    "공고가 목록에 보이지 않습니다": "#tab-award details > summary", "공고를 목록에서 빼고 싶습니다": "#awardList .award-more > summary", "계약 단계로는 언제 넘어가나요?": "#awardCheck",
-    "'낙찰 서류 만들기'가 눌리지 않습니다": "#awardList .award-more > summary", "만든 서류는 어디에 있나요?": "#awardList [data-award-open]", "'서류 다시 만들기'는 언제 누르나요?": "#awardList .award-more > summary",
+    "공고가 목록에 보이지 않습니다": "#tab-award .award-addbox > summary", "공고를 목록에서 빼고 싶습니다": "#awardList .award-more > summary", "계약 단계로는 언제 넘어가나요?": "#awardCheck",
+    "'낙찰 서류 만들기'가 눌리지 않습니다": "#awardList button.award-main:disabled :: 낙찰 서류 || #awardList .award-more > summary", "만든 서류는 어디에 있나요?": "#awardList [data-award-open]", "'서류 다시 만들기'는 언제 누르나요?": "#awardList .award-more > summary",
     "공고문에서 내라는 서류는 어디서 보나요?": "#awardList [data-award-open]", "아직 안 채운 칸은 어디서 보나요?": "#awardList [data-award-open]",
     "회사 서류를 새것으로 바꾸고 싶습니다": "#docBellBtn", "개찰 2등부터는 무엇을 하나요?": "#awardList .award-more > summary",
-    "어떤 순서로 하나요?": "#awardList .award-main" },
+    "어떤 순서로 하나요?": "#awardList .award-main || #awardList h3",
+    "개찰 1등이면 무엇을 하나요?": "#awardList button.award-main[data-award-stage=\"qual\"] || #awardList h3", "개찰 등수는 무슨 뜻인가요?": "#awardList .award-stage || #awardList td :: 개찰",
+    "'하한선 미달'은 무슨 뜻인가요?": "#awardList td :: 하한선 미달", "'폴더가 없습니다'라고 나옵니다": "#awardList .award-more > summary",
+    "착공·착수서류를 고치면 준공 서류도 바뀌나요?": "#awardList [data-award-open]", "공유 폴더에서 고치면 언제 반영되나요?": "#awardList [data-award-open]",
+    "계약일·금액이 계약서와 다릅니다": "#awardList [data-award-open]", "한글(hwp) 파일로 내라고 합니다": "#awardList [data-award-open]" },
   // 정량평가서 탭은 화면이 따로(iframe) 들어가 있어 그 안에서 찾음
   quant: { "무엇부터 보면 되나요?": "#no", "어떤 순서로 하나요?": "#go", "받은 zip에는 무엇이 들어 있나요?": "#dlink", "기술인력은 왜 체크하나요?": "#staffBox > summary",
     "실적 후보를 그대로 내도 되나요?": "#candBox > summary", "'한글 파일 필요'라고 나옵니다": "#hwpneed", "⚠ 표시가 나옵니다": "#notes", "만든 파일은 언제까지 받을 수 있나요?": "#dlink",
@@ -5839,7 +5848,7 @@ const HELP_SPOT_CSS = `@keyframes help-spot { 0%, 100% { box-shadow: 0 0 0 3px #
 .help-spot { position: relative; z-index: 5; border-radius: 6px; box-shadow: 0 0 0 3px #1b6e43, 0 0 0 9px rgba(27,110,67,.25); animation: help-spot 1s ease-in-out 3; }`;
 const helpSpotOf = (h, tab = HELP_TAB) => (HELP_SPOT[tab] || {})[h[1]] || HELP_SPOT["*"][h[1]] || "";
 // '@탭 선택자' = 그 탭의 자리 — 다른 탭에 있으면 그 탭으로 옮긴 뒤 표시(11/26 사용자 '다른 탭에 있을 때도 질문한 화면으로')
-const helpSpotFor = (h, tab) => { const sel = helpSpotOf(h, tab); return sel && tab !== HELP_TAB ? `@${tab} ${sel}` : sel; };
+const helpSpotFor = (h, tab) => { const sel = helpSpotOf(h, tab); return sel && tab !== HELP_TAB && !sel.startsWith("@") ? `@${tab} ${sel}` : sel; };
 const helpWait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function helpSpot(raw) {
   let sel = raw;
@@ -5868,8 +5877,11 @@ async function helpSpot(raw) {
   // 같은 것이 여럿(카드마다 있는 버튼 등)이면 지금 보는 화면 가운데에 가장 가까운 것 — 화면 안에 있으면 그 자리, 없으면 가까운 위·아래로 옮겨 감
   // (11/26 사용자 — 예전엔 늘 목록 맨 위 카드로 올라갔음)
   const gap = (x) => { const r = x.getBoundingClientRect(); return Math.abs(r.top + r.height / 2 - innerHeight / 2); };
+  const own = (x) => [...x.childNodes].filter((c) => !(c.classList && c.classList.contains("qtip"))).map((c) => c.textContent).join("");
+  const hit = (x, one) => { const [css, word] = one.split(" :: "); return x.matches(css) && (!word || own(x).includes(word)); };
   const pick = (one) => {
-    const all = [...docOf().querySelectorAll(one)].filter((x) => !x.closest("#helpBox"));
+    const [css, word] = one.split(" :: ");
+    const all = [...docOf().querySelectorAll(css)].filter((x) => !x.closest("#helpBox") && (!word || own(x).includes(word)));
     const shown = all.filter((x) => x.checkVisibility());
     return (shown.length > 1 ? shown.sort((a, b) => gap(a) - gap(b))[0] : shown[0]) || all.find((x) => x.offsetParent !== null && x.closest("details:not([open])"));
   };
@@ -5878,9 +5890,9 @@ async function helpSpot(raw) {
   // 방금 탭을 옮겼으면 화면(정량평가서 안쪽 화면·목록)이 그려질 때까지 조금 기다림
   for (let i = 0; go && i < 25 && !el; i++) { await helpWait(100); if (moved()) return; el = find(); }
   // 앞 선택자가 안 보이고 화면 나눔 버튼(투찰 계산 / 투찰내역)을 찾았으면 그 화면으로 옮긴 뒤 다시 찾음
-  if (el && parts.length > 1 && !el.matches(parts[0]) && el.matches("[data-calcpage]")) {
+  if (el && parts.length > 1 && !hit(el, parts[0]) && el.matches("[data-calcpage]")) {
     el.click();
-    for (let i = 0; i < 25 && (!el.isConnected || !el.matches(parts[0])); i++) { await helpWait(100); if (moved()) return; el = find() || el; }
+    for (let i = 0; i < 25 && (!el.isConnected || !hit(el, parts[0])); i++) { await helpWait(100); if (moved()) return; el = find() || el; }
   }
   for (let d = el && el.closest("details:not([open])"); d && !el.checkVisibility(); d = d.parentElement.closest("details:not([open])")) d.open = true;
   if (!el) {
@@ -6146,7 +6158,8 @@ function renderHelp() {
     const faqBtn = (lead = "") => `<div class="hsubs">${lead}${back}<button type="button" class="hsub" data-hview="faq">${k ? "다른 질문" : "전체 질문"}</button></div>`;
     const startBtns = `<div class="hpicks">${[["first", "처음 써 봅니다"], ["use", "쓰다가 궁금합니다"]].map(([v, t]) => `<button type="button" data-hstart="${v}">${t}</button>`).join("")}<div class="hsubs"><button type="button" class="hsub" data-hview="faq">전체 질문</button></div></div>`;
     const list = !live || !Array.isArray(m.picks) ? [] : m.picks;
-    const qbtn = (c0) => { const c = helpOwn(c0, m.tab); return (typeof c === "number" || c.tab === HELP_TAB ? `<button type="button" data-hq="${c.i ?? c}">${esc(HS().qa[c.i ?? c][1])}</button>`
+    const shared = (t) => Object.values(HELP_SETS).filter((x) => x.qa.some((h) => h[1] === t)).length > 1;
+    const qbtn = (c0) => { const c = helpOwn(c0, m.tab); const t = (typeof c === "number" || c.tab === HELP_TAB) && HS().qa[c.i ?? c][1]; return (t ? `<button type="button" data-hq="${c.i ?? c}">${esc(t)}${shared(t) ? ` <small>${esc(HS().name)} 탭</small>` : ""}</button>`
       : `<button type="button" data-hq="${c.i}" data-htab="${c.tab}">${esc(HS(c.tab).qa[c.i][1])} <small>${esc(HELP_SETS[c.tab].name)} 탭</small></button>`); };
     const next = live && m.next && m.next.length ? `<div class="hpicks">${m.next.map(qbtn).join("")}</div>` : "";
     const picks = !live || !m.picks ? "" : m.picks === "start" ? startBtns : list.length ? `<div class="hpicks">${list.map(qbtn).join("")}${faqBtn()}</div>`

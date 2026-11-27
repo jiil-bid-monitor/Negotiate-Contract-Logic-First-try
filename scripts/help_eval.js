@@ -31,6 +31,11 @@ const HELP_TOP = vm.runInNewContext("(" + html.slice(topAt, topAt + topEnd + 1) 
 const shown = (tab, title) => { if (!has(tab, title) || !box.helpListed([0, title], tab)) { bad++; console.log(`화면 버튼에 없거나 숨긴 질문: [${tab}] ${title}`); } };
 Object.entries(HELP_TOP).forEach(([tab, x]) => [...x.first, ...x.use].forEach((t) => shown(tab, t)));
 Object.entries(box.HELP_NEXT).forEach(([tab, x]) => Object.values(x).flat().forEach((t) => (t.includes("::") ? shown(...t.split("::")) : shown(tab, t))));
+// '어디인지 보기' 자리표(HELP_SPOT)의 질문 제목이 지금 도우미에 있는지 — 제목을 바꾸면 자리도 같이 바꿔야 함
+const spotAt = html.indexOf("{", html.indexOf("const HELP_SPOT = ")), spotEnd = html.slice(spotAt).search(/\};\r?\n/);
+Object.entries(vm.runInNewContext("(" + html.slice(spotAt, spotAt + spotEnd + 1) + ")")).forEach(([tab, x]) => Object.keys(x).forEach((t) => {
+  if (!(tab === "*" ? Object.keys(HELP_SETS).every((k) => has(k, t)) : has(tab, t))) { bad++; console.log(`자리표에 있는데 도우미에 없는 질문: [${tab}] ${t}`); }
+}));
 
 const args = process.argv.slice(2), rows = args.includes("--rows");
 const files = args.filter((x) => !x.startsWith("--"));

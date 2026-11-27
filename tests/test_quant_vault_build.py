@@ -4556,6 +4556,27 @@ def test_history_grid_rows_and_grow(tmp_path: Path):
     assert "|주요연혁|년 월 일|내 용|비 고|2009.09|법인 설립|2012.08|사업자 등록|2015.03|공장 등록|※ 최근 순으로|" in text, text
     assert 'rowCnt="6"' in sec and 'pageBreak="TABLE"' in sec and 'height="9000"' in sec
     assert re.search(r'rowAddr="5"/>.*?최근 순으로|최근 순으로.*?rowAddr="5"', sec, re.S)  # 아래 줄 번호도 밀림
+def test_history_grid_dotted_head(tmp_path: Path):
+    """11/27 사용자 지적(태백 LED전광판 서식 8): '2. 업체 연혁' 아래 '연.월.일 | 내 용 | 비 고' 표가 빔 — 날짜 머리 칸을
+    붙여 쓴 '연월일'로만 찾아 점 찍은 머리를 연혁 표로 못 봤음."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                             f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                             f'<hp:cellSz width="9000" height="1500"/></hp:tc>')
+    for head in ("연.월.일", "년·월·일", "(연월일)"):
+        rows = [[c(0, 0, head), c(1, 0, "내 용"), c(2, 0, "비 고")]] + [[c(0, r, ""), c(1, r, ""), c(2, r, "")] for r in (1, 2)]
+        body = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>2. 업체 연혁</hp:t></hp:run></hp:p>'
+                '<hp:p><hp:run><hp:tbl rowCnt="3" colCnt="3" pageBreak="NONE"><hp:sz width="27000" height="4500"/>'
+                + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>")
+        v = vault.Vault({}, info={"회사명": "(주)가상"})
+        v.history = [{"연월일": "2009.09", "내용": "법인 설립"}, {"연월일": "2012.08", "내용": "사업자 등록"}]
+        fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+        sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+        text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+        assert f"|{head}|내 용|비 고|2009.09|법인 설립|2012.08|사업자 등록|" in text, (head, text)
+
+
 def test_wrapped_value_prefix_two_spaces_per_hangul(tmp_path: Path):
     """11/23 사용자 지적: 서약서 서명 묶음 '주    소 : 강원특별자치도 / 정선군 남면 …' — 넘어간 줄이 '강'보다 반 글자쯤 왼쪽.
     앞부분의 한글 자리를 전각 빈칸(U+3000)으로 채웠는데 한글에서 한글 한 글자보다 좁게 찍힘. '글꼴에 어울리는 빈칸'이 꺼진 글자 모양은

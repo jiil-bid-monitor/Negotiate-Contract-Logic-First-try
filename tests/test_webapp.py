@@ -552,6 +552,11 @@ class TestServer(unittest.TestCase):
         self.assertEqual(self.call("/api/help-question", {"q": "필터를 크게 해 주세요", "result": "요청", "tab": "live", "who": "홍길동", "co": "grida"})[0], 200)
         rows = json.loads((self.app.store.path.parent / "help_questions.json").read_text(encoding="utf-8"))
         self.assertEqual((rows[-1]["result"], rows[-1]["who"], rows[-1]["co"]), ("요청", "홍길동", "grida"))
+        # 개발자 탭 '분석하기'(11/27) — 수집 결과가 없으면 미리 보기는 빈 값, 투찰 방향은 늘 한 줄 이상
+        status, res = self.call("/api/dev/analysis", {"changes": [{"remove_keyword": ["통신"]}, {}]})
+        self.assertEqual(status, 200)
+        self.assertEqual(len(res["previews"]), 2)
+        self.assertTrue(res["bid"] and "keywords" in res["config"])
         # 개발자 탭이 읽는 기록(11/27) — 토큰 없으면 막힘
         self.assertEqual(self.call("/api/help-questions")[1]["items"][-1]["q"], "필터를 크게 해 주세요")
         self.assertEqual(self.call("/api/help-questions", token="wrong")[0], 401)

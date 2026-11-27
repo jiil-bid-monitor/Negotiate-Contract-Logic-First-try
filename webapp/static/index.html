@@ -226,6 +226,14 @@ body.picking { overflow: hidden; }
 .viz-table table { margin-top: 6px; font-size: 12.5px; }
 .viz-table td.num, .viz-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .viz-wide { margin-top: 4px; }
+.viz-watch { margin-bottom: 14px; }
+.viz-watch ul { margin: 0 0 10px; padding-left: 18px; font-size: 13px; color: var(--ink); }
+.viz-watch li { margin: 3px 0; }
+#devAnalysis { margin-top: 10px; font-size: 13px; color: var(--ink); }
+#devAnalysis h5 { margin: 14px 0 4px; font-size: 13px; color: var(--ink-strong); }
+#devAnalysis ul { margin: 0; padding-left: 18px; }
+#devAnalysis li { margin: 6px 0; }
+#devAnalysis .sub { color: var(--muted); font-size: 12px; }
 #vizTip { position: fixed; z-index: 60; pointer-events: none; background: var(--panel); border: 1px solid var(--line-strong);
   box-shadow: 0 4px 14px rgba(0, 0, 0, .12); padding: 8px 10px; font-size: 12.5px; color: var(--ink); min-width: 130px; }
 #vizTip .t { color: var(--muted); margin-bottom: 4px; }
@@ -2400,6 +2408,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
     <div class="viz-filter"><label>기간 <select id="devRange">
       <option value="">전체</option><option value="7">최근 7일</option><option value="30">최근 30일</option><option value="90">최근 90일</option>
     </select></label></div>
+    <div class="viz-card viz-watch"><h4>살펴볼 것</h4><ul id="devWatch"></ul>
+      <button type="button" id="devAnalyze">분석하기</button> <button type="button" id="devAnalysisCopy" hidden>결과 복사</button>
+      <div id="devAnalysis"></div></div>
     <div class="viz-tiles" id="devTiles"></div>
     <h2 class="viz-sec">판단 기록</h2>
     <div class="viz-grid" id="devJudge"></div>
@@ -4716,7 +4727,71 @@ function renderDev() {
   const byTab = countBy(help, (r) => HELP_SETS[r.tab]?.name || r.tab || "(없음)").map(([k, v]) => ({ k, v }));
   $("devHelpViz").innerHTML = help.length ? vizCard("결과별", vizHBars(byResult)) + vizCard("탭별", vizHBars(byTab)) : "";
   renderDevHelp();
+
+  // 살펴볼 것 — 기준을 넘은 것만 한 줄씩(기준값: 조정 검토 = 판단 10건·불참 80%, 하한선 통과 60%·개찰 20건, 외주 비교 5건, 답 없는 질문 5건)
+  const outBetter = cmp.filter((c) => c < 0).length, none = help.filter((r) => r.result === "모름").length, reqs = help.filter((r) => r.result === "요청").length;
+  const watch = [
+    ...paths.filter((r) => r.note).map((r) => `수집 경로 '${r.k}': 판단 ${r.n}건 · 불참 ${devPct(r.vals[2], r.n)}%`),
+    ...kws.filter((r) => r.note).map((r) => `관심 키워드 '${r.k}': 판단 ${r.n}건 · 불참 ${devPct(r.vals[2], r.n)}%`),
+    diffs.length >= 20 && devPct(pass, diffs.length) < 60 ? `하한선 통과 ${devPct(pass, diffs.length)}% (${pass}/${diffs.length}건): 기준 사정률 높이는 쪽` : "",
+    cmp.length >= 5 && outBetter * 2 >= cmp.length ? `외주가 더 좋은 등수 ${outBetter}/${cmp.length}건` : "",
+    none >= 5 ? `답 없는 질문 ${none}건` : "",
+    reqs ? `요청 ${reqs}건` : "",
+  ].filter(Boolean);
+  $("devWatch").innerHTML = (watch.length ? watch : ["없습니다."]).map((s) => `<li>${esc(s)}</li>`).join("");
 }
+/** '분석하기' — 판단 기록으로 조정 후보(키워드·경로)를 골라 서버에 보내면, 서버가 최근 수집 결과로 미리 보기와 투찰 방향을 계산(외부 AI 없음) */
+async function devAnalyze() {
+  const btn = $("devAnalyze"), out = $("devAnalysis"), since = devSince();
+  const judged = logEntriesOf().map((e) => e.p).filter((x) => devIn(x.decidedAt || x.updatedAt, since))
+    .filter((x) => !(x.status !== "참가" && (x.tags || []).length && x.tags.every((tg) => NON_FILTER_TAGS.includes(tg))));  // 필터와 무관한 사유만 고른 판단은 뺌
+  const cand = (keysOf) => groupCount(judged, keysOf, (x) => x.status).filter((r) => r.n >= AGG_MIN_N && devPct(r.vals[2], r.n) >= 70).slice(0, 4);
+  const works = (k, st) => judged.filter((x) => (x.meta?.keywords || []).includes(k) && x.status === st).map((x) => x.meta?.businessType || "");
+  const topTag = (keyOf, k) => countBy(judged.filter((x) => x.status !== "참가" && keyOf(x).includes(k)).flatMap((x) => x.tags || []), (tg) => tg)[0];
+  const items = [];
+  for (const r of cand((x) => x.meta?.keywords || [])) {
+    const tag = topTag((x) => x.meta?.keywords || [], r.k);
+    items.push({ r, tag, kind: "kw", change: { remove_keyword: [r.k] } });
+    const joined = works(r.k, "참가"), left = works(r.k, "불참");
+    if (joined.length && joined.every((w) => w === "공사") && left.some((w) => w && w !== "공사")) items.push({ r, tag, kind: "kwwork", change: { keyword_work: [`${r.k}=공사`] } });
+  }
+  for (const r of cand((x) => x.meta?.paths || []).filter((r) => r.k === "보유 면허")) items.push({ r, tag: topTag((x) => x.meta?.paths || [], r.k), kind: "lic", change: { license_work: ["공사"] } });
+  btn.disabled = true;
+  out.innerHTML = '<div class="sub">분석 중…</div>';
+  let res;
+  try {
+    const resp = await fetch("/api/dev/analysis", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ changes: items.map((x) => x.change) }) });
+    res = await resp.json();
+    if (!resp.ok) throw new Error(res.error || String(resp.status));
+  } catch (e) {
+    out.innerHTML = `<div class="sub">분석하지 못했습니다: ${esc(String(e.message || e))}</div>`;
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+  const cfg = res.config || {};
+  const ruleLi = (x, i) => {
+    const pv = res.previews[i], r = x.r, stat = `판단 ${r.n}건 · 불참 ${devPct(r.vals[2], r.n)}%${x.tag ? ` · 주된 사유 ${x.tag[0]} ${x.tag[1]}건` : ""}`;
+    const title = x.kind === "kw" ? `관심 키워드 '${r.k}' 빼기` : x.kind === "kwwork" ? `관심 키워드 '${r.k}'를 공사 공고에서만` : "보유 면허 경로를 공사 공고에서만";
+    const done = x.kind === "kw" ? !(cfg.keywords || []).includes(r.k) : x.kind === "kwwork" ? (cfg.keywordWork?.[r.k] || []).includes("공사") : (cfg.licenseWork || []).includes("공사");
+    const joinedDrop = (pv?.drop || []).filter((no) => participation[no]?.status === "참가").length;
+    const effect = done ? "이미 적용됨" : !pv ? "최근 수집 결과 없음" : `최근 수집에서 ${pv.drop.length}건 빠짐 (그중 참가로 판단 ${joinedDrop}건)${pv.add ? ` · ${pv.add}건 새로 들어옴` : ""}`;
+    const ex = !done && pv?.dropTitles?.length ? `<div class="sub">빠지는 공고: ${pv.dropTitles.slice(0, 3).map(esc).join(" · ")}${pv.drop.length > 3 ? " …" : ""}</div>` : "";
+    return `<li><b>${esc(title)}</b><div class="sub">${esc(stat)}</div><div>${esc(effect)}</div>${ex}</li>`;
+  };
+  const missed = countBy(DEV_HELP.filter((r) => devIn(r.at, since) && (r.result === "모름" || r.result === "고르기")), (r) => r.q.trim()).slice(0, 5);
+  const reqs = DEV_HELP.filter((r) => devIn(r.at, since) && r.result === "요청").slice(-5).reverse();
+  out.innerHTML = `<div class="sub">판단 ${judged.length}건 기준${judged.length < LOG_AGG_MIN ? ` (${LOG_AGG_MIN}건 미만: 비율이 흔들릴 수 있음)` : ""}${res.runAt ? ` · 최근 수집 ${esc(fmtDT(res.runAt))}` : ""}</div>
+    <h5>수집 규칙 후보</h5>${items.length ? `<ul>${items.map(ruleLi).join("")}</ul>` : `<div class="sub">없습니다 (판단 ${AGG_MIN_N}건 이상 · 불참 70% 이상인 관심 키워드·보유 면허 경로)</div>`}
+    <h5>투찰</h5><ul>${(res.bid || []).map((s) => `<li>${esc(s.replace(/^→\s*/, ""))}</li>`).join("")}</ul>
+    <h5>도우미</h5>${missed.length || reqs.length ? `<ul>${missed.map(([q, n]) => `<li>못 찾은 말 ${n}번: ${esc(q)}</li>`).join("")}${reqs.map((r) => `<li>요청: ${esc(r.q)}${r.who ? ` (${esc(r.who)})` : ""}</li>`).join("")}</ul>` : '<div class="sub">없습니다.</div>'}`;
+  $("devAnalysisCopy").hidden = false;
+}
+$("devAnalyze").onclick = devAnalyze;
+$("devAnalysisCopy").onclick = () => {
+  const text = $("devAnalysis").innerText.trim();
+  (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).catch(() => copyByCommand(text));
+};
 // 차트 값 상자 — 커서·키보드 포커스에 같은 내용(글자는 textContent로만)
 const VIZ_TIP = document.createElement("div");
 VIZ_TIP.id = "vizTip"; VIZ_TIP.hidden = true; document.body.appendChild(VIZ_TIP);

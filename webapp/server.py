@@ -836,6 +836,9 @@ def make_handler(app: App):
                         key = os.environ.get("NARA_SERVICE_KEY", "")
                         return self._error(HTTPStatus.BAD_GATEWAY, redact(str(err), [key] if key else []))
                     return self._json({"ok": True, **done, "entries": app.bidlog_of(co).entries()})
+                if url.path == "/api/dev/analysis":  # 개발자 탭 '분석하기'(11/27) — 외부 AI 없이 규칙 미리 보기·투찰 보정 방향
+                    from .devanalysis import analyze
+                    return self._json(analyze(co.store, None if co.default else co.id, app.bidlog_of(co).entries(), data.get("changes") or []))
                 if url.path == "/api/help-question":  # 도우미에 직접 적은 질문 모으기(11/24)
                     app.help_question(data)
                     return self._json({"ok": True})

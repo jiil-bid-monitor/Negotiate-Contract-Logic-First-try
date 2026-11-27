@@ -87,6 +87,17 @@ class RulePreviewTest(unittest.TestCase):
         self.assertIn("R1,박물관 희귀자료 영인 해제", text)
         self.assertIn("불참", text)
 
+    def test_dev_analysis_preview_and_bid_direction(self):
+        """개발자 탭 '분석하기'(11/27): 화면이 고른 변경마다 최근 수집 결과에서 빠지는 공고, 투찰 방향은 성적표와 같은 판단."""
+        from webapp.devanalysis import analyze
+        d = Path(tempfile.mkdtemp())
+        store = Store(d / "web.sqlite3")
+        store.save_run("2026-11-16T09:00:00", {"days": 7}, self.payload())
+        res = analyze(store, None, [], [{"add_hard": ["영인"]}, {"nothing": ["x"]}])
+        self.assertIn("R1", res["previews"][0]["drop"])
+        self.assertIsNone(res["previews"][1])
+        self.assertEqual(res["bid"], ["아직 개찰된 투찰이 없어 판단할 수 없음"])
+
 
 if __name__ == "__main__":
     unittest.main()

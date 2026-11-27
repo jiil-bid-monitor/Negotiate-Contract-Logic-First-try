@@ -184,6 +184,54 @@ body.picking { overflow: hidden; }
 }
 .tabs button:hover { color: var(--ink-strong); }
 #devHelpList tr.dev-req td { background: var(--brand-tint); }
+/* 개발자 탭 대시보드(11/27) — 차트 색은 dataviz 기준 팔레트(검증: 판단 3색·통과/미달·등수 4단계, 바탕 #fff·#1c2026), 글자는 화면 글자색 */
+#tab-dev, #vizTip { --viz-1: #257de0; --viz-2: #f47230; --viz-3: #00b894; --viz-pass: #257de0; --viz-fail: #ec4647;
+  --viz-t1: #0f4a96; --viz-t2: #2370cd; --viz-t3: #519ced; --viz-t4: #84b9f3; --viz-grid: #e7e7e7; --viz-axis: #c2c2c2; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #tab-dev, :root:not([data-theme="light"]) #vizTip { --viz-1: #338ced; --viz-2: #e76624; --viz-3: #00a888; --viz-pass: #338ced; --viz-fail: #eb6263; --viz-t1: #84b9f3; --viz-t2: #519ced; --viz-t3: #257de0; --viz-t4: #1757ac; --viz-grid: #303030; --viz-axis: #474747; } }
+:root[data-theme="dark"] #tab-dev, :root[data-theme="dark"] #vizTip { --viz-1: #338ced; --viz-2: #e76624; --viz-3: #00a888; --viz-pass: #338ced; --viz-fail: #eb6263; --viz-t1: #84b9f3; --viz-t2: #519ced; --viz-t3: #257de0; --viz-t4: #1757ac; --viz-grid: #303030; --viz-axis: #474747; }
+.viz-filter { display: flex; gap: 12px; align-items: center; margin: 4px 0 14px; font-size: 13px; color: var(--muted); }
+.viz-filter select { margin-left: 6px; }
+.viz-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px; }
+.viz-tile { background: var(--panel); border: 1px solid var(--line); padding: 12px 16px; }
+.viz-tile .lab { font-size: 12.5px; color: var(--muted); }
+.viz-tile .val { font-size: 26px; font-weight: 700; color: var(--ink-strong); margin: 2px 0 1px; }
+.viz-tile .sub2 { font-size: 12.5px; color: var(--muted); }
+.viz-sec { font-size: 16px; margin: 28px 0 10px; color: var(--ink-strong); }
+.viz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr)); gap: 14px; }
+.viz-card { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px 12px; min-width: 0; }
+.viz-card h4 { margin: 0 0 8px; font-size: 13.5px; color: var(--ink-strong); }
+.viz-card .empty { padding: 18px 0; }
+.viz-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.viz-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.viz-svg { width: 100%; height: auto; display: block; }
+.viz-svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .viz-svg text { font-size: 17px; } }  /* 차트가 줄어드는 만큼 글자를 키움(휴대폰에서 약 10px) */
+.viz-svg .grid { stroke: var(--viz-grid); stroke-width: 1; }
+.viz-svg .axis { stroke: var(--viz-axis); stroke-width: 1; }
+.viz-svg g[tabindex] { outline: none; }
+.viz-svg g[tabindex]:hover .mark, .viz-svg g[tabindex]:focus .mark { filter: brightness(1.15); }
+.viz-svg g[tabindex]:focus-visible .hit { stroke: var(--brand); stroke-width: 1.5; }
+.viz-hb { display: grid; grid-template-columns: minmax(70px, 34%) 1fr auto; gap: 7px 10px; align-items: center; font-size: 12.5px; }
+.viz-hb .k { color: var(--ink); overflow-wrap: anywhere; }
+.viz-hb .bar { display: block; height: 14px; border-radius: 0 4px 4px 0; background: var(--viz-1); min-width: 2px; }
+.viz-hb .v { color: var(--ink-strong); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.viz-seg { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; outline: none; }
+.viz-seg:hover span, .viz-seg:focus span { filter: brightness(1.15); }
+.viz-seg:focus-visible { box-shadow: 0 0 0 2px var(--brand); }
+.viz-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.viz-mini div { border: 1px solid var(--line); padding: 10px 12px; }
+.viz-mini b { display: block; font-size: 22px; color: var(--ink-strong); }
+.viz-mini span { font-size: 12.5px; color: var(--muted); }
+.viz-table > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.viz-table table { margin-top: 6px; font-size: 12.5px; }
+.viz-table td.num, .viz-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.viz-wide { margin-top: 4px; }
+#vizTip { position: fixed; z-index: 60; pointer-events: none; background: var(--panel); border: 1px solid var(--line-strong);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .12); padding: 8px 10px; font-size: 12.5px; color: var(--ink); min-width: 130px; }
+#vizTip .t { color: var(--muted); margin-bottom: 4px; }
+#vizTip .r { display: flex; align-items: center; gap: 6px; line-height: 1.6; }
+#vizTip .r b { color: var(--ink-strong); }
+#vizTip .r i { display: inline-block; width: 10px; height: 2px; }
 .tabs button[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); font-weight: 700; }
 
 /* ── 폼 ───────────────────────────────────────────────────── */
@@ -2349,15 +2397,25 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 
   <!-- 개발자 탭(11/27 사용자) — 주소 끝 ?dev=1일 때만 보임. 담당자 화면과 비교할 수 있게 다른 탭은 그대로 두고 개발자용 내용은 여기만 -->
   <section id="tab-dev" hidden>
-    <h3 class="log-agg-title" id="devHelpHead">도우미 질문 기록</h3>
+    <div class="viz-filter"><label>기간 <select id="devRange">
+      <option value="">전체</option><option value="7">최근 7일</option><option value="30">최근 30일</option><option value="90">최근 90일</option>
+    </select></label></div>
+    <div class="viz-tiles" id="devTiles"></div>
+    <h2 class="viz-sec">판단 기록</h2>
+    <div class="viz-grid" id="devJudge"></div>
+    <details class="viz-table viz-wide"><summary>집계 표</summary>
+      <p class="sub log-agg-note" id="logAggNote"></p>
+      <div id="logAgg"></div>
+    </details>
+    <h2 class="viz-sec">투찰 분석</h2>
+    <div class="viz-grid" id="devBid"></div>
+    <h2 class="viz-sec" id="devHelpHead">도우미 질문 기록</h2>
+    <div class="viz-grid" id="devHelpViz"></div>
     <div class="search log-search">
       <select id="devHelpResult" aria-label="결과"></select>
       <input id="devHelpQ" type="search" autocomplete="off" aria-label="질문 기록에서 찾기">
     </div>
     <div id="devHelpList"></div>
-    <h3 class="log-agg-title">판단 기록 집계</h3>
-    <p class="sub log-agg-note" id="logAggNote"></p>
-    <div id="logAgg"></div>
   </section>
 
   <!-- 낙찰 후 서류(2026-11-10) — 투찰 기록·직접 넣은 공고의 낙찰자 확인(webapp/postaward.py), 공사 / 물품·용역 구분, 공고 폴더 만들기 -->
@@ -4421,7 +4479,6 @@ function renderLog() {
     `판단 기록 <b>${num(entries.length)}</b>건: ${DECISIONS.map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
     `<button type="button" class="linkish" id="logCsv">${logFilterOn() ? `CSV 내려받기 (고른 ${num(logFiltered(entries).length)}건)` : "CSV 내려받기"}</button>` +
     "";
-  $("logAggNote").textContent = DEV_VIEW ? `판단할 때의 관심 키워드·수집 경로 기준${all.length < LOG_AGG_MIN ? ` (판단 ${all.length}건: ${LOG_AGG_MIN}건쯤부터 비율이 믿을 만함)` : ""}. 끄려면 주소 끝에 ?dev=0` : "";
   $("logSearch").hidden = entries.length === 0;
   $("logEmpty").hidden = entries.length > 0;
 
@@ -4492,23 +4549,26 @@ function renderLog() {
     ? list.length ? top + (top && weeks.length ? '<h3 class="log-sec-title log-sec-past">지난 기록 <span class="faint-note">판단한 공고</span></h3>' : "") + weeks.map(weekHtml).join("")
       : '<div class="empty">조건에 맞는 판단 기록이 없습니다.</div>'
     : "";
-  $("logAgg").innerHTML = DEV_VIEW ? (all.length ? logAggHtml(all) : '<div class="empty">아직 판단 기록이 없습니다.</div>') : "";
+  if (DEV_VIEW && !$("tab-dev").hidden) renderDev();
 }
 
 /** 개발자 탭 — 도우미 질문 기록(11/27 사용자 '요청 기록 보는 거'). 이 웹앱(서버 PC·NAS 따로)에 모인 것, 최근 것부터 */
-let DEV_HELP = [];
-async function loadDevHelp() {
-  try { DEV_HELP = (await getJson("/api/help-questions")).items || []; } catch { DEV_HELP = []; }
-  renderDevHelp();
+let DEV_HELP = [], DEV_BIDS = [];
+async function loadDev() {
+  const [h, b] = await Promise.all([getJson("/api/help-questions").catch(() => ({})), getJson("/api/bidlog").catch(() => ({}))]);
+  DEV_HELP = h.items || [];
+  DEV_BIDS = b.entries || [];
+  renderDev();
 }
 function renderDevHelp() {
   const sel = $("devHelpResult"), pick = sel.value;
-  const counts = countBy(DEV_HELP, (r) => r.result || "(없음)");
+  const since = devSince(), base = DEV_HELP.filter((r) => devIn(r.at, since));
+  const counts = countBy(base, (r) => r.result || "(없음)");
   if (!counts.some(([k]) => k === "요청")) counts.unshift(["요청", 0]);
-  sel.innerHTML = `<option value="">전체 ${DEV_HELP.length}</option>` + counts.map(([k, n]) => `<option value="${esc(k)}">${esc(k)} ${n}</option>`).join("");
+  sel.innerHTML = `<option value="">전체 ${base.length}</option>` + counts.map(([k, n]) => `<option value="${esc(k)}">${esc(k)} ${n}</option>`).join("");
   sel.value = counts.some(([k]) => k === pick) ? pick : "";
   const q = ($("devHelpQ").value || "").replace(/\s+/g, "").toLowerCase();
-  const rows = DEV_HELP.filter((r) => (!sel.value || (r.result || "(없음)") === sel.value)
+  const rows = base.filter((r) => (!sel.value || (r.result || "(없음)") === sel.value)
     && (!q || [r.q, r.hit, r.who].join(" ").replace(/\s+/g, "").toLowerCase().includes(q))).slice().reverse();
   const when = (s) => String(s || "").slice(5, 16).replace("T", " ").replace("-", "/");
   $("devHelpHead").textContent = `도우미 질문 기록 ${num(rows.length)}건`;
@@ -4519,6 +4579,165 @@ function renderDevHelp() {
   </table></div>` : '<div class="empty">질문 기록이 없습니다.</div>';
 }
 $("devHelpResult").onchange = renderDevHelp;
+$("devRange").onchange = renderDev;
+const devSince = () => { const d = Number($("devRange").value || 0); return d ? Date.now() - d * 86400000 : 0; };
+const devIn = (at, since) => !since || (!!at && new Date(String(at).replace(" ", "T")).getTime() >= since);
+const devPct = (a, n) => (n ? Math.round((a / n) * 100) : 0);
+// 차트 조각 — 값·이름은 글자색, 색은 표시에만. 표시마다 커서·키보드로 값(tooltip), 같은 값은 '표로 보기'에도
+const vizLegend = (series) => `<div class="viz-legend">${series.map((s) => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")}</div>`;
+const vizCard = (title, body, table = "") => `<div class="viz-card"><h4>${esc(title)}</h4>${body}${table ? `<details class="viz-table"><summary>표로 보기</summary>${table}</details>` : ""}</div>`;
+const vizEmpty = (title) => vizCard(title, '<div class="empty">없습니다.</div>');
+const vizTableHtml = (head, rows, numCols = []) => `<div class="scroll"><table><thead><tr>${head.map((h, i) => `<th${numCols.includes(i) ? ' class="num"' : ""}>${esc(h)}</th>`).join("")}</tr></thead>
+  <tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td${numCols.includes(i) ? ' class="num"' : ""}>${esc(String(c))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+const vizTip = (title, rows) => esc(JSON.stringify({ t: title, rows }));
+const niceStep = (m) => { const raw = m / 4, p = 10 ** Math.floor(Math.log10(raw || 1)), f = raw / p; return Math.max(1, (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p); };
+/** 세로 막대(쌓기) — cats: [{label, values: [계열마다 값]}], 막대 굵기 24px까지·위 끝만 둥글게·조각 사이 2px 틈 */
+function vizCols(cats, series, { unit = "건", label = "", tipAll = true, edge = null, totals = true } = {}) {
+  const W = 560, H = 196, L = 36, R = 8, T = 10, B = 26, pw = W - L - R, ph = H - T - B;
+  const max = Math.max(1, ...cats.map((c) => c.values.reduce((a, b) => a + b, 0)));
+  const step = niceStep(max), top = Math.ceil(max / step) * step, y = (v) => T + ph - (v / top) * ph;
+  const band = pw / Math.max(1, cats.length), bw = Math.min(24, band * 0.64);
+  const every = Math.ceil(cats.length / 8);
+  let s = `<svg class="viz-svg" viewBox="0 0 ${W} ${H}" role="group" aria-label="${esc(label)}">`;
+  for (let v = 0; v <= top; v += step) s += `<line class="${v ? "grid" : "axis"}" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${num(v)}</text>`;
+  cats.forEach((c, i) => {
+    const x = L + band * i + (band - bw) / 2, parts = c.values.map((v, k) => [v, k]).filter(([v]) => v > 0);
+    const rows = series.map((se, k) => [se.name, num(c.values[k]) + unit, se.color]).filter((r, k) => tipAll || c.values[k] > 0);
+    let acc = 0, marks = "";
+    parts.forEach(([v, k], j) => {
+      const yTop = y(acc + v) + (j < parts.length - 1 ? 2 : 0), yBot = y(acc), h = Math.max(0, yBot - yTop);
+      acc += v;
+      if (j === parts.length - 1) { const r = Math.min(4, bw / 2, h); marks += `<path class="mark" fill="${series[k].color}" d="M${x},${yBot}V${yTop + r}Q${x},${yTop} ${x + r},${yTop}H${x + bw - r}Q${x + bw},${yTop} ${x + bw},${yTop + r}V${yBot}Z"/>`; }
+      else marks += `<rect class="mark" fill="${series[k].color}" x="${x}" y="${yTop}" width="${bw}" height="${h}"/>`;
+    });
+    const total = c.values.reduce((a, b) => a + b, 0);
+    s += `<g tabindex="0" data-tip="${vizTip(c.label, rows)}" aria-label="${esc(`${c.label} ${rows.map((r) => r[0] + " " + r[1]).join(", ")}`)}"><rect class="hit" x="${L + band * i}" y="${T}" width="${band}" height="${ph}" fill="transparent"/>${marks}</g>`;
+    if (total && totals && cats.length <= 12) s += `<text x="${x + bw / 2}" y="${y(total) - 4}" text-anchor="middle">${num(total)}</text>`;
+    if (!edge && i % every === 0) s += `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle">${esc(c.label)}</text>`;
+  });
+  if (edge) edge.forEach(([i, text]) => { s += `<text x="${L + band * i}" y="${H - 8}" text-anchor="${i >= cats.length ? "end" : "middle"}">${esc(text)}</text>`; });
+  return s + "</svg>";
+}
+/** 가로 막대(한 계열) — 값은 막대 끝 */
+const vizHBars = (rows, unit = "건") => { const max = Math.max(1, ...rows.map((r) => r.v));
+  return `<div class="viz-hb">${rows.map((r) => `<span class="k">${esc(r.k)}</span><span><span class="bar" style="width:${(r.v / max) * 100}%"></span></span><span class="v">${num(r.v)}${unit}</span>`).join("")}</div>`; };
+/** 가로 100% 쌓기 — 줄마다 판단 나눔, 오른쪽에 건수(·조정 검토) */
+const vizHStack = (rows, series) => `<div class="viz-hb">${rows.map((r) => {
+  const tip = series.map((s, i) => [s.name, `${r.vals[i]}건 (${devPct(r.vals[i], r.n)}%)`, s.color]);
+  return `<span class="k">${esc(r.k)}</span><span class="viz-seg" tabindex="0" data-tip="${vizTip(r.k, tip)}" aria-label="${esc(`${r.k} ${tip.map((x) => x[0] + " " + x[1]).join(", ")}`)}">${series.map((s, i) => (r.vals[i] ? `<span style="flex:${r.vals[i]};background:${s.color}"></span>` : "")).join("")}</span><span class="v">${r.n}건${r.note ? ` <span class="badge warn">${esc(r.note)}</span>` : ""}</span>`;
+}).join("")}</div>`;
+const JUDGE_SERIES = [{ name: "참가", color: "var(--viz-1)" }, { name: "보류", color: "var(--viz-2)" }, { name: "불참", color: "var(--viz-3)" }];
+const TIER_SERIES = [{ name: "1순위", color: "var(--viz-t1)" }, { name: "2~5위", color: "var(--viz-t2)" }, { name: "6위 밖", color: "var(--viz-t3)" }, { name: "하한선 미달", color: "var(--viz-t4)" }];
+/** 웹앱 금액 기준 결과 — 다른 금액(외주 등)으로 냈으면 '웹앱 금액이었으면'(recorded), 아니면 지일 실제 */
+const devWeb = (res) => res.recorded || res.own || null;
+const devTier = (x) => (!x ? -1 : x.rank > 0 ? (x.rank === 1 ? 0 : x.rank <= 5 ? 1 : 2) : 3);
+const devRank = (x) => (!x ? "-" : x.rank > 0 ? `${x.rank}위` : x.rank < 0 ? `미달 ${x.rank}` : x.underRank ? `미달 ${x.underRank}` : "탈락");
+/** 등수 비교 — 통과가 미달보다 좋고, 통과끼리 등수가 작을수록, 미달끼리 하한선에 가까울수록 */
+const devScore = (x) => (x.rank > 0 ? [1, -x.rank] : [0, -Math.abs(x.rank || x.underRank || 9999)]);
+function devCmp(a, b) { const p = devScore(a), q = devScore(b); return p[0] !== q[0] ? p[0] - q[0] : p[1] - q[1]; }
+function groupCount(list, keysOf, statusOf) {
+  const by = new Map();
+  for (const x of list) for (const k of keysOf(x)) {
+    const r = by.get(k) || [0, 0, 0];
+    r[DECISIONS.indexOf(statusOf(x))] += 1;
+    by.set(k, r);
+  }
+  return [...by].map(([k, vals]) => ({ k, vals, n: vals[0] + vals[1] + vals[2] })).sort((a, b) => b.n - a.n);
+}
+function renderDev() {
+  const since = devSince();
+  // 판단 기록 — 판단한 공고(참가·보류·불참)만, 판단 시각으로 기간
+  const judged = logEntriesOf().map((e) => e.p).filter((x) => devIn(x.decidedAt || x.updatedAt, since));
+  const cnt = (s) => judged.filter((x) => x.status === s).length;
+  // 투찰 기록 — 개찰 결과를 받은 것, 개찰일(없으면 기록일)로 기간
+  const bids = DEV_BIDS.filter((r) => devIn(r.openingAt || r.recordedAt, since));
+  const done = bids.filter((r) => r.result && r.result.status === "완료" && devWeb(r.result));
+  const tierN = (k) => done.filter((r) => devTier(devWeb(r.result)) === k).length;
+  const diffs = done.map((r) => r.result.rateDiff).filter((v) => v != null);
+  const pass = diffs.filter((v) => v >= 0).length;
+  const help = DEV_HELP.filter((r) => devIn(r.at, since));
+  $("devTiles").innerHTML = [
+    ["판단", num(judged.length), `참가 ${cnt("참가")} · 보류 ${cnt("보류")} · 불참 ${cnt("불참")}`],
+    ["개찰 결과", num(done.length), `1순위 ${tierN(0)} · 5위 안 ${tierN(0) + tierN(1)} (웹앱 금액)`],
+    ["하한선 통과", diffs.length ? `${devPct(pass, diffs.length)}%` : "-", `${pass} / ${diffs.length}건 (기준 사정률)`],
+    ["도우미 질문", num(help.length), `요청 ${help.filter((r) => r.result === "요청").length} · 답 없음 ${help.filter((r) => r.result === "모름").length}`],
+  ].map(([lab, val, s]) => `<div class="viz-tile"><div class="lab">${esc(lab)}</div><div class="val">${esc(val)}</div><div class="sub2">${esc(s)}</div></div>`).join("");
+
+  // ── 판단 기록 차트
+  const wkeys = judged.map((x) => weekOf(x.decidedAt || x.updatedAt).key).filter(Boolean).sort();
+  const weeks = [];
+  if (wkeys.length) for (let d = new Date(wkeys.at(-1) + "T00:00:00"), first = new Date(wkeys[0] + "T00:00:00"); d >= first && weeks.length < 12; d.setDate(d.getDate() - 7)) weeks.unshift(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);  // 현지 날짜(toISOString은 UTC라 하루 밀림)
+  const weekCats = weeks.map((w) => ({ label: `${Number(w.slice(5, 7))}/${Number(w.slice(8))}~`, values: DECISIONS.map((s) => judged.filter((x) => weekOf(x.decidedAt || x.updatedAt).key === w && x.status === s).length) }));
+  const reasons = countBy(judged.filter((x) => x.status !== "참가").flatMap((x) => x.tags || []), (t) => t).slice(0, 8).map(([k, v]) => ({ k, v }));
+  const review = (r) => (!r.k.startsWith("(") && r.n >= AGG_REVIEW_N && devPct(r.vals[2], r.n) >= AGG_REVIEW_OUT ? "조정 검토" : "");
+  const paths = groupCount(judged, (x) => (x.meta?.paths?.length ? x.meta.paths : ["(경로 기록 없음)"]), (x) => x.status).slice(0, 8).map((r) => ({ ...r, note: review(r) }));
+  const kws = groupCount(judged, (x) => x.meta?.keywords || [], (x) => x.status).slice(0, 8).map((r) => ({ ...r, note: review(r) }));
+  const stackTable = (rows, head) => vizTableHtml([head, "판단", "참가", "보류", "불참", "불참 비율"], rows.map((r) => [r.k, r.n, ...r.vals, devPct(r.vals[2], r.n) + "%"]), [1, 2, 3, 4, 5]);
+  $("devJudge").innerHTML = judged.length ? [
+    vizCard("주별 판단", vizLegend(JUDGE_SERIES) + vizCols(weekCats, JUDGE_SERIES, { label: "주별 판단" }),
+      vizTableHtml(["주", "참가", "보류", "불참"], weekCats.map((c) => [c.label, ...c.values]), [1, 2, 3])),
+    reasons.length ? vizCard("보류·불참 사유", vizHBars(reasons), vizTableHtml(["사유", "건수"], reasons.map((r) => [r.k, r.v]), [1])) : vizEmpty("보류·불참 사유"),
+    paths.length ? vizCard("수집 경로별 판단", vizLegend(JUDGE_SERIES) + vizHStack(paths, JUDGE_SERIES), stackTable(paths, "수집 경로")) : vizEmpty("수집 경로별 판단"),
+    kws.length ? vizCard("관심 키워드별 판단", vizLegend(JUDGE_SERIES) + vizHStack(kws, JUDGE_SERIES), stackTable(kws, "관심 키워드")) : vizEmpty("관심 키워드별 판단"),
+  ].join("") : vizEmpty("판단 기록");
+  $("logAggNote").textContent = `판단할 때의 관심 키워드·수집 경로 기준${judged.length < LOG_AGG_MIN ? ` (판단 ${judged.length}건: ${LOG_AGG_MIN}건쯤부터 비율이 믿을 만함)` : ""}. 끄려면 주소 끝에 ?dev=0`;
+  $("logAgg").innerHTML = judged.length ? logAggHtml(judged) : '<div class="empty">없습니다.</div>';
+
+  // ── 투찰 분석
+  const mkeys = done.map((r) => String(r.openingAt || r.recordedAt || "").slice(0, 7)).filter(Boolean).sort();
+  const months = [];
+  if (mkeys.length) for (let [y, m] = mkeys.at(-1).split("-").map(Number); months.length < 12; m === 1 ? (y -= 1, m = 12) : (m -= 1)) {
+    const k = `${y}-${String(m).padStart(2, "0")}`;
+    if (k < mkeys[0]) break;
+    months.unshift(k);
+  }
+  const monthCats = months.map((m) => ({ label: `${Number(m.slice(5))}월`, values: TIER_SERIES.map((s, k) => done.filter((r) => String(r.openingAt || r.recordedAt || "").startsWith(m) && devTier(devWeb(r.result)) === k).length) }));
+  const BIN = 0.25, LO = -2, NB = 16;  // 기준 사정률 − 실제 사정률(%p), 양 끝은 그 밖까지 모음
+  const bins = Array.from({ length: NB }, (_, i) => {
+    const a = LO + i * BIN, inBin = (v) => (i === 0 ? v < a + BIN : i === NB - 1 ? v >= a : v >= a && v < a + BIN);
+    const n = diffs.filter(inBin).length, fmt = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
+    return { label: i === 0 ? `${fmt(a + BIN)}%p 미만` : i === NB - 1 ? `${fmt(a)}%p 이상` : `${fmt(a)} ~ ${fmt(a + BIN)}%p`, values: a < 0 ? [n, 0] : [0, n] };
+  });
+  const SIGN_SERIES = [{ name: "하한선 미달(기준이 실제보다 낮음)", color: "var(--viz-fail)" }, { name: "하한선 통과", color: "var(--viz-pass)" }];
+  const cmp = done.filter((r) => r.result.outsource).map((r) => devCmp(devWeb(r.result), r.result.outsource));
+  const bidRows = done.slice().sort((a, b) => String(b.openingAt || b.recordedAt).localeCompare(String(a.openingAt || a.recordedAt)))
+    .map((r) => [String(r.openingAt || r.recordedAt || "").slice(0, 10), r.title || r.noticeNo, devRank(devWeb(r.result)), r.result.rateDiff != null ? `${r.result.rateDiff >= 0 ? "+" : "−"}${Math.abs(r.result.rateDiff).toFixed(3)}%p` : "-", r.result.outsource ? devRank(r.result.outsource) : "-"]);
+  $("devBid").innerHTML = done.length ? [
+    vizCard("월별 개찰 결과 (웹앱 금액 기준)", vizLegend(TIER_SERIES) + vizCols(monthCats, TIER_SERIES, { label: "월별 개찰 결과" }),
+      vizTableHtml(["달", ...TIER_SERIES.map((s) => s.name)], monthCats.map((c) => [c.label, ...c.values]), [1, 2, 3, 4])),
+    diffs.length ? vizCard("기준 사정률 − 실제 사정률", vizLegend(SIGN_SERIES) + vizCols(bins, SIGN_SERIES, { label: "기준 사정률 − 실제 사정률", tipAll: false, totals: false, edge: [[0, "−2"], [4, "−1"], [8, "0"], [12, "+1"], [16, "+2%p"]] }),
+      vizTableHtml(["구간", "건수"], bins.map((b) => [b.label, b.values[0] + b.values[1]]), [1])) : vizEmpty("기준 사정률 − 실제 사정률"),
+    cmp.length ? vizCard(`웹앱 금액 vs 외주 금액 (${cmp.length}건)`, `<div class="viz-mini"><div><b>${cmp.filter((c) => c > 0).length}</b><span>웹앱이 더 좋은 등수</span></div><div><b>${cmp.filter((c) => c === 0).length}</b><span>같음</span></div><div><b>${cmp.filter((c) => c < 0).length}</b><span>외주가 더 좋은 등수</span></div></div>`) : vizEmpty("웹앱 금액 vs 외주 금액"),
+    vizCard("공고별 개찰 결과", `<div class="viz-legend">${done.length}건</div>`, vizTableHtml(["개찰일", "공고", "웹앱 금액 등수", "기준 − 실제", "외주 금액 등수"], bidRows, [3])),
+  ].join("") : vizEmpty("투찰 분석");
+
+  // ── 도우미 질문
+  const byResult = countBy(help, (r) => r.result || "(없음)").map(([k, v]) => ({ k, v }));
+  const byTab = countBy(help, (r) => HELP_SETS[r.tab]?.name || r.tab || "(없음)").map(([k, v]) => ({ k, v }));
+  $("devHelpViz").innerHTML = help.length ? vizCard("결과별", vizHBars(byResult)) + vizCard("탭별", vizHBars(byTab)) : "";
+  renderDevHelp();
+}
+// 차트 값 상자 — 커서·키보드 포커스에 같은 내용(글자는 textContent로만)
+const VIZ_TIP = document.createElement("div");
+VIZ_TIP.id = "vizTip"; VIZ_TIP.hidden = true; document.body.appendChild(VIZ_TIP);
+function vizTipShow(el, x, y) {
+  const d = JSON.parse(el.dataset.tip);
+  VIZ_TIP.replaceChildren();
+  const t = document.createElement("div"); t.className = "t"; t.textContent = d.t; VIZ_TIP.append(t);
+  for (const [lab, val, col] of d.rows) {
+    const r = document.createElement("div"); r.className = "r";
+    const i = document.createElement("i"); i.style.background = col || "transparent";
+    const b = document.createElement("b"); b.textContent = val;
+    r.append(i, b, document.createTextNode(" " + lab)); VIZ_TIP.append(r);
+  }
+  VIZ_TIP.hidden = false;
+  VIZ_TIP.style.left = Math.max(8, Math.min(x + 14, innerWidth - VIZ_TIP.offsetWidth - 8)) + "px";
+  VIZ_TIP.style.top = Math.max(8, y - VIZ_TIP.offsetHeight - 12) + "px";
+}
+$("tab-dev").addEventListener("pointermove", (e) => { const el = e.target.closest("[data-tip]"); if (el) vizTipShow(el, e.clientX, e.clientY); else VIZ_TIP.hidden = true; });
+$("tab-dev").addEventListener("pointerleave", () => { VIZ_TIP.hidden = true; });
+$("tab-dev").addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); if (el) { const b = el.getBoundingClientRect(); vizTipShow(el, b.left + b.width / 2, b.top); } });
+$("tab-dev").addEventListener("focusout", () => { VIZ_TIP.hidden = true; });
 $("devHelpQ").oninput = renderDevHelp;
 
 /** 필터(키워드·경로)를 바꿔도 줄지 않는 불참 사유 — 이 사유만 고른 판단은 조정용 집계에서 뺀다 */
@@ -6690,7 +6909,7 @@ function showTab(tab) {
   else if (tab === "excluded") $("exTools").appendChild($("liveQ"));
   if (tab === "excluded") exData ? renderExcluded() : loadExcluded();
   if (tab === "log" || tab === "dev") renderLog();
-  if (tab === "dev") loadDevHelp();
+  if (tab === "dev") loadDev();
   if (tab === "award") loadAward();
 }
 document.querySelector(".tabs").onclick = (e) => {

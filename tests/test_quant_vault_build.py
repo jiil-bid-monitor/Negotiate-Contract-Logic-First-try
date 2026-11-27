@@ -5333,6 +5333,64 @@ def test_self_eval_two_points_columns_and_staff_count(tmp_path: Path):
     assert got[(12, 6)] == "10.55", got
 
 
+def test_self_eval_score_head_right_of_points_head(tmp_path: Path):
+    """(11/26 사용자 '왜 하나도 기입되지 않은 거야') 실제 머리 '항목 | 배점 | 세부 항목 | 평점 | 자기평가 점수' — 왼쪽부터 처음 맞는
+    '평점'을 평점 칸으로 봐서(이미 '5점' 등이 적힌 줄 배점 칸) 아무것도 안 채웠음. '자기평가 점수'가 평점 칸, '평점'은 줄 배점."""
+    import datetime as _dt
+    from quantdocs.fill import fill_hwpx
+    from quantdocs.selfscore import SelfScore, form_staff_grades
+
+    c = lambda col, row, t="", span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                              f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    tb = lambda rows: "<hp:p><hp:run><hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>"
+    rows = [
+        [c(0, 0, "항 목"), c(1, 0, "배점"), c(2, 0, "세 부 항 목", 2), c(4, 0, "평점", 2), c(6, 0, "자기평가 점수")],
+        [c(0, 1, "경영상태", rs=4), c(1, 1, "5", rs=4), c(2, 1, "기업 신용평가 등급", rs=4), c(3, 1, "AAA, AA+, AA0, AA- A+, A0, A-, BBB+, BBB0"), c(4, 1, "5점", 2), c(6, 1, "", rs=4)],
+        [c(3, 2, "BBB-, BB+, BB0, BB-"), c(4, 2, "4.75점", 2)],
+        [c(3, 3, "B+, B0, B-"), c(4, 3, "4.5점", 2)],
+        [c(3, 4, "CCC+ 이하"), c(4, 4, "3.5점", 2)],
+        [c(0, 5, "기술능력", rs=5), c(1, 5, "5", rs=5), c(2, 5, "기술 인력 보유 정도", rs=5), c(3, 5, "등급"), c(4, 5, "배점"), c(5, 5, "인원"), c(6, 5, "", rs=5)],
+        [c(3, 6, "기술사/특급기술자"), c(4, 6, "각 1.0점"), c(5, 6, "")],
+        [c(3, 7, "고급기술자"), c(4, 7, "각0.8점"), c(5, 7, "")],
+        [c(3, 8, "중급기술자"), c(4, 8, "각0.6점"), c(5, 8, "")],
+        [c(3, 9, "초급기술자"), c(4, 9, "각0.4점"), c(5, 9, "")],
+        [c(0, 10, "성실성", rs=2), c(1, 10, "4", rs=2), c(2, 10, "부정당업자 종 제재기간", rs=2), c(3, 10, "2년 이상"), c(4, 10, "△2.0", 2), c(6, 10, "", rs=2)],
+        [c(3, 11, "3월 미만"), c(4, 11, "△0.3", 2)],
+        [c(0, 12, "합계"), c(1, 12, "20"), c(2, 12, "", 4), c(6, 12, "")],
+    ]
+    src = _mini_hwpx(tmp_path / "s.hwpx", tb(rows))
+    assert form_staff_grades([src])[0].get("특급") == 1.0
+    v = vault.Vault({}, info={"회사명": "(주)가상", "신용평가등급": "BB+", "신용평가 종류": "기업신용평가등급"},
+                    staff=[{"이름": "가1", "등급": "특급", "입사일": "2015-01-01"}, {"이름": "가2", "등급": "고급", "입사일": "2015-01-01"}])
+    fill_hwpx(src, tmp_path / "o.hwpx", v, self_scores=SelfScore([], v, _dt.date(2026, 11, 26)))
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {}
+    for tc in re.findall(r"<hp:tc>.*?</hp:tc>", xml, re.S):
+        col, row = re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', tc).groups()
+        got[(int(row), int(col))] = re.sub(r"<[^>]+>", "", tc).strip()
+    assert got[(1, 6)] == "4.75" and got[(5, 6)] == "1.8" and got[(10, 6)] == "4", got
+    assert [got[(r, 5)] for r in range(6, 10)] == ["1", "1", "0", "0"], got
+    assert got[(12, 6)] == "10.55", got
+
+
+def test_score_column_found_by_empty_cells(tmp_path: Path):
+    """(11/26 사용자 '원인 제대로 파악해서 재발하지 않도록') 평점 칸은 머리 이름이 아니라 아래가 빈 열로 확인 —
+    '평점 | 평가점수'에서 '평점' 열 아래가 이미 '5점'으로 차 있으면 '평가점수'가 평점 칸. 다 채운 뒤에도 비어 있으면 ⚠."""
+    from quantdocs.fill import _cells, _spans
+    from quantdocs.selfscore import read_form, score_column_empty
+
+    c = lambda col, row, t="", span=1, rs=1: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                                              f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{span}" rowSpan="{rs}"/></hp:tc>')
+    rows = [[c(0, 0, "항목"), c(1, 0, "배점"), c(2, 0, "세부 항목"), c(3, 0, "평점"), c(4, 0, "평가점수")],
+            [c(0, 1, "경영상태", rs=2), c(1, 1, "5", rs=2), c(2, 1, "BBB0 이상"), c(3, 1, "5점"), c(4, 1, "", rs=2)],
+            [c(2, 2, "BB+ 이하"), c(3, 2, "4.5점")]]
+    xml = "<hp:tbl>" + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl>"
+    cells = _cells(xml, _spans(xml, "tbl")[0])
+    got = read_form(cells)
+    assert got and got[0].cell.col == 4, got
+    assert score_column_empty(cells)
+
+
 def test_form_staff_grades_without_score_head(tmp_path: Path):
     """(11/26 사용자 '왜 기술인원 칸이 없어') 평점 칸 머리를 못 알아본 표라도 '기술사/특급기술자 | 각 1.0점 · 고급기술자 | 각0.8점'
     등급표가 있으면 화면 기술인력 고르기 칸용 등급별 점수를 읽음."""

@@ -2823,6 +2823,11 @@ def _page_slack(xml: str, tbl_end: int) -> int | None:
 _HIST_DATE_HEAD = re.compile(r"(?:년월일|연월일|년월|연월|일자|일시|날짜)")
 
 
+def _head_sq(text: str) -> str:
+    """표 머리 칸 글자 — 빈칸과 점·가운뎃점·빗금·괄호·쌍점을 뺀 것('연.월.일'·'년/월/일'·'(연월일)' → '연월일')."""
+    return re.sub(r"[.·・ㆍ/,()\[\]〔〕<>:：]", "", _sq(text))
+
+
 HIST_GAP = 567  # 이름표 아래 연혁 칸 위·아래 여백(HWPUNIT, 2mm)
 
 
@@ -2839,9 +2844,11 @@ def _history_grid(cells: list[Cell], titled: bool = False) -> tuple[Cell, Cell, 
     머리 줄 바로 위가 '주요연혁'·'연혁' 칸일 때만(11/23 사용자 요청: 창원산업진흥원 별지 제5호 일반현황 — 연혁을 '주요연혁' 칸에 통째로 넣었음),
     또는 표 바로 앞 문단이 연혁 제목일 때(titled — `_titled_before`, 11/23 안성시 '2. 회사연혁')."""
     for date in cells:
-        if not _HIST_DATE_HEAD.fullmatch(_sq(date.text)):
+        # 머리 칸 글자의 점·가운뎃점·빗금·괄호는 빼고 비교(11/27 사용자 — 태백 LED전광판 서식 8 '연.월.일 | 내 용 | 비 고' 표가 빔:
+        # 붙여 쓴 '연월일'만 알았음)
+        if not _HIST_DATE_HEAD.fullmatch(_head_sq(date.text)):
             continue
-        body = next((c for c in cells if c.row == date.row and c.col > date.col and _sq(c.text) == "내용"), None)
+        body = next((c for c in cells if c.row == date.row and c.col > date.col and _head_sq(c.text) == "내용"), None)
         if body is None:
             continue
         above = [c for c in cells if c.row + c.rowspan == date.row]
@@ -3700,6 +3707,25 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if birth and target is not None and target.blank:
                             edits.append((target, [birth], False))
                             rep.filled.append(f"대표자 생년월일 → {birth}")
+                        continue
+                    if not key and re.fullmatch(r"대표(?:자|이사)\(주민등록번호\)", _sq(c.text)) and c.row not in agent_rows:
+                        # '대 표 자 (주민등록번호) | (인)'(11/27 사용자 — 태백 LED전광판 서식 5 제안서 접수증, 통째로 비었음) —
+                        # 첫 줄 '대표자 이름 … (인)'(한 줄), 다음 줄 '(주민등록번호)'
+                        target = by_pos.get((c.row, c.col + c.colspan))
+                        rep_nm = _value("대표자", vault)
+                        rrn = _masked(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
+                        if rep_nm and target is not None and (target.blank or _SEAL_ONLY.match(_sq(target.text))):
+                            first = rep_nm
+                            if not target.blank:
+                                seal_text = target.text.strip()
+                                gap = _seal_gap(xml[target.start:target.end], rep_nm, seal_text, chars) if chars is not None else None
+                                first = f"{rep_nm}{' ' * (gap or 3)}{seal_text}"
+                                pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[target.start:target.end])
+                                if chars is not None and pm:
+                                    para_override[target.start] = chars.left_any(pm.group(1))
+                                rep.one_line.add(target.start)
+                            edits.append((target, [first] + ([f"({rrn})"] if rrn else []), False))
+                            rep.filled.append(f"대표자(주민등록번호) → {rep_nm}" + (f" ({rrn})" if rrn else ""))
                         continue
                     if not key and "주민등록번호" in _sq(c.text):
                         # 대표자 줄의 주민등록번호만(위임장 '대 표 자 | 이름 | 주민등록번호 | __') — 대리인 줄은 비움, 뒷자리는 '*'

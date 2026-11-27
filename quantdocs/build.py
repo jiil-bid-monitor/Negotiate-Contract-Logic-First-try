@@ -322,6 +322,14 @@ _MANUAL_FORM = re.compile(r"인력|인원|PM|책임자|투입|이력|경력|참�
 _BLANK_FORM = re.compile(r"질\s*의|공동\s*수급|공동\s*이행|분담\s*이행|공동\s*도급|합의\s*각서|공동\s*(?:참가|응모|참여)\s*(?:협정|합의|계약)")
 
 
+def _note_seal(a: "Analysis", form, rep) -> None:
+    """채운 뒤 '(인)' 자리가 원래 서식과 달라진 줄이 있으면 '⚠ 확인 필요' 알림(11/27 사용자 '서식은 건들지 않는다' — 공통 검사)."""
+    moved = list(dict.fromkeys(getattr(rep, "seal_moved", None) or []))
+    if moved:
+        a.notes.append(f"⚠ 확인 필요 — 서식 {form.no} {form.title[:30]}: (인) 자리가 원래 서식과 다름 — "
+                       + ", ".join(f"'{m[-20:]}'" for m in moved[:4]) + (" 외" if len(moved) > 4 else ""))
+
+
 def _note_unfilled(a: "Analysis", form, path: Path, sign_only: bool) -> None:
     """채운 서식에 회사 정보 이름표가 있는데 빈 자리가 남았으면 '⚠ 확인 필요' 알림(11/06 사용자 결정 — 담당자가 볼 곳을 바로 알게)."""
     from .fill import _all_tables, _cells
@@ -555,8 +563,10 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                             shutil.copyfile(forms_dir / c.file, manual_dir / c.file)
                         else:  # 뒤에 붙은 【별표】(안전관리 서약서 등)는 채움 — 질의서 부분만 공란(11/13)
                             reports.append(rep)
+                            _note_seal(a, c, rep)
                     else:  # 재직증명서 등도 표 밖 서명 줄(업체명·주소·대표자 (인))은 채움(11/05 사용자 요청)
                         reports.append(fill_hwpx(forms_dir / c.file, manual_dir / c.file, vault, title=notice_title, sign_only=True))
+                        _note_seal(a, c, reports[-1])
                         _note_unfilled(a, c, manual_dir / c.file, True)
                     manual.append(c.file)
                     parts.append((c, manual_dir / c.file))
@@ -573,6 +583,7 @@ def build(files: list[Path], vault, out_zip: Path, notice_title: str = "", notic
                 rep = fill_hwpx(forms_dir / c.file, filled_dir / c.file, vault, rows if is_track else None, notice_title,
                                 agency_no, notice_no, score_ctx, basis[0] if basis else None, ref_no=ref_no)
                 reports.append(rep)
+                _note_seal(a, c, rep)
                 _note_unfilled(a, c, filled_dir / c.file, False)
                 parts.append((c, filled_dir / c.file))
             if parts:  # 서식 전체(채운 것 + 직접 기입)를 한글 파일 하나로 — 담당자가 이 파일 하나에서 기입(11/03 사용자 요청)

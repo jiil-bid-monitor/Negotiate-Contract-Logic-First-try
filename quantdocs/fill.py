@@ -32,6 +32,7 @@ class FillReport:
     face: str = ""  # 이 서식에 채운 글의 한글 글꼴 이름(첫 값 기준) — 다음 서식들도 이 글꼴로(11/10 통합서식 글꼴 통일)
     word_cells: set[int] = field(default_factory=set)  # 실적 표 글 칸 — 내어쓰기 없는 문단 모양으로(11/12 당진: 넘친 줄이 1.9cm 안쪽에서 시작)
     one_line: set[int] = field(default_factory=set)  # 한 줄에 맞춰 글자를 줄일 칸(cell.start) — 실적 금액(11/12 사용자 요청)
+    seal_moved: list[str] = field(default_factory=list)  # 채운 뒤 '(인)' 자리가 원래 서식과 달라진 줄(그 앞 글) — 11/27 공통 검사
 
 
 def _spans(xml: str, tag: str, start: int = 0, end: int | None = None) -> list[tuple[int, int]]:
@@ -1172,7 +1173,7 @@ def _center_area(pid: str, chars: "_Chars", line_w: int | None) -> tuple[float, 
 def _orig_colon_x(orig: str, chars: "_Chars", line_w: int | None) -> float | None:
     """원본(가운데 정렬) 이름표 문단에서 ':' 오른쪽 끝이 있던 자리(글 영역 왼쪽 끝 기준, HWPUNIT 어림)."""
     open_m = re.match(r'<([\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"[^>]*>', orig)
-    if not open_m or not line_w:
+    if not open_m or not line_w or re.search(r"<(?:[\w.-]+:)?lineBreak\b", orig):  # 줄이 여럿인 문단은 어림 안 함(11/27)
         return None
     body = orig[open_m.end():]
     cut = _colon_cut(body)
@@ -1193,6 +1194,10 @@ def _center_keep(orig: str, seg: str, chars: "_Chars | None", line_w: int | None
     (가운데 정렬에서 시작 위치 = (줄 너비 − 길이)/2 + 앞 빈칸 → 원래 시작 위치 그대로). 값이 오른쪽 끝을 넘으면 낱말 사이에서 끊어
     같은 문단 모양의 다음 문단으로(앞부분은 같은 너비 빈칸 — 값 시작 위치에 맞춤)."""
     if chars is None or _VS not in seg or _VE not in seg:
+        return seg
+    if re.search(r"<(?:[\w.-]+:)?lineBreak\b", orig):
+        # 문단 안 줄바꿈이 있으면(그리다 위임장 '(빈 줄) ⏎ 대리인 :      (인)', 11/27) 줄 길이를 문단 전체로 셈해 자리가 크게 틀렸음 —
+        # 가운데 정렬 그대로 둠(값을 넣을 때 이름 너비만큼 빈칸을 뺐으니 (인)은 거의 그 자리)
         return seg
     open_m = re.match(r'<([\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"[^>]*>', seg)
     if not open_m:
@@ -1914,16 +1919,8 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
         seg = re.sub(rf"({_VE})([(（]\s*(?:공\s*동\s*)?대\s*표\s*사)", r"\1 \2", seg, count=1)  # '(주)지일 (대표사)' — 붙지 않게 한 칸
         if bare:  # 쌍점 없는 서식은 쌍점 없이 — ' : 값'을 '   값'으로
             seg = seg.replace(f" : {_mark(value)}", f"   {_mark(value)}", 1)
-        if key == "대표자" and not seal and n + 1 < len(order):
-            # 서명 줄 바로 아래 문단이 '(인)'뿐이면(청렴계약 이행서약서 '서 약 자 :' / 다음 줄 '      (인)') 이름 줄로 올림 —
-            # 아래 문단은 글만 지우고 빈 줄로 남겨 쪽 배치는 그대로(11/11 사용자 결정)
-            ns, ne = order[n + 1]
-            seal_m = re.fullmatch(rf"\s*({_SEAL_TAIL})\s*", _text(xml[ns:ne]))
-            if seal_m and ns >= e and _VE in seg:
-                seg = seg.replace(_VE, _VE + " " * 8 + seal_m.group(1), 1)
-                below = re.sub(r"(<(?:[\w.-]+:)?t\b[^>]*>).*?(</(?:[\w.-]+:)?t>)", r"\1\2", xml[ns:ne], flags=re.S)
-                edits.append((ns, ne, re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", below, flags=re.S)))
-                rep.filled.append(f"{_sq(label)} 아래 줄 {seal_m.group(1)} → 이름 줄로")
+        # (11/27 사용자 '원래 자리로') 서명 줄 바로 아래 문단이 '(인)'뿐이어도 이름 줄로 올리지 않음 — '(인)'은 원래 줄 그대로
+        # (11/11 '이름 줄로 올림'을 대체)
         pid = re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[s:e])
         if chars is not None and pid and chars.align(pid.group(1)) == "CENTER":
             seg = _center_keep(xml[s:e], seg, chars, _line_width(xml, s, cells), colon_at.get(s))  # 가운데 정렬 서명 묶음은 이름표 자리 그대로(11/13)
@@ -2226,6 +2223,29 @@ class _Chars:
                 or "\u2460" <= ch <= "\u27bf" or ch in "※·ㆍ":
             return h * ratio * extra
         return h * ratio * (0.5 if ch.isalnum() else 0.45) * extra
+
+    def geom(self, pid: str) -> tuple[str, int, int, int]:
+        """문단 모양의 (정렬, 왼쪽 여백, 들여쓰기, 오른쪽 여백) — 채우면서 더한 사본(가운데·왼쪽·내어쓰기·왼쪽 여백 고정)도(11/27 (인) 자리 검사)."""
+        def right(p: str) -> int:
+            m = re.search(r'<(?:[\w.-]+:)?right\b[^>]*value="(-?\d+)"', self.paras.get(p, ""))
+            return int(m.group(1)) if m else 0
+        if pid in self.paras:
+            intent, left = self.margins(pid)
+            return self.align(pid), left, intent, right(pid)
+        for kind, table in (("CENTER", self.added_para), ("LEFT", self.added_left)):
+            for orig, new in table.items():
+                if new == pid:
+                    intent, left = self.margins(orig)
+                    return kind, left, intent, right(orig)
+        for (orig, left), new in self.added_left_at.items():
+            if new == pid:
+                return "LEFT", left, 0, right(orig)
+        for kind, table in ((None, self.added_hang), ("LEFT", self.added_left_hang)):
+            for (orig, w), new in table.items():
+                if new == pid:
+                    intent, left = self.margins(orig)
+                    return kind or self.align(orig), left + max(intent, 0), -w, right(orig)
+        return "LEFT", 0, 0, 0
 
     def align(self, pid: str) -> str:
         m = re.search(r'<(?:[\w.-]+:)?align\b[^>]*\bhorizontal="(\w+)"', self.paras.get(pid, ""))
@@ -2756,27 +2776,83 @@ def _align_right_cells(xml: str, edits: list, chars: "_Chars", override: dict[in
             override[cell.start] = chars.centered(pid)
 
 
-def _seal_gap(cell: str, name: str, seal: str, chars: "_Chars") -> int | None:
-    """'이름 + 빈칸 + (인)'이 칸 한 줄을 꽉 채우게 할 빈칸 수(이름은 왼쪽, (인)은 오른쪽 끝). 채운 글은 11pt라 그 크기로 어림,
-    줄이 넘치지 않게 조금 덜 둠. 칸 너비·글자 모양을 모르면 None."""
-    size = re.search(r'<(?:[\w.-]+:)?cellSz\b[^>]*width="(\d+)"', cell)
+_SEAL_RX = re.compile(_SEAL_TAIL)
+
+
+def _seal_spots(xml: str, chars: "_Chars") -> list[tuple[float | None, str, int]]:
+    """'(인)' 등 도장 글이 든 문단마다 (도장 글이 시작하는 가로 자리 어림, 그 앞 글, 도장 글 크기) — 문서 순서.
+    자리는 줄(표 칸 안이면 칸 안쪽) 왼쪽 끝부터 HWPUNIT. 줄이 여럿이거나 줄 너비를 모르면 None."""
+    cells = _all_spans(xml, "tc")
+    out = []
+    for ps, pe in _all_spans(xml, "p"):
+        para = xml[ps:pe]
+        if re.search(r"<(?:[\w.-]+:)?(?:p|tbl)\b", para[2:]):  # 안에 문단·표가 든 바깥 문단은 건너뜀(안쪽 문단을 따로 봄)
+            continue
+        hit = None
+        for t in re.finditer(r"(<(?:[\w.-]+:)?t\b[^>/]*>)(.*?)(</(?:[\w.-]+:)?t>)", para, re.S):
+            m = _SEAL_RX.search(t.group(2))
+            if m:
+                hit = t.start(2) + m.start()
+                break
+        if hit is None:
+            continue
+        open_end = para.index(">") + 1
+        close = para.rfind("</")
+        # 문단 안 줄바꿈(lineBreak)이 있으면 도장 글이 든 줄만 셈 — 위임장 '(빈 줄) ⏎ 대리인 :      (인)'(11/27)
+        breaks = list(re.finditer(r"<(?:[\w.-]+:)?lineBreak\b[^>]*/>", para))
+        line_s = max([b.end() for b in breaks if b.end() <= hit], default=open_end)
+        line_e = min([b.start() for b in breaks if b.start() >= hit], default=close)
+        lead = "" if line_s == open_end else f'<hp:run charPrIDRef="{_prefix_width(para[open_end:line_s], chars)[1]}"><hp:t>'
+        pw, cur = _prefix_width(lead + para[line_s:hit], chars)
+        label = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", "", para[line_s:hit])).replace(_VS, "").replace(_VE, "")).strip()
+        h = chars.height(cur)
+        line_w = _line_width(xml, ps, cells)
+        pm = re.match(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', para)
+        if line_w is None:
+            out.append((None, label, h))
+            continue
+        tw, _c = _prefix_width(lead + para[line_s:line_e], chars)
+        align, left, intent, right = chars.geom(pm.group(1)) if pm else ("LEFT", 0, 0, 0)
+        ind = max(intent, 0) if line_s == open_end else max(-intent, 0)  # 첫 줄은 들여쓰기, 다음 줄은 내어쓰기
+        start = left + ind
+        area = line_w - left - right - ind
+        if area <= 0 or tw > area * 1.02:  # 한 줄에 안 듦 — 자리를 어림할 수 없음
+            out.append((None, label, h))
+            continue
+        x = start + pw + {"CENTER": (area - tw) / 2, "RIGHT": area - tw}.get(align, 0)
+        out.append((x, label, h))
+    return out
+
+
+def seal_moves(before: str, after: str, chars: "_Chars | None") -> list[str]:
+    """채우기 전·후 같은 구역에서 '(인)' 자리가 도장 글 한 글자 너비보다 많이 달라진 줄(그 앞 글) — 11/27 공통 검사
+    (사용자 '서식은 건들지 않는다' — 서명 줄을 채우는 길이 여럿이라 어느 길로 채웠든 마지막에 한 번 봄). 도장 글 수가 다르면 비교 안 함."""
+    if chars is None:
+        return []
+    b, a = _seal_spots(before, chars), _seal_spots(after, chars)
+    if len(a) != len(b):
+        return []
+    return [lab_a or lab_b for (xb, lab_b, hb), (xa, lab_a, ha) in zip(b, a)
+            if xb is not None and xa is not None and abs(xa - xb) > max(hb, ha) * 1.2]
+
+
+def _seal_keep(cell: str, name: str, chars: "_Chars") -> tuple[str, int] | None:
+    """'(인)'만 있던 표 칸에 이름을 넣을 때 '(인)'을 원래 자리에 두는 (문단 모양 id, 이름 뒤 빈칸 수) — 왼쪽 정렬 + 왼쪽 여백 사본으로
+    이름이 (인) 바로 앞 두 칸에서 끝나게(11/27 사용자 '원래 자리로' — 11/11 '(인)은 칸 오른쪽 끝'·11/04 '가운데 정렬'을 대체).
+    이름이 들어갈 자리가 모자라면 왼쪽 끝에서 시작(그때는 (인)이 조금 밀리고 공통 검사가 알림). 칸 너비·글자 모양을 모르면 None."""
+    spots = _seal_spots(cell, chars)
+    pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', cell)
     run = re.search(r'<(?:[\w.-]+:)?run\b[^>]*charPrIDRef="(\d+)"', cell)
-    if not size or not run:
+    if not spots or spots[0][0] is None or not pm or not run:
         return None
-    tag = re.search(r'<(?:[\w.-]+:)?cellMargin\b[^>]*>', cell)
-    mg = dict(re.findall(r'\b(left|right)="(\d+)"', tag.group(0) if tag else ""))
-    pm = re.search(r'paraPrIDRef="(\d+)"', cell)
-    block = chars._para(pm.group(1)) if pm else ""
-    ind = sum(int(x) for x in re.findall(r'<(?:[\w.-]+:)?(?:left|right)\b[^>]*\bvalue="(\d+)"', block)[:2])
-    avail = int(size.group(1)) - int(mg.get("left", 141)) - int(mg.get("right", 141)) - ind
     cid = run.group(1)
-    scale = max(1.0, FILL_HEIGHT / max(1, chars.height(cid)))
-    used = sum(chars.char_width(cid, ch) for ch in name + seal) * scale
+    scale = max(1.0, FILL_HEIGHT / max(1, chars.height(cid)))  # 채운 글은 11pt
     space = chars.char_width(cid, " ") * scale
-    if avail <= 0 or space <= 0:
+    if space <= 0:
         return None
-    n = int((avail * 0.95 - used) // space) - 2  # 어림 오차로 줄이 넘치지 않게 5% + 빈칸 둘 덜
-    return n if n >= 3 else None
+    gap = 2
+    margin = spots[0][0] - sum(chars.char_width(cid, ch) for ch in name) * scale - gap * space
+    return chars.left_at(pm.group(1), max(0, int(round(margin)))), gap
 
 
 def _cell_need(cell: str, chars: "_Chars") -> int | None:
@@ -3486,6 +3562,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
         data = zin.read(name)
         if re.fullmatch(r"Contents/section\d+\.xml", name):
             xml = data.decode("utf-8")
+            orig_sec = xml
             xml, n_click = _drop_click_here(xml, title)
             xml = _fill_employment(xml, vault, rep)  # 재직증명서 = 지정 임원(그리다, 11/25) — 다른 칸 규칙보다 먼저
             if n_click:
@@ -3758,11 +3835,10 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             first = rep_nm
                             if not target.blank:
                                 seal_text = target.text.strip()
-                                gap = _seal_gap(xml[target.start:target.end], rep_nm, seal_text, chars) if chars is not None else None
-                                first = f"{rep_nm}{' ' * (gap or 3)}{seal_text}"
-                                pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[target.start:target.end])
-                                if chars is not None and pm:
-                                    para_override[target.start] = chars.left_any(pm.group(1))
+                                keep = _seal_keep(xml[target.start:target.end], rep_nm, chars) if chars is not None else None
+                                first = f"{rep_nm}{' ' * (keep[1] if keep else 3)}{seal_text}"
+                                if keep:  # '(인)'은 원래 자리(11/27)
+                                    para_override[target.start] = keep[0]
                                 rep.one_line.add(target.start)
                             edits.append((target, [first] + ([f"({rrn})"] if rrn else []), False))
                             rep.filled.append(f"대표자(주민등록번호) → {rep_nm}" + (f" ({rrn})" if rrn else ""))
@@ -3917,13 +3993,13 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                         if not _SEAL_ONLY.match(seal):
                             continue
                         seal_text = target.text.strip()
-                        pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[target.start:target.end])
-                        gap = _seal_gap(xml[target.start:target.end], value, seal_text, chars) if chars is not None else None
-                        # 11/11 사용자 요청: 표 칸 안 이름은 다른 값 칸처럼 앞쪽(왼쪽)에, '(인)'은 칸 오른쪽 끝에
-                        # (11/04의 '이름 + (인)을 가운데 정렬'을 대체). 칸 너비를 모르면 예전처럼 이름 뒤 빈칸 셋.
+                        # (11/27 사용자 '원래 자리로') '(인)'은 원래 서식 자리 그대로 — 이름은 그 바로 앞에(11/11 '(인)은 칸 오른쪽 끝'·
+                        # 11/04 '가운데 정렬'을 대체). 칸 너비를 모르면 예전처럼 이름 뒤 빈칸 셋.
+                        keep = _seal_keep(xml[target.start:target.end], value, chars) if chars is not None else None
+                        gap = keep[1] if keep else None
                         value = f"{value}{' ' * (gap or 3)}{seal_text}"
-                        if chars is not None and pm:
-                            para_override[target.start] = chars.left_any(pm.group(1))
+                        if keep:
+                            para_override[target.start] = keep[0]
                         # 이름 + '(서명 또는 날인)'·'(인)' 칸은 두 줄로 넘기지 않고 글자를 줄여 한 줄에(11/23 사용자 — '(이름) (서명 또는 날' / '인)'으로
                         # 나뉘어 형식이 무너졌음). 빈칸이 모자라면 이름과 도장 글 사이 한 칸
                         rep.one_line.add(target.start)
@@ -4146,6 +4222,7 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                     xml = _split_long_tables(xml, chars, rep, escape(first))
                 xml = _split_track_tables(xml, chars, rep, track_marks)
                 xml = _keep_table_heights(before_fill, xml, chars, rep)
+                rep.seal_moved += seal_moves(orig_sec, xml, chars)  # '(인)' 자리가 원래 서식과 달라졌는지(11/27 공통 검사)
             data = xml.encode("utf-8")
         out_entries[name] = data
     if chars is not None:

@@ -1325,6 +1325,7 @@ def test_hangul_history_table_date_line_then_content(tmp_path: Path, monkeypatch
     assert read_overview(text) == {"회사명": "(가상)회사", "대표자": "(가상)대표", "팩스번호": "000-000-0000", "종업원 수": "7명"}
     from quantdocs.fill import _label_key, _value
     assert _label_key("총직원수") == "종업원 수" and _label_key("총 종업원 수") == "종업원 수"
+    assert _label_key("총 종사자수") == "종업원 수" and _label_key("참여 종사자수") != "종업원 수"  # 11/27 태백 일반현황
     assert _value("종업원 수", vault.Vault({}, info={"종업원 수": "7"})) == "7명"
     # 예전 모양('2005.03 법인 설립' 한 줄)도 그대로
     assert read_history("2005.03 (가상) 법인 설립")[0]["내용"] == "(가상) 법인 설립"
@@ -4556,6 +4557,48 @@ def test_history_grid_rows_and_grow(tmp_path: Path):
     assert "|주요연혁|년 월 일|내 용|비 고|2009.09|법인 설립|2012.08|사업자 등록|2015.03|공장 등록|※ 최근 순으로|" in text, text
     assert 'rowCnt="6"' in sec and 'pageBreak="TABLE"' in sec and 'height="9000"' in sec
     assert re.search(r'rowAddr="5"/>.*?최근 순으로|최근 순으로.*?rowAddr="5"', sec, re.S)  # 아래 줄 번호도 밀림
+def test_history_grid_dotted_head(tmp_path: Path):
+    """11/27 사용자 지적(태백 LED전광판 서식 8): '2. 업체 연혁' 아래 '연.월.일 | 내 용 | 비 고' 표가 빔 — 날짜 머리 칸을
+    붙여 쓴 '연월일'로만 찾아 점 찍은 머리를 연혁 표로 못 봤음."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, row, t: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                             f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                             f'<hp:cellSz width="9000" height="1500"/></hp:tc>')
+    for head in ("연.월.일", "년·월·일", "(연월일)"):
+        rows = [[c(0, 0, head), c(1, 0, "내 용"), c(2, 0, "비 고")]] + [[c(0, r, ""), c(1, r, ""), c(2, r, "")] for r in (1, 2)]
+        body = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>2. 업체 연혁</hp:t></hp:run></hp:p>'
+                '<hp:p><hp:run><hp:tbl rowCnt="3" colCnt="3" pageBreak="NONE"><hp:sz width="27000" height="4500"/>'
+                + "".join("<hp:tr>" + "".join(r) + "</hp:tr>" for r in rows) + "</hp:tbl></hp:run></hp:p>")
+        v = vault.Vault({}, info={"회사명": "(주)가상"})
+        v.history = [{"연월일": "2009.09", "내용": "법인 설립"}, {"연월일": "2012.08", "내용": "사업자 등록"}]
+        fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+        sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+        text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+        assert f"|{head}|내 용|비 고|2009.09|법인 설립|2012.08|사업자 등록|" in text, (head, text)
+
+
+def test_none_rule_only_on_table_with_instruction(tmp_path: Path):
+    """11/27 사용자 지적(태백 서식 13 '경영상태 및 행정처분 내용'): 행정처분 표 아래 '해당사항이 없으면 “해당 없음” 표기' 때문에
+    위 경영상태 표에도 '해당 없음'이 들어감 — 안내가 붙은 표에만. 같은 표 '제안업체의 유동비율 :'에 회사명이 붙던 것도('…의 유동비율'은 회사 칸 아님)."""
+    from quantdocs.fill import _label_key, fill_hwpx
+
+    c = lambda col, row, t: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                             f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+                             f'<hp:cellSz width="9000" height="1500"/></hp:tc>')
+    tbl = lambda heads: ('<hp:p><hp:run><hp:tbl rowCnt="2" colCnt="2"><hp:sz width="18000" height="3000"/><hp:tr>'
+                         + "".join(c(i, 0, h) for i, h in enumerate(heads)) + "</hp:tr><hp:tr>"
+                         + "".join(c(i, 1, "") for i in range(len(heads))) + "</hp:tr></hp:tbl></hp:run></hp:p>")
+    para = lambda t: f'<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    body = (tbl(["금 액", "비 율"]) + para("주) 1. 결산서 첨부") + para("행정처분 내용") + tbl(["처분 사유", "처분 일시"])
+            + para("주) 2. 해당사항이 없으면 “해당 없음” 표기"))
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", vault.Vault({}, info={"회사명": "(주)가상"}))
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    text = re.sub(r"\|+", "|", re.sub(r"<[^>]+>", "|", sec))
+    assert "|금 액|비 율|주) 1." in text and "|처분 사유|처분 일시|해당 없음|" in text, text
+    assert _label_key("제안업체의 유동비율 :") is None and _label_key("제안업체명") == "회사명"
+
+
 def test_wrapped_value_prefix_two_spaces_per_hangul(tmp_path: Path):
     """11/23 사용자 지적: 서약서 서명 묶음 '주    소 : 강원특별자치도 / 정선군 남면 …' — 넘어간 줄이 '강'보다 반 글자쯤 왼쪽.
     앞부분의 한글 자리를 전각 빈칸(U+3000)으로 채웠는데 한글에서 한글 한 글자보다 좁게 찍힘. '글꼴에 어울리는 빈칸'이 꺼진 글자 모양은
@@ -5254,6 +5297,21 @@ def test_applicant_rep_group_rrn(tmp_path: Path):
     g = {(c.row, c.col): c.text.strip() for c in _cells(xml, _spans(xml, "tbl")[0])}
     assert g[(0, 4)] == "000101-3******", g
 
+
+def test_rep_rrn_label_name_seal_then_rrn_line(tmp_path: Path):
+    """(11/27 사용자 — 태백 LED전광판 서식 5 제안서 접수증) '대 표 자 (주민등록번호) | (인)'이 통째로 비었음('주민' 비움 규칙) —
+    첫 줄 '대표자 이름 … (인)', 다음 줄 '(주민등록번호)'."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    rows = [[_c(0, 0, "업 체 명"), _c(1, 0, ""), _c(2, 0, "대 표 자 (주민등록번호)"), _c(3, 0, "(인)")]]
+    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl(rows))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍대표", "대표자 주민등록번호": "000101-3******"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v, title="가상 공고")
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    cell = next(c for c in _cells(xml, _spans(xml, "tbl")[0]) if (c.row, c.col) == (0, 3))
+    paras = [p for p in (re.sub(r"<[^>]+>", "", m) for m in re.findall(r"<hp:p\b.*?</hp:p>", xml[cell.start:cell.end], re.S)) if p.strip()]
+    assert paras[0].startswith("홍대표") and paras[0].rstrip().endswith("(인)"), paras
+    assert paras[1].strip() == "(000101-3******)", paras
 
 def test_grida_track_table_leaves_orderer_blank():
     """(11/25 사용자) 그리다 실적 표는 사업명·사업기간·계약금액·업무수행내용·공동수행 여부만 — 발주처 칸은 비움(지일은 예전대로)."""

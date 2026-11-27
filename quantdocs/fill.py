@@ -4133,6 +4133,16 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             value = f"{value.split(seal_text)[0].rstrip()}  {seal_text}"  # 칸 너비를 아는데 빈칸이 모자람
                     lines = [value]
                     lead = re.fullmatch(r"\s*([:：])\s*", target.text)
+                    right = by_pos.get((target.row, target.col + target.colspan)) if lead else None
+                    if lead and chars is not None and right is not None and right.blank and _sq(right.text) == "":
+                        tw, rw = _inner_width(xml, target, chars), _inner_width(xml, right, chars)
+                        if tw is not None and rw is not None and tw < 2 * FILL_HEIGHT and rw > tw:
+                            # ':'만 든 좁은 칸(11/27 사용자 '이거 왜 이래' — 0.3cm 칸에 값을 넣어 한 글자씩 세로로 쌓임) —
+                            # ':'는 그 칸에 두고 값은 바로 오른쪽 빈 칸에
+                            lines, _lab_v, _val_v = _colon_layout(xml, target, right, value, chars)
+                            edits.append((right, lines, False))
+                            rep.filled.append(f"{_sq(c.text)} → {value}")
+                            continue
                     if lead:
                         # 값 칸에 ':'만 미리 적힌 표('상호(법인명) | : | ' — 11/13 사용자 지적: ':'를 지우고 값을 넣었음) — ':'는 두고 그 옆에
                         if chars is not None:

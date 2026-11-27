@@ -236,6 +236,8 @@ body.picking { overflow: hidden; }
 .viz-enough .meter span { display: block; height: 100%; background: var(--viz-1); }
 .viz-enough .n { color: var(--ink-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .viz-enough .why { color: var(--muted); }
+.viz-enough .basis, .viz-basis { display: block; font-size: 11.5px; margin-top: 2px; color: var(--muted); word-break: keep-all; }
+.viz-basis { margin: -4px 0 10px; }
 @media (max-width: 640px) { .viz-enough { grid-template-columns: 1fr auto; } .viz-enough .meter { grid-column: 1 / -1; } .viz-enough .why { grid-column: 1 / -1; margin-bottom: 4px; } }
 #devAnalysis { margin-top: 10px; font-size: 13px; color: var(--ink); }
 #devAnalysis h5 { margin: 14px 0 4px; font-size: 13px; color: var(--ink-strong); }
@@ -1679,7 +1681,9 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hhead span { color: var(--muted); font-size: 13px; flex: 1; }
 .helpbox .hhead button { font: inherit; border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; }
 /* 투명도(11/27 사용자 — 창이 공고를 가림) — 창 전체에, 이 브라우저에 기억 */
-.helpbox { opacity: var(--hop, 1); }
+.helpbox { opacity: var(--hop, 1); transition: opacity .15s; }
+.helpbox:hover { opacity: 1; }  /* 마우스를 올린 동안은 진하게(11/27 사용자) — 질문 칸은 버튼을 누를 때마다 포커스를 받아 포커스로는 안 가림 */
+.helpbox:has(.hop:hover, .hop input:active, .hop input:focus-visible) { opacity: var(--hop, 1); }  /* 밀대를 만지는 동안은 고른 투명도가 보이게 */
 .helpbox .hhead .hop { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); align-self: center; }
 .helpbox .hhead .hop input { width: 64px; accent-color: var(--brand); }
 .helpbox .hsafe { margin: 0; padding: 7px 14px; font-size: 12.5px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--line); word-break: keep-all; }
@@ -1691,7 +1695,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hav { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--brand-dark); color: #fff; display: flex; align-items: center; justify-content: center; }
 .helpbox .hav svg { width: 22px; height: auto; }
 /* 움직임(11/24) — 창은 버튼 쪽에서 커지며 열림, 새 말은 아래에서 살짝 올라옴, 입력 중 점 3개. 움직임 줄이기 설정이면 끔 */
-@keyframes help-open { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes help-open { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: var(--hop, 1); transform: none; } }  /* 끝 = 고른 투명도(1까지 올렸다 뚝 떨어지지 않게) */
 @keyframes help-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes help-dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 .helpbox:not([hidden]) { animation: help-open .22s ease-out; transform-origin: bottom right; }
@@ -2425,6 +2429,7 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <option value="">전체</option><option value="7">최근 7일</option><option value="30">최근 30일</option><option value="90">최근 90일</option>
     </select></label></div>
     <div class="viz-card viz-watch"><h4>살펴볼 것</h4><ul id="devWatch"></ul>
+      <p class="viz-basis">근거: 먼저 눈여겨볼 줄을 고르는 기준(통계 판단은 아래 '분석하기'에서). 수집 경로·키워드 = 판단 10건 이상 · 불참 80% 이상(판단 기록 집계의 '조정 검토'와 같음) · 하한선 통과 = 개찰 20건 이상인데 60% 미만 · 외주 = 비교 5건 이상에 외주가 절반 이상 · 답 없는 질문 5건 이상</p>
       <h5 class="viz-sub">자료가 얼마나 쌓였나</h5><div class="viz-enough" id="devEnough"></div>
       <button type="button" id="devAnalyze">분석하기</button> <button type="button" id="devAnalysisCopy" hidden>결과 복사</button>
       <div id="devAnalysis"></div></div>
@@ -4451,8 +4456,11 @@ function logEntriesOf() {
 }
 /** 그 날짜가 든 주(월~일) — 판단 기록을 주 단위로 묶어 보인다(2026-11-09 사용자 요청: 놓침이 쌓이면 보기 어려움) */
 function weekOf(dateText) {
-  const d = new Date(String(dateText).slice(0, 10) + "T00:00:00");
+  // 판단 시각은 UTC('…Z')로 저장돼 앞 10글자를 자르면 한국 시각 0~9시 판단이 전날로 감 — 시각이 있으면 현지 날짜로(11/27 교차 검증)
+  const s = String(dateText || "");
+  const d = s.length > 10 ? new Date(s.replace(" ", "T")) : new Date(s.slice(0, 10) + "T00:00:00");
   if (Number.isNaN(d.getTime())) return { key: "", label: "날짜 없음" };
+  d.setHours(0, 0, 0, 0);
   const mon = new Date(d);
   mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   const sun = new Date(mon);
@@ -4583,10 +4591,10 @@ function renderLog() {
 /** 개발자 탭 — 도우미 질문 기록(11/27 사용자 '요청 기록 보는 거'). 이 웹앱(서버 PC·NAS 따로)에 모인 것, 최근 것부터 */
 let DEV_HELP = [], DEV_BIDS = [];
 async function loadDev() {
-  const [h, b] = await Promise.all([getJson("/api/help-questions").catch(() => ({})), getJson("/api/bidlog").catch(() => ({}))]);
-  DEV_HELP = h.items || [];
-  DEV_BIDS = b.entries || [];
-  renderDev();
+  const [h, b] = await Promise.all([getJson("/api/help-questions").catch(() => null), getJson("/api/bidlog").catch(() => null)]);
+  if (h?.items) DEV_HELP = h.items.filter((r) => r && typeof r.q === "string");  // 잠깐 실패하면 받아 둔 것 그대로
+  if (b?.entries) DEV_BIDS = b.entries;
+  renderDev(true);
 }
 function renderDevHelp() {
   const sel = $("devHelpResult"), pick = sel.value;
@@ -4652,10 +4660,10 @@ const vizHBars = (rows, unit = "건") => { const max = Math.max(1, ...rows.map((
 /** 가로 100% 쌓기 — 줄마다 판단 나눔, 오른쪽에 건수(·조정 검토) */
 const vizHStack = (rows, series) => `<div class="viz-hb">${rows.map((r) => {
   const tip = series.map((s, i) => [s.name, `${r.vals[i]}건 (${devPct(r.vals[i], r.n)}%)`, s.color]);
-  return `<span class="k">${esc(r.k)}</span><span class="viz-seg" tabindex="0" data-tip="${vizTip(r.k, tip)}" aria-label="${esc(`${r.k} ${tip.map((x) => x[0] + " " + x[1]).join(", ")}`)}">${series.map((s, i) => (r.vals[i] ? `<span style="flex:${r.vals[i]};background:${s.color}"></span>` : "")).join("")}</span><span class="v">${r.n}건${r.note ? ` <span class="badge warn">${esc(r.note)}</span>` : ""}</span>`;
+  return `<span class="k">${esc(r.k)}</span><span class="viz-seg" role="img" tabindex="0" data-tip="${vizTip(r.k, tip)}" aria-label="${esc(`${r.k} ${tip.map((x) => x[0] + " " + x[1]).join(", ")}`)}">${series.map((s, i) => (r.vals[i] ? `<span style="flex:${r.vals[i]};background:${s.color}"></span>` : "")).join("")}</span><span class="v">${r.n}건${r.note ? ` <span class="badge warn">${esc(r.note)}</span>` : ""}</span>`;
 }).join("")}</div>`;
 const JUDGE_SERIES = [{ name: "참가", color: "var(--viz-1)" }, { name: "보류", color: "var(--viz-2)" }, { name: "불참", color: "var(--viz-3)" }];
-const TIER_SERIES = [{ name: "1순위", color: "var(--viz-t1)" }, { name: "2~5위", color: "var(--viz-t2)" }, { name: "6위 밖", color: "var(--viz-t3)" }, { name: "하한선 미달", color: "var(--viz-t4)" }];
+const TIER_SERIES = [{ name: "1순위", color: "var(--viz-t1)" }, { name: "2~5위", color: "var(--viz-t2)" }, { name: "6위 밖", color: "var(--viz-t3)" }, { name: "미달·탈락", color: "var(--viz-t4)" }];
 /** 웹앱 금액 기준 결과 — 다른 금액(외주 등)으로 냈으면 '웹앱 금액이었으면'(recorded), 아니면 지일 실제 */
 const devWeb = (res) => res.recorded || res.own || null;
 const devTier = (x) => (!x ? -1 : x.rank > 0 ? (x.rank === 1 ? 0 : x.rank <= 5 ? 1 : 2) : 3);
@@ -4672,10 +4680,16 @@ function groupCount(list, keysOf, statusOf) {
   }
   return [...by].map(([k, vals]) => ({ k, vals, n: vals[0] + vals[1] + vals[2] })).sort((a, b) => b.n - a.n);
 }
-function renderDev() {
+let DEV_SIG = "";
+function renderDev(force = false) {
   const since = devSince();
   // 판단 기록 — 판단한 공고(참가·보류·불참)만, 판단 시각으로 기간
   const judged = logEntriesOf().map((e) => e.p).filter((x) => devIn(x.decidedAt || x.updatedAt, since));
+  // 판단 기록은 10초마다 다시 받음 — 바뀐 게 없으면 다시 그리지 않음(펼친 '표로 보기'·키보드 위치가 그대로)
+  const sig = JSON.stringify([$("devRange").value, judged.map((x) => [x.status, x.decidedAt, x.tags, x.meta?.paths, x.meta?.keywords])]);
+  if (!force && sig === DEV_SIG) return;
+  DEV_SIG = sig;
+  const forAgg = judged.filter((x) => !(x.status !== "참가" && (x.tags || []).length && x.tags.every((tg) => NON_FILTER_TAGS.includes(tg))));  // 집계 표와 같게
   const cnt = (s) => judged.filter((x) => x.status === s).length;
   // 투찰 기록 — 개찰 결과를 받은 것, 개찰일(없으면 기록일)로 기간
   const bids = DEV_BIDS.filter((r) => devIn(r.openingAt || r.recordedAt, since));
@@ -4698,8 +4712,8 @@ function renderDev() {
   const weekCats = weeks.map((w) => ({ label: `${Number(w.slice(5, 7))}/${Number(w.slice(8))}~`, values: DECISIONS.map((s) => judged.filter((x) => weekOf(x.decidedAt || x.updatedAt).key === w && x.status === s).length) }));
   const reasons = countBy(judged.filter((x) => x.status !== "참가").flatMap((x) => x.tags || []), (t) => t).slice(0, 8).map(([k, v]) => ({ k, v }));
   const review = (r) => (!r.k.startsWith("(") && r.n >= AGG_REVIEW_N && devPct(r.vals[2], r.n) >= AGG_REVIEW_OUT ? "조정 검토" : "");
-  const paths = groupCount(judged, (x) => (x.meta?.paths?.length ? x.meta.paths : ["(경로 기록 없음)"]), (x) => x.status).slice(0, 8).map((r) => ({ ...r, note: review(r) }));
-  const kws = groupCount(judged, (x) => x.meta?.keywords || [], (x) => x.status).slice(0, 8).map((r) => ({ ...r, note: review(r) }));
+  const paths = groupCount(forAgg, (x) => (x.meta?.paths?.length ? x.meta.paths : ["(경로 기록 없음)"]), (x) => x.status).slice(0, 8).map((r) => ({ ...r, note: review(r) }));
+  const kws = groupCount(forAgg, (x) => x.meta?.keywords || [], (x) => x.status).slice(0, 8).map((r) => ({ ...r, note: review(r) }));
   const stackTable = (rows, head) => vizTableHtml([head, "판단", "참가", "보류", "불참", "불참 비율"], rows.map((r) => [r.k, r.n, ...r.vals, devPct(r.vals[2], r.n) + "%"]), [1, 2, 3, 4, 5]);
   $("devJudge").innerHTML = judged.length ? [
     vizCard("주별 판단", vizLegend(JUDGE_SERIES) + vizCols(weekCats, JUDGE_SERIES, { label: "주별 판단" }),
@@ -4757,21 +4771,27 @@ function renderDev() {
   ].filter(Boolean);
   $("devWatch").innerHTML = (watch.length ? watch : ["없습니다."]).map((s) => `<li>${esc(s)}</li>`).join("");
   // 자료가 얼마나 쌓였나(11/27 사용자) — 비율 오차 = 95% 범위 ±0.98/√n, 사정률 가운데값 오차 = 1.96 × 1.25 × σ/√n(σ = 실제 흩어짐, 1.48 × 중앙 절대 편차),
-  // 웹앱 vs 외주 = 부호 검정(20건 중 15건 이상 한쪽이면 p < 0.05), 도우미는 같은 말이 3번 넘게 못 찾으면 고칠 거리
+  // 웹앱 vs 외주 = 부호 검정(20건 중 15건 이상 한쪽이면 p < 0.05), 도우미는 같은 말이 3번 이상 바로 답하지 못하면 고칠 거리
   const med = (a) => { const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
   const sigma = diffs.length >= 5 ? 1.4826 * med(diffs.map((v) => Math.abs(v - med(diffs)))) : null;
   const seMed = (n) => (sigma && n ? 1.96 * 1.2533 * sigma / Math.sqrt(n) : null);
+  const needFor = (err) => (sigma ? Math.ceil((1.96 * 1.2533 * sigma / err) ** 2) : null);   // 오차가 err 안으로 들어오는 건수
   const pctErr = (n) => (n ? Math.round(98 / Math.sqrt(n)) : null);
   const topItem = Math.max(0, ...paths.map((r) => r.n), ...kws.map((r) => r.n));
+  // [이름, 지금 건수, 권장 건수, 단위, 지금 상태, 권장 건수의 근거](근거 = 11/27 사용자 '저 수치는 어떤 근거로')
   const enough = [
-    ["키워드·경로 조정", judged.length, 30, "판단", `비율 오차 ±${pctErr(judged.length) ?? "-"}%p (30건 ±18%p) · 가장 많이 쌓인 항목 ${topItem}건, 항목마다 10건부터 조정 검토`],
-    ["기준 사정률 보정", diffs.length, 50, "개찰", sigma ? `가운데값 오차 약 ±${seMed(diffs.length).toFixed(2)}%p · 50건이면 ±${seMed(50).toFixed(2)}%p, 100건이면 ±${seMed(100).toFixed(2)}%p` : "5건부터 오차 계산"],
-    ["웹앱 vs 외주", cmp.length, 20, "비교", "20건 중 15건 이상이 한쪽이면 우연이 아님"],
-    ["도우미 말투 보강", help.length, 50, "질문", "같은 말을 3번 넘게 못 찾으면 고칠 거리 · 요청은 1건부터"],
+    ["키워드·경로 조정", judged.length, 30, "판단", `${judged.length ? `비율 오차 ±${pctErr(judged.length)}%p` : "판단 없음"} · 가장 많이 쌓인 항목 ${topItem}건`,
+      "근거: 비율 오차(95% 범위)는 ±98%p/√건수라 30건이면 ±18%p, 그보다 적으면 불참 80%와 60%가 갈리지 않음 · 항목마다 10건: 10건 모두 불참이면 확실한 불참 비율(윌슨 하한) 72%로 제안 기준 70%를 넘음(1건만 참가·보류여도 60% 아래)"],
+    ["기준 사정률 보정", diffs.length, 50, "개찰", sigma ? `가운데값 오차 약 ±${seMed(diffs.length).toFixed(2)}%p (지금 흩어짐 σ ${sigma.toFixed(2)}%p)` : "5건부터 오차 계산",
+      `근거: 가운데값 오차는 1.96 × 1.25 × σ/√건수 · 오차가 보정 단위 0.25%p보다 작아야 보정할 수 있음${sigma ? `(지금 흩어짐이면 약 ${needFor(0.25)}건)` : ""} · 폭 제안은 업체 목록 있는 개찰 30건(앞 15건으로 고르고 뒤 15건으로 확인)`],
+    ["웹앱 vs 외주", cmp.length, 20, "비교", `지금 ${cmp.length}건`,
+      "근거: 부호 검정. 20건 중 15건(75%)이 한쪽이면 우연일 확률 4%(5% 미만). 12건은 9건(75%)이 한쪽이어도 15%라 판단 못 함"],
+    ["도우미 말투 보강", help.length, 50, "질문", "요청은 1건부터",
+      "근거: 통계 기준 아님(정한 목표) · 같은 말이 3번 이상 바로 답하지 못하면 한 번 실수가 아니라 다른 사람도 쓰는 말로 봄"],
   ];
-  $("devEnough").innerHTML = enough.map(([k, n, goal, unit, why]) => `<span class="k">${esc(k)}</span>
+  $("devEnough").innerHTML = enough.map(([k, n, goal, unit, why, basis]) => `<span class="k">${esc(k)}</span>
     <span class="meter" role="meter" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(n, goal)}" aria-label="${esc(k)}"><span style="width:${Math.min(100, (n / goal) * 100)}%"></span></span>
-    <span class="n">${esc(`${unit} ${num(n)} / ${goal}건${n >= goal ? " 충분" : ""}`)}</span><span class="why">${esc(why)}</span>`).join("");
+    <span class="n">${esc(`${unit} ${num(n)} / ${goal}건${n >= goal ? " 충분" : ""}`)}</span><span class="why">${esc(why)}<span class="basis">${esc(basis)}</span></span>`).join("");
 }
 /** '분석하기'(11/27) — 외부 AI 없이: 화면이 판단·투찰·질문 기록으로 후보를 고르고, 서버가 최근 수집 결과 미리 보기·기준 사정률 폭·투찰 방향을 계산.
  *  제안 = 자료 충분 + 근거 강도(윌슨 하한·부호 검정) + 효과 계산 + 안전(참가로 판단한 공고가 빠지지 않음). 적용은 '적용 요청'(요청 기록) 뒤 PR */
@@ -4810,13 +4830,16 @@ async function devAnalyze() {
     }
     for (const r of cand((x) => x.meta?.paths || []).filter((r) => r.k === "보유 면허"))
       rules.push({ r, tag: topTag((x) => x.meta?.paths || [], r.k), kind: "lic", change: { license_work: ["공사"] }, done: (cfg.licenseWork || []).includes("공사") });
-    // 제외 낱말: 불참 공고명에 3번 이상, 참가 공고명엔 없고, 관심·제외 키워드와 겹치지 않는 낱말
-    const outs = judged.filter((x) => x.status === "불참"), joins = judged.filter((x) => x.status === "참가");
+    // 제외 낱말: 불참 공고명에 3번 이상, 참가 공고명엔 없고, 관심·제외 키워드와 겹치지 않는 낱말 — 비율은 그 낱말이 든 판단 전부(보류 포함)로
+    const outs = judged.filter((x) => x.status === "불참"), joins = judged.filter((x) => x.status === "참가"), holds = judged.filter((x) => x.status === "보류");
     const words = countBy(outs.flatMap((x) => devWords(x.title)), (w) => w)
       .filter(([w, c]) => c >= 3 && !joins.some((x) => String(x.title || "").includes(w))
         && !kws0.some((k) => w.includes(k) || k.includes(w)) && !ex0.some((k) => w.includes(k) || k.includes(w)))
       .slice(0, 5);
-    for (const [w, c] of words) rules.push({ r: { k: w, n: c, vals: [0, 0, c] }, kind: "ex", change: { add_exclude: [w] }, done: false });
+    for (const [w, c] of words) {
+      const h = holds.filter((x) => devWords(x.title).includes(w)).length;
+      rules.push({ r: { k: w, n: c + h, vals: [0, h, c] }, kind: "ex", change: { add_exclude: [w] }, done: false });
+    }
     const res = rules.length ? await devPost("/api/dev/analysis", { changes: rules.map((x) => x.change) }) : { ...first, previews: [] };
     DEV_SAVED = res.proposals || first.proposals || {};
     const props = [];
@@ -4827,7 +4850,7 @@ async function devAnalyze() {
       const joinedMoved = (pv?.moved || []).filter((no) => participation[no]?.status === "참가").length;
       const strong = x.kind === "ex" ? lb >= 0.7 : r.n >= AGG_REVIEW_N && lb >= 0.7;
       const level = x.done ? "적용됨" : !pv ? "참고" : joinedDrop ? "보류" : strong ? "제안" : "참고";
-      const evidence = (x.kind === "ex" ? `불참 공고명에 ${r.n}번 · 참가 공고명엔 없음` : `판단 ${r.n}건 · 불참 ${devPct(out_, r.n)}%${x.tag ? ` · 주된 사유 ${x.tag[0]} ${x.tag[1]}건` : ""}`)
+      const evidence = (x.kind === "ex" ? `공고명에 이 낱말이 든 판단 ${r.n}건 · 불참 ${out_}${r.vals[1] ? ` · 보류 ${r.vals[1]}` : ""} · 참가 0` :`판단 ${r.n}건 · 불참 ${devPct(out_, r.n)}%${x.tag ? ` · 주된 사유 ${x.tag[0]} ${x.tag[1]}건` : ""}`)
         + ` · 실제 불참률 ${Math.round(lb * 100)}% 이상`;
       const effect = x.done ? "" : !pv ? "최근 수집 결과 없음"
         : `최근 수집에서 ${pv.drop.length}건 빠짐 (참가로 판단 ${joinedDrop}건)${pv.moved?.length ? ` · ${pv.moved.length}건 검토필요로 (참가 ${joinedMoved}건)` : ""}${pv.add ? ` · ${pv.add}건 새로 들어옴` : ""}`;
@@ -4857,12 +4880,12 @@ async function devAnalyze() {
       props.push({ id: "out:sign", step: 5, n: cmps.length, level: ok ? "제안" : "참고", title: ok ? (web > outN ? "웹앱 금액으로 투찰해도 됨" : "외주 금액 유지") : "웹앱 vs 외주 금액", evidence,
         effect: ok ? "" : "같음을 뺀 20건 이상 · p<0.05부터 제안", text: evidence });
     }
-    // 도우미 — 같은 말을 3번 넘게 못 찾았으면 어느 질문에 붙일지
+    // 도우미 — 같은 말을 3번 이상 바로 답하지 못했으면(답 없음·후보만 보임) 어느 질문에 붙일지
     const hq = DEV_HELP.filter((r) => devIn(r.at, since) && (r.result === "모름" || r.result === "고르기"));
     for (const [q, c] of countBy(hq, (r) => r.q.trim()).filter(([, c]) => c >= 3).slice(0, 5)) {
       const tab = hq.find((r) => r.q.trim() === q)?.tab || "live", d = helpDecide(q, HELP_SETS[tab] ? tab : "live"), to = d.list[0]?.h[1];
       props.push({ id: `help:${q.slice(0, 60)}`, step: 3, n: c, level: "제안", title: to ? `'${q}' → '${to}' 질문 낱말에` : `'${q}' 새 질문 후보`,
-        evidence: `${HELP_SETS[tab]?.name || tab} 탭에서 ${c}번 못 찾음`, effect: "", text: `도우미: '${q}' ${to ? `→ '${to}'` : "새 질문"} (${c}번)` });
+        evidence: `${HELP_SETS[tab]?.name || tab} 탭에서 ${c}번 바로 답하지 못함`, effect: "", text: `도우미: '${q}' ${to ? `→ '${to}'` : "새 질문"} (${c}번)` });
     }
     DEV_LAST = { props, head: `판단 ${judged.length}건 기준${judged.length < LOG_AGG_MIN ? ` (${LOG_AGG_MIN}건 미만: 비율이 흔들릴 수 있음)` : ""}${res.runAt ? ` · 최근 수집 ${fmtDT(res.runAt)}` : ""} · 외부 AI 없이 계산`,
       bid: first.bid || [], reqs: DEV_HELP.filter((r) => devIn(r.at, since) && r.result === "요청").slice(-5).reverse() };
@@ -6212,7 +6235,7 @@ function helpExact(q, qa = HS().qa) {
 }
 const HELP_NO = /(?<![A-Z0-9])(?:R\d{2}[A-Z]{2}\d{8}|\d{11})(?![0-9])/i;
 const HELP_CHANCE = /(낙찰|수주|당첨|이길|1등|1순위).{0,8}(가능|확률|될까|되나|돼\?|할까|있을까|받을|높|할\s*수\s*있)|(가능성|확률).{0,6}(있|높|얼마|어때|몇)|^이길/;
-const HELP_WHICH = /우선\s*순위\S{0,3}\s*공고|들어가야\s*(돼|되나|하나|할까|해)|\S*(까|지)\s*말(까|지)|(입찰|투찰|참가|참여|지원|판단|검토)\s*(해야|할|하면|하기)[^?]*(공고|거|것|게)|(어떤|무슨|추천|할\s*만한|괜찮은|좋은)\s*(입찰\s*)?공고|공고.*(추천|골라)/;
+const HELP_WHICH = /우선\s*순위\S{0,3}\s*공고|(?<!어디\S{0,2}\s*)들어가야\s*(돼|되나|하나|할까|해)|\S*(까|지)\s*말(까|지)|(입찰|투찰|참가|참여|지원|판단|검토)\s*(해야|할|하면|하기)[^?]*(공고|거|것|게)|(어떤|무슨|추천|할\s*만한|괜찮은|좋은)\s*(입찰\s*)?공고|공고.*(추천|골라)/;
 // ── 직접 적은 질문의 문맥(11/25 사용자 '채팅으로 물으면 문맥을 못 잡는다') — 외부 AI 없이 규칙으로:
 // ① 앞에 답한 질문과 같은 주제 안에서 짧은 후속 질문을 먼저 찾음 ② 탭 이름이 든 질문은 그 탭부터
 // ③ 찾을 낱말에 없는 표현은 글자 두 개씩 겹치는 정도로 후보를 찾아 '혹시 이 질문인가요?'로만 보임(바로 답하지 않음).
@@ -6241,7 +6264,7 @@ const HELP_TAB_WORDS = { calc: ["투찰계산기", "계산기", "투찰내역", 
   log: ["판단기록"], excluded: ["제외된공고", "제외공고"], corpus: ["과거사업", "과거실적"], live: ["실제공고"] };
 const HELP_BOTH = /이랑|하고\s|그리고|[,]|[와과]\s/;
 // 도우미에 답이 없는 주제: 낱말이 겹쳐도 다른 질문을 권하지 않고 준비된 답이 없다고 말함. 답을 만들면 여기서 뺌
-const HELP_NONE = /세금\s*계산서|(나라장터|공동|공인|범용)\s*인증서|보증서|보증금|하자|수익률|초대|(공문|협정서)\s*양식|정성\s*평가|발표\s*자료|전자\s*투찰|번호가\s*제일|법으로|선급금|날씨|연차|휴가|점심|월급|급여|회식|수주율|수익|부가세\s*신고|프린터|프린트\S{0,2}\s*안|vlookup|엑셀\s*함수|함수\s*(어떻게|쓰)|고객\s*센터|콜\s*센터|법인\s*카드|영수증|(입찰|투찰)\S{0,3}\s*자동|즐겨\s*찾기|(자동|대신|바로)\S{0,2}\s*(입찰|투찰)|사업비\s*합계|금액\s*합계|총\s*사업비|나라장터.*로그인|준공\s*검사|예정가격.*맞춰|통계|담당자.*(전화|연락처)|업체.*연락처|지체\s*상금|매출|PPT|피피티/i;
+const HELP_NONE = /세금\s*계산서|(나라장터|공동|공인|범용)\s*인증서|보증서|보증금|하자|수익률|초대|(공문|협정서)\s*양식|정성\s*평가|발표\s*자료|전자\s*투찰|번호가\s*제일|법으로|선급금|날씨|연차|휴가|점심|월급|급여|회식|수주율|수익|부가세\s*신고|프린터|프린트\S{0,2}\s*안|vlookup|엑셀\s*함수|함수\s*(어떻게|쓰)|고객\s*센터|콜\s*센터|법인\s*카드|영수증|(입찰|투찰)(을|를|도|까지)?\s*자동|즐겨\s*찾기|(자동|대신|바로)\S{0,2}\s*(입찰|투찰)(?!\S{0,2}\s*(계산|금액|가격|기록|내역))|사업비\s*합계|금액\s*합계|나라장터.*로그인|준공\s*검사(?!\s*원)|예정가격.*맞춰|통계|담당자.*(전화|연락처)|업체.*연락처|지체\s*상금|매출|PPT|피피티/i;
 // 답이 없는 주제 가운데 자주 물을 것은 확인할 곳만 알림(11/25 사용자). 내용은 짐작해 적지 않음
 const HELP_WHERE = [
   [/입찰\s*보증금/, "웹앱에는 이 내용이 없습니다.\n공고문의 입찰보증금 항목을 확인해 주세요."],
@@ -6250,7 +6273,7 @@ const HELP_WHERE = [
 ];
 const helpWhere = (q) => (HELP_WHERE.find(([re]) => re.test(q)) || [])[1] || "";
 // 개발 담당에게 바라는 점으로 보이는 말(11/27 사용자) — 바로 남기지 않고 '남길까요?'로 물음. '…해 주나요?'처럼 묻는 말, '건의하려면'처럼 남기는 법을 묻는 말은 안 걸림
-const HELP_REQ = /바뀌었으면|있었으면|면\s*좋겠|으면\s*합니다|불편(합니다|해요|하네|해서)|(추가|변경|수정|개선)해\s*(주세요|줘|주시)|(바꿔|고쳐|만들어|넣어|키워|늘려|줄여|넓혀|보내|빼)\s*(주세요|줘|주시)|(크게|작게|넓게|좁게|거꾸로|기본으로)\s*해\s*(주세요|줘|주시)|(넓혔|키웠|줄였|늘렸|바꿨|고쳤|넣었|뺐)으면|(그래프|차트|크게|작게|따로)\S{0,2}\s*보여\s*(주세요|줘|주시)|(문자|카톡|메일|텔레그램)\S{0,3}\s*(알려|보내)\s*(주세요|줘|주시)|(?<!어떻)게\s*해\s*(주세요|줘|주시)/;
+const HELP_REQ = /바뀌었으면|있었으면|면\s*좋겠|으면\s*합니다|불편(합니다|해요|하네|해서)|(추가|변경|수정|개선)해\s*(주세요|줘|주시)|(바꿔|고쳐|만들어|넣어|키워|늘려|줄여|넓혀)\s*(주세요|줘|주시)|(크게|작게|넓게|좁게|거꾸로|기본으로)\s*해\s*(주세요|줘|주시)|(넓혔|키웠|줄였|늘렸|바꿨|고쳤|넣었|뺐)으면|(그래프|차트|크게|작게|따로)\S{0,2}\s*보여\s*(주세요|줘|주시)|(문자|카톡|메일|텔레그램)\S{0,3}\s*(알려|보내)\s*(주세요|줘|주시)|(?<!어떻|어둡|밝)게\s*해\s*(주세요|줘|주시)/;
 const HELP_FOLLOW = /^(그럼|그러면|그런데|근데|그건|그거|그게|그걸|그때|거기|이건|이거|또|그리고|그\s*다음|다음엔|다음은|아니면|반대로)/;
 // 같은 뜻 다른 말(사람이 한 줄씩 늘리는 표) — 질문에 왼쪽 말이 있으면 오른쪽 말을 덧붙여 찾음. 화면 용어일 뿐 회사 자료가 아님
 const HELP_ALIAS = [[/어케|어캐|어떡해|어떡케/, "어떻게"], [/안\s*보(임|여|이|입|ㅕ)|안\s*(뜸|떠|뜨|나와|나옴|나오|나타)/, "안보여 보이지"],
@@ -6800,7 +6823,7 @@ function helpAsk(q) {
     if (btn) { helpSay("me", q); HELP_QUIET = true; try { btn.click(); } finally { HELP_QUIET = false; } return; }
     if (Array.isArray(lastBot.picks) && lastBot.picks.length > 1) {  // 후보가 여럿 — 같은 버튼을 다시 보임
       helpSay("me", q);
-      helpReply(() => helpSay("bot", yn === "yes" ? "위 질문 가운데 하나를 눌러 주세요." : `알겠습니다.${N}다른 말로 적어 주시면 다시 찾아 드립니다.`, yn === "yes" ? lastBot.picks.slice() : []));
+      helpReply(() => helpSay("bot", yn === "yes" ? "위 질문 가운데 하나를 눌러 주세요." : "알겠습니다.\n다른 말로 적어 주시면 다시 찾아 드립니다.", yn === "yes" ? lastBot.picks.slice() : []));
       return;
     }
   }
@@ -7097,7 +7120,9 @@ $("helpBox").addEventListener("submit", (e) => {
 });
 function showTab(tab) {
   $("helpFab").hidden = !HELP_SETS[tab];
-  if (HELP_TAB !== tab) {  // 탭이 바뀌어도 대화는 남김(11/26 사용자). 기다리던 답은 버림
+  if (!HELP_SETS[tab]) {  // 도우미가 없는 탭(개발자) — 열린 창은 닫고 대화는 그대로(돌아오면 이어짐)
+    if (!$("helpBox").hidden) helpOpen(false);
+  } else if (HELP_TAB !== tab) {  // 탭이 바뀌어도 대화는 남김(11/26 사용자). 기다리던 답은 버림
     if (HELP_TYPING && HELP_LOG.length && HELP_LOG[HELP_LOG.length - 1].who === "me") HELP_LOG.pop();  // 답을 기다리던 질문은 뺌(답은 버림)
     HELP_TAB = tab; HELP_GEN++; HELP_TYPING = false; HELP_CTX = {}; HELP_VIEW = "chat"; HELP_FAQ = { cat: -1, q: -1, find: "" };
     helpTabHello();

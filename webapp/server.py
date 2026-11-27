@@ -468,7 +468,6 @@ def make_handler(app: App):
                     "has_service_key": bool(os.environ.get("NARA_SERVICE_KEY", "").strip()),
                     "has_ai_key": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
                     "can_collect": not app.viewer,
-                    # 도우미에 보일 개발 담당 이름 — 공개 저장소에 적지 않으려고 서버 설정에서(11/27 사용자)
                     "companies": [c.public() for c in app.companies.values()], "company": co.id,
                 })
             if url.path == "/api/docs-alert":
@@ -838,8 +837,9 @@ def make_handler(app: App):
                     return self._json({"ok": True, **done, "entries": app.bidlog_of(co).entries()})
                 if url.path == "/api/dev/analysis":  # 개발자 탭 '분석하기'(11/27) — 외부 AI 없이 규칙 미리 보기·투찰 보정 방향
                     from .devanalysis import analyze
-                    log = app.bidlog_of(co)
-                    return self._json(analyze(co.store, None if co.default else co.id, log.entries(), data.get("changes") or [], log.bidders))
+                    log, changes = app.bidlog_of(co), data.get("changes")
+                    return self._json(analyze(co.store, None if co.default else co.id, log.entries(),
+                                              changes if isinstance(changes, list) else [], log.bidders, run=co.latest_run()))
                 if url.path == "/api/dev/proposal":  # 개발자 탭 제안 — 숨기기·적용 요청(요청은 도우미 요청 기록에도, 11/27)
                     from .devanalysis import set_proposal
                     action = str(data.get("action") or "")

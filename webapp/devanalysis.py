@@ -44,26 +44,44 @@ def _best(rows: list[dict[str, Any]]) -> float:
     return max(OFFSETS, key=lambda d: _key(_score(rows, d), d))
 
 
+def _net_line(bidders: list[dict[str, Any]]) -> float | None:
+    """'순공사원가'로 무효된 업체 중 가장 높은 금액과 그 위 순위 있는 업체 중 가장 낮은 금액의 가운데(bidrecommend._net_line과 같은 규칙)."""
+    bad = [b["amount"] for b in bidders if b.get("rank") is None and b.get("amount") and "순공사" in (b.get("remark") or "")]
+    above = [b["amount"] for b in bidders if bad and b.get("rank") is not None and b.get("amount") and b["amount"] > max(bad)]
+    return (max(bad) + min(above)) / 2 if above else None
+
+
 def rate_offsets(entries: list[dict[str, Any]], bidders_of) -> dict[str, Any]:
-    """웹앱 기준 사정률을 Δ%p 옮겼다면 — 같은 계산식(bid_amount)으로 Δ=0과 비교해 끝자리 처리 차이는 서로 지움."""
-    rows, missing = [], 0
+    """웹앱 기준 사정률을 Δ%p 옮겼다면 — 같은 계산식(bid_amount)으로 Δ=0과 비교해 끝자리 처리 차이는 서로 지움.
+    순공사원가로 무효된 업체가 있는 공고는 계산기처럼 순공사원가 × 사정률 × 98%와 높은 쪽을 내고, 그 선 아래면 무효로 셈.
+    같은 공고를 여러 번 기록했으면 가장 최근 기록 하나만(앞·뒤 절반에 같은 공고가 갈리지 않게)."""
+    latest: dict[tuple, dict[str, Any]] = {}
     for e in entries:
-        res = e.get("result") or {}
-        if res.get("status") != "완료":
+        if (e.get("result") or {}).get("status") == "완료":
+            key = (e.get("noticeNo"), e.get("noticeOrd")) if e.get("noticeNo") else e.get("id")
+            if key not in latest or str(e.get("recordedAt") or "") > str(latest[key].get("recordedAt") or ""):
+                latest[key] = e
+    rows, missing, no_input = [], 0, 0
+    for e in latest.values():
+        res = e["result"]
+        need = [e.get("basis"), e.get("lowerRate"), e.get("rate")]
+        if any(v is None for v in need):
+            no_input += 1
             continue
         bidders = bidders_of(e["id"])
-        need = [e.get("basis"), e.get("lowerRate"), e.get("rate")]
-        if bidders is None or any(v is None for v in need):
+        if bidders is None:
             missing += 1
             continue
-        a = res.get("aValue") if res.get("aValue") is not None else (e.get("aValue") or 0)
+        a = float((res.get("aValue") if res.get("aValue") is not None else e.get("aValue")) or 0)
+        net = _net_line(bidders)
+        net_cost = float(e["netCost"]) if net and e.get("netCost") else None
         ranks = {}
         for d in OFFSETS:
-            amount = bid_amount(float(e["basis"]), float(e["rate"]) + d, float(e["lowerRate"]), float(a or 0))
-            ranks[d] = simulate(bidders, e, res, amount).get("rank")
+            amount = bid_amount(float(e["basis"]), float(e["rate"]) + d, float(e["lowerRate"]), a, net_cost, 98 if net_cost else None)
+            ranks[d] = -1 if net and amount < net else simulate(bidders, e, res, amount).get("rank")
         rows.append({"at": str(e.get("openingAt") or e.get("recordedAt") or ""), "ranks": ranks})
     rows.sort(key=lambda r: r["at"])
-    out: dict[str, Any] = {"n": len(rows), "missing": missing, "min": OFFSET_MIN,
+    out: dict[str, Any] = {"n": len(rows), "missing": missing, "noInput": no_input, "min": OFFSET_MIN,
                            "grid": [{"d": d, **_score(rows, d)} for d in OFFSETS] if rows else []}
     if not rows:
         return out
@@ -106,19 +124,29 @@ def set_proposal(store, pid: str, action: str, n: int | None = None) -> dict[str
         if action == "undo":
             data.pop(pid, None)
         elif action in ("dismiss", "request"):
-            data[pid] = {"status": "dismissed" if action == "dismiss" else "requested", "n": int(n or 0),
+            try:
+                n = max(0, min(int(n or 0), 10**6))
+            except (TypeError, ValueError, OverflowError):
+                n = 0
+            data[pid] = {"status": "dismissed" if action == "dismiss" else "requested", "n": n,
                          "at": datetime.now().isoformat(timespec="seconds")}
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp = path.with_suffix(".tmp")  # 쓰다 끊겨도 예전 파일은 남게
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.replace(path)
         return data
 
 
-def analyze(store, company: str | None, bid_entries: list[dict[str, Any]], changes: list[dict[str, Any]], bidders_of=None) -> dict[str, Any]:
+def analyze(store, company: str | None, bid_entries: list[dict[str, Any]], changes: list[dict[str, Any]], bidders_of=None,
+            run: dict[str, Any] | None = None) -> dict[str, Any]:
+    """run = 회사 묶음이 들고 있는 최신 수집 결과(company.latest_run — 다시 읽지 않게)."""
     cfg = replace(load_config(company=company).screen, review_conflicts=True)  # 웹앱과 같은 규칙
-    run = store.latest_run()
     previews: list[dict[str, Any] | None] = []
     for raw in changes[:MAX_CHANGES]:
-        change = Change(**{k: [str(x) for x in raw.get(k) or []][:5] for k in FIELDS if raw.get(k)})
+        if not isinstance(raw, dict):
+            previews.append(None)
+            continue
+        change = Change(**{k: [str(x) for x in raw.get(k)][:5] for k in FIELDS if isinstance(raw.get(k), list) and raw.get(k)})
         if change.empty() or not run:
             previews.append(None)
             continue

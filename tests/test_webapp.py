@@ -557,8 +557,14 @@ class TestServer(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(len(res["previews"]), 2)
         self.assertTrue(res["bid"] and "keywords" in res["config"])
+        # 제안 숨기기·적용 요청(11/27) — 요청은 도우미 요청 기록에도 남음
+        self.assertEqual(self.call("/api/dev/proposal", {"id": "kw:remove:통신", "action": "dismiss", "n": 12})[1]["proposals"]["kw:remove:통신"]["status"], "dismissed")
+        self.assertEqual(self.call("/api/dev/proposal", {"id": "bid:offset", "action": "request", "text": "기준 사정률 −0.1%p", "who": "홍길동"})[1]["proposals"]["bid:offset"]["status"], "requested")
+        self.assertEqual(self.call("/api/help-questions")[1]["items"][-1]["q"], "[적용 요청] 기준 사정률 −0.1%p")
+        self.assertIn("kw:remove:통신", self.call("/api/dev/analysis", {"changes": []})[1]["proposals"])
+        self.assertNotIn("kw:remove:통신", self.call("/api/dev/proposal", {"id": "kw:remove:통신", "action": "undo"})[1]["proposals"])
         # 개발자 탭이 읽는 기록(11/27) — 토큰 없으면 막힘
-        self.assertEqual(self.call("/api/help-questions")[1]["items"][-1]["q"], "필터를 크게 해 주세요")
+        self.assertIn("필터를 크게 해 주세요", [r["q"] for r in self.call("/api/help-questions")[1]["items"]])
         self.assertEqual(self.call("/api/help-questions", token="wrong")[0], 401)
 
     def test_bidlog_routes(self):

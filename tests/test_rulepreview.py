@@ -98,6 +98,24 @@ class RulePreviewTest(unittest.TestCase):
         self.assertIsNone(res["previews"][1])
         self.assertEqual(res["bid"], ["아직 개찰된 투찰이 없어 판단할 수 없음"])
 
+    def test_rate_offset_holdout(self):
+        """기준 사정률 폭(11/27): 실제 1위보다 살짝 비싸게 낸 개찰이 이어지면, 앞 절반으로 고른 '낮추는' 폭이 뒤 절반에서도 1순위를 늘림."""
+        from webapp.devanalysis import rate_offsets
+        entries, lists = [], {}
+        for i in range(32):
+            eid = f"e{i}"
+            basis, rate, lower = 100_000_000, 100.0, 90.0
+            mine = basis * rate / 100 * lower / 100   # Δ=0일 때 내 금액
+            entries.append({"id": eid, "basis": basis, "rate": rate, "lowerRate": lower, "openingAt": f"2026-10-{i % 28 + 1:02d}",
+                            "result": {"status": "완료", "plannedPrice": basis * 0.995, "aValue": 0, "own": None}})
+            lists[eid] = [{"rank": 1, "amount": mine - 30_000, "remark": ""}, {"rank": 2, "amount": mine + 500_000, "remark": ""}]
+        out = rate_offsets(entries, lists.get)
+        self.assertEqual(out["n"], 32)
+        self.assertLess(out["best"], 0)                 # 낮추는 쪽
+        self.assertTrue(out["holdout"]["better"] and out["ok"])
+        self.assertEqual(out["grid"][10]["d"], 0.0)
+        self.assertEqual(rate_offsets(entries[:4], lists.get)["ok"], False)   # 업체 목록 있는 개찰이 적으면 제안 안 함
+
 
 if __name__ == "__main__":
     unittest.main()

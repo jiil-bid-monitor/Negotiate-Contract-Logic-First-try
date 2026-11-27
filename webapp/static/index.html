@@ -242,6 +242,10 @@ body.picking { overflow: hidden; }
 #devAnalysis ul { margin: 0; padding-left: 18px; }
 #devAnalysis li { margin: 6px 0; }
 #devAnalysis .sub { color: var(--muted); font-size: 12px; }
+#devAnalysis .prop-lv { display: inline-block; font-size: 11.5px; padding: 0 6px; margin-right: 6px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--muted); }
+#devAnalysis .prop-lv.on { border-color: var(--brand); color: var(--brand); background: var(--brand-tint); }
+#devAnalysis .prop-acts { margin-top: 4px; }
+#devAnalysis .prop-acts button { font-size: 12px; }
 #vizTip { position: fixed; z-index: 60; pointer-events: none; background: var(--panel); border: 1px solid var(--line-strong);
   box-shadow: 0 4px 14px rgba(0, 0, 0, .12); padding: 8px 10px; font-size: 12.5px; color: var(--ink); min-width: 130px; }
 #vizTip .t { color: var(--muted); margin-bottom: 4px; }
@@ -1674,6 +1678,10 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 .helpbox .hhead b { font-size: 16px; }
 .helpbox .hhead span { color: var(--muted); font-size: 13px; flex: 1; }
 .helpbox .hhead button { font: inherit; border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; }
+/* 투명도(11/27 사용자 — 창이 공고를 가림) — 창 전체에, 이 브라우저에 기억 */
+.helpbox { opacity: var(--hop, 1); }
+.helpbox .hhead .hop { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); align-self: center; }
+.helpbox .hhead .hop input { width: 64px; accent-color: var(--brand); }
 .helpbox .hsafe { margin: 0; padding: 7px 14px; font-size: 12.5px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--line); word-break: keep-all; }
 .helpbox .hlog { flex: 1; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 14px; list-style: none; background: var(--bg); }
 .helpbox .hmsg { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; }
@@ -4595,7 +4603,7 @@ function renderDevHelp() {
   $("devHelpList").innerHTML = rows.length ? `<div class="scroll"><table>
     <thead><tr><th>때</th><th>회사</th><th>탭</th><th>적은 사람</th><th>질문</th><th>결과</th><th>알아들은 질문</th></tr></thead>
     <tbody>${rows.map((r) => `<tr${r.result === "요청" ? ' class="dev-req"' : ""}><td>${esc(when(r.at))}</td><td>${esc(r.co === "grida" ? "그리다" : r.co ? "지일" : "")}</td>
-      <td>${esc(HELP_SETS[r.tab]?.name || r.tab || "")}</td><td>${esc(r.who || "")}</td><td>${esc(r.q)}</td><td>${esc(r.result || "")}</td><td>${esc(r.hit || "")}</td></tr>`).join("")}</tbody>
+      <td>${esc(r.tab === "dev" ? "개발자" : HELP_SETS[r.tab]?.name || r.tab || "")}</td><td>${esc(r.who || "")}</td><td>${esc(r.q)}</td><td>${esc(r.result || "")}</td><td>${esc(r.hit || "")}</td></tr>`).join("")}</tbody>
   </table></div>` : '<div class="empty">질문 기록이 없습니다.</div>';
 }
 $("devHelpResult").onchange = renderDevHelp;
@@ -4765,53 +4773,141 @@ function renderDev() {
     <span class="meter" role="meter" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(n, goal)}" aria-label="${esc(k)}"><span style="width:${Math.min(100, (n / goal) * 100)}%"></span></span>
     <span class="n">${esc(`${unit} ${num(n)} / ${goal}건${n >= goal ? " 충분" : ""}`)}</span><span class="why">${esc(why)}</span>`).join("");
 }
-/** '분석하기' — 판단 기록으로 조정 후보(키워드·경로)를 골라 서버에 보내면, 서버가 최근 수집 결과로 미리 보기와 투찰 방향을 계산(외부 AI 없음) */
+/** '분석하기'(11/27) — 외부 AI 없이: 화면이 판단·투찰·질문 기록으로 후보를 고르고, 서버가 최근 수집 결과 미리 보기·기준 사정률 폭·투찰 방향을 계산.
+ *  제안 = 자료 충분 + 근거 강도(윌슨 하한·부호 검정) + 효과 계산 + 안전(참가로 판단한 공고가 빠지지 않음). 적용은 '적용 요청'(요청 기록) 뒤 PR */
+const devWilson = (k, n) => { if (!n) return 0; const z = 1.96, p = k / n; return (p + z * z / (2 * n) - z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / (1 + z * z / n); };
+const devSignP = (k, n) => { if (!n) return 1; const m = Math.max(k, n - k); let s = 0, c = 1; for (let i = 0; i <= n; i++) { if (i >= m) s += c; c = c * (n - i) / (i + 1); } return Math.min(1, (2 * s) / 2 ** n); };
+// 제외 낱말 후보 — 공고명 낱말(끝의 용역·공사·사업·구매는 뗌), 흔한 말은 뺌
+const DEV_STOP = new Set(["사업", "용역", "공사", "구매", "제작", "설치", "조성", "구축", "시설", "관련", "일반", "추진", "개선", "지원", "통합", "단가", "계약", "연간", "년도", "장기계속", "긴급", "재공고", "기본", "실시", "설계", "및", "등", "외", "위한", "변경", "정정", "추가", "신규", "물품", "제조"]);
+const devWords = (title) => [...new Set(String(title || "").split(/[^가-힣A-Za-z]+/).map((w) => w.replace(/(용역|공사|사업|구매)$/, "")).filter((w) => w.length >= 2 && !DEV_STOP.has(w)))];
+let DEV_LAST = null, DEV_SAVED = {}, DEV_SHOW_HIDDEN = false;
+const DEV_LEVEL = { 제안: 0, 보류: 1, 참고: 2, 적용됨: 3 };
+async function devPost(path, body) {
+  const resp = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = await resp.json();
+  if (!resp.ok) throw new Error(j.error || String(resp.status));
+  return j;
+}
 async function devAnalyze() {
   const btn = $("devAnalyze"), out = $("devAnalysis"), since = devSince();
-  const judged = logEntriesOf().map((e) => e.p).filter((x) => devIn(x.decidedAt || x.updatedAt, since))
-    .filter((x) => !(x.status !== "참가" && (x.tags || []).length && x.tags.every((tg) => NON_FILTER_TAGS.includes(tg))));  // 필터와 무관한 사유만 고른 판단은 뺌
-  const cand = (keysOf) => groupCount(judged, keysOf, (x) => x.status).filter((r) => r.n >= AGG_MIN_N && devPct(r.vals[2], r.n) >= 70).slice(0, 4);
-  const works = (k, st) => judged.filter((x) => (x.meta?.keywords || []).includes(k) && x.status === st).map((x) => x.meta?.businessType || "");
-  const topTag = (keyOf, k) => countBy(judged.filter((x) => x.status !== "참가" && keyOf(x).includes(k)).flatMap((x) => x.tags || []), (tg) => tg)[0];
-  const items = [];
-  for (const r of cand((x) => x.meta?.keywords || [])) {
-    const tag = topTag((x) => x.meta?.keywords || [], r.k);
-    items.push({ r, tag, kind: "kw", change: { remove_keyword: [r.k] } });
-    const joined = works(r.k, "참가"), left = works(r.k, "불참");
-    if (joined.length && joined.every((w) => w === "공사") && left.some((w) => w && w !== "공사")) items.push({ r, tag, kind: "kwwork", change: { keyword_work: [`${r.k}=공사`] } });
-  }
-  for (const r of cand((x) => x.meta?.paths || []).filter((r) => r.k === "보유 면허")) items.push({ r, tag: topTag((x) => x.meta?.paths || [], r.k), kind: "lic", change: { license_work: ["공사"] } });
   btn.disabled = true;
   out.innerHTML = '<div class="sub">분석 중…</div>';
-  let res;
   try {
-    const resp = await fetch("/api/dev/analysis", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ changes: items.map((x) => x.change) }) });
-    res = await resp.json();
-    if (!resp.ok) throw new Error(res.error || String(resp.status));
+    const judged = logEntriesOf().map((e) => e.p).filter((x) => devIn(x.decidedAt || x.updatedAt, since))
+      .filter((x) => !(x.status !== "참가" && (x.tags || []).length && x.tags.every((tg) => NON_FILTER_TAGS.includes(tg))));  // 필터와 무관한 사유만 고른 판단은 뺌
+    const first = await devPost("/api/dev/analysis", { changes: [] });   // 설정(지금 관심·제외 키워드)·투찰 폭·방향
+    const cfg = first.config || {}, kws0 = cfg.keywords || [], ex0 = cfg.excludes || [];
+    const cand = (keysOf) => groupCount(judged, keysOf, (x) => x.status).filter((r) => r.n >= AGG_MIN_N && devPct(r.vals[2], r.n) >= 70).slice(0, 4);
+    const works = (k, st) => judged.filter((x) => (x.meta?.keywords || []).includes(k) && x.status === st).map((x) => x.meta?.businessType || "");
+    const topTag = (keyOf, k) => countBy(judged.filter((x) => x.status !== "참가" && keyOf(x).includes(k)).flatMap((x) => x.tags || []), (tg) => tg)[0];
+    const rules = [];
+    for (const r of cand((x) => x.meta?.keywords || [])) {
+      const tag = topTag((x) => x.meta?.keywords || [], r.k);
+      rules.push({ r, tag, kind: "kw", change: { remove_keyword: [r.k] }, done: !kws0.includes(r.k) });
+      const joined = works(r.k, "참가"), left = works(r.k, "불참");
+      if (joined.length && joined.every((w) => w === "공사") && left.some((w) => w && w !== "공사"))
+        rules.push({ r, tag, kind: "kwwork", change: { keyword_work: [`${r.k}=공사`] }, done: (cfg.keywordWork?.[r.k] || []).includes("공사") });
+    }
+    for (const r of cand((x) => x.meta?.paths || []).filter((r) => r.k === "보유 면허"))
+      rules.push({ r, tag: topTag((x) => x.meta?.paths || [], r.k), kind: "lic", change: { license_work: ["공사"] }, done: (cfg.licenseWork || []).includes("공사") });
+    // 제외 낱말: 불참 공고명에 3번 이상, 참가 공고명엔 없고, 관심·제외 키워드와 겹치지 않는 낱말
+    const outs = judged.filter((x) => x.status === "불참"), joins = judged.filter((x) => x.status === "참가");
+    const words = countBy(outs.flatMap((x) => devWords(x.title)), (w) => w)
+      .filter(([w, c]) => c >= 3 && !joins.some((x) => String(x.title || "").includes(w))
+        && !kws0.some((k) => w.includes(k) || k.includes(w)) && !ex0.some((k) => w.includes(k) || k.includes(w)))
+      .slice(0, 5);
+    for (const [w, c] of words) rules.push({ r: { k: w, n: c, vals: [0, 0, c] }, kind: "ex", change: { add_exclude: [w] }, done: false });
+    const res = rules.length ? await devPost("/api/dev/analysis", { changes: rules.map((x) => x.change) }) : { ...first, previews: [] };
+    DEV_SAVED = res.proposals || first.proposals || {};
+    const props = [];
+    rules.forEach((x, i) => {
+      const pv = res.previews[i], r = x.r, out_ = r.vals[2], lb = devWilson(out_, r.n);
+      const title = { kw: `관심 키워드 '${r.k}' 빼기`, kwwork: `관심 키워드 '${r.k}'를 공사 공고에서만`, lic: "보유 면허 경로를 공사 공고에서만", ex: `제외 키워드 '${r.k}' 더하기` }[x.kind];
+      const joinedDrop = (pv?.drop || []).filter((no) => participation[no]?.status === "참가").length;
+      const joinedMoved = (pv?.moved || []).filter((no) => participation[no]?.status === "참가").length;
+      const strong = x.kind === "ex" ? lb >= 0.7 : r.n >= AGG_REVIEW_N && lb >= 0.7;
+      const level = x.done ? "적용됨" : !pv ? "참고" : joinedDrop ? "보류" : strong ? "제안" : "참고";
+      const evidence = (x.kind === "ex" ? `불참 공고명에 ${r.n}번 · 참가 공고명엔 없음` : `판단 ${r.n}건 · 불참 ${devPct(out_, r.n)}%${x.tag ? ` · 주된 사유 ${x.tag[0]} ${x.tag[1]}건` : ""}`)
+        + ` · 실제 불참률 ${Math.round(lb * 100)}% 이상`;
+      const effect = x.done ? "" : !pv ? "최근 수집 결과 없음"
+        : `최근 수집에서 ${pv.drop.length}건 빠짐 (참가로 판단 ${joinedDrop}건)${pv.moved?.length ? ` · ${pv.moved.length}건 검토필요로 (참가 ${joinedMoved}건)` : ""}${pv.add ? ` · ${pv.add}건 새로 들어옴` : ""}`;
+      const why = level === "보류" ? "참가로 판단한 공고가 빠짐" : level === "참고" && pv ? (x.kind !== "ex" && r.n < AGG_REVIEW_N ? `판단 ${r.n}건: ${AGG_REVIEW_N}건부터 제안` : "실제 불참률 하한 70%부터 제안") : "";
+      props.push({ id: `${x.kind}:${r.k}`, step: 10, n: r.n, level, title, evidence, effect: [effect, why].filter(Boolean).join(" · "),
+        examples: !x.done && pv?.dropTitles?.length ? `빠지는 공고: ${pv.dropTitles.slice(0, 3).join(" · ")}${pv.drop.length > 3 ? " …" : ""}` : "", text: `${title} (${evidence})` });
+    });
+    // 기준 사정률 폭 — 업체 목록이 있는 개찰로 다시 셈(앞 절반으로 고르고 뒤 절반으로 확인)
+    const off = first.offset;
+    if (off) {
+      const s = (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}%p`, g = (d) => off.grid.find((x) => x.d === d) || {};
+      const z = g(0), b = g(off.best);
+      const evidence = off.n ? `업체 목록 있는 개찰 ${off.n}건: 지금 → ${s(off.best ?? 0)} 1순위 ${z.wins}→${b.wins} · 5위 안 ${z.top5}→${b.top5} · 통과 ${z.pass}→${b.pass}` : "업체 목록 있는 개찰 없음";
+      const h = off.holdout;
+      const check = h ? `뒤 ${h.testN}건 확인(앞 ${h.trainN}건으로 고른 ${s(h.pick)}): 1순위 ${h.base.wins}→${h.cand.wins} · 5위 안 ${h.base.top5}→${h.cand.top5}${h.better ? "" : " · 나아지지 않음"}` : "";
+      const need = off.n < off.min ? `개찰 ${off.n}/${off.min}건: ${off.min}건부터 제안` : "";
+      const miss = off.missing ? `업체 목록 없는 개찰 ${off.missing}건은 다음 결과 받기 때 채워짐` : "";
+      props.push({ id: "bid:offset", step: 10, n: off.n, level: off.ok ? "제안" : "참고", title: off.ok ? `기준 사정률 ${s(off.best)}` : "기준 사정률 폭", evidence,
+        effect: [check, need, miss].filter(Boolean).join(" · "), text: `기준 사정률 ${s(off.best ?? 0)} (${evidence})` });
+    }
+    // 웹앱 vs 외주 — 부호 검정
+    const bids = DEV_BIDS.filter((r) => devIn(r.openingAt || r.recordedAt, since) && r.result?.status === "완료" && devWeb(r.result) && r.result.outsource);
+    const cmps = bids.map((r) => devCmp(devWeb(r.result), r.result.outsource)), web = cmps.filter((c) => c > 0).length, outN = cmps.filter((c) => c < 0).length, nn = web + outN;
+    if (cmps.length) {
+      const pval = devSignP(web, nn), ok = nn >= 20 && pval < 0.05;
+      const evidence = `비교 ${cmps.length}건: 웹앱이 더 좋은 등수 ${web} · 외주 ${outN} · 같음 ${cmps.length - nn} (p=${pval.toFixed(2)})`;
+      props.push({ id: "out:sign", step: 5, n: cmps.length, level: ok ? "제안" : "참고", title: ok ? (web > outN ? "웹앱 금액으로 투찰해도 됨" : "외주 금액 유지") : "웹앱 vs 외주 금액", evidence,
+        effect: ok ? "" : "같음을 뺀 20건 이상 · p<0.05부터 제안", text: evidence });
+    }
+    // 도우미 — 같은 말을 3번 넘게 못 찾았으면 어느 질문에 붙일지
+    const hq = DEV_HELP.filter((r) => devIn(r.at, since) && (r.result === "모름" || r.result === "고르기"));
+    for (const [q, c] of countBy(hq, (r) => r.q.trim()).filter(([, c]) => c >= 3).slice(0, 5)) {
+      const tab = hq.find((r) => r.q.trim() === q)?.tab || "live", d = helpDecide(q, HELP_SETS[tab] ? tab : "live"), to = d.list[0]?.h[1];
+      props.push({ id: `help:${q.slice(0, 60)}`, step: 3, n: c, level: "제안", title: to ? `'${q}' → '${to}' 질문 낱말에` : `'${q}' 새 질문 후보`,
+        evidence: `${HELP_SETS[tab]?.name || tab} 탭에서 ${c}번 못 찾음`, effect: "", text: `도우미: '${q}' ${to ? `→ '${to}'` : "새 질문"} (${c}번)` });
+    }
+    DEV_LAST = { props, head: `판단 ${judged.length}건 기준${judged.length < LOG_AGG_MIN ? ` (${LOG_AGG_MIN}건 미만: 비율이 흔들릴 수 있음)` : ""}${res.runAt ? ` · 최근 수집 ${fmtDT(res.runAt)}` : ""} · 외부 AI 없이 계산`,
+      bid: first.bid || [], reqs: DEV_HELP.filter((r) => devIn(r.at, since) && r.result === "요청").slice(-5).reverse() };
+    renderDevAnalysis();
   } catch (e) {
     out.innerHTML = `<div class="sub">분석하지 못했습니다: ${esc(String(e.message || e))}</div>`;
+  } finally {
     btn.disabled = false;
-    return;
   }
-  btn.disabled = false;
-  const cfg = res.config || {};
-  const ruleLi = (x, i) => {
-    const pv = res.previews[i], r = x.r, stat = `판단 ${r.n}건 · 불참 ${devPct(r.vals[2], r.n)}%${x.tag ? ` · 주된 사유 ${x.tag[0]} ${x.tag[1]}건` : ""}`;
-    const title = x.kind === "kw" ? `관심 키워드 '${r.k}' 빼기` : x.kind === "kwwork" ? `관심 키워드 '${r.k}'를 공사 공고에서만` : "보유 면허 경로를 공사 공고에서만";
-    const done = x.kind === "kw" ? !(cfg.keywords || []).includes(r.k) : x.kind === "kwwork" ? (cfg.keywordWork?.[r.k] || []).includes("공사") : (cfg.licenseWork || []).includes("공사");
-    const joinedDrop = (pv?.drop || []).filter((no) => participation[no]?.status === "참가").length;
-    const effect = done ? "이미 적용됨" : !pv ? "최근 수집 결과 없음" : `최근 수집에서 ${pv.drop.length}건 빠짐 (그중 참가로 판단 ${joinedDrop}건)${pv.add ? ` · ${pv.add}건 새로 들어옴` : ""}`;
-    const ex = !done && pv?.dropTitles?.length ? `<div class="sub">빠지는 공고: ${pv.dropTitles.slice(0, 3).map(esc).join(" · ")}${pv.drop.length > 3 ? " …" : ""}</div>` : "";
-    return `<li><b>${esc(title)}</b><div class="sub">${esc(stat)}</div><div>${esc(effect)}</div>${ex}</li>`;
+}
+function renderDevAnalysis() {
+  if (!DEV_LAST) return;
+  const hidden = (p) => DEV_SAVED[p.id]?.status === "dismissed" && p.n < (DEV_SAVED[p.id].n || 0) + p.step;  // 숨긴 뒤 자료가 더 쌓이면 다시 보임
+  const list = DEV_LAST.props.slice().sort((a, b) => DEV_LEVEL[a.level] - DEV_LEVEL[b.level]);
+  const shown = list.filter((p) => DEV_SHOW_HIDDEN || !hidden(p)), nHidden = list.length - list.filter((p) => !hidden(p)).length;
+  const strong = shown.filter((p) => p.level === "제안" || p.level === "보류"), weak = shown.filter((p) => p.level === "참고" || p.level === "적용됨");
+  const li = (p) => {
+    const st = DEV_SAVED[p.id], ida = `data-id="${esc(p.id)}" data-n="${p.n}" data-text="${esc(p.text)}"`;
+    const acts = st?.status === "requested" ? `<span class="sub">적용 요청함 ${esc(fmtDT(st.at))}</span> <button type="button" data-prop="undo" ${ida}>요청 취소</button>`
+      : st?.status === "dismissed" ? `<button type="button" data-prop="undo" ${ida}>다시 보이기</button>`
+      : `${p.level === "제안" ? `<button type="button" data-prop="request" ${ida}>적용 요청</button> ` : ""}<button type="button" data-prop="dismiss" ${ida}>숨기기</button>`;
+    return `<li><span class="prop-lv${p.level === "제안" ? " on" : ""}">${esc(p.level)}</span><b>${esc(p.title)}</b><div class="sub">${esc(p.evidence)}</div>${p.effect ? `<div>${esc(p.effect)}</div>` : ""}${p.examples ? `<div class="sub">${esc(p.examples)}</div>` : ""}<div class="prop-acts">${acts}</div></li>`;
   };
-  const missed = countBy(DEV_HELP.filter((r) => devIn(r.at, since) && (r.result === "모름" || r.result === "고르기")), (r) => r.q.trim()).slice(0, 5);
-  const reqs = DEV_HELP.filter((r) => devIn(r.at, since) && r.result === "요청").slice(-5).reverse();
-  out.innerHTML = `<div class="sub">판단 ${judged.length}건 기준${judged.length < LOG_AGG_MIN ? ` (${LOG_AGG_MIN}건 미만: 비율이 흔들릴 수 있음)` : ""}${res.runAt ? ` · 최근 수집 ${esc(fmtDT(res.runAt))}` : ""}</div>
-    <h5>수집 규칙 후보</h5>${items.length ? `<ul>${items.map(ruleLi).join("")}</ul>` : `<div class="sub">없습니다 (판단 ${AGG_MIN_N}건 이상 · 불참 70% 이상인 관심 키워드·보유 면허 경로)</div>`}
-    <h5>투찰</h5><ul>${(res.bid || []).map((s) => `<li>${esc(s.replace(/^→\s*/, ""))}</li>`).join("")}</ul>
-    <h5>도우미</h5>${missed.length || reqs.length ? `<ul>${missed.map(([q, n]) => `<li>못 찾은 말 ${n}번: ${esc(q)}</li>`).join("")}${reqs.map((r) => `<li>요청: ${esc(r.q)}${r.who ? ` (${esc(r.who)})` : ""}</li>`).join("")}</ul>` : '<div class="sub">없습니다.</div>'}`;
+  const reqs = DEV_LAST.reqs;
+  $("devAnalysis").innerHTML = `<div class="sub">${esc(DEV_LAST.head)}</div>
+    <h5>제안</h5>${strong.length ? `<ul>${strong.map(li).join("")}</ul>` : '<div class="sub">없습니다.</div>'}
+    <h5>참고</h5>${weak.length ? `<ul>${weak.map(li).join("")}</ul>` : '<div class="sub">없습니다.</div>'}${nHidden ? `<button type="button" class="linkish" data-prop-toggle>${DEV_SHOW_HIDDEN ? "숨긴 것 가리기" : `숨긴 것 ${nHidden}건 보기`}</button>` : ""}
+    <h5>투찰 방향</h5><ul>${DEV_LAST.bid.map((s) => `<li>${esc(s.replace(/^→\s*/, ""))}</li>`).join("")}</ul>
+    <h5>요청</h5>${reqs.length ? `<ul>${reqs.map((r) => `<li>${esc(r.q)}${r.who ? ` (${esc(r.who)})` : ""}</li>`).join("")}</ul>` : '<div class="sub">없습니다.</div>'}`;
   $("devAnalysisCopy").hidden = false;
 }
+$("devAnalysis").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-prop-toggle]")) { DEV_SHOW_HIDDEN = !DEV_SHOW_HIDDEN; renderDevAnalysis(); return; }
+  const b = e.target.closest("[data-prop]");
+  if (!b) return;
+  b.disabled = true;
+  try {
+    DEV_SAVED = (await devPost("/api/dev/proposal", { id: b.dataset.id, action: b.dataset.prop, n: Number(b.dataset.n), text: b.dataset.text, who: myName() })).proposals || {};
+    if (b.dataset.prop === "request") loadDev();   // 요청 기록에도 남았으니 질문 기록을 다시 받음
+    renderDevAnalysis();
+  } catch (err) {
+    b.disabled = false;
+    alert("저장하지 못했습니다: " + (err.message || err));
+  }
+});
 $("devAnalyze").onclick = devAnalyze;
 $("devAnalysisCopy").onclick = () => {
   const text = $("devAnalysis").innerText.trim();
@@ -6358,6 +6454,9 @@ const HELP_NEXT = {
 };
 // HELP-PURE-END
 // 개발 담당 이름은 화면 어디에도 안 보임(11/27 사용자 '우리 이름은 공개적으로 쓰지마') — 늘 '개발 담당'
+// 도우미 창 투명도(11/27 사용자) — 40~100%, 이 브라우저에 기억(창을 그리기 전에 읽음)
+let HELP_OPACITY = 1;
+try { const o = Number(localStorage.getItem("help-opacity")); if (o >= 0.4 && o <= 1) HELP_OPACITY = o; } catch (e) {}
 const helpDevs = (josa = "") => "개발 담당" + (josa ? "이" : "");
 const helpText = (h) => ((IS_VIEWER && h[4]) || h[2]).replace("{여기}", IS_VIEWER ? "NAS 웹앱" : "서버 PC 웹앱").replace("{개발이}", helpDevs("이"));  // 다섯째 값 = NAS 웹앱에서 다른 답, {여기} = 지금 보는 웹앱(11/25 사용자)
 // '어디인지 보기'(11/25 사용자) — 답에 나온 버튼·칸을 실제 화면에서 잠깐 표시. 캡처 그림 대신 화면의 그 요소를 가리켜 화면을 고쳐도 낡지 않음.
@@ -6774,7 +6873,7 @@ function helpTabTitle(t, tab) {
     : t === "개찰 결과는 언제 나오나요?" ? `${n}의 개찰 결과는 언제 나오나요?` : `${n}${j} ${t}`;
 }
 function renderHelp() {
-  const head = `<button type="button" class="hgrip" aria-label="창 크기 조절(화살표 키, 두 번 누르면 처음 크기)"><svg viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1 10V1h9M4.5 10V4.5H10"/></svg></button><div class="hhead"><b>${CO_NAME} 도우미</b><span>${esc(HS().name)} · ${IS_VIEWER ? "NAS 웹앱" : "서버 PC 웹앱"}</span><button type="button" data-hclose aria-label="닫기">✕</button></div>`
+  const head = `<button type="button" class="hgrip" aria-label="창 크기 조절(화살표 키, 두 번 누르면 처음 크기)"><svg viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1 10V1h9M4.5 10V4.5H10"/></svg></button><div class="hhead"><b>${CO_NAME} 도우미</b><span>${esc(HS().name)} · ${IS_VIEWER ? "NAS 웹앱" : "서버 PC 웹앱"}</span><label class="hop">투명도 <input type="range" min="40" max="100" step="5" value="${Math.round(HELP_OPACITY * 100)}" aria-label="도우미 창 투명도"></label><button type="button" data-hclose aria-label="닫기">✕</button></div>`
     + `<div class="hviews" role="tablist">${[["chat", "대화"], ["faq", "자주 묻는 질문"]].map(([v, t]) => `<button type="button" role="tab" data-hview="${v}" aria-selected="${HELP_VIEW === v}">${t}</button>`).join("")}</div>`;
   if (HELP_VIEW === "faq") {
     $("helpBox").innerHTML = head + `<div class="hform fform"><input id="helpFind" type="search" value="${esc(HELP_FAQ.find)}" placeholder="질문에서 찾기" autocomplete="off" aria-label="자주 묻는 질문에서 찾기"></div><div class="flist" id="helpFaq">${helpFaqList()}</div>`;
@@ -6830,6 +6929,14 @@ function helpSize(w, h, save) {
   if (save) try { w == null ? localStorage.removeItem("help-size") : localStorage.setItem("help-size", JSON.stringify([w, h].map(Math.round))); } catch (e) {}
 }
 try { const z = JSON.parse(localStorage.getItem("help-size") || "null"); if (z && z.every(Number.isFinite)) helpSize(z[0], z[1]); } catch (e) {}
+// 창 투명도(11/27 사용자) — 40~100%, 이 브라우저에 기억
+$("helpBox").style.setProperty("--hop", HELP_OPACITY);
+$("helpBox").addEventListener("input", (e) => {
+  if (!e.target.closest(".hop")) return;
+  HELP_OPACITY = Math.max(0.4, Math.min(1, Number(e.target.value) / 100));
+  $("helpBox").style.setProperty("--hop", HELP_OPACITY);
+  try { localStorage.setItem("help-opacity", String(HELP_OPACITY)); } catch (err) {}
+});
 $("helpBox").addEventListener("pointerdown", (e) => {
   const grip = e.target.closest(".hgrip");
   if (!grip) return;

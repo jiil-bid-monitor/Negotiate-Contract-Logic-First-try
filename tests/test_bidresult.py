@@ -158,6 +158,19 @@ class TestFill(unittest.TestCase):
         self.assertEqual(fill_results(log, None, "u", OWN, ids=[a["id"]], force=True, fetch=fake)["fetched"], 1)
         self.assertIn("1순위 업체", log.csv())
 
+    def test_completed_without_bidder_list_refetched_once(self):
+        """11/27: 투찰 업체 목록 저장 전에 받은 '완료' 결과는 한 번 다시 받아 목록을 채움 — 그래도 없으면 다시 안 받음."""
+        log = BidLog(Path(tempfile.mkdtemp()))
+        a = log.add({"noticeNo": "R26BK01810177", "bid": 173_500_000, "rate": 100.55, "workType": "공사"})
+        fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(BIDDERS))
+        log._bidders_path(a["id"]).unlink()   # 예전(목록 저장 전) 결과처럼
+        self.assertEqual(fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(BIDDERS))["fetched"], 1)
+        self.assertEqual(len(log.bidders(a["id"])), 4)
+        self.assertEqual(fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(BIDDERS))["fetched"], 0)   # 목록이 생기면 또 안 받음
+        log._bidders_path(a["id"]).unlink()
+        log.set_result_field(a["id"], "biddersMissing", True)   # 다시 받아도 목록이 없던 결과
+        self.assertEqual(fill_results(log, None, "u", OWN, fetch=lambda c, b, n: result(BIDDERS))["fetched"], 0)
+
     def test_new_result_notified_once(self):
         """11/24 사용자: 개찰 결과가 처음 '완료'가 될 때만 한 통 — 개찰 전·다시 받기는 안 보냄."""
         log = BidLog(Path(tempfile.mkdtemp()))

@@ -838,7 +838,15 @@ def make_handler(app: App):
                     return self._json({"ok": True, **done, "entries": app.bidlog_of(co).entries()})
                 if url.path == "/api/dev/analysis":  # 개발자 탭 '분석하기'(11/27) — 외부 AI 없이 규칙 미리 보기·투찰 보정 방향
                     from .devanalysis import analyze
-                    return self._json(analyze(co.store, None if co.default else co.id, app.bidlog_of(co).entries(), data.get("changes") or []))
+                    log = app.bidlog_of(co)
+                    return self._json(analyze(co.store, None if co.default else co.id, log.entries(), data.get("changes") or [], log.bidders))
+                if url.path == "/api/dev/proposal":  # 개발자 탭 제안 — 숨기기·적용 요청(요청은 도우미 요청 기록에도, 11/27)
+                    from .devanalysis import set_proposal
+                    action = str(data.get("action") or "")
+                    if action == "request":
+                        app.help_question({"q": "[적용 요청] " + str(data.get("text") or data.get("id") or ""), "result": "요청", "tab": "dev",
+                                           "who": data.get("who"), "co": co.id})
+                    return self._json({"proposals": set_proposal(co.store, str(data.get("id") or ""), action, data.get("n"))})
                 if url.path == "/api/help-question":  # 도우미에 직접 적은 질문 모으기(11/24)
                     app.help_question(data)
                     return self._json({"ok": True})

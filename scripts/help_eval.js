@@ -1,5 +1,5 @@
 // 도우미가 직접 적은 질문을 얼마나 맞히는지 재기 (2026-11-25).
-// 쓰는 법: node scripts/help_eval.js [시험세트.json ...] [--rows] [--grida]   (기본: scripts/help_evalset.dev.json, .hold.json, .blind.json, .casual.json — casual = 반말·오타·단답·요청 287문장, 11/27)
+// 쓰는 법: node scripts/help_eval.js [시험세트.json ...] [--rows] [--grida]   (기본: scripts/help_evalset.dev.json, .hold.json, .blind.json, .casual.json, .casual2.json — casual = 반말·오타·단답·요청 295문장, casual2 = 처음 보는 말투 160문장(따로 만든 것), 11/27)
 // 화면 코드(webapp/static/index.html의 HELP-PURE-BEGIN ~ HELP-PURE-END)를 그대로 읽어 돌린다. 화면 코드를 따로 옮겨 적지 않음.
 // 시험 항목: {id, tab, q, expect(질문 제목 또는 null), expectTab, altExpect["제목" 또는 "탭::제목"], prev, prevTitle, type}
 // 가장 나쁜 결과는 wrong(엉뚱한 답을 바로 냄). 도우미 답·낱말을 고친 뒤엔 wrong이 늘지 않았는지 볼 것.
@@ -45,7 +45,7 @@ Object.entries(vm.runInNewContext("(" + html.slice(spotAt, spotAt + spotEnd + 1)
 
 const args = process.argv.slice(2), rows = args.includes("--rows");
 const files = args.filter((x) => !x.startsWith("--"));
-const sets = files.length ? files : ["help_evalset.dev.json", "help_evalset.hold.json", "help_evalset.blind.json", "help_evalset.casual.json"].map((f) => path.join(__dirname, f)).filter(fs.existsSync);
+const sets = files.length ? files : ["help_evalset.dev.json", "help_evalset.hold.json", "help_evalset.blind.json", "help_evalset.casual.json", "help_evalset.casual2.json"].map((f) => path.join(__dirname, f)).filter(fs.existsSync);
 const KEYS = ["correct", "wrong", "choicesHit", "choicesMiss", "falseNone", "correctNone", "shownOutOfScope", "special"];
 let wrongTotal = 0;
 for (const file of sets) {

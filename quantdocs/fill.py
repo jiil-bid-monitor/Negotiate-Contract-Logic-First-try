@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import html
+import math
 import re
 import unicodedata
 import zipfile
@@ -921,7 +922,28 @@ def _span(text: str) -> int:
     return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
 
 
-def _after_colon(seg: str, value: str, seal: bool) -> str | None:
+def _exact_need(seg_before: str, value: str, chars: "_Chars | None") -> int | None:
+    """서명 줄 쌍점 뒤 빈칸 중 뺄 개수를 글자 모양 너비로 — ' ' + 값이 뺀 빈칸 너비를 넘지 않는 가장 적은 수(줄 길이 그대로 → (인) 원래 자리).
+    (11/27 사용자 '미묘하지만 여전히 차이' — 그리다 위임장 대표자·대리인 줄 (인)이 반 글자쯤 어긋남: 한글 2칸 + 10% 여유로 빼서
+    값보다 빈칸이 한 칸 더 빠졌음.) 한글·빈칸이 아닌 글자(영문·숫자·괄호)가 있으면 너비 어림이 덜 정확해 10% 여유를 둠."""
+    if chars is None:
+        return None
+    runs = re.findall(r'<(?:[\w.-]+:)?run\b[^>]*?charPrIDRef="(\d+)"', seg_before)
+    if not runs:
+        return None
+    cid = runs[-1]
+    h0 = chars.height(cid) or 1
+    sp = chars.char_width(cid, " ")
+    if sp <= 0:
+        return None
+    scale = max(h0, FILL_HEIGHT) / h0  # 값은 이름표 크기(11pt보다 작으면 11pt)
+    w = sum(chars.char_width(cid, ch) for ch in value) * scale
+    if re.search(r"[^가-힣 ]", value):
+        w *= 1.1
+    return 1 + math.ceil(w / sp - 1e-6)
+
+
+def _after_colon(seg: str, value: str, seal: bool, chars: "_Chars | None" = None) -> str | None:
     """문단(또는 한 문단짜리 칸) 글 속 첫 쌍점 뒤에 값. 쌍점이 없으면 맨 끝 글 뒤에 ' : 값'. 못 넣으면 None."""
     ts = list(re.finditer(r"(<(?:[\w.-]+:)?t\b[^>]*>)(.*?)(</(?:[\w.-]+:)?t>)", seg, re.S))
     hit = next((t for t in ts if re.search(r"[:：]", re.sub(r"<[^>]*>", "", t.group(2)))), None)
@@ -943,11 +965,14 @@ def _after_colon(seg: str, value: str, seal: bool) -> str | None:
             # 빈칸은 이름의 '너비'만큼 뺌 — 한글은 빈칸 두 칸 너비, 채운 글은 11pt로 커지니 10%쯤 더(11/11 '신 청 인 : 이윤봉'
             # 뒤 (인)이 다음 줄로 넘어감 — 예전엔 글자 수만큼만 빼서 줄이 넘쳤음)
             need = _span(value) + 1 + -(-_span(value) // 10)
+            if seal and exact[0] is not None:
+                need = exact[0]
             room = len(mm.group(3))
             # (11/20 사용자 결정: ':' 자리는 지킨 채 값 뒤 오른쪽 빈칸을 줄임) 이름과 (인) 사이는 한 칸까지 줄이고, 그래도 모자라면 줄 끝 빈칸에서 뺌
             short.append(max(0, need + 1 - room) if seal else 0)
             return f"{mm.group(2)} {_mark(value)}" + " " * max(1 if seal else 0, room - need)
         last = hit
+        exact = [_exact_need(seg[:hit.start(2)], value, chars) if seal else None]
         body = re.sub(r"(<[^>]*>)|([:：])( *)", put, hit.group(2))
         # (11/16 사용자 지적: '대 표 자:' 줄만 ':'가 왼쪽으로 — 기본 서식의 ':' 자리는 절대 옮기지 말 것) 빈칸이 모자라도 줄 앞 들여쓰기
         # 빈칸은 줄이지 않음 — 대신 '(인)' 뒤 줄 끝 빈칸을 그만큼 줄임(같은 글 조각, 모자라면 뒤 글 조각들의 빈칸도 — 11/20 (인)이 다음 줄로 넘어감)
@@ -1913,7 +1938,7 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
             key = "생년월일"
         if not value:
             continue
-        seg = _after_colon(xml[s:e], value, seal)
+        seg = _after_colon(xml[s:e], value, seal, chars)
         if seg is None:
             continue
         seg = re.sub(rf"({_VE})([(（]\s*(?:공\s*동\s*)?대\s*표\s*사)", r"\1 \2", seg, count=1)  # '(주)지일 (대표사)' — 붙지 않게 한 칸

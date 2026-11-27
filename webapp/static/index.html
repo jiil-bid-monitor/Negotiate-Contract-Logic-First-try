@@ -236,8 +236,14 @@ body.picking { overflow: hidden; }
 .viz-enough .meter span { display: block; height: 100%; background: var(--viz-1); }
 .viz-enough .n { color: var(--ink-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .viz-enough .why { color: var(--muted); }
-.viz-enough .basis, .viz-basis { display: block; font-size: 11.5px; margin-top: 2px; color: var(--muted); word-break: keep-all; }
-.viz-basis { margin: -4px 0 10px; }
+.viz-basis { margin: -4px 0 12px; font-size: 12px; color: var(--muted); }
+.viz-basis summary { cursor: pointer; width: max-content; }
+.viz-basis table { border-collapse: collapse; margin: 6px 0 4px; width: auto; }
+.viz-basis th, .viz-basis td { text-align: left; padding: 3px 14px 3px 0; vertical-align: top; word-break: keep-all; }
+.viz-basis th { font-weight: 400; color: var(--ink); white-space: nowrap; }
+.viz-basis th.sub { padding-left: 12px; color: var(--muted); }
+.viz-basis .goal td:nth-child(2) { white-space: nowrap; color: var(--ink); }
+.viz-basis p { margin: 4px 0 0; }
 @media (max-width: 640px) { .viz-enough { grid-template-columns: 1fr auto; } .viz-enough .meter { grid-column: 1 / -1; } .viz-enough .why { grid-column: 1 / -1; margin-bottom: 4px; } }
 #devAnalysis { margin-top: 10px; font-size: 13px; color: var(--ink); }
 #devAnalysis h5 { margin: 14px 0 4px; font-size: 13px; color: var(--ink-strong); }
@@ -2429,8 +2435,21 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
       <option value="">전체</option><option value="7">최근 7일</option><option value="30">최근 30일</option><option value="90">최근 90일</option>
     </select></label></div>
     <div class="viz-card viz-watch"><h4>살펴볼 것</h4><ul id="devWatch"></ul>
-      <p class="viz-basis">근거: 먼저 눈여겨볼 줄을 고르는 기준(통계 판단은 아래 '분석하기'에서). 수집 경로·키워드 = 판단 10건 이상 · 불참 80% 이상(판단 기록 집계의 '조정 검토'와 같음) · 하한선 통과 = 개찰 20건 이상인데 60% 미만 · 외주 = 비교 5건 이상에 외주가 절반 이상 · 답 없는 질문 5건 이상</p>
+      <details class="viz-basis"><summary>기준 보기</summary><table><tbody>
+        <tr><th>수집 경로·키워드</th><td>판단 10건 이상 · 불참 80% 이상</td></tr>
+        <tr><th>하한선 통과</th><td>개찰 20건 이상인데 통과 60% 미만</td></tr>
+        <tr><th>외주 금액</th><td>비교 5건 이상인데 외주가 더 좋은 등수가 절반 이상</td></tr>
+        <tr><th>답 없는 질문</th><td>5건 이상</td></tr></tbody></table>
+        <p>먼저 눈여겨볼 것만 고르는 기준입니다. 통계로 따지는 건 '분석하기'에서.</p></details>
       <h5 class="viz-sub">자료가 얼마나 쌓였나</h5><div class="viz-enough" id="devEnough"></div>
+      <details class="viz-basis"><summary>권장 건수의 근거</summary><table class="goal"><tbody>
+        <tr><th>키워드·경로 조정</th><td>판단 30건</td><td>오차가 ±18%p로 줄어 불참 80%와 60%를 가를 수 있음</td></tr>
+        <tr><th class="sub">항목마다</th><td>10건</td><td>10건 모두 불참이어야 불참 70% 이상이라고 확실히 말할 수 있음(1건만 달라도 60% 아래)</td></tr>
+        <tr><th>기준 사정률 보정</th><td>개찰 50건</td><td>오차가 보정 단위 0.25%p보다 작아지는 건수<span id="devNeed"></span></td></tr>
+        <tr><th class="sub">폭 제안</th><td>30건</td><td>업체 목록이 있는 개찰, 앞 15건으로 고르고 뒤 15건으로 확인</td></tr>
+        <tr><th>웹앱 vs 외주</th><td>비교 20건</td><td>20건 중 15건이 한쪽이면 우연일 확률 4%(12건이면 9건이 한쪽이어도 15%)</td></tr>
+        <tr><th>도우미 말투 보강</th><td>질문 50건</td><td>통계 기준 아님, 정해 둔 목표</td></tr></tbody></table>
+        <p>오차는 95% 범위: 비율 ±98%p/√건수, 가운데값 ±1.96 × 1.25 × 흩어짐/√건수. '항목마다'는 윌슨 하한(10건 중 10건 = 72%).</p></details>
       <button type="button" id="devAnalyze">분석하기</button> <button type="button" id="devAnalysisCopy" hidden>결과 복사</button>
       <div id="devAnalysis"></div></div>
     <div class="viz-tiles" id="devTiles"></div>
@@ -4416,9 +4435,12 @@ const LOG_AGG_MIN = 30;
 /**
  * 개발자 화면(11/24 사용자 요청) — 키워드 조정용 집계는 담당자에겐 필요 없어 주소에 ?dev=1을 붙였을 때만 보인다.
  * 한 번 켜면 이 브라우저에서 계속(?dev=0으로 끔).
+ * 주소 어디에 넣어도 됨(11/27 사용자 — 서버 PC에서 '#live?dev=1'·'?t=…?dev=1'처럼 넣어 안 켜졌음). # 뒤에 넣었으면 그 부분은 주소에서 지움(탭 이동이 # 뒤를 읽어서).
  */
 const DEV_VIEW = (() => {
-  const q = new URLSearchParams(location.search).get("dev");
+  const q = [...location.href.matchAll(/[?&#]dev=([01])(?![0-9A-Za-z])/g)].at(-1)?.[1] || null;
+  const hash = location.hash.replace(/[?&]dev=[01](?![0-9A-Za-z])/g, "");
+  if (hash !== location.hash) history.replaceState(null, "", location.pathname + location.search + (hash === "#" ? "" : hash));
   try {
     if (q === "1") localStorage.setItem("ui-dev", "1");
     if (q === "0") localStorage.removeItem("ui-dev");
@@ -4778,20 +4800,18 @@ function renderDev(force = false) {
   const needFor = (err) => (sigma ? Math.ceil((1.96 * 1.2533 * sigma / err) ** 2) : null);   // 오차가 err 안으로 들어오는 건수
   const pctErr = (n) => (n ? Math.round(98 / Math.sqrt(n)) : null);
   const topItem = Math.max(0, ...paths.map((r) => r.n), ...kws.map((r) => r.n));
-  // [이름, 지금 건수, 권장 건수, 단위, 지금 상태, 권장 건수의 근거](근거 = 11/27 사용자 '저 수치는 어떤 근거로')
+  // [이름, 지금 건수, 권장 건수, 단위, 지금 상태] — 권장 건수의 근거는 아래 접힌 표(11/27 사용자 '근거 문장 가독성')
+  const webBetter = cmp.filter((c) => c > 0).length;
   const enough = [
-    ["키워드·경로 조정", judged.length, 30, "판단", `${judged.length ? `비율 오차 ±${pctErr(judged.length)}%p` : "판단 없음"} · 가장 많이 쌓인 항목 ${topItem}건`,
-      "근거: 비율 오차(95% 범위)는 ±98%p/√건수라 30건이면 ±18%p, 그보다 적으면 불참 80%와 60%가 갈리지 않음 · 항목마다 10건: 10건 모두 불참이면 확실한 불참 비율(윌슨 하한) 72%로 제안 기준 70%를 넘음(1건만 참가·보류여도 60% 아래)"],
-    ["기준 사정률 보정", diffs.length, 50, "개찰", sigma ? `가운데값 오차 약 ±${seMed(diffs.length).toFixed(2)}%p (지금 흩어짐 σ ${sigma.toFixed(2)}%p)` : "5건부터 오차 계산",
-      `근거: 가운데값 오차는 1.96 × 1.25 × σ/√건수 · 오차가 보정 단위 0.25%p보다 작아야 보정할 수 있음${sigma ? `(지금 흩어짐이면 약 ${needFor(0.25)}건)` : ""} · 폭 제안은 업체 목록 있는 개찰 30건(앞 15건으로 고르고 뒤 15건으로 확인)`],
-    ["웹앱 vs 외주", cmp.length, 20, "비교", `지금 ${cmp.length}건`,
-      "근거: 부호 검정. 20건 중 15건(75%)이 한쪽이면 우연일 확률 4%(5% 미만). 12건은 9건(75%)이 한쪽이어도 15%라 판단 못 함"],
-    ["도우미 말투 보강", help.length, 50, "질문", "요청은 1건부터",
-      "근거: 통계 기준 아님(정한 목표) · 같은 말이 3번 이상 바로 답하지 못하면 한 번 실수가 아니라 다른 사람도 쓰는 말로 봄"],
+    ["키워드·경로 조정", judged.length, 30, "판단", `${judged.length ? `비율 오차 ±${pctErr(judged.length)}%p` : "판단 없음"} · 가장 많이 쌓인 항목 ${topItem}건`],
+    ["기준 사정률 보정", diffs.length, 50, "개찰", sigma ? `가운데값 오차 약 ±${seMed(diffs.length).toFixed(2)}%p` : "5건부터 오차 계산"],
+    ["웹앱 vs 외주", cmp.length, 20, "비교", cmp.length ? `웹앱이 더 좋은 등수 ${webBetter} · 외주 ${outBetter}` : "비교 없음"],
+    ["도우미 말투 보강", help.length, 50, "질문", `답 없는 질문 ${none} · 요청 ${reqs}`],
   ];
-  $("devEnough").innerHTML = enough.map(([k, n, goal, unit, why, basis]) => `<span class="k">${esc(k)}</span>
+  $("devEnough").innerHTML = enough.map(([k, n, goal, unit, why]) => `<span class="k">${esc(k)}</span>
     <span class="meter" role="meter" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(n, goal)}" aria-label="${esc(k)}"><span style="width:${Math.min(100, (n / goal) * 100)}%"></span></span>
-    <span class="n">${esc(`${unit} ${num(n)} / ${goal}건${n >= goal ? " 충분" : ""}`)}</span><span class="why">${esc(why)}<span class="basis">${esc(basis)}</span></span>`).join("");
+    <span class="n">${esc(`${unit} ${num(n)} / ${goal}건${n >= goal ? " 충분" : ""}`)}</span><span class="why">${esc(why)}</span>`).join("");
+  $("devNeed").textContent = sigma ? ` (지금 자료로는 약 ${needFor(0.25)}건)` : "";
 }
 /** '분석하기'(11/27) — 외부 AI 없이: 화면이 판단·투찰·질문 기록으로 후보를 고르고, 서버가 최근 수집 결과 미리 보기·기준 사정률 폭·투찰 방향을 계산.
  *  제안 = 자료 충분 + 근거 강도(윌슨 하한·부호 검정) + 효과 계산 + 안전(참가로 판단한 공고가 빠지지 않음). 적용은 '적용 요청'(요청 기록) 뒤 PR */

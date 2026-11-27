@@ -1491,12 +1491,17 @@ def _seal_need(value: str) -> int:
     return w + -(-w // 10)
 
 
+_SIGNER = r"(?:서\s*약\s*자|서\s*약\s*인|확\s*약\s*자|각\s*서\s*인|신\s*청\s*(?:인|자)|제\s*안\s*자|입\s*찰\s*자|제\s*출\s*자)\s*[:：]?"
+_CO_PH_ONLY = re.compile(rf"\s*{_SIGNER}\s*{_PH}\s*(?:회\s*사|업\s*체)\s*")  # '서약자 : OOO회사'만 있는 칸·줄
+
+
 def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | None" = None, sign_only: bool = False) -> str:
     """표 밖 '업 체 명 :'처럼 이름표만 있는 문단 끝에 값을 붙임(11/04 당진 실적 서식)."""
     tbls = _spans(xml, "tbl")
     # 표 안이어도 여러 줄짜리 칸(서식 본문 칸)의 줄은 채움 — 한 줄짜리 칸은 이름표 칸이라 표 채우기가 옆 칸에 씀(11/04 서식 8·9 서명 줄)
     cells = _all_spans(xml, "tc")  # 표 안 표의 칸도(11/13 — 안쪽 표 이름표 칸 뒤에도 값이 한 번 더 들어갔음)
-    single = [(cs, ce) for cs, ce in cells if len(_spans(xml, "p", cs, ce)) <= 1]
+    single = [(cs, ce) for cs, ce in cells if len(_spans(xml, "p", cs, ce)) <= 1
+              and not _CO_PH_ONLY.fullmatch(_text(xml[cs:ce]))]  # '서약자 : OOO회사' 한 칸은 아래 자리표시 규칙이(11/27)
     edits = []
     paras, stack = [], []  # 모든 문단(표 칸 안 문단 포함) — _spans는 맨 바깥만 줌
     for m in re.finditer(r"<(/?)(?:[\w.-]+:)?p\b[^>]*?(/?)>", xml):
@@ -1745,6 +1750,17 @@ def _fill_label_paragraphs(xml: str, vault, rep: FillReport, chars: "_Chars | No
                 rep.filled.append(f"서명 줄 자리표시 → {' · '.join(v for _l, v in vals if v)}")
                 if co_ph:
                     lab_ph_at = n
+            continue
+        # '서약자 : OOO회사'만 있는 칸·줄(11/27 사용자 지적 — 대표가 옆 칸 '대 표 : | (서명 또는 날인)'이라 아래 한 줄 규칙에 안 맞음)
+        co_only = _CO_PH_ONLY.fullmatch(text)
+        if co_only and _value("회사명", vault):
+            company = _value("회사명", vault)
+            seg = re.sub(rf"{_PH}\s*(?:회\s*사|업\s*체)", lambda mm: _mark(company), xml[s:e], count=1)
+            if seg != xml[s:e]:
+                seg = re.sub(r"<(?:[\w.-]+:)?linesegarray\b.*?</(?:[\w.-]+:)?linesegarray>", "", seg, flags=re.S)
+                edits.append((s, e, seg))
+                rep.filled.append(f"서명 줄 자리표시 → {company}")
+                lab_ph_at = n
             continue
         # 서식에 '○○○업체 대표자 :   ○○○ (인)'처럼 자리표시가 미리 적힌 서명 줄(11/04 서식 19)
         # (11/13 사용자 요청) 앞에 이름표가 붙고 쌍점 없는 '서 약 자 : ○○○회사    대표 ○○○ (서명 또는 날인)'도

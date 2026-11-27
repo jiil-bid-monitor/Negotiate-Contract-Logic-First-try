@@ -3701,6 +3701,25 @@ def fill_hwpx(src: Path, dst: Path, vault, tracks: list[dict] | None = None, tit
                             edits.append((target, [birth], False))
                             rep.filled.append(f"대표자 생년월일 → {birth}")
                         continue
+                    if not key and re.fullmatch(r"대표(?:자|이사)\(주민등록번호\)", _sq(c.text)) and c.row not in agent_rows:
+                        # '대 표 자 (주민등록번호) | (인)'(11/27 사용자 — 태백 LED전광판 서식 5 제안서 접수증, 통째로 비었음) —
+                        # 첫 줄 '대표자 이름 … (인)'(한 줄), 다음 줄 '(주민등록번호)'
+                        target = by_pos.get((c.row, c.col + c.colspan))
+                        rep_nm = _value("대표자", vault)
+                        rrn = _masked(next((str(v) for k, v in vault.info.items() if "주민" in k and v), ""))
+                        if rep_nm and target is not None and (target.blank or _SEAL_ONLY.match(_sq(target.text))):
+                            first = rep_nm
+                            if not target.blank:
+                                seal_text = target.text.strip()
+                                gap = _seal_gap(xml[target.start:target.end], rep_nm, seal_text, chars) if chars is not None else None
+                                first = f"{rep_nm}{' ' * (gap or 3)}{seal_text}"
+                                pm = re.search(r'<(?:[\w.-]+:)?p\b[^>]*\bparaPrIDRef="(\d+)"', xml[target.start:target.end])
+                                if chars is not None and pm:
+                                    para_override[target.start] = chars.left_any(pm.group(1))
+                                rep.one_line.add(target.start)
+                            edits.append((target, [first] + ([f"({rrn})"] if rrn else []), False))
+                            rep.filled.append(f"대표자(주민등록번호) → {rep_nm}" + (f" ({rrn})" if rrn else ""))
+                        continue
                     if not key and "주민등록번호" in _sq(c.text):
                         # 대표자 줄의 주민등록번호만(위임장 '대 표 자 | 이름 | 주민등록번호 | __') — 대리인 줄은 비움, 뒷자리는 '*'
                         if c.row not in agent_rows and (group == "대표자" or any(o.row == c.row and _sq(o.text).startswith("대표자") for o in cells)):

@@ -5255,6 +5255,21 @@ def test_applicant_rep_group_rrn(tmp_path: Path):
     assert g[(0, 4)] == "000101-3******", g
 
 
+def test_rep_rrn_label_name_seal_then_rrn_line(tmp_path: Path):
+    """(11/27 사용자 — 태백 LED전광판 서식 5 제안서 접수증) '대 표 자 (주민등록번호) | (인)'이 통째로 비었음('주민' 비움 규칙) —
+    첫 줄 '대표자 이름 … (인)', 다음 줄 '(주민등록번호)'."""
+    from quantdocs.fill import _cells, _spans, fill_hwpx
+
+    rows = [[_c(0, 0, "업 체 명"), _c(1, 0, ""), _c(2, 0, "대 표 자 (주민등록번호)"), _c(3, 0, "(인)")]]
+    src = _mini_hwpx(tmp_path / "s.hwpx", _tbl(rows))
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍대표", "대표자 주민등록번호": "000101-3******"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v, title="가상 공고")
+    xml = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    cell = next(c for c in _cells(xml, _spans(xml, "tbl")[0]) if (c.row, c.col) == (0, 3))
+    paras = [p for p in (re.sub(r"<[^>]+>", "", m) for m in re.findall(r"<hp:p\b.*?</hp:p>", xml[cell.start:cell.end], re.S)) if p.strip()]
+    assert paras[0].startswith("홍대표") and paras[0].rstrip().endswith("(인)"), paras
+    assert paras[1].strip() == "(000101-3******)", paras
+
 def test_grida_track_table_leaves_orderer_blank():
     """(11/25 사용자) 그리다 실적 표는 사업명·사업기간·계약금액·업무수행내용·공동수행 여부만 — 발주처 칸은 비움(지일은 예전대로)."""
     from quantdocs import company

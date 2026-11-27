@@ -4445,6 +4445,29 @@ def test_merge_keeps_one_sec_pr_per_section(tmp_path: Path):
         assert t in xml
 
 
+def test_merge_sec_pr_run_with_page_header(tmp_path: Path):
+    """11/27 사용자 제보(태백 LED전광판 R26BK01860338 '만들기 · list index out of range'): 쪽 설정 run 안에 로고 머리말(그 안에 문단·run)이 있어
+    처음 나오는 '</run>'(머리말 안)을 run 끝으로 보고 반만 옮겨, 잘라 낸 서식마다 문단 하나가 안 닫혔고 통합서식 잇기가 멈췄음."""
+    from quantdocs import forms_cut
+
+    para = lambda t, brk="0": f'<hp:p paraPrIDRef="0" pageBreak="{brk}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    header = '<hp:ctrl><hp:header><hp:subList><hp:p paraPrIDRef="3"><hp:run charPrIDRef="6"><hp:pic/></hp:run></hp:p></hp:subList></hp:header></hp:ctrl>'
+    first = f'<hp:p paraPrIDRef="9"><hp:run charPrIDRef="7"><hp:secPr/>{header}</hp:run><hp:run charPrIDRef="7"><hp:t>표지</hp:t></hp:run></hp:p>'
+    src = tmp_path / "rfp.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", '<hh:head xmlns:hh="h" secCnt="1"><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+        z.writestr("Contents/section0.xml", f'<hs:sec>{first}{para("목차")}{para("〈서식 1〉 참가신청서", "1")}{para("내용 1")}'
+                                            f'{para("〈서식 2〉 위임장", "1")}{para("내용 2")}</hs:sec>')
+    forms = forms_cut.cut(src, tmp_path / "cut")
+    for f in forms:
+        x = zipfile.ZipFile(tmp_path / "cut" / f.file).read("Contents/section0.xml").decode()
+        assert x.count("<hp:p ") == x.count("</hp:p>")
+    out = forms_cut.merge(src, [(f, tmp_path / "cut" / f.file) for f in forms], tmp_path / "merged.hwpx", fit_pages=False)
+    xml = zipfile.ZipFile(out).read("Contents/section0.xml").decode()
+    assert xml.count("<hp:p ") == xml.count("</hp:p>") and xml.count("<hp:secPr/>") == 1 and xml.count("<hp:header>") == 1
+    assert "내용 1" in xml and "내용 2" in xml
+
 def test_joint_supply_form_recognized_by_body(tmp_path: Path):
     """11/20 사용자 '공동수급 관련 문서는 기입 대상이 아니야': 이름엔 '공동수급'이 없는 '대표자 선임계'
     ('…참여업체의 대표자를 … 선임하고 모든 권한을 공동수급체 대표자에게 위임합니다. ※ 단독 참가시는 필요 없음.')도 공란 서식."""

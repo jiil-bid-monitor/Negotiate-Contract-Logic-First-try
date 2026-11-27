@@ -679,6 +679,11 @@ class TestServer(unittest.TestCase):
             self.assertIn("<title>나라장터", res.read().decode())
         with urllib.request.urlopen(f"{self.base}/v2/?t={self.app.token}") as res:
             self.assertIn("app_token=", res.headers.get("Set-Cookie") or "")
+        # 11/27: '?t=토큰?dev=1'처럼 ?를 두 번 써도 토큰으로 알아봄(개발자 모드를 켜려다 화면이 안 열리던 것)
+        with urllib.request.urlopen(f"{self.base}/?t={self.app.token}?dev=1") as res:
+            self.assertIn("app_token=", res.headers.get("Set-Cookie") or "")
+        with urllib.request.urlopen(f"{self.base}/api/meta?t={self.app.token}?dev=1") as res:
+            self.assertEqual(res.status, 200)
 
     def test_quant_tab_routes(self):
         """정량평가서 탭(11/03 합침): /quant/ 화면은 토큰 없이, /api/quant/…는 이 웹앱 토큰으로 quantdocs를 부름."""

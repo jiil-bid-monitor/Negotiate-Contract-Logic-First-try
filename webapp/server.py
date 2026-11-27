@@ -341,8 +341,12 @@ def make_handler(app: App):
         def _authorized(self) -> bool:
             if not app.token:
                 return True
-            given = self.headers.get("X-App-Token") or parse_qs(urlparse(self.path).query).get("t", [""])[0] or self._cookie()
+            given = self.headers.get("X-App-Token") or self._url_token() or self._cookie()
             return hmac.compare_digest(given.encode(), app.token.encode())
+
+        def _url_token(self) -> str:
+            # '?t=토큰?dev=1'처럼 ?를 두 번 쓴 주소도(11/27 사용자) — 토큰엔 ?가 없음(token_urlsafe)
+            return parse_qs(urlparse(self.path).query).get("t", [""])[0].split("?")[0]
 
         def _cookie(self) -> str:
             # 팀원 화면은 요청마다 토큰을 붙이지 않는다 — 처음 ?t=로 들어올 때 심은 쿠키로 확인한다(ui.ts와 같은 방식)
@@ -672,7 +676,7 @@ def make_handler(app: App):
                 ctype += "; charset=utf-8"
             cookie = None
             if name.endswith("index.html") and app.token:
-                given = parse_qs(urlparse(self.path).query).get("t", [""])[0]
+                given = self._url_token()
                 if given and hmac.compare_digest(given.encode(), app.token.encode()):
                     # HttpOnly·SameSite=Lax, 1년 — 한 번 토큰 주소로 들어오면 그 뒤로는 주소에 토큰이 없어도 된다
                     cookie = f"app_token={app.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000"

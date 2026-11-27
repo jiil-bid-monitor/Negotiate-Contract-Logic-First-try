@@ -10,7 +10,7 @@ const a = html.indexOf("// HELP-PURE-BEGIN"), b = html.indexOf("// HELP-PURE-END
 if (a < 0 || b < a) throw new Error("index.html에서 HELP-PURE-BEGIN/END를 찾지 못함");
 const box = {};
 const GRIDA = process.argv.includes("--grida");  // 그리다 화면의 질문으로 재기
-vm.runInNewContext((GRIDA ? 'var CO = "grida";\n' : "") + html.slice(a, b) + "\n;Object.assign(out, { HELP_SETS, HS, helpDecide, helpExact, helpRank, HELP_DOCS, HELP_P });", { out: box });
+vm.runInNewContext((GRIDA ? 'var CO = "grida";\n' : "") + html.slice(a, b) + "\n;Object.assign(out, { HELP_SETS, HS, helpDecide, helpExact, helpRank, HELP_DOCS, HELP_P, HELP_CHAT_ONLY, HELP_NEXT, helpListed });", { out: box });
 if (process.env.HELP_P) Object.assign(box.HELP_P, JSON.parse(process.env.HELP_P));  // 문턱값을 바꿔 가며 잴 때
 const { HELP_SETS, HS, helpDecide } = box;
 const has = (tab, title) => !!HELP_SETS[tab] && HS(tab).qa.some((h) => h[1] === title);
@@ -21,6 +21,16 @@ for (const tab of Object.keys(HELP_SETS)) for (const h of HS(tab).qa) {
   const d = helpDecide(h[1], tab, null);
   if (!(d.kind === "answer" && d.list[0].h[1] === h[1])) { bad++; console.log(`제목 그대로인데 다른 결과: [${tab}] ${h[1]} → ${d.kind} ${d.list.map((x) => x.h[1]).join(" / ")}`); }
 }
+// 화면에서 숨긴 질문(채팅 전용): 모두 있는 질문이어야 하고, 처음 고르기(HELP_TOP)·꼬리 질문(HELP_NEXT) 버튼엔 안 나와야 함
+for (const k of box.HELP_CHAT_ONLY) {
+  const [tab, title] = k.split("::");
+  if (!(tab === "*" ? Object.keys(HELP_SETS).every((t) => has(t, title)) : has(tab, title))) { bad++; console.log(`숨긴 질문이 도우미에 없음: ${k}`); }
+}
+const topAt = html.indexOf("{", html.indexOf("const HELP_TOP = ")), topEnd = html.slice(topAt).search(/\};\r?\nfunction helpHello/);
+const HELP_TOP = vm.runInNewContext("(" + html.slice(topAt, topAt + topEnd + 1) + ")");
+const shown = (tab, title) => { if (!has(tab, title) || !box.helpListed([0, title], tab)) { bad++; console.log(`화면 버튼에 없거나 숨긴 질문: [${tab}] ${title}`); } };
+Object.entries(HELP_TOP).forEach(([tab, x]) => [...x.first, ...x.use].forEach((t) => shown(tab, t)));
+Object.entries(box.HELP_NEXT).forEach(([tab, x]) => Object.values(x).flat().forEach((t) => (t.includes("::") ? shown(...t.split("::")) : shown(tab, t))));
 
 const args = process.argv.slice(2), rows = args.includes("--rows");
 const files = args.filter((x) => !x.startsWith("--"));

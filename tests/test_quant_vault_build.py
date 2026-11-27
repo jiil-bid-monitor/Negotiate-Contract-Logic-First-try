@@ -5428,3 +5428,22 @@ def test_rep_section_filled_roster_blank(tmp_path: Path):
     b = {(c.row, c.col): c.text.strip() for c in _cells(xml, t[1])}
     assert a[(0, 2)] == "(주)가상" and a[(0, 4)] == "홍대표" and a[(1, 2)] == "가상시 1", a
     assert b[(0, 2)] == "" and b[(0, 4)] == "" and b[(1, 2)] == "", b
+
+def test_placeholder_company_cell_alone(tmp_path: Path):
+    """11/27 사용자 지적(부산 창의융합교육원 청렴계약 이행서약서): 서명 표 '서약자 : OOO회사 | 대 표 : | (서명 또는 날인)' —
+    대표가 다른 칸이라 회사 자리표시만 남음. 서약자 등 이름표 뒤 '○○○회사'·'OOO업체'만 있는 칸/줄도 회사명."""
+    from quantdocs.fill import fill_hwpx
+
+    c = lambda col, t: (f'<hp:tc><hp:subList><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p></hp:subList>'
+                        f'<hp:cellAddr colAddr="{col}" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/></hp:tc>')
+    body = ("<hp:p><hp:run><hp:tbl><hp:tr>" + c(0, "   서약자 : OOO회사 ") + c(1, "대   표 :") + c(2, "") + c(3, "(서명 또는 날인)")
+            + "</hp:tr></hp:tbl></hp:run></hp:p>"
+            + '<hp:p><hp:run charPrIDRef="0"><hp:t>신청인 : ○○○업체</hp:t></hp:run></hp:p>'
+            + '<hp:p><hp:run charPrIDRef="0"><hp:t>1. ○○○회사(공동수급체대표자)：○○은행</hp:t></hp:run></hp:p>')
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    fill_hwpx(_mini_hwpx(tmp_path / "s.hwpx", body), tmp_path / "o.hwpx", v)
+    text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode())
+    assert re.search(r"서약자 : \(주\)가상", text), text
+    assert "OOO회사" not in text
+    assert re.search(r"신청인 : \(주\)가상", text), text
+    assert "○○○회사(공동수급체대표자)" in text  # 이름표 없는 협정서 문장은 그대로

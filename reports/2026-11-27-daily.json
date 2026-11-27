@@ -1,0 +1,438 @@
+{
+ "v": 1,
+ "kind": "daily",
+ "date": "2026-11-27",
+ "reportedAt": "2026-11-26T23:59:10+00:00",
+ "notices": [
+  {
+   "noticeNo": "R26BK01859684",
+   "title": "상대포지구(재해대비) 수리시설개보수사업 통신공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국농어촌공사 경남지역본부 창녕지사",
+    "budgetAmount": 27340000.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 18,
+    "deadline": "2026-11-27T09:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01859684&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01859131",
+   "title": "제주공항 숨비식당가 안내사이니지 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "한국공항공사 제주공항",
+    "budgetAmount": 19860000.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [],
+    "products": [
+     "안내판"
+    ],
+    "paths": [
+     "세부품명"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 57,
+    "deadline": "2026-11-27T12:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01859131&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01859367",
+   "title": "도련일동 마을만들기(종합개발)사업『다목적 커뮤니티센터』 통신 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국농어촌공사 제주지역본부",
+    "budgetAmount": 17633636.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 19,
+    "deadline": "2026-11-30T11:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01859367&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01860550",
+   "title": "경강선 이천~여주 상선 강대외장형 광케이블 개량공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사수도권동부본부",
+    "budgetAmount": 1838084000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 51,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01860550&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01860527",
+   "title": "경원선 연천~백마고지 운행재개에 따른 통신설비 개량공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사수도권동부본부",
+    "budgetAmount": 1427162727.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 51,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01860527&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01860575",
+   "title": "경춘선 청량리~마석 하선 강대외장형 광케이블 개량공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사수도권동부본부",
+    "budgetAmount": 2103796000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 51,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01860575&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01860430",
+   "title": "분당선 수서~수원 하선 강대외장형 광케이블 개량공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사수도권동부본부",
+    "budgetAmount": 2518217000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 51,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01860430&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01857412",
+   "title": "예미농공단지 중소유통물류센터 리모델링공사(통신)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도 정선군",
+    "budgetAmount": 98393636.0,
+    "confidence": "참고용",
+    "bidMethod": "수의",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "수의계약",
+    "score": 40,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01857412&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01860590",
+   "title": "중앙선 청량리~양평 하선 강대외장형 광케이블 개량공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "한국철도공사수도권동부본부",
+    "budgetAmount": 2837292000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 51,
+    "deadline": "2026-12-01T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01860590&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01857987",
+   "title": "춘천시보건소 이전 신축공사(통신)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "강원특별자치도 춘천시 보건소",
+    "budgetAmount": 2076955493.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "통신"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "일반경쟁",
+    "score": 37,
+    "deadline": "2026-12-02T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01857987&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01859436",
+   "title": "서울대학교치과병원 연구동 리모델링 공사(통신)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "서울대학교치과병원",
+    "budgetAmount": 712888182.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 38,
+    "deadline": "2026-12-03T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01859436&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01859214",
+   "title": "코스콤 전사 사무환경 개선 네트워크 공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "(주)코스콤",
+    "budgetAmount": 385100000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 24,
+    "deadline": "2026-12-03T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01859214&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01860608",
+   "title": "한반도면 후탄1리 곡금교 재가설공사 실시설계용역(장기계속)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "용역",
+    "institution": "강원특별자치도 영월군",
+    "budgetAmount": 139530000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [
+     "공사 설계 용역"
+    ],
+    "products": [],
+    "paths": [
+     "관심 키워드"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 60,
+    "deadline": "2026-12-03T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01860608&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01857544",
+   "title": "경북기계공업고등학교 환경개선공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "대구광역시교육청",
+    "budgetAmount": 1514087273.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "금속창호ㆍ지붕건축물조립공사업/4991"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 46,
+    "deadline": "2026-12-11T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01857544&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01857533",
+   "title": "[대학혁신]교육대학원 교육환경 인프라 개선공사(건축)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "가천대학교",
+    "budgetAmount": 336363636.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 63,
+    "deadline": "2026-12-13T18:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01857533&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01857769",
+   "title": "(서강대) 김대건관(K관) 505호 강의실 환경개선 건축공사",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "서강대학교산학협력단",
+    "budgetAmount": 20300000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "실내건축공사업/4990"
+    ],
+    "contractMethod": "일반경쟁",
+    "score": 54,
+    "deadline": "2026-12-14T11:00",
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01857769&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01858942",
+   "title": "정선의료재단(의약품) [1그룹] 부광미다졸람주사_(5mg/5mL) 외 27건(긴급)",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "물품",
+    "institution": "(재)정선의료재단",
+    "budgetAmount": 4837155.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "정선 사업"
+    ],
+    "licenses": [],
+    "contractMethod": "제한경쟁",
+    "score": 33,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01858942&bidPbancOrd=000"
+   }
+  },
+  {
+   "noticeNo": "R26BK01860338",
+   "title": "태백마루자율상권  LED전광판 설치",
+   "meta": {
+    "sourceType": "본공고",
+    "businessType": "공사",
+    "institution": "태백마루자율상권조합",
+    "budgetAmount": 108000000.0,
+    "confidence": "참고용",
+    "bidMethod": "입찰",
+    "keywords": [],
+    "products": [],
+    "paths": [
+     "보유 면허"
+    ],
+    "licenses": [
+     "정보통신공사업/0036"
+    ],
+    "contractMethod": "제한경쟁",
+    "score": 57,
+    "deadline": null,
+    "detailUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01860338&bidPbancOrd=000"
+   }
+  }
+ ]
+}

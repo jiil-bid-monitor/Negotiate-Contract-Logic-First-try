@@ -130,6 +130,7 @@
       <p id="staffRule" class="muted"></p>
       <div class="row" style="margin-bottom:6px"><button type="button" id="staffAll" class="ghost">모두 체크</button><button type="button" id="staffNone" class="ghost">모두 해제</button></div>
       <div class="scroll"><table id="staff"></table></div>
+      <div class="row" style="margin-top:8px"><button type="button" id="staffNone2" class="ghost">모두 해제</button></div>
     </details>
 
     <details class="card fold hide" id="patentBox">  <!-- 11/06 사용자 요청: 자기평점 보유기술 점수·통합본에 넣을 특허 고르기 -->
@@ -294,6 +295,7 @@ function renderStaff(list, rule, ok) {
   $("#staff").onchange = staffCount;
   $("#staffAll").onclick = () => { document.querySelectorAll("#staff input.sp").forEach(c => c.checked = true); staffCount(); };
   $("#staffNone").onclick = () => { document.querySelectorAll("#staff input.sp").forEach(c => c.checked = false); staffCount(); };
+  $("#staffNone2").onclick = $("#staffNone").onclick;
   staffCount();
 }
 

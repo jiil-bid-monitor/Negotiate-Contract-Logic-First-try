@@ -4469,6 +4469,31 @@ def test_merge_sec_pr_run_with_page_header(tmp_path: Path):
     assert xml.count("<hp:p ") == xml.count("</hp:p>") and xml.count("<hp:secPr/>") == 1 and xml.count("<hp:header>") == 1
     assert "내용 1" in xml and "내용 2" in xml
 
+def test_form_head_after_line_break_in_previous_paragraph(tmp_path: Path):
+    """11/27 사용자 지적(운리단길 R26BK01852049 — 그리다 화면 서식 4 서약서에 지일 정보): 머리 '【별지서식 4】'가 앞 서식 끝 문단
+    '… 귀하⏎【별지서식 4】' 안에 줄바꿈으로 붙어 서식 4가 서식 3(사용인감계) 파일에 같이 잘렸음 → 그 줄바꿈에서 문단을 나눠 따로 자름."""
+    from quantdocs import forms_cut
+
+    para = lambda t, brk="0": f'<hp:p paraPrIDRef="0" pageBreak="{brk}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+    joined = ('<hp:p paraPrIDRef="1" pageBreak="0"><hp:run charPrIDRef="2"><hp:t> 가상기관 </hp:t></hp:run><hp:run charPrIDRef="3"><hp:t>귀하</hp:t></hp:run>'
+              '<hp:run charPrIDRef="4"><hp:t><hp:lineBreak/></hp:t></hp:run><hp:run charPrIDRef="5"><hp:t>【별지서식  4】</hp:t></hp:run>'
+              '<hp:linesegarray><hp:lineseg textpos="0"/></hp:linesegarray></hp:p>')
+    src = tmp_path / "rfp.hwpx"
+    with zipfile.ZipFile(src, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", '<hh:head xmlns:hh="h" secCnt="1"><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"></hh:charPr></hh:charProperties></hh:head>')
+        z.writestr("Contents/section0.xml", f'<hs:sec>{para("【별지서식 3】", "1")}{para("사 용 인 감 계")}{joined}'
+                                            f'{para("서 약 서")}{para("1. 당사는")}{para("【별지서식 5】", "1")}{para("청렴")}</hs:sec>')
+    forms = forms_cut.cut(src, tmp_path / "cut")
+    assert [f.no for f in forms] == ["3", "4", "5"]
+    texts = {f.no: forms_cut._text(zipfile.ZipFile(tmp_path / "cut" / f.file).read("Contents/section0.xml").decode()) for f in forms}
+    assert "귀하" in texts["3"] and "서 약 서" not in texts["3"] and "별지서식  4" not in texts["3"]
+    assert "별지서식  4" in texts["4"] and "서 약 서" in texts["4"] and "귀하" not in texts["4"]
+    for f in forms:
+        x = zipfile.ZipFile(tmp_path / "cut" / f.file).read("Contents/section0.xml").decode()
+        assert x.count("<hp:p ") == x.count("</hp:p>")
+
+
 def test_joint_supply_form_recognized_by_body(tmp_path: Path):
     """11/20 사용자 '공동수급 관련 문서는 기입 대상이 아니야': 이름엔 '공동수급'이 없는 '대표자 선임계'
     ('…참여업체의 대표자를 … 선임하고 모든 권한을 공동수급체 대표자에게 위임합니다. ※ 단독 참가시는 필요 없음.')도 공란 서식."""

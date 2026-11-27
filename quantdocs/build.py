@@ -83,6 +83,9 @@ def _form_heads(path: Path) -> int:
     try:
         with zipfile.ZipFile(path) as z:
             secs = {n: z.read(n).decode("utf-8") for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n)}
+        from .forms_cut import split_inline_heads
+
+        split_inline_heads(secs)
         return len(find_forms(secs))
     except (zipfile.BadZipFile, OSError, UnicodeDecodeError, KeyError):
         return 0
@@ -430,8 +433,11 @@ _SEAL_FORM = re.compile(r"사\s*용\s*인\s*감")
 _JIIL_VAULT: list = []  # 그리다 사용인감계에 쓸 지일 자료(작업마다 한 번 읽음)
 
 
-# 서식 이름에 '사용인감'이 없어도 본문이 사용인감계 모양이면(11/25 해남 — '사 용 인 감 | 인 적 사 항' 표). '(사용인감)' 서명 줄만 있는 서약서는 아님
-_SEAL_BODY = re.compile(r"사용인감(?:계|신고)|사용인감.{0,6}인적사항")
+# 서식 이름에 '사용인감'이 없어도 본문이 사용인감계 모양이면(11/25 해남 — '사 용 인 감 | 인 적 사 항' 표). '(사용인감)' 서명 줄만 있는 서약서는 아님.
+# 제목('사용인감계·사용인감 신고')은 서식 머리 바로 뒤에 있을 때만 — 위임장 안내 '※ … 사용인감계에 등록된 사용인감'은 아님(11/27 운리단길)
+_SEAL_TITLE = re.compile(r"사용인감(?:계|신고)")
+_SEAL_TABLE = re.compile(r"사용인감.{0,6}인적사항")
+_FORM_HEAD = re.compile(r"^[^\w\s]?(?:별지)?(?:서식|양식|붙임)?(?:제)?[\d-]*호?(?:서식)?[^\w\s]?")
 
 
 def _seal_body(path: Path | None) -> bool:
@@ -444,7 +450,9 @@ def _seal_body(path: Path | None) -> bool:
             text = "".join(_text(z.read(n).decode("utf-8")) for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n))
     except (OSError, zipfile.BadZipFile, KeyError):
         return False
-    return bool(_SEAL_BODY.search(re.sub(r"\s+", "", text)))
+    sq = re.sub(r"\s+", "", text)
+    head = sq[len(_FORM_HEAD.match(sq).group(0)):][:20]
+    return bool(_SEAL_TITLE.search(head) or _SEAL_TABLE.search(sq))
 
 
 def _seal_vault(title: str, vault, path: Path | None = None):

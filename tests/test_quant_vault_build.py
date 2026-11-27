@@ -3132,6 +3132,37 @@ def test_colon_in_value_cell_is_kept(tmp_path: Path):
     assert got[(2, 2)] == ["(인)"]
 
 
+def test_narrow_colon_cell_value_goes_right(tmp_path: Path):
+    """11/27 사용자 '이거 왜 이래': '업 체 명 | : | (넓은 빈 칸)'처럼 ':'만 든 칸이 0.3cm로 좁으면 값을 그 칸에 넣어 한 글자씩 세로로 쌓였음
+    — ':'는 그 칸에 두고 값은 오른쪽 넓은 빈 칸에. 대표자 줄 '(인)' 칸은 그대로."""
+    from quantdocs.fill import fill_hwpx
+
+    header = ('<hh:head><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1100" useFontSpace="0"><hh:ratio hangul="100"/>'
+              '<hh:spacing hangul="0"/></hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0">'
+              '<hh:align horizontal="LEFT"/><hh:margin><hc:intent value="0"/><hc:left value="0"/></hh:margin></hh:paraPr></hh:paraProperties></hh:head>')
+    cell = lambda col, row, t, w, cs=1: (f'<hp:tc><hp:subList vertAlign="CENTER"><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
+                                         f'</hp:subList><hp:cellAddr colAddr="{col}" rowAddr="{row}"/><hp:cellSpan colSpan="{cs}" rowSpan="1"/>'
+                                         f'<hp:cellSz width="{w}" height="2249"/><hp:cellMargin left="141" right="141" top="141" bottom="141"/></hp:tc>')
+    trs = [cell(0, 0, "업체명", 10811) + cell(1, 0, ":", 849) + cell(2, 0, "", 28357, 2),
+           cell(0, 1, "주소", 10811) + cell(1, 1, ":", 849) + cell(2, 1, "", 28357, 2),
+           cell(0, 2, "대표자", 10811) + cell(1, 2, ":", 849) + cell(2, 2, "", 20631) + cell(3, 2, "(인)", 7726)]
+    body = "<hp:p><hp:run><hp:tbl>" + "".join(f"<hp:tr>{t}</hp:tr>" for t in trs) + "</hp:tbl></hp:run></hp:p>"
+    src = _mini_hwpx(tmp_path / "n.hwpx", body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "주소": "강원특별자치도 정선군 남면 무릉2로 64(공장1층)", "대표자": "홍길동"})
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = zipfile.ZipFile(tmp_path / "o.hwpx").read("Contents/section0.xml").decode()
+    got = {}
+    for m in re.findall(r"<hp:tc>.*?</hp:tc>", sec, re.S):
+        pos = tuple(map(int, re.search(r'colAddr="(\d+)" rowAddr="(\d+)"', m).groups()))
+        got[pos] = [re.sub(r"<[^>]+>", "", p) for p in re.findall(r"<hp:p\b.*?</hp:p>", m, re.S)]
+    assert got[(1, 0)] == [":"] and got[(1, 1)] == [":"] and got[(1, 2)] == [":"], got
+    assert got[(2, 0)] == ["(주)가상"] and got[(2, 2)] == ["홍길동"], got
+    assert "".join(got[(2, 1)]).replace(" ", "") == "강원특별자치도정선군남면무릉2로64(공장1층)", got
+    assert got[(3, 2)] == ["(인)"]
+
+
 def test_credit_financial_base_date(tmp_path: Path):
     """11/13 사용자 제보: 서식 13호 신용평가 등급 확인서 '재무결산기준' 칸이 빔 — 확인서 PDF의 '재무기준일 2025년 12월 31일'을 읽어
     '2025. 12. 31.'로(등급평가일·유효기간과 같은 모양)."""

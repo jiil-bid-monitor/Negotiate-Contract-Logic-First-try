@@ -325,6 +325,21 @@ function renderPatents(list, rule, ok, on) {
   $("#patentNone").onclick = () => { document.querySelectorAll("#patents input.pp").forEach(c => c.checked = false); patentCount(); };
   patentCount();
 }
+// 펼친 칸이 화면 아래로 잘리면 칸 전체가 보이게 내림(칸이 화면보다 길면 칸 맨 위에 맞춤) — 정량평가서 탭(iframe)이면 웹앱 페이지를 내림
+function revealFold(d) {
+  let w = window, off = 0;
+  try { if (window.frameElement && parent !== window) { off = window.frameElement.getBoundingClientRect().top; w = parent; } } catch (e) {}
+  const r = d.getBoundingClientRect(), top = r.top + off, bottom = r.bottom + off, vh = w.innerHeight;
+  let dy = 0;
+  if (bottom - top > vh - 16) dy = top - 8;
+  else if (bottom > vh - 8) dy = bottom - vh + 8;
+  else if (top < 0) dy = top - 8;
+  if (Math.abs(dy) > 2) w.scrollBy({ top: dy, behavior: "smooth" });
+}
+document.querySelectorAll("details.fold > summary").forEach(sm => sm.addEventListener("click", () => {
+  const d = sm.parentElement;
+  setTimeout(() => { if (d.open) revealFold(d); }, 150);
+}));
 </script>
 </body>
 </html>

@@ -183,6 +183,7 @@ body.picking { overflow: hidden; }
   border-bottom: 2px solid transparent; margin-bottom: -1px; letter-spacing: .02em;
 }
 .tabs button:hover { color: var(--ink-strong); }
+#devHelpList tr.dev-req td { background: var(--brand-tint); }
 .tabs button[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); font-weight: 700; }
 
 /* ── 폼 ───────────────────────────────────────────────────── */
@@ -2348,6 +2349,13 @@ table.bidders { width: 100%; table-layout: fixed; border-collapse: collapse; fon
 
   <!-- 개발자 탭(11/27 사용자) — 주소 끝 ?dev=1일 때만 보임. 담당자 화면과 비교할 수 있게 다른 탭은 그대로 두고 개발자용 내용은 여기만 -->
   <section id="tab-dev" hidden>
+    <h3 class="log-agg-title" id="devHelpHead">도우미 질문 기록</h3>
+    <div class="search log-search">
+      <select id="devHelpResult" aria-label="결과"></select>
+      <input id="devHelpQ" type="search" autocomplete="off" aria-label="질문 기록에서 찾기">
+    </div>
+    <div id="devHelpList"></div>
+    <h3 class="log-agg-title">판단 기록 집계</h3>
     <p class="sub log-agg-note" id="logAggNote"></p>
     <div id="logAgg"></div>
   </section>
@@ -4413,7 +4421,7 @@ function renderLog() {
     `판단 기록 <b>${num(entries.length)}</b>건: ${DECISIONS.map((s) => `${s} ${num(count(s))}`).join(" · ")} · ` +
     `<button type="button" class="linkish" id="logCsv">${logFilterOn() ? `CSV 내려받기 (고른 ${num(logFiltered(entries).length)}건)` : "CSV 내려받기"}</button>` +
     "";
-  $("logAggNote").textContent = DEV_VIEW ? `판단 기록 집계: 판단할 때의 관심 키워드·수집 경로 기준${all.length < LOG_AGG_MIN ? ` (판단 ${all.length}건: ${LOG_AGG_MIN}건쯤부터 비율이 믿을 만함)` : ""}. 끄려면 주소 끝에 ?dev=0` : "";
+  $("logAggNote").textContent = DEV_VIEW ? `판단할 때의 관심 키워드·수집 경로 기준${all.length < LOG_AGG_MIN ? ` (판단 ${all.length}건: ${LOG_AGG_MIN}건쯤부터 비율이 믿을 만함)` : ""}. 끄려면 주소 끝에 ?dev=0` : "";
   $("logSearch").hidden = entries.length === 0;
   $("logEmpty").hidden = entries.length > 0;
 
@@ -4486,6 +4494,32 @@ function renderLog() {
     : "";
   $("logAgg").innerHTML = DEV_VIEW ? (all.length ? logAggHtml(all) : '<div class="empty">아직 판단 기록이 없습니다.</div>') : "";
 }
+
+/** 개발자 탭 — 도우미 질문 기록(11/27 사용자 '요청 기록 보는 거'). 이 웹앱(서버 PC·NAS 따로)에 모인 것, 최근 것부터 */
+let DEV_HELP = [];
+async function loadDevHelp() {
+  try { DEV_HELP = (await getJson("/api/help-questions")).items || []; } catch { DEV_HELP = []; }
+  renderDevHelp();
+}
+function renderDevHelp() {
+  const sel = $("devHelpResult"), pick = sel.value;
+  const counts = countBy(DEV_HELP, (r) => r.result || "(없음)");
+  if (!counts.some(([k]) => k === "요청")) counts.unshift(["요청", 0]);
+  sel.innerHTML = `<option value="">전체 ${DEV_HELP.length}</option>` + counts.map(([k, n]) => `<option value="${esc(k)}">${esc(k)} ${n}</option>`).join("");
+  sel.value = counts.some(([k]) => k === pick) ? pick : "";
+  const q = ($("devHelpQ").value || "").replace(/\s+/g, "").toLowerCase();
+  const rows = DEV_HELP.filter((r) => (!sel.value || (r.result || "(없음)") === sel.value)
+    && (!q || [r.q, r.hit, r.who].join(" ").replace(/\s+/g, "").toLowerCase().includes(q))).slice().reverse();
+  const when = (s) => String(s || "").slice(5, 16).replace("T", " ").replace("-", "/");
+  $("devHelpHead").textContent = `도우미 질문 기록 ${num(rows.length)}건`;
+  $("devHelpList").innerHTML = rows.length ? `<div class="scroll"><table>
+    <thead><tr><th>때</th><th>회사</th><th>탭</th><th>적은 사람</th><th>질문</th><th>결과</th><th>알아들은 질문</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr${r.result === "요청" ? ' class="dev-req"' : ""}><td>${esc(when(r.at))}</td><td>${esc(r.co === "grida" ? "그리다" : r.co ? "지일" : "")}</td>
+      <td>${esc(HELP_SETS[r.tab]?.name || r.tab || "")}</td><td>${esc(r.who || "")}</td><td>${esc(r.q)}</td><td>${esc(r.result || "")}</td><td>${esc(r.hit || "")}</td></tr>`).join("")}</tbody>
+  </table></div>` : '<div class="empty">질문 기록이 없습니다.</div>';
+}
+$("devHelpResult").onchange = renderDevHelp;
+$("devHelpQ").oninput = renderDevHelp;
 
 /** 필터(키워드·경로)를 바꿔도 줄지 않는 불참 사유 — 이 사유만 고른 판단은 조정용 집계에서 뺀다 */
 const NON_FILTER_TAGS = ["마감 촉박", "공동수급 상대 없음", "인력·일정 부족"];
@@ -6657,6 +6691,7 @@ function showTab(tab) {
   else if (tab === "excluded") $("exTools").appendChild($("liveQ"));
   if (tab === "excluded") exData ? renderExcluded() : loadExcluded();
   if (tab === "log" || tab === "dev") renderLog();
+  if (tab === "dev") loadDevHelp();
   if (tab === "award") loadAward();
 }
 document.querySelector(".tabs").onclick = (e) => {

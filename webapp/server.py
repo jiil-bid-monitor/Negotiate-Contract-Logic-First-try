@@ -151,6 +151,12 @@ class App:
             rows = (rows + [row])[-2000:]
             path.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
 
+    def help_questions(self) -> list[dict]:
+        """개발자 탭(11/27 사용자) — 모은 도우미 질문(요청·못 찾은 말 포함)을 그대로."""
+        path = self.store.path.parent / "help_questions.json"
+        with self._seen_lock:
+            return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+
     def promoted(self, co: Company) -> dict[str, Any]:
         """담당자가 '실제 공고로 올리기' 한 공고 — NAS 한 곳(11/25 사용자, 예전엔 누른 웹앱에만 남았음). 30초 동안은 받은 것을 쓰고,
         NAS가 안 되면 지난번 것. 이 PC에 남아 있던 것은 처음 한 번 NAS로 옮김(파일은 promoted_옮기기전.json으로 남김)."""
@@ -448,6 +454,8 @@ def make_handler(app: App):
             co = app.company(q)  # 회사 고르기(2026-11-24) — 화면이 ?co=<id>를 붙인다, 없으면 지일
             if pa is not app.postaward_test:
                 pa = app.postaward_of(co)
+            if url.path == "/api/help-questions":  # 개발자 탭 — 도우미 질문 기록(11/27)
+                return self._json({"items": app.help_questions()})
             if url.path == "/api/meta":
                 years: dict[str, int] = {}
                 for p in app.past.projects:

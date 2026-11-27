@@ -554,6 +554,9 @@ class TestServer(unittest.TestCase):
         self.assertEqual(self.call("/api/help-question", {"q": "필터를 크게 해 주세요", "result": "요청", "tab": "live", "who": "홍길동", "co": "grida"})[0], 200)
         rows = json.loads((self.app.store.path.parent / "help_questions.json").read_text(encoding="utf-8"))
         self.assertEqual((rows[-1]["result"], rows[-1]["who"], rows[-1]["co"]), ("요청", "홍길동", "grida"))
+        # 개발자 탭이 읽는 기록(11/27) — 토큰 없으면 막힘
+        self.assertEqual(self.call("/api/help-questions")[1]["items"][-1]["q"], "필터를 크게 해 주세요")
+        self.assertEqual(self.call("/api/help-questions", token="wrong")[0], 401)
 
     def test_bidlog_routes(self):
         """투찰 계산기 '투찰내역'(2026-11-06): 기록·목록·고치기·지우기, 토큰 없으면 막힘."""

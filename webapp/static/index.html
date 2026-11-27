@@ -6038,9 +6038,8 @@ const HELP_NEXT = {
  }
 };
 // HELP-PURE-END
-let HELP_DEVS = "";  // 개발 담당 이름 — 서버 설정 HELP_DEVELOPERS에서 읽어 도우미 창에만 보임(11/27 사용자, 공개 저장소엔 이름을 적지 않음)
-fetch("/api/meta").then((r) => r.json()).then((d) => { HELP_DEVS = (d.help_devs || []).join("·"); }).catch(() => {});
-const helpDevs = (josa = "") => { const t = HELP_DEVS ? `개발 담당 ${HELP_DEVS}` : "개발 담당"; return josa ? t + ((t.charCodeAt(t.length - 1) - 0xac00) % 28 ? "이" : "가") : t; };
+// 개발 담당 이름은 화면 어디에도 안 보임(11/27 사용자 '우리 이름은 공개적으로 쓰지마') — 늘 '개발 담당'
+const helpDevs = (josa = "") => "개발 담당" + (josa ? "이" : "");
 const helpText = (h) => ((IS_VIEWER && h[4]) || h[2]).replace("{여기}", IS_VIEWER ? "NAS 웹앱" : "서버 PC 웹앱").replace("{개발이}", helpDevs("이"));  // 다섯째 값 = NAS 웹앱에서 다른 답, {여기} = 지금 보는 웹앱(11/25 사용자)
 // '어디인지 보기'(11/25 사용자) — 답에 나온 버튼·칸을 실제 화면에서 잠깐 표시. 캡처 그림 대신 화면의 그 요소를 가리켜 화면을 고쳐도 낡지 않음.
 // {탭: {질문 제목: CSS 선택자}} — 맞는 요소 중 화면에 보이는 첫 번째. 요소 이름을 바꾸면 여기도 같이(없으면 '지금 화면에는 없습니다'라고 말함)

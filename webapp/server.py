@@ -17,7 +17,6 @@ import json
 import logging
 import mimetypes
 import os
-import re
 import secrets
 import sys
 import threading
@@ -470,7 +469,6 @@ def make_handler(app: App):
                     "has_ai_key": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
                     "can_collect": not app.viewer,
                     # 도우미에 보일 개발 담당 이름 — 공개 저장소에 적지 않으려고 서버 설정에서(11/27 사용자)
-                    "help_devs": [x.strip() for x in re.split(r"[,·]", os.environ.get("HELP_DEVELOPERS", "")) if x.strip()],
                     "companies": [c.public() for c in app.companies.values()], "company": co.id,
                 })
             if url.path == "/api/docs-alert":

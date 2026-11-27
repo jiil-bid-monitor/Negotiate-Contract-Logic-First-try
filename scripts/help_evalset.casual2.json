@@ -1140,5 +1140,29 @@
   "q": "제외된 공고도 텔레그램으로 보내주면 좋겠음",
   "expect": null,
   "type": "request"
+ },
+ {
+  "id": "b2-w1",
+  "tab": "live",
+  "q": "이 공고 넣을까 말까",
+  "expect": null,
+  "type": "special",
+  "why": "which"
+ },
+ {
+  "id": "b2-w2",
+  "tab": "live",
+  "q": "이거 낼까 말까",
+  "expect": null,
+  "type": "special",
+  "why": "which"
+ },
+ {
+  "id": "b2-w3",
+  "tab": "live",
+  "q": "들어갈지 말지 모르겠어",
+  "expect": null,
+  "type": "special",
+  "why": "which"
  }
 ]

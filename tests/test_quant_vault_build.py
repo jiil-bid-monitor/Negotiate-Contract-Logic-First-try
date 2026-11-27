@@ -4309,8 +4309,8 @@ def test_center_sign_block_seal_line_drops_padding(tmp_path: Path):
              for p in re.findall(r"<hp:p\b[^>]*>(.*?)</hp:p>", out, re.S)]
     rep = next(t for t in texts if "대 표 자" in t)
     # (11/27 사용자 지적: 서식은 건들지 않음) (인)은 원래 자리 — 이름 너비(한글 2칸씩 + 여유)만큼만 빈칸을 빼고, (인) 뒤 빈칸은 지움
-    # 빈칸 20 − 이름 너비(홍길동 = 6칸 + 여유 2) = 12
-    assert rep == "대 표 자: 홍길동" + " " * 12 + "(인)", repr(rep)
+    # 빈칸 20 − (앞 한 칸 + 이름 너비 — 홍길동 11pt = 빈칸 6칸쯤, 글자 모양 너비로 셈 — 11/27) = 13
+    assert rep == "대 표 자: 홍길동" + " " * 13 + "(인)", repr(rep)
 
 
 def test_general_status_unit_slots_paren_phone_fax_number_and_bare_rep(tmp_path: Path):
@@ -5601,10 +5601,11 @@ _SEAL_PAGE = ('<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:secPr><hp:pageP
 def test_seal_positions_kept_on_every_signature_shape(tmp_path: Path):
     """(11/27 사용자 '서식은 건들지 않는다') 서명 줄 모양마다 이름을 넣어도 '(인)'은 원래 자리 — 서명 줄을 채우는 길이 여럿이라
     모양별로 한 묶음 시험. 서명 규칙을 고칠 때마다 이 시험이 모두 통과해야 함. 공통 검사(rep.seal_moved)가 비어 있어야 함."""
-    from quantdocs.fill import fill_hwpx
+    from quantdocs.fill import _Chars, _seal_spots, fill_hwpx
 
     p = lambda t, pid="0": f'<hp:p paraPrIDRef="{pid}"><hp:run charPrIDRef="0"><hp:t>{t}</hp:t></hp:run></hp:p>'
     sp = " " * 20
+    EXACT = ("쌍점 서명 줄", "대표(자 없이)", "위임장 대표자·대리인")  # 가운데 정렬 묶음은 줄끼리 ":"를 맞추느라(11/16) 이 시험 모양에선 옮겨 감
     shapes = {
         "쌍점 서명 줄": p(f"대 표 자 :{sp}(인)"),
         "쌍점 없는 서약자": p(f"서 약 자{sp}(인)"),
@@ -5628,6 +5629,38 @@ def test_seal_positions_kept_on_every_signature_shape(tmp_path: Path):
         text = re.sub(r"<[^>]+>", "", zipfile.ZipFile(tmp_path / f"o{i}.hwpx").read("Contents/section0.xml").decode())
         assert re.search(r"홍길동 +\(인\)", text), (shape, text)
         assert rep.seal_moved == [], (shape, rep.seal_moved)
+        if shape in EXACT:
+            # (11/27 사용자 '미묘하지만 여전히 차이') 쌍점 서명 줄은 빈칸을 값 너비만큼만 빼므로 (인)이 빈칸 한 칸 안쪽 그대로
+            sec = lambda f: f"<hs:sec>{zipfile.ZipFile(f).read('Contents/section0.xml').decode()}</hs:sec>"
+            before = [x for x, _l, _h in _seal_spots(sec(src), _Chars(_SEAL_HEADER))]
+            after = [x for x, _l, _h in _seal_spots(sec(tmp_path / f"o{i}.hwpx"),
+                                                    _Chars(zipfile.ZipFile(tmp_path / f"o{i}.hwpx").read("Contents/header.xml").decode()))]
+            assert len(before) == len(after) and all(b is not None and a is not None and abs(a - b) < 500
+                                                     for a, b in zip(after, before)), (shape, before, after)
+
+
+def test_grida_delegation_seals_exact_at_14pt(tmp_path: Path):
+    """(11/27 사용자 '미묘하지만 여전히 차이') 그리다 위임장 — 14pt 서명 줄 '대표자(대표사) :      (인)' / '⏎ 대리인 :      (인)'.
+    예전엔 이름 너비(한글 2칸 + 10% 여유)보다 빈칸을 한 칸 더 빼서 두 줄 (인)이 반 글자쯤 어긋났음 → 글자 모양 너비로 정확히."""
+    from quantdocs.fill import _Chars, _seal_spots, fill_hwpx
+
+    header = _SEAL_HEADER.replace('height="1000"', 'height="1400"')
+    sp = " " * 19
+    body = (f'<hp:p paraPrIDRef="7"><hp:run charPrIDRef="0"><hp:t>{" " * 10}대표자(대표사) :{sp}(인)</hp:t></hp:run></hp:p>'
+            f'<hp:p paraPrIDRef="7"><hp:run charPrIDRef="0"><hp:t>{" " * 10}<hp:lineBreak/>{" " * 16}대리인 :{sp}(인)</hp:t></hp:run></hp:p>')
+    src = _mini_hwpx(tmp_path / "s.hwpx", _SEAL_PAGE + body)
+    with zipfile.ZipFile(src, "a") as z:
+        z.writestr("Contents/header.xml", header)
+    v = vault.Vault({}, info={"회사명": "(주)가상", "대표자": "홍길동"})
+    v.agent = {"성명": "김대리"}
+    fill_hwpx(src, tmp_path / "o.hwpx", v)
+    sec = lambda f: f"<hs:sec>{zipfile.ZipFile(f).read('Contents/section0.xml').decode()}</hs:sec>"
+    before = [x for x, _l, _h in _seal_spots(sec(src), _Chars(header))]
+    out = zipfile.ZipFile(tmp_path / "o.hwpx")
+    text = re.sub(r"<[^>]+>", "", out.read("Contents/section0.xml").decode())
+    assert "홍길동" in text and "김대리" in text, text
+    after = [x for x, _l, _h in _seal_spots(sec(tmp_path / "o.hwpx"), _Chars(out.read("Contents/header.xml").decode()))]
+    assert len(after) == 2 and all(abs(a - b) <= 350 for a, b in zip(after, before)), (before, after)
 
 
 def test_seal_move_check_catches_pulled_seal():

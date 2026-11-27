@@ -240,6 +240,7 @@ def page_titles(path: Path, source: str = "") -> dict[int, str]:
     if not heights:
         return {}
     sections = {n: zin.read(n).decode("utf-8") for n in zin.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n)}
+    split_inline_heads(sections)
     out = {}
     for f in find_forms(sections):
         if "-" in f.no:
@@ -249,6 +250,42 @@ def page_titles(path: Path, source: str = "") -> dict[int, str]:
         if t:
             out[int(f.no)] = t
     return out
+
+
+_LSEG = re.compile(r"<((?:[\w.-]+:)?linesegarray)\b[^>]*>.*?</\1>|<(?:[\w.-]+:)?linesegarray\b[^>]*/>", re.S)
+_LBREAK = re.compile(r"<((?:[\w.-]+:)?)lineBreak\s*/>")
+
+
+def split_inline_heads(sections: dict[str, str]) -> None:
+    """서식 머리가 앞 서식 끝 문단 안에 줄바꿈으로 붙은 모양('… 귀하⏎【별지서식 4】' — 11/27 운리단길)이면
+    그 줄바꿈에서 문단을 둘로 나눔 — 안 나누면 그 서식이 앞 서식 파일에 같이 잘려 들어감. 표가 든 문단은 그대로."""
+    for name, xml in list(sections.items()):
+        out, pos = [], 0
+        for p in _top_paragraphs(xml):
+            seg = xml[p.start:p.end]
+            if "lineBreak" not in seg or re.search(r"<(?:[\w.-]+:)?tbl\b", seg):
+                continue
+            cuts = [m for m in _LBREAK.finditer(seg) if _HEAD.match(_squash(_text(seg[m.end():])))]
+            if not cuts:
+                continue
+            opening = re.match(r"<(?:[\w.-]+:)?p\b[^>]*>", seg).group(0)
+            opening = re.sub(r'\bpageBreak="1"', 'pageBreak="0"', opening)
+            ns = re.match(r"<((?:[\w.-]+:)?)p\b", seg).group(1)
+            new, last = [], 0
+            for m in cuts:
+                run = seg.rfind(f"<{ns}run ", 0, m.start())
+                char = re.search(r'charPrIDRef="(\d+)"', seg[run:m.start()]) if run >= 0 else None
+                ref = f' charPrIDRef="{char.group(1)}"' if char else ""
+                new.append(seg[last:m.start()])
+                new.append(f"</{ns}t></{ns}run></{ns}p>{opening}<{ns}run{ref}><{ns}t>")
+                last = m.end()
+            new.append(seg[last:])
+            out.append(xml[pos:p.start])
+            out.append(_LSEG.sub("", "".join(new)))
+            pos = p.end
+        if out:
+            out.append(xml[pos:])
+            sections[name] = "".join(out)
 
 
 def find_forms(sections: dict[str, str], heights: dict[str, int] | None = None, source: str = "") -> list[CutForm]:
@@ -366,6 +403,7 @@ def cut(path: Path, out_dir: Path, names: dict[str, str] | None = None) -> list[
     sec_names = sorted((n for n in entries if re.fullmatch(r"Contents/section\d+\.xml", n)),
                        key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[1]).group()))
     sections = {n: zin.read(n).decode("utf-8") for n in sec_names}
+    split_inline_heads(sections)
     forms = find_forms(sections, char_heights(zin), path.name)
     out_dir.mkdir(parents=True, exist_ok=True)
     for f in forms:

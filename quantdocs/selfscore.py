@@ -1047,6 +1047,10 @@ def read_form(cells) -> list[FormRow]:
     sub_cells: dict[int, object] = {}  # '경영상태 소계' 줄 묶음 → 그 아래 세부 줄 평점 칸(11/20)
     def sub_label(r):
         return "".join(_sq(c.text) for c in rows[r] if c.col < min(pcol, scol) and c.rowspan <= 1)
+    def grade_block(r, ic):
+        subs = [_sq(c.text) for c in rows[r] if ic.col + ic.colspan <= c.col < min(pcol, scol) and _sq(c.text)]
+        return bool(subs) and all(re.fullmatch(r"회사채.*|기업어음|기업신용.*|신용평가등급|미제출", s) or _GRADE_EXPR.fullmatch(s)
+                                  or (parse_range(s) and len(s) <= 20) for s in subs)
     for rs in blocks:
         ic = item_cell(rs[0])
         sc = score_cell(rs[0])
@@ -1059,7 +1063,9 @@ def read_form(cells) -> list[FormRow]:
             continue
         # 평점 칸이 여러 줄을 합친 칸이면 줄마다 따로 평점 칸이 있는 표가 아님 — 묶지 않음
         # ('참여인력의 전문성 | 사업총괄책임자 3 / 참여인력 3'처럼 큰 항목 아래 작은 항목마다 평점 칸, 11/18)
-        if merged and ic is not None and item_cell(merged[-1][0]) is ic and (sc is None or sc.rowspan <= 1):
+        # 단, 그 묶음 줄 이름이 신용평가 종류('회사채·기업어음·기업신용')나 등급·구간뿐이면 작은 항목이 아니라 같은 항목의 등급 줄 묶음 —
+        # 평점 칸이 등급마다 세 줄씩 합쳐져 있어도 한 항목으로(11/27 사용자 지적: 운리단길 서식 9-6 경영상태가 등급마다 따로 읽혀 하나도 못 채움)
+        if merged and ic is not None and item_cell(merged[-1][0]) is ic and (sc is None or sc.rowspan <= 1 or grade_block(rs[0], ic)):
             merged[-1] += rs
             split_cells.setdefault(merged[-1][0], {})
         else:
@@ -1126,6 +1132,9 @@ def read_form(cells) -> list[FormRow]:
         for r in rs:
             line = sorted(rows[r], key=lambda c: c.col)
             pts_text = next((c.text for c in line if c.col <= pcol < c.col + c.colspan), "")
+            if not pts_text and any(re.fullmatch(r"회사채.*|기업어음|기업신용.*", _sq(c.text)) for c in line if c.col < min(pcol, scol)):
+                # 등급마다 배점 칸이 '회사채·기업어음·기업신용' 세 줄을 세로로 합친 칸(11/27 운리단길) — 아래 줄도 그 배점
+                pts_text = next((c.text for c in cells if c.col <= pcol < c.col + c.colspan and c.row < r < c.row + c.rowspan), "")
             pts, per = _num(pts_text), _per_person(pts_text)
             if r == foot:  # 소계 줄 — 그 배점이 항목 배점(상한), 평점 칸 = 항목 점수 자리
                 if pts is not None:

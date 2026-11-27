@@ -213,11 +213,14 @@ def test_grida_seal_form_uses_jiil_vault(monkeypatch, tmp_path):
         assert build._seal_vault("위임장", grida) is grida
         # 서식 이름에 '사용인감'이 없어도 본문이 '사 용 인 감 | 인 적 사 항' 표면 사용인감계(11/25 해남)
         import zipfile
-        for name, body in (("seal.hwpx", "사 용 인 감</hp:t><hp:t>인 적 사 항"), ("pledge.hwpx", "서 약 자 인(사용인감)")):
+        # (11/27 운리단길) 위임장 안내 '※ … 사용인감계에 등록된 사용인감'은 사용인감계 아님, 머리 뒤 제목 '사 용 인 감 계'는 맞음
+        for name, body in (("seal.hwpx", "사 용 인 감</hp:t><hp:t>인 적 사 항"), ("pledge.hwpx", "서 약 자 인(사용인감)"),
+                           ("seal2.hwpx", "【별지서식 3】</hp:t><hp:t>사 용 인 감 계 위 인감은 상기인이 사용하는 인감"),
+                           ("deleg.hwpx", "【별지서식 2】 위 임 장 대표자 성 명 … ※ 위임장에 사용하는 도장은 법인인감(또는 사용인감계에 등록된 사용인감)과 같아야 함")):
             path = tmp_path / name
             with zipfile.ZipFile(path, "w") as z:
                 z.writestr("Contents/section0.xml", f"<hp:p><hp:run><hp:t>{body}</hp:t></hp:run></hp:p>")
-            assert (build._seal_vault("서식 7", grida, path) is jiil) == (name == "seal.hwpx")
+            assert (build._seal_vault("서식 7", grida, path) is jiil) == name.startswith("seal"), name
     finally:
         company.use("jiil")
     assert build._seal_vault("사용인감계", grida) is grida, "지일 화면은 그대로"

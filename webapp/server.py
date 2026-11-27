@@ -17,6 +17,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import secrets
 import sys
 import threading
@@ -143,6 +144,7 @@ class App:
         path = self.store.path.parent / "help_questions.json"
         row = {"q": q, "result": str(item.get("result") or "")[:20], "tab": str(item.get("tab") or "")[:20],
                "hit": str(item.get("hit") or "")[:80],  # 어느 질문으로 알아들었는지(11/25) — 낱말·같은 뜻 표를 늘릴 때 봄
+               "who": str(item.get("who") or "")[:20], "co": str(item.get("co") or "")[:10],  # 적은 사람·회사(11/27 사용자 — 쓰는 사람 파악)
                "at": datetime.now().isoformat(timespec="seconds")}
         with self._seen_lock:
             rows = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
@@ -459,6 +461,8 @@ def make_handler(app: App):
                     "has_service_key": bool(os.environ.get("NARA_SERVICE_KEY", "").strip()),
                     "has_ai_key": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
                     "can_collect": not app.viewer,
+                    # 도우미에 보일 개발 담당 이름 — 공개 저장소에 적지 않으려고 서버 설정에서(11/27 사용자)
+                    "help_devs": [x.strip() for x in re.split(r"[,·]", os.environ.get("HELP_DEVELOPERS", "")) if x.strip()],
                     "companies": [c.public() for c in app.companies.values()], "company": co.id,
                 })
             if url.path == "/api/docs-alert":

@@ -31,6 +31,12 @@ const HELP_TOP = vm.runInNewContext("(" + html.slice(topAt, topAt + topEnd + 1) 
 const shown = (tab, title) => { if (!has(tab, title) || !box.helpListed([0, title], tab)) { bad++; console.log(`화면 버튼에 없거나 숨긴 질문: [${tab}] ${title}`); } };
 Object.entries(HELP_TOP).forEach(([tab, x]) => [...x.first, ...x.use].forEach((t) => shown(tab, t)));
 Object.entries(box.HELP_NEXT).forEach(([tab, x]) => Object.values(x).flat().forEach((t) => (t.includes("::") ? shown(...t.split("::")) : shown(tab, t))));
+// 개발 담당에게 바라는 점(HELP_REQ): 요청 말투는 '남길까요?'로, 묻는 말은 평소 답으로
+const asReq = (q) => helpDecide(q, "live").why === "request";
+["필터 버튼을 더 크게 해 주시면 좋겠습니다", "정렬 기본값을 마감순으로 바꿔 주세요", "알림이 너무 많아 불편합니다", "카드에 담당자 전화번호도 있었으면 해요",
+  "엑셀 받기 버튼 추가해 주세요"].forEach((q) => { if (!asReq(q)) { bad++; console.log(`요청인데 요청으로 안 봄: ${q}`); } });
+["계약서도 만들어 주나요?", "필터는 어떻게 바꾸나요?", "사유를 고치고 싶습니다", "판단을 바꾸고 싶어요", "제안 발표용 PPT도 만들어 주나요?", "바라는 점을 개발자에게 남기고 싶습니다",
+  "개발자에게 요청하고 싶어요", "건의 사항이 있습니다", "개발자한테 건의하려면"].forEach((q) => { if (asReq(q)) { bad++; console.log(`묻는 말인데 요청으로 봄: ${q}`); } });
 // '어디인지 보기' 자리표(HELP_SPOT)의 질문 제목이 지금 도우미에 있는지 — 제목을 바꾸면 자리도 같이 바꿔야 함
 const spotAt = html.indexOf("{", html.indexOf("const HELP_SPOT = ")), spotEnd = html.slice(spotAt).search(/\};\r?\n/);
 Object.entries(vm.runInNewContext("(" + html.slice(spotAt, spotAt + spotEnd + 1) + ")")).forEach(([tab, x]) => Object.keys(x).forEach((t) => {

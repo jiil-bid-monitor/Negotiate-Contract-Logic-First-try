@@ -1243,5 +1243,190 @@
   "q": "보류한 것만 볼래요",
   "expect": "참가한 공고만 보고 싶습니다",
   "type": "chat-only"
+ },
+ {
+  "id": "d-401",
+  "tab": "live",
+  "q": "필터 어케 써",
+  "expect": "판단 안 한 공고나 용역·물품·공사만 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-402",
+  "tab": "live",
+  "q": "마감순 정렬 어케함",
+  "expect": "마감이 급한 공고부터 보고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-403",
+  "tab": "live",
+  "q": "싱크로율 뭐임",
+  "expect": "싱크로율은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-404",
+  "tab": "live",
+  "q": "판단 취소 어케해",
+  "expect": "잘못 눌렀는데 취소할 수 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-405",
+  "tab": "live",
+  "q": "왜 안떠",
+  "expect": "찾는 공고가 보이지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-406",
+  "tab": "live",
+  "q": "공고 안보임",
+  "expect": "찾는 공고가 보이지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-407",
+  "tab": "calc",
+  "q": "투찰게산기 어케 씀",
+  "expect": "어떤 순서로 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-408",
+  "tab": "calc",
+  "q": "추천금액 그냥 넣어도됨?",
+  "expect": "추천 금액 그대로 투찰해도 되나요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-409",
+  "tab": "calc",
+  "q": "기초금액 - 로 뜸",
+  "expect": "기초금액·하한율이 '-'로 나옵니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-410",
+  "tab": "calc",
+  "q": "외주금액 어디 적음",
+  "expect": "외주 금액으로 투찰했습니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-411",
+  "tab": "award",
+  "q": "서류 어딨어",
+  "expect": "만든 서류는 어디에 있나요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-412",
+  "tab": "award",
+  "q": "낙찰서류 버튼 안눌림",
+  "expect": "'낙찰 서류 만들기'가 눌리지 않습니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-413",
+  "tab": "award",
+  "q": "2등이면 머함",
+  "expect": "개찰 2등부터는 무엇을 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-414",
+  "tab": "log",
+  "q": "엑셀로 뽑아줘",
+  "expect": "엑셀로 받고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-415",
+  "tab": "excluded",
+  "q": "빠진거 살리는법",
+  "expect": "잘못 빠진 공고를 되살리고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-416",
+  "tab": "excluded",
+  "q": "왜 빠졋는지 보려면",
+  "expect": "왜 빠졌는지 어디서 보나요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-417",
+  "tab": "quant",
+  "q": "정량평가써 순서",
+  "expect": "어떤 순서로 하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-418",
+  "tab": "live",
+  "q": "자격 미달 뜻",
+  "expect": "'자격 충족'·'자격 미달'은 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-419",
+  "tab": "live",
+  "q": "셔류 만료 알림",
+  "expect": "'회사 서류' 숫자는 무슨 뜻인가요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-420",
+  "tab": "live",
+  "q": "다크모드 ㄱㄱ",
+  "expect": "화면을 어둡게 하고 싶습니다",
+  "type": "casual"
+ },
+ {
+  "id": "d-421",
+  "tab": "live",
+  "q": "판다기록 어디",
+  "expect": "이 탭에서는 무엇을 하나요?",
+  "type": "casual",
+  "expectTab": "log"
+ },
+ {
+  "id": "d-422",
+  "tab": "live",
+  "q": "투찰계산기 뭐야",
+  "expect": "이 탭에서는 무엇을 하나요?",
+  "type": "casual",
+  "expectTab": "calc"
+ },
+ {
+  "id": "d-423",
+  "tab": "live",
+  "q": "과거사업 목록",
+  "expect": "이 탭에서는 무엇을 하나요?",
+  "type": "casual",
+  "expectTab": "corpus"
+ },
+ {
+  "id": "d-424",
+  "tab": "live",
+  "q": "참가 보류 어디서 눌러",
+  "expect": "참가·보류·불참은 어디서 정하나요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-425",
+  "tab": "live",
+  "q": "현장설멍회 있는거 어케 앎",
+  "expect": "현장설명회가 있는 공고는 어떻게 아나요?",
+  "type": "casual"
+ },
+ {
+  "id": "d-426",
+  "tab": "live",
+  "q": "ㅋㅋ 싱크로율 낮으면 뭐임",
+  "expect": "싱크로율은 무슨 뜻인가요?",
+  "type": "casual"
  }
 ]

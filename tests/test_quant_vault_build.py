@@ -4303,7 +4303,9 @@ def test_center_sign_block_seal_line_drops_padding(tmp_path: Path):
     texts = [re.sub(r"<[^>]+>", "", "".join(re.findall(r"<hp:t\b[^>]*>(.*?)</hp:t>", p, re.S)))
              for p in re.findall(r"<hp:p\b[^>]*>(.*?)</hp:p>", out, re.S)]
     rep = next(t for t in texts if "대 표 자" in t)
-    assert rep.endswith("홍길동 (인)"), repr(rep)
+    # (11/27 사용자 지적: 서식은 건들지 않음) (인)은 원래 자리 — 이름 너비(한글 2칸씩 + 여유)만큼만 빈칸을 빼고, (인) 뒤 빈칸은 지움
+    # 빈칸 20 − 이름 너비(홍길동 = 6칸 + 여유 2) = 12
+    assert rep == "대 표 자: 홍길동" + " " * 12 + "(인)", repr(rep)
 
 
 def test_general_status_unit_slots_paren_phone_fax_number_and_bare_rep(tmp_path: Path):
